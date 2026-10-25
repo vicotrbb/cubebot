@@ -1,0 +1,2 @@
+# Supplemental cognitive metric. The mandatory cyclomatic gate is tooling/quality/complexity.py.
+cognitive-complexity-threshold = 15

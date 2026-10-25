@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.png binary
+*.woff2 binary
+apps/web/src/routeTree.gen.ts linguist-generated=true

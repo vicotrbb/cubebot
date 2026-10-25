@@ -1,0 +1,131 @@
+:root {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  color: #e8efea;
+  background: #101919;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+a {
+  color: inherit;
+}
+a:focus-visible {
+  outline: 2px solid #b6e8b3;
+  outline-offset: 8px;
+}
+.workspace {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 36px 40px;
+}
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -1px;
+  text-decoration: none;
+}
+.wordmark svg {
+  width: 32px;
+  height: 32px;
+  stroke: #b6e8b3;
+  stroke-width: 1.5;
+}
+.badge {
+  font-size: 12px;
+  color: #c4d2c8;
+  border: 1px solid #3d514a;
+  border-radius: 100px;
+  padding: 8px 12px;
+}
+.introduction {
+  padding: 120px 0 60px;
+  max-width: 750px;
+}
+.eyebrow,
+.stage {
+  color: #b6e8b3;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+h1 {
+  font-size: clamp(40px, 6vw, 72px);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 1.08;
+  margin: 24px 0;
+}
+.description {
+  max-width: 560px;
+  color: #aebfb6;
+  font-size: 19px;
+  line-height: 1.7;
+}
+.foundation {
+  padding: 32px;
+  border: 1px solid #354a41;
+  border-radius: 16px;
+  background: #172420;
+}
+h2 {
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  margin: 20px 0 12px;
+}
+.foundation p {
+  max-width: 620px;
+  color: #aebfb6;
+  line-height: 1.7;
+}
+.future {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+}
+.future span {
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: #21332b;
+  color: #c4d2c8;
+  font-size: 13px;
+}
+footer {
+  color: #9bad9f;
+  font-size: 12px;
+  padding: 36px 0;
+}
+
+@media (max-width: 600px) {
+  .workspace {
+    padding: 24px;
+  }
+  .masthead {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .introduction {
+    padding-top: 72px;
+  }
+  .foundation {
+    padding: 24px;
+  }
+}

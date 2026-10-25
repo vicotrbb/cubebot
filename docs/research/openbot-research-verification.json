@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-22",
+  "commit": "cfee2971f29cdb7c16272e60ae912de7fbb30693",
+  "checkedUniquePinnedSourceLinks": 291,
+  "checkedLocalCrossLinks": 23,
+  "approximateWordsExcludingURLs": {
+    "openbot-agent-runtime-memory.md": 4335,
+    "openbot-analysis.md": 3467,
+    "openbot-collaboration-channels.md": 3343,
+    "openbot-platform-tools-remote.md": 2536
+  },
+  "upstreamUnchanged": true,
+  "errors": [],
+  "verificationScope": "Reference paths/ranges and document cross-links; core claims also manually source cross-checked. No live application or test-suite execution."
+}

@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+target
+**/node_modules
+**/.output
+**/.tanstack
+**/dist
+.venv
+**/.venv
+**/__pycache__
+.ruff_cache
+.superpowers
+.tools
+test-results
+playwright-report

@@ -1,0 +1,21 @@
+[package]
+name = "cubebot-orchestrator"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+cubebot-protocol.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+serde_json = "1"
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

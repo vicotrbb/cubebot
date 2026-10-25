@@ -1,0 +1,19 @@
+[package]
+name = "cubebot-agent"
+default-run = "cubebot-agent"
+autobins = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cubebot-agent"
+path = "src/main.rs"
+
+[[bin]]
+name = "cubebot-tool-runner"
+path = "src/bin/tool-runner.rs"
+
+[lints]
+workspace = true
