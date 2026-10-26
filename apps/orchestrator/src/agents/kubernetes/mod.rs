@@ -1,5 +1,7 @@
 //! Namespaced Kubernetes effects and conservative ownership/termination checks.
 mod client;
+mod layout;
+pub use layout::Layout;
 mod registry;
 pub use registry::{
     Attempt, AttemptId, Phase, Registry, ResourceKind, ResourceObject, ResourceSpec,

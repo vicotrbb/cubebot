@@ -44,9 +44,9 @@ The orchestrator accepts exported `CUBEBOT_BIND_ADDR` and `RUST_LOG` variables. 
 | `deploy`            | Installation packaging; Dockerfiles live with their apps              |
 | `docs/adr`          | Accepted product and architecture decisions                           |
 
-See [repository layout](docs/development/repository-layout.md) for the complete module map and dependency rules. The agent package builds `cubebot-agent` and `cubebot-tool-runner`; both explicitly exit with an unimplemented message until their execution behavior exists. The tool runner belongs to the agent app and will run in its separate tool container.
+See [repository layout](docs/development/repository-layout.md) for the complete module map and dependency rules. The agent package builds `cubebot-agent` and `cubebot-tool-runner`; normal execution still exits with an unimplemented message. The runtime binary also supports the trusted init-container operation `--initialize-storage runtime|tools`, which creates and verifies its role directory beneath `/storage`. The tool runner belongs to the agent app and will run in its separate tool container.
 
-The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter tested against a controlled HTTP server; no Kubernetes controller is connected yet. Provider and tool dependencies will be added with their first working features.
+The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter, durable resource reservations and a fixed pod/PVC specification compiler. Controlled HTTP, PostgreSQL and manifest tests cover these boundaries; no Kubernetes controller is connected yet. The compiler requires digest-pinned images, a dedicated runtime service account, HTTPS orchestrator origin and CSI support for ReadWriteOncePod. Its mount/security layout is not cluster-qualified and does not yet enforce distinct runtime/tool egress. Provider and tool dependencies will be added with their first working features.
 
 ## Quality rules
 
