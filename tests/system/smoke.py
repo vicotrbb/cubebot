@@ -64,6 +64,20 @@ def running(command: list[str], cwd: Path, environment: dict[str, str]):
                 process.wait()
 
 
+def request_json(base, path, token="", value=None):
+    headers = {"Authorization": f"Bearer {token}"}
+    data = None
+    if value is not None:
+        data = json.dumps(value).encode()
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(base + path, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=5) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or b"{}")
+
+
 def check_api() -> None:
     port = unused_port()
     address = f"127.0.0.1:{port}"

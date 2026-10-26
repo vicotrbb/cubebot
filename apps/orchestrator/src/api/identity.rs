@@ -144,6 +144,7 @@ impl IntoResponse for IdentityError {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::Conflict => (StatusCode::CONFLICT, "conflict"),
+            Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::Database(_) | Self::Password => {
                 (StatusCode::SERVICE_UNAVAILABLE, "identity_unavailable")
             }

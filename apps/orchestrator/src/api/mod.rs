@@ -2,6 +2,7 @@
 //!
 //! Database-enabled mode exposes the initial authenticated identity endpoints.
 
+mod access;
 mod identity;
 mod invitations;
 
@@ -27,6 +28,7 @@ pub fn database_router(pool: sqlx::PgPool) -> Router {
         .merge(invitations::router(crate::identity::Identity::new(
             pool.clone(),
         )))
+        .merge(access::router(crate::identity::Identity::new(pool.clone())))
         .route("/api/health/ready", get(readiness).with_state(pool))
 }
 

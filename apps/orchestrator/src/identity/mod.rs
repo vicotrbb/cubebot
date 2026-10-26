@@ -1,6 +1,10 @@
 //! Human accounts and current database-backed session authority.
 
+pub mod access;
 mod accounts;
+mod commands;
+pub mod teams;
+pub use commands::{IdentityEvent, Receipt};
 mod invitations;
 pub use invitations::Invitation;
 mod passwords;
@@ -20,6 +24,7 @@ pub enum IdentityError {
     Unauthorized,
     Forbidden,
     Conflict,
+    NotFound,
     Database(sqlx::Error),
     Password,
 }

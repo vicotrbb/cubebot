@@ -1,26 +1,19 @@
 """Exercise operator bootstrap and identity HTTP across real process restarts."""
 
-import json
 import secrets
 import subprocess
-import urllib.error
-import urllib.request
 
-from smoke import BINARY, ROOT, await_ready, running, unused_port
-
-
-def request(base, path, token="", value=None):
-    headers = {"Authorization": f"Bearer {token}"}
-    data = None
-    if value is not None:
-        data = json.dumps(value).encode()
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(base + path, data=data, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=5) as response:
-            return response.status, json.loads(response.read())
-    except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read() or b"{}")
+from access_flow import check_access, check_access_restart
+from smoke import (
+    BINARY,
+    ROOT,
+    await_ready,
+    running,
+    unused_port,
+)
+from smoke import (
+    request_json as request,
+)
 
 
 def check_identity(environment):
@@ -56,10 +49,12 @@ def check_identity(environment):
         token = result["token"]
         status, account = request(base, "/api/identity/me", token)
         assert status == 200 and account["administrator"] is True
-        check_invitation(base, token)
+        member = check_invitation(base, token)
+        checkpoint = check_access(base, token, member)
     with running([str(BINARY)], ROOT, server_env) as process:
         await_ready(process, base + "/api/health/ready")
         assert request(base, "/api/identity/me", token)[1] == account
+        check_access_restart(base, token, checkpoint)
         assert request(base, "/api/identity/logout", token, {})[0] == 200
         assert request(base, "/api/identity/me", token)[0] == 401
     print(
@@ -116,3 +111,4 @@ def check_invitation(base, token):
         )[0]
         == 403
     )
+    return member["token"]
