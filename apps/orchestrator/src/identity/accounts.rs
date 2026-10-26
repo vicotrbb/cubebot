@@ -1,8 +1,27 @@
 use uuid::Uuid;
 
-use super::{Actor, Identity, IdentityError, passwords};
+use super::{Actor, Identity, IdentityError, Receipt, commands::Command, passwords};
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct AccountSummary {
+    pub id: Uuid,
+    pub login: String,
+    pub administrator: bool,
+    pub active: bool,
+    pub revision: i64,
+}
 
 impl Identity {
+    pub async fn accounts(
+        &self,
+        actor: &Actor,
+        after: Option<Uuid>,
+    ) -> Result<Vec<AccountSummary>, IdentityError> {
+        self.require_administrator(actor).await?;
+        Ok(sqlx::query_as("SELECT id, login, role = 'administrator' AS administrator, active, revision FROM human_accounts WHERE $1::uuid IS NULL OR id > $1 ORDER BY id LIMIT 100")
+            .bind(after).fetch_all(&self.pool).await?)
+    }
+
     pub async fn bootstrap(&self, login: &str, password: &str) -> Result<Uuid, IdentityError> {
         passwords::validate(login, password)?;
         let verifier = passwords::hash(password).await?;
@@ -29,45 +48,89 @@ impl Identity {
         login: &str,
         password: &str,
         administrator: bool,
+        request_id: Uuid,
     ) -> Result<Uuid, IdentityError> {
-        self.require_administrator(actor).await?;
+        let input = serde_json::json!({"login": login, "administrator": administrator});
+        let command = Command::new(actor, "account.create", request_id, &input)?;
+        let (transaction, previous) = command.begin(&self.pool).await?;
+        transaction.rollback().await?;
+        if let Some(receipt) = previous {
+            return self
+                .replay_account(actor, request_id, password, receipt)
+                .await;
+        }
         passwords::validate(login, password)?;
         let verifier = passwords::hash(password).await?;
+        let command = command.with_password_verifier(verifier.clone());
+        let (mut transaction, previous) = command.begin(&self.pool).await?;
+        if let Some(receipt) = previous {
+            transaction.rollback().await?;
+            return self
+                .replay_account(actor, request_id, password, receipt)
+                .await;
+        }
         let role = if administrator {
             "administrator"
         } else {
             "member"
         };
-        let mut transaction = self.pool.begin().await?;
-        lock_administrator(&mut transaction, actor.id).await?;
         let id = insert_account(&mut transaction, login, &verifier, role).await?;
         audit(&mut transaction, actor.id, id, "account_created").await?;
-        transaction.commit().await?;
+        command
+            .commit(transaction, Receipt { id, revision: 1 })
+            .await?;
         Ok(id)
     }
 
-    pub async fn suspend(&self, actor: &Actor, subject: Uuid) -> Result<(), IdentityError> {
+    async fn replay_account(
+        &self,
+        actor: &Actor,
+        request_id: Uuid,
+        password: &str,
+        receipt: Receipt,
+    ) -> Result<Uuid, IdentityError> {
+        self.verify_command_password(actor.id, "account.create", request_id, password)
+            .await?;
+        self.require_administrator(actor).await?;
+        Ok(receipt.id)
+    }
+
+    pub async fn suspend(
+        &self,
+        actor: &Actor,
+        subject: Uuid,
+        expected_revision: i64,
+        request_id: Uuid,
+    ) -> Result<Receipt, IdentityError> {
+        let input = serde_json::json!({"id": subject, "expected_revision": expected_revision});
+        let command = Command::new(actor, "account.suspend", request_id, &input)?;
+        let (mut transaction, previous) = command.begin(&self.pool).await?;
+        if let Some(receipt) = previous {
+            return Ok(receipt);
+        }
         if actor.id == subject {
             return Err(IdentityError::InvalidInput);
         }
-        let mut transaction = self.pool.begin().await?;
-        lock_administrator(&mut transaction, actor.id).await?;
-        let changed = sqlx::query(
-            "UPDATE human_accounts SET active = false, revision = revision + 1 WHERE id = $1",
+        let revision: Option<i64> = sqlx::query_scalar(
+            "UPDATE human_accounts SET active = false, revision = revision + 1 WHERE id = $1 AND revision = $2 AND active RETURNING revision",
         )
-        .bind(subject)
-        .execute(&mut *transaction)
-        .await?;
-        if changed.rows_affected() == 0 {
-            return Err(IdentityError::InvalidInput);
-        }
+        .bind(subject).bind(expected_revision)
+        .fetch_optional(&mut *transaction).await?;
+        let revision = revision.ok_or(IdentityError::Conflict)?;
         sqlx::query("DELETE FROM human_sessions WHERE account_id = $1")
             .bind(subject)
             .execute(&mut *transaction)
             .await?;
         audit(&mut transaction, actor.id, subject, "account_suspended").await?;
-        transaction.commit().await?;
-        Ok(())
+        command
+            .commit(
+                transaction,
+                Receipt {
+                    id: subject,
+                    revision,
+                },
+            )
+            .await
     }
 }
 

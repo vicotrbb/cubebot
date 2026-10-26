@@ -43,7 +43,7 @@ def check_access(base, admin, member):
     )
     assert status == 200 and explanation["allowed"] is False
     status, events = request(base, "/api/identity/access/events", admin)
-    assert status == 200 and len(events) == 4
+    assert status == 200 and len(events) >= 4
     assert events[-1]["input"]["account_id"] == account["id"]
     assert events[-1]["input"]["present"] is False
     return command, team

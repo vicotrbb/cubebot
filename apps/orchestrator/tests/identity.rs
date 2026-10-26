@@ -24,7 +24,13 @@ async fn bootstrap_sessions_and_revocation_survive_restart() {
     let actor = identity.authenticate(&session.token).await.unwrap();
     assert!(actor.administrator);
     let member = identity
-        .create_account(&actor, "member-one", "long member password", false)
+        .create_account(
+            &actor,
+            "member-one",
+            "long member password",
+            false,
+            uuid::Uuid::new_v4(),
+        )
         .await
         .unwrap();
     let member_session = identity
@@ -34,7 +40,13 @@ async fn bootstrap_sessions_and_revocation_survive_restart() {
     let member_actor = identity.authenticate(&member_session.token).await.unwrap();
     assert!(matches!(
         identity
-            .create_account(&member_actor, "escalated", "long other password", true)
+            .create_account(
+                &member_actor,
+                "escalated",
+                "long other password",
+                true,
+                uuid::Uuid::new_v4()
+            )
             .await,
         Err(IdentityError::Forbidden)
     ));
@@ -47,7 +59,10 @@ async fn bootstrap_sessions_and_revocation_survive_restart() {
         identity.authenticate(&session.token).await.unwrap().id,
         actor.id
     );
-    identity.suspend(&actor, member).await.unwrap();
+    identity
+        .suspend(&actor, member, 1, uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     assert!(matches!(
         identity.authenticate(&member_session.token).await,
         Err(IdentityError::Unauthorized)

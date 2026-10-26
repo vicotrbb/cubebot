@@ -23,7 +23,13 @@ async fn people(
         .unwrap();
     let admin = identity.authenticate(&admin.token).await.unwrap();
     identity
-        .create_account(&admin, "access-member", "long member password", false)
+        .create_account(
+            &admin,
+            "access-member",
+            "long member password",
+            false,
+            uuid::Uuid::new_v4(),
+        )
         .await
         .unwrap();
     let member = identity
@@ -213,7 +219,10 @@ async fn manager_permissions_never_confer_administration_or_content_and_suspensi
         identity.grant(&member, &command).await,
         Err(IdentityError::Forbidden)
     ));
-    identity.suspend(&admin, member.id).await.unwrap();
+    identity
+        .suspend(&admin, member.id, 1, uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     assert!(matches!(
         identity
             .explain_access(&member, scope, Capability::AgentManage)
@@ -346,6 +355,7 @@ async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
             "second-admin",
             "second administrator password",
             true,
+            uuid::Uuid::new_v4(),
         )
         .await
         .unwrap();
@@ -354,7 +364,10 @@ async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
         .await
         .unwrap();
     let second = identity.authenticate(&session.token).await.unwrap();
-    identity.suspend(&second, admin.id).await.unwrap();
+    identity
+        .suspend(&second, admin.id, 1, uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     assert!(matches!(
         identity.create_team(&admin, &command).await,
         Err(IdentityError::Forbidden)
@@ -407,6 +420,7 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
             "event-admin",
             "long event administrator password",
             true,
+            uuid::Uuid::new_v4(),
         )
         .await
         .unwrap();
@@ -415,6 +429,13 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
         .await
         .unwrap();
     let second = identity.authenticate(&session.token).await.unwrap();
+    let cursor = identity
+        .access_events(&admin, 0)
+        .await
+        .unwrap()
+        .last()
+        .unwrap()
+        .sequence;
     let mut blocker = pool.begin().await.unwrap();
     sqlx::query("SELECT singleton FROM installation WHERE singleton FOR UPDATE")
         .execute(&mut *blocker)
@@ -453,11 +474,17 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
         observed.is_err(),
         "publication must wait for the shared commit-order barrier"
     );
-    assert!(identity.access_events(&admin, 0).await.unwrap().is_empty());
+    assert!(
+        identity
+            .access_events(&admin, cursor)
+            .await
+            .unwrap()
+            .is_empty()
+    );
     blocker.commit().await.unwrap();
     first.await.unwrap().unwrap();
     later.await.unwrap().unwrap();
-    let events = identity.access_events(&admin, 0).await.unwrap();
+    let events = identity.access_events(&admin, cursor).await.unwrap();
     assert_eq!(events.len(), 2);
     let tail = identity
         .access_events(&admin, events[0].sequence)
@@ -487,7 +514,10 @@ async fn membership_cleanup_accepts_suspended_accounts() {
         .change_membership(&admin, &membership(id, member.id, 1, true))
         .await
         .unwrap();
-    identity.suspend(&admin, member.id).await.unwrap();
+    identity
+        .suspend(&admin, member.id, 1, uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     identity
         .change_membership(&admin, &membership(id, member.id, 2, false))
         .await

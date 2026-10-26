@@ -2,8 +2,15 @@
 
 import secrets
 import subprocess
+import uuid
 
 from access_flow import check_access, check_access_restart
+from request_flow import (
+    check_account_commands,
+    check_account_restart,
+    check_invitation_receipt,
+    check_redemption_replay,
+)
 from smoke import (
     BINARY,
     ROOT,
@@ -51,10 +58,12 @@ def check_identity(environment):
         assert status == 200 and account["administrator"] is True
         member = check_invitation(base, token)
         checkpoint = check_access(base, token, member)
+        requests = check_account_commands(base, token)
     with running([str(BINARY)], ROOT, server_env) as process:
         await_ready(process, base + "/api/health/ready")
         assert request(base, "/api/identity/me", token)[1] == account
         check_access_restart(base, token, checkpoint)
+        check_account_restart(base, token, requests)
         assert request(base, "/api/identity/logout", token, {})[0] == 200
         assert request(base, "/api/identity/me", token)[0] == 401
     print(
@@ -64,31 +73,21 @@ def check_identity(environment):
 
 
 def check_invitation(base, token):
-    status, invitation = request(
-        base, "/api/identity/invitations", token, {"login": "invited-http-member"}
-    )
+    command = {"login": "invited-http-member", "request_id": str(uuid.uuid4())}
+    status, invitation = request(base, "/api/identity/invitations", token, command)
     assert status == 201
+    check_invitation_receipt(base, token, command, invitation)
     member_password = secrets.token_hex(24)
-    status, _ = request(
-        base,
-        "/api/identity/invitations/accept",
-        value={
-            "token": invitation["token"],
-            "password": member_password,
-        },
+    redemption = {
+        "request_id": str(uuid.uuid4()),
+        "token": invitation["token"],
+        "password": member_password,
+    }
+    status, account = request(
+        base, "/api/identity/invitations/accept", value=redemption
     )
     assert status == 201
-    assert (
-        request(
-            base,
-            "/api/identity/invitations/accept",
-            value={
-                "token": invitation["token"],
-                "password": member_password,
-            },
-        )[0]
-        == 401
-    )
+    check_redemption_replay(base, redemption, account)
     status, member = request(
         base,
         "/api/identity/login",
@@ -104,6 +103,7 @@ def check_invitation(base, token):
             "/api/identity/accounts",
             member["token"],
             {
+                "request_id": str(uuid.uuid4()),
                 "login": "escalated",
                 "password": member_password,
                 "administrator": True,

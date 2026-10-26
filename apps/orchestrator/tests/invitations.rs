@@ -19,16 +19,27 @@ async fn administrator(identity: &Identity) -> cubebot_orchestrator::identity::A
 async fn invitations_admit_the_bound_login_exactly_once() {
     let identity = Identity::new(support::database().await);
     let admin = administrator(&identity).await;
-    let invite = identity.invite(&admin, "invited-member").await.unwrap();
+    let invite = identity
+        .invite(&admin, "invited-member", uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     assert!(matches!(
         identity
-            .accept_invitation("invalid", "long invitation password")
+            .accept_invitation("invalid", "long invitation password", uuid::Uuid::new_v4())
             .await,
         Err(IdentityError::Unauthorized)
     ));
     let (first, second) = tokio::join!(
-        identity.accept_invitation(&invite.token, "long invitation password"),
-        identity.accept_invitation(&invite.token, "another invitation password")
+        identity.accept_invitation(
+            invite.token.as_deref().unwrap(),
+            "long invitation password",
+            uuid::Uuid::new_v4()
+        ),
+        identity.accept_invitation(
+            invite.token.as_deref().unwrap(),
+            "another invitation password",
+            uuid::Uuid::new_v4()
+        )
     );
     assert_ne!(first.is_ok(), second.is_ok());
     let password = if first.is_ok() {
@@ -40,11 +51,18 @@ async fn invitations_admit_the_bound_login_exactly_once() {
     let member = identity.authenticate(&session.token).await.unwrap();
     assert!(!member.administrator);
     assert!(matches!(
-        identity.invite(&member, "escalated-member").await,
+        identity
+            .invite(&member, "escalated-member", uuid::Uuid::new_v4())
+            .await,
         Err(IdentityError::Forbidden)
     ));
-    identity.suspend(&admin, member.id).await.unwrap();
-    let replacement = identity.invite(&admin, "invited-member").await;
+    identity
+        .suspend(&admin, member.id, 1, uuid::Uuid::new_v4())
+        .await
+        .unwrap();
+    let replacement = identity
+        .invite(&admin, "invited-member", uuid::Uuid::new_v4())
+        .await;
     assert!(matches!(replacement, Err(IdentityError::Conflict)));
 }
 
@@ -54,18 +72,28 @@ async fn revoked_and_expired_invitations_cannot_be_redeemed() {
     let pool = support::database().await;
     let identity = Identity::new(pool.clone());
     let admin = administrator(&identity).await;
-    let revoked = identity.invite(&admin, "revoked-member").await.unwrap();
+    let revoked = identity
+        .invite(&admin, "revoked-member", uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     identity
-        .revoke_invitation(&admin, revoked.id)
+        .revoke_invitation(&admin, revoked.id, 1, uuid::Uuid::new_v4())
         .await
         .unwrap();
     assert!(matches!(
         identity
-            .accept_invitation(&revoked.token, "long member password")
+            .accept_invitation(
+                revoked.token.as_deref().unwrap(),
+                "long member password",
+                uuid::Uuid::new_v4()
+            )
             .await,
         Err(IdentityError::Unauthorized)
     ));
-    let expired = identity.invite(&admin, "expired-member").await.unwrap();
+    let expired = identity
+        .invite(&admin, "expired-member", uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     sqlx::query("UPDATE invitations SET expires_at = now() - interval '1 second' WHERE id = $1")
         .bind(expired.id)
         .execute(&pool)
@@ -73,7 +101,11 @@ async fn revoked_and_expired_invitations_cannot_be_redeemed() {
         .unwrap();
     assert!(matches!(
         identity
-            .accept_invitation(&expired.token, "long member password")
+            .accept_invitation(
+                expired.token.as_deref().unwrap(),
+                "long member password",
+                uuid::Uuid::new_v4()
+            )
             .await,
         Err(IdentityError::Unauthorized)
     ));
@@ -97,7 +129,10 @@ async fn invitation_expiring_while_redemption_waits_creates_no_account() {
     let pool = support::database().await;
     let identity = Identity::new(pool.clone());
     let admin = administrator(&identity).await;
-    let invitation = identity.invite(&admin, "waiting-member").await.unwrap();
+    let invitation = identity
+        .invite(&admin, "waiting-member", uuid::Uuid::new_v4())
+        .await
+        .unwrap();
     let mut blocker = pool.begin().await.unwrap();
     sqlx::query("SELECT id FROM invitations WHERE id = $1 FOR UPDATE")
         .bind(invitation.id)
@@ -106,7 +141,11 @@ async fn invitation_expiring_while_redemption_waits_creates_no_account() {
         .unwrap();
     let redemption = tokio::spawn(async move {
         identity
-            .accept_invitation(&invitation.token, "long invited password")
+            .accept_invitation(
+                invitation.token.as_deref().unwrap(),
+                "long invited password",
+                uuid::Uuid::new_v4(),
+            )
             .await
     });
     await_blocked_redemption(&pool).await;

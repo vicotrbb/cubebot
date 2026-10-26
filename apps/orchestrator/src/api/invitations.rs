@@ -1,18 +1,18 @@
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::post,
+    routing::{get, post},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::identity::{Identity, IdentityError};
+use crate::identity::{Identity, IdentityError, Receipt};
 
 pub fn router(identity: Identity) -> Router {
     Router::new()
-        .route("/api/identity/invitations", post(invite))
+        .route("/api/identity/invitations", get(list).post(invite))
         .route("/api/identity/invitations/accept", post(accept))
         .route("/api/identity/invitations/revoke", post(revoke))
         .with_state(identity)
@@ -21,13 +21,8 @@ pub fn router(identity: Identity) -> Router {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Invite {
+    request_id: Uuid,
     login: String,
-}
-
-#[derive(Serialize)]
-struct Invitation {
-    id: Uuid,
-    token: String,
 }
 
 async fn invite(
@@ -36,20 +31,20 @@ async fn invite(
     Json(input): Json<Invite>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
-    let invitation = identity.invite(&actor, &input.login).await?;
+    let invitation = identity
+        .invite(&actor, &input.login, input.request_id)
+        .await?;
     Ok((
         StatusCode::CREATED,
         [("cache-control", "no-store")],
-        Json(Invitation {
-            id: invitation.id,
-            token: invitation.token,
-        }),
+        Json(invitation),
     ))
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Accept {
+    request_id: Uuid,
     token: String,
     password: String,
 }
@@ -59,7 +54,7 @@ async fn accept(
     Json(input): Json<Accept>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let id = identity
-        .accept_invitation(&input.token, &input.password)
+        .accept_invitation(&input.token, &input.password, input.request_id)
         .await?;
     Ok((StatusCode::CREATED, Json(id)))
 }
@@ -67,6 +62,8 @@ async fn accept(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Revoke {
+    request_id: Uuid,
+    expected_revision: i64,
     id: Uuid,
 }
 
@@ -74,8 +71,28 @@ async fn revoke(
     State(identity): State<Identity>,
     headers: HeaderMap,
     Json(input): Json<Revoke>,
-) -> Result<Json<bool>, IdentityError> {
+) -> Result<Json<Receipt>, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
-    identity.revoke_invitation(&actor, input.id).await?;
-    Ok(Json(true))
+    let receipt = identity
+        .revoke_invitation(&actor, input.id, input.expected_revision, input.request_id)
+        .await?;
+    Ok(Json(receipt))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Cursor {
+    after: Option<Uuid>,
+}
+
+async fn list(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Query(cursor): Query<Cursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(identity.invitations(&actor, cursor.after).await?),
+    ))
 }

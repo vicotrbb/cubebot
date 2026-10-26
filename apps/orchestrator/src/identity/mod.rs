@@ -2,11 +2,12 @@
 
 pub mod access;
 mod accounts;
+pub use accounts::AccountSummary;
 mod commands;
 pub mod teams;
 pub use commands::{IdentityEvent, Receipt};
 mod invitations;
-pub use invitations::Invitation;
+pub use invitations::{Invitation, InvitationSummary};
 mod passwords;
 mod sessions;
 

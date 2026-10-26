@@ -69,7 +69,7 @@ async fn http_login_logout_and_authorized_account_creation() {
         "POST",
         "/api/identity/accounts",
         token,
-        json!({"login":"http-member","password":"http member password","administrator":false}),
+        json!({"request_id":uuid::Uuid::new_v4(),"login":"http-member","password":"http member password","administrator":false}),
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);

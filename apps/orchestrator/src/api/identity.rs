@@ -1,6 +1,6 @@
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -15,9 +15,27 @@ pub fn router(identity: Identity) -> Router {
         .route("/api/identity/login", post(login))
         .route("/api/identity/logout", post(logout))
         .route("/api/identity/me", get(me))
-        .route("/api/identity/accounts", post(create_account))
+        .route("/api/identity/accounts", get(accounts).post(create_account))
         .route("/api/identity/suspend", post(suspend))
         .with_state(identity)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AccountCursor {
+    after: Option<Uuid>,
+}
+
+async fn accounts(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Query(cursor): Query<AccountCursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(identity.accounts(&actor, cursor.after).await?),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -91,6 +109,7 @@ async fn logout(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateAccount {
+    request_id: Uuid,
     login: String,
     password: String,
     #[serde(default)]
@@ -104,7 +123,13 @@ async fn create_account(
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = actor(&identity, &headers).await?;
     let id = identity
-        .create_account(&actor, &input.login, &input.password, input.administrator)
+        .create_account(
+            &actor,
+            &input.login,
+            &input.password,
+            input.administrator,
+            input.request_id,
+        )
         .await?;
     Ok((
         StatusCode::CREATED,
@@ -118,6 +143,8 @@ async fn create_account(
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Subject {
+    request_id: Uuid,
+    expected_revision: i64,
     id: Uuid,
 }
 
@@ -125,11 +152,16 @@ async fn suspend(
     State(identity): State<Identity>,
     headers: HeaderMap,
     Json(input): Json<Subject>,
-) -> Result<Json<bool>, IdentityError> {
-    identity
-        .suspend(&actor(&identity, &headers).await?, input.id)
+) -> Result<Json<crate::identity::Receipt>, IdentityError> {
+    let receipt = identity
+        .suspend(
+            &actor(&identity, &headers).await?,
+            input.id,
+            input.expected_revision,
+            input.request_id,
+        )
         .await?;
-    Ok(Json(true))
+    Ok(Json(receipt))
 }
 
 #[derive(Serialize)]
