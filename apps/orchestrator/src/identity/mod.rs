@@ -2,6 +2,7 @@
 
 pub mod access;
 mod accounts;
+pub mod oidc;
 pub use accounts::AccountSummary;
 mod commands;
 pub mod teams;
@@ -17,6 +18,7 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct Identity {
     pool: PgPool,
+    pub(crate) browser_origin: Option<String>,
 }
 
 #[derive(Debug)]
@@ -29,6 +31,7 @@ pub enum IdentityError {
     Database(sqlx::Error),
     Password,
     Busy,
+    OidcUnavailable,
 }
 
 impl From<sqlx::Error> for IdentityError {
@@ -53,7 +56,10 @@ pub struct Session {
 
 impl Identity {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        Self {
+            pool,
+            browser_origin: None,
+        }
     }
 
     async fn require_administrator(&self, actor: &Actor) -> Result<(), IdentityError> {

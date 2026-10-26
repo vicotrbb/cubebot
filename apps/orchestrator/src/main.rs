@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         Err(error) => return Err(error.into()),
     };
     let listener = TcpListener::bind(address).await?;
-    tracing::info!(address = %listener.local_addr()?, "orchestrator liveness server listening");
+    tracing::info!(address = %listener.local_addr()?, "orchestrator HTTP server listening");
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
@@ -54,9 +54,23 @@ async fn application() -> Result<axum::Router, Box<dyn Error + Send + Sync>> {
             let pool = cubebot_orchestrator::operations::database::connect(&url)
                 .await
                 .map_err(|_| "configured database connection or migration failed")?;
-            Ok(cubebot_orchestrator::api::database_router(pool))
+            let config = cubebot_orchestrator::identity::oidc::environment()
+                .map_err(|_| "invalid OIDC configuration")?;
+            let origin = match std::env::var("CUBEBOT_PUBLIC_ORIGIN") {
+                Ok(origin) => Some(origin),
+                Err(std::env::VarError::NotPresent) => None,
+                Err(_) => return Err("invalid CUBEBOT_PUBLIC_ORIGIN".into()),
+            };
+            cubebot_orchestrator::api::configured_router(pool, origin, config)
+                .await
+                .map_err(|_| "identity configuration failed".into())
         }
-        Err(std::env::VarError::NotPresent) => Ok(cubebot_orchestrator::api::router()),
+        Err(std::env::VarError::NotPresent) => {
+            if std::env::var_os("CUBEBOT_OIDC_CONFIG").is_some() {
+                return Err("OIDC requires a configured database".into());
+            }
+            Ok(cubebot_orchestrator::api::router())
+        }
         Err(_) => Err("invalid CUBEBOT_DATABASE_URL".into()),
     }
 }

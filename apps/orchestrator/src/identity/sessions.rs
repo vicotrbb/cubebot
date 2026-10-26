@@ -37,7 +37,7 @@ impl Identity {
             return Err(IdentityError::Unauthorized);
         }
         let account: Option<(Uuid, bool)> = sqlx::query_as(
-            "SELECT a.id, a.role = 'administrator' FROM human_sessions s JOIN human_accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND a.active",
+            "SELECT a.id, a.role = 'administrator' FROM human_sessions s JOIN human_accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND a.active AND (s.oidc_policy_revision IS NULL OR EXISTS(SELECT 1 FROM identity_oidc_policy p WHERE p.singleton AND p.enabled AND p.revision = s.oidc_policy_revision))",
         )
         .bind(digest(token))
         .fetch_optional(&self.pool)

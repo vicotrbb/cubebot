@@ -7,6 +7,7 @@ import time
 import uuid
 
 from identity_flow import check_identity
+from oidc_flow import check_oidc
 
 
 def run(*args, **kwargs):
@@ -71,6 +72,16 @@ def main():
             env=env,
         )
         check_identity(env)
+        run("docker", "exec", name, "createdb", "-U", "cubebot", "cubebot_oidc")
+        check_oidc(
+            env
+            | {
+                "CUBEBOT_TEST_DATABASE_URL": env["CUBEBOT_TEST_DATABASE_URL"].rsplit(
+                    "/", 1
+                )[0]
+                + "/cubebot_oidc"
+            }
+        )
     finally:
         run("docker", "stop", name, stdout=subprocess.DEVNULL)
 

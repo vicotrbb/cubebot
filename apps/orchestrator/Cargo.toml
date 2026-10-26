@@ -19,6 +19,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid = { version = "1", features = ["v4", "serde"] }
+openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
 
 [dev-dependencies]
 http-body-util = "0.1"

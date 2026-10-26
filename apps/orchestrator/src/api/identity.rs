@@ -13,6 +13,8 @@ use crate::identity::{Actor, Identity, IdentityError};
 pub fn router(identity: Identity) -> Router {
     Router::new()
         .route("/api/identity/login", post(login))
+        .route("/api/identity/oidc/bindings", get(oidc_bindings))
+        .route("/api/identity/oidc/revoke", post(revoke_oidc))
         .route("/api/identity/logout", post(logout))
         .route("/api/identity/me", get(me))
         .route("/api/identity/accounts", get(accounts).post(create_account))
@@ -55,27 +57,28 @@ async fn login(
     Json(input): Json<Login>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let session = identity.login(&input.login, &input.password).await?;
-    Ok((
+    let response = (
         [("cache-control", "no-store")],
         Json(Token {
-            token: session.token,
+            token: session.token.clone(),
         }),
+    )
+        .into_response();
+    Ok(super::browser::set_session(
+        response,
+        &identity,
+        &session.token,
+        86400,
     ))
-}
-
-fn bearer(headers: &HeaderMap) -> Result<&str, IdentityError> {
-    headers
-        .get("authorization")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or(IdentityError::Unauthorized)
 }
 
 pub(super) async fn actor(
     identity: &Identity,
     headers: &HeaderMap,
 ) -> Result<Actor, IdentityError> {
-    identity.authenticate(bearer(headers)?).await
+    identity
+        .authenticate(super::browser::credential(identity, headers)?)
+        .await
 }
 
 #[derive(Serialize)]
@@ -101,9 +104,16 @@ async fn me(
 async fn logout(
     State(identity): State<Identity>,
     headers: HeaderMap,
-) -> Result<Json<bool>, IdentityError> {
-    identity.logout(bearer(&headers)?).await?;
-    Ok(Json(true))
+) -> Result<impl IntoResponse, IdentityError> {
+    identity
+        .logout(super::browser::credential(&identity, &headers)?)
+        .await?;
+    Ok(super::browser::set_session(
+        ([("cache-control", "no-store")], Json(true)).into_response(),
+        &identity,
+        "",
+        0,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -178,6 +188,7 @@ impl IntoResponse for IdentityError {
             Self::Conflict => (StatusCode::CONFLICT, "conflict"),
             Self::Busy => (StatusCode::TOO_MANY_REQUESTS, "identity_busy"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
+            Self::OidcUnavailable => (StatusCode::SERVICE_UNAVAILABLE, "oidc_unavailable"),
             Self::Database(_) | Self::Password => {
                 (StatusCode::SERVICE_UNAVAILABLE, "identity_unavailable")
             }
@@ -208,4 +219,40 @@ mod tests {
         assert_eq!(response.headers()["retry-after"], "1");
         assert_eq!(response.headers()["cache-control"], "no-store");
     }
+}
+
+async fn oidc_bindings(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Query(cursor): Query<AccountCursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(identity.oidc_bindings(&actor, cursor.after).await?),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevokeOidc {
+    id: Uuid,
+    expected_revision: i64,
+    request_id: Uuid,
+}
+
+async fn revoke_oidc(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Json(input): Json<RevokeOidc>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(
+            identity
+                .revoke_oidc_binding(&actor, input.id, input.expected_revision, input.request_id)
+                .await?,
+        ),
+    ))
 }
