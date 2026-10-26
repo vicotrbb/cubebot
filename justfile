@@ -61,3 +61,7 @@ db-down:
 # Uses an isolated disposable local PostgreSQL; never an existing application DB.
 integration:
     uv run --project tooling/quality --locked python tests/system/integration.py
+
+# Builds owned temporary images and compares Linux isolation mechanisms; not full G1-G3.
+container-isolation:
+    uv run --project tooling/quality --locked python tests/system/container_isolation.py

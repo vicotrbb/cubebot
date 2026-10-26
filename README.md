@@ -58,6 +58,8 @@ Runtime bootstrap TokenReview and 120-second identity sessions are enabled with 
 
 See [the quality policy](docs/development/quality.md) for exact tools, scope, exclusions, and limitations. `just format` applies formatting. GitHub Actions runs the same `just check` and `just smoke` commands and separately builds both containers. Hosting the workflow does not enable branch protection; configure required checks when a remote repository is created.
 
+`just container-isolation` builds disposable runtime/tool/qualification images and compares Linux filesystem and network mechanisms in an isolated Docker namespace. The [recorded mechanism results](docs/development/container-isolation.md) favor UID-aware kernel filtering, but the production Pod has no such filter yet. Full G1–G3, CNI/CSI, DNS, grants, browsers and arbitrary-tool qualification remain pending.
+
 ## Optional local database
 
 The liveness-only process still runs without a database. To run the identity API with PostgreSQL:
