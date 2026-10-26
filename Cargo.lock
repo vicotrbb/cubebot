@@ -396,7 +396,14 @@ dependencies = [
 name = "cubebot-agent"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "cubebot-protocol",
+ "reqwest",
+ "serde",
+ "serde_json",
  "sha2",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -427,6 +434,7 @@ name = "cubebot-protocol"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "uuid",
 ]
 
 [[package]]

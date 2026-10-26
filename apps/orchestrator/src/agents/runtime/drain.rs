@@ -8,14 +8,7 @@ pub struct DrainRequest {
     pub request_id: Uuid,
     pub acknowledged: bool,
 }
-#[derive(Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeDisposition {
-    /// Eligible for future assignment admission; this is not an execution grant.
-    Available,
-    Hold,
-    Drain,
-}
+pub use cubebot_protocol::runtime::RuntimeDisposition;
 #[derive(Serialize)]
 pub struct RuntimeControl {
     pub actor: RuntimeActor,
@@ -110,5 +103,23 @@ impl RuntimeIdentity {
         sqlx::query_scalar::<_,Uuid>("SELECT r.id FROM agent_runtime_sessions s JOIN agent_resources r ON r.id = s.attempt_id WHERE r.id = $1 AND s.version = $2 AND s.token_hash = $3 AND s.expires_at > clock_timestamp() AND r.kind = 'pod' AND r.phase = 'bound' AND r.uid = s.pod_uid")
             .bind(actor.attempt).bind(actor.version).bind(super::sessions::digest(token)).fetch_optional(&mut **transaction).await?.ok_or(Error::Unauthorized)?;
         Ok(())
+    }
+}
+
+impl From<DrainRequest> for cubebot_protocol::runtime::DrainRequest {
+    fn from(value: DrainRequest) -> Self {
+        Self {
+            request_id: value.request_id,
+            acknowledged: value.acknowledged,
+        }
+    }
+}
+impl From<RuntimeControl> for cubebot_protocol::runtime::RuntimeControl {
+    fn from(value: RuntimeControl) -> Self {
+        Self {
+            actor: value.actor.into(),
+            disposition: value.disposition,
+            drain: value.drain.map(Into::into),
+        }
     }
 }

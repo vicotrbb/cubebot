@@ -652,3 +652,64 @@ async fn drain_http_workflow_requires_machine_identity_and_retains_acknowledgeme
     task.abort();
     f.task.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn actual_native_runtime_bootstraps_and_acknowledges_persisted_drain() {
+    use cubebot_orchestrator::agents::LifecycleAction;
+    use std::os::unix::fs::DirBuilderExt;
+    let f = fixture().await;
+    lifecycle(&f, LifecycleAction::Sleep, 2).await;
+    let (origin, task) = runtime_server(f.auth.clone()).await;
+    let root = std::env::temp_dir().join(format!("cubebot-native-pg-{}", Uuid::new_v4()));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let token = root.join("token");
+    std::fs::write(&token, "projected-native-token").unwrap();
+    let binary = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("cubebot-agent");
+    let mut child = std::process::Command::new(binary)
+        .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
+        .env("CUBEBOT_BOOTSTRAP_TOKEN_FILE", token)
+        .env("CUBEBOT_JOURNAL_DIRECTORY", &root)
+        .spawn()
+        .expect("build the workspace before integration");
+    let status = native_exit(&mut child).await;
+    assert!(status.success());
+    let reported: bool = sqlx::query_scalar(
+        "SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1",
+    )
+    .bind(f.attempt)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert!(reported);
+    let phase: String = sqlx::query_scalar("SELECT phase FROM agent_resources WHERE id = $1")
+        .bind(f.attempt)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(phase, "bound");
+    assert!(root.join("journal/state").is_file());
+    std::fs::remove_dir_all(root).unwrap();
+    task.abort();
+    f.task.abort();
+}
+async fn native_exit(child: &mut std::process::Child) -> std::process::ExitStatus {
+    for _ in 0..250 {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    panic!("native runtime did not complete persisted drain");
+}

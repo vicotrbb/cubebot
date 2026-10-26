@@ -29,7 +29,7 @@ def wait_ready(name):
 
 
 def main():
-    run("cargo", "build", "-p", "cubebot-orchestrator", "--locked")
+    run("cargo", "build", "--workspace", "--locked")
     name = f"cubebot-test-{uuid.uuid4().hex}"
     password = secrets.token_hex(24)
     env = os.environ | {"POSTGRES_PASSWORD": password}

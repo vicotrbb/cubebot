@@ -98,3 +98,26 @@ impl RuntimeIdentity {
         Ok(expected)
     }
 }
+
+impl From<RuntimeActor> for cubebot_protocol::runtime::RuntimeActor {
+    fn from(value: RuntimeActor) -> Self {
+        Self {
+            agent: value.agent.0,
+            attempt: value.attempt.0,
+            epoch: value.epoch,
+            version: value.version,
+        }
+    }
+}
+impl From<RuntimeSession> for cubebot_protocol::runtime::RuntimeSession {
+    fn from(value: RuntimeSession) -> Self {
+        Self {
+            token: value.token,
+            agent: value.agent.0,
+            attempt: value.attempt.0,
+            epoch: value.epoch,
+            version: value.version,
+            expires_in_seconds: value.expires_in_seconds,
+        }
+    }
+}

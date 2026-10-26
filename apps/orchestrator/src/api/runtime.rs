@@ -1,9 +1,7 @@
 //! Machine credential boundary. It never consults human cookies or human session authority.
 use crate::agents::{
     kubernetes::Error,
-    runtime::{
-        DrainRequest, RuntimeAccess, RuntimeActor, RuntimeControl, RuntimeIdentity, RuntimeSession,
-    },
+    runtime::{RuntimeAccess, RuntimeIdentity},
 };
 use axum::{
     Json, Router,
@@ -12,21 +10,9 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use serde::Deserialize;
-use uuid::Uuid;
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Bootstrap {
-    token: String,
-    instance: Uuid,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct DrainAcknowledgement {
-    request_id: Uuid,
-}
+use cubebot_protocol::runtime::{
+    Bootstrap, DrainAcknowledgement, DrainRequest, RuntimeActor, RuntimeControl, RuntimeSession,
+};
 
 pub(super) fn router(identity: RuntimeIdentity) -> Router {
     Router::new()
@@ -43,22 +29,22 @@ async fn bootstrap(
     input: Result<Json<Bootstrap>, axum::extract::rejection::JsonRejection>,
 ) -> Result<Json<RuntimeSession>, Failure> {
     let Json(input) = input.map_err(|error| Failure(error.status()))?;
-    let session: RuntimeSession = identity
+    let session = identity
         .bootstrap(&input.token, input.instance)
         .await
         .map_err(Failure::from)?;
-    Ok(Json(session))
+    Ok(Json(session.into()))
 }
 async fn inspect(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
 ) -> Result<Json<RuntimeActor>, Failure> {
     let token = bearer(&headers)?;
-    let actor: RuntimeActor = identity
+    let actor = identity
         .authenticate(token, RuntimeAccess::Active)
         .await
         .map_err(Failure::from)?;
-    Ok(Json(actor))
+    Ok(Json(actor.into()))
 }
 async fn control(
     State(identity): State<RuntimeIdentity>,
@@ -68,7 +54,8 @@ async fn control(
         identity
             .control(bearer(&headers)?)
             .await
-            .map_err(Failure::from)?,
+            .map_err(Failure::from)?
+            .into(),
     ))
 }
 async fn drained(
@@ -81,7 +68,8 @@ async fn drained(
         identity
             .acknowledge_drain(bearer(&headers)?, input.request_id)
             .await
-            .map_err(Failure::from)?,
+            .map_err(Failure::from)?
+            .into(),
     ))
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
