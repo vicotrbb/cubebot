@@ -13,6 +13,7 @@ use cubebot_orchestrator::{
             Attempt, Kubernetes, Layout, Phase, ReconcileResult, Reconciler, Registry,
             ResourceObject,
         },
+        runtime::{RuntimeAccess, RuntimeIdentity, RuntimeSession},
     },
     identity::Identity,
 };
@@ -36,20 +37,25 @@ struct Fixture {
     api: Kubernetes,
     reconciler: Reconciler,
     client: Client,
+    identity: RuntimeIdentity,
 }
 #[tokio::main]
 async fn main() {
     let fixture = setup().await;
     let (workspace, first) = provision(&fixture).await;
     let first_pod = started(&fixture, &first).await;
+    let (projected, session) = verify_identity(&fixture, &first, &first_pod).await;
     verify_storage(&fixture, &workspace, &first_pod).await;
     let name = first_pod.metadata.name.as_deref().unwrap();
     exec(name, &["/usr/bin/tee", MARKER], Some(BYTES)).await;
     let rejection = verify_rwop(&fixture, &workspace).await;
     settle(&fixture, &first, &first_pod, 2).await;
+    verify_revoked(&fixture, &projected, &session).await;
     availability(&fixture, LifecycleAction::Wake, 3).await;
     let (retained, second) = provision(&fixture).await;
     let second_pod = started(&fixture, &second).await;
+    let (_, second_session) = verify_identity(&fixture, &second, &second_pod).await;
+    assert!(second_session.epoch > session.epoch);
     assert_eq!(workspace.uid, retained.uid);
     assert_ne!(first_pod.metadata.uid, second_pod.metadata.uid);
     let name = second_pod.metadata.name.as_deref().unwrap();
@@ -61,6 +67,8 @@ async fn main() {
         "second_pod_uid":second_pod.metadata.uid,"initializers_succeeded":true,
         "rwop_scheduler_rejected_second_mount":true,"rwop_rejection":rejection,"workspace_bytes_survived":true,
         "tool_runner_exit_code":1,"working_agent":false,"runtime_authenticated":false,
+        "actual_projected_token_exchange":true,"different_process_rejected":true,
+        "removed_pod_credentials_rejected":true,"replacement_epoch_increased":true,
         "operator_stop_required":true,"scope":"CSI/layout startup and clean termination only; G1-G3 remain open"})
     );
     fixture.pool.close().await;
@@ -71,6 +79,7 @@ async fn setup() -> Fixture {
     let (pool, registry, agent) = registry_support::setup().await;
     let api = Kubernetes::new(config.clone(), NAMESPACE).unwrap();
     let client = Client::try_from(config.clone()).unwrap();
+    let identity = RuntimeIdentity::new(pool.clone(), config.clone(), NAMESPACE).unwrap();
     let reconciler = Reconciler::new(pool.clone(), config, NAMESPACE, layout()).unwrap();
     Fixture {
         pool,
@@ -79,7 +88,45 @@ async fn setup() -> Fixture {
         api,
         reconciler,
         client,
+        identity,
     }
+}
+async fn verify_identity(f: &Fixture, attempt: &Attempt, pod: &Pod) -> (String, RuntimeSession) {
+    let projected = exec(
+        pod.metadata.name.as_deref().unwrap(),
+        &["/usr/bin/cat", "/run/cubebot/identity/token"],
+        None,
+    )
+    .await;
+    let instance = uuid::Uuid::new_v4();
+    let session = f.identity.bootstrap(&projected, instance).await.unwrap();
+    assert_eq!(session.agent, f.agent);
+    assert_eq!(session.attempt, attempt.id);
+    assert_eq!(session.epoch, attempt.epoch);
+    let actor = f
+        .identity
+        .authenticate(&session.token, RuntimeAccess::Active)
+        .await
+        .unwrap();
+    assert_eq!(actor.attempt, attempt.id);
+    assert!(matches!(
+        f.identity.bootstrap(&projected, uuid::Uuid::new_v4()).await,
+        Err(cubebot_orchestrator::agents::kubernetes::Error::Conflict)
+    ));
+    (projected, session)
+}
+async fn verify_revoked(f: &Fixture, projected: &str, session: &RuntimeSession) {
+    use cubebot_orchestrator::agents::kubernetes::Error;
+    assert!(matches!(
+        f.identity
+            .authenticate(&session.token, RuntimeAccess::Active)
+            .await,
+        Err(Error::Unauthorized)
+    ));
+    assert!(matches!(
+        f.identity.bootstrap(projected, uuid::Uuid::new_v4()).await,
+        Err(Error::Unauthorized)
+    ));
 }
 fn layout() -> Layout {
     let network = NetworkPolicy::new(

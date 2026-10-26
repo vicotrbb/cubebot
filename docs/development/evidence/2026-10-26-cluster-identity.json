@@ -1,0 +1,904 @@
+{
+  "timestamp": "2026-10-26T18:33:03.195856+00:00",
+  "node_image": "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+  "kind": "kind v0.33.0 go1.26.7 darwin/arm64",
+  "server": {
+    "major": "1",
+    "minor": "36",
+    "emulationMajor": "1",
+    "emulationMinor": "36",
+    "minCompatibilityMajor": "1",
+    "minCompatibilityMinor": "35",
+    "gitVersion": "v1.36.4",
+    "gitCommit": "bb826b1d48562f110659e64e8ec444327433db95",
+    "gitTreeState": "clean",
+    "buildDate": "2026-08-20T03:06:28Z",
+    "goVersion": "go1.26.5",
+    "compiler": "gc",
+    "platform": "linux/arm64"
+  },
+  "nodes": [
+    {
+      "name": "cubebot-startup-372b27a807bd-control-plane",
+      "pod_cidrs": ["10.244.0.0/24", "fd00:10:244::/64"],
+      "runtime": {
+        "architecture": "arm64",
+        "bootID": "f2f20ea8-4352-4082-8359-6f8197be7c8d",
+        "containerRuntimeVersion": "containerd://2.3.4",
+        "kernelVersion": "7.0.14-orbstack-00380-ga7e0a2dc9535",
+        "kubeProxyVersion": "",
+        "kubeletVersion": "v1.36.4",
+        "machineID": "2d470b5a446549e2894fd7de2eafb9eb",
+        "operatingSystem": "linux",
+        "osImage": "Debian GNU/Linux 13 (trixie)",
+        "swap": {
+          "capacity": 5254967296
+        },
+        "systemUUID": "2d470b5a446549e2894fd7de2eafb9eb"
+      },
+      "features": {
+        "supplementalGroupsPolicy": true
+      },
+      "capacity": {
+        "cpu": "3",
+        "ephemeral-storage": "172608Mi",
+        "memory": "4083236Ki",
+        "pods": "110"
+      },
+      "allocatable": {
+        "cpu": "3",
+        "ephemeral-storage": "172608Mi",
+        "memory": "4083236Ki",
+        "pods": "110"
+      }
+    }
+  ],
+  "images": {
+    "runtime": {
+      "id": "sha256:7fe58a1cafd9ba6d7a50cba4af4519568e7612a195d23ded5608c4f1649f4b38",
+      "architecture": "arm64",
+      "os": "linux",
+      "user": "10001:10001",
+      "entrypoint": ["/usr/local/bin/cubebot-agent"]
+    },
+    "tools": {
+      "id": "sha256:1b79e737be1a8a7d9b95086f6eed3631878971403792deee09579bdad67ed6bb",
+      "architecture": "arm64",
+      "os": "linux",
+      "user": "10002:10002",
+      "entrypoint": ["/usr/local/bin/cubebot-tool-runner"]
+    }
+  },
+  "node_image_references": {
+    "runtime": "docker.io/library/cubebot-startup-372b27a807bd-runtime@sha256:7fe58a1cafd9ba6d7a50cba4af4519568e7612a195d23ded5608c4f1649f4b38",
+    "tools": "docker.io/library/cubebot-startup-372b27a807bd-tools@sha256:1b79e737be1a8a7d9b95086f6eed3631878971403792deee09579bdad67ed6bb"
+  },
+  "csi_sources": [
+    {
+      "file": "volumesnapshotclasses.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml",
+      "sha256": "75e6565aac2c0f2949ed13ea884bbaa388cb7be576b558b709cf1168e011828d"
+    },
+    {
+      "file": "volumesnapshotcontents.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml",
+      "sha256": "895a3c1e73b60f06a0deb566dd123d01bdf1b2efc5d5ff5231ff8bbcf42dafc7"
+    },
+    {
+      "file": "volumesnapshots.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml",
+      "sha256": "b032116e987fb1d7d93cec7d942833adeb9d95c9bdc7e00c10b280c2fe4a6c33"
+    },
+    {
+      "file": "provisioner-rbac.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-provisioner/v6.4.0/deploy/kubernetes/rbac.yaml",
+      "sha256": "0ee8427b746a1d3b695705b74c2d7fb165121110b1a10c0b6e204918d93e814f"
+    },
+    {
+      "file": "attacher-rbac.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-attacher/v4.13.0/deploy/kubernetes/rbac.yaml",
+      "sha256": "3a38b5198b0496927c0ce26c63e71d43e2263e2dbbb93a83acdec71d7c90a766"
+    },
+    {
+      "file": "resizer-rbac.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-resizer/v2.3.0/deploy/kubernetes/rbac.yaml",
+      "sha256": "3615af0d007d51e02e53cd6f7415ff7b418c3a21d33bb6ce506639223619cd82"
+    },
+    {
+      "file": "snapshotter-rbac.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/deploy/kubernetes/csi-snapshotter/rbac-csi-snapshotter.yaml",
+      "sha256": "de67f66412f17fab9868494f657fed4319d4c13777b921045afc04100bdc9c98"
+    },
+    {
+      "file": "rbac-snapshot-controller.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/deploy/kubernetes/snapshot-controller/rbac-snapshot-controller.yaml",
+      "sha256": "99c4ac480b6c9563be0d85599e29cc7b68b25a82d250b0e789726727551e8d38"
+    },
+    {
+      "file": "setup-snapshot-controller.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/deploy/kubernetes/snapshot-controller/setup-snapshot-controller.yaml",
+      "sha256": "54b9342a7433c377b83a671babf416660078a716ec2e63f658a77aa629de5581"
+    },
+    {
+      "file": "csi-hostpath-driverinfo.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/6fab18ae4fc4f486193b618114eeb817d9929242/deploy/kubernetes-1.35/hostpath/csi-hostpath-driverinfo.yaml",
+      "sha256": "464307265464b77189bd4b339774cd2de69589458a62a740028b248f248c7e9a"
+    },
+    {
+      "file": "csi-hostpath-plugin.yaml",
+      "url": "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/6fab18ae4fc4f486193b618114eeb817d9929242/deploy/kubernetes-1.35/hostpath/csi-hostpath-plugin.yaml",
+      "sha256": "c3d075ee1dd17fa2b93d0ea216cd94d47b57f1f825210d0ca101607c58f9fdfa"
+    }
+  ],
+  "csi_pods": {
+    "apiVersion": "v1",
+    "items": [
+      {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+          "creationTimestamp": "2026-10-26T18:31:18Z",
+          "generateName": "csi-hostpathplugin-",
+          "generation": 1,
+          "labels": {
+            "app.kubernetes.io/component": "plugin",
+            "app.kubernetes.io/instance": "hostpath.csi.k8s.io",
+            "app.kubernetes.io/name": "csi-hostpathplugin",
+            "app.kubernetes.io/part-of": "csi-driver-host-path",
+            "apps.kubernetes.io/pod-index": "0",
+            "controller-revision-hash": "csi-hostpathplugin-5965b588d4",
+            "statefulset.kubernetes.io/pod-name": "csi-hostpathplugin-0"
+          },
+          "name": "csi-hostpathplugin-0",
+          "namespace": "default",
+          "ownerReferences": [
+            {
+              "apiVersion": "apps/v1",
+              "blockOwnerDeletion": true,
+              "controller": true,
+              "kind": "StatefulSet",
+              "name": "csi-hostpathplugin",
+              "uid": "1f8360ea-83e9-4a7a-b6af-b974ea93ea7e"
+            }
+          ],
+          "resourceVersion": "706",
+          "uid": "cb4727f5-8751-4b79-9606-657b2d8c76bf"
+        },
+        "spec": {
+          "containers": [
+            {
+              "args": [
+                "--drivername=hostpath.csi.k8s.io",
+                "--v=5",
+                "--endpoint=$(CSI_ENDPOINT)",
+                "--nodeid=$(KUBE_NODE_NAME)"
+              ],
+              "env": [
+                {
+                  "name": "CSI_ENDPOINT",
+                  "value": "unix:///csi/csi.sock"
+                },
+                {
+                  "name": "KUBE_NODE_NAME",
+                  "valueFrom": {
+                    "fieldRef": {
+                      "apiVersion": "v1",
+                      "fieldPath": "spec.nodeName"
+                    }
+                  }
+                }
+              ],
+              "image": "registry.k8s.io/sig-storage/hostpathplugin:v1.19.0",
+              "imagePullPolicy": "IfNotPresent",
+              "livenessProbe": {
+                "failureThreshold": 5,
+                "httpGet": {
+                  "path": "/healthz",
+                  "port": "healthz",
+                  "scheme": "HTTP"
+                },
+                "initialDelaySeconds": 10,
+                "periodSeconds": 2,
+                "successThreshold": 1,
+                "timeoutSeconds": 3
+              },
+              "name": "hostpath",
+              "ports": [
+                {
+                  "containerPort": 9898,
+                  "name": "healthz",
+                  "protocol": "TCP"
+                }
+              ],
+              "resources": {},
+              "securityContext": {
+                "privileged": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/lib/kubelet/pods",
+                  "mountPropagation": "Bidirectional",
+                  "name": "mountpoint-dir"
+                },
+                {
+                  "mountPath": "/var/lib/kubelet/plugins",
+                  "mountPropagation": "Bidirectional",
+                  "name": "plugins-dir"
+                },
+                {
+                  "mountPath": "/csi-data-dir",
+                  "name": "csi-data-dir"
+                },
+                {
+                  "mountPath": "/dev",
+                  "name": "dev-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "args": [
+                "--v=5",
+                "--csi-address=/csi/csi.sock",
+                "--kubelet-registration-path=/var/lib/kubelet/plugins/csi-hostpath/csi.sock",
+                "--http-endpoint=:9809"
+              ],
+              "env": [
+                {
+                  "name": "KUBE_NODE_NAME",
+                  "valueFrom": {
+                    "fieldRef": {
+                      "apiVersion": "v1",
+                      "fieldPath": "spec.nodeName"
+                    }
+                  }
+                }
+              ],
+              "image": "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0",
+              "imagePullPolicy": "IfNotPresent",
+              "livenessProbe": {
+                "failureThreshold": 3,
+                "httpGet": {
+                  "path": "/healthz",
+                  "port": "healthz",
+                  "scheme": "HTTP"
+                },
+                "initialDelaySeconds": 30,
+                "periodSeconds": 10,
+                "successThreshold": 1,
+                "timeoutSeconds": 15
+              },
+              "name": "node-driver-registrar",
+              "ports": [
+                {
+                  "containerPort": 9809,
+                  "name": "healthz",
+                  "protocol": "TCP"
+                }
+              ],
+              "resources": {},
+              "securityContext": {
+                "privileged": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/registration",
+                  "name": "registration-dir"
+                },
+                {
+                  "mountPath": "/csi-data-dir",
+                  "name": "csi-data-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "args": ["--csi-address=/csi/csi.sock", "--health-port=9898"],
+              "image": "registry.k8s.io/sig-storage/livenessprobe:v2.20.0",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "liveness-probe",
+              "resources": {},
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "args": ["--v=5", "--csi-address=/csi/csi.sock"],
+              "image": "registry.k8s.io/sig-storage/csi-attacher:v4.13.0",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "csi-attacher",
+              "resources": {},
+              "securityContext": {
+                "privileged": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "args": [
+                "-v=5",
+                "--csi-address=/csi/csi.sock",
+                "--feature-gates=Topology=true"
+              ],
+              "image": "registry.k8s.io/sig-storage/csi-provisioner:v6.4.0",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "csi-provisioner",
+              "resources": {},
+              "securityContext": {
+                "privileged": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "args": ["-v=5", "-csi-address=/csi/csi.sock"],
+              "image": "registry.k8s.io/sig-storage/csi-resizer:v2.3.0",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "csi-resizer",
+              "resources": {},
+              "securityContext": {
+                "privileged": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            },
+            {
+              "args": ["-v=5", "--csi-address=/csi/csi.sock"],
+              "image": "registry.k8s.io/sig-storage/csi-snapshotter:v8.7.0",
+              "imagePullPolicy": "IfNotPresent",
+              "name": "csi-snapshotter",
+              "resources": {},
+              "securityContext": {
+                "privileged": true
+              },
+              "terminationMessagePath": "/dev/termination-log",
+              "terminationMessagePolicy": "File",
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true
+                }
+              ]
+            }
+          ],
+          "dnsPolicy": "ClusterFirst",
+          "enableServiceLinks": true,
+          "hostname": "csi-hostpathplugin-0",
+          "nodeName": "cubebot-startup-372b27a807bd-control-plane",
+          "preemptionPolicy": "PreemptLowerPriority",
+          "priority": 0,
+          "restartPolicy": "Always",
+          "schedulerName": "default-scheduler",
+          "securityContext": {},
+          "serviceAccount": "csi-hostpathplugin-sa",
+          "serviceAccountName": "csi-hostpathplugin-sa",
+          "subdomain": "csi-hostpathplugin",
+          "terminationGracePeriodSeconds": 30,
+          "tolerations": [
+            {
+              "effect": "NoExecute",
+              "key": "node.kubernetes.io/not-ready",
+              "operator": "Exists",
+              "tolerationSeconds": 300
+            },
+            {
+              "effect": "NoExecute",
+              "key": "node.kubernetes.io/unreachable",
+              "operator": "Exists",
+              "tolerationSeconds": 300
+            }
+          ],
+          "volumes": [
+            {
+              "hostPath": {
+                "path": "/var/lib/kubelet/plugins/csi-hostpath",
+                "type": "DirectoryOrCreate"
+              },
+              "name": "socket-dir"
+            },
+            {
+              "hostPath": {
+                "path": "/var/lib/kubelet/pods",
+                "type": "DirectoryOrCreate"
+              },
+              "name": "mountpoint-dir"
+            },
+            {
+              "hostPath": {
+                "path": "/var/lib/kubelet/plugins_registry",
+                "type": "Directory"
+              },
+              "name": "registration-dir"
+            },
+            {
+              "hostPath": {
+                "path": "/var/lib/kubelet/plugins",
+                "type": "Directory"
+              },
+              "name": "plugins-dir"
+            },
+            {
+              "hostPath": {
+                "path": "/var/lib/csi-hostpath-data/",
+                "type": "DirectoryOrCreate"
+              },
+              "name": "csi-data-dir"
+            },
+            {
+              "hostPath": {
+                "path": "/dev",
+                "type": "Directory"
+              },
+              "name": "dev-dir"
+            },
+            {
+              "name": "kube-api-access-4g96b",
+              "projected": {
+                "defaultMode": 420,
+                "sources": [
+                  {
+                    "serviceAccountToken": {
+                      "expirationSeconds": 3607,
+                      "path": "token"
+                    }
+                  },
+                  {
+                    "configMap": {
+                      "items": [
+                        {
+                          "key": "ca.crt",
+                          "path": "ca.crt"
+                        }
+                      ],
+                      "name": "kube-root-ca.crt"
+                    }
+                  },
+                  {
+                    "downwardAPI": {
+                      "items": [
+                        {
+                          "fieldRef": {
+                            "apiVersion": "v1",
+                            "fieldPath": "metadata.namespace"
+                          },
+                          "path": "namespace"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "status": {
+          "conditions": [
+            {
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-10-26T18:31:20Z",
+              "observedGeneration": 1,
+              "status": "True",
+              "type": "PodReadyToStartContainers"
+            },
+            {
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-10-26T18:31:18Z",
+              "observedGeneration": 1,
+              "status": "True",
+              "type": "Initialized"
+            },
+            {
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-10-26T18:32:07Z",
+              "observedGeneration": 1,
+              "status": "True",
+              "type": "Ready"
+            },
+            {
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-10-26T18:32:07Z",
+              "observedGeneration": 1,
+              "status": "True",
+              "type": "ContainersReady"
+            },
+            {
+              "lastProbeTime": null,
+              "lastTransitionTime": "2026-10-26T18:31:18Z",
+              "observedGeneration": 1,
+              "status": "True",
+              "type": "PodScheduled"
+            }
+          ],
+          "containerStatuses": [
+            {
+              "containerID": "containerd://ab888348017992e34dfc0366a73569f61f26a534b3815d75f09cef223f49687f",
+              "image": "registry.k8s.io/sig-storage/csi-attacher:v4.13.0",
+              "imageID": "registry.k8s.io/sig-storage/csi-attacher@sha256:d1a26170efed45491074ca4545c81844eee2b9043fb885ac01fb4aed6f8b72d2",
+              "lastState": {},
+              "name": "csi-attacher",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:31:46Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            },
+            {
+              "containerID": "containerd://f92f92e3a4bd2d6df42f9ef8964ae513acef8e021c57a56d14daaff1ef0d5057",
+              "image": "registry.k8s.io/sig-storage/csi-provisioner:v6.4.0",
+              "imageID": "registry.k8s.io/sig-storage/csi-provisioner@sha256:6ebe60fd8ed67a7f8a90d34402e9e706b274e53612d6fa5fbb8285728db622e2",
+              "lastState": {},
+              "name": "csi-provisioner",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:31:53Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            },
+            {
+              "containerID": "containerd://a3995f81a00b7f9dff1bbe53ebcc2a82e8d0c72512c25f0aba51ee120f74f71a",
+              "image": "registry.k8s.io/sig-storage/csi-resizer:v2.3.0",
+              "imageID": "registry.k8s.io/sig-storage/csi-resizer@sha256:48fb3deb93cd848e3c8998b6368f4322c93bb5ce4a90d1307b6dda0dbefb9a0e",
+              "lastState": {},
+              "name": "csi-resizer",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:32:00Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            },
+            {
+              "containerID": "containerd://f51e273a95c4f730b0ebb56c5ffbd90233395025e57fdc5cad0bf5bbaf3111ad",
+              "image": "registry.k8s.io/sig-storage/csi-snapshotter:v8.7.0",
+              "imageID": "registry.k8s.io/sig-storage/csi-snapshotter@sha256:b03d3334f8035fa42660b166f6eb819a659a14774da020eb1b6c52cd422eaadb",
+              "lastState": {},
+              "name": "csi-snapshotter",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:32:07Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            },
+            {
+              "containerID": "containerd://7d27317ff0221f3ae84685232107a05771ad496555f83be941e549e722fd7192",
+              "image": "registry.k8s.io/sig-storage/hostpathplugin:v1.19.0",
+              "imageID": "registry.k8s.io/sig-storage/hostpathplugin@sha256:3af7d1b51d7af6e1858fcb0f08d87c89b4cc64cc709adfa9d75320da8f2f175c",
+              "lastState": {},
+              "name": "hostpath",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:31:23Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0, 1, 2, 3, 4, 6, 10, 11, 20, 26, 27],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/lib/kubelet/pods",
+                  "name": "mountpoint-dir"
+                },
+                {
+                  "mountPath": "/var/lib/kubelet/plugins",
+                  "name": "plugins-dir"
+                },
+                {
+                  "mountPath": "/csi-data-dir",
+                  "name": "csi-data-dir"
+                },
+                {
+                  "mountPath": "/dev",
+                  "name": "dev-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            },
+            {
+              "containerID": "containerd://d2f348ffa20ac58787c85df6cc31253f841ac5dff2ecc6d89f53a422e9f76f96",
+              "image": "registry.k8s.io/sig-storage/livenessprobe:v2.20.0",
+              "imageID": "registry.k8s.io/sig-storage/livenessprobe@sha256:19f2cf2f40e1987c7943945deca5f65cd4e4bf5cc0657fc78a5df131861578e8",
+              "lastState": {},
+              "name": "liveness-probe",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:31:40Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            },
+            {
+              "containerID": "containerd://0550bae89daedd771586d85b0ca371299a2e48dd9014cf6338708d213d53d809",
+              "image": "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0",
+              "imageID": "registry.k8s.io/sig-storage/csi-node-driver-registrar@sha256:b7fefd08651f00ac4df1a196ed4c621c2451fbb899297fe9fad9e36c667af0c0",
+              "lastState": {},
+              "name": "node-driver-registrar",
+              "ready": true,
+              "resources": {},
+              "restartCount": 0,
+              "started": true,
+              "state": {
+                "running": {
+                  "startedAt": "2026-10-26T18:31:35Z"
+                }
+              },
+              "user": {
+                "linux": {
+                  "gid": 0,
+                  "supplementalGroups": [0],
+                  "uid": 0
+                }
+              },
+              "volumeMounts": [
+                {
+                  "mountPath": "/csi",
+                  "name": "socket-dir"
+                },
+                {
+                  "mountPath": "/registration",
+                  "name": "registration-dir"
+                },
+                {
+                  "mountPath": "/csi-data-dir",
+                  "name": "csi-data-dir"
+                },
+                {
+                  "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                  "name": "kube-api-access-4g96b",
+                  "readOnly": true,
+                  "recursiveReadOnly": "Disabled"
+                }
+              ]
+            }
+          ],
+          "hostIP": "192.168.158.2",
+          "hostIPs": [
+            {
+              "ip": "192.168.158.2"
+            },
+            {
+              "ip": "fc00:f853:ccd:e793::2"
+            }
+          ],
+          "observedGeneration": 1,
+          "phase": "Running",
+          "podIP": "10.244.0.7",
+          "podIPs": [
+            {
+              "ip": "10.244.0.7"
+            },
+            {
+              "ip": "fd00:10:244::7"
+            }
+          ],
+          "qosClass": "BestEffort",
+          "resources": {},
+          "startTime": "2026-10-26T18:31:18Z"
+        }
+      }
+    ],
+    "kind": "List",
+    "metadata": {
+      "resourceVersion": ""
+    }
+  },
+  "scope": "Test-only CSI/layout startup and clean termination; working agent and G1-G3 remain unqualified",
+  "results": {
+    "actual_projected_token_exchange": true,
+    "different_process_rejected": true,
+    "first_pod_uid": "fbaf20d1-23a2-4347-80c6-b6242ca70817",
+    "initializers_succeeded": true,
+    "operator_stop_required": true,
+    "removed_pod_credentials_rejected": true,
+    "replacement_epoch_increased": true,
+    "runtime_authenticated": false,
+    "rwop_rejection": "0/1 nodes are available: 1 node(s) unavailable due to PersistentVolumeClaim with ReadWriteOncePod access mode already in-use by another pod. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.",
+    "rwop_scheduler_rejected_second_mount": true,
+    "scope": "CSI/layout startup and clean termination only; G1-G3 remain open",
+    "second_pod_uid": "dec3fb38-2601-442a-85d3-73d5343f85c5",
+    "tool_runner_exit_code": 1,
+    "working_agent": false,
+    "workspace_bytes_survived": true,
+    "workspace_uid": "aadf70bf-8853-4aa5-9695-44743c78def8"
+  },
+  "source_sha256": "65da76a05a0cccb17344e5a8eba9f662b76bacc4358bbedd46dbcfd316a8668b",
+  "base_commit": "e539cc0364d9285086d558884e5b312b619a9ca3",
+  "cleanup_completed": true
+}

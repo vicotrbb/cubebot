@@ -14,6 +14,8 @@ This is a startup and clean-replacement compatibility check. It is not a working
 6. Request sleep and require `AwaitingDrain` while runtime control is unavailable. The fixture operator then explicitly requests deletion with UID and resource-version preconditions. Reconciliation must retain actual termination evidence, finalize the owned Pod and observe its removal. This does not prove disconnected authority, acknowledged drain or partition fencing.
 7. Wake the same agent, require a different Pod UID and the same PVC UID, and read the retained bytes. Settle the second Pod through the same explicit operator-stop path. Cleanup removes only the owned cluster, builder, images, database and private kubeconfig.
 
+For each running Pod, the fixture operator also reads the projected token into memory and calls the production `RuntimeIdentity` exchange against actual Kubernetes TokenReview. The issued session must authenticate as the exact agent/attempt/epoch. A different process instance must be rejected. After the first Pod is removed, its session and projected credential must be rejected by Cubebot; the replacement must receive a higher epoch. Tokens are never saved in reports. This exercises the backend exchange through an operator harness, not the runtime process's HTTPS connection or drain acknowledgement.
+
 ## Backend and evidence limits
 
 The [upstream CSI hostpath driver](https://github.com/kubernetes-csi/csi-driver-host-path/blob/v1.19.0/README.md) is a test/demo driver. It cannot establish production storage durability, node-loss recovery, physical attachment fencing, capacity guarantees or backup/restore correctness. This fixture uses it to expose actual Kubernetes/CSI mount and lifecycle behavior before selecting and qualifying production storage profiles.
@@ -25,3 +27,5 @@ Public diagnostics stay under the run's ignored `target/cubebot-startup-*` direc
 The [recorded run](evidence/2026-10-26-cluster-startup.json) passed on Kubernetes 1.36.4 with the shipped arm64 images: all initializers succeeded, the scheduler rejected the competing RWOP mount, and the same PVC retained the expected bytes across different Pod UIDs. Both epochs settled after explicit fixture-operator stop, and owned-resource cleanup completed. The initial run failed because native Kustomize requires a supported filename; the fixture now writes `kustomization.yaml`.
 
 G1–G3, authenticated runtime operation, tool execution, finite authority and grant renewal remain open.
+
+The later [real-cluster identity run](evidence/2026-10-26-cluster-identity.json) passed those projected-token and epoch assertions as well as the original storage/startup workflow. Rejection of the removed Pod is an end-to-end Cubebot identity result; it does not establish immediate Kubernetes JWT revocation or physical executor fencing.
