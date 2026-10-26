@@ -6,6 +6,9 @@ use rand_core::{OsRng, RngCore};
 
 use super::IdentityError;
 
+// Shared by hashing and verification. The permit stays with uncancellable CPU work.
+static HASH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+
 pub fn validate_login(login: &str) -> Result<(), IdentityError> {
     let valid_login = login
         .bytes()
@@ -29,8 +32,10 @@ pub fn validate(login: &str, password: &str) -> Result<(), IdentityError> {
 }
 
 pub async fn hash(password: &str) -> Result<String, IdentityError> {
+    let permit = HASH_SLOTS.try_acquire().map_err(|_| IdentityError::Busy)?;
     let password = password.to_owned();
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         Argon2::default()
             .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
             .map(|hash| hash.to_string())
@@ -41,8 +46,10 @@ pub async fn hash(password: &str) -> Result<String, IdentityError> {
 }
 
 pub async fn verify(password: &str, verifier: String) -> Result<(), IdentityError> {
+    let permit = HASH_SLOTS.try_acquire().map_err(|_| IdentityError::Busy)?;
     let password = password.to_owned();
     tokio::task::spawn_blocking(move || {
+        let _permit = permit;
         let parsed = PasswordHash::new(&verifier).map_err(|_| IdentityError::Password)?;
         Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
@@ -56,4 +63,25 @@ pub fn token() -> String {
     let mut bytes = [0_u8; 32];
     OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn saturated_hash_capacity_rejects_hash_and_verification_without_queueing() {
+        let verifier = hash("a long real password").await.unwrap();
+        let capacity = HASH_SLOTS.acquire_many(4).await.unwrap();
+        assert!(matches!(
+            hash("another real password").await,
+            Err(IdentityError::Busy)
+        ));
+        assert!(matches!(
+            verify("a long real password", verifier.clone()).await,
+            Err(IdentityError::Busy)
+        ));
+        drop(capacity);
+        verify("a long real password", verifier).await.unwrap();
+    }
 }

@@ -28,6 +28,7 @@ pub enum IdentityError {
     NotFound,
     Database(sqlx::Error),
     Password,
+    Busy,
 }
 
 impl From<sqlx::Error> for IdentityError {

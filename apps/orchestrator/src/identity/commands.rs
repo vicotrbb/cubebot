@@ -149,6 +149,7 @@ impl super::Identity {
         let verifier: Option<String> = sqlx::query_scalar("SELECT c.secret_verifier FROM identity_commands c JOIN human_accounts a ON a.id = c.actor_id AND a.active WHERE c.actor_id = $1 AND c.kind = $2 AND c.request_id = $3 AND c.secret_verifier IS NOT NULL")
             .bind(account).bind(kind).bind(request_id).fetch_optional(&self.pool).await?;
         let verifier = verifier.ok_or(IdentityError::Unauthorized)?;
+        self.reserve_password_check(account).await?;
         let verified = super::passwords::verify(password, verifier).await;
         if matches!(verified, Err(IdentityError::Unauthorized)) {
             return Err(IdentityError::Conflict);

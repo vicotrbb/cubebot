@@ -5,6 +5,10 @@ import subprocess
 import uuid
 
 from access_flow import check_access, check_access_restart
+from authentication_flow import (
+    check_authentication_budget,
+    check_authentication_restart,
+)
 from request_flow import (
     check_account_commands,
     check_account_restart,
@@ -59,16 +63,18 @@ def check_identity(environment):
         member = check_invitation(base, token)
         checkpoint = check_access(base, token, member)
         requests = check_account_commands(base, token)
+        limited_login = check_authentication_budget(base, token)
     with running([str(BINARY)], ROOT, server_env) as process:
         await_ready(process, base + "/api/health/ready")
         assert request(base, "/api/identity/me", token)[1] == account
         check_access_restart(base, token, checkpoint)
         check_account_restart(base, token, requests)
+        check_authentication_restart(base, limited_login)
         assert request(base, "/api/identity/logout", token, {})[0] == 200
         assert request(base, "/api/identity/me", token)[0] == 401
     print(
         "Identity workflow passed: CLI bootstrap, HTTP login/invitation, "
-        "denied escalation, restart, logout"
+        "denied escalation, durable replays, password limits, restart, logout"
     )
 
 

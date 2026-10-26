@@ -15,6 +15,7 @@ impl Identity {
         .fetch_optional(&self.pool)
         .await?;
         let (id, verifier) = account.ok_or(IdentityError::Unauthorized)?;
+        self.reserve_password_check(id).await?;
         passwords::verify(password, verifier).await?;
         let token = passwords::token();
         // Recheck activity under a row lock after the expensive password verification.
@@ -25,7 +26,7 @@ impl Identity {
                 .fetch_optional(&mut *transaction)
                 .await?;
         active.ok_or(IdentityError::Unauthorized)?;
-        sqlx::query("INSERT INTO human_sessions (token_hash, account_id, expires_at) VALUES ($1, $2, now() + interval '1 day')")
+        sqlx::query("INSERT INTO human_sessions (token_hash, account_id, expires_at) VALUES ($1, $2, clock_timestamp() + interval '1 day')")
             .bind(digest(&token)).bind(id).execute(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(Session { token })
@@ -36,7 +37,7 @@ impl Identity {
             return Err(IdentityError::Unauthorized);
         }
         let account: Option<(Uuid, bool)> = sqlx::query_as(
-            "SELECT a.id, a.role = 'administrator' FROM human_sessions s JOIN human_accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > now() AND a.active",
+            "SELECT a.id, a.role = 'administrator' FROM human_sessions s JOIN human_accounts a ON a.id = s.account_id WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND a.active",
         )
         .bind(digest(token))
         .fetch_optional(&self.pool)
@@ -56,4 +57,15 @@ impl Identity {
 
 pub(super) fn digest(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
+}
+
+impl Identity {
+    pub(super) async fn reserve_password_check(&self, account: Uuid) -> Result<(), IdentityError> {
+        let reserved: Option<Uuid> = sqlx::query_scalar(
+            "UPDATE human_accounts SET auth_window_started_at = CASE WHEN auth_window_started_at <= clock_timestamp() - interval '60 seconds' THEN clock_timestamp() ELSE auth_window_started_at END, auth_attempts = CASE WHEN auth_window_started_at <= clock_timestamp() - interval '60 seconds' THEN 1 ELSE auth_attempts + 1 END WHERE id = $1 AND active AND (auth_attempts < 10 OR auth_window_started_at <= clock_timestamp() - interval '60 seconds') RETURNING id",
+        )
+        .bind(account).fetch_optional(&self.pool).await?;
+        reserved.ok_or(IdentityError::Unauthorized)?;
+        Ok(())
+    }
 }

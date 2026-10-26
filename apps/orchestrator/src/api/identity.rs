@@ -176,16 +176,36 @@ impl IntoResponse for IdentityError {
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::Conflict => (StatusCode::CONFLICT, "conflict"),
+            Self::Busy => (StatusCode::TOO_MANY_REQUESTS, "identity_busy"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::Database(_) | Self::Password => {
                 (StatusCode::SERVICE_UNAVAILABLE, "identity_unavailable")
             }
         };
-        (
+        let mut response = (
             status,
             [("cache-control", "no-store")],
             Json(ErrorBody { error }),
         )
-            .into_response()
+            .into_response();
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            response
+                .headers_mut()
+                .insert("retry-after", axum::http::HeaderValue::from_static("1"));
+        }
+        response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn saturated_password_capacity_returns_a_retryable_response() {
+        let response = IdentityError::Busy.into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers()["retry-after"], "1");
+        assert_eq!(response.headers()["cache-control"], "no-store");
     }
 }
