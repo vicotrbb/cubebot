@@ -1,9 +1,11 @@
 //! Short-lived runtime identity. It does not grant a turn or permission to execute effects.
+mod drain;
 mod sessions;
 use super::{
     AgentId,
     kubernetes::{Attempt, AttemptId, Error, Kubernetes, Registry, ResourceObject, ReviewedPod},
 };
+pub use drain::{DrainRequest, RuntimeControl, RuntimeDisposition};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;

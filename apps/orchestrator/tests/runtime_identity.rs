@@ -438,3 +438,217 @@ async fn uncertain_physical_ownership_denies_active_access_until_verified_again(
     );
     f.task.abort();
 }
+
+async fn lifecycle(
+    f: &Fixture,
+    action: cubebot_orchestrator::agents::LifecycleAction,
+    revision: i64,
+) {
+    use cubebot_orchestrator::agents::{Agents, LifecycleCommand};
+    let identity = Identity::new(f.pool.clone());
+    let human = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let actor = identity.authenticate(&human.token).await.unwrap();
+    Agents::new(f.pool.clone())
+        .lifecycle(
+            &actor,
+            f.agent,
+            &LifecycleCommand {
+                request_id: Uuid::new_v4(),
+                expected_revision: revision,
+                action,
+            },
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority() {
+    use cubebot_orchestrator::agents::LifecycleAction;
+    let f = fixture().await;
+    let instance = Uuid::new_v4();
+    let session = f.auth.bootstrap("projected-token", instance).await.unwrap();
+    assert!(
+        f.auth
+            .control(&session.token)
+            .await
+            .unwrap()
+            .drain
+            .is_none()
+    );
+    assert!(
+        f.auth
+            .acknowledge_drain(&session.token, Uuid::new_v4())
+            .await
+            .is_err()
+    );
+    lifecycle(&f, LifecycleAction::Sleep, 2).await;
+    let request = f.auth.control(&session.token).await.unwrap().drain.unwrap();
+    assert!(!request.acknowledged);
+    assert!(
+        f.auth
+            .acknowledge_drain(&session.token, Uuid::new_v4())
+            .await
+            .is_err()
+    );
+    let acknowledged = f
+        .auth
+        .acknowledge_drain(&session.token, request.request_id)
+        .await
+        .unwrap();
+    assert!(acknowledged.acknowledged);
+    let original: String = sqlx::query_scalar(
+        "SELECT acknowledged_at::text FROM agent_runtime_drains WHERE attempt_id = $1",
+    )
+    .bind(f.attempt)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    let rotated = f.auth.bootstrap("projected-token", instance).await.unwrap();
+    f.auth
+        .acknowledge_drain(&rotated.token, request.request_id)
+        .await
+        .unwrap();
+    let retained: String = sqlx::query_scalar(
+        "SELECT acknowledged_at::text FROM agent_runtime_drains WHERE attempt_id = $1",
+    )
+    .bind(f.attempt)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(original, retained);
+    lifecycle(&f, LifecycleAction::Wake, 3).await;
+    let control = f.auth.control(&rotated.token).await.unwrap();
+    assert_eq!(control.drain.unwrap().request_id, request.request_id);
+    assert!(
+        f.auth
+            .authenticate(&rotated.token, RuntimeAccess::Active)
+            .await
+            .is_err()
+    );
+    let phase: String = sqlx::query_scalar("SELECT phase FROM agent_resources WHERE id = $1")
+        .bind(f.attempt)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(phase, "bound");
+    // Even an accidentally restored generation cannot reopen a latched incarnation.
+    sqlx::query("UPDATE agents SET restart_generation = (SELECT target_generation FROM agent_resources WHERE id = $1) WHERE id = $2")
+        .bind(f.attempt).bind(f.agent).execute(&f.pool).await.unwrap();
+    assert!(
+        f.auth
+            .authenticate(&rotated.token, RuntimeAccess::Active)
+            .await
+            .is_err()
+    );
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn drain_reports_recheck_expiry_after_waiting_for_lifecycle_lock() {
+    use cubebot_orchestrator::agents::LifecycleAction;
+    let f = fixture().await;
+    let session = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    lifecycle(&f, LifecycleAction::Restart, 2).await;
+    let request = f.auth.control(&session.token).await.unwrap().drain.unwrap();
+    let mut transaction = f.pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM agents WHERE id = $1 FOR UPDATE")
+        .bind(f.agent)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    let auth = f.auth.clone();
+    let report = tokio::spawn(async move {
+        auth.acknowledge_drain(&session.token, request.request_id)
+            .await
+    });
+    // Wait until PostgreSQL proves the report is contending on the held lifecycle lock.
+    wait_for_runtime_lock(&f.pool).await;
+    sqlx::query("UPDATE agent_runtime_sessions SET created_at = clock_timestamp() - interval '3 minutes', expires_at = clock_timestamp() - interval '1 second' WHERE attempt_id = $1").bind(f.attempt).execute(&mut *transaction).await.unwrap();
+    transaction.commit().await.unwrap();
+    assert!(report.await.unwrap().is_err());
+    let acknowledged: bool = sqlx::query_scalar(
+        "SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1",
+    )
+    .bind(f.attempt)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert!(!acknowledged);
+    f.task.abort();
+}
+
+async fn wait_for_runtime_lock(pool: &sqlx::PgPool) {
+    for _ in 0..100 {
+        let waiting: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'SELECT id FROM agents%')")
+            .fetch_one(pool).await.unwrap();
+        if waiting {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("runtime did not wait on held lifecycle lock");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn drain_http_workflow_requires_machine_identity_and_retains_acknowledgement() {
+    use cubebot_orchestrator::agents::LifecycleAction;
+    let f = fixture().await;
+    let session = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    lifecycle(&f, LifecycleAction::Retire, 2).await;
+    let (origin, task) = runtime_server(f.auth.clone()).await;
+    let client = openidconnect::reqwest::Client::new();
+    let response = client
+        .get(format!("{origin}/api/runtime/control"))
+        .bearer_auth(&session.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let control: Value = serde_json::from_slice(&response.bytes().await.unwrap()).unwrap();
+    assert_eq!(control["disposition"], "drain");
+    let body = json!({"request_id":control["drain"]["request_id"]});
+    let identity = Identity::new(f.pool.clone());
+    let human = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let denied = client
+        .post(format!("{origin}/api/runtime/drained"))
+        .bearer_auth(human.token)
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 401);
+    let accepted = client
+        .post(format!("{origin}/api/runtime/drained"))
+        .bearer_auth(&session.token)
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), 200);
+    assert_eq!(accepted.headers()["cache-control"], "no-store");
+    let result: Value = serde_json::from_slice(&accepted.bytes().await.unwrap()).unwrap();
+    assert_eq!(result["acknowledged"], true);
+    task.abort();
+    f.task.abort();
+}
