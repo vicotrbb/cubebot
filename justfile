@@ -66,3 +66,7 @@ integration:
 # Builds owned temporary images and compares Linux isolation mechanisms; not full G1-G3.
 container-isolation:
     uv run --project tooling/quality --locked python tests/system/container_isolation.py
+
+# Owns a disposable local cluster and PostgreSQL; never uses the default kubeconfig.
+cluster-admission:
+    uv run --project tooling/quality --locked python tests/system/cluster_admission.py

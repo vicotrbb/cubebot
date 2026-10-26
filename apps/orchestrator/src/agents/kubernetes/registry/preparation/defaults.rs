@@ -2,7 +2,7 @@ use super::{Error, ResourceObject};
 use k8s_openapi::api::core::v1::{Container, PodSpec, Toleration};
 
 pub(super) fn verify(intent: &ResourceObject, preview: &ResourceObject) -> Result<(), Error> {
-    if intent.metadata() != preview.metadata() {
+    if !metadata_matches(intent, preview) {
         return Err(Error::OwnershipMismatch);
     }
     let matches = match (intent, preview) {
@@ -44,7 +44,36 @@ pub(super) fn verify(intent: &ResourceObject, preview: &ResourceObject) -> Resul
     Ok(())
 }
 
+fn metadata_matches(intent: &ResourceObject, preview: &ResourceObject) -> bool {
+    let mut expected = intent.metadata().clone();
+    let protection = "kubernetes.io/pvc-protection".to_owned();
+    if matches!(intent, ResourceObject::Workspace(_))
+        && preview
+            .metadata()
+            .finalizers
+            .as_ref()
+            .is_some_and(|items| items.contains(&protection))
+        && !expected
+            .finalizers
+            .as_ref()
+            .is_some_and(|items| items.contains(&protection))
+    {
+        expected
+            .finalizers
+            .get_or_insert_with(Vec::new)
+            .push(protection);
+    }
+    expected == *preview.metadata()
+}
+
 fn pod_defaults(expected: &mut PodSpec, actual: &PodSpec) {
+    if let Some(name) = &expected.service_account_name {
+        fill(
+            &mut expected.service_account,
+            &actual.service_account,
+            name.clone(),
+        );
+    }
     fill(&mut expected.priority, &actual.priority, 0);
     fill(
         &mut expected.preemption_policy,
@@ -152,6 +181,60 @@ mod tests {
 
     fn pod() -> ResourceObject {
         ResourceObject::Pod(Box::new(serde_json::from_value(json!({"metadata":{"name":"owned-pod"},"spec":{"restartPolicy":"Never","containers":[{"name":"runtime","image":"registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},{"name":"tools","image":"registry.test/tools@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}]}})).unwrap()))
+    }
+    #[test]
+    fn legacy_service_account_alias_must_match_the_explicit_account() {
+        let intent = mutate(&pod(), "/spec/serviceAccountName", json!("cubebot-runtime"));
+        let preview = mutate(&intent, "/spec/serviceAccount", json!("cubebot-runtime"));
+        assert!(verify(&intent, &preview).is_ok());
+        assert!(
+            verify(
+                &intent,
+                &mutate(&preview, "/spec/serviceAccount", json!("other-account"))
+            )
+            .is_err()
+        );
+        assert!(verify(&intent, &mutate(&preview, "/spec/hostNetwork", json!(true))).is_err());
+    }
+    #[test]
+    fn pvc_protection_is_the_only_allowed_metadata_addition() {
+        let intent = ResourceObject::Workspace(Box::new(serde_json::from_value(json!({"metadata":{"name":"workspace","finalizers":["cubebot.dev/workspace-retained"]},"spec":{"accessModes":["ReadWriteOncePod"],"resources":{"requests":{"storage":"10Gi"}}}})).unwrap()));
+        let protected = mutate(
+            &intent,
+            "/metadata/finalizers",
+            json!([
+                "cubebot.dev/workspace-retained",
+                "kubernetes.io/pvc-protection"
+            ]),
+        );
+        assert!(verify(&intent, &protected).is_ok());
+        for finalizers in [
+            json!(["kubernetes.io/pvc-protection"]),
+            json!([
+                "cubebot.dev/workspace-retained",
+                "injected.example/finalizer"
+            ]),
+            json!([
+                "cubebot.dev/workspace-retained",
+                "kubernetes.io/pvc-protection",
+                "kubernetes.io/pvc-protection"
+            ]),
+        ] {
+            assert!(
+                verify(
+                    &intent,
+                    &mutate(&intent, "/metadata/finalizers", finalizers)
+                )
+                .is_err()
+            );
+        }
+        assert!(
+            verify(
+                &intent,
+                &mutate(&protected, "/metadata/labels", json!({"injected":"label"}))
+            )
+            .is_err()
+        );
     }
     fn mutate(object: &ResourceObject, path: &str, value: Value) -> ResourceObject {
         let mut serialized = serde_json::to_value(object).unwrap();

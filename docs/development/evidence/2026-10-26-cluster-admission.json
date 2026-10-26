@@ -1,0 +1,60 @@
+{
+  "timestamp": "2026-10-26T17:37:10.505993+00:00",
+  "node_image": "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
+  "kind": "kind v0.33.0 go1.26.7 darwin/arm64",
+  "server": {
+    "major": "1",
+    "minor": "36",
+    "emulationMajor": "1",
+    "emulationMinor": "36",
+    "minCompatibilityMajor": "1",
+    "minCompatibilityMinor": "35",
+    "gitVersion": "v1.36.4",
+    "gitCommit": "bb826b1d48562f110659e64e8ec444327433db95",
+    "gitTreeState": "clean",
+    "buildDate": "2026-08-20T03:06:28Z",
+    "goVersion": "go1.26.5",
+    "compiler": "gc",
+    "platform": "linux/arm64"
+  },
+  "nodes": [
+    {
+      "name": "cubebot-admission-9a2842850ac7-control-plane",
+      "pod_cidrs": ["10.244.0.0/24", "fd00:10:244::/64"],
+      "runtime": {
+        "architecture": "arm64",
+        "bootID": "f2f20ea8-4352-4082-8359-6f8197be7c8d",
+        "containerRuntimeVersion": "containerd://2.3.4",
+        "kernelVersion": "7.0.14-orbstack-00380-ga7e0a2dc9535",
+        "kubeProxyVersion": "",
+        "kubeletVersion": "v1.36.4",
+        "machineID": "d9210852c15145f9b9459b40cad507b9",
+        "operatingSystem": "linux",
+        "osImage": "Debian GNU/Linux 13 (trixie)",
+        "swap": {
+          "capacity": 5254967296
+        },
+        "systemUUID": "d9210852c15145f9b9459b40cad507b9"
+      },
+      "features": {
+        "supplementalGroupsPolicy": true
+      }
+    }
+  ],
+  "scope": "API admission and prepared-manifest persistence; no running agent or G1-G3 qualification",
+  "results": {
+    "allowed": {
+      "namespace": "cubebot-admission",
+      "physical_pod_created": false,
+      "repeated_preparation_stable": true,
+      "server_defaulting_accepted": true
+    },
+    "restricted": {
+      "namespace": "cubebot-admission-restricted",
+      "pod_security_rejected": true
+    }
+  },
+  "source_sha256": "c4fbc413850c22502827587deb09f729651ca65ce75b851a8d6ca4600cb4c3bc",
+  "base_commit": "8dab77b782185c1a1f5557db5224758e17d68e7f",
+  "cleanup_completed": true
+}

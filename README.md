@@ -218,3 +218,5 @@ Container verification was retried after the layout change on 2026-10-25. Both b
 - [Implementation evidence](docs/development/implementation-progress.md)
 
 Next, implement a complete path from creating an agent and recording its assignment to native execution, streamed results, and restart-safe state. The scaffold does not resolve the security and recovery qualification gates described in those documents.
+
+`just cluster-admission` runs the [actual Kubernetes admission fixture](docs/development/cluster-admission.md) in an owned disposable kind cluster with PostgreSQL. It requires the verified local kind v0.33.0 tool and tests server defaulting, retained preparation and restricted Pod Security rejection. It creates no running agent or workspace; CSI, CNI and full lifecycle qualification remain pending.

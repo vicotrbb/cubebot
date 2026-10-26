@@ -60,14 +60,14 @@ impl Layout {
         let value = json!({
             "os":{"name":"linux"},"restartPolicy":"Never", "terminationGracePeriodSeconds":30,
             "automountServiceAccountToken":false,"serviceAccountName":self.service_account,
-            "shareProcessNamespace":false,"hostNetwork":false,"hostPID":false,"hostIPC":false,
+            "shareProcessNamespace":false,
             "enableServiceLinks":false,"dnsPolicy":"None","dnsConfig":{"nameservers":self.network.dns().iter().map(ToString::to_string).collect::<Vec<_>>()},"schedulerName":"default-scheduler",
             "runtimeClassName":self.runtime_class,
             "securityContext":{"runAsNonRoot":true,"fsGroup":20000,"fsGroupChangePolicy":"OnRootMismatch","supplementalGroupsPolicy":"Strict","seccompProfile":{"type":"RuntimeDefault"}},
             "initContainers":[self.initialize_network(),self.initialize("runtime",10001),self.initialize("tools",10002)],
             "containers":[self.runtime(),self.tools()],
             "volumes":[
-                {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name,"readOnly":false}},
+                {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name}},
                 {"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}},
                 {"name":"runtime-tmp","emptyDir":{"sizeLimit":"64Mi"}},
                 {"name":"tools-tmp","emptyDir":{"sizeLimit":"1Gi"}},
