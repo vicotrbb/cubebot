@@ -10,6 +10,7 @@ from authentication_flow import (
     check_authentication_budget,
     check_authentication_restart,
 )
+from lifecycle_flow import check_lifecycle, check_lifecycle_restart
 from request_flow import (
     check_account_commands,
     check_account_restart,
@@ -63,6 +64,7 @@ def check_identity(environment):
         assert status == 200 and account["administrator"] is True
         member = check_invitation(base, token)
         agent_checkpoint = check_agents(base, token, member)
+        lifecycle_checkpoint = check_lifecycle(base, token, member)
         checkpoint = check_access(base, token, member)
         requests = check_account_commands(base, token)
         limited_login = check_authentication_budget(base, token)
@@ -71,6 +73,7 @@ def check_identity(environment):
         assert request(base, "/api/identity/me", token)[1] == account
         check_access_restart(base, token, checkpoint)
         check_agents_restart(base, token, agent_checkpoint)
+        check_lifecycle_restart(base, token, lifecycle_checkpoint)
         check_account_restart(base, token, requests)
         check_authentication_restart(base, limited_login)
         assert request(base, "/api/identity/logout", token, {})[0] == 200

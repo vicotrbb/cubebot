@@ -1,5 +1,5 @@
 use crate::{
-    agents::{AgentId, Agents, CreateAgent},
+    agents::{AgentId, Agents, CreateAgent, LifecycleCommand, UpdateAgent},
     identity::{Identity, IdentityError},
 };
 use axum::{
@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
 use serde::Deserialize;
 
@@ -21,6 +21,9 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/agents", get(list).post(create))
         .route("/api/agents/{id}", get(read))
+        .route("/api/agents/{id}/definition", post(update))
+        .route("/api/agents/{id}/lifecycle", post(lifecycle))
+        .route("/api/agents/{id}/revisions", get(revisions))
         .with_state(AgentApi {
             identity,
             agents: Agents::new(pool),
@@ -67,5 +70,52 @@ async fn create(
         StatusCode::CREATED,
         [("cache-control", "no-store")],
         Json(api.agents.create(&actor, &input).await?),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevisionCursor {
+    #[serde(default)]
+    after: i64,
+}
+
+async fn update(
+    State(api): State<AgentApi>,
+    headers: HeaderMap,
+    Path(id): Path<AgentId>,
+    Json(input): Json<UpdateAgent>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.agents.update(&actor, id, &input).await?),
+    ))
+}
+
+async fn lifecycle(
+    State(api): State<AgentApi>,
+    headers: HeaderMap,
+    Path(id): Path<AgentId>,
+    Json(input): Json<LifecycleCommand>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        [("cache-control", "no-store")],
+        Json(api.agents.lifecycle(&actor, id, &input).await?),
+    ))
+}
+
+async fn revisions(
+    State(api): State<AgentApi>,
+    headers: HeaderMap,
+    Path(id): Path<AgentId>,
+    Query(cursor): Query<RevisionCursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.agents.revisions(&actor, id, cursor.after).await?),
     ))
 }
