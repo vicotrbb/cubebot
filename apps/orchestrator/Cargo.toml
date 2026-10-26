@@ -1,16 +1,23 @@
 [package]
 name = "cubebot-orchestrator"
+default-run = "cubebot-orchestrator"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+argon2 = "0.5"
 axum.workspace = true
 cubebot-protocol.workspace = true
+rand_core = { version = "0.6", features = ["getrandom"] }
+serde = { workspace = true, features = ["derive"] }
+sha2 = "0.10"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "macros", "uuid"] }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid = { version = "1", features = ["v4", "serde"] }
 
 [dev-dependencies]
 http-body-util = "0.1"

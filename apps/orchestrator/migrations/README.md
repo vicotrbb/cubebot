@@ -1,5 +1,7 @@
 # Database migrations
 
-Add the first PostgreSQL migration with the first persistent feature. No schema exists in this scaffold. The orchestrator owns migrations and database access; agents use the orchestrator API.
+The orchestrator embeds and applies SQLx migrations from this directory when a database is configured. `0001_identity.sql` creates the singleton installation bootstrap record, built-in accounts, hashed sessions and identity audit trail. The build script tracks migration changes. Applied migrations are immutable; add a new numbered migration for changes.
 
-Migrations must support the coordinated maintenance and backup/restore requirements in ADRs 0064, 0065, and 0077. Do not infer production readiness from the development Compose database.
+`just integration` applies migrations against real isolated PostgreSQL, reconnects, reapplies them and verifies constraints and transaction rollback. Agents never receive database credentials or access the schema directly.
+
+Coordinated maintenance, backup/restore and upgrades under ADRs 0064, 0065 and 0077 remain unimplemented. Development migration tests do not qualify those workflows.

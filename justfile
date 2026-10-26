@@ -57,3 +57,7 @@ db-up:
 # Retains the PostgreSQL volume.
 db-down:
     docker compose --env-file .env down
+
+# Uses an isolated disposable local PostgreSQL; never an existing application DB.
+integration:
+    uv run --project tooling/quality --locked python tests/system/integration.py

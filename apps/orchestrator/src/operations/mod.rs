@@ -1,2 +1,3 @@
-//! Owns maintenance, coordinated backup/restore, upgrades, and operational notifications.
-//! Not implemented yet.
+//! Installation operations, dependency readiness, and maintenance.
+
+pub mod database;

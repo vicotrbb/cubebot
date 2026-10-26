@@ -34,6 +34,7 @@ jobs:
       - run: just bootstrap
       - run: just check
       - run: just smoke
+      - run: just integration
       - name: Validate development database configuration
         run: docker compose --env-file .env.example config --quiet
 

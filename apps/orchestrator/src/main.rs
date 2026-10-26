@@ -16,6 +16,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_env_filter(filter)
         .try_init()?;
 
+    let router = application().await?;
     let address: SocketAddr = match std::env::var("CUBEBOT_BIND_ADDR") {
         Ok(value) => value.parse()?,
         Err(std::env::VarError::NotPresent) => "127.0.0.1:8080".parse()?,
@@ -23,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
     let listener = TcpListener::bind(address).await?;
     tracing::info!(address = %listener.local_addr()?, "orchestrator liveness server listening");
-    axum::serve(listener, cubebot_orchestrator::api::router())
+    axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     Ok(())
@@ -45,4 +46,17 @@ async fn shutdown_signal() {
         .await
         .expect("shutdown handler must be available");
     tracing::info!("shutdown requested");
+}
+
+async fn application() -> Result<axum::Router, Box<dyn Error + Send + Sync>> {
+    match std::env::var("CUBEBOT_DATABASE_URL") {
+        Ok(url) => {
+            let pool = cubebot_orchestrator::operations::database::connect(&url)
+                .await
+                .map_err(|_| "configured database connection or migration failed")?;
+            Ok(cubebot_orchestrator::api::database_router(pool))
+        }
+        Err(std::env::VarError::NotPresent) => Ok(cubebot_orchestrator::api::router()),
+        Err(_) => Err("invalid CUBEBOT_DATABASE_URL".into()),
+    }
 }

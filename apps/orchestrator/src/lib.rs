@@ -1,6 +1,6 @@
 //! Installation-wide behavior, exposed through the orchestrator application.
 //!
-//! Each domain owns its rules and persistence. Only process liveness exists today.
+//! Each domain owns its rules and persistence. PostgreSQL identity is the first implemented domain slice.
 
 pub mod agents;
 pub mod api;

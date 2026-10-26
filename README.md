@@ -2,7 +2,7 @@
 
 A Kubernetes-native home for persistent agents, shared rooms, memories, and skills.
 
-**Status: repository foundation.** The Rust orchestrator serves process liveness and the TanStack Start frontend serves a starting page. Agent execution, accounts, persistence, rooms, memory, integrations, PWA installation, and Kubernetes reconciliation are not implemented yet.
+**Status: first persistence and identity slice in progress.** The Rust orchestrator supports PostgreSQL migrations, operator-only administrator bootstrap, built-in account login, expiring sessions, logout, administrator account creation and suspension. The TanStack Start frontend still serves a starting page. Invitations, teams, scoped grants, OIDC, agent execution, rooms, memory, integrations, PWA installation and Kubernetes reconciliation are not implemented yet.
 
 ## Start developing
 
@@ -34,7 +34,7 @@ The orchestrator accepts exported `CUBEBOT_BIND_ADDR` and `RUST_LOG` variables. 
 
 | Path                | Responsibility                                                        |
 | ------------------- | --------------------------------------------------------------------- |
-| `apps/orchestrator` | Installation control plane; currently HTTP liveness and shutdown      |
+| `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown   |
 | `apps/agent`        | Agent runtime and internal tool runner in one Rust package            |
 | `apps/web`          | TanStack Start frontend and future PWA                                |
 | `modules/protocol`  | Shared communication contracts                                        |
@@ -46,7 +46,7 @@ The orchestrator accepts exported `CUBEBOT_BIND_ADDR` and `RUST_LOG` variables. 
 
 See [repository layout](docs/development/repository-layout.md) for the complete module map and dependency rules. The agent package builds `cubebot-agent` and `cubebot-tool-runner`; both explicitly exit with an unimplemented message until their execution behavior exists. The tool runner belongs to the agent app and will run in its separate tool container.
 
-The backend remains a modular monolith. Dependencies for PostgreSQL, Kubernetes, providers, and tools will be added with their first working feature rather than as unused scaffolding.
+The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. Kubernetes, provider and tool dependencies will be added with their first working feature.
 
 ## Quality rules
 
@@ -56,7 +56,7 @@ See [the quality policy](docs/development/quality.md) for exact tools, scope, ex
 
 ## Optional local database
 
-The scaffold runs without a database. To prepare PostgreSQL for upcoming persistence work:
+The liveness-only process still runs without a database. To run the identity API with PostgreSQL:
 
 ```sh
 cp .env.example .env
@@ -65,7 +65,28 @@ just db-up
 just db-down
 ```
 
-Compose binds PostgreSQL to loopback and retains its named volume when stopped. The example credentials are for local development. No application schema or database integration exists yet. The development image follows PostgreSQL major 18; production image digests and the pgvector extension will be selected during persistence qualification.
+Compose binds PostgreSQL to loopback and retains its named volume when stopped. The example credentials are for local development. The orchestrator applies embedded migrations when `CUBEBOT_DATABASE_URL` is exported. Invalid configured databases stop startup. The development image follows PostgreSQL major 18; production image digests and pgvector remain unqualified.
+
+### Identity development workflow
+
+Export `CUBEBOT_DATABASE_URL` with your local PostgreSQL connection string. Create the initial administrator through the local operator binary, using exported `CUBEBOT_BOOTSTRAP_LOGIN` and `CUBEBOT_BOOTSTRAP_PASSWORD`, then remove those bootstrap variables from your shell:
+
+```sh
+cargo run --locked -p cubebot-orchestrator --bin cubebot-admin -- bootstrap
+cargo run --locked -p cubebot-orchestrator
+```
+
+Bootstrap is one-time and serialized in PostgreSQL. Passwords must contain 12–1024 bytes and logins use 3–64 lowercase ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. Passwords use Argon2id. Sessions last one day and persist only SHA-256 token digests. Send the returned opaque token as `Authorization: Bearer <token>` over HTTPS outside loopback development. No public bootstrap or registration endpoint exists.
+
+The current identity API has `POST /api/identity/login`, `GET /api/identity/me`, `POST /api/identity/logout`, administrator-only `POST /api/identity/accounts`, and administrator-only `POST /api/identity/suspend`. Login and account creation accept `login` and `password`; creation also accepts `administrator`, default false. Suspension accepts account `id`. Logout removes the session, and suspension blocks subsequent authentication and removes the account's sessions. These endpoints are an initial development slice; scoped access, invitation/OIDC flows and authentication abuse controls remain pending.
+
+`GET /api/health/ready` checks the configured database and exists only in database-enabled mode. It does not attest to agent, Kubernetes or provider readiness.
+
+```sh
+just integration
+```
+
+This builds the orchestrator/operator binaries, starts an isolated disposable PostgreSQL 18 container with a generated password, runs real database/HTTP tests and a process restart workflow, then removes that container and its test data. It never uses the database in `.env` or another application's database. Ordinary `cargo test` explicitly reports the database cases as ignored; `just integration` runs them and fails if Docker or PostgreSQL is unavailable.
 
 ## Builds and containers
 
@@ -93,5 +114,7 @@ Container verification was retried after the layout change on 2026-10-25. Both b
 - [Accepted ADRs](docs/adr/README.md)
 - [Software specification](docs/design/software-specification.md)
 - [Qualification plan](docs/design/qualification.md)
+- [Implementation milestones](docs/superpowers/plans/2026-10-25-cubebot.md)
+- [Implementation evidence](docs/development/implementation-progress.md)
 
 Next, implement a complete path from creating an agent and recording its assignment to native execution, streamed results, and restart-safe state. The scaffold does not resolve the security and recovery qualification gates described in those documents.
