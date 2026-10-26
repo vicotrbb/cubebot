@@ -296,7 +296,7 @@ def session_event(process, request=None):
 
 
 @contextmanager
-def socket_session(runtime, address):
+def socket_session(runtime, address, protocol="session", expected=True):
     process = subprocess.Popen(
         [
             "docker",
@@ -306,7 +306,7 @@ def socket_session(runtime, address):
             "10002:10002",
             runtime,
             "/usr/local/bin/isolation-probe",
-            "session",
+            protocol,
             address,
         ],
         stdin=subprocess.PIPE,
@@ -315,7 +315,7 @@ def socket_session(runtime, address):
         bufsize=0,
     )
     try:
-        assert session_event(process), "private socket did not open under grant"
+        assert session_event(process) is expected, "unexpected socket admission"
         yield process
     finally:
         process.stdin.close()
@@ -458,6 +458,93 @@ def bidirectional_grants(image, prefix, runtime):
         "duplex_request_reply_grants": existing,
         "duplex_blocks_incoming_data": duplex,
         "duplex_default_paths": reachable,
+    }
+
+
+def udp_policy(image, prefix, runtime):
+    # Distinct sets prevent a TCP grant from authorizing the same UDP port.
+    rules = ""
+    for family, version in ((4, "ip"), (6, "ip6")):
+        rules += (
+            f"add set inet cubebot_probe datagram{family} "
+            f"{{ type ipv{family}_addr . inet_service; flags timeout; }}\n"
+            "insert rule inet cubebot_probe output ct direction original "
+            f"meta skuid 10002 {version} daddr . udp dport "
+            f"@datagram{family} ct mark set 2 accept\n"
+            "insert rule inet cubebot_probe input ct mark 2 ct direction original "
+            f"{version} daddr . udp dport @datagram{family} accept\n"
+            "insert rule inet cubebot_probe input ct mark 2 ct direction reply "
+            f"{version} saddr . udp sport @datagram{family} accept\n"
+        )
+    helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rules)
+
+
+def udp_element(image, prefix, runtime, family, operation, timeout=None):
+    address, port = {4: ("127.0.0.1", 18080), 6: ("::1", 18081)}[family]
+    lifetime = f" timeout {timeout}s" if timeout else ""
+    rules = (
+        f"{operation} element inet cubebot_probe datagram{family} "
+        f"{{ {address} . {port}{lifetime} }}\n"
+    )
+    helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rules)
+
+
+def udp_family(image, prefix, runtime, family):
+    address, other = {
+        4: ("127.0.0.1:18080", "127.0.0.1:18082"),
+        6: ("[::1]:18081", "[::1]:18083"),
+    }[family]
+    grant_element(image, prefix, runtime, family, "add", timeout=30)
+    with socket_session(runtime, address, "udp-session", expected=False):
+        pass
+    grant_element(image, prefix, runtime, family, "delete")
+    udp_element(image, prefix, runtime, family, "add", timeout=5)
+    with socket_session(runtime, address, "udp-session") as process:
+        assert session_event(process, "exchange")
+        with socket_session(runtime, other, "udp-session", expected=False):
+            pass
+        time.sleep(5.2)
+        assert not session_event(process, "exchange")
+    with socket_session(runtime, address, "udp-session", expected=False):
+        pass
+    udp_element(image, prefix, runtime, family, "add", timeout=30)
+    with socket_session(runtime, address, "udp-session") as process:
+        assert session_event(process, "exchange")
+        udp_element(image, prefix, runtime, family, "delete")
+        assert not session_event(process, "exchange")
+    with socket_session(runtime, address, "udp-session", expected=False):
+        pass
+    return {
+        "tcp_grant_does_not_authorize_udp": True,
+        "ungranted_port_denied": True,
+        "expired_existing_and_new_denied": True,
+        "revoked_existing_and_new_denied": True,
+    }
+
+
+def udp_grants(image, prefix, runtime):
+    for address in (
+        "127.0.0.1:18080",
+        "127.0.0.1:18082",
+        "[::1]:18081",
+        "[::1]:18083",
+    ):
+        result = json.loads(
+            docker(
+                "exec",
+                runtime,
+                "/usr/local/bin/isolation-probe",
+                "udp-session",
+                address,
+            )
+        )
+        assert result["connected"], "trusted UDP listener control failed"
+    for address in ("8.8.4.4:18080", "[2001:4860::8888]:18081"):
+        with socket_session(runtime, address, "udp-session"):
+            pass
+    udp_policy(image, prefix, runtime)
+    return {
+        f"ipv{family}": udp_family(image, prefix, runtime, family) for family in (4, 6)
     }
 
 
@@ -612,6 +699,7 @@ def qualify(images, prefix, volume):
         "bidirectional_private_grants": bidirectional_grants(
             images["qualification"], prefix, runtime
         ),
+        "udp_private_grants": udp_grants(images["qualification"], prefix, runtime),
         **results,
     }
 

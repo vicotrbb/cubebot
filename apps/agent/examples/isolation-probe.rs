@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     io::{BufRead, Read, Write},
-    net::{SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream, UdpSocket},
     os::unix::fs::MetadataExt,
     sync::{Arc, Mutex},
     time::Duration,
@@ -15,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("serve") => return serve(),
         Some("filesystem") => filesystem()?,
         Some("session") if args.len() == 2 => return session(&args[1]),
+        Some("udp-session") if args.len() == 2 => return udp_session(&args[1]),
         Some("connect") if args.len() == 2 => connect(&args[1])?,
         _ => return Err("invalid probe command".into()),
     };
@@ -45,6 +46,10 @@ fn serve() -> Result<(), Box<dyn std::error::Error>> {
     }
     serve_push("127.0.0.1:18088", "127.0.0.1:18089")?;
     serve_push("[::1]:18090", "[::1]:18091")?;
+    for address in ["0.0.0.0:18080", "[::]:18081", "0.0.0.0:18082", "[::]:18083"] {
+        let socket = UdpSocket::bind(address)?;
+        std::thread::spawn(move || udp_respond(socket));
+    }
     println!("{}", identity()?);
     std::io::stdout().flush()?;
     loop {
@@ -89,6 +94,27 @@ fn connect(address: &str) -> Result<Value, Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn udp_exchange_rejects_a_stale_reply() {
+        let server = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let client = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        client.connect(server.local_addr().unwrap()).unwrap();
+        client
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .unwrap();
+        let peer = client.local_addr().unwrap();
+        let producer = std::thread::spawn(move || {
+            let mut bytes = [0; 8];
+            server.recv_from(&mut bytes).unwrap();
+            server.send_to(&1u64.to_be_bytes(), peer).unwrap();
+            server.recv_from(&mut bytes).unwrap();
+            server.send_to(&1u64.to_be_bytes(), peer).unwrap();
+        });
+        assert!(udp_exchange(&client, 1).is_ok());
+        assert!(udp_exchange(&client, 2).is_err());
+        producer.join().unwrap();
+    }
 
     #[test]
     fn receiving_a_push_does_not_send_another_request() {
@@ -143,6 +169,51 @@ fn respond_session(mut stream: TcpStream) -> std::io::Result<()> {
 fn exchange(stream: &mut TcpStream) -> std::io::Result<()> {
     stream.write_all(b"?")?;
     read_fixture(stream)
+}
+
+fn udp_respond(socket: UdpSocket) {
+    let mut bytes = [0; 8];
+    while let Ok((length, peer)) = socket.recv_from(&mut bytes) {
+        if length == bytes.len() {
+            let _ = socket.send_to(&bytes, peer);
+        }
+    }
+}
+
+fn udp_exchange(socket: &UdpSocket, sequence: u64) -> std::io::Result<()> {
+    let expected = sequence.to_be_bytes();
+    socket.send(&expected)?;
+    let mut bytes = [0; 9];
+    let length = socket.recv(&mut bytes)?;
+    if length != expected.len() || bytes[..length] != expected {
+        return Err(std::io::Error::other("stale or invalid UDP response"));
+    }
+    Ok(())
+}
+
+fn udp_session(address: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let address: SocketAddr = address.parse()?;
+    let local = if address.is_ipv4() {
+        "0.0.0.0:0"
+    } else {
+        "[::]:0"
+    };
+    let socket = UdpSocket::bind(local)?;
+    socket.connect(address)?;
+    socket.set_read_timeout(Some(Duration::from_millis(700)))?;
+    socket.set_write_timeout(Some(Duration::from_millis(700)))?;
+    // UDP connect alone sends nothing. Admission requires a complete exchange.
+    println!("{}", json!({"connected":udp_exchange(&socket, 1).is_ok()}));
+    std::io::stdout().flush()?;
+    for (index, line) in std::io::stdin().lock().lines().take(4).enumerate() {
+        if line? != "exchange" {
+            return Err("invalid UDP session command".into());
+        }
+        let connected = udp_exchange(&socket, index as u64 + 2).is_ok();
+        println!("{}", json!({"connected":connected}));
+        std::io::stdout().flush()?;
+    }
+    Ok(())
 }
 
 fn read_fixture(stream: &mut TcpStream) -> std::io::Result<()> {
