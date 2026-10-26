@@ -1,6 +1,7 @@
 //! Durable ownership before external effects. No Kubernetes calls occur inside transactions.
 mod anchor;
 mod objects;
+mod preparation;
 mod recovery;
 use super::Error;
 use crate::agents::AgentId;
@@ -52,6 +53,8 @@ pub struct Attempt {
     pub uid: Option<String>,
     pub blocked_reason: Option<String>,
     pub object: ResourceObject,
+    pub intent: ResourceObject,
+    pub prepared: bool,
 }
 
 #[derive(sqlx::FromRow)]
@@ -66,6 +69,8 @@ struct Row {
     uid: Option<String>,
     blocked_reason: Option<String>,
     manifest: sqlx::types::Json<serde_json::Value>,
+    source_manifest: sqlx::types::Json<serde_json::Value>,
+    prepared: bool,
 }
 impl Row {
     fn attempt(self) -> Result<Attempt, Error> {
@@ -80,6 +85,8 @@ impl Row {
             uid: self.uid,
             blocked_reason: self.blocked_reason,
             object: ResourceObject::decode(self.kind, self.manifest.0)?,
+            intent: ResourceObject::decode(self.kind, self.source_manifest.0)?,
+            prepared: self.prepared,
         })
     }
 }
@@ -93,7 +100,7 @@ impl Registry {
         Self { pool }
     }
     pub async fn attempt(&self, id: AttemptId) -> Result<Attempt, Error> {
-        let row:Row = sqlx::query_as("SELECT id, agent_id, kind, epoch, target_generation, definition_revision, phase, uid, blocked_reason, manifest FROM agent_resources WHERE id = $1")
+        let row:Row = sqlx::query_as("SELECT id, agent_id, kind, epoch, target_generation, definition_revision, phase, uid, blocked_reason, manifest, source_manifest, prepared FROM agent_resources WHERE id = $1")
             .bind(id).fetch_optional(&self.pool).await?.ok_or(Error::Conflict)?;
         row.attempt()
     }
@@ -128,7 +135,7 @@ impl Registry {
         let mut transaction = self.transaction().await?;
         let (state,generation):(String,i64) = sqlx::query_as("SELECT a.desired_state,a.restart_generation FROM agents a JOIN agent_resources r ON r.agent_id = a.id WHERE r.id = $1 FOR UPDATE OF a")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
-        let changed = sqlx::query("UPDATE agent_resources SET phase = 'creating', updated_at = clock_timestamp() WHERE id = $1 AND $2 <> 'retired' AND (kind = 'workspace' OR ($2 = 'running' AND target_generation = $3)) AND phase IN ('planned','creating')")
+        let changed = sqlx::query("UPDATE agent_resources SET phase = 'creating', updated_at = clock_timestamp() WHERE id = $1 AND $2 <> 'retired' AND (kind = 'workspace' OR ($2 = 'running' AND target_generation = $3)) AND prepared AND phase IN ('planned','creating')")
             .bind(id).bind(state).bind(generation).execute(&mut *transaction).await?.rows_affected();
         if changed != 1 {
             return Err(Error::Conflict);
@@ -139,7 +146,7 @@ impl Registry {
 
     pub async fn bind_object(&self, id: AttemptId, observed: &ResourceObject) -> Result<(), Error> {
         let mut transaction = self.transaction().await?;
-        let row:Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest FROM agent_resources WHERE id = $1 FOR UPDATE")
+        let row:Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE id = $1 FOR UPDATE")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
         let expected = row.attempt()?;
         if !matches!(expected.phase, Phase::Creating | Phase::Bound) {
@@ -196,14 +203,14 @@ async fn existing(
     generation: i64,
     spec: &ResourceSpec,
 ) -> Result<Option<Attempt>, Error> {
-    let current:Option<Row> = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest FROM agent_resources WHERE agent_id = $1 AND kind = $2 AND phase <> 'stopped'")
+    let current:Option<Row> = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE agent_id = $1 AND kind = $2 AND phase <> 'stopped'")
         .bind(agent).bind(spec.kind().as_str()).fetch_optional(&mut **transaction).await?;
     let Some(current) = current else {
         return Ok(None);
     };
     let attempt = current.attempt()?;
     if (spec.kind() == ResourceKind::Pod && attempt.target_generation != generation)
-        || !spec.matches(&attempt.object)
+        || !spec.matches(&attempt.intent)
     {
         if attempt.kind == ResourceKind::Pod && attempt.phase == Phase::Planned {
             sqlx::query("UPDATE agent_resources SET phase = 'stopped', termination_proof = '{\"kind\":\"not_dispatched\"}'::jsonb, updated_at = clock_timestamp() WHERE id = $1 AND phase = 'planned'")
@@ -232,7 +239,7 @@ async fn insert_attempt(
     let object = spec.object(binding, agent, id, epoch)?;
     let metadata = object.metadata();
     let manifest = serde_json::to_value(&object).map_err(|_| Error::InvalidConfiguration)?;
-    sqlx::query("INSERT INTO agent_resources (id,agent_id,kind,epoch,target_generation,definition_revision,namespace,name,manifest) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+    sqlx::query("INSERT INTO agent_resources (id,agent_id,kind,epoch,target_generation,definition_revision,namespace,name,manifest,source_manifest) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)")
         .bind(id).bind(agent).bind(kind.as_str()).bind(epoch).bind(generation).bind(revision).bind(metadata.namespace.as_deref()).bind(metadata.name.as_deref()).bind(sqlx::types::Json(manifest)).execute(&mut **transaction).await?;
     Ok(id)
 }

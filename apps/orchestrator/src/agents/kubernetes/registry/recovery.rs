@@ -26,7 +26,7 @@ impl Registry {
     /// Retain the observed terminal object before allowing the next pod epoch.
     pub async fn record_stopped(&self, id: super::AttemptId, pod: &Pod) -> Result<(), Error> {
         let mut transaction = self.transaction().await?;
-        let row: Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest FROM agent_resources WHERE id = $1 FOR UPDATE")
+        let row: Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE id = $1 FOR UPDATE")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
         let expected = row.attempt()?;
         if expected.kind != ResourceKind::Pod
