@@ -6,7 +6,7 @@ use rand_core::{OsRng, RngCore};
 
 use super::IdentityError;
 
-pub fn validate(login: &str, password: &str) -> Result<(), IdentityError> {
+pub fn validate_login(login: &str) -> Result<(), IdentityError> {
     let valid_login = login
         .bytes()
         .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte));
@@ -17,6 +17,11 @@ pub fn validate(login: &str, password: &str) -> Result<(), IdentityError> {
     if !(3..=64).contains(&login.len()) || !valid_login || !valid_first {
         return Err(IdentityError::InvalidInput);
     }
+    Ok(())
+}
+
+pub fn validate(login: &str, password: &str) -> Result<(), IdentityError> {
+    validate_login(login)?;
     if !(12..=1024).contains(&password.len()) {
         return Err(IdentityError::InvalidInput);
     }

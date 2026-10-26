@@ -54,6 +54,6 @@ impl Identity {
     }
 }
 
-fn digest(token: &str) -> Vec<u8> {
+pub(super) fn digest(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }

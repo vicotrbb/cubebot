@@ -71,7 +71,7 @@ impl Identity {
     }
 }
 
-async fn lock_administrator(
+pub(super) async fn lock_administrator(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: Uuid,
 ) -> Result<(), IdentityError> {
@@ -85,7 +85,7 @@ async fn lock_administrator(
     Ok(())
 }
 
-async fn insert_account(
+pub(super) async fn insert_account(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     login: &str,
     verifier: &str,
@@ -101,7 +101,7 @@ async fn insert_account(
     .await?)
 }
 
-async fn audit(
+pub(super) async fn audit(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: Uuid,
     subject: Uuid,

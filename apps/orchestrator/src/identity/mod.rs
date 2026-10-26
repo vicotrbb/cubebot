@@ -1,6 +1,8 @@
 //! Human accounts and current database-backed session authority.
 
 mod accounts;
+mod invitations;
+pub use invitations::Invitation;
 mod passwords;
 mod sessions;
 

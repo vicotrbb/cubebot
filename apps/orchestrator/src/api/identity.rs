@@ -53,7 +53,10 @@ fn bearer(headers: &HeaderMap) -> Result<&str, IdentityError> {
         .ok_or(IdentityError::Unauthorized)
 }
 
-async fn actor(identity: &Identity, headers: &HeaderMap) -> Result<Actor, IdentityError> {
+pub(super) async fn actor(
+    identity: &Identity,
+    headers: &HeaderMap,
+) -> Result<Actor, IdentityError> {
     identity.authenticate(bearer(headers)?).await
 }
 

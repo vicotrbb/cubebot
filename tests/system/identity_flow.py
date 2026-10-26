@@ -20,7 +20,7 @@ def request(base, path, token="", value=None):
         with urllib.request.urlopen(req, timeout=5) as response:
             return response.status, json.loads(response.read())
     except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read())
+        return error.code, json.loads(error.read() or b"{}")
 
 
 def check_identity(environment):
@@ -56,9 +56,63 @@ def check_identity(environment):
         token = result["token"]
         status, account = request(base, "/api/identity/me", token)
         assert status == 200 and account["administrator"] is True
+        check_invitation(base, token)
     with running([str(BINARY)], ROOT, server_env) as process:
         await_ready(process, base + "/api/health/ready")
         assert request(base, "/api/identity/me", token)[1] == account
         assert request(base, "/api/identity/logout", token, {})[0] == 200
         assert request(base, "/api/identity/me", token)[0] == 401
-    print("Identity workflow passed: CLI bootstrap, HTTP login, restart, logout")
+    print(
+        "Identity workflow passed: CLI bootstrap, HTTP login/invitation, "
+        "denied escalation, restart, logout"
+    )
+
+
+def check_invitation(base, token):
+    status, invitation = request(
+        base, "/api/identity/invitations", token, {"login": "invited-http-member"}
+    )
+    assert status == 201
+    member_password = secrets.token_hex(24)
+    status, _ = request(
+        base,
+        "/api/identity/invitations/accept",
+        value={
+            "token": invitation["token"],
+            "password": member_password,
+        },
+    )
+    assert status == 201
+    assert (
+        request(
+            base,
+            "/api/identity/invitations/accept",
+            value={
+                "token": invitation["token"],
+                "password": member_password,
+            },
+        )[0]
+        == 401
+    )
+    status, member = request(
+        base,
+        "/api/identity/login",
+        value={
+            "login": "invited-http-member",
+            "password": member_password,
+        },
+    )
+    assert status == 200
+    assert (
+        request(
+            base,
+            "/api/identity/accounts",
+            member["token"],
+            {
+                "login": "escalated",
+                "password": member_password,
+                "administrator": True,
+            },
+        )[0]
+        == 403
+    )

@@ -2,7 +2,7 @@
 
 A Kubernetes-native home for persistent agents, shared rooms, memories, and skills.
 
-**Status: first persistence and identity slice in progress.** The Rust orchestrator supports PostgreSQL migrations, operator-only administrator bootstrap, built-in account login, expiring sessions, logout, administrator account creation and suspension. The TanStack Start frontend still serves a starting page. Invitations, teams, scoped grants, OIDC, agent execution, rooms, memory, integrations, PWA installation and Kubernetes reconciliation are not implemented yet.
+**Status: first persistence and identity slice in progress.** The Rust orchestrator supports PostgreSQL migrations, operator-only administrator bootstrap, built-in account login, expiring sessions, logout, administrator account creation and suspension, and login-bound invitations with one-time redemption, expiry and revocation. The TanStack Start frontend still serves a starting page. Teams, scoped grants, OIDC, agent execution, rooms, memory, integrations, PWA installation and Kubernetes reconciliation are not implemented yet.
 
 ## Start developing
 
@@ -78,7 +78,9 @@ cargo run --locked -p cubebot-orchestrator
 
 Bootstrap is one-time and serialized in PostgreSQL. Passwords must contain 12–1024 bytes and logins use 3–64 lowercase ASCII letters, digits, dots, underscores or hyphens, starting with a letter or digit. Passwords use Argon2id. Sessions last one day and persist only SHA-256 token digests. Send the returned opaque token as `Authorization: Bearer <token>` over HTTPS outside loopback development. No public bootstrap or registration endpoint exists.
 
-The current identity API has `POST /api/identity/login`, `GET /api/identity/me`, `POST /api/identity/logout`, administrator-only `POST /api/identity/accounts`, and administrator-only `POST /api/identity/suspend`. Login and account creation accept `login` and `password`; creation also accepts `administrator`, default false. Suspension accepts account `id`. Logout removes the session, and suspension blocks subsequent authentication and removes the account's sessions. These endpoints are an initial development slice; scoped access, invitation/OIDC flows and authentication abuse controls remain pending.
+The current identity API has `POST /api/identity/login`, `GET /api/identity/me`, `POST /api/identity/logout`, administrator-only `POST /api/identity/accounts`, and administrator-only `POST /api/identity/suspend`. Login and account creation accept `login` and `password`; creation also accepts `administrator`, default false. Suspension accepts account `id`. Logout removes the session, and suspension blocks subsequent authentication and removes the account's sessions. These endpoints are an initial development slice; scoped access, OIDC flows and authentication abuse controls remain pending.
+
+Administrators create a seven-day invitation with `POST /api/identity/invitations` and a `login`. The response contains its ID and a one-time bearer token; only its digest is stored. Deliver the token through a trusted channel. `POST /api/identity/invitations/accept` accepts that token and a new password, creating only the bound member login. `POST /api/identity/invitations/revoke` accepts the invitation ID. Expired/revoked/used invitations cannot create another account, and inviting an existing suspended login cannot reactivate it. Invitation delivery, listing and lost-response command reconciliation remain pending.
 
 `GET /api/health/ready` checks the configured database and exists only in database-enabled mode. It does not attest to agent, Kubernetes or provider readiness.
 

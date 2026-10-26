@@ -3,6 +3,7 @@
 //! Database-enabled mode exposes the initial authenticated identity endpoints.
 
 mod identity;
+mod invitations;
 
 use axum::{Json, Router, routing::get};
 use cubebot_protocol::{Liveness, LivenessStatus};
@@ -21,6 +22,9 @@ async fn liveness() -> Json<Liveness> {
 pub fn database_router(pool: sqlx::PgPool) -> Router {
     router()
         .merge(identity::router(crate::identity::Identity::new(
+            pool.clone(),
+        )))
+        .merge(invitations::router(crate::identity::Identity::new(
             pool.clone(),
         )))
         .route("/api/health/ready", get(readiness).with_state(pool))
