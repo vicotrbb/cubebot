@@ -25,6 +25,23 @@ impl Registry {
 
     /// Retain the observed terminal object before allowing the next pod epoch.
     pub async fn record_stopped(&self, id: super::AttemptId, pod: &Pod) -> Result<(), Error> {
+        self.store_termination(id, pod, true).await
+    }
+
+    pub(crate) async fn retain_termination(
+        &self,
+        id: super::AttemptId,
+        pod: &Pod,
+    ) -> Result<(), Error> {
+        self.store_termination(id, pod, false).await
+    }
+
+    async fn store_termination(
+        &self,
+        id: super::AttemptId,
+        pod: &Pod,
+        stopped: bool,
+    ) -> Result<(), Error> {
         let mut transaction = self.transaction().await?;
         let row: Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE id = $1 FOR UPDATE")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
@@ -39,9 +56,43 @@ impl Registry {
         if !termination_proven(pod) {
             return Err(Error::TerminationUnproven);
         }
-        sqlx::query("UPDATE agent_resources SET phase = 'stopped', blocked_reason = NULL, termination_proof = $2, updated_at = clock_timestamp() WHERE id = $1")
-            .bind(id).bind(sqlx::types::Json(pod)).execute(&mut *transaction).await?;
+        sqlx::query("UPDATE agent_resources SET phase = CASE WHEN $3 THEN 'stopped' ELSE phase END, blocked_reason = NULL, termination_proof = COALESCE(termination_proof,$2), updated_at = clock_timestamp() WHERE id = $1")
+            .bind(id).bind(sqlx::types::Json(pod)).bind(stopped).execute(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(())
+    }
+    pub(crate) async fn retained_termination(
+        &self,
+        id: super::AttemptId,
+    ) -> Result<Option<Pod>, Error> {
+        let proof: Option<sqlx::types::Json<Pod>> = sqlx::query_scalar("SELECT termination_proof FROM agent_resources WHERE id = $1 AND kind = 'pod' AND phase = 'bound'")
+            .bind(id).fetch_optional(&self.pool).await?.flatten();
+        Ok(proof.map(|proof| proof.0))
+    }
+
+    pub(crate) async fn recorded_pod(
+        &self,
+        attempt: &super::Attempt,
+    ) -> Result<crate::agents::kubernetes::RecordedPod, Error> {
+        let mut transaction = self.transaction().await?;
+        let binding = super::anchor::load(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(crate::agents::kubernetes::RecordedPod {
+            namespace: binding.namespace,
+            name: attempt
+                .object
+                .metadata()
+                .name
+                .clone()
+                .ok_or(Error::OwnershipMismatch)?,
+            uid: attempt.uid.clone().ok_or(Error::OwnershipMismatch)?,
+            identity: crate::agents::kubernetes::Identity {
+                installation: binding.installation,
+                agent: attempt.agent,
+                attempt: attempt.id.0,
+                anchor_name: binding.name,
+                anchor_uid: binding.uid,
+            },
+        })
     }
 }

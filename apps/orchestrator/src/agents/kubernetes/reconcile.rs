@@ -11,6 +11,9 @@ pub enum ReconcileResult {
     AwaitingDrain {
         attempt: AttemptId,
     },
+    Stopping {
+        attempt: AttemptId,
+    },
     Uncertain {
         attempt: AttemptId,
     },
@@ -21,9 +24,9 @@ pub enum ReconcileResult {
     },
 }
 pub struct Reconciler {
-    pool: PgPool,
-    registry: Registry,
-    api: Kubernetes,
+    pub(super) pool: PgPool,
+    pub(super) registry: Registry,
+    pub(super) api: Kubernetes,
     namespace: String,
     layout: Layout,
 }
@@ -110,12 +113,7 @@ impl Reconciler {
             self.registry.cancel_planned(previous.id).await?;
             return Ok(None);
         }
-        self.registry
-            .block(previous.id, previous.phase, "drain_required")
-            .await?;
-        Ok(Some(ReconcileResult::AwaitingDrain {
-            attempt: previous.id,
-        }))
+        self.shutdown(previous).await
     }
     async fn anchor(&self) -> Result<(), Error> {
         let expected = self.registry.configure(&self.namespace).await?;
@@ -176,7 +174,7 @@ impl Reconciler {
         let preview = self.api.prepare(&attempt.intent).await?;
         self.registry.record_prepared(attempt.id, &preview).await
     }
-    async fn observe(&self, attempt: Attempt) -> Result<Option<Attempt>, Error> {
+    pub(super) async fn observe(&self, attempt: Attempt) -> Result<Option<Attempt>, Error> {
         let Some(observed) = self.api.fetch_candidate(&attempt.object).await? else {
             self.registry.record_missing(attempt.id).await?;
             return Ok(None);

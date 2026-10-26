@@ -1,0 +1,107 @@
+//! Retain terminal evidence before releasing a finalizer. A 404 alone never releases ownership.
+use super::{
+    Attempt, Error, Phase, ReconcileResult, Reconciler, ResourceObject, termination_proven,
+    verify_pod,
+};
+use k8s_openapi::api::core::v1::Pod;
+
+impl Reconciler {
+    pub(super) async fn shutdown(
+        &self,
+        mut attempt: Attempt,
+    ) -> Result<Option<ReconcileResult>, Error> {
+        if attempt.phase == Phase::Creating {
+            let id = attempt.id;
+            let Some(bound) = self.observe(attempt).await? else {
+                return Ok(Some(ReconcileResult::Uncertain { attempt: id }));
+            };
+            attempt = bound;
+        }
+        let proof = self.registry.retained_termination(attempt.id).await?;
+        let observed = self.api.fetch_candidate(&attempt.object).await?;
+        let Some(ResourceObject::Pod(pod)) = observed else {
+            return self.absent(&attempt, proof).await;
+        };
+        self.verify_shutdown(&attempt, &pod, proof.as_ref()).await?;
+        if termination_proven(&pod) {
+            return self.finish(&attempt, &pod, proof).await;
+        }
+        self.wait_or_stop(&attempt, &pod).await.map(Some)
+    }
+
+    async fn verify_shutdown(
+        &self,
+        attempt: &Attempt,
+        pod: &Pod,
+        proof: Option<&Pod>,
+    ) -> Result<(), Error> {
+        if let Some(proof) = proof {
+            let recorded = self.registry.recorded_pod(attempt).await?;
+            verify_pod(pod, &recorded)?;
+            if pod.spec != proof.spec || !termination_proven(pod) {
+                return Err(Error::OwnershipMismatch);
+            }
+        } else {
+            self.registry
+                .bind_object(attempt.id, &ResourceObject::Pod(Box::new(pod.clone())))
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn absent(
+        &self,
+        attempt: &Attempt,
+        proof: Option<Pod>,
+    ) -> Result<Option<ReconcileResult>, Error> {
+        if let Some(proof) = proof {
+            self.registry.record_stopped(attempt.id, &proof).await?;
+            return Ok(None);
+        }
+        self.registry.record_missing(attempt.id).await?;
+        Ok(Some(ReconcileResult::Uncertain {
+            attempt: attempt.id,
+        }))
+    }
+
+    async fn finish(
+        &self,
+        attempt: &Attempt,
+        pod: &Pod,
+        proof: Option<Pod>,
+    ) -> Result<Option<ReconcileResult>, Error> {
+        // Keep the row Bound until finalization succeeds, retaining proof across lost replies.
+        let retained = proof.as_ref().unwrap_or(pod);
+        self.registry
+            .retain_termination(attempt.id, retained)
+            .await?;
+        if pod.metadata.deletion_timestamp.is_none() {
+            self.api.stop_observed(pod).await?;
+            return Ok(Some(ReconcileResult::Stopping {
+                attempt: attempt.id,
+            }));
+        }
+        self.api.finalize_observed(pod).await?;
+        self.registry.record_stopped(attempt.id, retained).await?;
+        Ok(None)
+    }
+
+    async fn wait_or_stop(&self, attempt: &Attempt, pod: &Pod) -> Result<ReconcileResult, Error> {
+        let acknowledged: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_runtime_drains WHERE attempt_id = $1 AND acknowledged_at IS NOT NULL)")
+            .bind(attempt.id).fetch_one(&self.pool).await?;
+        self.registry
+            .block(attempt.id, Phase::Bound, "drain_required")
+            .await?;
+        if !acknowledged {
+            return Ok(ReconcileResult::AwaitingDrain {
+                attempt: attempt.id,
+            });
+        }
+        if pod.metadata.deletion_timestamp.is_none() {
+            self.api.stop_observed(pod).await?;
+        }
+        Ok(ReconcileResult::Stopping {
+            attempt: attempt.id,
+        })
+    }
+}

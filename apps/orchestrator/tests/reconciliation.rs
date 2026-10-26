@@ -25,6 +25,11 @@ struct Server {
     lose_kind: Option<String>,
     unavailable: bool,
     requests: usize,
+    deletes: Vec<String>,
+    patches: Vec<String>,
+    lose_delete: bool,
+    lose_finalize: bool,
+    reject_finalize: bool,
 }
 type Shared = Arc<Mutex<Server>>;
 
@@ -34,15 +39,23 @@ async fn api(State(state): State<Shared>, method: Method, uri: Uri, bytes: Bytes
     if state.unavailable {
         return failure(503);
     }
-    if method == Method::GET {
-        return state
-            .objects
-            .get(uri.path())
-            .cloned()
-            .map(Json)
-            .map(IntoResponse::into_response)
-            .unwrap_or_else(|| failure(404));
+    match method {
+        Method::GET => read(&state, uri.path()),
+        Method::DELETE => delete(&mut state, uri.path(), &bytes),
+        Method::PATCH => patch(&mut state, uri.path(), &bytes),
+        _ => create(&mut state, uri, bytes),
     }
+}
+fn read(state: &Server, path: &str) -> Response {
+    state
+        .objects
+        .get(path)
+        .cloned()
+        .map(Json)
+        .map(IntoResponse::into_response)
+        .unwrap_or_else(|| failure(404))
+}
+fn create(state: &mut Server, uri: Uri, bytes: Bytes) -> Response {
     let mut body: Value = serde_json::from_slice(&bytes).unwrap();
     let name = body["metadata"]["name"].as_str().unwrap().to_owned();
     let path = format!("{}/{name}", uri.path());
@@ -68,6 +81,50 @@ async fn api(State(state): State<Shared>, method: Method, uri: Uri, bytes: Bytes
         }
     }
     Json(body).into_response()
+}
+fn delete(state: &mut Server, path: &str, bytes: &[u8]) -> Response {
+    state.deletes.push(path.into());
+    let body: Value = serde_json::from_slice(bytes).unwrap();
+    assert_eq!(body["gracePeriodSeconds"], 30);
+    let Some(pod) = state.objects.get_mut(path) else {
+        return failure(404);
+    };
+    if body["preconditions"]["uid"] != pod["metadata"]["uid"]
+        || body["preconditions"]["resourceVersion"] != pod["metadata"]["resourceVersion"]
+    {
+        return failure(409);
+    }
+    pod["metadata"]["deletionTimestamp"] = json!("2026-10-26T12:00:00Z");
+    pod["metadata"]["resourceVersion"] = json!("2");
+    if state.lose_delete {
+        return failure(503);
+    }
+    Json(pod.clone()).into_response()
+}
+fn patch(state: &mut Server, path: &str, bytes: &[u8]) -> Response {
+    state.patches.push(path.into());
+    if state.reject_finalize {
+        return failure(503);
+    }
+    let body: Value = serde_json::from_slice(bytes).unwrap();
+    let Some(pod) = state.objects.get_mut(path) else {
+        return failure(404);
+    };
+    if body["metadata"]["uid"] != pod["metadata"]["uid"]
+        || body["metadata"]["resourceVersion"] != pod["metadata"]["resourceVersion"]
+    {
+        return failure(409);
+    }
+    pod["metadata"]["finalizers"] = body["metadata"]["finalizers"].clone();
+    pod["metadata"]["resourceVersion"] = json!("3");
+    let response = pod.clone();
+    if pod["metadata"]["finalizers"].as_array().unwrap().is_empty() {
+        state.objects.remove(path);
+    }
+    if state.lose_finalize {
+        return failure(503);
+    }
+    Json(response).into_response()
 }
 fn failure(code: u16) -> Response {
     let reason = match code {
@@ -271,7 +328,7 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
             matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
         );
     }
-    assert_eq!(state.lock().unwrap().requests, requests);
+    assert_eq!(state.lock().unwrap().requests, requests + 4);
     assert_eq!(
         registry
             .attempt(pod)
@@ -361,4 +418,392 @@ async fn unapproved_admission_changes_remain_planned_and_recover_after_policy_is
     ));
     assert_eq!(state.lock().unwrap().create_attempts.len(), 3);
     task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn acknowledged_sleep_stops_then_finalizes_the_exact_pod_and_retains_workspace() {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (client, state, task) = server().await;
+    let reconciler = Reconciler::new(pool.clone(), client, "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, workspace } =
+        reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    request_sleep(&pool, agent).await;
+    acknowledge(&pool, pod).await;
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
+    );
+    assert_eq!(
+        registry.attempt(pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    complete_pod(&state);
+    assert!(matches!(
+        reconciler.reconcile(agent).await.unwrap(),
+        ReconcileResult::Idle
+    ));
+    assert_eq!(
+        registry.attempt(pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Stopped
+    );
+    assert_eq!(
+        registry.attempt(workspace).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    assert_eq!(state.lock().unwrap().deletes.len(), 1);
+    assert_eq!(state.lock().unwrap().patches.len(), 1);
+    assert_eq!(state.lock().unwrap().creates.len(), 3);
+    task.abort();
+}
+async fn request_sleep(pool: &sqlx::PgPool, agent: cubebot_orchestrator::agents::AgentId) {
+    use cubebot_orchestrator::{
+        agents::{Agents, LifecycleAction, LifecycleCommand},
+        identity::Identity,
+    };
+    let identity = Identity::new(pool.clone());
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let actor = identity.authenticate(&session.token).await.unwrap();
+    Agents::new(pool.clone())
+        .lifecycle(
+            &actor,
+            agent,
+            &LifecycleCommand {
+                request_id: uuid::Uuid::new_v4(),
+                expected_revision: 2,
+                action: LifecycleAction::Sleep,
+            },
+        )
+        .await
+        .unwrap();
+}
+async fn acknowledge(
+    pool: &sqlx::PgPool,
+    attempt: cubebot_orchestrator::agents::kubernetes::AttemptId,
+) {
+    sqlx::query("UPDATE agent_runtime_drains SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1 WHERE attempt_id = $1").bind(attempt).execute(pool).await.unwrap();
+}
+fn complete_pod(state: &Shared) {
+    let mut state = state.lock().unwrap();
+    let pod = state
+        .objects
+        .values_mut()
+        .find(|object| object["kind"] == "Pod")
+        .unwrap();
+    let containers = ["runtime", "tools"]
+        .into_iter()
+        .map(stopped_container)
+        .collect::<Vec<_>>();
+    let initializers = ["initialize-runtime", "initialize-tools"]
+        .into_iter()
+        .map(stopped_container)
+        .collect::<Vec<_>>();
+    pod["status"] = json!({"phase":"Succeeded","containerStatuses":containers,"initContainerStatuses":initializers});
+}
+fn stopped_container(name: &str) -> Value {
+    let id = format!("containerd://{name}");
+    json!({"name":name,"image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":id,"state":{"terminated":{"exitCode":0,"reason":"Completed","containerID":id,"startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}})
+}
+
+struct Shutdown {
+    pool: sqlx::PgPool,
+    registry: cubebot_orchestrator::agents::kubernetes::Registry,
+    config: kube::Config,
+    state: Shared,
+    task: tokio::task::JoinHandle<()>,
+    reconciler: Reconciler,
+    agent: cubebot_orchestrator::agents::AgentId,
+    pod: cubebot_orchestrator::agents::kubernetes::AttemptId,
+}
+async fn shutdown_fixture() -> Shutdown {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    let reconciler =
+        Reconciler::new(pool.clone(), config.clone(), "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    request_sleep(&pool, agent).await;
+    acknowledge(&pool, pod).await;
+    Shutdown {
+        pool,
+        registry,
+        config,
+        state,
+        task,
+        reconciler,
+        agent,
+        pod,
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn lost_delete_reply_is_observed_without_repeating_delete_or_releasing_ownership() {
+    let f = shutdown_fixture().await;
+    f.state.lock().unwrap().lose_delete = true;
+    assert!(f.reconciler.reconcile(f.agent).await.is_err());
+    assert!(matches!(
+        f.reconciler.reconcile(f.agent).await.unwrap(),
+        ReconcileResult::Stopping { .. }
+    ));
+    assert_eq!(f.state.lock().unwrap().deletes.len(), 1);
+    assert_eq!(
+        f.registry.attempt(f.pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    complete_pod(&f.state);
+    assert!(matches!(
+        f.reconciler.reconcile(f.agent).await.unwrap(),
+        ReconcileResult::Idle
+    ));
+    assert_eq!(f.state.lock().unwrap().creates.len(), 3);
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn lost_finalizer_reply_recovers_only_from_durably_retained_terminal_proof() {
+    let f = shutdown_fixture().await;
+    f.reconciler.reconcile(f.agent).await.unwrap();
+    complete_pod(&f.state);
+    f.state.lock().unwrap().lose_finalize = true;
+    assert!(f.reconciler.reconcile(f.agent).await.is_err());
+    let (phase, retained): (String, bool) = sqlx::query_as(
+        "SELECT phase,termination_proof IS NOT NULL FROM agent_resources WHERE id = $1",
+    )
+    .bind(f.pod)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(phase, "bound");
+    assert!(retained);
+    let restarted =
+        Reconciler::new(f.pool.clone(), f.config.clone(), "cubebot-test", layout()).unwrap();
+    assert!(matches!(
+        restarted.reconcile(f.agent).await.unwrap(),
+        ReconcileResult::Idle
+    ));
+    assert_eq!(
+        f.registry.attempt(f.pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Stopped
+    );
+    assert_eq!(f.state.lock().unwrap().patches.len(), 1);
+    assert_eq!(f.state.lock().unwrap().deletes.len(), 1);
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn acknowledged_but_missing_pod_without_terminal_proof_remains_uncertain() {
+    let f = shutdown_fixture().await;
+    f.state
+        .lock()
+        .unwrap()
+        .objects
+        .retain(|_, object| object["kind"] != "Pod");
+    assert!(
+        matches!(f.reconciler.reconcile(f.agent).await.unwrap(), ReconcileResult::Uncertain { attempt } if attempt == f.pod)
+    );
+    assert_eq!(
+        f.registry.attempt(f.pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    assert!(f.state.lock().unwrap().deletes.is_empty());
+    assert!(f.state.lock().unwrap().patches.is_empty());
+    assert_eq!(f.state.lock().unwrap().creates.len(), 3);
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn acknowledged_node_lost_status_cannot_release_the_execution_finalizer() {
+    let f = shutdown_fixture().await;
+    f.reconciler.reconcile(f.agent).await.unwrap();
+    complete_pod(&f.state);
+    {
+        let mut state = f.state.lock().unwrap();
+        let pod = state
+            .objects
+            .values_mut()
+            .find(|object| object["kind"] == "Pod")
+            .unwrap();
+        pod["status"]["reason"] = json!("NodeLost");
+    }
+    assert!(matches!(
+        f.reconciler.reconcile(f.agent).await.unwrap(),
+        ReconcileResult::Stopping { .. }
+    ));
+    assert_eq!(
+        f.registry.attempt(f.pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    assert!(f.state.lock().unwrap().patches.is_empty());
+    assert_eq!(f.state.lock().unwrap().deletes.len(), 1);
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn finalization_preserves_foreign_finalizers_and_never_deletes_workspace() {
+    let f = shutdown_fixture().await;
+    f.reconciler.reconcile(f.agent).await.unwrap();
+    complete_pod(&f.state);
+    {
+        let mut state = f.state.lock().unwrap();
+        let pod = state
+            .objects
+            .values_mut()
+            .find(|object| object["kind"] == "Pod")
+            .unwrap();
+        pod["metadata"]["finalizers"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!("other.test/retained"));
+    }
+    f.state.lock().unwrap().lose_finalize = true;
+    assert!(f.reconciler.reconcile(f.agent).await.is_err());
+    f.state.lock().unwrap().lose_finalize = false;
+    assert!(matches!(
+        f.reconciler.reconcile(f.agent).await.unwrap(),
+        ReconcileResult::Idle
+    ));
+    let state = f.state.lock().unwrap();
+    let pod = state
+        .objects
+        .values()
+        .find(|object| object["kind"] == "Pod")
+        .unwrap();
+    assert_eq!(
+        pod["metadata"]["finalizers"],
+        json!(["other.test/retained"])
+    );
+    assert!(state.deletes.iter().all(|path| path.contains("/pods/")));
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn retained_terminal_proof_does_not_allow_finalizing_a_replaced_or_changed_pod() {
+    for change in ["uid", "spec"] {
+        let f = shutdown_fixture().await;
+        f.reconciler.reconcile(f.agent).await.unwrap();
+        complete_pod(&f.state);
+        f.state.lock().unwrap().reject_finalize = true;
+        assert!(f.reconciler.reconcile(f.agent).await.is_err());
+        {
+            let mut state = f.state.lock().unwrap();
+            state.reject_finalize = false;
+            let pod = state
+                .objects
+                .values_mut()
+                .find(|object| object["kind"] == "Pod")
+                .unwrap();
+            if change == "uid" {
+                pod["metadata"]["uid"] = json!("replacement-uid");
+            } else {
+                pod["spec"]["containers"][0]["image"] = json!("unapproved-image");
+            }
+        }
+        assert!(f.reconciler.reconcile(f.agent).await.is_err());
+        assert_eq!(f.state.lock().unwrap().patches.len(), 1);
+        assert_eq!(
+            f.registry.attempt(f.pod).await.unwrap().phase,
+            cubebot_orchestrator::agents::kubernetes::Phase::Bound
+        );
+        f.task.abort();
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn sleep_after_a_lost_create_response_binds_the_same_pod_for_recovery_drain() {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    state.lock().unwrap().lose_kind = Some("Pod".into());
+    let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", layout()).unwrap();
+    assert!(reconciler.reconcile(agent).await.is_err());
+    request_sleep(&pool, agent).await;
+    let ReconcileResult::AwaitingDrain { attempt } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("drain expected")
+    };
+    assert_eq!(
+        registry.attempt(attempt).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    acknowledge(&pool, attempt).await;
+    assert!(matches!(
+        reconciler.reconcile(agent).await.unwrap(),
+        ReconcileResult::Stopping { .. }
+    ));
+    assert_eq!(state.lock().unwrap().create_attempts.len(), 3);
+    assert_eq!(state.lock().unwrap().deletes.len(), 1);
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn waking_after_proven_stop_creates_one_new_epoch_and_reuses_the_workspace_uid() {
+    use cubebot_orchestrator::{
+        agents::{Agents, LifecycleAction, LifecycleCommand},
+        identity::Identity,
+    };
+    let f = shutdown_fixture().await;
+    let old = f.registry.attempt(f.pod).await.unwrap();
+    f.reconciler.reconcile(f.agent).await.unwrap();
+    complete_pod(&f.state);
+    f.reconciler.reconcile(f.agent).await.unwrap();
+    let identity = Identity::new(f.pool.clone());
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let actor = identity.authenticate(&session.token).await.unwrap();
+    Agents::new(f.pool.clone())
+        .lifecycle(
+            &actor,
+            f.agent,
+            &LifecycleCommand {
+                request_id: uuid::Uuid::new_v4(),
+                expected_revision: 3,
+                action: LifecycleAction::Wake,
+            },
+        )
+        .await
+        .unwrap();
+    let ReconcileResult::Provisioned { pod, workspace } =
+        f.reconciler.reconcile(f.agent).await.unwrap()
+    else {
+        panic!("new epoch expected")
+    };
+    let new = f.registry.attempt(pod).await.unwrap();
+    assert_ne!(pod, f.pod);
+    assert_eq!(new.epoch, old.epoch + 1);
+    assert_eq!(new.target_generation, old.target_generation + 1);
+    let claim = f.registry.attempt(workspace).await.unwrap();
+    assert!(claim.uid.is_some());
+    let state = f.state.lock().unwrap();
+    assert_eq!(state.creates.len(), 4);
+    assert_eq!(
+        state
+            .creates
+            .iter()
+            .filter(|path| path.contains("/persistentvolumeclaims/"))
+            .count(),
+        1
+    );
+    assert!(
+        state
+            .objects
+            .values()
+            .any(|object| object["metadata"]["uid"].as_str() == claim.uid.as_deref())
+    );
+    f.task.abort();
 }

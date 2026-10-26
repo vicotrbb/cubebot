@@ -3,6 +3,7 @@ mod authentication;
 mod client;
 pub use authentication::ReviewedPod;
 mod reconcile;
+mod shutdown;
 pub use reconcile::{ReconcileResult, Reconciler};
 mod layout;
 pub use layout::Layout;

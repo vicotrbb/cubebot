@@ -174,6 +174,11 @@ impl Kubernetes {
             .observe(recorded)
             .await?
             .ok_or(Error::TerminationUnproven)?;
+        self.stop_observed(&pod).await
+    }
+
+    pub(super) async fn stop_observed(&self, pod: &Pod) -> Result<(), Error> {
+        self.validate_target(&pod.metadata)?;
         if !pod
             .metadata
             .finalizers
@@ -182,12 +187,9 @@ impl Kubernetes {
         {
             return Err(Error::OwnershipMismatch);
         }
-        let revision = pod
-            .metadata
-            .resource_version
-            .ok_or(Error::OwnershipMismatch)?;
+        let (name, uid, revision) = observed_identity(pod)?;
         self.pods
-            .delete(&recorded.name, &delete_params(recorded, revision))
+            .delete(name, &delete_params(uid, revision.to_owned()))
             .await?;
         Ok(())
     }
@@ -198,37 +200,36 @@ impl Kubernetes {
             .observe(recorded)
             .await?
             .ok_or(Error::TerminationUnproven)?;
-        if pod.metadata.deletion_timestamp.is_none() || !termination_proven(&pod) {
+        self.finalize_observed(&pod).await
+    }
+
+    pub(super) async fn finalize_observed(&self, pod: &Pod) -> Result<(), Error> {
+        self.validate_target(&pod.metadata)?;
+        if pod.metadata.deletion_timestamp.is_none() || !termination_proven(pod) {
             return Err(Error::TerminationUnproven);
         }
-        let revision = pod
-            .metadata
-            .resource_version
-            .ok_or(Error::OwnershipMismatch)?;
+        let (name, uid, revision) = observed_identity(pod)?;
         let finalizers: Vec<_> = pod
             .metadata
             .finalizers
+            .clone()
             .unwrap_or_default()
             .into_iter()
             .filter(|value| value != FINALIZER)
             .collect();
-        let patch = serde_json::json!({"metadata":{"resourceVersion":revision,"uid":recorded.uid,"finalizers":finalizers}});
+        let patch = serde_json::json!({"metadata":{"resourceVersion":revision,"uid":uid,"finalizers":finalizers}});
         self.pods
-            .patch(
-                &recorded.name,
-                &PatchParams::default(),
-                &Patch::Merge(patch),
-            )
+            .patch(name, &PatchParams::default(), &Patch::Merge(patch))
             .await?;
         Ok(())
     }
 }
 
-fn delete_params(recorded: &RecordedPod, revision: String) -> DeleteParams {
+fn delete_params(uid: &str, revision: String) -> DeleteParams {
     DeleteParams {
         grace_period_seconds: Some(30),
         preconditions: Some(Preconditions {
-            uid: Some(recorded.uid.clone()),
+            uid: Some(uid.to_owned()),
             resource_version: Some(revision),
         }),
         ..Default::default()
@@ -267,4 +268,20 @@ fn clear_preview_observation(object: &mut ResourceObject) {
     metadata.deletion_timestamp = None;
     metadata.deletion_grace_period_seconds = None;
     metadata.managed_fields = None;
+}
+
+fn observed_identity(pod: &Pod) -> Result<(&str, &str, &str), Error> {
+    let metadata = &pod.metadata;
+    let name = metadata.name.as_deref().ok_or(Error::OwnershipMismatch)?;
+    let uid = metadata
+        .uid
+        .as_deref()
+        .filter(|uid| !uid.is_empty())
+        .ok_or(Error::OwnershipMismatch)?;
+    let version = metadata
+        .resource_version
+        .as_deref()
+        .filter(|version| !version.is_empty())
+        .ok_or(Error::OwnershipMismatch)?;
+    Ok((name, uid, version))
 }
