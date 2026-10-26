@@ -37,6 +37,7 @@ lint: complexity
 
 test:
     cargo test --workspace --locked
+    cargo test -p cubebot-agent --example isolation-probe --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
 
 build:

@@ -2,10 +2,12 @@
 
 import hashlib
 import json
+import select
 import subprocess
 import sys
 import time
 import uuid
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -251,6 +253,127 @@ def policies(image, prefix, runtime):
     }
 
 
+def finite_policy(image, prefix, runtime):
+    # Never accept conntrack-established packets ahead of current grant membership.
+    rules = """delete table inet cubebot_probe
+table inet cubebot_probe {
+ set private4 { type ipv4_addr . inet_service; flags timeout; }
+ set private6 { type ipv6_addr . inet_service; flags timeout; }
+ chain output { type filter hook output priority 0; policy accept;
+  meta skuid 10001 accept
+  meta skuid 10002 ip daddr . tcp dport @private4 accept
+  meta skuid 10002 ip6 daddr . tcp dport @private6 accept
+  ip daddr 127.0.0.0/8 drop
+  ip6 daddr ::1 drop
+ }
+}
+"""
+    helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rules)
+
+
+def grant_element(image, prefix, runtime, family, operation, timeout=None):
+    address, port = {4: ("127.0.0.1", 18080), 6: ("::1", 18081)}[family]
+    lifetime = f" timeout {timeout}s" if timeout else ""
+    rule = (
+        f"{operation} element inet cubebot_probe private{family} "
+        f"{{ {address} . {port}{lifetime} }}\n"
+    )
+    helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rule)
+
+
+def session_event(process, request=False):
+    if request:
+        process.stdin.write(b"exchange\n")
+        process.stdin.flush()
+    readable, _, _ = select.select([process.stdout], [], [], 10)
+    if not readable:
+        raise RuntimeError("persistent socket probe did not respond")
+    event = process.stdout.readline()
+    if not event:
+        raise RuntimeError("persistent socket probe exited before response")
+    return json.loads(event)["connected"]
+
+
+@contextmanager
+def socket_session(runtime, address):
+    process = subprocess.Popen(
+        [
+            "docker",
+            "exec",
+            "--interactive",
+            "--user",
+            "10002:10002",
+            runtime,
+            "/usr/local/bin/isolation-probe",
+            "session",
+            address,
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        bufsize=0,
+    )
+    try:
+        assert session_event(process), "private socket did not open under grant"
+        yield process
+    finally:
+        process.stdin.close()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        process.stdout.close()
+        process.stderr.close()
+
+
+def finite_family(image, prefix, runtime, family):
+    address, other = {
+        4: ("127.0.0.1:18080", "127.0.0.1:18082"),
+        6: ("[::1]:18081", "[::1]:18083"),
+    }[family]
+    assert not probe(image, prefix, runtime, "connect", address)["connected"]
+    # Establish each socket before timing expiry or explicitly revoking its element.
+    grant_element(image, prefix, runtime, family, "add", timeout=5)
+    with socket_session(runtime, address) as process:
+        assert session_event(process, request=True)
+        assert not probe(image, prefix, runtime, "connect", other)["connected"]
+        time.sleep(5.2)
+        expired_existing = session_event(process, request=True)
+    expired_new = probe(image, prefix, runtime, "connect", address)["connected"]
+    grant_element(image, prefix, runtime, family, "add", timeout=30)
+    with socket_session(runtime, address) as process:
+        assert session_event(process, request=True)
+        grant_element(image, prefix, runtime, family, "delete")
+        revoked_existing = session_event(process, request=True)
+    revoked_new = probe(image, prefix, runtime, "connect", address)["connected"]
+    assert not any((expired_existing, expired_new, revoked_existing, revoked_new))
+    return {
+        "granted_connection_and_exchange": True,
+        "ungranted_port_denied": True,
+        "expired_existing_exchange": expired_existing,
+        "expired_new_connection": expired_new,
+        "revoked_existing_exchange": revoked_existing,
+        "revoked_new_connection": revoked_new,
+    }
+
+
+def finite_grants(image, prefix, runtime):
+    finite_policy(image, prefix, runtime)
+    # Prove control-port listeners exist, so refused ports cannot fake policy denial.
+    for address in ("127.0.0.1:18082", "[::1]:18083"):
+        result = json.loads(
+            docker(
+                "exec", runtime, "/usr/local/bin/isolation-probe", "connect", address
+            )
+        )
+        assert result["connected"]
+    return {
+        f"ipv{family}": finite_family(image, prefix, runtime, family)
+        for family in (4, 6)
+    }
+
+
 def cannot_flush(image, prefix, runtime):
     try:
         container(
@@ -396,6 +519,9 @@ def qualify(images, prefix, volume):
         "filesystem": filesystem,
         "without_filter": unrestricted,
         "direct_socket_ignores_proxy": proxy_ignored,
+        "finite_private_grants": finite_grants(
+            images["qualification"], prefix, runtime
+        ),
         **results,
     }
 

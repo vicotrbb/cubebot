@@ -1,0 +1,85 @@
+{
+  "profile": {
+    "timestamp": "2026-10-26T13:02:24.268008+00:00",
+    "base_commit": "1fa93f6bb8727c555c272053c921f3ccabf5f621",
+    "source_sha256": "16fa9033a7454a55e98e885ccb8398769ff1aab21e54357fe88b69753dba0005",
+    "docker_version": "29.4.0",
+    "platform": {
+      "os": "linux",
+      "architecture": "aarch64",
+      "cpus": 3,
+      "memory_bytes": 4181233664,
+      "kernel": "7.0.14-orbstack-00380-ga7e0a2dc9535"
+    },
+    "images": {
+      "runtime": {
+        "id": "sha256:e55bcb751ed437695c7fdb7d3b694ac7ced46e6030e5431f77c57bfdf5de504c",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10001:10001",
+        "entrypoint": ["/usr/local/bin/cubebot-agent"]
+      },
+      "tools": {
+        "id": "sha256:6d8b60b079854f2d7f1ceb4ac94f967a93a595330ae5d95b10ea2680fe95ce36",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10002:10002",
+        "entrypoint": ["/usr/local/bin/cubebot-tool-runner"]
+      },
+      "qualification": {
+        "id": "sha256:3a428e5caa4e14622a1103d88a4dd15a931450ab8fc46a6e8bdce777f07b09e0",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10001:10001",
+        "entrypoint": ["/usr/local/bin/isolation-probe"]
+      }
+    },
+    "nftables": "nftables v1.0.6 (Lester Gooch #5)"
+  },
+  "scope": "Linux container mechanism probes; G1-G3 not qualified",
+  "results": {
+    "filesystem": {
+      "links_runtime_token": false,
+      "pid_namespace": 4026534106,
+      "reads_runtime_journal": false,
+      "reads_runtime_token": false,
+      "uid": 10002,
+      "writes_runtime_directory": false,
+      "writes_tool_workspace": true
+    },
+    "without_filter": {
+      "private_v4": true,
+      "public_v4": true,
+      "private_v6": true,
+      "public_v6": true
+    },
+    "direct_socket_ignores_proxy": true,
+    "finite_private_grants": {
+      "ipv4": {
+        "granted_connection_and_exchange": true,
+        "ungranted_port_denied": true,
+        "expired_existing_exchange": false,
+        "expired_new_connection": false,
+        "revoked_existing_exchange": false,
+        "revoked_new_connection": false
+      },
+      "ipv6": {
+        "granted_connection_and_exchange": true,
+        "ungranted_port_denied": true,
+        "expired_existing_exchange": false,
+        "expired_new_connection": false,
+        "revoked_existing_exchange": false,
+        "revoked_new_connection": false
+      }
+    },
+    "shared_filter_runtime_private": false,
+    "uid_filter_tools": {
+      "private_v4": false,
+      "public_v4": true,
+      "private_v6": false,
+      "public_v6": true
+    },
+    "uid_filter_runtime_private": true,
+    "tool_cannot_flush_rules": true
+  }
+}
