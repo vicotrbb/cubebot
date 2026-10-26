@@ -3,6 +3,7 @@
 //! Database-enabled mode exposes the initial authenticated identity endpoints.
 
 mod access;
+mod agents;
 mod browser;
 mod identity;
 mod invitations;
@@ -28,6 +29,7 @@ pub fn database_router(pool: sqlx::PgPool) -> Router {
 
 fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
+        .merge(agents::router(pool.clone(), identity.clone()))
         .merge(identity::router(identity.clone()))
         .merge(invitations::router(identity.clone()))
         .merge(access::router(identity))

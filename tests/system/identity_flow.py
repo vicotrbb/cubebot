@@ -5,6 +5,7 @@ import subprocess
 import uuid
 
 from access_flow import check_access, check_access_restart
+from agent_flow import check_agents, check_agents_restart
 from authentication_flow import (
     check_authentication_budget,
     check_authentication_restart,
@@ -61,6 +62,7 @@ def check_identity(environment):
         status, account = request(base, "/api/identity/me", token)
         assert status == 200 and account["administrator"] is True
         member = check_invitation(base, token)
+        agent_checkpoint = check_agents(base, token, member)
         checkpoint = check_access(base, token, member)
         requests = check_account_commands(base, token)
         limited_login = check_authentication_budget(base, token)
@@ -68,6 +70,7 @@ def check_identity(environment):
         await_ready(process, base + "/api/health/ready")
         assert request(base, "/api/identity/me", token)[1] == account
         check_access_restart(base, token, checkpoint)
+        check_agents_restart(base, token, agent_checkpoint)
         check_account_restart(base, token, requests)
         check_authentication_restart(base, limited_login)
         assert request(base, "/api/identity/logout", token, {})[0] == 200

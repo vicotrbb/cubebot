@@ -2,7 +2,7 @@
 
 A Kubernetes-native home for persistent agents, shared rooms, memories, and skills.
 
-**Status: first persistence and identity slice in progress.** The Rust orchestrator supports PostgreSQL migrations, operator-only administrator bootstrap, built-in account login, expiring sessions, logout, administrator account creation and suspension with durable request receipts, and login-bound invitations with one-time redemption, expiry and revocation, local human teams and exact scoped human permissions. Optional OIDC code/PKCE sign-in and verified account linking share the same platform sessions. The TanStack Start frontend still serves a starting page. Agent execution, rooms, memory, integrations, PWA installation and Kubernetes reconciliation are not implemented yet.
+**Status: backend identity and initial persisted agent definitions implemented; lifecycle remains in progress.** The Rust orchestrator supports PostgreSQL migrations, operator-only administrator bootstrap, built-in account login, expiring sessions, logout, administrator account creation and suspension with durable request receipts, and login-bound invitations with one-time redemption, expiry and revocation, local human teams and exact scoped human permissions. Optional OIDC code/PKCE sign-in and verified account linking share the same platform sessions. Administrators can create durable agent definitions, with user/team management grants controlling actual read/list access. The TanStack Start frontend still serves a starting page. Agent execution, rooms, memory, integrations, PWA installation and Kubernetes reconciliation are not implemented yet.
 
 ## Start developing
 
@@ -106,6 +106,14 @@ New membership requires either an exact admitted subject or an explicitly allowe
 
 Changing the non-secret OIDC configuration or removing it advances a persisted policy revision, invalidating pending flows and OIDC sessions. Rotating the client secret alone does not invalidate platform sessions. Built-in credentials remain available for installation recovery. Discovery/JWKS are refreshed during callback; provider requests have deadlines, reject redirects and limit response bodies to one MiB. Four concurrent OIDC operations and 1,000 pending unexpired flows bound basic resource use. This slice is tested with a controlled signed issuer; no external identity-provider compatibility or production security qualification is claimed.
 
+### Durable agent definitions
+
+`POST /api/agents` accepts `request_id`, `name` and `instructions`. Creation currently requires an installation administrator and records a durable definition, command receipt and event in one PostgreSQL transaction. Names must contain 1–255 UTF-8 bytes without control characters; instructions accept at most 65,536 bytes and exclude null bytes. Repeating the same request returns the original ID/revision; changing its content conflicts. Current administrator authority is checked before returning a cached creation receipt.
+
+`GET /api/agents` lists up to 100 definitions visible through the current administrator role or an exact `agent_manage` user/team grant. Pass the last returned ID as `?after=<id>` for the next page. Authorization filtering occurs before the page limit. `GET /api/agents/<id>` returns the stored management definition, including instructions, only to those same callers. Unknown and inaccessible IDs both return 404. Revoking a grant or removing team membership takes effect on subsequent reads without a new login. These management permissions confer no memory, workspace or conversation access.
+
+Definitions belong to the installation; `created_by` is provenance rather than ownership. They begin with revision 1 and `desired_state: "sleeping"`, with `idle_policy: "sleep"`. Desired state is persisted intent, not an observation of a pod. This slice does not yet implement definition edits, retirement, executable provider/resource configuration, Kubernetes reconciliation or an agent loop. No create response claims successful provisioning.
+
 ### Authentication resource limits
 
 The orchestrator permits at most four concurrent Argon2 computations across password hashing and verification. Additional work receives HTTP 429 with `Retry-After: 1`; it does not enter an unbounded hashing queue. The permit stays with the blocking computation if its HTTP caller disconnects.
@@ -130,7 +138,7 @@ Team/grant, suspension and revocation mutation responses include an ID and revis
 just integration
 ```
 
-This builds the orchestrator/operator binaries, starts an isolated disposable PostgreSQL 18 container with a generated password, runs real database/HTTP tests, signed local OIDC issuer workflows and process restarts, then removes that container and its test data. It never uses the database in `.env` or another application's database. Ordinary `cargo test` explicitly reports the database cases as ignored; `just integration` runs them and fails if Docker or PostgreSQL is unavailable.
+This builds the orchestrator/operator binaries, starts an isolated disposable PostgreSQL 18 container with a generated password and temporary host-backed data directory, runs real database/HTTP tests, signed local OIDC issuer workflows and process restarts, then removes that container and its test data. It never uses the database in `.env` or another application's database. Ordinary `cargo test` explicitly reports the database cases as ignored; `just integration` runs them and fails if Docker or PostgreSQL is unavailable.
 
 ## Builds and containers
 

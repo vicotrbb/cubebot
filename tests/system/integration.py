@@ -3,6 +3,7 @@
 import os
 import secrets
 import subprocess
+import tempfile
 import time
 import uuid
 
@@ -32,6 +33,11 @@ def main():
     name = f"cubebot-test-{uuid.uuid4().hex}"
     password = secrets.token_hex(24)
     env = os.environ | {"POSTGRES_PASSWORD": password}
+    with tempfile.TemporaryDirectory(prefix="cubebot-postgres-", dir="target") as data:
+        run_database(name, env, password, os.path.abspath(data))
+
+
+def run_database(name, env, password, data):
     run(
         "docker",
         "run",
@@ -39,6 +45,8 @@ def main():
         "--rm",
         "--name",
         name,
+        "--mount",
+        f"type=bind,source={data},target=/var/lib/postgresql",
         "--publish",
         "127.0.0.1::5432",
         "--env",
@@ -83,7 +91,29 @@ def main():
             }
         )
     finally:
-        run("docker", "stop", name, stdout=subprocess.DEVNULL)
+        try:
+            run("docker", "stop", name, stdout=subprocess.DEVNULL)
+        finally:
+            restore_data_owner(data)
+
+
+def restore_data_owner(data):
+    # Return this test directory from PostgreSQL's UID to its creator on Linux.
+    run(
+        "docker",
+        "run",
+        "--rm",
+        "--user",
+        "root",
+        "--mount",
+        f"type=bind,source={data},target=/var/lib/postgresql",
+        "--entrypoint",
+        "chown",
+        "postgres:18-bookworm",
+        "-R",
+        f"{os.getuid()}:{os.getgid()}",
+        "/var/lib/postgresql",
+    )
 
 
 if __name__ == "__main__":

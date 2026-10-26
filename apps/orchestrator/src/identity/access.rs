@@ -166,7 +166,7 @@ impl Identity {
         capability.validate(scope)?;
         let (kind, scope_id) = scope.parts();
         let rows: Vec<(bool, Option<GrantId>, Option<TeamId>)> = sqlx::query_as(
-            "SELECT a.role = 'administrator', g.id, g.team_id FROM human_accounts a LEFT JOIN access_grants g ON g.scope_kind = $2 AND g.scope_id = $3 AND g.capability = $4 AND g.revoked_at IS NULL AND (g.account_id = a.id OR EXISTS(SELECT 1 FROM human_team_members m JOIN human_teams t ON t.id = m.team_id AND t.active WHERE m.team_id = g.team_id AND m.account_id = a.id)) WHERE a.id = $1 AND a.active ORDER BY g.id",
+            "SELECT a.role = 'administrator', g.id, g.team_id FROM human_accounts a LEFT JOIN effective_human_grants g ON g.actor_id = a.id AND g.scope_kind = $2 AND g.scope_id = $3 AND g.capability = $4 WHERE a.id = $1 AND a.active ORDER BY g.id",
         )
         .bind(actor.id).bind(kind).bind(scope_id).bind(capability.name())
         .fetch_all(&self.pool).await?;

@@ -89,5 +89,7 @@ def check_access_restart(base, admin, checkpoint):
 def check_team_listing(base, admin, command, team):
     assert request(base, "/api/identity/teams", admin, command)[1] == team
     status, listed = request(base, "/api/identity/teams", admin)
-    assert status == 200 and listed[0]["id"] == team["id"]
-    assert request(base, f"/api/identity/teams?after={team['id']}", admin)[1] == []
+    assert status == 200 and any(item["id"] == team["id"] for item in listed)
+    assert (
+        request(base, f"/api/identity/teams?after={listed[-1]['id']}", admin)[1] == []
+    )
