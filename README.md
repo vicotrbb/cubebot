@@ -197,7 +197,7 @@ docker build -t cubebot-orchestrator:dev -f apps/orchestrator/Dockerfile .
 docker build -t cubebot-web:dev -f apps/web/Dockerfile .
 ```
 
-Container recipes run as non-root users. They are development build foundations, not a qualified installation. Helm packaging, agent pod construction, network enforcement, credential isolation, and fencing belong to subsequent implementation milestones.
+Container recipes default to distinct non-root runtime/tool users. The runtime image also packages the trusted `--initialize-network` setup command, verified in the [disposable Linux fixture](docs/development/container-isolation.md); production Pod startup does not invoke it yet. Helm packaging, production network enforcement, full credential isolation and fencing qualification remain open.
 
 Container verification was retried after the layout change on 2026-10-25. Both builds remained blocked by Docker's `no space left on device` error: the orchestrator during dependency compilation and the frontend while materializing its base image. No existing Docker data was pruned. See [layout verification](docs/development/layout-verification.md) for the successful local and fresh-copy checks; image builds remain unqualified.
 

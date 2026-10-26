@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && rm -rf /var/lib/apt/lists/*
 
 FROM base AS runtime-image
+RUN apt-get update && apt-get install -y --no-install-recommends nftables \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/target/release/cubebot-agent /usr/local/bin/
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/cubebot-agent"]

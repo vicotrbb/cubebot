@@ -50,6 +50,12 @@ fn serve() -> Result<(), Box<dyn std::error::Error>> {
         let socket = UdpSocket::bind(address)?;
         std::thread::spawn(move || udp_respond(socket));
     }
+    for address in ["127.0.0.1:53", "[::1]:53"] {
+        let listener = TcpListener::bind(address)?;
+        std::thread::spawn(move || respond(listener));
+        let socket = UdpSocket::bind(address)?;
+        std::thread::spawn(move || udp_respond(socket));
+    }
     println!("{}", identity()?);
     std::io::stdout().flush()?;
     loop {

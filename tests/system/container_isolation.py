@@ -11,6 +11,19 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+RESTRICTED_FIXTURES = (
+    "10.23.45.67",
+    "100.100.100.200",
+    "169.254.169.254",
+    "192.0.0.9",
+    "198.18.0.1",
+    "198.51.100.7",
+    "fd12::1234",
+    "2001:db8::1234",
+    "64:ff9b::a00:1",
+    "2002:a00:1::1",
+)
+
 
 def run(*args, input=None):
     result = subprocess.run(
@@ -186,6 +199,46 @@ def addresses(image, prefix, runtime):
         "address",
         "add",
         "2001:4860::8888/128",
+        "dev",
+        "lo",
+        "nodad",
+    )
+    for address in RESTRICTED_FIXTURES:
+        family = ("-6",) if ":" in address else ()
+        mask = 128 if family else 32
+        helper(
+            image,
+            prefix,
+            runtime,
+            "/usr/sbin/ip",
+            *family,
+            "address",
+            "add",
+            f"{address}/{mask}",
+            "dev",
+            "lo",
+            *(("nodad",) if family else ()),
+        )
+    helper(
+        image,
+        prefix,
+        runtime,
+        "/usr/sbin/ip",
+        "address",
+        "add",
+        "9.9.9.9/32",
+        "dev",
+        "lo",
+    )
+    helper(
+        image,
+        prefix,
+        runtime,
+        "/usr/sbin/ip",
+        "-6",
+        "address",
+        "add",
+        "2606:4700:4700::1111/128",
         "dev",
         "lo",
         "nodad",
@@ -548,6 +601,90 @@ def udp_grants(image, prefix, runtime):
     }
 
 
+def baseline_setup(image, prefix, runtime, dns):
+    config = {"infrastructure": ["8.8.4.4/32", "2001:4860::8888/128"], "dns": dns}
+    helper(
+        image,
+        prefix,
+        runtime,
+        "/usr/local/bin/cubebot-agent",
+        "--initialize-network",
+        json.dumps(config),
+    )
+
+
+def compiled_destinations(image, prefix, runtime):
+    for address in RESTRICTED_FIXTURES:
+        target = f"[{address}]:18081" if ":" in address else f"{address}:18080"
+        control = json.loads(
+            docker("exec", runtime, "/usr/local/bin/isolation-probe", "connect", target)
+        )
+        assert control["connected"], f"missing special-address listener: {target}"
+        assert not probe(image, prefix, runtime, "connect", target)["connected"]
+    for address in ("9.9.9.9:18080", "[2606:4700:4700::1111]:18081"):
+        assert probe(image, prefix, runtime, "connect", address)["connected"]
+        with socket_session(runtime, address, "udp-session"):
+            pass
+    unknown = json.loads(
+        container(
+            image,
+            prefix,
+            "--user",
+            "10003:10003",
+            "--network",
+            f"container:{runtime}",
+            command=("connect", "9.9.9.9:18080"),
+        )
+    )
+    assert not unknown["connected"]
+
+
+def compiled_baseline(image, prefix, runtime):
+    # Earlier comparison rules must not provide either an allow or deny here.
+    helper(
+        image,
+        prefix,
+        runtime,
+        "/usr/sbin/nft",
+        "delete",
+        "table",
+        "inet",
+        "cubebot_probe",
+    )
+    baseline_setup(image, prefix, runtime, [])
+    baseline_setup(image, prefix, runtime, [])
+    assert not any(network(image, prefix, runtime).values())
+    compiled_destinations(image, prefix, runtime)
+    for address in ("127.0.0.1:53", "[::1]:53"):
+        assert not probe(image, prefix, runtime, "connect", address)["connected"]
+    baseline_setup(image, prefix, runtime, ["127.0.0.1", "::1"])
+    for address in ("127.0.0.1:53", "[::1]:53"):
+        assert probe(image, prefix, runtime, "connect", address)["connected"]
+        with socket_session(runtime, address, "udp-session"):
+            pass
+    assert not any(network(image, prefix, runtime).values())
+    control = json.loads(
+        docker(
+            "exec",
+            runtime,
+            "/usr/local/bin/isolation-probe",
+            "connect",
+            "127.0.0.1:18080",
+        )
+    )
+    assert control["connected"]
+    return {
+        "repeated_atomic_setup": True,
+        "public_tcp_udp": True,
+        "public_infrastructure_denied": True,
+        "private_denied": True,
+        "dns_explicit_tcp_udp_port_53": True,
+        "runtime_path_retained": True,
+        "unknown_uid_denied": True,
+        "restricted_addresses": list(RESTRICTED_FIXTURES),
+    }
+
+
 def cannot_flush(image, prefix, runtime):
     try:
         container(
@@ -700,6 +837,9 @@ def qualify(images, prefix, volume):
             images["qualification"], prefix, runtime
         ),
         "udp_private_grants": udp_grants(images["qualification"], prefix, runtime),
+        "compiled_baseline": compiled_baseline(
+            images["qualification"], prefix, runtime
+        ),
         **results,
     }
 

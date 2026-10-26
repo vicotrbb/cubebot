@@ -1,0 +1,166 @@
+{
+  "profile": {
+    "timestamp": "2026-10-26T16:43:40.040589+00:00",
+    "base_commit": "e02ba9541073bdc4c149422aadf5ce1a01d57403",
+    "source_sha256": "fd042983a42ebeffbb01cc87727667ee8962c9fc096fd6a1fbd9f99120a4bcfb",
+    "docker_version": "29.4.0",
+    "platform": {
+      "os": "linux",
+      "architecture": "aarch64",
+      "cpus": 3,
+      "memory_bytes": 4181233664,
+      "kernel": "7.0.14-orbstack-00380-ga7e0a2dc9535"
+    },
+    "images": {
+      "runtime": {
+        "id": "sha256:f512c491806c96e0cb01a71b676a65f0b4646d00b6f798ee4246463fa18dab37",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10001:10001",
+        "entrypoint": ["/usr/local/bin/cubebot-agent"]
+      },
+      "tools": {
+        "id": "sha256:0324f6ad7d3a6247402469870637df70ce9b636fdd318869aa61e889de0cb381",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10002:10002",
+        "entrypoint": ["/usr/local/bin/cubebot-tool-runner"]
+      },
+      "qualification": {
+        "id": "sha256:8acf3b817bf2a9e9565bca207d3890280c8268da69d09cad30ba7afaa8f945d0",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10001:10001",
+        "entrypoint": ["/usr/local/bin/isolation-probe"]
+      }
+    },
+    "nftables": "nftables v1.0.6 (Lester Gooch #5)"
+  },
+  "scope": "Linux container mechanism probes; G1-G3 not qualified",
+  "results": {
+    "filesystem": {
+      "links_runtime_token": false,
+      "pid_namespace": 4026534106,
+      "reads_runtime_journal": false,
+      "reads_runtime_token": false,
+      "uid": 10002,
+      "writes_runtime_directory": false,
+      "writes_tool_workspace": true
+    },
+    "without_filter": {
+      "private_v4": true,
+      "public_v4": true,
+      "private_v6": true,
+      "public_v6": true
+    },
+    "direct_socket_ignores_proxy": true,
+    "finite_private_grants": {
+      "ipv4": {
+        "granted_connection_and_exchange": true,
+        "ungranted_port_denied": true,
+        "expired_existing_exchange": false,
+        "expired_new_connection": false,
+        "revoked_existing_exchange": false,
+        "revoked_new_connection": false
+      },
+      "ipv6": {
+        "granted_connection_and_exchange": true,
+        "ungranted_port_denied": true,
+        "expired_existing_exchange": false,
+        "expired_new_connection": false,
+        "revoked_existing_exchange": false,
+        "revoked_new_connection": false
+      }
+    },
+    "bidirectional_private_grants": {
+      "output_only_leaks_incoming_data": {
+        "ipv4": {
+          "fresh_push_after_expiry": true,
+          "fresh_push_after_revocation": true
+        },
+        "ipv6": {
+          "fresh_push_after_expiry": true,
+          "fresh_push_after_revocation": true
+        }
+      },
+      "duplex_request_reply_grants": {
+        "ipv4": {
+          "granted_connection_and_exchange": true,
+          "ungranted_port_denied": true,
+          "expired_existing_exchange": false,
+          "expired_new_connection": false,
+          "revoked_existing_exchange": false,
+          "revoked_new_connection": false
+        },
+        "ipv6": {
+          "granted_connection_and_exchange": true,
+          "ungranted_port_denied": true,
+          "expired_existing_exchange": false,
+          "expired_new_connection": false,
+          "revoked_existing_exchange": false,
+          "revoked_new_connection": false
+        }
+      },
+      "duplex_blocks_incoming_data": {
+        "ipv4": {
+          "fresh_push_after_expiry": false,
+          "fresh_push_after_revocation": false
+        },
+        "ipv6": {
+          "fresh_push_after_expiry": false,
+          "fresh_push_after_revocation": false
+        }
+      },
+      "duplex_default_paths": {
+        "private_v4": false,
+        "public_v4": true,
+        "private_v6": false,
+        "public_v6": true
+      }
+    },
+    "udp_private_grants": {
+      "ipv4": {
+        "tcp_grant_does_not_authorize_udp": true,
+        "ungranted_port_denied": true,
+        "expired_existing_and_new_denied": true,
+        "revoked_existing_and_new_denied": true
+      },
+      "ipv6": {
+        "tcp_grant_does_not_authorize_udp": true,
+        "ungranted_port_denied": true,
+        "expired_existing_and_new_denied": true,
+        "revoked_existing_and_new_denied": true
+      }
+    },
+    "compiled_baseline": {
+      "repeated_atomic_setup": true,
+      "public_tcp_udp": true,
+      "public_infrastructure_denied": true,
+      "private_denied": true,
+      "dns_explicit_tcp_udp_port_53": true,
+      "runtime_path_retained": true,
+      "unknown_uid_denied": true,
+      "restricted_addresses": [
+        "10.23.45.67",
+        "100.100.100.200",
+        "169.254.169.254",
+        "192.0.0.9",
+        "198.18.0.1",
+        "198.51.100.7",
+        "fd12::1234",
+        "2001:db8::1234",
+        "64:ff9b::a00:1",
+        "2002:a00:1::1"
+      ]
+    },
+    "shared_filter_runtime_private": false,
+    "uid_filter_tools": {
+      "private_v4": false,
+      "public_v4": true,
+      "private_v6": false,
+      "public_v6": true
+    },
+    "uid_filter_runtime_private": true,
+    "tool_cannot_flush_rules": true
+  }
+}

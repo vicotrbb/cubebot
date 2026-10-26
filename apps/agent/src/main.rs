@@ -13,6 +13,9 @@ async fn main() -> ExitCode {
             }
         };
     }
+    if args.len() == 2 && args[0] == "--initialize-network" {
+        return initialize_network(&args[1]).await;
+    }
     if !args.is_empty() {
         eprintln!("Unknown runtime arguments");
         return ExitCode::FAILURE;
@@ -21,6 +24,16 @@ async fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Runtime startup failed: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn initialize_network(input: &str) -> ExitCode {
+    match cubebot_agent::execution::network::initialize(input).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("Network initialization failed: {error}");
             ExitCode::FAILURE
         }
     }
