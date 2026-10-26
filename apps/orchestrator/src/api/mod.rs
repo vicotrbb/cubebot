@@ -8,6 +8,7 @@ mod browser;
 mod identity;
 mod invitations;
 mod oidc;
+mod runtime;
 
 use axum::{Json, Router, routing::get};
 use cubebot_protocol::{Liveness, LivenessStatus};
@@ -69,4 +70,9 @@ async fn readiness(
         Ok(_) => axum::http::StatusCode::OK,
         Err(_) => axum::http::StatusCode::SERVICE_UNAVAILABLE,
     }
+}
+
+/// Explicit runtime routes. Normal startup does not discover a Kubernetes configuration.
+pub fn runtime_router(identity: crate::agents::runtime::RuntimeIdentity) -> Router {
+    runtime::router(identity)
 }

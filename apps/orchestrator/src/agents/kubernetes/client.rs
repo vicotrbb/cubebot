@@ -1,6 +1,7 @@
 use super::{
     Error, RecordedPod, ResourceObject, ownership::FINALIZER, termination_proven, verify_pod,
 };
+use k8s_openapi::api::authentication::v1::{TokenReview, TokenReviewSpec};
 use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod};
 use kube::{
     Api, Client,
@@ -10,6 +11,8 @@ use kube::{
 #[derive(Clone)]
 pub struct Kubernetes {
     namespace: String,
+    token_reviews: Api<TokenReview>,
+    review_slots: std::sync::Arc<tokio::sync::Semaphore>,
     pods: Api<Pod>,
     anchors: Api<ConfigMap>,
     workspaces: Api<PersistentVolumeClaim>,
@@ -25,10 +28,40 @@ impl Kubernetes {
         let client = Client::try_from(config)?;
         Ok(Self {
             namespace: namespace.into(),
+            token_reviews: Api::all(client.clone()),
+            review_slots: std::sync::Arc::new(tokio::sync::Semaphore::new(16)),
             pods: Api::namespaced(client.clone(), namespace),
             anchors: Api::namespaced(client.clone(), namespace),
             workspaces: Api::namespaced(client, namespace),
         })
+    }
+
+    pub async fn review_runtime_token(&self, token: &str) -> Result<super::ReviewedPod, Error> {
+        if token.is_empty()
+            || token.len() > 16384
+            || token
+                .bytes()
+                .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+        {
+            return Err(Error::Unauthorized);
+        }
+        let _slot = self
+            .review_slots
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| Error::Busy)?;
+        let review = TokenReview {
+            spec: TokenReviewSpec {
+                audiences: Some(vec![super::authentication::RUNTIME_AUDIENCE.into()]),
+                token: token.into(),
+            },
+            ..Default::default()
+        };
+        let reviewed = self
+            .token_reviews
+            .create(&PostParams::default(), &review)
+            .await?;
+        super::authentication::verify(reviewed.status.ok_or(Error::Unauthorized)?, &self.namespace)
     }
 
     /// Server defaulting/admission preview, never evidence of a physical object.

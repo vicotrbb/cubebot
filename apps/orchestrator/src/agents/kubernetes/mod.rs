@@ -1,5 +1,7 @@
-//! Namespaced Kubernetes effects and conservative ownership/termination checks.
+//! Managed namespaced resources, runtime token review and conservative termination checks.
+mod authentication;
 mod client;
+pub use authentication::ReviewedPod;
 mod reconcile;
 pub use reconcile::{ReconcileResult, Reconciler};
 mod layout;
@@ -15,6 +17,9 @@ pub use ownership::{Identity, RecordedPod, termination_proven, verify_pod};
 #[derive(Debug)]
 pub enum Error {
     InvalidConfiguration,
+    Unauthorized,
+    Busy,
+    DeadlineExceeded,
     Conflict,
     Database(sqlx::Error),
     OwnershipMismatch,

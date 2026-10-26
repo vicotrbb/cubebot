@@ -64,7 +64,7 @@ impl Layout {
             "containers":[self.runtime(),self.tools()],
             "volumes":[
                 {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name,"readOnly":false}},
-                {"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":"cubebot-runtime","expirationSeconds":600,"path":"token"}}]}},
+                {"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}},
                 {"name":"runtime-tmp","emptyDir":{"sizeLimit":"64Mi"}},
                 {"name":"tools-tmp","emptyDir":{"sizeLimit":"1Gi"}},
                 {"name":"browser-shm","emptyDir":{"medium":"Memory","sizeLimit":"256Mi"}}

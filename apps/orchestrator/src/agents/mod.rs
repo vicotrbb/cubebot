@@ -4,6 +4,7 @@ mod definitions;
 pub mod kubernetes;
 mod lifecycle;
 mod revisions;
+pub mod runtime;
 pub use definitions::{Agent, AgentId, CreateAgent};
 pub use lifecycle::{LifecycleAction, LifecycleCommand};
 pub use revisions::{DefinitionRevision, IdlePolicy, UpdateAgent};
