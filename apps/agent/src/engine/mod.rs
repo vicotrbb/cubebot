@@ -12,7 +12,7 @@ pub async fn run() -> Result<(), &'static str> {
     let config = Config::from_environment().map_err(|_| "invalid runtime configuration")?;
     let root =
         std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY").ok_or("runtime storage not configured")?;
-    let journal = open_journal(Path::new(&root))?;
+    let mut journal = open_journal(Path::new(&root))?;
     let mut client = RuntimeClient::new(config).map_err(|_| "runtime transport unavailable")?;
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
         .map_err(|_| "runtime signal handler unavailable")?;
@@ -20,8 +20,9 @@ pub async fn run() -> Result<(), &'static str> {
     loop {
         tokio::select! {
             _ = shutdown(&mut terminate) => return Ok(()),
-            outcome = cycle(&mut client, &journal, &mut drain) => match outcome {
+            outcome = cycle(&mut client, &mut journal, &mut drain) => match outcome {
                 Ok(true) => return Ok(()),
+                Ok(false) if !journal.pending().is_empty() => continue,
                 Ok(false) => (),
                 Err(error) => {
                     client.invalidate();
@@ -54,7 +55,7 @@ async fn shutdown(terminate: &mut Signal) {
 }
 async fn cycle(
     client: &mut RuntimeClient,
-    journal: &Journal,
+    journal: &mut Journal,
     latched: &mut Option<Uuid>,
 ) -> Result<bool, crate::control::Error> {
     use crate::control::Error;
@@ -67,11 +68,19 @@ async fn cycle(
     {
         return Err(Error::Protocol);
     }
+    if let Some(record) = journal.pending().first() {
+        client
+            .synchronize_record(record.sequence, &record.payload)
+            .await?;
+        journal
+            .acknowledge(record.sequence)
+            .map_err(|_| Error::Journal)?;
+    }
     if matches!(control.disposition, RuntimeDisposition::Drain) {
         let request = control.drain.ok_or(Error::Protocol)?;
         *latched = Some(request.request_id);
         // No turns or tool invocations can run in this control-only engine yet.
-        // Pending records still prohibit reporting a clean drain until centrally reconciled.
+        // Custody acknowledgement permits local cleanup, not semantic acceptance or new work.
         if !journal.pending().is_empty() {
             return Ok(false);
         }

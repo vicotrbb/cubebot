@@ -52,3 +52,18 @@ pub struct RuntimeControl {
     pub disposition: RuntimeDisposition,
     pub drain: Option<DrainRequest>,
 }
+
+/// Opaque recovery evidence, never a state commit or authority to execute.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JournalRecord {
+    pub sequence: u64,
+    pub payload: Vec<u8>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct JournalReceipt {
+    pub actor: RuntimeActor,
+    pub sequence: u64,
+    pub payload_digest: [u8; 32],
+}

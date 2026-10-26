@@ -298,3 +298,54 @@ async fn native_process_retains_pending_evidence_and_never_acknowledges_clean_dr
         std::fs::remove_dir_all(root).unwrap();
     }
 }
+
+async fn journal_receipt(
+    State(wrong): State<u8>,
+    headers: HeaderMap,
+    Json(record): Json<Value>,
+) -> Json<Value> {
+    use sha2::{Digest, Sha256};
+    assert!(
+        headers["authorization"]
+            .to_str()
+            .unwrap()
+            .starts_with("Bearer cb_runtime_")
+    );
+    assert_eq!(record, json!({"sequence":1,"payload":b"evidence"}));
+    let digest: [u8; 32] = Sha256::digest(b"evidence").into();
+    let mut result = json!({"actor":{"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(2),"epoch":1,"version":1},"sequence":1,"payload_digest":digest});
+    match wrong {
+        1 => result["sequence"] = json!(2),
+        2 => result["actor"]["attempt"] = json!(Uuid::from_u128(3)),
+        3 => result["payload_digest"] = json!(vec![0; 32]),
+        _ => {}
+    }
+    Json(result)
+}
+#[tokio::test]
+async fn journal_client_requires_receipt_identity_sequence_and_exact_digest() {
+    for wrong in 0..4 {
+        let router = Router::new()
+            .route("/api/runtime/journal", post(journal_receipt))
+            .with_state(wrong)
+            .merge(Router::new().route(
+                "/api/runtime/bootstrap",
+                post(|| async { Json(issued(120)) }),
+            ));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(listener, router).await.unwrap();
+        });
+        let path = std::env::temp_dir().join(format!("cubebot-journal-client-{}", Uuid::new_v4()));
+        std::fs::write(&path, "projected").unwrap();
+        let mut client = RuntimeClient::new(Config::new(&origin, path.clone()).unwrap()).unwrap();
+        client.bootstrap().await.unwrap();
+        assert_eq!(
+            client.synchronize_record(1, b"evidence").await.is_ok(),
+            wrong == 0
+        );
+        task.abort();
+        std::fs::remove_file(path).unwrap();
+    }
+}

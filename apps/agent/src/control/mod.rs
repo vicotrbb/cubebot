@@ -14,6 +14,7 @@ pub enum Error {
     Rejected,
     Protocol,
     Expired,
+    Journal,
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -24,6 +25,7 @@ impl std::fmt::Display for Error {
             Self::Rejected => "runtime identity rejected",
             Self::Protocol => "invalid runtime control response",
             Self::Expired => "runtime identity expired",
+            Self::Journal => "runtime journal requires recovery",
         })
     }
 }
@@ -134,6 +136,31 @@ impl RuntimeClient {
             return Err(Error::Protocol);
         }
         Ok(report)
+    }
+    pub async fn synchronize_record(&self, sequence: u64, payload: &[u8]) -> Result<(), Error> {
+        use sha2::{Digest, Sha256};
+        if sequence == 0
+            || sequence > i64::MAX as u64
+            || payload.len() > crate::journal::MAX_PAYLOAD
+        {
+            return Err(Error::Protocol);
+        }
+        let response = self
+            .request(reqwest::Method::POST, "api/runtime/journal")?
+            .json(&runtime::JournalRecord {
+                sequence,
+                payload: payload.to_vec(),
+            })
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let receipt: runtime::JournalReceipt = transport::decode(response).await?;
+        self.check_actor(&receipt.actor)?;
+        let expected: [u8; 32] = Sha256::digest(payload).into();
+        if receipt.sequence != sequence || receipt.payload_digest != expected {
+            return Err(Error::Protocol);
+        }
+        Ok(())
     }
     fn request(
         &self,

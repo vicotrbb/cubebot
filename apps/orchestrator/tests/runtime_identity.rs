@@ -657,7 +657,7 @@ async fn drain_http_workflow_requires_machine_identity_and_retains_acknowledgeme
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn actual_native_runtime_bootstraps_and_acknowledges_persisted_drain() {
+async fn actual_native_runtime_synchronizes_retained_evidence_before_persisted_drain() {
     use cubebot_orchestrator::agents::LifecycleAction;
     use std::os::unix::fs::DirBuilderExt;
     let f = fixture().await;
@@ -668,6 +668,7 @@ async fn actual_native_runtime_bootstraps_and_acknowledges_persisted_drain() {
         .mode(0o700)
         .create(&root)
         .unwrap();
+    seed_native_journal(&root);
     let token = root.join("token");
     std::fs::write(&token, "projected-native-token").unwrap();
     let binary = std::env::current_exe()
@@ -700,6 +701,16 @@ async fn actual_native_runtime_bootstraps_and_acknowledges_persisted_drain() {
         .unwrap();
     assert_eq!(phase, "bound");
     assert!(root.join("journal/state").is_file());
+    assert!(!root.join("journal/0000000000000001.entry").exists());
+    let retained: Vec<u8> = sqlx::query_scalar(
+        "SELECT payload FROM agent_journal_records WHERE agent_id = $1 AND sequence = 1",
+    )
+    .bind(f.agent)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(retained, vec![255u8; 65536]);
+
     std::fs::remove_dir_all(root).unwrap();
     task.abort();
     f.task.abort();
@@ -863,5 +874,229 @@ async fn human_status_http_reports_observed_facts_without_runtime_secrets_or_wor
     assert!(!body.contains("manifest"));
     assert!(!body.contains("instructions"));
     task.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn journal_receipts_are_contiguous_immutable_and_hold_active_admission() {
+    use cubebot_protocol::runtime::JournalRecord;
+    let f = fixture().await;
+    let instance = Uuid::new_v4();
+    let session = f.auth.bootstrap("projected-token", instance).await.unwrap();
+    let first = JournalRecord {
+        sequence: 1,
+        payload: b"unresolved dispatch".to_vec(),
+    };
+    assert!(
+        f.auth
+            .retain_journal(
+                &session.token,
+                &JournalRecord {
+                    sequence: 2,
+                    payload: vec![]
+                }
+            )
+            .await
+            .is_err()
+    );
+    let (accepted, repeated) = tokio::join!(
+        f.auth.retain_journal(&session.token, &first),
+        f.auth.retain_journal(&session.token, &first)
+    );
+    let receipt = accepted.unwrap();
+    assert!(repeated.is_ok());
+    assert_eq!(receipt.sequence, 1);
+    assert_eq!(receipt.actor.agent, f.agent.0);
+    let replay = f.auth.retain_journal(&session.token, &first).await.unwrap();
+    assert_eq!(receipt.payload_digest, replay.payload_digest);
+    assert!(
+        f.auth
+            .retain_journal(
+                &session.token,
+                &JournalRecord {
+                    sequence: 1,
+                    payload: b"changed".to_vec()
+                }
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Active)
+            .await
+            .is_err()
+    );
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Recovery)
+            .await
+            .is_ok()
+    );
+    let next = f.auth.bootstrap("projected-token", instance).await.unwrap();
+    assert!(f.auth.retain_journal(&session.token, &first).await.is_err());
+    f.auth.retain_journal(&next.token, &first).await.unwrap();
+    f.auth
+        .retain_journal(
+            &next.token,
+            &JournalRecord {
+                sequence: 2,
+                payload: b"known local outcome".to_vec(),
+            },
+        )
+        .await
+        .unwrap();
+    let retained: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM agent_journal_records WHERE agent_id = $1")
+            .bind(f.agent)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(retained, 2);
+    f.task.abort();
+}
+
+// Independent on-disk fixture exercises the native binary without an app-to-app dependency.
+fn seed_native_journal(root: &std::path::Path) {
+    use std::os::unix::fs::DirBuilderExt;
+    let path = root.join("journal");
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&path)
+        .unwrap();
+    let mut state = b"CBJNL001".to_vec();
+    state.extend(1u64.to_be_bytes());
+    state.extend(0u64.to_be_bytes());
+    write_sealed(&path.join("state"), state);
+    let mut record = 1u64.to_be_bytes().to_vec();
+    record.extend(65536u32.to_be_bytes());
+    record.extend(vec![255u8; 65536]);
+    write_sealed(&path.join("0000000000000001.entry"), record);
+    use std::os::unix::fs::OpenOptionsExt;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path.join("lock"))
+        .unwrap();
+}
+fn write_sealed(path: &std::path::Path, mut bytes: Vec<u8>) {
+    use sha2::{Digest, Sha256};
+    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    bytes.extend(Sha256::digest(&bytes));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(path)
+        .unwrap();
+    file.write_all(&bytes).unwrap();
+    file.sync_all().unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn journal_http_accepts_bounded_evidence_and_rejects_human_or_malformed_reports() {
+    let f = fixture().await;
+    let session = f.auth.bootstrap("projected", Uuid::new_v4()).await.unwrap();
+    let human = Identity::new(f.pool.clone())
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let (origin, task) = runtime_server(f.auth.clone()).await;
+    let client = openidconnect::reqwest::Client::new();
+    let url = format!("{origin}/api/runtime/journal");
+    let body = json!({"sequence":1,"payload":vec![255u8;65536]});
+    let denied = client
+        .post(&url)
+        .bearer_auth(human.token)
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(denied.status(), 401);
+    assert_eq!(denied.headers()["cache-control"], "no-store");
+    let accepted = client
+        .post(&url)
+        .bearer_auth(&session.token)
+        .header("content-type", "application/json")
+        .body(body.to_string())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), 200);
+    assert_eq!(accepted.headers()["cache-control"], "no-store");
+    assert!(accepted.bytes().await.unwrap().len() < 1024);
+    for (body, status) in [
+        (json!({"sequence":0,"payload":[]}), 400),
+        (json!({"sequence":2,"payload":vec![0;65537]}), 400),
+        (json!({"sequence":2,"payload":[],"agent":f.agent}), 422),
+    ] {
+        let response = client
+            .post(&url)
+            .bearer_auth(&session.token)
+            .header("content-type", "application/json")
+            .body(body.to_string())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), status);
+    }
+    let oversized = client
+        .post(&url)
+        .bearer_auth(&session.token)
+        .header("content-type", "application/json")
+        .body(" ".repeat(272 * 1024 + 1))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(oversized.status(), 413);
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM agent_journal_records WHERE agent_id = $1")
+            .bind(f.agent)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 1);
+    task.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn journal_reports_recheck_expiry_after_waiting_for_lifecycle_lock() {
+    use cubebot_protocol::runtime::JournalRecord;
+    let f = fixture().await;
+    let session = f.auth.bootstrap("projected", Uuid::new_v4()).await.unwrap();
+    let mut transaction = f.pool.begin().await.unwrap();
+    sqlx::query("SELECT id FROM agents WHERE id = $1 FOR UPDATE")
+        .bind(f.agent)
+        .execute(&mut *transaction)
+        .await
+        .unwrap();
+    let auth = f.auth.clone();
+    let report = tokio::spawn(async move {
+        auth.retain_journal(
+            &session.token,
+            &JournalRecord {
+                sequence: 1,
+                payload: b"evidence".to_vec(),
+            },
+        )
+        .await
+    });
+    wait_for_runtime_lock(&f.pool).await;
+    sqlx::query("UPDATE agent_runtime_sessions SET created_at = clock_timestamp() - interval '3 minutes',expires_at = clock_timestamp() - interval '1 second' WHERE attempt_id = $1").bind(f.attempt).execute(&mut *transaction).await.unwrap();
+    transaction.commit().await.unwrap();
+    assert!(report.await.unwrap().is_err());
+    let count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM agent_journal_records WHERE agent_id = $1")
+            .bind(f.agent)
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0);
     f.task.abort();
 }

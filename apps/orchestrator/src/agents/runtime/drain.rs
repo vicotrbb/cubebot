@@ -72,7 +72,7 @@ impl RuntimeIdentity {
         Ok(report)
     }
 
-    async fn lock_runtime(
+    pub(super) async fn lock_runtime(
         &self,
         actor: &RuntimeActor,
     ) -> Result<sqlx::Transaction<'_, sqlx::Postgres>, Error> {
@@ -94,7 +94,7 @@ impl RuntimeIdentity {
         Ok(transaction)
     }
 
-    async fn recheck(
+    pub(super) async fn recheck(
         &self,
         token: &str,
         actor: &RuntimeActor,

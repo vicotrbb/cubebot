@@ -1,5 +1,6 @@
 //! Short-lived runtime identity. It does not grant a turn or permission to execute effects.
 mod drain;
+mod journal;
 mod sessions;
 use super::{
     AgentId,

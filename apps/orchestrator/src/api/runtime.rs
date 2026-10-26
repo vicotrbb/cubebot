@@ -11,7 +11,8 @@ use axum::{
     routing::{get, post},
 };
 use cubebot_protocol::runtime::{
-    Bootstrap, DrainAcknowledgement, DrainRequest, RuntimeActor, RuntimeControl, RuntimeSession,
+    Bootstrap, DrainAcknowledgement, DrainRequest, JournalReceipt, JournalRecord, RuntimeActor,
+    RuntimeControl, RuntimeSession,
 };
 
 pub(super) fn router(identity: RuntimeIdentity) -> Router {
@@ -21,6 +22,11 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/control", get(control))
         .route("/api/runtime/drained", post(drained))
         .layer(DefaultBodyLimit::max(20 * 1024))
+        .merge(
+            Router::new()
+                .route("/api/runtime/journal", post(journal))
+                .layer(DefaultBodyLimit::max(272 * 1024)),
+        )
         .layer(axum::middleware::map_response(no_store))
         .with_state(identity)
 }
@@ -71,6 +77,18 @@ async fn drained(
             .map_err(Failure::from)?
             .into(),
     ))
+}
+async fn journal(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    input: Result<Json<JournalRecord>, axum::extract::rejection::JsonRejection>,
+) -> Result<Json<JournalReceipt>, Failure> {
+    let Json(record) = input.map_err(|error| Failure(error.status()))?;
+    identity
+        .retain_journal(bearer(&headers)?, &record)
+        .await
+        .map(Json)
+        .map_err(Failure::from)
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
     headers
