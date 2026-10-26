@@ -13,16 +13,7 @@ pub struct Kubernetes {
 
 impl Kubernetes {
     pub fn new(client: Client, namespace: &str) -> Result<Self, Error> {
-        if namespace.is_empty()
-            || namespace.len() > 63
-            || !namespace
-                .bytes()
-                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-            || namespace.starts_with('-')
-            || namespace.ends_with('-')
-        {
-            return Err(Error::InvalidConfiguration);
-        }
+        validate_namespace(namespace)?;
         Ok(Self {
             pods: Api::namespaced(client.clone(), namespace),
             workspaces: Api::namespaced(client, namespace),
@@ -116,4 +107,18 @@ fn delete_params(recorded: &RecordedPod, revision: String) -> DeleteParams {
         }),
         ..Default::default()
     }
+}
+
+pub(super) fn validate_namespace(namespace: &str) -> Result<(), Error> {
+    if namespace.is_empty()
+        || namespace.len() > 63
+        || !namespace
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        || namespace.starts_with('-')
+        || namespace.ends_with('-')
+    {
+        return Err(Error::InvalidConfiguration);
+    }
+    Ok(())
 }
