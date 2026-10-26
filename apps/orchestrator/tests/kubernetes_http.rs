@@ -18,6 +18,7 @@ struct ApiState {
     pod: Option<Pod>,
     calls: Vec<(Method, String, Value)>,
     conflict_create: bool,
+    candidates: std::collections::BTreeMap<String, Value>,
 }
 
 async fn serve(
@@ -41,7 +42,13 @@ async fn serve(
         }
         let mut created = body;
         created["metadata"]["uid"] = json!("created-uid");
+        created["metadata"]["resourceVersion"] = json!("9");
+        created["metadata"]["creationTimestamp"] = json!("2026-10-26T12:00:00Z");
+        created["status"] = json!({"phase":"Pending"});
         return Json(created).into_response();
+    }
+    if let Some(candidate) = state.candidates.get(uri.path()) {
+        return Json(candidate.clone()).into_response();
     }
     if let Some(pod) = &state.pod {
         return Json(pod.clone()).into_response();
@@ -60,6 +67,7 @@ async fn server(
         pod: Some(pod),
         calls: vec![],
         conflict_create: false,
+        candidates: Default::default(),
     }));
     let router = Router::new().fallback(any(serve)).with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -211,5 +219,164 @@ async fn creates_only_in_the_selected_namespace_and_never_adopts_conflicting_obj
         calls[1].1.split('?').next(),
         Some("/api/v1/namespaces/cubebot-test/persistentvolumeclaims")
     );
+    task.abort();
+}
+
+#[tokio::test]
+async fn preparation_uses_server_dry_run_without_issuing_real_creates() {
+    use cubebot_orchestrator::agents::kubernetes::ResourceObject;
+    use k8s_openapi::api::core::v1::PersistentVolumeClaim;
+    let identity = fixtures::identity();
+    let mut pod = fixtures::pod(&identity);
+    pod.metadata.uid = None;
+    pod.metadata.resource_version = None;
+    let (client, state, task) = server(pod.clone()).await;
+    let claim: PersistentVolumeClaim = serde_json::from_value(json!({"metadata":{"name":"workspace-test"},"spec":{"accessModes":["ReadWriteOncePod"],"resources":{"requests":{"storage":"10Gi"}}}})).unwrap();
+    let prepared = client
+        .prepare(&ResourceObject::Pod(Box::new(pod)))
+        .await
+        .unwrap();
+    assert!(prepared.metadata().uid.is_none());
+    assert!(prepared.metadata().resource_version.is_none());
+    assert!(prepared.metadata().creation_timestamp.is_none());
+    let ResourceObject::Pod(preview) = prepared else {
+        panic!("pod expected")
+    };
+    assert!(preview.status.is_none());
+    client
+        .prepare(&ResourceObject::Workspace(Box::new(claim)))
+        .await
+        .unwrap();
+    let calls = state.lock().unwrap().calls.clone();
+    assert_eq!(calls.len(), 2);
+    assert!(
+        calls
+            .iter()
+            .all(|call| call.0 == Method::POST && call.1.contains("dryRun=All"))
+    );
+    assert!(
+        calls[0]
+            .1
+            .starts_with("/api/v1/namespaces/cubebot-test/pods?")
+    );
+    assert!(
+        calls[1]
+            .1
+            .starts_with("/api/v1/namespaces/cubebot-test/persistentvolumeclaims?")
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn anchor_and_workspace_reads_return_candidates_without_adopting_them() {
+    use cubebot_orchestrator::agents::kubernetes::ResourceObject;
+    use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim};
+    let identity = fixtures::identity();
+    let (client, state, task) = server(fixtures::pod(&identity)).await;
+    state.lock().unwrap().pod = None;
+    let anchor: ConfigMap = serde_json::from_value(json!({"metadata":{"name":"installation-anchor"},"immutable":true,"data":{"installation":"test"}})).unwrap();
+    assert!(
+        client
+            .fetch_anchor("installation-anchor")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let created = client.create_anchor(&anchor).await.unwrap();
+    state.lock().unwrap().candidates.insert(
+        "/api/v1/namespaces/cubebot-test/configmaps/installation-anchor".into(),
+        serde_json::to_value(&created).unwrap(),
+    );
+    assert_eq!(
+        client
+            .fetch_anchor("installation-anchor")
+            .await
+            .unwrap()
+            .unwrap()
+            .metadata
+            .uid,
+        created.metadata.uid
+    );
+    let claim: PersistentVolumeClaim = serde_json::from_value(json!({"metadata":{"name":"workspace-test","uid":"foreign-uid"},"spec":{"accessModes":["ReadWriteOncePod"]}})).unwrap();
+    let expected = ResourceObject::Workspace(Box::new(claim.clone()));
+    assert!(client.fetch_candidate(&expected).await.unwrap().is_none());
+    state.lock().unwrap().candidates.insert(
+        "/api/v1/namespaces/cubebot-test/persistentvolumeclaims/workspace-test".into(),
+        serde_json::to_value(claim).unwrap(),
+    );
+    assert_eq!(
+        client
+            .fetch_candidate(&expected)
+            .await
+            .unwrap()
+            .unwrap()
+            .metadata()
+            .uid
+            .as_deref(),
+        Some("foreign-uid")
+    );
+    let calls = state.lock().unwrap().calls.clone();
+    assert_eq!(
+        calls.iter().filter(|call| call.0 == Method::POST).count(),
+        1
+    );
+    assert!(calls.iter().all(|call| {
+        call.0 == Method::GET
+            || call
+                .1
+                .starts_with("/api/v1/namespaces/cubebot-test/configmaps?")
+    }));
+    task.abort();
+}
+
+#[tokio::test]
+async fn foreign_namespaces_and_invalid_names_never_reach_the_api() {
+    use cubebot_orchestrator::agents::kubernetes::ResourceObject;
+    let identity = fixtures::identity();
+    let mut pod = fixtures::pod(&identity);
+    let (client, state, task) = server(pod.clone()).await;
+    pod.metadata.uid = None;
+    pod.metadata.resource_version = None;
+    pod.metadata.namespace = Some("foreign".into());
+    assert!(
+        client
+            .prepare(&ResourceObject::Pod(Box::new(pod.clone())))
+            .await
+            .is_err()
+    );
+    assert!(client.create_pod(&pod).await.is_err());
+    assert!(
+        client
+            .fetch_candidate(&ResourceObject::Pod(Box::new(pod)))
+            .await
+            .is_err()
+    );
+    assert!(client.fetch_anchor("../foreign").await.is_err());
+    assert!(state.lock().unwrap().calls.is_empty());
+    task.abort();
+}
+
+#[tokio::test]
+async fn preparation_rejects_bound_input_and_propagates_api_conflicts_without_fallback() {
+    use cubebot_orchestrator::agents::kubernetes::ResourceObject;
+    let identity = fixtures::identity();
+    let mut pod = fixtures::pod(&identity);
+    let (client, state, task) = server(pod.clone()).await;
+    assert!(
+        client
+            .prepare(&ResourceObject::Pod(Box::new(pod.clone())))
+            .await
+            .is_err()
+    );
+    assert!(state.lock().unwrap().calls.is_empty());
+    pod.metadata.uid = None;
+    pod.metadata.resource_version = None;
+    state.lock().unwrap().conflict_create = true;
+    assert!(
+        matches!(client.prepare(&ResourceObject::Pod(Box::new(pod))).await, Err(Error::Api(kube::Error::Api(response))) if response.code == 409)
+    );
+    let calls = state.lock().unwrap().calls.clone();
+    assert_eq!(calls.len(), 1);
+    assert!(calls[0].1.contains("dryRun=All"));
     task.abort();
 }

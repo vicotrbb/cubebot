@@ -1,5 +1,7 @@
-use super::{Error, RecordedPod, ownership::FINALIZER, termination_proven, verify_pod};
-use k8s_openapi::api::core::v1::{PersistentVolumeClaim, Pod};
+use super::{
+    Error, RecordedPod, ResourceObject, ownership::FINALIZER, termination_proven, verify_pod,
+};
+use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod};
 use kube::{
     Api, Client,
     api::{DeleteParams, Patch, PatchParams, PostParams, Preconditions},
@@ -7,7 +9,9 @@ use kube::{
 
 #[derive(Clone)]
 pub struct Kubernetes {
+    namespace: String,
     pods: Api<Pod>,
+    anchors: Api<ConfigMap>,
     workspaces: Api<PersistentVolumeClaim>,
 }
 
@@ -15,12 +19,91 @@ impl Kubernetes {
     pub fn new(client: Client, namespace: &str) -> Result<Self, Error> {
         validate_namespace(namespace)?;
         Ok(Self {
+            namespace: namespace.into(),
             pods: Api::namespaced(client.clone(), namespace),
+            anchors: Api::namespaced(client.clone(), namespace),
             workspaces: Api::namespaced(client, namespace),
         })
     }
 
+    /// Server defaulting/admission preview, never evidence of a physical object.
+    pub async fn prepare(&self, object: &ResourceObject) -> Result<ResourceObject, Error> {
+        self.validate_target(object.metadata())?;
+        if object.metadata().uid.is_some() || object.metadata().resource_version.is_some() {
+            return Err(Error::InvalidConfiguration);
+        }
+        let parameters = PostParams {
+            dry_run: true,
+            ..Default::default()
+        };
+        let mut preview = match object {
+            ResourceObject::Pod(pod) => {
+                ResourceObject::Pod(Box::new(self.pods.create(&parameters, pod).await?))
+            }
+            ResourceObject::Workspace(claim) => ResourceObject::Workspace(Box::new(
+                self.workspaces.create(&parameters, claim).await?,
+            )),
+        };
+        clear_preview_observation(&mut preview);
+        Ok(preview)
+    }
+
+    pub async fn create_anchor(&self, anchor: &ConfigMap) -> Result<ConfigMap, Error> {
+        self.validate_target(&anchor.metadata)?;
+        Ok(self.anchors.create(&PostParams::default(), anchor).await?)
+    }
+
+    /// A candidate read never grants ownership. The durable registry must verify it.
+    pub async fn fetch_candidate(
+        &self,
+        expected: &ResourceObject,
+    ) -> Result<Option<ResourceObject>, Error> {
+        self.validate_target(expected.metadata())?;
+        let name = expected
+            .metadata()
+            .name
+            .as_deref()
+            .ok_or(Error::InvalidConfiguration)?;
+        match expected {
+            ResourceObject::Pod(_) => Ok(self
+                .pods
+                .get_opt(name)
+                .await?
+                .map(|pod| ResourceObject::Pod(Box::new(pod)))),
+            ResourceObject::Workspace(_) => Ok(self
+                .workspaces
+                .get_opt(name)
+                .await?
+                .map(|claim| ResourceObject::Workspace(Box::new(claim)))),
+        }
+    }
+
+    pub async fn fetch_anchor(&self, name: &str) -> Result<Option<ConfigMap>, Error> {
+        validate_namespace(name)?;
+        Ok(self.anchors.get_opt(name).await?)
+    }
+
+    fn validate_target(
+        &self,
+        metadata: &k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta,
+    ) -> Result<(), Error> {
+        let name = metadata
+            .name
+            .as_deref()
+            .ok_or(Error::InvalidConfiguration)?;
+        validate_namespace(name)?;
+        if metadata
+            .namespace
+            .as_ref()
+            .is_some_and(|namespace| namespace != &self.namespace)
+        {
+            return Err(Error::OwnershipMismatch);
+        }
+        Ok(())
+    }
+
     pub async fn create_pod(&self, pod: &Pod) -> Result<Pod, Error> {
+        self.validate_target(&pod.metadata)?;
         Ok(self.pods.create(&PostParams::default(), pod).await?)
     }
 
@@ -28,6 +111,7 @@ impl Kubernetes {
         &self,
         claim: &PersistentVolumeClaim,
     ) -> Result<PersistentVolumeClaim, Error> {
+        self.validate_target(&claim.metadata)?;
         Ok(self
             .workspaces
             .create(&PostParams::default(), claim)
@@ -35,6 +119,10 @@ impl Kubernetes {
     }
 
     pub async fn observe(&self, recorded: &RecordedPod) -> Result<Option<Pod>, Error> {
+        validate_namespace(&recorded.name)?;
+        if recorded.namespace != self.namespace {
+            return Err(Error::OwnershipMismatch);
+        }
         let pod = self.pods.get_opt(&recorded.name).await?;
         if let Some(pod) = &pod {
             verify_pod(pod, recorded)?;
@@ -121,4 +209,24 @@ pub(super) fn validate_namespace(namespace: &str) -> Result<(), Error> {
         return Err(Error::InvalidConfiguration);
     }
     Ok(())
+}
+
+fn clear_preview_observation(object: &mut ResourceObject) {
+    let metadata = match object {
+        ResourceObject::Pod(pod) => {
+            pod.status = None;
+            &mut pod.metadata
+        }
+        ResourceObject::Workspace(claim) => {
+            claim.status = None;
+            &mut claim.metadata
+        }
+    };
+    metadata.uid = None;
+    metadata.generation = None;
+    metadata.resource_version = None;
+    metadata.creation_timestamp = None;
+    metadata.deletion_timestamp = None;
+    metadata.deletion_grace_period_seconds = None;
+    metadata.managed_fields = None;
 }
