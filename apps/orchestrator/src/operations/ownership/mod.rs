@@ -1,4 +1,5 @@
 //! Single active process. Losing PostgreSQL connectivity never permits blind takeover.
+mod development;
 mod proof;
 use crate::agents::kubernetes::{Error, Kubernetes};
 use sqlx::{Connection, PgConnection, PgPool};
@@ -27,6 +28,7 @@ pub struct Owner {
     connection: Option<PgConnection>,
     instance: Uuid,
     generation: i64,
+    table: &'static str,
 }
 impl Owner {
     pub async fn acquire(
@@ -39,13 +41,14 @@ impl Owner {
             .map_err(|_| Error::DeadlineExceeded)?
     }
     async fn claim(pool: &PgPool, api: &Kubernetes, identity: PodIdentity) -> Result<Self, Error> {
-        let mut connection = pool.acquire().await?.detach();
-        let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
-            .bind(LOCK)
-            .fetch_one(&mut connection)
-            .await?;
-        if !locked {
-            return Err(Error::Busy);
+        let mut connection = locked_connection(pool).await?;
+        let development_active: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM orchestrator_development_owner WHERE released_at IS NULL)",
+        )
+        .fetch_one(&mut connection)
+        .await?;
+        if development_active {
+            return Err(Error::TerminationUnproven);
         }
         let selected: Option<String> =
             sqlx::query_scalar("SELECT namespace FROM installation_kubernetes WHERE singleton")
@@ -72,6 +75,7 @@ impl Owner {
             connection: Some(connection),
             instance,
             generation,
+            table: "orchestrator_owner",
         })
     }
     pub fn instance(&self) -> Uuid {
@@ -94,7 +98,7 @@ impl Owner {
     }
     async fn check_session(&mut self) -> Result<(), Error> {
         let connection = self.connection.as_mut().ok_or(Error::Conflict)?;
-        let owned: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM orchestrator_owner WHERE singleton AND instance_id = $1 AND generation = $2 AND released_at IS NULL)")
+        let owned: bool = sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM {} WHERE singleton AND instance_id = $1 AND generation = $2 AND released_at IS NULL)",self.table))
             .bind(self.instance).bind(self.generation).fetch_one(connection).await?;
         if !owned {
             return Err(Error::Conflict);
@@ -111,7 +115,7 @@ impl Owner {
     }
     async fn release_session(mut self) -> Result<(), Error> {
         let mut connection = self.connection.take().ok_or(Error::Conflict)?;
-        let changed = sqlx::query("UPDATE orchestrator_owner SET released_at = clock_timestamp() WHERE singleton AND instance_id = $1 AND generation = $2 AND released_at IS NULL")
+        let changed = sqlx::query(&format!("UPDATE {} SET released_at = clock_timestamp() WHERE singleton AND instance_id = $1 AND generation = $2 AND released_at IS NULL",self.table))
             .bind(self.instance).bind(self.generation).execute(&mut connection).await?.rows_affected();
         if changed != 1 {
             return Err(Error::Conflict);
@@ -147,4 +151,16 @@ async fn prove_previous(
         .await?
         .ok_or(Error::TerminationUnproven)?;
     proof::replacement(&old, previous).map(Some)
+}
+
+async fn locked_connection(pool: &PgPool) -> Result<PgConnection, Error> {
+    let mut connection = pool.acquire().await?.detach();
+    let locked: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
+        .bind(LOCK)
+        .fetch_one(&mut connection)
+        .await?;
+    if !locked {
+        return Err(Error::Busy);
+    }
+    Ok(connection)
 }

@@ -16,17 +16,23 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .with_env_filter(filter)
         .try_init()?;
 
-    let router = application().await?;
     let address: SocketAddr = match std::env::var("CUBEBOT_BIND_ADDR") {
         Ok(value) => value.parse()?,
         Err(std::env::VarError::NotPresent) => "127.0.0.1:8080".parse()?,
         Err(error) => return Err(error.into()),
     };
     let listener = TcpListener::bind(address).await?;
-    tracing::info!(address = %listener.local_addr()?, "orchestrator HTTP server listening");
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    let address = listener.local_addr()?;
+    let (router, controller) = application().await?;
+    tracing::info!(%address, "orchestrator HTTP server listening");
+    cubebot_orchestrator::operations::server::serve(
+        listener,
+        router,
+        controller,
+        shutdown_signal(),
+    )
+    .await
+    .map_err(|_| "orchestrator ownership or service failed")?;
     Ok(())
 }
 
@@ -48,7 +54,12 @@ async fn shutdown_signal() {
     tracing::info!("shutdown requested");
 }
 
-async fn application() -> Result<axum::Router, Box<dyn Error + Send + Sync>> {
+type Application = (
+    axum::Router,
+    Option<cubebot_orchestrator::agents::kubernetes::Controller>,
+);
+
+async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
     match std::env::var("CUBEBOT_DATABASE_URL") {
         Ok(url) => {
             let pool = cubebot_orchestrator::operations::database::connect(&url)
@@ -61,16 +72,43 @@ async fn application() -> Result<axum::Router, Box<dyn Error + Send + Sync>> {
                 Err(std::env::VarError::NotPresent) => None,
                 Err(_) => return Err("invalid CUBEBOT_PUBLIC_ORIGIN".into()),
             };
-            cubebot_orchestrator::api::configured_router(pool, origin, config)
-                .await
-                .map_err(|_| "identity configuration failed".into())
+            let controller = configured_controller(&pool).await?;
+            let router =
+                match cubebot_orchestrator::api::configured_router(pool, origin, config).await {
+                    Ok(router) => router.merge(controller.runtime_router()),
+                    Err(_) => {
+                        controller
+                            .release()
+                            .await
+                            .map_err(|_| "startup cleanup could not release ownership")?;
+                        return Err("identity configuration failed".into());
+                    }
+                };
+            Ok((router, Some(controller)))
         }
         Err(std::env::VarError::NotPresent) => {
-            if std::env::var_os("CUBEBOT_OIDC_CONFIG").is_some() {
-                return Err("OIDC requires a configured database".into());
+            if std::env::var_os("CUBEBOT_OIDC_CONFIG").is_some()
+                || std::env::var_os("CUBEBOT_CONTROLLER_CONFIG").is_some()
+            {
+                return Err("OIDC and controller configuration require a database".into());
             }
-            Ok(cubebot_orchestrator::api::router())
+            Ok((cubebot_orchestrator::api::router(), None))
         }
         Err(_) => Err("invalid CUBEBOT_DATABASE_URL".into()),
+    }
+}
+
+async fn configured_controller(
+    pool: &sqlx::PgPool,
+) -> Result<cubebot_orchestrator::agents::kubernetes::Controller, Box<dyn Error + Send + Sync>> {
+    use cubebot_orchestrator::agents::kubernetes::{Controller, ControllerConfig};
+    match ControllerConfig::environment().map_err(|_| "invalid controller configuration")? {
+        Some(config) => config
+            .activate(pool.clone())
+            .await
+            .map_err(|_| "controller ownership or configuration failed".into()),
+        None => Controller::database_only(pool.clone()).await.map_err(|_| {
+            "database-only ownership unavailable or controller configuration required".into()
+        }),
     }
 }

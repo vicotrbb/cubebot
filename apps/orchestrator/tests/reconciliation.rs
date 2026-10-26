@@ -925,3 +925,410 @@ async fn current_generation_recovers_a_lost_finalizer_reply_before_replacement()
     assert_eq!(state.lock().unwrap().creates.len(), 4);
     task.abort();
 }
+
+fn platform_identity() -> cubebot_orchestrator::operations::ownership::PodIdentity {
+    cubebot_orchestrator::operations::ownership::PodIdentity {
+        namespace: "cubebot-test".into(),
+        name: "orchestrator-a".into(),
+        uid: "platform-a".into(),
+    }
+}
+fn platform_pod() -> Value {
+    json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":"orchestrator-a","namespace":"cubebot-test","uid":"platform-a"},"spec":{"restartPolicy":"Always","serviceAccountName":"cubebot-orchestrator","containers":[{"name":"orchestrator","image":"test"}]},"status":{"phase":"Running","containerStatuses":[{"name":"orchestrator","image":"test","imageID":"test","ready":true,"restartCount":0,"containerID":"containerd://platform-a","state":{"running":{"startedAt":"2026-10-26T12:00:00Z"}}}]}})
+}
+async fn wait_bound_pod(pool: &sqlx::PgPool) {
+    for _ in 0..200 {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM agent_resources WHERE kind = 'pod' AND phase = 'bound'",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        if count == 1 {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("automatic controller did not bind a pod");
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
+    use cubebot_orchestrator::{agents::kubernetes::Controller, operations::server};
+    let (pool, _, _) = registry_support::setup().await;
+    let (config, state, api_task) = server().await;
+    state.lock().unwrap().objects.insert(
+        "/api/v1/namespaces/cubebot-test/pods/orchestrator-a".into(),
+        platform_pod(),
+    );
+    let controller = Controller::new(pool.clone(), config.clone(), layout(), platform_identity())
+        .await
+        .unwrap();
+    assert!(Controller::database_only(pool.clone()).await.is_err());
+    let routes =
+        cubebot_orchestrator::api::database_router(pool.clone()).merge(controller.runtime_router());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
+        stopped.await.unwrap();
+    }));
+    wait_bound_pod(&pool).await;
+    let http = openidconnect::reqwest::Client::new();
+    assert_eq!(
+        http.get(format!("{origin}/api/health/ready"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    assert_eq!(
+        http.get(format!("{origin}/api/runtime/control"))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert!(
+        Controller::new(pool.clone(), config.clone(), layout(), platform_identity())
+            .await
+            .is_err()
+    );
+    stop.send(()).unwrap();
+    serving.await.unwrap().unwrap();
+    let released: bool = sqlx::query_scalar(
+        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(released);
+    let next = Controller::new(pool.clone(), config, layout(), platform_identity())
+        .await
+        .unwrap();
+    server::serve(
+        tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap(),
+        cubebot_orchestrator::api::router(),
+        Some(next),
+        async {},
+    )
+    .await
+    .unwrap();
+    let generation: i64 =
+        sqlx::query_scalar("SELECT generation FROM orchestrator_owner WHERE singleton")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(generation, 2);
+    assert_eq!(state.lock().unwrap().creates.len(), 3);
+    api_task.abort();
+}
+
+struct OrchestratorProcess {
+    child: std::process::Child,
+    directory: std::path::PathBuf,
+    origin: String,
+}
+impl Drop for OrchestratorProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.directory);
+    }
+}
+fn orchestrator_process(
+    pool: &sqlx::PgPool,
+    api: &kube::Config,
+    configured: bool,
+    extra: Option<(&str, String)>,
+) -> OrchestratorProcess {
+    use sqlx::ConnectOptions;
+    let directory = std::env::current_dir().unwrap().join(format!(
+        "../../target/controller-test-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir(&directory).unwrap();
+    let kubeconfig = directory.join("kubeconfig.json");
+    std::fs::write(&kubeconfig,json!({"apiVersion":"v1","kind":"Config","clusters":[{"name":"controlled","cluster":{"server":api.cluster_url.to_string()}}],"users":[{"name":"controlled","user":{}}],"contexts":[{"name":"controlled","context":{"cluster":"controlled","user":"controlled"}}],"current-context":"controlled"}).to_string()).unwrap();
+    let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let configuration = directory.join("controller.json");
+    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"runtime_image":image,"tools_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test"}).to_string()).unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    drop(listener);
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_cubebot-orchestrator"));
+    command
+        .env(
+            "CUBEBOT_DATABASE_URL",
+            pool.connect_options().to_url_lossy().as_str(),
+        )
+        .env("CUBEBOT_BIND_ADDR", address.to_string())
+        .env("CUBEBOT_POD_NAMESPACE", "cubebot-test")
+        .env("CUBEBOT_POD_NAME", "orchestrator-a")
+        .env("CUBEBOT_POD_UID", "platform-a")
+        .env_remove("CUBEBOT_OIDC_CONFIG")
+        .env_remove("CUBEBOT_PUBLIC_ORIGIN")
+        .env_remove("CUBEBOT_CONTROLLER_CONFIG")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    if configured {
+        command.env("CUBEBOT_CONTROLLER_CONFIG", configuration);
+    }
+    if let Some((key, value)) = extra {
+        command.env(key, value);
+    }
+    let child = command.spawn().unwrap();
+    OrchestratorProcess {
+        child,
+        directory,
+        origin: format!("http://{address}"),
+    }
+}
+async fn process_exit(process: &mut OrchestratorProcess) -> std::process::ExitStatus {
+    for _ in 0..400 {
+        if let Some(status) = process.child.try_wait().unwrap() {
+            return status;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("orchestrator did not exit");
+}
+async fn process_ready(process: &mut OrchestratorProcess) {
+    let client = openidconnect::reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(100))
+        .build()
+        .unwrap();
+    for _ in 0..200 {
+        assert!(
+            process.child.try_wait().unwrap().is_none(),
+            "orchestrator exited before readiness"
+        );
+        if client
+            .get(format!("{}/api/health/ready", process.origin))
+            .send()
+            .await
+            .is_ok_and(|response| response.status() == 200)
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("orchestrator did not become ready");
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn actual_orchestrator_activates_explicit_controller_and_rejects_ownership_bypass() {
+    let (pool, _, _) = registry_support::setup().await;
+    let (config, state, api_task) = server().await;
+    state.lock().unwrap().objects.insert(
+        "/api/v1/namespaces/cubebot-test/pods/orchestrator-a".into(),
+        platform_pod(),
+    );
+    let mut development = orchestrator_process(&pool, &config, false, None);
+    process_ready(&mut development).await;
+    let mut premature = orchestrator_process(&pool, &config, true, None);
+    assert!(!process_exit(&mut premature).await.success());
+    let mut duplicate_development = orchestrator_process(&pool, &config, false, None);
+    assert!(!process_exit(&mut duplicate_development).await.success());
+    assert!(
+        std::process::Command::new("kill")
+            .args(["-TERM", &development.child.id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(process_exit(&mut development).await.success());
+    let mut process = orchestrator_process(&pool, &config, true, None);
+    process_ready(&mut process).await;
+    wait_bound_pod(&pool).await;
+    let mut competing = orchestrator_process(&pool, &config, true, None);
+    assert!(!process_exit(&mut competing).await.success());
+    let mut bypass = orchestrator_process(&pool, &config, false, None);
+    assert!(!process_exit(&mut bypass).await.success());
+    assert!(
+        std::process::Command::new("kill")
+            .args(["-TERM", &process.child.id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(process_exit(&mut process).await.success());
+    let released: bool = sqlx::query_scalar(
+        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(released);
+    let mut restarted = orchestrator_process(&pool, &config, true, None);
+    process_ready(&mut restarted).await;
+    assert_eq!(state.lock().unwrap().creates.len(), 3);
+    restarted.child.kill().unwrap();
+    assert!(!process_exit(&mut restarted).await.success());
+    let mut uncertain = orchestrator_process(&pool, &config, true, None);
+    assert!(!process_exit(&mut uncertain).await.success());
+    let generation: i64 =
+        sqlx::query_scalar("SELECT generation FROM orchestrator_owner WHERE singleton")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(generation, 2);
+    api_task.abort();
+}
+
+struct HeldRequest {
+    entered: tokio::sync::Semaphore,
+    finish: tokio::sync::Semaphore,
+}
+async fn held_request(State(state): State<Arc<HeldRequest>>) -> &'static str {
+    state.entered.add_permits(1);
+    state.finish.acquire().await.unwrap().forget();
+    "settled"
+}
+async fn wait_listener_closed(address: std::net::SocketAddr) {
+    for _ in 0..200 {
+        if tokio::net::TcpStream::connect(address).await.is_err() {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("HTTP listener remained active");
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn clean_owner_release_waits_for_in_flight_http_handlers() {
+    use cubebot_orchestrator::{agents::kubernetes::Controller, operations::server};
+    let (pool, _, _) = registry_support::setup().await;
+    let (config, state, api_task) = server().await;
+    state.lock().unwrap().objects.insert(
+        "/api/v1/namespaces/cubebot-test/pods/orchestrator-a".into(),
+        platform_pod(),
+    );
+    let controller = Controller::new(pool.clone(), config, layout(), platform_identity())
+        .await
+        .unwrap();
+    let held = Arc::new(HeldRequest {
+        entered: tokio::sync::Semaphore::new(0),
+        finish: tokio::sync::Semaphore::new(0),
+    });
+    let routes = Router::new()
+        .route("/hold", axum::routing::get(held_request))
+        .with_state(held.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
+        stopped.await.unwrap();
+    }));
+    let request = tokio::spawn(async move {
+        openidconnect::reqwest::get(format!("http://{address}/hold"))
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap()
+    });
+    held.entered.acquire().await.unwrap().forget();
+    stop.send(()).unwrap();
+    wait_listener_closed(address).await;
+    let released: bool = sqlx::query_scalar(
+        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!released);
+    assert!(!serving.is_finished());
+    held.finish.add_permits(1);
+    assert_eq!(request.await.unwrap(), "settled");
+    serving.await.unwrap().unwrap();
+    let released: bool = sqlx::query_scalar(
+        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(released);
+    api_task.abort();
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn lost_owner_session_stops_http_and_controller_without_releasing_claim() {
+    use cubebot_orchestrator::{agents::kubernetes::Controller, operations::server};
+    let (pool, _, _) = registry_support::setup().await;
+    let (config, state, api_task) = server().await;
+    state.lock().unwrap().objects.insert(
+        "/api/v1/namespaces/cubebot-test/pods/orchestrator-a".into(),
+        platform_pod(),
+    );
+    let controller = Controller::new(pool.clone(), config, layout(), platform_identity())
+        .await
+        .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let serving = tokio::spawn(server::serve(
+        listener,
+        cubebot_orchestrator::api::router(),
+        Some(controller),
+        std::future::pending(),
+    ));
+    wait_bound_pod(&pool).await;
+    let killed: bool = sqlx::query_scalar("SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())").fetch_one(&pool).await.unwrap();
+    assert!(killed);
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_secs(8), serving)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err()
+    );
+    wait_listener_closed(address).await;
+    let released: bool = sqlx::query_scalar(
+        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(!released);
+    assert_eq!(state.lock().unwrap().creates.len(), 3);
+    api_task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn handled_startup_errors_do_not_strand_development_ownership() {
+    let pool = support::database().await;
+    let (config, _, api_task) = server().await;
+    let occupied = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    for (key, value) in [
+        ("CUBEBOT_PUBLIC_ORIGIN", "http://invalid.test".to_string()),
+        ("CUBEBOT_BIND_ADDR", "invalid-address".to_string()),
+        (
+            "CUBEBOT_BIND_ADDR",
+            occupied.local_addr().unwrap().to_string(),
+        ),
+    ] {
+        let mut process = orchestrator_process(&pool, &config, false, Some((key, value)));
+        assert!(!process_exit(&mut process).await.success());
+        let held: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM orchestrator_development_owner WHERE released_at IS NULL",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(held, 0, "handled startup failure retained ownership");
+    }
+    let mut corrected = orchestrator_process(&pool, &config, false, None);
+    process_ready(&mut corrected).await;
+    assert!(
+        std::process::Command::new("kill")
+            .args(["-TERM", &corrected.child.id().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(process_exit(&mut corrected).await.success());
+    api_task.abort();
+}

@@ -1,5 +1,9 @@
 //! Managed namespaced resources, runtime token review and conservative termination checks.
 mod authentication;
+mod config;
+mod controller;
+pub use config::ControllerConfig;
+pub use controller::Controller;
 mod client;
 pub use authentication::ReviewedPod;
 mod observation;

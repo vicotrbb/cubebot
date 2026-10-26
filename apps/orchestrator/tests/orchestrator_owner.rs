@@ -329,3 +329,27 @@ fn invalid_current(case: &str) -> Value {
     }
     value
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn database_only_owner_excludes_activation_and_retains_unclean_claim() {
+    let f = fixture().await;
+    let owner = Owner::database_only(&f.pool).await.unwrap();
+    assert!(
+        Owner::acquire(&f.pool, &f.api, identity("orchestrator-a", "pod-a"))
+            .await
+            .is_err()
+    );
+    assert!(Owner::database_only(&f.pool).await.is_err());
+    owner.release().await.unwrap();
+    let mut owner = Owner::database_only(&f.pool).await.unwrap();
+    owner.check().await.unwrap();
+    drop(owner);
+    wait_unlocked(&f.pool).await;
+    assert!(Owner::database_only(&f.pool).await.is_err());
+    assert!(matches!(
+        Owner::acquire(&f.pool, &f.api, identity("orchestrator-a", "pod-a")).await,
+        Err(cubebot_orchestrator::agents::kubernetes::Error::TerminationUnproven)
+    ));
+    f.task.abort();
+}
