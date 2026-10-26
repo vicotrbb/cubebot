@@ -1,4 +1,4 @@
-//! Installation-owned definitions. Runtime and Kubernetes observations remain unimplemented.
+//! Installation-owned definitions and explicit Kubernetes reconciliation. Runtime authority remains pending.
 mod commands;
 mod definitions;
 pub mod kubernetes;

@@ -1,5 +1,7 @@
 //! Namespaced Kubernetes effects and conservative ownership/termination checks.
 mod client;
+mod reconcile;
+pub use reconcile::{ReconcileResult, Reconciler};
 mod layout;
 pub use layout::Layout;
 mod registry;

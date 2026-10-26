@@ -16,8 +16,13 @@ pub struct Kubernetes {
 }
 
 impl Kubernetes {
-    pub fn new(client: Client, namespace: &str) -> Result<Self, Error> {
+    pub fn new(mut config: kube::Config, namespace: &str) -> Result<Self, Error> {
         validate_namespace(namespace)?;
+        config.default_retry = false;
+        config.connect_timeout = Some(std::time::Duration::from_secs(5));
+        config.read_timeout = Some(std::time::Duration::from_secs(10));
+        config.write_timeout = Some(std::time::Duration::from_secs(10));
+        let client = Client::try_from(config)?;
         Ok(Self {
             namespace: namespace.into(),
             pods: Api::namespaced(client.clone(), namespace),

@@ -1,7 +1,9 @@
+#[path = "support/registry.rs"]
+mod registry_support;
 mod support;
 use cubebot_orchestrator::{
     agents::{
-        AgentId, Agents, CreateAgent, LifecycleAction, LifecycleCommand,
+        AgentId, Agents, LifecycleAction, LifecycleCommand,
         kubernetes::{Registry, ResourceObject, ResourceSpec},
     },
     identity::Identity,
@@ -84,43 +86,7 @@ fn terminate(pod: &mut k8s_openapi::api::core::v1::Pod) {
 }
 
 async fn setup() -> (sqlx::PgPool, Registry, AgentId) {
-    let pool = support::database().await;
-    let identity = Identity::new(pool.clone());
-    identity
-        .bootstrap("admin", "administrator password")
-        .await
-        .unwrap();
-    let session = identity
-        .login("admin", "administrator password")
-        .await
-        .unwrap();
-    let actor = identity.authenticate(&session.token).await.unwrap();
-    let agents = Agents::new(pool.clone());
-    let created = agents
-        .create(
-            &actor,
-            &CreateAgent {
-                request_id: Uuid::new_v4(),
-                name: "Registry agent".into(),
-                instructions: "Preserve identity".into(),
-            },
-        )
-        .await
-        .unwrap();
-    let agent = AgentId(created.id);
-    agents
-        .lifecycle(
-            &actor,
-            agent,
-            &LifecycleCommand {
-                request_id: Uuid::new_v4(),
-                expected_revision: 1,
-                action: LifecycleAction::Wake,
-            },
-        )
-        .await
-        .unwrap();
-    let registry = Registry::new(pool.clone());
+    let (pool, registry, agent) = registry_support::setup().await;
     let mut anchor = registry.configure("cubebot-test").await.unwrap();
     anchor.metadata.uid = Some("anchor-uid".into());
     anchor.metadata.resource_version = Some("1".into());
@@ -362,8 +328,8 @@ async fn server_preparation_precedes_dispatch_and_reconnect_uses_the_retained_ma
         .await
         .unwrap();
     });
-    let client = kube::Client::try_from(kube::Config::new(url.parse().unwrap())).unwrap();
-    let client = Kubernetes::new(client, "cubebot-test").unwrap();
+    let config = kube::Config::new(url.parse().unwrap());
+    let client = Kubernetes::new(config, "cubebot-test").unwrap();
     let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
     let reserved = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec.clone())))
@@ -489,4 +455,25 @@ async fn migration_preserves_legacy_dispatch_without_qualifying_unsent_cancellat
         serde_json::to_value(retained.intent).unwrap(),
         serde_json::to_value(retained.object).unwrap()
     );
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_prepared_attempt_grants_dispatch_to_exactly_one_caller() {
+    let (_, registry, agent) = setup().await;
+    let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let attempt = registry
+        .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec)))
+        .await
+        .unwrap();
+    registry
+        .record_prepared(attempt.id, &attempt.object)
+        .await
+        .unwrap();
+    let (left, right) = tokio::join!(
+        registry.begin_create(attempt.id),
+        registry.begin_create(attempt.id)
+    );
+    assert_ne!(left.is_ok(), right.is_ok());
+    assert!(registry.begin_create(attempt.id).await.is_err());
 }

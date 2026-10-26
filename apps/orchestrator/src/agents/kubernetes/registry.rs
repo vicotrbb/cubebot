@@ -105,6 +105,27 @@ impl Registry {
         row.attempt()
     }
 
+    pub(super) async fn current(
+        &self,
+        agent: AgentId,
+        kind: ResourceKind,
+    ) -> Result<Option<Attempt>, Error> {
+        let row: Option<Row> = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE agent_id = $1 AND kind = $2 AND phase <> 'stopped'")
+            .bind(agent).bind(kind.as_str()).fetch_optional(&self.pool).await?;
+        row.map(Row::attempt).transpose()
+    }
+
+    pub(super) async fn block(
+        &self,
+        id: AttemptId,
+        phase: Phase,
+        reason: &str,
+    ) -> Result<(), Error> {
+        sqlx::query("UPDATE agent_resources SET blocked_reason = $3, updated_at = clock_timestamp() WHERE id = $1 AND phase = $2")
+            .bind(id).bind(phase).bind(reason).execute(&self.pool).await?;
+        Ok(())
+    }
+
     pub async fn reserve(
         &self,
         agent: AgentId,
@@ -135,7 +156,7 @@ impl Registry {
         let mut transaction = self.transaction().await?;
         let (state,generation):(String,i64) = sqlx::query_as("SELECT a.desired_state,a.restart_generation FROM agents a JOIN agent_resources r ON r.agent_id = a.id WHERE r.id = $1 FOR UPDATE OF a")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
-        let changed = sqlx::query("UPDATE agent_resources SET phase = 'creating', updated_at = clock_timestamp() WHERE id = $1 AND $2 <> 'retired' AND (kind = 'workspace' OR ($2 = 'running' AND target_generation = $3)) AND prepared AND phase IN ('planned','creating')")
+        let changed = sqlx::query("UPDATE agent_resources SET phase = 'creating', blocked_reason = NULL, updated_at = clock_timestamp() WHERE id = $1 AND $2 <> 'retired' AND (kind = 'workspace' OR ($2 = 'running' AND target_generation = $3)) AND prepared AND phase = 'planned'")
             .bind(id).bind(state).bind(generation).execute(&mut *transaction).await?.rows_affected();
         if changed != 1 {
             return Err(Error::Conflict);

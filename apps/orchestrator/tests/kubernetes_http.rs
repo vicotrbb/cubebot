@@ -75,9 +75,9 @@ async fn server(
     let task = tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
     });
-    let client = kube::Client::try_from(kube::Config::new(url.parse().unwrap())).unwrap();
+    let config = kube::Config::new(url.parse().unwrap());
     (
-        Kubernetes::new(client, "cubebot-test").unwrap(),
+        Kubernetes::new(config, "cubebot-test").unwrap(),
         state,
         task,
     )
