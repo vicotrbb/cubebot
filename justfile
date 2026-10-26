@@ -70,3 +70,7 @@ container-isolation:
 # Owns a disposable local cluster and PostgreSQL; never uses the default kubeconfig.
 cluster-admission:
     uv run --project tooling/quality --locked python tests/system/cluster_admission.py
+
+# Uses the shipped agent images and a test-only CSI backend in an owned cluster.
+cluster-startup:
+    uv run --project tooling/quality --locked python tests/system/cluster_startup.py

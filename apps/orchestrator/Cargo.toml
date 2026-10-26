@@ -26,6 +26,7 @@ k8s-openapi = { version = "0.28.0", features = ["v1_36"] }
 [dev-dependencies]
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
+tokio = { workspace = true, features = ["process", "io-util"] }
 
 [lints]
 workspace = true

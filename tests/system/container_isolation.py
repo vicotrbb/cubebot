@@ -38,9 +38,9 @@ def docker(*args, input=None):
     return run("docker", *args, input=input)
 
 
-def build(builder, prefix):
+def build(builder, prefix, targets=("runtime", "tools", "qualification")):
     images = {}
-    for target in ("runtime", "tools", "qualification"):
+    for target in targets:
         print(f"Building isolated {target} image", flush=True)
         image = f"{prefix}-{target}"
         docker(

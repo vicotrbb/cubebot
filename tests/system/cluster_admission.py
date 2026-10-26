@@ -35,8 +35,10 @@ def run(*args, input=None, env=None, timeout=60):
     return result.stdout.strip()
 
 
-def kubectl(config, *args, input=None):
-    return run("kubectl", "--kubeconfig", str(config), *args, input=input)
+def kubectl(config, *args, input=None, timeout=60):
+    return run(
+        "kubectl", "--kubeconfig", str(config), *args, input=input, timeout=timeout
+    )
 
 
 def fingerprint():
@@ -58,11 +60,15 @@ def fingerprint():
     return digest.hexdigest()
 
 
-def namespaces(config, fixture):
-    for name, policy in (
+def namespaces(
+    config,
+    fixture,
+    profiles=(
         ("cubebot-admission", "privileged"),
         ("cubebot-admission-restricted", "restricted"),
-    ):
+    ),
+):
+    for name, policy in profiles:
         namespace = {
             "apiVersion": "v1",
             "kind": "Namespace",
@@ -88,12 +94,26 @@ def verify_database(_, env):
     destination.write_text(json.dumps(report, indent=2) + "\n")
 
 
+def node_profile(config):
+    nodes = json.loads(kubectl(config, "get", "nodes", "-o", "json"))["items"]
+    return [
+        {
+            "name": node["metadata"]["name"],
+            "pod_cidrs": node["spec"].get("podCIDRs", []),
+            "runtime": node["status"]["nodeInfo"],
+            "features": node["status"].get("features", {}),
+            "capacity": node["status"].get("capacity", {}),
+            "allocatable": node["status"].get("allocatable", {}),
+        }
+        for node in nodes
+    ]
+
+
 def verify(config, name, fixture, artifacts):
     version = json.loads(kubectl(config, "version", "-o", "json"))["serverVersion"]
     if version["gitVersion"] != "v1.36.4":
         raise RuntimeError("unexpected Kubernetes qualification version")
     namespaces(config, fixture)
-    nodes = json.loads(kubectl(config, "get", "nodes", "-o", "json"))["items"]
     dns = json.loads(
         kubectl(config, "get", "service", "kube-dns", "-n", "kube-system", "-o", "json")
     )["spec"]["clusterIP"]
@@ -115,22 +135,14 @@ def verify(config, name, fixture, artifacts):
         "node_image": NODE,
         "kind": run(str(KIND), "version"),
         "server": version,
-        "nodes": [
-            {
-                "name": node["metadata"]["name"],
-                "pod_cidrs": node["spec"].get("podCIDRs", []),
-                "runtime": node["status"]["nodeInfo"],
-                "features": node["status"].get("features", {}),
-            }
-            for node in nodes
-        ],
+        "nodes": node_profile(config),
         "scope": "API admission and prepared-manifest persistence; "
         "no running agent or G1-G3 qualification",
         "results": json.loads((artifacts / "admission.json").read_text()),
     }
 
 
-def cluster(config, name, artifacts):
+def cluster(config, name, artifacts, workflow):
     if name in run(str(KIND), "get", "clusters").splitlines():
         raise RuntimeError("refusing to reuse an existing cluster")
     configuration = {
@@ -160,7 +172,7 @@ def cluster(config, name, artifacts):
             "120s",
             timeout=360,
         )
-        return verify(config, name, name, artifacts)
+        return workflow(config, name, name, artifacts)
     except BaseException:
         failed = True
         raise
@@ -220,7 +232,7 @@ def main():
     artifacts.mkdir()
     with tempfile.TemporaryDirectory(prefix="private-", dir=artifacts) as private:
         report = cluster(
-            Path(private).resolve() / "kubeconfig", name, artifacts.resolve()
+            Path(private).resolve() / "kubeconfig", name, artifacts.resolve(), verify
         )
     if fingerprint() != baseline:
         raise RuntimeError(
