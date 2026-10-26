@@ -7,6 +7,7 @@ use std::{
 pub struct Config {
     pub(super) origin: reqwest::Url,
     pub(super) token_file: PathBuf,
+    pub(super) root_certificates: Vec<reqwest::Certificate>,
 }
 impl Config {
     pub fn new(origin: &str, token_file: PathBuf) -> Result<Self, Error> {
@@ -27,13 +28,38 @@ impl Config {
         {
             return Err(Error::Configuration);
         }
-        Ok(Self { origin, token_file })
+        Ok(Self {
+            origin,
+            token_file,
+            root_certificates: Vec::new(),
+        })
+    }
+    pub fn with_root_certificate(mut self, pem: &[u8]) -> Result<Self, Error> {
+        if pem.len() > 65536 {
+            return Err(Error::Configuration);
+        }
+        self.root_certificates =
+            reqwest::Certificate::from_pem_bundle(pem).map_err(|_| Error::Configuration)?;
+        if self.root_certificates.is_empty() {
+            return Err(Error::Configuration);
+        }
+        Ok(self)
     }
     pub fn from_environment() -> Result<Self, Error> {
         let origin =
             std::env::var("CUBEBOT_ORCHESTRATOR_ORIGIN").map_err(|_| Error::Configuration)?;
         let path = std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE").ok_or(Error::Configuration)?;
-        Self::new(&origin, path.into())
+        let config = Self::new(&origin, path.into())?;
+        let Some(ca) = std::env::var_os("CUBEBOT_CONTROL_CA_FILE") else {
+            return Ok(config);
+        };
+        let mut pem = Vec::new();
+        std::fs::File::open(ca)
+            .map_err(|_| Error::Configuration)?
+            .take(65537)
+            .read_to_end(&mut pem)
+            .map_err(|_| Error::Configuration)?;
+        config.with_root_certificate(&pem)
     }
 }
 pub(super) fn projected_token(path: &Path) -> Result<String, Error> {

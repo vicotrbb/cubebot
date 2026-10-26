@@ -27,6 +27,7 @@ tokio = { workspace = true, features = ["process", "io-util"] }
 
 [dev-dependencies]
 axum.workspace = true
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 
 [lints]
 workspace = true

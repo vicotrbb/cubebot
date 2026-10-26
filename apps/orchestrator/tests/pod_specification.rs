@@ -1,4 +1,48 @@
 use cubebot_orchestrator::agents::kubernetes::Layout;
+
+#[test]
+fn control_ca_is_explicit_and_mounted_only_in_runtime() {
+    let layout = Layout::new("registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "registry.test/tools@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "cubebot-runtime", "https://cubebot.test", None, cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()]).unwrap()).unwrap();
+    let layout = layout.with_control_ca("control-ca").unwrap();
+    let pod = serde_json::to_value(layout.pod("workspace").unwrap()).unwrap();
+    let containers = pod["containers"].as_array().unwrap();
+    let runtime = containers
+        .iter()
+        .find(|item| item["name"] == "runtime")
+        .unwrap();
+    assert!(
+        runtime["env"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["name"] == "CUBEBOT_CONTROL_CA_FILE"
+                && item["value"] == "/run/cubebot/control-ca/ca.crt")
+    );
+    assert!(
+        runtime["volumeMounts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["name"] == "control-ca" && item["readOnly"] == true)
+    );
+    let tools = containers
+        .iter()
+        .find(|item| item["name"] == "tools")
+        .unwrap();
+    assert!(!tools.to_string().contains("control-ca"));
+    assert!(!pod["initContainers"].to_string().contains("control-ca"));
+    let volume = pod["volumes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["name"] == "control-ca")
+        .unwrap();
+    assert_eq!(volume["configMap"]["name"], "control-ca");
+    assert_eq!(
+        volume["configMap"]["items"],
+        serde_json::json!([{"key":"ca.crt","path":"ca.crt"}])
+    );
+}
 use serde_json::json;
 
 #[test]

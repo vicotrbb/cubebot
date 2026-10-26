@@ -12,6 +12,7 @@ pub struct Layout {
     origin: String,
     runtime_class: Option<String>,
     network: NetworkPolicy,
+    control_ca: Option<String>,
 }
 impl Layout {
     pub fn new(
@@ -40,7 +41,25 @@ impl Layout {
             origin: url.origin().ascii_serialization(),
             runtime_class,
             network,
+            control_ca: None,
         })
+    }
+
+    pub fn with_control_ca(mut self, config_map: &str) -> Result<Self, Error> {
+        if config_map.len() > 253
+            || !config_map.split('.').all(|part| {
+                !part.is_empty()
+                    && !part.starts_with('-')
+                    && !part.ends_with('-')
+                    && part.bytes().all(|byte| {
+                        byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'
+                    })
+            })
+        {
+            return Err(Error::InvalidConfiguration);
+        }
+        self.control_ca = Some(config_map.into());
+        Ok(self)
     }
 
     pub fn workspace(&self) -> PersistentVolumeClaimSpec {
@@ -57,7 +76,7 @@ impl Layout {
 
     pub fn pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
         validate_namespace(claim_name)?;
-        let value = json!({
+        let mut value = json!({
             "os":{"name":"linux"},"restartPolicy":"Never", "terminationGracePeriodSeconds":30,
             "automountServiceAccountToken":false,"serviceAccountName":self.service_account,
             "shareProcessNamespace":false,
@@ -74,6 +93,12 @@ impl Layout {
                 {"name":"browser-shm","emptyDir":{"medium":"Memory","sizeLimit":"256Mi"}}
             ]
         });
+        if let Some(name) = &self.control_ca {
+            value["volumes"].as_array_mut().expect("fixed volumes").push(json!({"name":"control-ca","configMap":{"name":name,"defaultMode":420,"items":[{"key":"ca.crt","path":"ca.crt"}]}}));
+            let runtime = &mut value["containers"][0];
+            runtime["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));
+            runtime["volumeMounts"].as_array_mut().expect("fixed mounts").push(json!({"name":"control-ca","mountPath":"/run/cubebot/control-ca","readOnly":true}));
+        }
         serde_json::from_value(value).map_err(|_| Error::InvalidConfiguration)
     }
 

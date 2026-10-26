@@ -45,15 +45,17 @@ pub struct RuntimeClient {
 }
 impl RuntimeClient {
     pub fn new(config: Config) -> Result<Self, Error> {
-        let http = reqwest::Client::builder()
+        let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .retry(reqwest::retry::never())
             .referer(false)
             .no_proxy()
             .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(10))
-            .build()
-            .map_err(|_| Error::Configuration)?;
+            .timeout(Duration::from_secs(10));
+        for certificate in &config.root_certificates {
+            builder = builder.add_root_certificate(certificate.clone());
+        }
+        let http = builder.build().map_err(|_| Error::Configuration)?;
         Ok(Self {
             config,
             http,

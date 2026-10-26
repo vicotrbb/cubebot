@@ -40,6 +40,8 @@ async fn verify(config: &kube::Config, namespace: &str, allowed: bool) -> Value 
         None,
         network,
     )
+    .unwrap()
+    .with_control_ca("cubebot-control-ca.crt")
     .unwrap();
     let workspace = registry
         .reserve(

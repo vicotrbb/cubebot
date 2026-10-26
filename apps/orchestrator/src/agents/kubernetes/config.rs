@@ -14,6 +14,7 @@ pub struct ControllerConfig {
     orchestrator_origin: String,
     runtime_class: Option<String>,
     network: cubebot_protocol::network::NetworkPolicy,
+    control_ca_config_map: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -57,14 +58,18 @@ impl ControllerConfig {
         Controller::new(pool, config, layout, identity).await
     }
     fn layout(&self) -> Result<Layout, Error> {
-        Layout::new(
+        let layout = Layout::new(
             &self.runtime_image,
             &self.tools_image,
             &self.runtime_service_account,
             &self.orchestrator_origin,
             self.runtime_class.clone(),
             self.network.clone(),
-        )
+        )?;
+        match &self.control_ca_config_map {
+            Some(name) => layout.with_control_ca(name),
+            None => Ok(layout),
+        }
     }
 }
 impl Connection {
