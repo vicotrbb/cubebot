@@ -12,6 +12,76 @@ use k8s_openapi::api::core::v1::PodSpec;
 use serde_json::json;
 use uuid::Uuid;
 
+fn network_upgrade_specs() -> (PodSpec, PodSpec) {
+    let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let network =
+        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
+            .unwrap();
+    let layout = cubebot_orchestrator::agents::kubernetes::Layout::new(
+        image,
+        image,
+        "cubebot-runtime",
+        "https://cubebot.test",
+        None,
+        network,
+    )
+    .unwrap();
+    let current = layout.pod("workspace").unwrap();
+    let mut legacy = current.clone();
+    legacy.init_containers.as_mut().unwrap().remove(0);
+    legacy.dns_policy = Some("ClusterFirst".into());
+    legacy.dns_config = None;
+    (legacy, current)
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn unfiltered_plans_are_replaced_only_before_dispatch() {
+    let (_, registry, agent) = setup().await;
+    let (legacy, current) = network_upgrade_specs();
+    let old = registry
+        .reserve(agent, 2, ResourceSpec::Pod(Box::new(legacy)))
+        .await
+        .unwrap();
+    let next = registry
+        .reserve(agent, 2, ResourceSpec::Pod(Box::new(current)))
+        .await
+        .unwrap();
+    assert_ne!(old.id, next.id);
+    assert_eq!(next.epoch, old.epoch + 1);
+    assert_eq!(
+        registry.attempt(old.id).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Stopped
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn dispatched_legacy_pods_hold_policy_upgrade_without_replacement() {
+    let (_, registry, agent) = setup().await;
+    let (legacy, current) = network_upgrade_specs();
+    let old = registry
+        .reserve(agent, 2, ResourceSpec::Pod(Box::new(legacy.clone())))
+        .await
+        .unwrap();
+    dispatch(&registry, old.id).await;
+    assert!(
+        registry
+            .reserve(agent, 2, ResourceSpec::Pod(Box::new(current)))
+            .await
+            .is_err()
+    );
+    let retained = registry.attempt(old.id).await.unwrap();
+    assert_eq!(
+        retained.phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Creating
+    );
+    let ResourceObject::Pod(pod) = retained.intent else {
+        panic!("Pod expected");
+    };
+    assert_eq!(pod.spec.unwrap(), legacy);
+}
+
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn reservation_replays_and_recovers_a_lost_create_response_without_transferring_uid() {

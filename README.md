@@ -146,9 +146,15 @@ Set `CUBEBOT_CONTROLLER_CONFIG` to a local JSON file and configure `CUBEBOT_DATA
   "runtime_image": "registry.example/cubebot-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "tools_image": "registry.example/cubebot-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "runtime_service_account": "cubebot-runtime",
-  "orchestrator_origin": "https://cubebot.example"
+  "orchestrator_origin": "https://cubebot.example",
+  "network": {
+    "infrastructure": ["10.244.0.0/16", "10.96.0.0/12", "192.0.2.10/32"],
+    "dns": ["10.96.0.10"]
+  }
 }
 ```
+
+Replace the example topology with the installation's actual Pod, Service, node, API, metadata, translation and public infrastructure destinations. `network` is required; CIDRs must be canonical and use the actual packet address family. IPv4-mapped IPv6 infrastructure prefixes are rejected. Supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. The same addresses are allowed only on TCP/UDP port 53 by the tool policy. The network initializer runs first as root with only NET_ADMIN, no identity/workspace mounts, no privilege escalation and a read-only root filesystem. Cluster admission must permit this explicit setup capability; Cubebot never changes admission policy or starts tools without successful initialization.
 
 Replace both example image digests with the built installation images. Optional `runtime_class` selects an installed Kubernetes RuntimeClass. For an explicitly selected kubeconfig, replace `connection` with `{"kind":"kubeconfig","path":"/trusted/kubeconfig","context":"cubebot"}`. The service never discovers the default context. Kubernetes transport requires certificate-verified HTTPS, with literal loopback HTTP allowed for local controlled workflows. The orchestrator origin supplied to agents requires HTTPS.
 
@@ -197,7 +203,7 @@ docker build -t cubebot-orchestrator:dev -f apps/orchestrator/Dockerfile .
 docker build -t cubebot-web:dev -f apps/web/Dockerfile .
 ```
 
-Container recipes default to distinct non-root runtime/tool users. The runtime image also packages the trusted `--initialize-network` setup command, verified in the [disposable Linux fixture](docs/development/container-isolation.md); production Pod startup does not invoke it yet. Helm packaging, production network enforcement, full credential isolation and fencing qualification remain open.
+Container recipes default to distinct non-root runtime/tool users. The runtime image also packages the trusted `--initialize-network` setup command, verified in the [disposable Linux fixture](docs/development/container-isolation.md); new Pod specifications require it before the runtime and tools start. Actual Kubernetes/CNI acceptance remains pending. Helm packaging, production network enforcement, full credential isolation and fencing qualification remain open.
 
 Container verification was retried after the layout change on 2026-10-25. Both builds remained blocked by Docker's `no space left on device` error: the orchestrator during dependency compilation and the frontend while materializing its base image. No existing Docker data was pruned. See [layout verification](docs/development/layout-verification.md) for the successful local and fresh-copy checks; image builds remain unqualified.
 

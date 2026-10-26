@@ -28,7 +28,7 @@ fn setup_command_validates_before_requesting_privilege() {
     assert!(
         String::from_utf8(output.stderr)
             .unwrap()
-            .contains("invalid infrastructure prefix")
+            .contains("invalid network configuration")
     );
     assert!(output.stdout.is_empty());
 }

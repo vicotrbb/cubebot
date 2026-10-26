@@ -60,6 +60,8 @@ async fn fixture() -> Fixture {
         "cubebot-runtime",
         "https://cubebot.test",
         None,
+        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
+            .unwrap(),
     )
     .unwrap();
     let attempt = registry

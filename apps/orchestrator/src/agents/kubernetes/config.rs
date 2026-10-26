@@ -13,6 +13,7 @@ pub struct ControllerConfig {
     runtime_service_account: String,
     orchestrator_origin: String,
     runtime_class: Option<String>,
+    network: cubebot_protocol::network::NetworkPolicy,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -62,6 +63,7 @@ impl ControllerConfig {
             &self.runtime_service_account,
             &self.orchestrator_origin,
             self.runtime_class.clone(),
+            self.network.clone(),
         )
     }
 }

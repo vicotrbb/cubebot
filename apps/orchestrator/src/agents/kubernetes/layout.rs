@@ -1,5 +1,6 @@
 //! Fixed container/mount boundaries. Network enforcement is a separate qualification gate.
 use super::{Error, client::validate_namespace};
+use cubebot_protocol::network::NetworkPolicy;
 use k8s_openapi::api::core::v1::{PersistentVolumeClaimSpec, PodSpec};
 use openidconnect::reqwest::Url;
 use serde_json::{Value, json};
@@ -10,6 +11,7 @@ pub struct Layout {
     service_account: String,
     origin: String,
     runtime_class: Option<String>,
+    network: NetworkPolicy,
 }
 impl Layout {
     pub fn new(
@@ -18,11 +20,12 @@ impl Layout {
         service_account: &str,
         origin: &str,
         runtime_class: Option<String>,
+        network: NetworkPolicy,
     ) -> Result<Self, Error> {
         validate_image(runtime_image)?;
         validate_image(tools_image)?;
         validate_namespace(service_account)?;
-        if service_account == "default" {
+        if service_account == "default" || network.dns().is_empty() {
             return Err(Error::InvalidConfiguration);
         }
         if let Some(class) = &runtime_class {
@@ -36,6 +39,7 @@ impl Layout {
             service_account: service_account.into(),
             origin: url.origin().ascii_serialization(),
             runtime_class,
+            network,
         })
     }
 
@@ -57,10 +61,10 @@ impl Layout {
             "os":{"name":"linux"},"restartPolicy":"Never", "terminationGracePeriodSeconds":30,
             "automountServiceAccountToken":false,"serviceAccountName":self.service_account,
             "shareProcessNamespace":false,"hostNetwork":false,"hostPID":false,"hostIPC":false,
-            "enableServiceLinks":false,"dnsPolicy":"ClusterFirst","schedulerName":"default-scheduler",
+            "enableServiceLinks":false,"dnsPolicy":"None","dnsConfig":{"nameservers":self.network.dns().iter().map(ToString::to_string).collect::<Vec<_>>()},"schedulerName":"default-scheduler",
             "runtimeClassName":self.runtime_class,
             "securityContext":{"runAsNonRoot":true,"fsGroup":20000,"fsGroupChangePolicy":"OnRootMismatch","supplementalGroupsPolicy":"Strict","seccompProfile":{"type":"RuntimeDefault"}},
-            "initContainers":[self.initialize("runtime",10001),self.initialize("tools",10002)],
+            "initContainers":[self.initialize_network(),self.initialize("runtime",10001),self.initialize("tools",10002)],
             "containers":[self.runtime(),self.tools()],
             "volumes":[
                 {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name,"readOnly":false}},
@@ -78,6 +82,15 @@ impl Layout {
             "command":["/usr/local/bin/cubebot-agent"],"args":["--initialize-storage",directory],
             "securityContext":security(uid),"resources":resources("10m","32Mi","100m","64Mi"),
             "volumeMounts":[{"name":"workspace","mountPath":"/storage"}]})
+    }
+    fn initialize_network(&self) -> Value {
+        let mut context = security(0);
+        context["runAsNonRoot"] = json!(false);
+        context["capabilities"]["add"] = json!(["NET_ADMIN"]);
+        json!({"name":"initialize-network","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
+            "command":["/usr/local/bin/cubebot-agent"],
+            "args":["--initialize-network",serde_json::to_string(&self.network).expect("validated network configuration")],
+            "securityContext":context,"resources":resources("10m","32Mi","100m","64Mi")})
     }
     fn runtime(&self) -> Value {
         json!({"name":"runtime","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",

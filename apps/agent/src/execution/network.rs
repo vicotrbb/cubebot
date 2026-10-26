@@ -1,6 +1,6 @@
 //! Trusted network setup. Call only before tool processes start, with namespace NET_ADMIN.
+use cubebot_protocol::network::NetworkPolicy;
 use ipnet::IpNet;
-use serde::Deserialize;
 use std::{net::IpAddr, process::Stdio, time::Duration};
 use tokio::{io::AsyncWriteExt, process::Command};
 
@@ -31,12 +31,6 @@ const SPECIAL: &[&str] = &[
     "3fff::/20",
 ];
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Configuration {
-    infrastructure: Vec<String>,
-    dns: Vec<IpAddr>,
-}
 pub struct Policy {
     blocked: Vec<IpNet>,
     dns: Vec<IpAddr>,
@@ -48,25 +42,16 @@ impl Policy {
         if input.len() > 16384 {
             return Err("network configuration too large");
         }
-        let config: Configuration =
+        let config: NetworkPolicy =
             serde_json::from_str(input).map_err(|_| "invalid network configuration")?;
-        if config.infrastructure.len() > 128 || config.dns.len() > 4 {
-            return Err("network configuration exceeds limits");
-        }
         let mut blocked = SPECIAL
             .iter()
             .map(|value| value.parse().expect("fixed CIDR"))
             .collect::<Vec<IpNet>>();
-        for value in config.infrastructure {
-            let prefix: IpNet = value.parse().map_err(|_| "invalid infrastructure prefix")?;
-            if prefix.addr() != prefix.network() {
-                return Err("infrastructure prefix must be canonical");
-            }
-            blocked.push(prefix);
-        }
+        blocked.extend_from_slice(config.infrastructure());
         Ok(Self {
             blocked,
-            dns: config.dns,
+            dns: config.dns().to_vec(),
         })
     }
     pub fn rules(&self) -> String {
