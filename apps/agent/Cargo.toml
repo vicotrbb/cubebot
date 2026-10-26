@@ -15,5 +15,8 @@ path = "src/main.rs"
 name = "cubebot-tool-runner"
 path = "src/bin/tool-runner.rs"
 
+[dependencies]
+sha2 = "0.10"
+
 [lints]
 workspace = true
