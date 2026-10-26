@@ -116,6 +116,12 @@ impl Kubernetes {
         }
     }
 
+    /// Untrusted platform observation for installation process fencing, never adoption.
+    pub(crate) async fn platform_pod(&self, name: &str) -> Result<Option<Pod>, Error> {
+        validate_namespace(name)?;
+        Ok(self.pods.get_opt(name).await?)
+    }
+
     pub async fn fetch_anchor(&self, name: &str) -> Result<Option<ConfigMap>, Error> {
         validate_namespace(name)?;
         Ok(self.anchors.get_opt(name).await?)
