@@ -807,3 +807,121 @@ async fn waking_after_proven_stop_creates_one_new_epoch_and_reuses_the_workspace
     );
     f.task.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn same_generation_terminal_pod_is_fenced_before_one_new_epoch_is_created() {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, workspace } =
+        reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    let previous = registry.attempt(pod).await.unwrap();
+    complete_pod(&state);
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
+    );
+    let (bound, proof, latched): (bool, bool, bool) = sqlx::query_as("SELECT phase = 'bound',termination_proof IS NOT NULL,EXISTS(SELECT 1 FROM agent_runtime_drains WHERE attempt_id = r.id) FROM agent_resources r WHERE id = $1").bind(pod).fetch_one(&pool).await.unwrap();
+    assert!(bound && proof && latched);
+    let ReconcileResult::Provisioned {
+        pod: replacement,
+        workspace: retained,
+    } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("replacement expected")
+    };
+    let next = registry.attempt(replacement).await.unwrap();
+    assert_ne!(pod, replacement);
+    assert_eq!(workspace, retained);
+    assert_eq!(next.epoch, previous.epoch + 1);
+    assert_eq!(next.target_generation, previous.target_generation);
+    assert_eq!(state.lock().unwrap().creates.len(), 4);
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn same_generation_node_lost_is_visible_and_never_qualifies_for_replacement() {
+    use cubebot_orchestrator::{agents::Agents, identity::Identity};
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    complete_pod(&state);
+    {
+        let mut state = state.lock().unwrap();
+        let pod = state
+            .objects
+            .values_mut()
+            .find(|object| object["kind"] == "Pod")
+            .unwrap();
+        pod["status"]["phase"] = json!("Failed");
+        pod["status"]["reason"] = json!("NodeLost");
+    }
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
+    );
+    let identity = Identity::new(pool.clone());
+    let human = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let actor = identity.authenticate(&human.token).await.unwrap();
+    let status = Agents::new(pool).status(&actor, agent).await.unwrap();
+    assert_eq!(status.kubernetes_reason.as_deref(), Some("NodeLost"));
+    assert!(status.drain_requested);
+    assert!(!status.terminal_evidence_retained);
+    assert_eq!(
+        registry.attempt(pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    assert!(state.lock().unwrap().deletes.is_empty());
+    assert!(state.lock().unwrap().patches.is_empty());
+    assert_eq!(state.lock().unwrap().creates.len(), 3);
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn current_generation_recovers_a_lost_finalizer_reply_before_replacement() {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    let reconciler =
+        Reconciler::new(pool.clone(), config.clone(), "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    complete_pod(&state);
+    assert!(matches!(
+        reconciler.reconcile(agent).await.unwrap(),
+        ReconcileResult::Stopping { .. }
+    ));
+    state.lock().unwrap().lose_finalize = true;
+    assert!(reconciler.reconcile(agent).await.is_err());
+    assert_eq!(
+        registry.attempt(pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Bound
+    );
+    let restarted = Reconciler::new(pool, config, "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned {
+        pod: replacement, ..
+    } = restarted.reconcile(agent).await.unwrap()
+    else {
+        panic!("recovered epoch expected")
+    };
+    assert_ne!(pod, replacement);
+    assert_eq!(
+        registry.attempt(pod).await.unwrap().phase,
+        cubebot_orchestrator::agents::kubernetes::Phase::Stopped
+    );
+    assert_eq!(state.lock().unwrap().patches.len(), 1);
+    assert_eq!(state.lock().unwrap().creates.len(), 4);
+    task.abort();
+}

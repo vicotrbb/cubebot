@@ -1,7 +1,6 @@
 //! Explicit reconciliation steps. Construction never discovers or connects to a cluster.
 use super::{
-    Attempt, AttemptId, Error, Kubernetes, Layout, Phase, Registry, ResourceKind, ResourceObject,
-    ResourceSpec,
+    Attempt, AttemptId, Error, Kubernetes, Layout, Phase, Registry, ResourceObject, ResourceSpec,
 };
 use crate::agents::AgentId;
 use sqlx::PgPool;
@@ -53,12 +52,22 @@ impl Reconciler {
         .fetch_optional(&self.pool)
         .await?
         .ok_or(Error::Conflict)?;
-        if let Some(outcome) = self.hold_previous(agent, generation, &state).await? {
-            return Ok(outcome);
-        }
+        let verified = match self.inspect_pod(agent, generation, &state).await? {
+            super::recovery::Inspection::Vacant => None,
+            super::recovery::Inspection::Healthy(id) => Some(id),
+            super::recovery::Inspection::Held(outcome) => return Ok(outcome),
+        };
         if state != "running" {
             return Ok(ReconcileResult::Idle);
         }
+        self.provision(agent, revision, verified).await
+    }
+    async fn provision(
+        &self,
+        agent: AgentId,
+        revision: i64,
+        verified: Option<AttemptId>,
+    ) -> Result<ReconcileResult, Error> {
         self.anchor().await?;
         let workspace = self
             .registry
@@ -89,31 +98,13 @@ impl Reconciler {
             )
             .await?;
         let pod_id = pod.id;
-        if self.ensure(pod).await?.is_none() {
+        if verified != Some(pod_id) && self.ensure(pod).await?.is_none() {
             return Ok(ReconcileResult::Uncertain { attempt: pod_id });
         }
         Ok(ReconcileResult::Provisioned {
             workspace: workspace_id,
             pod: pod_id,
         })
-    }
-    async fn hold_previous(
-        &self,
-        agent: AgentId,
-        generation: i64,
-        state: &str,
-    ) -> Result<Option<ReconcileResult>, Error> {
-        let Some(previous) = self.registry.current(agent, ResourceKind::Pod).await? else {
-            return Ok(None);
-        };
-        if state == "running" && previous.target_generation == generation {
-            return Ok(None);
-        }
-        if previous.phase == Phase::Planned {
-            self.registry.cancel_planned(previous.id).await?;
-            return Ok(None);
-        }
-        self.shutdown(previous).await
     }
     async fn anchor(&self) -> Result<(), Error> {
         let expected = self.registry.configure(&self.namespace).await?;
@@ -181,7 +172,11 @@ impl Reconciler {
         };
         self.bind(attempt, observed).await.map(Some)
     }
-    async fn bind(&self, attempt: Attempt, observed: ResourceObject) -> Result<Attempt, Error> {
+    pub(super) async fn bind(
+        &self,
+        attempt: Attempt,
+        observed: ResourceObject,
+    ) -> Result<Attempt, Error> {
         if let Err(error) = self.registry.bind_object(attempt.id, &observed).await {
             self.registry
                 .block(

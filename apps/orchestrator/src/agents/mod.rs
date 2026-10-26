@@ -1,9 +1,11 @@
-//! Installation-owned definitions and explicit Kubernetes reconciliation. Runtime authority remains pending.
+//! Installation-owned definitions and explicit Kubernetes reconciliation. Per-turn authority remains pending.
 mod commands;
 mod definitions;
 pub mod kubernetes;
 mod lifecycle;
 mod revisions;
+mod status;
+pub use status::AgentStatus;
 pub mod runtime;
 pub use definitions::{Agent, AgentId, CreateAgent};
 pub use lifecycle::{LifecycleAction, LifecycleCommand};

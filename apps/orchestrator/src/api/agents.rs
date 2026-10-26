@@ -21,6 +21,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/agents", get(list).post(create))
         .route("/api/agents/{id}", get(read))
+        .route("/api/agents/{id}/status", get(status))
         .route("/api/agents/{id}/definition", post(update))
         .route("/api/agents/{id}/lifecycle", post(lifecycle))
         .route("/api/agents/{id}/revisions", get(revisions))
@@ -117,5 +118,17 @@ async fn revisions(
     Ok((
         [("cache-control", "no-store")],
         Json(api.agents.revisions(&actor, id, cursor.after).await?),
+    ))
+}
+
+async fn status(
+    State(api): State<AgentApi>,
+    headers: HeaderMap,
+    Path(id): Path<AgentId>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.agents.status(&actor, id).await?),
     ))
 }

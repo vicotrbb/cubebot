@@ -41,7 +41,7 @@ impl RuntimeIdentity {
     ) -> Result<RuntimeActor, Error> {
         validate_token(token)?;
         let active = matches!(access, RuntimeAccess::Active);
-        sqlx::query_as("SELECT a.id AS agent,r.id AS attempt,r.epoch,s.version FROM agent_runtime_sessions s JOIN agent_resources r ON r.id = s.attempt_id JOIN agents a ON a.id = r.agent_id WHERE s.token_hash = $1 AND s.expires_at > clock_timestamp() AND r.kind = 'pod' AND r.phase = 'bound' AND r.uid = s.pod_uid AND (NOT $2 OR (a.desired_state = 'running' AND a.restart_generation = r.target_generation AND r.blocked_reason IS NULL AND NOT EXISTS (SELECT 1 FROM agent_runtime_drains d WHERE d.attempt_id = r.id)))")
+        sqlx::query_as("SELECT agent_id AS agent,attempt_id AS attempt,epoch,version FROM runtime_session_access WHERE token_hash = $1 AND recovery AND (NOT $2 OR active)")
             .bind(digest(token)).bind(active).fetch_optional(&self.pool).await?.ok_or(Error::Unauthorized)
     }
 }

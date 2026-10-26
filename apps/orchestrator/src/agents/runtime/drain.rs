@@ -32,7 +32,7 @@ impl RuntimeIdentity {
         self.recheck(token, &actor, &mut transaction).await?;
         let drain = sqlx::query_as::<_, DrainRequest>("SELECT request_id,acknowledged_at IS NOT NULL AS acknowledged FROM agent_runtime_drains WHERE attempt_id = $1")
             .bind(actor.attempt).fetch_optional(&mut *transaction).await?;
-        let available: bool = sqlx::query_scalar("SELECT a.desired_state = 'running' AND a.restart_generation = r.target_generation AND r.blocked_reason IS NULL FROM agent_resources r JOIN agents a ON a.id = r.agent_id WHERE r.id = $1")
+        let available: bool = sqlx::query_scalar("SELECT COALESCE((SELECT active FROM runtime_session_access WHERE attempt_id = $1),false)")
             .bind(actor.attempt).fetch_one(&mut *transaction).await?;
         let disposition = match (&drain, available) {
             (Some(_), _) => RuntimeDisposition::Drain,
@@ -100,7 +100,7 @@ impl RuntimeIdentity {
         actor: &RuntimeActor,
         transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     ) -> Result<(), Error> {
-        sqlx::query_scalar::<_,Uuid>("SELECT r.id FROM agent_runtime_sessions s JOIN agent_resources r ON r.id = s.attempt_id WHERE r.id = $1 AND s.version = $2 AND s.token_hash = $3 AND s.expires_at > clock_timestamp() AND r.kind = 'pod' AND r.phase = 'bound' AND r.uid = s.pod_uid")
+        sqlx::query_scalar::<_,Uuid>("SELECT attempt_id FROM runtime_session_access WHERE attempt_id = $1 AND version = $2 AND token_hash = $3 AND recovery")
             .bind(actor.attempt).bind(actor.version).bind(super::sessions::digest(token)).fetch_optional(&mut **transaction).await?.ok_or(Error::Unauthorized)?;
         Ok(())
     }

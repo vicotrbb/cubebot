@@ -167,6 +167,7 @@ impl Registry {
 
     pub async fn bind_object(&self, id: AttemptId, observed: &ResourceObject) -> Result<(), Error> {
         let mut transaction = self.transaction().await?;
+        lock_attempt_agent(&mut transaction, id).await?;
         let row:Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE id = $1 FOR UPDATE")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
         let expected = row.attempt()?;
@@ -180,8 +181,12 @@ impl Registry {
             .resource_version
             .as_deref()
             .ok_or(Error::OwnershipMismatch)?;
-        sqlx::query("UPDATE agent_resources SET uid = $2, resource_version = $3, phase = 'bound', blocked_reason = NULL, updated_at = clock_timestamp() WHERE id = $1")
-            .bind(id).bind(uid).bind(version).execute(&mut *transaction).await?;
+        let observation = super::observation::Observation::of(observed);
+        sqlx::query("UPDATE agent_resources SET uid = $2, resource_version = $3, phase = 'bound', blocked_reason = CASE WHEN $7 THEN 'runtime_recovery_required' ELSE NULL END, observed_at = transaction_timestamp(), kubernetes_phase = $4, kubernetes_reason = $8, kubernetes_ready = $5, deleting = $6, updated_at = clock_timestamp() WHERE id = $1")
+            .bind(id).bind(uid).bind(version).bind(observation.phase).bind(observation.ready).bind(observation.deleting).bind(observation.recovery).bind(observation.reason).execute(&mut *transaction).await?;
+        if observation.recovery {
+            latch_drain(&mut transaction, id).await?;
+        }
         transaction.commit().await?;
         Ok(())
     }
@@ -263,4 +268,21 @@ async fn insert_attempt(
     sqlx::query("INSERT INTO agent_resources (id,agent_id,kind,epoch,target_generation,definition_revision,namespace,name,manifest,source_manifest) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)")
         .bind(id).bind(agent).bind(kind.as_str()).bind(epoch).bind(generation).bind(revision).bind(metadata.namespace.as_deref()).bind(metadata.name.as_deref()).bind(sqlx::types::Json(manifest)).execute(&mut **transaction).await?;
     Ok(id)
+}
+
+async fn lock_attempt_agent(
+    transaction: &mut Transaction<'_, Postgres>,
+    id: AttemptId,
+) -> Result<(), Error> {
+    sqlx::query_scalar::<_, uuid::Uuid>("SELECT a.id FROM agents a JOIN agent_resources r ON r.agent_id = a.id WHERE r.id = $1 FOR UPDATE OF a")
+        .bind(id).fetch_optional(&mut **transaction).await?.ok_or(Error::Conflict)?;
+    Ok(())
+}
+async fn latch_drain(
+    transaction: &mut Transaction<'_, Postgres>,
+    id: AttemptId,
+) -> Result<(), Error> {
+    sqlx::query("INSERT INTO agent_runtime_drains (attempt_id) VALUES ($1) ON CONFLICT (attempt_id) DO NOTHING")
+        .bind(id).execute(&mut **transaction).await?;
+    Ok(())
 }

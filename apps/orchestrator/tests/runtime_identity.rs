@@ -360,9 +360,11 @@ async fn bootstrap_deadline_does_not_issue_a_session_after_waiting_on_lifecycle_
 }
 
 async fn runtime_server(auth: RuntimeIdentity) -> (String, tokio::task::JoinHandle<()>) {
+    http_server(cubebot_orchestrator::api::runtime_router(auth)).await
+}
+async fn http_server(router: Router) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
-    let router = cubebot_orchestrator::api::runtime_router(auth);
     let task = tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
     });
@@ -712,4 +714,154 @@ async fn native_exit(child: &mut std::process::Child) -> std::process::ExitStatu
     child.kill().unwrap();
     child.wait().unwrap();
     panic!("native runtime did not complete persisted drain");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn incomplete_observation_holds_active_identity_without_destroying_recovery() {
+    let f = fixture().await;
+    let session = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let registry = Registry::new(f.pool.clone());
+    let original = f.api.lock().unwrap().pod.clone();
+    let mut incomplete = original.clone();
+    incomplete.status = None;
+    registry
+        .bind_object(f.attempt, &ResourceObject::Pod(Box::new(incomplete)))
+        .await
+        .unwrap();
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Active)
+            .await
+            .is_err()
+    );
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Recovery)
+            .await
+            .is_ok()
+    );
+    let control = f.auth.control(&session.token).await.unwrap();
+    assert_eq!(
+        serde_json::to_value(control).unwrap()["disposition"],
+        "hold"
+    );
+    registry
+        .bind_object(f.attempt, &ResourceObject::Pod(Box::new(original)))
+        .await
+        .unwrap();
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Active)
+            .await
+            .is_ok()
+    );
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn partial_runtime_failure_latches_drain_even_when_the_pod_phase_still_says_running() {
+    let f = fixture().await;
+    let session = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let registry = Registry::new(f.pool.clone());
+    let original = f.api.lock().unwrap().pod.clone();
+    let mut failed = original.clone();
+    failed.status = Some(serde_json::from_value(json!({"phase":"Running","containerStatuses":[{"name":"runtime","image":"test","imageID":"test","ready":false,"restartCount":0,"state":{"terminated":{"exitCode":1,"reason":"Error"}}}]})).unwrap());
+    registry
+        .bind_object(f.attempt, &ResourceObject::Pod(Box::new(failed)))
+        .await
+        .unwrap();
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Active)
+            .await
+            .is_err()
+    );
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Recovery)
+            .await
+            .is_ok()
+    );
+    assert!(
+        f.auth
+            .control(&session.token)
+            .await
+            .unwrap()
+            .drain
+            .is_some()
+    );
+    registry
+        .bind_object(f.attempt, &ResourceObject::Pod(Box::new(original)))
+        .await
+        .unwrap();
+    assert!(
+        f.auth
+            .authenticate(&session.token, RuntimeAccess::Active)
+            .await
+            .is_err()
+    );
+    assert!(
+        f.auth
+            .control(&session.token)
+            .await
+            .unwrap()
+            .drain
+            .is_some()
+    );
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn human_status_http_reports_observed_facts_without_runtime_secrets_or_working_claims() {
+    let f = fixture().await;
+    let runtime = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let identity = Identity::new(f.pool.clone());
+    let human = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let (origin, task) =
+        http_server(cubebot_orchestrator::api::database_router(f.pool.clone())).await;
+    let client = openidconnect::reqwest::Client::new();
+    let path = format!("{origin}/api/agents/{}/status", f.agent.0);
+    assert_eq!(client.get(&path).send().await.unwrap().status(), 401);
+    let response = client
+        .get(&path)
+        .bearer_auth(human.token)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["cache-control"], "no-store");
+    let bytes = response.bytes().await.unwrap();
+    let status: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(status["desired_state"], "running");
+    assert_eq!(status["resource_phase"], "bound");
+    assert_eq!(status["kubernetes_phase"], "Running");
+    assert_eq!(status["runtime_available"], true);
+    assert_eq!(status["kubernetes_ready"], false);
+    assert!(status["observed_at"].is_string());
+    assert!(status["observed_seconds_ago"].is_number());
+    let body = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!body.contains(&runtime.token));
+    assert!(!body.contains("token_hash"));
+    assert!(!body.contains("manifest"));
+    assert!(!body.contains("instructions"));
+    task.abort();
+    f.task.abort();
 }

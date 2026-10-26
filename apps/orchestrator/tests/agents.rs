@@ -79,6 +79,9 @@ async fn check_reconnect_and_revoke(
 ) {
     let agents = Agents::new(pool);
     assert_eq!(agents.get(actor, AgentId(id)).await.unwrap().revision, 1);
+    let status = agents.status(actor, AgentId(id)).await.unwrap();
+    assert_eq!(status.desired_state, "sleeping");
+    assert!(status.pod_attempt.is_none());
     identity
         .revoke_grant(
             admin,
@@ -91,6 +94,10 @@ async fn check_reconnect_and_revoke(
         .await
         .unwrap();
     assert!(agents.list(actor, None).await.unwrap().is_empty());
+    assert!(matches!(
+        agents.status(actor, AgentId(id)).await,
+        Err(IdentityError::NotFound)
+    ));
     assert!(matches!(
         agents.get(actor, AgentId(id)).await,
         Err(IdentityError::NotFound)

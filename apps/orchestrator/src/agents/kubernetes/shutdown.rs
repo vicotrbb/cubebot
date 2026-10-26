@@ -6,23 +6,25 @@ use super::{
 use k8s_openapi::api::core::v1::Pod;
 
 impl Reconciler {
-    pub(super) async fn shutdown(
+    pub(super) async fn settle_pod(
         &self,
-        mut attempt: Attempt,
+        attempt: Attempt,
+        proof: Option<Pod>,
+        observed: Option<ResourceObject>,
     ) -> Result<Option<ReconcileResult>, Error> {
-        if attempt.phase == Phase::Creating {
-            let id = attempt.id;
-            let Some(bound) = self.observe(attempt).await? else {
-                return Ok(Some(ReconcileResult::Uncertain { attempt: id }));
-            };
-            attempt = bound;
-        }
-        let proof = self.registry.retained_termination(attempt.id).await?;
-        let observed = self.api.fetch_candidate(&attempt.object).await?;
         let Some(ResourceObject::Pod(pod)) = observed else {
             return self.absent(&attempt, proof).await;
         };
-        self.verify_shutdown(&attempt, &pod, proof.as_ref()).await?;
+        if let Err(error) = self.verify_shutdown(&attempt, &pod, proof.as_ref()).await {
+            self.registry
+                .block(
+                    attempt.id,
+                    attempt.phase,
+                    "ownership_or_specification_conflict",
+                )
+                .await?;
+            return Err(error);
+        }
         if termination_proven(&pod) {
             return self.finish(&attempt, &pod, proof).await;
         }
@@ -41,10 +43,6 @@ impl Reconciler {
             if pod.spec != proof.spec || !termination_proven(pod) {
                 return Err(Error::OwnershipMismatch);
             }
-        } else {
-            self.registry
-                .bind_object(attempt.id, &ResourceObject::Pod(Box::new(pod.clone())))
-                .await?;
         }
         Ok(())
     }

@@ -43,6 +43,7 @@ impl Registry {
         stopped: bool,
     ) -> Result<(), Error> {
         let mut transaction = self.transaction().await?;
+        super::lock_attempt_agent(&mut transaction, id).await?;
         let row: Row = sqlx::query_as("SELECT id,agent_id,kind,epoch,target_generation,definition_revision,phase,uid,blocked_reason,manifest,source_manifest,prepared FROM agent_resources WHERE id = $1 FOR UPDATE")
             .bind(id).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
         let expected = row.attempt()?;
@@ -58,6 +59,7 @@ impl Registry {
         }
         sqlx::query("UPDATE agent_resources SET phase = CASE WHEN $3 THEN 'stopped' ELSE phase END, blocked_reason = NULL, termination_proof = COALESCE(termination_proof,$2), updated_at = clock_timestamp() WHERE id = $1")
             .bind(id).bind(sqlx::types::Json(pod)).bind(stopped).execute(&mut *transaction).await?;
+        super::latch_drain(&mut transaction, id).await?;
         transaction.commit().await?;
         Ok(())
     }
