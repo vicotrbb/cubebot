@@ -46,7 +46,7 @@ The orchestrator accepts exported `CUBEBOT_BIND_ADDR` and `RUST_LOG` variables. 
 
 See [repository layout](docs/development/repository-layout.md) for the complete module map and dependency rules. The agent package builds `cubebot-agent` and `cubebot-tool-runner`; both explicitly exit with an unimplemented message until their execution behavior exists. The tool runner belongs to the agent app and will run in its separate tool container.
 
-The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. Kubernetes, provider and tool dependencies will be added with their first working feature.
+The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter tested against a controlled HTTP server; no Kubernetes controller is connected yet. Provider and tool dependencies will be added with their first working features.
 
 ## Quality rules
 
@@ -117,6 +117,8 @@ Definitions belong to the installation; `created_by` is provenance rather than o
 Managers edit with `POST /api/agents/<id>/definition`, supplying `request_id`, `expected_revision`, `name`, `instructions` and `idle_policy` of `sleep` or `keep_running`. Edits increment the agent revision, retain immutable snapshots and increment `instructions_revision` only when instruction text changes. `GET /api/agents/<id>/revisions?after=<revision>` returns up to 100 authorized configuration snapshots in ascending order. Their revision numbers can skip lifecycle-only changes. Existing definitions are snapshotted when this migration is applied; unavailable historical text is not reconstructed.
 
 `POST /api/agents/<id>/lifecycle` accepts `request_id`, `expected_revision` and `action` of `wake`, `sleep`, `restart` or `retire`. HTTP 202 acknowledges persisted intent only. Wake from sleeping and explicit restart advance `restart_generation`; wake while already running does not. Replay returns its original receipt without repeating the transition. A retired definition remains inspectable but cannot be edited or newly awakened. Previously accepted receipts can still be replayed by their original actor while that actor retains current management access. `keep_running` applies to automatic idle shutdown after waking; a manual sleep preserves that policy. These commands do not currently start or stop a pod, and they establish no execution fencing or safe-drain guarantee.
+
+The Kubernetes boundary currently supports namespaced pod/PVC creation, recorded-pod observation and guarded pod stop/finalizer requests. It checks the recorded namespace/name/UID, installation/agent/attempt labels and installation ConfigMap controller anchor before changing an existing pod. Stop requests require Cubebot's execution finalizer and send UID plus resource-version preconditions with a nonzero grace period. Finalizer release requires deletion already requested, non-restarting runtime/tool containers with known identified exit reports, and terminal init containers; it preserves other controllers' finalizers. Missing objects, changed UIDs, unknown container status, NodeLost and ephemeral execution remain uncertain. These are local API-contract tests, not proof of physical fencing. The installation anchor/UID registry, resource specifications, controller activation, runtime protocol and real-cluster qualification remain pending. Running the current service does not contact a Kubernetes cluster.
 
 ### Authentication resource limits
 

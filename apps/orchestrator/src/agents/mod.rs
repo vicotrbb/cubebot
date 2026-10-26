@@ -1,6 +1,7 @@
 //! Installation-owned definitions. Runtime and Kubernetes observations remain unimplemented.
 mod commands;
 mod definitions;
+pub mod kubernetes;
 mod lifecycle;
 mod revisions;
 pub use definitions::{Agent, AgentId, CreateAgent};
