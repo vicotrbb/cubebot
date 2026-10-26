@@ -1,0 +1,131 @@
+{
+  "profile": {
+    "timestamp": "2026-10-26T13:21:37.466843+00:00",
+    "base_commit": "7e148834cb639503a06d119c600a45d0c1df03e3",
+    "source_sha256": "f196c470f9b55a346711e17d923cbf0f1fdb49d58f20586584e23259ca2d379a",
+    "docker_version": "29.4.0",
+    "platform": {
+      "os": "linux",
+      "architecture": "aarch64",
+      "cpus": 3,
+      "memory_bytes": 4181233664,
+      "kernel": "7.0.14-orbstack-00380-ga7e0a2dc9535"
+    },
+    "images": {
+      "runtime": {
+        "id": "sha256:66eb64765473ac997ac79cb5e0593ee739dce90b71ea436446f67825a4008b9a",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10001:10001",
+        "entrypoint": ["/usr/local/bin/cubebot-agent"]
+      },
+      "tools": {
+        "id": "sha256:52f9114bb44ab36c4a0b80032c216c6578ac3959e8cd40995f395ce3b404bdb0",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10002:10002",
+        "entrypoint": ["/usr/local/bin/cubebot-tool-runner"]
+      },
+      "qualification": {
+        "id": "sha256:11bea9e97208f27d5a3b1b993bd3c96d10e846c5fd37d1ed83d6fcbc0418f88c",
+        "architecture": "arm64",
+        "os": "linux",
+        "user": "10001:10001",
+        "entrypoint": ["/usr/local/bin/isolation-probe"]
+      }
+    },
+    "nftables": "nftables v1.0.6 (Lester Gooch #5)"
+  },
+  "scope": "Linux container mechanism probes; G1-G3 not qualified",
+  "results": {
+    "filesystem": {
+      "links_runtime_token": false,
+      "pid_namespace": 4026534106,
+      "reads_runtime_journal": false,
+      "reads_runtime_token": false,
+      "uid": 10002,
+      "writes_runtime_directory": false,
+      "writes_tool_workspace": true
+    },
+    "without_filter": {
+      "private_v4": true,
+      "public_v4": true,
+      "private_v6": true,
+      "public_v6": true
+    },
+    "direct_socket_ignores_proxy": true,
+    "finite_private_grants": {
+      "ipv4": {
+        "granted_connection_and_exchange": true,
+        "ungranted_port_denied": true,
+        "expired_existing_exchange": false,
+        "expired_new_connection": false,
+        "revoked_existing_exchange": false,
+        "revoked_new_connection": false
+      },
+      "ipv6": {
+        "granted_connection_and_exchange": true,
+        "ungranted_port_denied": true,
+        "expired_existing_exchange": false,
+        "expired_new_connection": false,
+        "revoked_existing_exchange": false,
+        "revoked_new_connection": false
+      }
+    },
+    "bidirectional_private_grants": {
+      "output_only_leaks_incoming_data": {
+        "ipv4": {
+          "fresh_push_after_expiry": true,
+          "fresh_push_after_revocation": true
+        },
+        "ipv6": {
+          "fresh_push_after_expiry": true,
+          "fresh_push_after_revocation": true
+        }
+      },
+      "duplex_request_reply_grants": {
+        "ipv4": {
+          "granted_connection_and_exchange": true,
+          "ungranted_port_denied": true,
+          "expired_existing_exchange": false,
+          "expired_new_connection": false,
+          "revoked_existing_exchange": false,
+          "revoked_new_connection": false
+        },
+        "ipv6": {
+          "granted_connection_and_exchange": true,
+          "ungranted_port_denied": true,
+          "expired_existing_exchange": false,
+          "expired_new_connection": false,
+          "revoked_existing_exchange": false,
+          "revoked_new_connection": false
+        }
+      },
+      "duplex_blocks_incoming_data": {
+        "ipv4": {
+          "fresh_push_after_expiry": false,
+          "fresh_push_after_revocation": false
+        },
+        "ipv6": {
+          "fresh_push_after_expiry": false,
+          "fresh_push_after_revocation": false
+        }
+      },
+      "duplex_default_paths": {
+        "private_v4": false,
+        "public_v4": true,
+        "private_v6": false,
+        "public_v6": true
+      }
+    },
+    "shared_filter_runtime_private": false,
+    "uid_filter_tools": {
+      "private_v4": false,
+      "public_v4": true,
+      "private_v6": false,
+      "public_v6": true
+    },
+    "uid_filter_runtime_private": true,
+    "tool_cannot_flush_rules": true
+  }
+}

@@ -5,6 +5,7 @@ use std::{
     io::{BufRead, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     os::unix::fs::MetadataExt,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -42,6 +43,8 @@ fn serve() -> Result<(), Box<dyn std::error::Error>> {
         let listener = TcpListener::bind(address)?;
         std::thread::spawn(move || respond(listener));
     }
+    serve_push("127.0.0.1:18088", "127.0.0.1:18089")?;
+    serve_push("[::1]:18090", "[::1]:18091")?;
     println!("{}", identity()?);
     std::io::stdout().flush()?;
     loop {
@@ -86,6 +89,24 @@ fn connect(address: &str) -> Result<Value, Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn receiving_a_push_does_not_send_another_request() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_millis(100)))
+                .unwrap();
+            stream.write_all(b"fixture").unwrap();
+            let mut byte = [0];
+            assert!(stream.read_exact(&mut byte).is_err());
+        });
+        let mut stream = TcpStream::connect(address).unwrap();
+        assert!(session_action(&mut stream, "receive").is_ok());
+        server.join().unwrap();
+    }
 
     #[test]
     fn persistent_exchange_requires_a_fresh_server_reply() {
@@ -141,11 +162,45 @@ fn session(address: &str) -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", json!({"connected":true}));
     std::io::stdout().flush()?;
     for line in std::io::stdin().lock().lines().take(4) {
-        if line? != "exchange" {
-            return Err("invalid session command".into());
-        }
-        println!("{}", json!({"connected":exchange(&mut stream).is_ok()}));
+        let connected = session_action(&mut stream, &line?).is_ok();
+        println!("{}", json!({"connected":connected}));
         std::io::stdout().flush()?;
     }
+    Ok(())
+}
+
+fn session_action(stream: &mut TcpStream, command: &str) -> std::io::Result<()> {
+    match command {
+        "exchange" => exchange(stream),
+        "receive" => read_fixture(stream),
+        _ => Err(std::io::Error::other("invalid session command")),
+    }
+}
+
+fn serve_push(address: &str, control: &str) -> std::io::Result<()> {
+    let listener = TcpListener::bind(address)?;
+    let control = TcpListener::bind(control)?;
+    let current: Arc<Mutex<Option<TcpStream>>> = Arc::new(Mutex::new(None));
+    let producer = Arc::clone(&current);
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(700)));
+            let mut slot = producer.lock().unwrap();
+            *slot = Some(stream);
+            if let Some(target) = slot.as_mut() {
+                let _ = target.write_all(b"fixture");
+            }
+        }
+    });
+    std::thread::spawn(move || {
+        for mut stream in control.incoming().flatten() {
+            let mut slot = current.lock().unwrap();
+            if let Some(target) = slot.as_mut()
+                && target.write_all(b"fixture").is_ok()
+            {
+                let _ = stream.write_all(b"fixture");
+            }
+        }
+    });
     Ok(())
 }

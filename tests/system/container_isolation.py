@@ -271,8 +271,9 @@ table inet cubebot_probe {
     helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rules)
 
 
-def grant_element(image, prefix, runtime, family, operation, timeout=None):
-    address, port = {4: ("127.0.0.1", 18080), 6: ("::1", 18081)}[family]
+def grant_element(image, prefix, runtime, family, operation, timeout=None, port=None):
+    address, default_port = {4: ("127.0.0.1", 18080), 6: ("::1", 18081)}[family]
+    port = port or default_port
     lifetime = f" timeout {timeout}s" if timeout else ""
     rule = (
         f"{operation} element inet cubebot_probe private{family} "
@@ -281,9 +282,9 @@ def grant_element(image, prefix, runtime, family, operation, timeout=None):
     helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rule)
 
 
-def session_event(process, request=False):
+def session_event(process, request=None):
     if request:
-        process.stdin.write(b"exchange\n")
+        process.stdin.write((request + "\n").encode())
         process.stdin.flush()
     readable, _, _ = select.select([process.stdout], [], [], 10)
     if not readable:
@@ -336,16 +337,16 @@ def finite_family(image, prefix, runtime, family):
     # Establish each socket before timing expiry or explicitly revoking its element.
     grant_element(image, prefix, runtime, family, "add", timeout=5)
     with socket_session(runtime, address) as process:
-        assert session_event(process, request=True)
+        assert session_event(process, request="exchange")
         assert not probe(image, prefix, runtime, "connect", other)["connected"]
         time.sleep(5.2)
-        expired_existing = session_event(process, request=True)
+        expired_existing = session_event(process, request="exchange")
     expired_new = probe(image, prefix, runtime, "connect", address)["connected"]
     grant_element(image, prefix, runtime, family, "add", timeout=30)
     with socket_session(runtime, address) as process:
-        assert session_event(process, request=True)
+        assert session_event(process, request="exchange")
         grant_element(image, prefix, runtime, family, "delete")
-        revoked_existing = session_event(process, request=True)
+        revoked_existing = session_event(process, request="exchange")
     revoked_new = probe(image, prefix, runtime, "connect", address)["connected"]
     assert not any((expired_existing, expired_new, revoked_existing, revoked_new))
     return {
@@ -371,6 +372,92 @@ def finite_grants(image, prefix, runtime):
     return {
         f"ipv{family}": finite_family(image, prefix, runtime, family)
         for family in (4, 6)
+    }
+
+
+def duplex_policy(image, prefix, runtime):
+    rules = """delete table inet cubebot_probe
+table inet cubebot_probe {
+ set private4 { type ipv4_addr . inet_service; flags timeout; }
+ set private6 { type ipv6_addr . inet_service; flags timeout; }
+ chain output { type filter hook output priority 0; policy accept;
+  ct direction original meta skuid 10001 ct mark set 1
+  ct direction original meta skuid 10002 ct mark set 2
+  ct mark 1 accept
+  meta skuid 10001 accept
+  meta skuid 10002 ip daddr . tcp dport @private4 accept
+  meta skuid 10002 ip6 daddr . tcp dport @private6 accept
+  ip daddr 127.0.0.0/8 drop
+  ip6 daddr ::1 drop
+ }
+ chain input { type filter hook input priority 0; policy accept;
+  ct mark 1 accept
+  ct mark 2 ct direction original ip daddr . tcp dport @private4 accept
+  ct mark 2 ct direction original ip6 daddr . tcp dport @private6 accept
+  ct mark 2 ct direction reply ip saddr . tcp sport @private4 accept
+  ct mark 2 ct direction reply ip6 saddr . tcp sport @private6 accept
+  ip saddr 127.0.0.0/8 drop
+  ip6 saddr ::1 drop
+ }
+}
+"""
+    helper(image, prefix, runtime, "/usr/sbin/nft", "-f", "-", input=rules)
+
+
+def pushed_reply(runtime, control, process):
+    # The trusted sender emits only after this independent control request, not a timer.
+    sent = json.loads(
+        docker("exec", runtime, "/usr/local/bin/isolation-probe", "connect", control)
+    )["connected"]
+    assert sent, "trusted sender failed to emit fresh data"
+    return session_event(process, request="receive")
+
+
+def push_family(image, prefix, runtime, family, expected):
+    address, control, port = {
+        4: ("127.0.0.1:18088", "127.0.0.1:18089", 18088),
+        6: ("[::1]:18090", "[::1]:18091", 18090),
+    }[family]
+    grant_element(image, prefix, runtime, family, "add", timeout=5, port=port)
+    with socket_session(runtime, address) as process:
+        assert pushed_reply(runtime, control, process)
+        time.sleep(5.2)
+        expired = pushed_reply(runtime, control, process)
+    grant_element(image, prefix, runtime, family, "add", timeout=30, port=port)
+    with socket_session(runtime, address) as process:
+        assert pushed_reply(runtime, control, process)
+        grant_element(image, prefix, runtime, family, "delete", port=port)
+        revoked = pushed_reply(runtime, control, process)
+    assert expired is expected and revoked is expected
+    return {"fresh_push_after_expiry": expired, "fresh_push_after_revocation": revoked}
+
+
+def bidirectional_grants(image, prefix, runtime):
+    output_only = {
+        f"ipv{family}": push_family(image, prefix, runtime, family, expected=True)
+        for family in (4, 6)
+    }
+    duplex_policy(image, prefix, runtime)
+    existing = {
+        f"ipv{family}": finite_family(image, prefix, runtime, family)
+        for family in (4, 6)
+    }
+    duplex = {
+        f"ipv{family}": push_family(image, prefix, runtime, family, expected=False)
+        for family in (4, 6)
+    }
+    reachable = network(image, prefix, runtime)
+    assert reachable == {
+        "private_v4": False,
+        "public_v4": True,
+        "private_v6": False,
+        "public_v6": True,
+    }
+    return {
+        "output_only_leaks_incoming_data": output_only,
+        "duplex_request_reply_grants": existing,
+        "duplex_blocks_incoming_data": duplex,
+        "duplex_default_paths": reachable,
     }
 
 
@@ -520,6 +607,9 @@ def qualify(images, prefix, volume):
         "without_filter": unrestricted,
         "direct_socket_ignores_proxy": proxy_ignored,
         "finite_private_grants": finite_grants(
+            images["qualification"], prefix, runtime
+        ),
+        "bidirectional_private_grants": bidirectional_grants(
             images["qualification"], prefix, runtime
         ),
         **results,
