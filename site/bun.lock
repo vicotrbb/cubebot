@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@cubebot/site",
+      "name": "cubebot-site",
       "dependencies": {
         "astro": "7.4.2",
       },
