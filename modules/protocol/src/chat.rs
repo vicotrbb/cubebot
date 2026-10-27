@@ -8,6 +8,8 @@ pub struct InferenceGrant {
     pub authority: Uuid,
     pub expires_in_seconds: u64,
     pub max_attempts: u8,
+    #[serde(default)]
+    pub terminal_enabled: bool,
     pub model: String,
     pub provider_revision: i64,
     pub api_key: String,
@@ -22,6 +24,12 @@ pub struct Message {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ChatEvidence {
+    TerminalOutcome {
+        turn: Uuid,
+        authority: Uuid,
+        invocation: Uuid,
+        outcome: crate::terminal::Outcome,
+    },
     TextIntent {
         turn: Uuid,
         authority: Uuid,

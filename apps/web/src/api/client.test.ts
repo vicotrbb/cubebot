@@ -53,3 +53,42 @@ test('agent loading follows every authorization-filtered page', async () => {
     )
   }
 })
+
+test('terminal outcomes and cancellation retain attributed command results', async () => {
+  const { turn } = await import('./client')
+  const result = turn({
+    id: 'turn',
+    sequence: 1,
+    message: 'run',
+    status: 'cancelled',
+    response: null,
+    error: 'cancelled',
+    authority_id: 'grant',
+    terminal: [
+      {
+        id: 'invocation',
+        command: 'exit 7',
+        status: 'exited',
+        outcome: { status: 'exited', code: 7, output: 'failure' },
+      },
+    ],
+  })
+  assert.deepEqual(result.terminal[0]?.outcome, {
+    status: 'exited',
+    code: 7,
+    output: 'failure',
+  })
+  assert.throws(() =>
+    turn({
+      ...result,
+      terminal: [
+        {
+          id: 'bad',
+          command: 'run',
+          status: 'exited',
+          outcome: { status: 'unsupported' },
+        },
+      ],
+    }),
+  )
+})

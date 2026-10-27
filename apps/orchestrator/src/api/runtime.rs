@@ -21,6 +21,9 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/identity", get(inspect))
         .route("/api/runtime/control", get(control))
         .route("/api/runtime/text/claim", post(claim_text))
+        .route("/api/runtime/terminal", post(terminal))
+        .route("/api/runtime/terminal/renew", post(renew_terminal))
+        .route("/api/runtime/terminal/pending", get(pending_terminal))
         .route("/api/runtime/drained", post(drained))
         .layer(DefaultBodyLimit::max(20 * 1024))
         .merge(
@@ -140,6 +143,41 @@ async fn claim_text(
 ) -> Result<Json<Option<cubebot_protocol::chat::InferenceGrant>>, Failure> {
     identity
         .claim_text(bearer(&headers)?)
+        .await
+        .map(Json)
+        .map_err(Failure::from)
+}
+
+async fn terminal(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Json(input): Json<cubebot_protocol::terminal::Authorization>,
+) -> Result<Json<cubebot_protocol::terminal::Permit>, Failure> {
+    identity
+        .authorize_terminal(bearer(&headers)?, &input)
+        .await
+        .map(Json)
+        .map_err(Failure::from)
+}
+
+async fn pending_terminal(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<cubebot_protocol::terminal::Authorization>>, Failure> {
+    identity
+        .pending_terminal(bearer(&headers)?)
+        .await
+        .map(Json)
+        .map_err(Failure::from)
+}
+
+async fn renew_terminal(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Json(input): Json<cubebot_protocol::terminal::Renewal>,
+) -> Result<Json<cubebot_protocol::terminal::Permit>, Failure> {
+    identity
+        .renew_terminal(bearer(&headers)?, &input)
         .await
         .map(Json)
         .map_err(Failure::from)

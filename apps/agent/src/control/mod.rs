@@ -246,3 +246,65 @@ fn validate_session(
         version: issued.version,
     })
 }
+
+impl RuntimeClient {
+    pub async fn authorize_terminal(
+        &self,
+        input: &cubebot_protocol::terminal::Authorization,
+    ) -> Result<cubebot_protocol::terminal::Permit, Error> {
+        let response = self
+            .request(reqwest::Method::POST, "api/runtime/terminal")?
+            .json(input)
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let permit: cubebot_protocol::terminal::Permit = transport::decode(response).await?;
+        self.valid_session()?;
+        if !(1..=cubebot_protocol::terminal::LEASE_MILLIS).contains(&permit.milliseconds) {
+            return Err(Error::Protocol);
+        }
+        Ok(permit)
+    }
+}
+
+impl RuntimeClient {
+    pub async fn pending_terminal(
+        &self,
+    ) -> Result<Vec<cubebot_protocol::terminal::Authorization>, Error> {
+        let response = self
+            .request(reqwest::Method::GET, "api/runtime/terminal/pending")?
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let pending: Vec<cubebot_protocol::terminal::Authorization> =
+            transport::decode_bounded(response, 256 * 1024).await?;
+        self.valid_session()?;
+        if pending.len() > 8 {
+            return Err(Error::Protocol);
+        }
+        for item in &pending {
+            item.invocation.validate().map_err(|_| Error::Protocol)?;
+        }
+        Ok(pending)
+    }
+}
+
+impl RuntimeClient {
+    pub async fn renew_terminal(
+        &self,
+        input: &cubebot_protocol::terminal::Renewal,
+    ) -> Result<cubebot_protocol::terminal::Permit, Error> {
+        let response = self
+            .request(reqwest::Method::POST, "api/runtime/terminal/renew")?
+            .json(input)
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let permit: cubebot_protocol::terminal::Permit = transport::decode(response).await?;
+        self.valid_session()?;
+        if !(1..=cubebot_protocol::terminal::LEASE_MILLIS).contains(&permit.milliseconds) {
+            return Err(Error::Protocol);
+        }
+        Ok(permit)
+    }
+}

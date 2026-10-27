@@ -25,7 +25,7 @@ impl RuntimeIdentity {
         }
         let connections = self.connections.as_ref();
         let grant = Work::new(self.pool.clone())
-            .claim(&mut tx, &actor, connections)
+            .claim(&mut tx, &actor, connections, self.terminal_enabled)
             .await?;
         tx.commit().await?;
         Ok(grant)

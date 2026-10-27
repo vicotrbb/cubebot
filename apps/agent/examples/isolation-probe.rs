@@ -14,6 +14,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = match args.first().map(String::as_str) {
         Some("serve") => return serve(),
         Some("filesystem") => filesystem()?,
+        Some("terminal" | "terminal-cancel" | "terminal-renew" | "terminal-half-close")
+            if (2..=3).contains(&args.len()) =>
+        {
+            terminal_request(&args)?
+        }
         Some("session") if args.len() == 2 => return session(&args[1]),
         Some("udp-session") if args.len() == 2 => return udp_session(&args[1]),
         Some("connect") if args.len() == 2 => connect(&args[1])?,
@@ -33,13 +38,8 @@ fn identity() -> Result<Value, Box<dyn std::error::Error>> {
     Ok(json!({"uid":uid,"pid_namespace":fs::metadata("/proc/self/ns/pid")?.ino()}))
 }
 fn serve() -> Result<(), Box<dyn std::error::Error>> {
-    let root = std::path::Path::new("/var/lib/cubebot");
-    let mut journal = cubebot_agent::journal::Journal::open(&root.join("journal"))?;
-    journal.append(b"fixture recovery evidence")?;
-    fs::write(
-        root.join("bootstrap-token"),
-        b"fixture-only-not-a-credential",
-    )?;
+    let _journal = fixture_storage()?;
+    serve_http()?;
     for address in ["0.0.0.0:18080", "[::]:18081", "0.0.0.0:18082", "[::]:18083"] {
         let listener = TcpListener::bind(address)?;
         std::thread::spawn(move || respond(listener));
@@ -87,6 +87,9 @@ fn filesystem() -> Result<Value, Box<dyn std::error::Error>> {
     Ok(result)
 }
 fn connect(address: &str) -> Result<Value, Box<dyn std::error::Error>> {
+    if address.starts_with("http://") || address.starts_with("https://") {
+        return http(address);
+    }
     let address: SocketAddr = address.parse()?;
     let connected = TcpStream::connect_timeout(&address, Duration::from_millis(700))
         .and_then(|mut stream| {
@@ -280,4 +283,168 @@ fn serve_push(address: &str, control: &str) -> std::io::Result<()> {
         }
     });
     Ok(())
+}
+
+fn terminal(
+    mode: &str,
+    request: &str,
+    lease_millis: u64,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut socket =
+        std::os::unix::net::UnixStream::connect("/run/cubebot-executor/terminal.sock")?;
+    socket.set_read_timeout(Some(Duration::from_secs(150)))?;
+    let invocation: cubebot_protocol::terminal::Invocation = serde_json::from_str(request)?;
+    invocation.validate().map_err(std::io::Error::other)?;
+    let not_after_millis = cubebot_agent::execution::terminal::monotonic_millis()? + lease_millis;
+    let request = serde_json::to_vec(&cubebot_protocol::terminal::Request::Execute {
+        invocation,
+        not_after_millis,
+    })?;
+    socket.write_all(&(request.len() as u32).to_be_bytes())?;
+    socket.write_all(&request)?;
+    terminal_exchange(socket, mode, lease_millis)
+}
+fn terminal_exchange(
+    socket: std::os::unix::net::UnixStream,
+    mode: &str,
+    lease_millis: u64,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    if mode == "terminal-cancel" {
+        std::thread::sleep(Duration::from_millis(200));
+        return Ok(json!({"cancel_requested":true}));
+    }
+    if mode == "terminal-half-close" {
+        socket.shutdown(std::net::Shutdown::Write)?;
+    }
+    let continuing = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let renewal = if mode == "terminal-renew" {
+        Some(renew_terminal(
+            socket.try_clone()?,
+            continuing.clone(),
+            lease_millis,
+        ))
+    } else {
+        None
+    };
+    let mut output = Vec::new();
+    let read = socket.take(65536).read_to_end(&mut output);
+    continuing.store(false, std::sync::atomic::Ordering::SeqCst);
+    if let Some(renewal) = renewal {
+        let _ = renewal.join();
+    }
+    read?;
+    Ok(serde_json::from_slice(&output)?)
+}
+
+fn fixture_storage() -> Result<cubebot_agent::journal::Journal, Box<dyn std::error::Error>> {
+    let root = std::path::Path::new("/var/lib/cubebot");
+    let mut journal = cubebot_agent::journal::Journal::open(&root.join("journal"))?;
+    journal.append(b"fixture recovery evidence")?;
+    fs::write(
+        root.join("bootstrap-token"),
+        b"fixture-only-not-a-credential",
+    )?;
+    Ok(journal)
+}
+
+fn serve_http() -> std::io::Result<()> {
+    for address in ["0.0.0.0:18084", "[::]:18085"] {
+        let listener = TcpListener::bind(address)?;
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let _ = http_reply(stream);
+            }
+        });
+    }
+    Ok(())
+}
+fn http_reply(mut stream: TcpStream) -> std::io::Result<()> {
+    stream.set_read_timeout(Some(Duration::from_secs(1)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(1)))?;
+    let mut request = String::new();
+    std::io::BufReader::new(&mut stream)
+        .take(1024)
+        .read_line(&mut request)?;
+    let target = if request.starts_with("GET /redirect-private-v6 ") {
+        Some("http://[::1]:18085/")
+    } else if request.starts_with("GET /redirect-private ") {
+        Some("http://127.0.0.1:18084/")
+    } else {
+        None
+    };
+    match target {
+        Some(target) => write!(
+            stream,
+            "HTTP/1.1 302 Found\r\nLocation: {target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        ),
+        None => stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nfixture"),
+    }
+}
+fn http(address: &str) -> Result<Value, Box<dyn std::error::Error>> {
+    let url = reqwest::Url::parse(address)?;
+    let resolve = url
+        .query_pairs()
+        .find(|(key, _)| key == "resolve")
+        .map(|(_, value)| value.parse::<std::net::IpAddr>())
+        .transpose()?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let connected = runtime
+        .block_on(http_request(url, resolve))
+        .unwrap_or(false);
+    Ok(json!({"connected":connected}))
+}
+async fn http_request(
+    url: reqwest::Url,
+    resolve: Option<std::net::IpAddr>,
+) -> Result<bool, reqwest::Error> {
+    let mut builder = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(3))
+        .redirect(reqwest::redirect::Policy::limited(5));
+    if let Some(address) = resolve {
+        builder = builder.resolve(
+            "qualification.invalid",
+            SocketAddr::new(address, url.port_or_known_default().unwrap_or(80)),
+        );
+    }
+    Ok(builder
+        .build()?
+        .get(url)
+        .send()
+        .await?
+        .status()
+        .is_success())
+}
+
+fn renew_terminal(
+    mut socket: std::os::unix::net::UnixStream,
+    continuing: Arc<std::sync::atomic::AtomicBool>,
+    lease_millis: u64,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        while continuing.load(std::sync::atomic::Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(200));
+            let Ok(now) = cubebot_agent::execution::terminal::monotonic_millis() else {
+                return;
+            };
+            if socket
+                .write_all(&(now + lease_millis).to_be_bytes())
+                .is_err()
+            {
+                return;
+            }
+        }
+    })
+}
+
+fn terminal_request(args: &[String]) -> Result<Value, Box<dyn std::error::Error>> {
+    let lease = args
+        .get(2)
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(60000);
+    terminal(&args[0], &args[1], lease)
 }

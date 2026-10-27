@@ -83,9 +83,7 @@ fn network_setup_precedes_tools_without_credential_or_workspace_access() {
     assert_eq!(init["securityContext"]["readOnlyRootFilesystem"], true);
     assert!(init["volumeMounts"].is_null());
     assert!(init["env"].is_null());
-    for container in spec["containers"].as_array().unwrap() {
-        assert!(container["securityContext"]["capabilities"]["add"].is_null());
-    }
+    verify_supervisor_capabilities(&spec);
 }
 
 #[test]
@@ -253,4 +251,14 @@ fn text_chat_pod_launches_only_the_runtime_and_retains_private_storage() {
             .iter()
             .any(|volume| matches!(volume.name.as_str(), "tools-tmp" | "browser-shm"))
     );
+}
+
+fn verify_supervisor_capabilities(spec: &serde_json::Value) {
+    assert!(spec["containers"][0]["securityContext"]["capabilities"]["add"].is_null());
+    assert_eq!(
+        spec["containers"][1]["securityContext"]["capabilities"],
+        json!({"drop":["ALL"],"add":["KILL","SETUID","SETGID"]})
+    );
+    assert_eq!(spec["containers"][1]["securityContext"]["runAsUser"], 0);
+    assert_eq!(spec["containers"][1]["workingDir"], "/");
 }

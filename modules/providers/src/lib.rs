@@ -1,4 +1,4 @@
-//! Native bounded OpenAI text inference. No tools, retries, or provider-side history.
+//! Native bounded OpenAI inference. No automatic retries or provider-side history.
 use cubebot_protocol::chat::Message;
 use reqwest::{Client, Url};
 use serde_json::{Value, json};
@@ -80,28 +80,41 @@ impl OpenAi {
         key: &str,
         messages: &[Message],
     ) -> Result<String, Error> {
+        extract(
+            self.send(
+                key,
+                json!({"model":model,"input":messages,"store":false,"max_output_tokens":2048}),
+            )
+            .await?,
+        )
+    }
+    pub(crate) async fn send(&self, key: &str, body: Value) -> Result<Value, Error> {
         let mut response = self
             .http
             .post(self.endpoint.clone())
             .bearer_auth(key)
-            .json(&json!({"model":model,"input":messages,"store":false,"max_output_tokens":2048}))
+            .json(&body)
             .send()
             .await
-            .map_err(|_| Error::Unavailable)?;
+            .map_err(unavailable)?;
         if !response.status().is_success() {
+            eprintln!(
+                "Provider HTTP failure: status={}",
+                response.status().as_u16()
+            );
             return Err(match response.status().as_u16() {
                 429 | 500..=599 => Error::Transient,
                 _ => Error::Rejected,
             });
         }
         let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unavailable)? {
+        while let Some(chunk) = response.chunk().await.map_err(unavailable)? {
             if bytes.len() + chunk.len() > 256 * 1024 {
                 return Err(Error::InvalidResponse);
             }
             bytes.extend_from_slice(&chunk);
         }
-        extract(serde_json::from_slice(&bytes).map_err(|_| Error::InvalidResponse)?)
+        serde_json::from_slice(&bytes).map_err(|_| Error::InvalidResponse)
     }
 }
 
@@ -133,4 +146,17 @@ fn append_content(text: &mut String, value: &Value) -> Result<(), Error> {
         text.push_str(part["text"].as_str().ok_or(Error::InvalidResponse)?);
     }
     Ok(())
+}
+
+pub mod tools;
+
+// Do not format reqwest errors: their URLs and request data are not diagnostics.
+fn unavailable(error: reqwest::Error) -> Error {
+    eprintln!(
+        "Provider transport unavailable: timeout={} connect={} body={}",
+        error.is_timeout(),
+        error.is_connect(),
+        error.is_body()
+    );
+    Error::Unavailable
 }

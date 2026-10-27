@@ -42,7 +42,7 @@ impl<'a> Observation<'a> {
         let recovery = deleting
             || reason == Some("NodeLost")
             || phase.is_some_and(|phase| !matches!(phase, "Pending" | "Running"))
-            || runtime_stopped(pod);
+            || application_stopped(pod);
         let ready = !recovery
             && status
                 .and_then(|status| status.conditions.as_deref())
@@ -58,17 +58,42 @@ impl<'a> Observation<'a> {
         }
     }
 }
-fn runtime_stopped(pod: &Pod) -> bool {
+fn application_stopped(pod: &Pod) -> bool {
     pod.status
         .as_ref()
         .and_then(|status| status.container_statuses.as_deref())
         .unwrap_or_default()
         .iter()
         .any(|container| {
-            container.name == "runtime"
+            matches!(container.name.as_str(), "runtime" | "tools")
                 && container
                     .state
                     .as_ref()
                     .is_some_and(|state| state.terminated.is_some())
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn executor_exit_requires_recovery_even_while_runtime_is_running() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "status": {
+                "phase": "Running",
+                "conditions": [{"type": "Ready", "status": "True"}],
+                "containerStatuses": [{
+                    "name": "tools", "image": "fixture", "imageID": "fixture",
+                    "ready": false, "restartCount": 0,
+                    "state": {"terminated": {"exitCode": 137}}
+                }]
+            }
+        }))
+        .unwrap();
+        let observed = Observation::pod(&pod);
+        assert!(observed.recovery);
+        assert!(!observed.ready);
+        assert!(!super::super::ownership::termination_proven(&pod));
+    }
 }

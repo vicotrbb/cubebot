@@ -1641,3 +1641,300 @@ async fn wait_native_waiting(
     }
     panic!("native provider failure did not enter durable waiting");
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn terminal_authority_is_finite_immutable_and_cancelled_in_flight() {
+    use cubebot_protocol::terminal::{Authorization, Invocation};
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Terminal authority").await;
+    let auth = auth.with_terminal(true);
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    let input = Authorization {
+        turn: grant.turn,
+        invocation: Invocation {
+            id: Uuid::new_v4(),
+            authority: grant.authority,
+            command: "printf hello".into(),
+        },
+    };
+    assert!(
+        auth.clone()
+            .with_terminal(false)
+            .authorize_terminal(&session.token, &input)
+            .await
+            .is_err()
+    );
+    let auth = auth.with_terminal(true);
+    let first = auth
+        .authorize_terminal(&session.token, &input)
+        .await
+        .unwrap();
+    assert!(first.milliseconds > 0 && first.milliseconds <= 60000);
+    let replay = auth
+        .authorize_terminal(&session.token, &input)
+        .await
+        .unwrap();
+    assert!(replay.milliseconds >= first.milliseconds.saturating_sub(10));
+    let mut changed = Authorization {
+        turn: input.turn,
+        invocation: input.invocation.clone(),
+    };
+    changed.invocation.command = "different effects".into();
+    assert!(
+        auth.authorize_terminal(&session.token, &changed)
+            .await
+            .is_err()
+    );
+    work.cancel(&admin, conversation, grant.turn).await.unwrap();
+    assert!(
+        auth.authorize_terminal(&session.token, &input)
+            .await
+            .is_err()
+    );
+    let history = work.history(&admin, conversation, 0).await.unwrap();
+    assert_eq!(history[0].status, "cancelled");
+    assert_eq!(history[0].terminal[0].command, "printf hello");
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn uncertain_terminal_effects_cannot_be_requeued_and_stale_results_cannot_uncancel() {
+    use cubebot_protocol::{
+        chat::{ChatEvidence, Outcome},
+        terminal::{Authorization, Invocation},
+    };
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Uncertain effects").await;
+    let auth = auth.with_terminal(true);
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    let input = Authorization {
+        turn: grant.turn,
+        invocation: Invocation {
+            id: Uuid::new_v4(),
+            authority: grant.authority,
+            command: "touch uncertain".into(),
+        },
+    };
+    auth.authorize_terminal(&session.token, &input)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE chat_turns SET status='waiting' WHERE id=$1")
+        .bind(grant.turn)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert!(
+        work.retry(
+            &admin,
+            conversation,
+            grant.turn,
+            &cubebot_orchestrator::work::RetryMessage {
+                request_id: Uuid::new_v4(),
+                expected_authority: Some(grant.authority)
+            }
+        )
+        .await
+        .is_err()
+    );
+    work.cancel(&admin, conversation, grant.turn).await.unwrap();
+    let payload = serde_json::to_vec(&ChatEvidence::TextOutcome {
+        turn: grant.turn,
+        authority: grant.authority,
+        outcome: Outcome::Complete {
+            response: "stale result".into(),
+        },
+    })
+    .unwrap();
+    auth.retain_journal(
+        &session.token,
+        &cubebot_protocol::runtime::JournalRecord {
+            sequence: 1,
+            payload,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap()[0].status,
+        "cancelled"
+    );
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn terminal_completion_reconciles_its_own_custody_without_becoming_stale() {
+    use cubebot_protocol::{
+        chat::{ChatEvidence, Outcome},
+        terminal::{Authorization, Invocation},
+    };
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Terminal result").await;
+    let auth = auth.with_terminal(true);
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    let invocation = Invocation {
+        id: Uuid::new_v4(),
+        authority: grant.authority,
+        command: "printf hello".into(),
+    };
+    auth.authorize_terminal(
+        &session.token,
+        &Authorization {
+            turn: grant.turn,
+            invocation: invocation.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let evidence = [
+        ChatEvidence::TerminalOutcome {
+            turn: grant.turn,
+            authority: grant.authority,
+            invocation: invocation.id,
+            outcome: cubebot_protocol::terminal::Outcome::Exited {
+                code: Some(0),
+                output: "hello".into(),
+            },
+        },
+        ChatEvidence::TextOutcome {
+            turn: grant.turn,
+            authority: grant.authority,
+            outcome: Outcome::Complete {
+                response: "verified hello".into(),
+            },
+        },
+    ];
+    for (index, record) in evidence.iter().enumerate() {
+        auth.retain_journal(
+            &session.token,
+            &cubebot_protocol::runtime::JournalRecord {
+                sequence: index as u64 + 1,
+                payload: serde_json::to_vec(record).unwrap(),
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let history = work.history(&admin, conversation, 0).await.unwrap();
+    assert_eq!(history[0].status, "complete");
+    assert_eq!(history[0].response.as_deref(), Some("verified hello"));
+    assert_eq!(history[0].terminal[0].status, "exited");
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn text_authorities_cannot_gain_tools_and_terminal_calls_have_no_count_budget() {
+    use cubebot_protocol::terminal::{Authorization, Invocation};
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Old text authority").await;
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let old = auth.claim_text(&session.token).await.unwrap().unwrap();
+    assert!(!old.terminal_enabled);
+    let auth = auth.with_terminal(true);
+    let request = Authorization {
+        turn: old.turn,
+        invocation: Invocation {
+            id: Uuid::new_v4(),
+            authority: old.authority,
+            command: "true".into(),
+        },
+    };
+    assert!(
+        auth.authorize_terminal(&session.token, &request)
+            .await
+            .is_err()
+    );
+    work.cancel(&admin, conversation, old.turn).await.unwrap();
+    work.send(
+        &admin,
+        conversation,
+        &cubebot_orchestrator::work::SendMessage {
+            request_id: Uuid::new_v4(),
+            message: "New terminal authority".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    assert!(grant.terminal_enabled);
+    for _ in 0..12 {
+        let request = Authorization {
+            turn: grant.turn,
+            invocation: Invocation {
+                id: Uuid::new_v4(),
+                authority: grant.authority,
+                command: "true".into(),
+            },
+        };
+        auth.authorize_terminal(&session.token, &request)
+            .await
+            .unwrap();
+    }
+    let request = Authorization {
+        turn: grant.turn,
+        invocation: Invocation {
+            id: Uuid::new_v4(),
+            authority: grant.authority,
+            command: "true".into(),
+        },
+    };
+    auth.authorize_terminal(&session.token, &request)
+        .await
+        .unwrap();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn active_terminal_authority_renews_without_a_turn_deadline_but_never_revives_expiry() {
+    use cubebot_protocol::terminal::Renewal;
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Renewable terminal").await;
+    let auth = auth.with_terminal(true);
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    let request = Renewal {
+        turn: grant.turn,
+        authority: grant.authority,
+    };
+    sqlx::query("UPDATE chat_authorities SET created_at=clock_timestamp()-interval '1 day', expires_at=clock_timestamp()+interval '5 seconds' WHERE id=$1").bind(grant.authority).execute(&f.pool).await.unwrap();
+    let renewed = auth.renew_terminal(&session.token, &request).await.unwrap();
+    assert!(renewed.milliseconds > 50000);
+    work.cancel(&admin, conversation, grant.turn).await.unwrap();
+    assert!(auth.renew_terminal(&session.token, &request).await.is_err());
+    sqlx::query("UPDATE chat_turns SET status='running' WHERE id=$1")
+        .bind(grant.turn)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE chat_authorities SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    )
+    .bind(grant.authority)
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    assert!(auth.renew_terminal(&session.token, &request).await.is_err());
+    f.task.abort();
+}

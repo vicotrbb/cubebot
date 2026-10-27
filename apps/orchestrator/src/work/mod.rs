@@ -3,6 +3,7 @@ mod access;
 pub(crate) mod evidence;
 mod retry;
 mod runtime;
+pub(crate) mod terminal;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
@@ -40,6 +41,8 @@ pub struct Turn {
     pub response: Option<String>,
     pub error: Option<String>,
     pub authority_id: Option<Uuid>,
+    #[sqlx(skip)]
+    pub terminal: Vec<terminal::Progress>,
 }
 
 impl Work {
@@ -75,8 +78,9 @@ impl Work {
         let mut tx = self.pool.begin().await?;
         let canonical =
             access::conversation(&mut tx, actor, conversation, "conversation.read").await?;
-        let turns = sqlx::query_as("SELECT id,sequence,message,status,response,error,authority_id FROM chat_turns WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 100")
+        let mut turns = sqlx::query_as("SELECT id,sequence,message,status,response,error,authority_id FROM chat_turns WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 100")
             .bind(canonical).bind(after).fetch_all(&mut *tx).await?;
+        Self::progress(&mut tx, &mut turns).await?;
         tx.commit().await?;
         Ok(turns)
     }

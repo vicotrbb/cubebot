@@ -280,7 +280,8 @@ def orchestrator(f, dns):
     config = {
         "connection": {"kind": "in_cluster"},
         "runtime_image": f.images["runtime"],
-        "tools_image": f.images["runtime"],
+        "tools_image": f.images.get("tools", f.images["runtime"]),
+        "terminal_enabled": "tools" in f.images,
         "runtime_service_account": "cubebot-runtime",
         "orchestrator_origin": CONTROL,
         "network": {"dns": [dns], "infrastructure": []},

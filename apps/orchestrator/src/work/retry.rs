@@ -51,7 +51,7 @@ async fn requeue(
     turn: Uuid,
     input: &RetryMessage,
 ) -> Result<(), IdentityError> {
-    let updated: Option<Uuid> = sqlx::query_scalar("UPDATE chat_turns SET status='queued',error=NULL,authority_id=NULL WHERE id=$1 AND conversation_id=$2 AND status='waiting' AND authority_id IS NOT DISTINCT FROM $3 RETURNING id")
+    let updated: Option<Uuid> = sqlx::query_scalar("UPDATE chat_turns SET status='queued',error=NULL,authority_id=NULL WHERE id=$1 AND conversation_id=$2 AND status='waiting' AND NOT EXISTS(SELECT 1 FROM terminal_invocations i WHERE i.turn_id=chat_turns.id AND (i.outcome IS NULL OR i.outcome->>'status'='uncertain')) AND authority_id IS NOT DISTINCT FROM $3 RETURNING id")
                     .bind(turn).bind(agent).bind(input.expected_authority).fetch_optional(&mut **tx).await?;
     updated.ok_or(IdentityError::Conflict)?;
     super::wake(tx, agent).await?;

@@ -90,7 +90,7 @@ impl Reconciler {
         self.registry
             .block(attempt.id, Phase::Bound, "drain_required")
             .await?;
-        if !acknowledged {
+        if !acknowledged && !super::ownership::runtime_termination_proven(pod) {
             return Ok(ReconcileResult::AwaitingDrain {
                 attempt: attempt.id,
             });

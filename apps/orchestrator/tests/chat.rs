@@ -189,12 +189,12 @@ async fn legacy_histories_merge_without_broadening_private_grants() {
         first,
         second,
     } = seed_legacy(&pool).await;
-    sqlx::raw_sql(include_str!(
-        "../migrations/0023_single_agent_conversation.sql"
-    ))
-    .execute(&pool)
-    .await
-    .unwrap();
+    for migration in migrations
+        .iter()
+        .filter(|migration| migration.version >= 23)
+    {
+        sqlx::raw_sql(&migration.sql).execute(&pool).await.unwrap();
+    }
     let actor = cubebot_orchestrator::identity::Actor {
         id: admin,
         administrator: true,

@@ -2,6 +2,7 @@
 mod drain;
 mod journal;
 mod sessions;
+mod terminal;
 mod text;
 use super::{
     AgentId,
@@ -17,6 +18,7 @@ pub struct RuntimeIdentity {
     pool: PgPool,
     api: Kubernetes,
     connections: Option<crate::connections::Connections>,
+    terminal_enabled: bool,
 }
 #[derive(Serialize)]
 pub struct RuntimeSession {
@@ -45,6 +47,7 @@ impl RuntimeIdentity {
             pool,
             api: Kubernetes::new(config, namespace)?,
             connections: None,
+            terminal_enabled: false,
         })
     }
     pub async fn bootstrap(

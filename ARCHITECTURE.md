@@ -1,6 +1,6 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-25 for connection access and repository scaffolding. Status: consolidated architecture proposal grounded in 82 accepted ADRs. The repository now contains identity/lifecycle foundations and a minimal native text-chat implementation. The broader agent system described below remains intended design. See [README](README.md) for the actual runnable scope.
+Design baseline: 2026-10-24, updated 2026-10-25 for connection access and repository scaffolding. Status: consolidated architecture proposal grounded in 82 accepted ADRs. The repository now contains identity/lifecycle foundations and a minimal native text-chat implementation and a gated terminal implementation. The broader agent system described below remains intended design. See [README](README.md) for the actual runnable scope.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 
