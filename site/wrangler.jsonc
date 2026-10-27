@@ -1,0 +1,9 @@
+{
+  // Static site served by a Worker with assets only; no adapter, no server code.
+  "name": "cubebot-site",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page",
+  },
+}
