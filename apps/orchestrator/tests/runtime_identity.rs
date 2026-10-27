@@ -1,122 +1,19 @@
 #[path = "support/registry.rs"]
 mod registry_support;
+#[path = "support/runtime.rs"]
+mod runtime_support;
 mod support;
-use axum::{
-    Json, Router,
-    body::Bytes,
-    extract::State,
-    http::{Method, Uri},
-    routing::any,
-};
+use axum::Router;
 use cubebot_orchestrator::{
     agents::{
-        AgentId,
-        kubernetes::{AttemptId, Layout, Registry, ResourceObject, ResourceSpec},
+        kubernetes::{Registry, ResourceObject},
         runtime::{RuntimeAccess, RuntimeIdentity},
     },
     identity::Identity,
 };
-use k8s_openapi::api::core::v1::Pod;
+use runtime_support::{Fixture, fixture};
 use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
-
-struct Api {
-    pod: Pod,
-    service_uid: String,
-}
-async fn api(
-    State(state): State<Arc<Mutex<Api>>>,
-    method: Method,
-    uri: Uri,
-    bytes: Bytes,
-) -> Json<Value> {
-    let state = state.lock().unwrap();
-    if method == Method::GET {
-        return Json(serde_json::to_value(&state.pod).unwrap());
-    }
-    assert_eq!(uri.path(), "/apis/authentication.k8s.io/v1/tokenreviews");
-    let request: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(request["spec"]["audiences"], json!(["cubebot-runtime"]));
-    Json(
-        json!({"apiVersion":"authentication.k8s.io/v1","kind":"TokenReview","status":{"authenticated":true,"audiences":["cubebot-runtime"],"user":{"username":"system:serviceaccount:cubebot-test:cubebot-runtime","uid":state.service_uid,"extra":{"authentication.kubernetes.io/pod-name":[state.pod.metadata.name],"authentication.kubernetes.io/pod-uid":[state.pod.metadata.uid]}}}}),
-    )
-}
-struct Fixture {
-    pool: sqlx::PgPool,
-    auth: RuntimeIdentity,
-    api: Arc<Mutex<Api>>,
-    task: tokio::task::JoinHandle<()>,
-    agent: AgentId,
-    attempt: AttemptId,
-}
-async fn fixture() -> Fixture {
-    let (pool, registry, agent) = registry_support::setup().await;
-    bind_anchor(&registry).await;
-    let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    let layout = Layout::new(
-        image,
-        image,
-        "cubebot-runtime",
-        "https://cubebot.test",
-        None,
-        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
-            .unwrap(),
-    )
-    .unwrap();
-    let attempt = registry
-        .reserve(
-            agent,
-            2,
-            ResourceSpec::Pod(Box::new(layout.pod("owned-workspace").unwrap())),
-        )
-        .await
-        .unwrap();
-    registry
-        .record_prepared(attempt.id, &attempt.object)
-        .await
-        .unwrap();
-    registry.begin_create(attempt.id).await.unwrap();
-    let ResourceObject::Pod(mut pod) = attempt.object else {
-        panic!("pod expected")
-    };
-    pod.metadata.uid = Some("pod-uid".into());
-    pod.metadata.resource_version = Some("1".into());
-    pod.status = Some(serde_json::from_value(json!({"phase":"Running"})).unwrap());
-    registry
-        .bind_object(attempt.id, &ResourceObject::Pod(pod.clone()))
-        .await
-        .unwrap();
-    let state = Arc::new(Mutex::new(Api {
-        pod: *pod,
-        service_uid: "service-uid".into(),
-    }));
-    let router = Router::new().fallback(any(api)).with_state(state.clone());
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}", listener.local_addr().unwrap());
-    let task = tokio::spawn(async move {
-        axum::serve(listener, router).await.unwrap();
-    });
-    Fixture {
-        auth: RuntimeIdentity::new(
-            pool.clone(),
-            kube::Config::new(url.parse().unwrap()),
-            "cubebot-test",
-        )
-        .unwrap(),
-        pool,
-        api: state,
-        task,
-        agent,
-        attempt: attempt.id,
-    }
-}
-async fn bind_anchor(registry: &Registry) {
-    let mut anchor = registry.configure("cubebot-test").await.unwrap();
-    anchor.metadata.uid = Some("anchor-uid".into());
-    anchor.metadata.resource_version = Some("1".into());
-    registry.bind_anchor(&anchor).await.unwrap();
-}
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
@@ -1101,4 +998,482 @@ async fn journal_reports_recheck_expiry_after_waiting_for_lifecycle_lock() {
             .unwrap();
     assert_eq!(count, 0);
     f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn text_grants_are_single_use_and_recovered_results_commit_once() {
+    use cubebot_orchestrator::{
+        connections::{ConfigureProvider, Connections, Credentials},
+        work::{SendMessage, Work},
+    };
+    use cubebot_protocol::chat::{ChatEvidence, Outcome};
+    let f = fixture().await;
+    let identity = Identity::new(f.pool.clone());
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    connections
+        .configure(
+            &admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 0,
+                model: "test-model".into(),
+                api_key: "test-secret".into(),
+                access: None,
+            },
+        )
+        .await
+        .unwrap();
+    let auth = f.auth.clone().with_credentials(Credentials::new([7; 32]));
+    let work = Work::new(f.pool.clone());
+    let conversation = work.conversation(&admin, f.agent).await.unwrap();
+    work.send(
+        &admin,
+        conversation.id,
+        &SendMessage {
+            request_id: Uuid::new_v4(),
+            message: "Hello".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    assert_eq!(grant.api_key, "test-secret");
+    assert_eq!(grant.messages.last().unwrap().content, "Hello");
+    assert!(grant.expires_in_seconds <= 60);
+    assert!(auth.claim_text(&session.token).await.unwrap().is_none());
+    let evidence = ChatEvidence::TextOutcome {
+        turn: grant.turn,
+        authority: grant.authority,
+        outcome: Outcome::Complete {
+            response: "Hello back".into(),
+        },
+    };
+    let record = cubebot_protocol::runtime::JournalRecord {
+        sequence: 1,
+        payload: serde_json::to_vec(&evidence).unwrap(),
+    };
+    auth.retain_journal(&session.token, &record).await.unwrap();
+    auth.retain_journal(&session.token, &record).await.unwrap();
+    let history = work.history(&admin, conversation.id, 0).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].response.as_deref(), Some("Hello back"));
+    assert!(
+        auth.authenticate(&session.token, RuntimeAccess::Active)
+            .await
+            .is_ok()
+    );
+    connections
+        .configure(
+            &admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 1,
+                model: "test-model".into(),
+                api_key: "test-secret".into(),
+                access: Some(
+                    cubebot_orchestrator::connections::ProviderAccess::ExplicitGrants {
+                        agents: vec![],
+                    },
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    work.send(
+        &admin,
+        conversation.id,
+        &SendMessage {
+            request_id: Uuid::new_v4(),
+            message: "Restricted".into(),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(auth.claim_text(&session.token).await.unwrap().is_none());
+    let blocked = work
+        .history(&admin, conversation.id, 0)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(blocked.status, "waiting");
+    assert!(blocked.authority_id.is_none());
+    connections
+        .configure(
+            &admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 2,
+                model: "test-model".into(),
+                api_key: "test-secret".into(),
+                access: Some(
+                    cubebot_orchestrator::connections::ProviderAccess::ExplicitGrants {
+                        agents: vec![f.agent.0],
+                    },
+                ),
+            },
+        )
+        .await
+        .unwrap();
+    let retry = cubebot_orchestrator::work::RetryMessage {
+        request_id: Uuid::new_v4(),
+        expected_authority: None,
+    };
+    work.retry(&admin, conversation.id, blocked.id, &retry)
+        .await
+        .unwrap();
+    let issued = auth.claim_text(&session.token).await.unwrap().unwrap();
+    work.retry(&admin, conversation.id, blocked.id, &retry)
+        .await
+        .unwrap();
+    assert!(auth.claim_text(&session.token).await.unwrap().is_none());
+    sqlx::query(
+        "UPDATE chat_authorities SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    )
+    .bind(issued.authority)
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    work.recover_expired().await.unwrap();
+    assert_eq!(
+        work.history(&admin, conversation.id, 0).await.unwrap()[1]
+            .error
+            .as_deref(),
+        Some("execution_interrupted")
+    );
+    f.task.abort();
+}
+
+struct TextProvider {
+    fail_first: bool,
+    started: tokio::sync::Notify,
+    finish: tokio::sync::Notify,
+    calls: std::sync::atomic::AtomicUsize,
+}
+async fn text_reply(
+    axum::extract::State(state): axum::extract::State<std::sync::Arc<TextProvider>>,
+    axum::Json(body): axum::Json<Value>,
+) -> (axum::http::StatusCode, axum::Json<Value>) {
+    assert_eq!(body["model"], "controlled-model");
+    assert_eq!(body["store"], false);
+    let call = state
+        .calls
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    let input = body["input"].as_array().unwrap().last().unwrap()["content"]
+        .as_str()
+        .unwrap();
+    if input == "FAIL_PROVIDER" {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(json!({"error":"controlled outage"})),
+        );
+    }
+    if input == "REJECT_PROVIDER" {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            axum::Json(json!({"error":"controlled rejection"})),
+        );
+    }
+    if state.fail_first && call == 0 {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(json!({"error":"transient fixture"})),
+        );
+    }
+    state.started.notify_one();
+    state.finish.notified().await;
+    (
+        axum::http::StatusCode::OK,
+        axum::Json(
+            json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Durable native reply"}]}]}),
+        ),
+    )
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn native_text_result_survives_control_server_restart_without_repeating_inference() {
+    native_recovery(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn native_transient_failure_retries_once_with_durable_progress_and_the_same_model() {
+    native_recovery(true).await;
+}
+
+async fn native_recovery(first_failure: bool) {
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Hello").await;
+    let (origin, server) = runtime_server(auth.clone()).await;
+    let state = std::sync::Arc::new(TextProvider {
+        fail_first: first_failure,
+        started: tokio::sync::Notify::new(),
+        finish: tokio::sync::Notify::new(),
+        calls: std::sync::atomic::AtomicUsize::new(0),
+    });
+    let provider_router = Router::new()
+        .route("/responses", axum::routing::post(text_reply))
+        .with_state(state.clone());
+    let (provider_origin, provider) = http_server(provider_router).await;
+    let mut child = spawn_native_text(&origin, &provider_origin);
+    let root = child.root.clone();
+    tokio::time::timeout(std::time::Duration::from_secs(10), state.started.notified())
+        .await
+        .unwrap();
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap()[0].status,
+        if first_failure { "retrying" } else { "running" }
+    );
+    let restarted =
+        recover_control_server(&origin, auth, server, &state, &root, first_failure).await;
+    wait_native_response(&work, &admin, conversation).await;
+    assert_eq!(
+        state.calls.load(std::sync::atomic::Ordering::SeqCst),
+        1 + usize::from(first_failure)
+    );
+    child.process.kill().unwrap();
+    child.process.wait().unwrap();
+    let history = work.history(&admin, conversation, 0).await.unwrap();
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].response.as_deref(), Some("Durable native reply"));
+    std::fs::remove_dir_all(root).unwrap();
+    restarted.abort();
+    provider.abort();
+    f.task.abort();
+}
+async fn wait_native_evidence(root: &std::path::Path, sequence: u64) {
+    for _ in 0..100 {
+        if root
+            .join(format!("journal/{sequence:016x}.entry"))
+            .is_file()
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    panic!("native response was not journaled during control outage");
+}
+async fn wait_native_response(
+    work: &cubebot_orchestrator::work::Work,
+    admin: &cubebot_orchestrator::identity::Actor,
+    conversation: Uuid,
+) {
+    for _ in 0..150 {
+        if work.history(admin, conversation, 0).await.unwrap()[0]
+            .response
+            .is_some()
+        {
+            return;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("native journal result was not committed after restart");
+}
+
+struct NativeChild {
+    process: std::process::Child,
+    root: std::path::PathBuf,
+}
+impl Drop for NativeChild {
+    fn drop(&mut self) {
+        let _ = self.process.kill();
+        let _ = self.process.wait();
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
+}
+
+async fn native_chat_setup(
+    f: &Fixture,
+    message: &str,
+) -> (
+    RuntimeIdentity,
+    cubebot_orchestrator::work::Work,
+    cubebot_orchestrator::identity::Actor,
+    Uuid,
+) {
+    use cubebot_orchestrator::{
+        connections::{ConfigureProvider, Connections, Credentials},
+        work::{SendMessage, Work},
+    };
+    let identity = Identity::new(f.pool.clone());
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    Connections::new(f.pool.clone(), Credentials::new([7; 32]))
+        .configure(
+            &admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 0,
+                model: "controlled-model".into(),
+                api_key: "controlled-key".into(),
+                access: None,
+            },
+        )
+        .await
+        .unwrap();
+    let work = Work::new(f.pool.clone());
+    let conversation = work.conversation(&admin, f.agent).await.unwrap();
+    work.send(
+        &admin,
+        conversation.id,
+        &SendMessage {
+            request_id: Uuid::new_v4(),
+            message: message.into(),
+        },
+    )
+    .await
+    .unwrap();
+    (
+        f.auth.clone().with_credentials(Credentials::new([7; 32])),
+        work,
+        admin,
+        conversation.id,
+    )
+}
+async fn restart_runtime_server(
+    origin: &str,
+    auth: RuntimeIdentity,
+) -> tokio::task::JoinHandle<()> {
+    let listener = tokio::net::TcpListener::bind(origin.trim_start_matches("http://"))
+        .await
+        .unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, cubebot_orchestrator::api::runtime_router(auth))
+            .await
+            .unwrap();
+    })
+}
+
+async fn recover_control_server(
+    origin: &str,
+    auth: RuntimeIdentity,
+    server: tokio::task::JoinHandle<()>,
+    state: &TextProvider,
+    root: &std::path::Path,
+    first_failure: bool,
+) -> tokio::task::JoinHandle<()> {
+    server.abort();
+    let _ = server.await;
+    state.finish.notify_one();
+    wait_native_evidence(root, if first_failure { 3 } else { 2 }).await;
+    restart_runtime_server(origin, auth).await
+}
+
+fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeChild {
+    use std::os::unix::fs::DirBuilderExt;
+    let root = std::env::temp_dir().join(format!("cubebot-native-text-{}", Uuid::new_v4()));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    let token = root.join("token");
+    std::fs::write(&token, "projected-native-token").unwrap();
+    let binary = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("cubebot-agent");
+    let process = std::process::Command::new(binary)
+        .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
+        .env("CUBEBOT_BOOTSTRAP_TOKEN_FILE", token)
+        .env("CUBEBOT_JOURNAL_DIRECTORY", &root)
+        .env(
+            "CUBEBOT_TEST_PROVIDER_ORIGIN",
+            format!("{provider_origin}/"),
+        )
+        .spawn()
+        .unwrap();
+    NativeChild { process, root }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn native_repeated_transient_failure_waits_after_two_attempts_and_manual_retry_is_idempotent()
+{
+    native_failure("FAIL_PROVIDER", 2).await;
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn native_provider_authentication_rejection_does_not_retry_automatically() {
+    native_failure("REJECT_PROVIDER", 1).await;
+}
+async fn native_failure(message: &str, expected: usize) {
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, message).await;
+    let (origin, server) = runtime_server(auth).await;
+    let state = std::sync::Arc::new(TextProvider {
+        fail_first: false,
+        started: tokio::sync::Notify::new(),
+        finish: tokio::sync::Notify::new(),
+        calls: std::sync::atomic::AtomicUsize::new(0),
+    });
+    let router = Router::new()
+        .route("/responses", axum::routing::post(text_reply))
+        .with_state(state.clone());
+    let (provider_origin, provider) = http_server(router).await;
+    let child = spawn_native_text(&origin, &provider_origin);
+    let before = wait_native_waiting(&work, &admin, conversation).await;
+    assert_eq!(
+        state.calls.load(std::sync::atomic::Ordering::SeqCst),
+        expected
+    );
+    let retry = cubebot_orchestrator::work::RetryMessage {
+        request_id: Uuid::new_v4(),
+        expected_authority: before.authority_id,
+    };
+    work.retry(&admin, conversation, before.id, &retry)
+        .await
+        .unwrap();
+    work.retry(&admin, conversation, before.id, &retry)
+        .await
+        .unwrap();
+    let after = wait_native_waiting(&work, &admin, conversation).await;
+    assert_ne!(before.authority_id, after.authority_id);
+    assert_eq!(
+        state.calls.load(std::sync::atomic::Ordering::SeqCst),
+        expected * 2
+    );
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap().len(),
+        1
+    );
+    drop(child);
+    server.abort();
+    provider.abort();
+    f.task.abort();
+}
+async fn wait_native_waiting(
+    work: &cubebot_orchestrator::work::Work,
+    admin: &cubebot_orchestrator::identity::Actor,
+    conversation: Uuid,
+) -> cubebot_orchestrator::work::Turn {
+    for _ in 0..250 {
+        let turn = work
+            .history(admin, conversation, 0)
+            .await
+            .unwrap()
+            .pop()
+            .unwrap();
+        if turn.status == "waiting" {
+            return turn;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    panic!("native provider failure did not enter durable waiting");
 }

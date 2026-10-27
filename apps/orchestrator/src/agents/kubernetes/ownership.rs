@@ -84,7 +84,11 @@ pub fn termination_proven(pod: &Pod) -> bool {
     {
         return false;
     }
-    let expected = ["runtime", "tools"];
+    let expected: &[&str] = match spec.containers.len() {
+        1 => &["runtime"],
+        2 => &["runtime", "tools"],
+        _ => return false,
+    };
     let shape = spec.containers.len() == expected.len()
         && expected.iter().all(|name| {
             spec.containers

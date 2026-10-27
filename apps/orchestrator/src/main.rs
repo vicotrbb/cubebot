@@ -87,10 +87,10 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             Ok((router, Some(controller)))
         }
         Err(std::env::VarError::NotPresent) => {
-            if std::env::var_os("CUBEBOT_OIDC_CONFIG").is_some()
-                || std::env::var_os("CUBEBOT_CONTROLLER_CONFIG").is_some()
-            {
-                return Err("OIDC and controller configuration require a database".into());
+            if database_required() {
+                return Err(
+                    "Identity, provider and controller configuration require a database".into(),
+                );
             }
             Ok((cubebot_orchestrator::api::router(), None))
         }
@@ -111,4 +111,14 @@ async fn configured_controller(
             "database-only ownership unavailable or controller configuration required".into()
         }),
     }
+}
+
+fn database_required() -> bool {
+    [
+        "CUBEBOT_OIDC_CONFIG",
+        "CUBEBOT_CONTROLLER_CONFIG",
+        "CUBEBOT_CREDENTIAL_KEY_FILE",
+    ]
+    .iter()
+    .any(|key| std::env::var_os(key).is_some())
 }

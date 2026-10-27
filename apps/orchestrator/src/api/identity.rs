@@ -188,6 +188,9 @@ impl IntoResponse for IdentityError {
             Self::Conflict => (StatusCode::CONFLICT, "conflict"),
             Self::Busy => (StatusCode::TOO_MANY_REQUESTS, "identity_busy"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
+            Self::CredentialUnavailable => {
+                (StatusCode::SERVICE_UNAVAILABLE, "credential_unavailable")
+            }
             Self::OidcUnavailable => (StatusCode::SERVICE_UNAVAILABLE, "oidc_unavailable"),
             Self::Database(_) | Self::Password => {
                 (StatusCode::SERVICE_UNAVAILABLE, "identity_unavailable")

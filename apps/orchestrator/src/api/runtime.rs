@@ -20,6 +20,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/bootstrap", post(bootstrap))
         .route("/api/runtime/identity", get(inspect))
         .route("/api/runtime/control", get(control))
+        .route("/api/runtime/text/claim", post(claim_text))
         .route("/api/runtime/drained", post(drained))
         .layer(DefaultBodyLimit::max(20 * 1024))
         .merge(
@@ -131,4 +132,15 @@ async fn no_store(mut response: Response) -> Response {
         );
     }
     response
+}
+
+async fn claim_text(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Option<cubebot_protocol::chat::InferenceGrant>>, Failure> {
+    identity
+        .claim_text(bearer(&headers)?)
+        .await
+        .map(Json)
+        .map_err(Failure::from)
 }

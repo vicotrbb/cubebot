@@ -16,6 +16,7 @@ name = "cubebot-tool-runner"
 path = "src/bin/tool-runner.rs"
 
 [dependencies]
+cubebot-providers = { path = "../../modules/providers" }
 sha2 = "0.10"
 cubebot-protocol.workspace = true
 serde.workspace = true

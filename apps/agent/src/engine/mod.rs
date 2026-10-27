@@ -1,4 +1,5 @@
-//! Native identity/control loop. Turn admission, inference and tool execution remain pending.
+//! Native bounded text-turn loop with durable recovery evidence.
+mod text;
 use crate::{
     control::{Config, RuntimeClient},
     journal::Journal,
@@ -30,7 +31,7 @@ pub async fn run() -> Result<(), &'static str> {
                 }
             }
         }
-        // ponytail: bounded fixed polling; use server push and jitter when delivery is implemented.
+        // ponytail: fixed five-second MVP polling; use push if measured latency requires it.
         tokio::select! {
             _ = shutdown(&mut terminate) => return Ok(()),
             _ = tokio::time::sleep(Duration::from_secs(5)) => (),
@@ -79,13 +80,15 @@ async fn cycle(
     if matches!(control.disposition, RuntimeDisposition::Drain) {
         let request = control.drain.ok_or(Error::Protocol)?;
         *latched = Some(request.request_id);
-        // No turns or tool invocations can run in this control-only engine yet.
-        // Custody acknowledgement permits local cleanup, not semantic acceptance or new work.
+        // Custody permits local cleanup; typed outcomes must reconcile centrally before new work.
         if !journal.pending().is_empty() {
             return Ok(false);
         }
         client.acknowledge_drain(request.request_id).await?;
         return Ok(true);
+    }
+    if text::can_start(control.disposition, journal) {
+        text::execute(client, journal).await?;
     }
     Ok(false)
 }

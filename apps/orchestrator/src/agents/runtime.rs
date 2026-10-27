@@ -2,6 +2,7 @@
 mod drain;
 mod journal;
 mod sessions;
+mod text;
 use super::{
     AgentId,
     kubernetes::{Attempt, AttemptId, Error, Kubernetes, Registry, ResourceObject, ReviewedPod},
@@ -15,6 +16,7 @@ use uuid::Uuid;
 pub struct RuntimeIdentity {
     pool: PgPool,
     api: Kubernetes,
+    connections: Option<crate::connections::Connections>,
 }
 #[derive(Serialize)]
 pub struct RuntimeSession {
@@ -42,6 +44,7 @@ impl RuntimeIdentity {
         Ok(Self {
             pool,
             api: Kubernetes::new(config, namespace)?,
+            connections: None,
         })
     }
     pub async fn bootstrap(

@@ -36,6 +36,7 @@ lint: complexity
     uv run --project tooling/quality --locked ruff check --config tooling/quality/pyproject.toml tooling tests
 
 test:
+    bun test apps/web/src/api/client.test.ts
     cargo test --workspace --locked
     cargo test -p cubebot-agent --example isolation-probe --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'

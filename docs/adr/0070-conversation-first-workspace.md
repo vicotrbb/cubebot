@@ -2,6 +2,8 @@
 
 Status: Accepted
 
+Amended by [ADR 0082](0082-one-permanent-conversation-per-agent.md): each agent has exactly one permanent conversation and manages context within it. Earlier references to multiple conversations for the same agent are superseded.
+
 Date: 2026-10-23
 
 Decision: Organize the web console and installed PWA around conversations with agents and rooms. The user selected this direction on 2026-10-23. Goals, assignments, artifacts, memory, and skills are accessible in the context of a conversation. Work overviews and fleet administration remain available as supporting destinations.

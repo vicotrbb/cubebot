@@ -409,7 +409,7 @@ async fn unapproved_admission_changes_remain_planned_and_recover_after_policy_is
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn removal_of_network_init_is_rejected_before_pod_dispatch() {
+async fn removal_of_runtime_storage_init_is_rejected_before_pod_dispatch() {
     verify_blocked_admission(true).await;
 }
 
@@ -516,19 +516,17 @@ fn complete_pod(state: &Shared) {
         .values_mut()
         .find(|object| object["kind"] == "Pod")
         .unwrap();
-    let containers = ["runtime", "tools"]
-        .into_iter()
-        .map(stopped_container)
-        .collect::<Vec<_>>();
-    let initializers = [
-        "initialize-network",
-        "initialize-runtime",
-        "initialize-tools",
-    ]
-    .into_iter()
-    .map(stopped_container)
-    .collect::<Vec<_>>();
+    let containers = stopped_from_spec(&pod["spec"]["containers"]);
+    let initializers = stopped_from_spec(&pod["spec"]["initContainers"]);
     pod["status"] = json!({"phase":"Succeeded","containerStatuses":containers,"initContainerStatuses":initializers});
+}
+fn stopped_from_spec(value: &Value) -> Vec<Value> {
+    value
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|container| stopped_container(container["name"].as_str().unwrap()))
+        .collect()
 }
 fn stopped_container(name: &str) -> Value {
     let id = format!("containerd://{name}");

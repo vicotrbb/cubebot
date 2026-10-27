@@ -5,10 +5,12 @@
 mod access;
 mod agents;
 mod browser;
+mod connections;
 mod identity;
 mod invitations;
 mod oidc;
 mod runtime;
+mod work;
 
 use axum::{Json, Router, routing::get};
 use cubebot_protocol::{Liveness, LivenessStatus};
@@ -31,6 +33,7 @@ pub fn database_router(pool: sqlx::PgPool) -> Router {
 fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
+        .merge(work::router(pool.clone(), identity.clone()))
         .merge(identity::router(identity.clone()))
         .merge(invitations::router(identity.clone()))
         .merge(access::router(identity))
@@ -42,21 +45,40 @@ pub async fn configured_router(
     origin: Option<String>,
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
 ) -> Result<Router, crate::identity::IdentityError> {
+    let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
+        .map(|path| crate::connections::Credentials::from_file(std::path::Path::new(&path)))
+        .transpose()
+        .map_err(|_| crate::identity::IdentityError::CredentialUnavailable)?;
+    configured_router_with_credentials(pool, origin, config, credentials).await
+}
+
+pub async fn configured_router_with_credentials(
+    pool: sqlx::PgPool,
+    origin: Option<String>,
+    config: Option<(crate::identity::oidc::Config, Option<String>)>,
+    credentials: Option<crate::connections::Credentials>,
+) -> Result<Router, crate::identity::IdentityError> {
     let mut identity = crate::identity::Identity::new(pool.clone());
     if let Some(origin) = origin {
         identity.browser_origin = Some(crate::identity::oidc::Config::public_origin(&origin)?);
     }
-    let routes = if let Some((config, secret)) = config {
+    let mut routes = if let Some((config, secret)) = config {
         if identity.browser_origin.is_some() && identity.browser_origin != Some(config.origin()?) {
             return Err(crate::identity::IdentityError::InvalidInput);
         }
         let oidc = crate::identity::oidc::Oidc::configure(identity, config, secret).await?;
         identity = oidc.identity.clone();
-        identity_router(pool, identity.clone()).merge(self::oidc::router(oidc))
+        identity_router(pool.clone(), identity.clone()).merge(self::oidc::router(oidc))
     } else {
         crate::identity::oidc::disable(&pool).await?;
-        identity_router(pool, identity.clone())
+        identity_router(pool.clone(), identity.clone())
     };
+    if let Some(credentials) = credentials {
+        routes = routes.merge(connections::router(
+            identity.clone(),
+            crate::connections::Connections::new(pool, credentials),
+        ));
+    }
     Ok(routes.layer(axum::middleware::from_fn_with_state(
         identity,
         browser::csrf,

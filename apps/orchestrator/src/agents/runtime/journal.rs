@@ -65,6 +65,10 @@ impl RuntimeIdentity {
             )
             .await?;
         }
+        if crate::work::evidence::reconcile(&mut transaction, actor.agent, &record.payload).await? {
+            sqlx::query("UPDATE agent_journal_records SET reconciled_at=COALESCE(reconciled_at,clock_timestamp()) WHERE agent_id=$1 AND sequence=$2")
+                .bind(actor.agent).bind(sequence).execute(&mut *transaction).await?;
+        }
         transaction.commit().await?;
         Ok(JournalReceipt {
             actor: actor.into(),

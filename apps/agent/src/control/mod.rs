@@ -122,6 +122,28 @@ impl RuntimeClient {
         }
         Ok(control)
     }
+    pub async fn claim_text(
+        &self,
+    ) -> Result<Option<cubebot_protocol::chat::InferenceGrant>, Error> {
+        let response = self
+            .request(reqwest::Method::POST, "api/runtime/text/claim")?
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let grant: Option<cubebot_protocol::chat::InferenceGrant> =
+            transport::decode_bounded(response, 2 * 1024 * 1024).await?;
+        self.valid_session()?;
+        if let Some(grant) = &grant
+            && (grant.turn.is_nil()
+                || grant.authority.is_nil()
+                || grant.provider_revision < 1
+                || grant.max_attempts != 2
+                || !(1..=60).contains(&grant.expires_in_seconds))
+        {
+            return Err(Error::Protocol);
+        }
+        Ok(grant)
+    }
     pub async fn acknowledge_drain(
         &self,
         request_id: Uuid,

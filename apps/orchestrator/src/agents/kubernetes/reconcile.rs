@@ -94,7 +94,7 @@ impl Reconciler {
             .reserve(
                 agent,
                 revision,
-                ResourceSpec::Pod(Box::new(self.layout.pod(name)?)),
+                ResourceSpec::Pod(Box::new(self.layout.text_chat_pod(name)?)),
             )
             .await?;
         let pod_id = pod.id;

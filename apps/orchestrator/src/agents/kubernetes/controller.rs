@@ -32,11 +32,17 @@ impl Controller {
         let api = Kubernetes::new(config.clone(), &identity.namespace)?;
         let reconciler =
             Reconciler::new(pool.clone(), config.clone(), &identity.namespace, layout)?;
-        let runtime = crate::agents::runtime::RuntimeIdentity::new(
+        let mut runtime = crate::agents::runtime::RuntimeIdentity::new(
             pool.clone(),
             config,
             &identity.namespace,
         )?;
+        if let Some(path) = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE") {
+            let credentials =
+                crate::connections::Credentials::from_file(std::path::Path::new(&path))
+                    .map_err(|_| Error::InvalidConfiguration)?;
+            runtime = runtime.with_credentials(credentials);
+        }
         let owner = Owner::acquire(&pool, &api, identity).await?;
         Ok(Self {
             owner,
@@ -68,6 +74,9 @@ impl Controller {
                 return Ok(());
             }
             self.owner.check().await?;
+            crate::work::Work::new(self.pool.clone())
+                .recover_expired()
+                .await?;
             let batch = self.batch(cursor).await?;
             self.reconcile_batch(&batch, &stop).await?;
             if batch.len() == 32 {

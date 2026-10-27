@@ -102,6 +102,20 @@ impl Layout {
         serde_json::from_value(value).map_err(|_| Error::InvalidConfiguration)
     }
 
+    /// MVP pods carry no tool process or tool workspace, and need no privileged network init.
+    pub fn text_chat_pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
+        let mut pod = self.pod(claim_name)?;
+        pod.containers
+            .retain(|container| container.name == "runtime");
+        if let Some(initializers) = &mut pod.init_containers {
+            initializers.retain(|container| container.name == "initialize-runtime");
+        }
+        if let Some(volumes) = &mut pod.volumes {
+            volumes.retain(|volume| !matches!(volume.name.as_str(), "tools-tmp" | "browser-shm"));
+        }
+        Ok(pod)
+    }
+
     fn initialize(&self, directory: &str, uid: i64) -> Value {
         json!({"name":format!("initialize-{directory}"),"image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
             "command":["/usr/local/bin/cubebot-agent"],"args":["--initialize-storage",directory],

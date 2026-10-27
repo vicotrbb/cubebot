@@ -1,10 +1,12 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-25 for connection access and repository scaffolding. Status: consolidated architecture proposal grounded in 81 accepted ADRs. A buildable repository foundation now exists; agent-system behavior has not been implemented or qualified. See [README](README.md) for the actual runnable scope.
+Design baseline: 2026-10-24, updated 2026-10-25 for connection access and repository scaffolding. Status: consolidated architecture proposal grounded in 82 accepted ADRs. The repository now contains identity/lifecycle foundations and a minimal native text-chat implementation. The broader agent system described below remains intended design. See [README](README.md) for the actual runnable scope.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 
 ## Start with the experience
+
+Each agent has exactly one permanent conversation. Selecting it opens that continuous history, and all context management happens within it. There are no separate direct-chat sessions for an agent. See [ADR 0082](docs/adr/0082-one-permanent-conversation-per-agent.md).
 
 A person opens Cubebot, selects an agent or room, and asks for useful work. Cubebot records the request before acknowledging it. A sleeping agent wakes, receives an authorized assignment, retrieves memories or discovers tools when needed, and works through its own Rust loop. It can delegate and yield while waiting. Results, artifacts, and failures retain their task relationships.
 
@@ -92,7 +94,7 @@ Retain durable data until explicit deletion. Retiring or sleeping releases execu
 
 ## Execution and collaboration
 
-Each agent has one serial main lane and a configurable one-to-four concurrent task lanes, default two. A lane is an execution queue, not a transcript. Main-lane work can originate from several conversations; context assembly must select the relevant conversation and assignment explicitly. All lanes share the agent's memory and workspace.
+Each agent has one serial main lane and a configurable one-to-four concurrent task lanes, default two. A lane is an execution queue, not a transcript. Main-lane work uses the agent's permanent conversation; context assembly manages that conversation and the current assignment without creating another chat session. All lanes share the agent's memory and workspace.
 
 Human room mentions create independent assignments for each eligible target. An unmentioned human request invokes the tool-free coordinator, which returns a validated owner, continuation, clarification, or no-action result. Agent-authored progress does not retrigger routing. Delegation and transfer are structured operations with explicit identities and ancestry.
 

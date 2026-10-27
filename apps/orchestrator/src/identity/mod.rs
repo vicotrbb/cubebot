@@ -32,6 +32,7 @@ pub enum IdentityError {
     Password,
     Busy,
     OidcUnavailable,
+    CredentialUnavailable,
 }
 
 impl From<sqlx::Error> for IdentityError {

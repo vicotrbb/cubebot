@@ -53,9 +53,9 @@ The orchestrator owns installation-wide state and rules. `api` translates HTTP r
 
 The agent owns the native loop and all agent-specific behavior. `engine` coordinates turns and recovery; `context` assembles and compacts working context; `memory` owns extraction and dreaming behavior; `skills` loads installed skill revisions; `tools` discovers and dispatches calls; `execution` owns tool-runner behavior; `control` communicates with the orchestrator. The orchestrator remains authoritative for durable records, grants, credential refresh, and memory/skill revisions.
 
-The agent package has two binaries: `cubebot-agent` from `src/main.rs` and `cubebot-tool-runner` from `src/bin/tool-runner.rs`. They belong to one application but run in different containers under [ADR 0033](../adr/0033-separate-runtime-and-tool-containers.md). The tool runner must not inherit runtime identity or provider credentials. Both currently exit unsuccessfully with an explicit unimplemented message; their authentication, execution, and isolation are not implemented.
+The agent package has two binaries: `cubebot-agent` from `src/main.rs` and `cubebot-tool-runner` from `src/bin/tool-runner.rs`. They belong to one application but run in different containers under [ADR 0033](../adr/0033-separate-runtime-and-tool-containers.md). The tool runner must not inherit runtime identity or provider credentials. The runtime now supports authenticated text-turn grants, native OpenAI inference and durable result recovery. Text-chat lifecycle dispatch launches only the runtime; the pre-existing tool runner remains unavailable and is excluded from that Pod.
 
-The web app owns the console and future PWA. Routes compose features. Feature-specific state and components stay with their feature; reusable interface primitives belong in `components`; API client/types and event transport belong in `api`. The current starting page is unchanged by this reorganization.
+The web app owns the console and future PWA. Routes compose features. Feature-specific state and components stay with their feature; reusable interface primitives belong in `components`; API client/types and event transport belong in `api`. The text-chat workspace now implements sign-in/out, authorized agent management, provider configuration and durable conversations.
 
 ## Shared libraries and dependencies
 

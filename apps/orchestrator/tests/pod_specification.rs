@@ -224,3 +224,33 @@ fn verify_container_limits(runtime: &serde_json::Value, tools: &serde_json::Valu
     assert!(runtime["resources"]["limits"]["memory"].is_string());
     assert!(tools["resources"]["limits"]["memory"].is_string());
 }
+
+#[test]
+fn text_chat_pod_launches_only_the_runtime_and_retains_private_storage() {
+    let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    let layout = Layout::new(
+        image,
+        image,
+        "cubebot-runtime",
+        "https://cubebot.test",
+        None,
+        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
+            .unwrap(),
+    )
+    .unwrap();
+    let pod = layout.text_chat_pod("workspace").unwrap();
+    assert_eq!(pod.containers.len(), 1);
+    assert_eq!(pod.containers[0].name, "runtime");
+    assert!(
+        !pod.init_containers
+            .unwrap()
+            .iter()
+            .any(|container| container.name == "initialize-tools")
+    );
+    assert!(
+        !pod.volumes
+            .unwrap()
+            .iter()
+            .any(|volume| matches!(volume.name.as_str(), "tools-tmp" | "browser-shm"))
+    );
+}

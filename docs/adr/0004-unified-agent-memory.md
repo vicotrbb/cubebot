@@ -2,6 +2,8 @@
 
 Status: Accepted
 
+Amended by [ADR 0082](0082-one-permanent-conversation-per-agent.md): each agent has exactly one permanent conversation and manages context within it. Earlier references to multiple conversations for the same agent are superseded.
+
 Date: 2026-10-22
 
 An agent can participate in private conversations, shared rooms, direct agent messaging, and tasks. Its memory model must define whether knowledge learned in one context is available in another.

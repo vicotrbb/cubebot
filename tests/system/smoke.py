@@ -112,7 +112,7 @@ def check_web() -> None:
         {"PORT": str(port), "HOST": "127.0.0.1", "NODE_ENV": "production"},
     ) as process:
         html = await_ready(process, url).decode()
-        assert "A home for your agents." in html
+        assert "Opening Cubebot" in html
         assert '<html lang="en"' in html
         assets = re.findall(r'(?:src|href)="(/assets/[^"\s]+)"', html)
         assert any(asset.endswith(".js") for asset in assets)

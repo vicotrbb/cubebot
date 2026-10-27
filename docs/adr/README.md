@@ -89,6 +89,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0079](0079-explicit-deletion-for-durable-data.md) | Retain durable data until explicitly deleted | Accepted |
 | [0080](0080-agent-completion-with-optional-human-acceptance.md) | Agent completion with optional human acceptance | Accepted |
 | [0081](0081-installation-wide-default-connection-access.md) | Installation-wide connection access by default | Accepted |
+| [0082](0082-one-permanent-conversation-per-agent.md) | One permanent conversation per agent | Accepted |
 
 Discussion will follow dependencies and adapt to answers: installation and trust; primary workflows and operating targets; agent identity and execution; conversations, rooms, tasks, and delegation; persistence and recovery; memory and context; provider and tool integration; console and mobile access; operations and validation.
 
