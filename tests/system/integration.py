@@ -41,6 +41,8 @@ def main():
 def run_database(name, env, password, data, workflow):
     failed = False
     try:
+        # PostgreSQL owns its private PGDATA child; its UID must traverse this parent.
+        os.chmod(data, 0o711)
         run(
             "docker",
             "run",
