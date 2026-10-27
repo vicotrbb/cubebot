@@ -85,3 +85,7 @@ cluster-startup:
 # Builds shipped images; requires an external evidence directory and provider key file.
 cluster-chat:
     uv run --project tooling/quality --locked python tests/system/cluster_chat.py
+
+# Owns a disposable dual-stack cluster for terminal mechanism checks.
+cluster-terminal:
+    uv run --project tooling/quality --locked python tests/system/cluster_terminal.py

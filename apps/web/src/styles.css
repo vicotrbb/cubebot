@@ -346,3 +346,10 @@ button.agent-link.selected {
     margin-top: 40px;
   }
 }
+
+.terminal-result pre {
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

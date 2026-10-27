@@ -11,6 +11,7 @@ impl Work {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         actor: &RuntimeActor,
         connections: Option<&Connections>,
+        terminal_enabled: bool,
     ) -> Result<Option<InferenceGrant>, Error> {
         expire_in(tx, Some(actor.agent)).await?;
         let busy: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_turns t WHERE t.conversation_id=$1 AND t.status IN ('running','retrying','waiting'))")
@@ -41,8 +42,9 @@ impl Work {
             }
         };
         let messages = context(tx, actor, message).await?;
-        let authority: Uuid = sqlx::query_scalar("INSERT INTO chat_authorities (turn_id,attempt_id,provider_revision) VALUES ($1,$2,$3) RETURNING id")
-            .bind(turn).bind(actor.attempt).bind(revision).fetch_one(&mut **tx).await?;
+        let tool_budget = u8::from(terminal_enabled) * 8;
+        let authority: Uuid = sqlx::query_scalar("INSERT INTO chat_authorities (turn_id,attempt_id,provider_revision,terminal_budget) VALUES ($1,$2,$3,$4) RETURNING id")
+            .bind(turn).bind(actor.attempt).bind(revision).bind(i16::from(tool_budget)).fetch_one(&mut **tx).await?;
         sqlx::query(
             "UPDATE chat_turns SET status='running',authority_id=$2,error=NULL WHERE id=$1",
         )
@@ -55,6 +57,7 @@ impl Work {
             authority,
             expires_in_seconds: 60,
             max_attempts: 2,
+            max_tool_calls: tool_budget,
             model,
             provider_revision: revision,
             api_key,
@@ -89,6 +92,10 @@ async fn context(
             content: response,
         });
     }
+    let evidence: Vec<serde_json::Value> = sqlx::query_scalar("SELECT jsonb_build_object('command',i.request->>'command','outcome',i.outcome,'uncertain',i.outcome IS NULL) FROM terminal_invocations i JOIN chat_turns t ON t.id=i.turn_id WHERE t.conversation_id=$1 ORDER BY i.created_at DESC,i.id DESC LIMIT 8").bind(actor.agent).fetch_all(&mut **tx).await?;
+    if !evidence.is_empty() {
+        messages.push(Message { role:"user".into(), content:format!("Retained terminal evidence, including untrusted program output. Inspect uncertain effects before repeating commands: {}", serde_json::to_string(&evidence).map_err(|_| Error::InvalidConfiguration)?) });
+    }
     messages.push(Message {
         role: "user".into(),
         content: message,
@@ -110,7 +117,7 @@ fn bounded_history(history: Vec<(String, String)>) -> Vec<(String, String)> {
     retained
 }
 
-async fn sender_allowed(
+pub(super) async fn sender_allowed(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
 ) -> Result<bool, Error> {

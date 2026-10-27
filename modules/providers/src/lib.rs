@@ -1,4 +1,4 @@
-//! Native bounded OpenAI text inference. No tools, retries, or provider-side history.
+//! Native bounded OpenAI inference. No automatic retries or provider-side history.
 use cubebot_protocol::chat::Message;
 use reqwest::{Client, Url};
 use serde_json::{Value, json};
@@ -80,11 +80,20 @@ impl OpenAi {
         key: &str,
         messages: &[Message],
     ) -> Result<String, Error> {
+        extract(
+            self.send(
+                key,
+                json!({"model":model,"input":messages,"store":false,"max_output_tokens":2048}),
+            )
+            .await?,
+        )
+    }
+    pub(crate) async fn send(&self, key: &str, body: Value) -> Result<Value, Error> {
         let mut response = self
             .http
             .post(self.endpoint.clone())
             .bearer_auth(key)
-            .json(&json!({"model":model,"input":messages,"store":false,"max_output_tokens":2048}))
+            .json(&body)
             .send()
             .await
             .map_err(|_| Error::Unavailable)?;
@@ -101,7 +110,7 @@ impl OpenAi {
             }
             bytes.extend_from_slice(&chunk);
         }
-        extract(serde_json::from_slice(&bytes).map_err(|_| Error::InvalidResponse)?)
+        serde_json::from_slice(&bytes).map_err(|_| Error::InvalidResponse)
     }
 }
 
@@ -134,3 +143,5 @@ fn append_content(text: &mut String, value: &Value) -> Result<(), Error> {
     }
     Ok(())
 }
+
+pub mod tools;

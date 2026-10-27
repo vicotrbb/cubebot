@@ -45,6 +45,13 @@ function stateLabel(message: Turn) {
   if (message.status === 'running') return 'Agent is responding…'
   if (message.status === 'retrying')
     return 'Retrying the selected model after a temporary provider error…'
+  if (message.status === 'cancelled')
+    return 'Cancelled. Workspace changes may already have occurred.'
+  if (
+    message.status === 'waiting' &&
+    message.terminal.some((tool) => tool.status === 'uncertain')
+  )
+    return 'Terminal effects are uncertain. Stop this turn, then ask the agent to inspect the workspace in a new message.'
   if (message.status === 'waiting')
     return `Waiting: ${(message.error ?? 'execution interrupted').replaceAll('_', ' ')}. Retry when ready.`
   return ''
@@ -126,29 +133,12 @@ export function Chat({ id, accountId }: { id: string; accountId: string }) {
           </div>
         )}
         {messages.map((message) => (
-          <article className="exchange" key={message.id}>
-            <div className="human-message">
-              <span className="speaker">You</span>
-              <p>{message.message}</p>
-            </div>
-            <div className="agent-message">
-              <span className="speaker">Agent</span>
-              {message.response !== null ? (
-                <p>{message.response}</p>
-              ) : (
-                <p className="muted" role="status">
-                  {stateLabel(message)}
-                </p>
-              )}
-              {message.status === 'waiting' && (
-                <Retry
-                  conversation={id}
-                  message={message}
-                  onRetried={async () => setMessages(await history(id))}
-                />
-              )}
-            </div>
-          </article>
+          <Exchange
+            key={message.id}
+            conversation={id}
+            message={message}
+            onChanged={async () => setMessages(await history(id))}
+          />
         ))}
       </div>
       {readError && <p role="alert">{readError}</p>}
@@ -236,6 +226,125 @@ function Retry({
         }}
       >
         {busy ? 'Retrying…' : 'Retry response'}
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </>
+  )
+}
+
+function Exchange({
+  conversation,
+  message,
+  onChanged,
+}: {
+  conversation: string
+  message: Turn
+  onChanged: () => Promise<void>
+}) {
+  return (
+    <article className="exchange">
+      <div className="human-message">
+        <span className="speaker">You</span>
+        <p>{message.message}</p>
+      </div>
+      <div className="agent-message">
+        <span className="speaker">Agent</span>
+        {message.response !== null ? (
+          <p>{message.response}</p>
+        ) : (
+          <p className="muted" role="status">
+            {stateLabel(message)}
+          </p>
+        )}
+        {message.status === 'waiting' &&
+          !message.terminal.some((tool) => tool.status === 'uncertain') && (
+            <Retry
+              conversation={conversation}
+              message={message}
+              onRetried={onChanged}
+            />
+          )}
+        <TerminalResults message={message} />
+        {['queued', 'running', 'retrying', 'waiting'].includes(
+          message.status,
+        ) && (
+          <Stop
+            conversation={conversation}
+            message={message}
+            onChanged={onChanged}
+          />
+        )}
+      </div>
+    </article>
+  )
+}
+function TerminalResults({ message }: { message: Turn }) {
+  return (
+    <>
+      {message.terminal.map((tool) => (
+        <details
+          className="terminal-result"
+          key={tool.id}
+          open={tool.status === 'running'}
+        >
+          <summary>Terminal · {tool.status}</summary>
+          <pre>{tool.command}</pre>
+          {tool.outcome?.status === 'exited' && (
+            <p>Exit status: {tool.outcome.code ?? 'terminated by signal'}</p>
+          )}
+          {tool.outcome?.status === 'stopped' && (
+            <p>Stopped: {tool.outcome.reason.replaceAll('_', ' ')}</p>
+          )}
+          {tool.status === 'uncertain' && (
+            <p>
+              Effects are uncertain. This command will not be repeated
+              automatically. Inspect the workspace before continuing.
+            </p>
+          )}
+          {tool.outcome && 'output' in tool.outcome && (
+            <div>
+              <pre>{tool.outcome.output}</pre>
+              <p className="muted">Output capture is limited to 8 KiB.</p>
+            </div>
+          )}
+        </details>
+      ))}
+    </>
+  )
+}
+function Stop({
+  conversation,
+  message,
+  onChanged,
+}: {
+  conversation: string
+  message: Turn
+  onChanged: () => Promise<void>
+}) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  return (
+    <>
+      <button
+        className="secondary"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true)
+          setError('')
+          try {
+            await request(
+              `/conversations/${conversation}/messages/${message.id}/cancel`,
+              {},
+            )
+            await onChanged()
+          } catch (error) {
+            setError(failure(error))
+          } finally {
+            setBusy(false)
+          }
+        }}
+      >
+        {busy ? 'Stopping…' : 'Stop'}
       </button>
       {error && <p role="alert">{error}</p>}
     </>

@@ -45,7 +45,14 @@ def diagnostics(f):
 def workflow(config, name, fixture, artifacts, images):
     from cluster_chat_flow import qualify
 
-    admission.namespaces(config, fixture, ((NAMESPACE, "baseline"),))
+    if "tools" in images:
+        from cluster_terminal_flow import qualify
+
+    admission.namespaces(
+        config,
+        fixture,
+        ((NAMESPACE, "privileged" if "tools" in images else "baseline"),),
+    )
     references = startup.load_images(name, images)
     f = Fixture(config, name, artifacts, references)
     f.save("images.json", references)
@@ -102,7 +109,13 @@ def main():
                 "--driver",
                 "docker-container",
             )
-        images = build_images(builder, name, artifacts, baseline)
+        images = build_images(
+            builder,
+            name,
+            artifacts,
+            baseline,
+            terminal=os.environ.get("CUBEBOT_QUALIFY_TERMINAL") == "1",
+        )
         if admission.fingerprint() != baseline:
             raise RuntimeError("source changed during image build; repeat")
         admission.cluster(config, name, artifacts, partial(workflow, images=images))
@@ -116,13 +129,16 @@ def main():
     print("Owned text-chat qualification and cluster cleanup completed", flush=True)
 
 
-def build_images(builder, name, artifacts, source):
+def build_images(builder, name, artifacts, source, terminal=False):
     images = {}
-    for role, app in (
+    roles = (
         ("runtime", "agent"),
         ("orchestrator", "orchestrator"),
         ("web", "web"),
-    ):
+    )
+    if terminal:
+        roles += (("tools", "agent"),)
+    for role, app in roles:
         image = f"{name}-{role}"
         args = [
             "docker",
@@ -140,8 +156,8 @@ def build_images(builder, name, artifacts, source):
             "--file",
             f"apps/{app}/Dockerfile",
         ]
-        if role == "runtime":
-            args += ["--target", "runtime"]
+        if role in ("runtime", "tools"):
+            args += ["--target", role]
         with (artifacts / f"build-{role}.log").open("w") as log:
             subprocess.run(
                 [*args, "."], stdout=log, stderr=log, check=True, timeout=1200
@@ -152,7 +168,7 @@ def build_images(builder, name, artifacts, source):
 
 def cleanup_images(name, builder):
     failures = []
-    for role in ("runtime", "orchestrator", "web"):
+    for role in ("runtime", "orchestrator", "web", "tools"):
         try:
             admission.run("docker", "image", "rm", f"{name}-{role}")
         except RuntimeError as error:

@@ -6,6 +6,7 @@ pub fn initialize(role: &str) -> io::Result<()> {
     let uid = match role {
         "runtime" => 10001,
         "tools" => 10002,
+        "executor" => 0,
         _ => {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

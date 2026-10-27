@@ -29,6 +29,7 @@ impl Controller {
         layout: Layout,
         identity: PodIdentity,
     ) -> Result<Self, Error> {
+        let terminal_enabled = layout.terminal_enabled();
         let api = Kubernetes::new(config.clone(), &identity.namespace)?;
         let reconciler =
             Reconciler::new(pool.clone(), config.clone(), &identity.namespace, layout)?;
@@ -36,7 +37,8 @@ impl Controller {
             pool.clone(),
             config,
             &identity.namespace,
-        )?;
+        )?
+        .with_terminal(terminal_enabled);
         if let Some(path) = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE") {
             let credentials =
                 crate::connections::Credentials::from_file(std::path::Path::new(&path))

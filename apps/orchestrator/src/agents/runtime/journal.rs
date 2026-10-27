@@ -27,6 +27,11 @@ impl RuntimeIdentity {
         let actor = self.authenticate(token, RuntimeAccess::Recovery).await?;
         let mut transaction = self.lock_runtime(&actor).await?;
         self.recheck(token, &actor, &mut transaction).await?;
+        let was_active: bool =
+            sqlx::query_scalar("SELECT active FROM runtime_session_access WHERE attempt_id=$1")
+                .bind(actor.attempt)
+                .fetch_one(&mut *transaction)
+                .await?;
         sqlx::query(
             "INSERT INTO agent_journal_streams (agent_id) VALUES ($1) ON CONFLICT DO NOTHING",
         )
@@ -42,16 +47,7 @@ impl RuntimeIdentity {
         let sequence = record.sequence as i64;
         let digest: [u8; 32] = Sha256::digest(&record.payload).into();
         if sequence <= through {
-            let payload: Vec<u8> = sqlx::query_scalar(
-                "SELECT payload FROM agent_journal_records WHERE agent_id = $1 AND sequence = $2",
-            )
-            .bind(actor.agent)
-            .bind(sequence)
-            .fetch_one(&mut *transaction)
-            .await?;
-            if payload != record.payload {
-                return Err(Error::Conflict);
-            }
+            verify_existing(&mut transaction, actor.agent, record).await?;
         } else {
             if through.checked_add(1) != Some(sequence) {
                 return Err(Error::Conflict);
@@ -65,7 +61,15 @@ impl RuntimeIdentity {
             )
             .await?;
         }
-        if crate::work::evidence::reconcile(&mut transaction, actor.agent, &record.payload).await? {
+        if crate::work::evidence::reconcile(
+            &mut transaction,
+            actor.agent,
+            actor.attempt,
+            was_active,
+            &record.payload,
+        )
+        .await?
+        {
             sqlx::query("UPDATE agent_journal_records SET reconciled_at=COALESCE(reconciled_at,clock_timestamp()) WHERE agent_id=$1 AND sequence=$2")
                 .bind(actor.agent).bind(sequence).execute(&mut *transaction).await?;
         }
@@ -90,5 +94,23 @@ async fn insert(
         .bind(record.sequence as i64)
         .execute(&mut **transaction)
         .await?;
+    Ok(())
+}
+
+async fn verify_existing(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    agent: super::AgentId,
+    record: &JournalRecord,
+) -> Result<(), Error> {
+    let payload: Vec<u8> = sqlx::query_scalar(
+        "SELECT payload FROM agent_journal_records WHERE agent_id=$1 AND sequence=$2",
+    )
+    .bind(agent)
+    .bind(record.sequence as i64)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if payload != record.payload {
+        return Err(Error::Conflict);
+    }
     Ok(())
 }

@@ -25,7 +25,7 @@ export async function request(path: string, body?: unknown): Promise<unknown> {
     body: body === undefined ? null : JSON.stringify(body),
   })
   if (!response.ok) throw new ApiError(response.status)
-  return response.json()
+  return response.status === 204 ? null : response.json()
 }
 export function failure(error: unknown) {
   return error instanceof Error
@@ -80,7 +80,14 @@ export function turn(value: unknown) {
   const data = record(value)
   const status = string(data.status)
   if (
-    !['queued', 'running', 'retrying', 'waiting', 'complete'].includes(status)
+    ![
+      'queued',
+      'running',
+      'retrying',
+      'waiting',
+      'complete',
+      'cancelled',
+    ].includes(status)
   )
     throw new Error('Invalid server response.')
   return {
@@ -91,6 +98,7 @@ export function turn(value: unknown) {
     response: nullable(data.response),
     error: nullable(data.error),
     authority_id: nullable(data.authority_id),
+    terminal: array(data.terminal, terminalProgress),
   }
 }
 export type Turn = ReturnType<typeof turn>
@@ -129,4 +137,42 @@ export function rejectedInput(error: unknown): boolean {
   return (
     error instanceof ApiError && (error.status === 400 || error.status === 413)
   )
+}
+
+function terminalProgress(value: unknown) {
+  const data = record(value)
+  return {
+    id: string(data.id),
+    command: string(data.command),
+    status: string(data.status),
+    outcome: terminalOutcome(data.outcome),
+  }
+}
+function terminalOutcome(
+  value: unknown,
+):
+  | { status: 'uncertain' }
+  | { status: 'exited'; code: number | null; output: string }
+  | { status: 'stopped'; reason: string; output: string }
+  | null {
+  if (value === null) return null
+  const data = record(value)
+  switch (data.status) {
+    case 'uncertain':
+      return { status: 'uncertain' }
+    case 'exited':
+      return {
+        status: 'exited',
+        code: data.code === null ? null : number(data.code),
+        output: string(data.output),
+      }
+    case 'stopped':
+      return {
+        status: 'stopped',
+        reason: string(data.reason),
+        output: string(data.output),
+      }
+    default:
+      throw new Error('Invalid terminal outcome.')
+  }
 }

@@ -66,7 +66,7 @@ async fn main() {
         json!({"workspace_uid":retained.uid,"first_pod_uid":first_pod.metadata.uid,
         "second_pod_uid":second_pod.metadata.uid,"initializers_succeeded":true,
         "rwop_scheduler_rejected_second_mount":true,"rwop_rejection":rejection,"workspace_bytes_survived":true,
-        "tool_runner_exit_code":1,"working_agent":false,"runtime_authenticated":false,
+        "tool_supervisor_started":true,"working_agent":false,"runtime_authenticated":false,
         "actual_projected_token_exchange":true,"different_process_rejected":true,
         "removed_pod_credentials_rejected":true,"replacement_epoch_increased":true,
         "operator_stop_required":true,"scope":"CSI/layout startup and clean termination only; G1-G3 remain open"})
@@ -143,6 +143,7 @@ fn layout() -> Layout {
         network,
     )
     .unwrap()
+    .with_terminal(true)
 }
 async fn provision(f: &Fixture) -> (Attempt, Attempt) {
     let ReconcileResult::Provisioned { workspace, pod } =
@@ -171,7 +172,7 @@ fn startup_finished(pod: &Pod) -> bool {
         .as_ref()
         .and_then(|status| status.init_container_statuses.as_ref())
         .is_some_and(|items| {
-            items.len() == 3
+            items.len() == 5
                 && items.iter().all(|item| {
                     item.state
                         .as_ref()
@@ -181,9 +182,7 @@ fn startup_finished(pod: &Pod) -> bool {
         });
     initialized
         && state(pod, "runtime").is_some_and(|state| state.running.is_some())
-        && state(pod, "tools")
-            .and_then(|state| state.terminated.as_ref())
-            .is_some_and(|exit| exit.exit_code == 1)
+        && state(pod, "tools").is_some_and(|state| state.running.is_some())
 }
 async fn started(f: &Fixture, attempt: &Attempt) -> Pod {
     for _ in 0..120 {
@@ -206,7 +205,16 @@ async fn started(f: &Fixture, attempt: &Attempt) -> Pod {
                 )
                 .await
                 .unwrap();
-            assert!(logs.contains("Cubebot tool runner is not implemented yet."));
+            assert!(!logs.contains("Terminal supervisor stopped"));
+            assert_eq!(
+                exec(
+                    pod.metadata.name.as_deref().unwrap(),
+                    &["/usr/bin/test", "-S", "/run/cubebot-executor/terminal.sock"],
+                    None
+                )
+                .await,
+                ""
+            );
             save("tool-runner-log.json", &logs);
             return *pod;
         }

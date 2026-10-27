@@ -13,6 +13,7 @@ pub struct Layout {
     runtime_class: Option<String>,
     network: NetworkPolicy,
     control_ca: Option<String>,
+    terminal: bool,
 }
 impl Layout {
     pub fn new(
@@ -42,9 +43,17 @@ impl Layout {
             runtime_class,
             network,
             control_ca: None,
+            terminal: false,
         })
     }
 
+    pub fn with_terminal(mut self, enabled: bool) -> Self {
+        self.terminal = enabled;
+        self
+    }
+    pub fn terminal_enabled(&self) -> bool {
+        self.terminal
+    }
     pub fn with_control_ca(mut self, config_map: &str) -> Result<Self, Error> {
         if config_map.len() > 253
             || !config_map.split('.').all(|part| {
@@ -83,13 +92,14 @@ impl Layout {
             "enableServiceLinks":false,"dnsPolicy":"None","dnsConfig":{"nameservers":self.network.dns().iter().map(ToString::to_string).collect::<Vec<_>>()},"schedulerName":"default-scheduler",
             "runtimeClassName":self.runtime_class,
             "securityContext":{"runAsNonRoot":true,"fsGroup":20000,"fsGroupChangePolicy":"OnRootMismatch","supplementalGroupsPolicy":"Strict","seccompProfile":{"type":"RuntimeDefault"}},
-            "initContainers":[self.initialize_network(),self.initialize("runtime",10001),self.initialize("tools",10002)],
+            "initContainers":[self.initialize_network(),self.initialize("runtime",10001),self.initialize("tools",10002),self.initialize("executor",0),self.initialize_ipc()],
             "containers":[self.runtime(),self.tools()],
             "volumes":[
                 {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name}},
                 {"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}},
                 {"name":"runtime-tmp","emptyDir":{"sizeLimit":"64Mi"}},
                 {"name":"tools-tmp","emptyDir":{"sizeLimit":"1Gi"}},
+                {"name":"executor-ipc","emptyDir":{"sizeLimit":"1Mi"}},
                 {"name":"browser-shm","emptyDir":{"medium":"Memory","sizeLimit":"256Mi"}}
             ]
         });
@@ -105,13 +115,32 @@ impl Layout {
     /// MVP pods carry no tool process or tool workspace, and need no privileged network init.
     pub fn text_chat_pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
         let mut pod = self.pod(claim_name)?;
+        if self.terminal {
+            pod.containers[0]
+                .env
+                .as_mut()
+                .expect("fixed environment")
+                .push(
+                    serde_json::from_value(json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}))
+                        .expect("fixed flag"),
+                );
+            return Ok(pod);
+        }
         pod.containers
             .retain(|container| container.name == "runtime");
+        if let Some(mounts) = &mut pod.containers[0].volume_mounts {
+            mounts.retain(|mount| mount.name != "executor-ipc");
+        }
         if let Some(initializers) = &mut pod.init_containers {
             initializers.retain(|container| container.name == "initialize-runtime");
         }
         if let Some(volumes) = &mut pod.volumes {
-            volumes.retain(|volume| !matches!(volume.name.as_str(), "tools-tmp" | "browser-shm"));
+            volumes.retain(|volume| {
+                !matches!(
+                    volume.name.as_str(),
+                    "tools-tmp" | "browser-shm" | "executor-ipc"
+                )
+            });
         }
         Ok(pod)
     }
@@ -131,22 +160,29 @@ impl Layout {
             "args":["--initialize-network",serde_json::to_string(&self.network).expect("validated network configuration")],
             "securityContext":context,"resources":resources("10m","32Mi","100m","64Mi")})
     }
+    fn initialize_ipc(&self) -> Value {
+        json!({"name":"initialize-executor-ipc","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
+            "command":["/bin/chmod","0755","/run/cubebot-executor"],"securityContext":security(0),"resources":resources("10m","32Mi","100m","64Mi"),
+            "volumeMounts":[{"name":"executor-ipc","mountPath":"/run/cubebot-executor"}]})
+    }
     fn runtime(&self) -> Value {
         json!({"name":"runtime","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
             "command":["/usr/local/bin/cubebot-agent"],"securityContext":security(10001),
             "resources":resources("100m","128Mi","1","512Mi"),
             "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot"}],
-            "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot","subPath":"runtime"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"runtime-tmp","mountPath":"/tmp"}]})
+            "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot","subPath":"runtime"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"runtime-tmp","mountPath":"/tmp"},{"name":"executor-ipc","mountPath":"/run/cubebot-executor","readOnly":true}]})
     }
     fn tools(&self) -> Value {
+        let mut context = security(0);
+        context["capabilities"]["add"] = json!(["KILL", "SETUID", "SETGID"]);
         json!({"name":"tools","image":self.tools_image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-tool-runner"],"securityContext":security(10002),"workingDir":"/home/agent",
-            "resources":resources("100m","256Mi","2","2Gi"),"env":[{"name":"HOME","value":"/home/agent"}],
-            "volumeMounts":[{"name":"workspace","mountPath":"/home/agent","subPath":"tools"},{"name":"tools-tmp","mountPath":"/tmp"},{"name":"browser-shm","mountPath":"/dev/shm"}]})
+            "command":["/usr/local/bin/cubebot-tool-runner"],"securityContext":context,"workingDir":"/",
+            "resources":resources("100m","256Mi","2","2Gi"),"env":[{"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}],
+            "volumeMounts":[{"name":"workspace","mountPath":"/home/agent","subPath":"tools"},{"name":"tools-tmp","mountPath":"/tmp"},{"name":"browser-shm","mountPath":"/dev/shm"},{"name":"workspace","mountPath":"/var/lib/cubebot-executor","subPath":"executor"},{"name":"executor-ipc","mountPath":"/run/cubebot-executor"}]})
     }
 }
 fn security(uid: i64) -> Value {
-    json!({"runAsUser":uid,"runAsGroup":uid,"runAsNonRoot":true,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}})
+    json!({"runAsUser":uid,"runAsGroup":uid,"runAsNonRoot":uid != 0,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}})
 }
 fn resources(cpu: &str, memory: &str, max_cpu: &str, max_memory: &str) -> Value {
     json!({"requests":{"cpu":cpu,"memory":memory,"ephemeral-storage":"64Mi"},"limits":{"cpu":max_cpu,"memory":max_memory,"ephemeral-storage":"1Gi"}})

@@ -19,6 +19,8 @@ USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/cubebot-agent"]
 
 FROM base AS tools
+RUN apt-get update && apt-get install -y --no-install-recommends util-linux bash \
+    && rm -rf /var/lib/apt/lists/*
 RUN install -d -m 0700 -o 10002 -g 10002 /home/agent
 COPY --from=build /src/target/release/cubebot-tool-runner /usr/local/bin/
 USER 10002:10002
@@ -29,9 +31,10 @@ ENTRYPOINT ["/usr/local/bin/cubebot-tool-runner"]
 # Only the disposable qualification fixture includes kernel-policy tooling/probes.
 FROM runtime-image AS qualification
 USER 0:0
-RUN apt-get update && apt-get install -y --no-install-recommends nftables iproute2 \
+RUN apt-get update && apt-get install -y --no-install-recommends nftables iproute2 util-linux bash \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/target/release/examples/isolation-probe /usr/local/bin/
+COPY --from=build /src/target/release/cubebot-tool-runner /usr/local/bin/
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/isolation-probe"]
 

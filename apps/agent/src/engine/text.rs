@@ -33,6 +33,9 @@ async fn infer(
     client: &RuntimeClient,
     journal: &mut Journal,
 ) -> Result<Outcome, Error> {
+    if grant.max_tool_calls > 0 && std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1") {
+        return super::terminal::infer(grant, deadline, client, journal).await;
+    }
     let provider = match configured_provider() {
         Ok(provider) => provider,
         Err(error) => {
@@ -80,7 +83,7 @@ async fn infer(
     })
 }
 
-fn configured_provider() -> Result<cubebot_providers::OpenAi, cubebot_providers::Error> {
+pub(super) fn configured_provider() -> Result<cubebot_providers::OpenAi, cubebot_providers::Error> {
     match std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
         Ok(origin) => cubebot_providers::OpenAi::for_loopback_tests(&origin),
         Err(std::env::VarError::NotPresent) => cubebot_providers::OpenAi::new(),
@@ -102,8 +105,11 @@ async fn model_call(
     .await
     .unwrap_or(Err(cubebot_providers::Error::Unavailable))
 }
-async fn publish_progress(client: &RuntimeClient, journal: &mut Journal) -> Result<bool, Error> {
-    for _ in 0..2 {
+pub(super) async fn publish_progress(
+    client: &RuntimeClient,
+    journal: &mut Journal,
+) -> Result<bool, Error> {
+    for _ in 0..20 {
         let Some(record) = journal.pending().first() else {
             break;
         };
@@ -125,7 +131,7 @@ async fn publish_progress(client: &RuntimeClient, journal: &mut Journal) -> Resu
     Ok(true)
 }
 
-fn bounded_response(response: String) -> Outcome {
+pub(super) fn bounded_response(response: String) -> Outcome {
     // JSON escaping can expand a short text result beyond the private journal record limit.
     if serde_json::to_vec(&response).is_ok_and(|encoded| encoded.len() <= 60 * 1024) {
         Outcome::Complete { response }
@@ -136,7 +142,7 @@ fn bounded_response(response: String) -> Outcome {
     }
 }
 
-fn append(journal: &mut Journal, evidence: &ChatEvidence) -> Result<(), Error> {
+pub(super) fn append(journal: &mut Journal, evidence: &ChatEvidence) -> Result<(), Error> {
     let payload = serde_json::to_vec(evidence).map_err(|_| Error::Journal)?;
     journal.append(&payload).map_err(|_| Error::Journal)?;
     Ok(())

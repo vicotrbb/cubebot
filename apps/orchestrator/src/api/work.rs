@@ -30,6 +30,10 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
             "/api/conversations/{conversation}/messages/{turn}/retry",
             post(retry),
         )
+        .route(
+            "/api/conversations/{conversation}/messages/{turn}/cancel",
+            post(cancel),
+        )
         .layer(DefaultBodyLimit::max(72 * 1024))
         .with_state(Api {
             identity,
@@ -92,4 +96,14 @@ async fn retry(
         [("cache-control", "no-store")],
         Json(api.work.retry(&actor, conversation, turn, &input).await?),
     ))
+}
+
+async fn cancel(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((conversation, turn)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.work.cancel(&actor, conversation, turn).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

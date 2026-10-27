@@ -1,4 +1,5 @@
 //! Native bounded text-turn loop with durable recovery evidence.
+mod terminal;
 mod text;
 use crate::{
     control::{Config, RuntimeClient},
@@ -87,8 +88,25 @@ async fn cycle(
         client.acknowledge_drain(request.request_id).await?;
         return Ok(true);
     }
-    if text::can_start(control.disposition, journal) {
+    advance_work(client, journal, control.disposition).await?;
+    Ok(false)
+}
+
+async fn advance_work(
+    client: &RuntimeClient,
+    journal: &mut Journal,
+    disposition: RuntimeDisposition,
+) -> Result<(), crate::control::Error> {
+    if journal.pending().is_empty()
+        && std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1")
+    {
+        terminal::recover(client, journal).await?;
+        if !journal.pending().is_empty() {
+            return Ok(());
+        }
+    }
+    if text::can_start(disposition, journal) {
         text::execute(client, journal).await?;
     }
-    Ok(false)
+    Ok(())
 }

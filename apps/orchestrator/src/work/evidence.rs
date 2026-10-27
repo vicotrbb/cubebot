@@ -7,6 +7,8 @@ use uuid::Uuid;
 pub(crate) async fn reconcile(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
+    attempt: crate::agents::kubernetes::AttemptId,
+    was_active: bool,
     payload: &[u8],
 ) -> Result<bool, Error> {
     // Other journal formats retain custody without claiming semantic acceptance.
@@ -15,7 +17,10 @@ pub(crate) async fn reconcile(
         Err(_) => return Ok(false),
     };
     let (turn, authority) = match &evidence {
-        ChatEvidence::TextIntent { turn, authority }
+        ChatEvidence::TerminalOutcome {
+            turn, authority, ..
+        }
+        | ChatEvidence::TextIntent { turn, authority }
         | ChatEvidence::TextRetry { turn, authority }
         | ChatEvidence::TextOutcome {
             turn, authority, ..
@@ -29,8 +34,16 @@ pub(crate) async fn reconcile(
     if matches!(evidence, ChatEvidence::TextRetry { .. }) {
         sqlx::query("UPDATE chat_turns SET status='retrying' WHERE id=$1 AND authority_id=$2 AND status='running'").bind(turn).bind(authority).execute(&mut **tx).await?;
     }
+    if let ChatEvidence::TerminalOutcome {
+        invocation,
+        ref outcome,
+        ..
+    } = evidence
+    {
+        super::terminal::outcome(tx, authority, invocation, outcome).await?;
+    }
     if let ChatEvidence::TextOutcome { outcome, .. } = evidence {
-        commit(tx, turn, authority, &outcome).await?;
+        commit(tx, turn, authority, &outcome, attempt, was_active).await?;
     }
     Ok(true)
 }
@@ -40,6 +53,8 @@ async fn commit(
     turn: Uuid,
     authority: Uuid,
     outcome: &Outcome,
+    attempt: crate::agents::kubernetes::AttemptId,
+    was_active: bool,
 ) -> Result<(), Error> {
     let value = serde_json::to_value(outcome).map_err(|_| Error::Conflict)?;
     let old: Option<serde_json::Value> =
@@ -64,7 +79,16 @@ async fn commit(
         .execute(&mut **tx)
         .await?;
     // Retain stale outcomes as evidence; never replace an accepted newer authority or reply.
-    if current != Some(authority) || status == "complete" {
+    if current != Some(authority) || matches!(status.as_str(), "complete" | "cancelled") {
+        return Ok(());
+    }
+    if !terminal_result_current(tx, turn, authority, attempt, was_active).await? {
+        sqlx::query(
+            "UPDATE chat_turns SET status='waiting',error='execution_interrupted' WHERE id=$1",
+        )
+        .bind(turn)
+        .execute(&mut **tx)
+        .await?;
         return Ok(());
     }
     apply(tx, turn, outcome).await
@@ -101,4 +125,28 @@ async fn apply(
         }
     }
     Ok(())
+}
+
+async fn terminal_result_current(
+    tx: &mut Transaction<'_, Postgres>,
+    turn: Uuid,
+    authority: Uuid,
+    attempt: crate::agents::kubernetes::AttemptId,
+    was_active: bool,
+) -> Result<bool, Error> {
+    let terminal: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM terminal_invocations WHERE authority_id=$1)",
+    )
+    .bind(authority)
+    .fetch_one(&mut **tx)
+    .await?;
+    if !terminal {
+        return Ok(true);
+    }
+    if !was_active || !super::runtime::sender_allowed(tx, turn).await? {
+        return Ok(false);
+    }
+    // This record holds new-work admission until reconciliation; it cannot
+    // disqualify itself. The sampled admission still binds the issuing attempt.
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_authorities g JOIN provider_connection p ON p.revision=g.provider_revision WHERE g.id=$1 AND g.attempt_id=$2 AND g.expires_at>clock_timestamp())").bind(authority).bind(attempt).fetch_one(&mut **tx).await?)
 }

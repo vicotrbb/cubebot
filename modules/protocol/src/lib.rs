@@ -17,3 +17,5 @@ pub enum LivenessStatus {
 pub mod chat;
 pub mod network;
 pub mod runtime;
+
+pub mod terminal;

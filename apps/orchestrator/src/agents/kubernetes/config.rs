@@ -15,6 +15,8 @@ pub struct ControllerConfig {
     runtime_class: Option<String>,
     network: cubebot_protocol::network::NetworkPolicy,
     control_ca_config_map: Option<String>,
+    #[serde(default)]
+    terminal_enabled: bool,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -65,7 +67,8 @@ impl ControllerConfig {
             &self.orchestrator_origin,
             self.runtime_class.clone(),
             self.network.clone(),
-        )?;
+        )?
+        .with_terminal(self.terminal_enabled);
         match &self.control_ca_config_map {
             Some(name) => layout.with_control_ca(name),
             None => Ok(layout),

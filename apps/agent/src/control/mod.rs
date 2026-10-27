@@ -138,6 +138,7 @@ impl RuntimeClient {
                 || grant.authority.is_nil()
                 || grant.provider_revision < 1
                 || grant.max_attempts != 2
+                || !matches!(grant.max_tool_calls, 0 | 8)
                 || !(1..=60).contains(&grant.expires_in_seconds))
         {
             return Err(Error::Protocol);
@@ -245,4 +246,46 @@ fn validate_session(
         epoch: issued.epoch,
         version: issued.version,
     })
+}
+
+impl RuntimeClient {
+    pub async fn authorize_terminal(
+        &self,
+        input: &cubebot_protocol::terminal::Authorization,
+    ) -> Result<cubebot_protocol::terminal::Permit, Error> {
+        let response = self
+            .request(reqwest::Method::POST, "api/runtime/terminal")?
+            .json(input)
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let permit: cubebot_protocol::terminal::Permit = transport::decode(response).await?;
+        self.valid_session()?;
+        if !(1..=30000).contains(&permit.milliseconds) {
+            return Err(Error::Protocol);
+        }
+        Ok(permit)
+    }
+}
+
+impl RuntimeClient {
+    pub async fn pending_terminal(
+        &self,
+    ) -> Result<Vec<cubebot_protocol::terminal::Authorization>, Error> {
+        let response = self
+            .request(reqwest::Method::GET, "api/runtime/terminal/pending")?
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let pending: Vec<cubebot_protocol::terminal::Authorization> =
+            transport::decode_bounded(response, 256 * 1024).await?;
+        self.valid_session()?;
+        if pending.len() > 8 {
+            return Err(Error::Protocol);
+        }
+        for item in &pending {
+            item.invocation.validate().map_err(|_| Error::Protocol)?;
+        }
+        Ok(pending)
+    }
 }
