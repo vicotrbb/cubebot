@@ -6,6 +6,7 @@ default:
 # Install exactly the locked dependency graph.
 bootstrap:
     bun install --frozen-lockfile
+    bun install --frozen-lockfile --cwd site
     uv sync --project tooling/quality --locked
     cargo fetch --locked
     cargo install rust-code-analysis-cli --version 0.0.25 --locked --root .tools
@@ -44,6 +45,11 @@ test:
 build:
     cargo build --workspace --locked
     bun run build
+    bun run --cwd site build
+
+# Public landing site; static output in site/dist.
+site-dev:
+    bun run --cwd site dev
 
 # Building first generates the route tree on a fresh checkout.
 check: format-check lint test build

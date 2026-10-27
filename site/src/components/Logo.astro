@@ -1,0 +1,22 @@
+---
+interface Props {
+  size?: number
+}
+const { size = 36 } = Astro.props
+---
+
+<svg
+  width={size}
+  height={size}
+  viewBox="0 0 64 64"
+  role="img"
+  aria-label="Cubebot"
+>
+  <path d="M32 4 56 16v32L32 60 8 48V16z" fill="#F26A1B"></path>
+  <path d="M32 4 56 16 32 28 8 16z" fill="#FF8A3D"></path>
+  <path d="M32 28v32L8 48V16z" fill="#F26A1B"></path>
+  <path d="M32 28v32l24-12V16z" fill="#C9530F"></path>
+  <path
+    d="M15.5 30.5c2.2-.4 4 1.8 3.8 4.6-.2 3-2.1 5.4-4.2 5-2-.5-3.2-3-2.9-5.6.2-2.2 1.5-3.7 3.3-4zM24.5 35.5c2.2-.4 4 1.8 3.8 4.6-.2 3-2.1 5.4-4.2 5-2-.5-3.2-3-2.9-5.6.2-2.2 1.5-3.7 3.3-4z"
+    fill="#2B2420"></path>
+</svg>

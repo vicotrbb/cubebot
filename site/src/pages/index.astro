@@ -1,0 +1,1713 @@
+---
+import Base from '../layouts/Base.astro'
+import Cube from '../components/Cube.astro'
+import Logo from '../components/Logo.astro'
+import Icon from '../components/Icon.astro'
+
+const repo = 'https://github.com/vicotrbb/cubebot'
+const docs = {
+  architecture: `${repo}/blob/main/ARCHITECTURE.md`,
+  manifesto: `${repo}/blob/main/MANIFESTO.md`,
+  adrs: `${repo}/tree/main/docs/adr`,
+}
+
+const anatomy = [
+  {
+    key: 'pod',
+    tone: 'orange',
+    title: 'Its own pod',
+    body: 'A running agent is one Kubernetes pod: a trusted Rust runtime beside a separate tool container. Wake it for work, let it sleep when idle.',
+  },
+  {
+    key: 'volume',
+    tone: 'wood',
+    title: 'A workspace that stays',
+    body: 'Files live on a persistent volume. Sleep, retire, upgrade, or replace the pod; the workspace is still there.',
+  },
+  {
+    key: 'journal',
+    tone: 'paper',
+    title: 'A recovery journal',
+    body: 'Every intent and outcome is written to a private journal before it happens. A crash never replays a tool call blindly.',
+  },
+  {
+    key: 'chat',
+    tone: 'orange',
+    title: 'One permanent conversation',
+    body: 'Exactly one continuous history per agent. No sessions to lose and nothing to re-explain after a restart.',
+  },
+  {
+    key: 'memory',
+    tone: 'sage',
+    title: 'One memory, everywhere',
+    body: 'A single memory pool across every room and task. Idle agents dream: consolidating, reconciling, and summarizing what they learned.',
+  },
+  {
+    key: 'skills',
+    tone: 'wood',
+    title: 'Skills it can grow',
+    body: 'Reusable procedures from a shared library, with revisions and provenance, installed per agent and never a source of extra permissions.',
+  },
+] as const
+
+const steps = [
+  {
+    title: 'Install into a namespace',
+    body: 'One Rust orchestrator, PostgreSQL, and a web console. Bring your own cluster and your own provider keys. Helm packaging is on the roadmap.',
+  },
+  {
+    title: 'Create agents',
+    body: 'A name, instructions, and a model. Each agent gets its pod, volume, journal, and conversation the moment it exists, and sleeps until there is work.',
+  },
+  {
+    title: 'Grant, do not babysit',
+    body: 'Tools, credentials, rooms, and budgets are explicit grants. Agents act inside them without per-call approval, and every important action leaves a record.',
+  },
+  {
+    title: 'Work alongside them',
+    body: 'Chat, rooms, delegation, steering, and inspectable memory from the desktop console or the installable PWA. Stop any goal and its descendants in one move.',
+  },
+]
+
+const status = {
+  today: [
+    'Built-in sign-in, invitations, teams, scoped grants',
+    'Optional OpenID Connect',
+    'Agent definitions with revisions',
+    'Pod and volume reconciliation with guarded shutdown',
+    'Runtime identity and private recovery journal',
+    'Encrypted OpenAI connection',
+    'One permanent conversation per agent',
+  ],
+  progress: [
+    'Cluster fencing and egress qualification',
+    'Finite private-network grants',
+    'Real-cluster acceptance',
+  ],
+  planned: [
+    'Anthropic and compatible providers',
+    'Terminal, browser, files, MCP',
+    'Rooms, mentions, delegation',
+    'Memory retrieval and dreaming',
+    'Shared skill library',
+    'Schedules and triggers',
+    'Full console and PWA',
+    'Backup, restore, scale',
+  ],
+}
+
+const timeline = [
+  {
+    date: 'Oct 24, 2026',
+    datetime: '2026-10-24',
+    state: 'done',
+    title: 'Design baseline',
+    body: 'Manifesto, system architecture, 82 accepted decisions, software specification, qualification plan.',
+  },
+  {
+    date: 'Oct 25, 2026',
+    datetime: '2026-10-25',
+    state: 'done',
+    title: 'Identity and access',
+    body: 'Accounts, invitations, teams, scoped grants, replayable commands, OpenID Connect.',
+  },
+  {
+    date: 'Oct 26, 2026 · being painted',
+    datetime: '2026-10-26',
+    state: 'painting',
+    title: 'Agents on Kubernetes',
+    body: 'Durable definitions, pod and volume reconciliation, runtime identity, journal custody. Fencing and egress still being qualified.',
+  },
+  {
+    date: 'Oct 26, 2026',
+    datetime: '2026-10-26',
+    state: 'done',
+    title: 'Text chat MVP',
+    body: 'Encrypted provider connection, one permanent conversation per agent, restart recovery, a minimal console.',
+  },
+  {
+    date: 'Next',
+    state: 'raw',
+    title: 'Providers and lanes',
+    body: 'Native OpenAI and Anthropic adapters, one main lane plus task lanes, direct inference from the pod.',
+  },
+  {
+    date: 'Then',
+    state: 'raw',
+    title: 'Tools and browser',
+    body: 'Terminal, files, structured browser sessions with live view and takeover, local and remote MCP.',
+  },
+  {
+    date: 'Then',
+    state: 'raw',
+    title: 'Rooms and delegation',
+    body: 'Mentions, a tool-free coordinator, task ancestry, steering, cancellation, shared budgets.',
+  },
+  {
+    date: 'Then',
+    state: 'raw',
+    title: 'Memory and skills',
+    body: 'Hybrid retrieval, dreaming reports, human corrections, a shared skill library with imports.',
+  },
+  {
+    date: 'Later',
+    state: 'raw',
+    title: 'Console, PWA, hardening',
+    body: 'Full workspace UI, notifications, backup and restore, and qualification at 100 registered agents.',
+  },
+] as const
+---
+
+<Base
+  title="Cubebot · A home for your agents"
+  description="Cubebot is a Kubernetes-native runtime for persistent AI agents. Each agent gets a pod, a volume, one permanent conversation, and a memory that outlives any restart. Built in Rust, in the open."
+>
+  <header class="top">
+    <div class="wrap top__row">
+      <a class="brand" href="/">
+        <Logo size={34} />
+        <span>Cubebot</span>
+      </a>
+      <nav class="top__nav" aria-label="Sections">
+        <a href="#agents">Agents</a>
+        <a href="#how">How it works</a>
+        <a href="#status">Status</a>
+        <a href="#roadmap">Roadmap</a>
+      </nav>
+      <a class="btn top__cta" href={repo}>
+        <Icon name="github" />
+        <span>GitHub</span>
+      </a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero__grid">
+        <div class="hero__copy">
+          <h1>A home for your agents.</h1>
+          <p class="hero__lede">
+            Cubebot is a Kubernetes-native runtime for persistent AI agents.
+            Each one gets its own pod, its own volume, one permanent
+            conversation, and a memory that outlives any restart. Built in
+            Rust, in the open, on infrastructure you control.
+          </p>
+          <div class="hero__actions">
+            <a class="btn" href={repo}>
+              <Icon name="github" />
+              <span>Star on GitHub</span>
+            </a>
+            <a class="link" href={docs.architecture}>
+              Read the architecture
+              <Icon name="arrow" />
+            </a>
+          </div>
+          <p class="stamp">
+            <Icon name="brush" />
+            Under development. Building in the open since October 2026.
+          </p>
+        </div>
+
+        <div class="hero__scene" aria-label="An orange block with eyes on a wooden desk, beside a sleeping sage block, a raw wood block, and a small plant" role="img">
+          <div class="desk">
+            <div class="desk__leg desk__leg--l"></div>
+            <div class="desk__leg desk__leg--r"></div>
+            <div class="desk__top"></div>
+            <div class="desk__edge"></div>
+          </div>
+          <div class="plant">
+            <span class="plant__leaf plant__leaf--1"></span>
+            <span class="plant__leaf plant__leaf--2"></span>
+            <span class="plant__leaf plant__leaf--3"></span>
+            <span class="plant__pot"></span>
+            <span class="plant__shadow"></span>
+          </div>
+          <div class="hero__small hero__small--sleep">
+            <Cube size={96} tone="sage" eyes="closed" contact />
+          </div>
+          <div class="hero__big" data-follow>
+            <Cube size={232} eyes="open" contact />
+          </div>
+          <div class="hero__small hero__small--raw">
+            <Cube size={64} tone="wood" contact />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="anatomy" id="agents">
+      <div class="wrap anatomy__grid">
+        <div class="anatomy__intro">
+          <h2>An agent is something you can hold.</h2>
+          <p>
+            Most agent tools give you a chat window and a process that
+            disappears when it closes. Cubebot gives each agent a durable
+            body. Stack the pieces and you have something that keeps its
+            identity through restarts, upgrades, and replaced hardware.
+          </p>
+          <p class="anatomy__hint">Hover a piece to find it in the stack.</p>
+        </div>
+
+        <div class="tower" data-reveal aria-hidden="true">
+          {
+            anatomy.map((part, index) => (
+              <div class="tower__slot" style={`--i:${index}`}>
+                <div class="reveal-item tower__drop" style={`--i:${index}`}>
+                  <Cube
+                    size={92}
+                    tone={part.tone}
+                    label={part.key}
+                    eyes={part.key === 'chat' ? 'open' : 'none'}
+                  />
+                </div>
+              </div>
+            ))
+          }
+          <div class="slab tower__base"></div>
+        </div>
+
+        <dl class="anatomy__list">
+          {
+            anatomy.map((part) => (
+              <div class="anatomy__item">
+                <dt>
+                  <span class:list={['chip', `chip--${part.tone}`]}>{part.key}</span>
+                  {part.title}
+                </dt>
+                <dd>{part.body}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+    </section>
+
+    <section class="how" id="how">
+      <div class="wrap">
+        <div class="how__head">
+          <h2>Your cluster, with a few more residents.</h2>
+          <p>
+            One Rust orchestrator, one PostgreSQL, one pod per agent. Only the
+            orchestrator touches the cluster and the database. Agents talk to
+            model providers themselves, inside the grants you gave them.
+          </p>
+        </div>
+        <div class="how__grid">
+          <div class="cluster" data-reveal aria-label="Diagram: a wooden rack. The console sits on the top shelf and talks to the orchestrator on the middle shelf, which owns PostgreSQL beside it and the agent pods on the bottom shelf. The agents call model providers outside the rack." role="img">
+            <svg class="cluster__cables" viewBox="0 0 620 600" preserveAspectRatio="none" aria-hidden="true">
+              <path id="cable-web" d="M280 150 C280 220 200 200 200 272" />
+              <path id="cable-pg" d="M235 300 H345" />
+              <path id="cable-pod-1" d="M200 330 C200 400 140 380 140 450" />
+              <path id="cable-pod-2" d="M200 330 C200 400 280 380 280 450" />
+              <path id="cable-pod-3" d="M200 330 C200 410 420 370 420 450" />
+              <path id="cable-api" class="cluster__cable--dashed" d="M440 485 H545" />
+              <circle r="6">
+                <animateMotion dur="4.4s" begin="0s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.001;0.2;1" calcMode="linear"><mpath href="#cable-web" /></animateMotion>
+              </circle>
+              <circle r="6">
+                <animateMotion dur="4.4s" begin="0s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.205;0.364;1" calcMode="linear"><mpath href="#cable-pg" /></animateMotion>
+              </circle>
+              <circle r="6">
+                <animateMotion dur="4.4s" begin="0s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.364;0.584;1" calcMode="linear"><mpath href="#cable-pod-2" /></animateMotion>
+              </circle>
+              <circle r="6">
+                <animateMotion dur="4.4s" begin="0s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.398;0.618;1" calcMode="linear"><mpath href="#cable-pod-3" /></animateMotion>
+              </circle>
+              <circle r="6">
+                <animateMotion dur="4.4s" begin="0s" repeatCount="indefinite" keyPoints="0;0;1;1" keyTimes="0;0.659;0.818;1" calcMode="linear"><mpath href="#cable-api" /></animateMotion>
+              </circle>
+            </svg>
+            <div class="cluster__post cluster__post--l"></div>
+            <div class="cluster__post cluster__post--r"></div>
+            <div class="slab cluster__shelf" style="--y:160"></div>
+            <div class="slab cluster__shelf" style="--y:340"></div>
+            <div class="slab cluster__shelf" style="--y:520"></div>
+            <div class="slab cluster__shelf cluster__shelf--api" style="--y:520"></div>
+            <div class="reveal-item cluster__node" style="--i:0;--x:280;--y:160;--s:13">
+              <Cube tone="paper" label="web" contact />
+              <span>Console</span>
+            </div>
+            <div class="reveal-item cluster__node" style="--i:1;--x:200;--y:340;--s:17">
+              <Cube label="orch" contact />
+              <span>Rust orchestrator</span>
+            </div>
+            <div class="reveal-item cluster__node" style="--i:2;--x:380;--y:340;--s:13">
+              <Cube tone="paper" label="pg" contact />
+              <span>PostgreSQL</span>
+            </div>
+            <div class="reveal-item cluster__node" style="--i:3;--x:140;--y:520;--s:14">
+              <Cube tone="sage" eyes="closed" contact />
+              <span>Sleeping</span>
+            </div>
+            <div class="reveal-item cluster__node" style="--i:4;--x:280;--y:520;--s:14">
+              <Cube eyes="open" contact style="--blink-delay:0.9s" />
+              <span>Agent pod</span>
+            </div>
+            <div class="reveal-item cluster__node" style="--i:5;--x:420;--y:520;--s:14">
+              <Cube eyes="open" contact style="--blink-delay:2.3s" />
+              <span>Agent pod</span>
+            </div>
+            <div class="reveal-item cluster__node" style="--i:6;--x:562;--y:520;--s:11.5">
+              <Cube tone="wood" label="api" contact />
+              <span>Model providers</span>
+            </div>
+          </div>
+
+          <ol class="steps">
+            {
+              steps.map((step, index) => (
+                <li class="step">
+                  <span class="step__n">{index + 1}</span>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.body}</p>
+                  </div>
+                </li>
+              ))
+            }
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="status" id="status">
+      <div class="wrap">
+        <div class="status__head">
+          <div>
+            <h2>What runs today.</h2>
+            <p>
+              Cubebot is early, and the page says so. Painted blocks are
+              implemented and validated locally. Half-painted blocks are being
+              qualified. Raw wood is planned, in order, with no dates promised.
+            </p>
+          </div>
+          <div class="paintshop" aria-label="An orange block with eyes watches a raw wood block being painted orange, a can of paint between them" role="img">
+            <div class="slab paintshop__floor"></div>
+            <div class="can">
+              <span class="can__body"></span>
+              <span class="can__top"></span>
+              <span class="can__shadow"></span>
+            </div>
+            <div class="paintshop__painter">
+              <Cube size={92} eyes="open" contact style="--blink-delay:1.7s" />
+            </div>
+            <div class="paintshop__block">
+              <Cube size={128} tone="wood" paint="live" contact />
+            </div>
+          </div>
+        </div>
+        <div class="status__rows">
+          <div class="status__row">
+            <h3><span class="swatch swatch--orange"></span>Runs today</h3>
+            <ul class="chips" data-reveal>
+              {status.today.map((item, i) => <li class="chip chip--orange reveal-item" style={`--i:${i}`}>{item}</li>)}
+            </ul>
+          </div>
+          <div class="status__row">
+            <h3><span class="swatch swatch--half"></span>Being qualified</h3>
+            <ul class="chips" data-reveal>
+              {status.progress.map((item, i) => <li class="chip chip--half reveal-item" style={`--i:${i}`}>{item}</li>)}
+            </ul>
+          </div>
+          <div class="status__row">
+            <h3><span class="swatch swatch--wood"></span>Planned</h3>
+            <ul class="chips" data-reveal>
+              {status.planned.map((item, i) => <li class="chip chip--wood reveal-item" style={`--i:${i}`}>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+        <p class="status__note">
+          Everything above is backed by local tests and controlled fixtures.
+          No cluster security, failover, or scale claim has been qualified yet.
+        </p>
+      </div>
+    </section>
+
+    <section class="roadmap" id="roadmap">
+      <div class="wrap">
+        <h2>The build, block by block.</h2>
+        <div class="roadmap__row">
+          <ol class="timeline" data-reveal>
+            {
+              timeline.map((entry, index) => (
+                <li class:list={['reveal-item', 'milestone', `milestone--${entry.state}`]} style={`--i:${index}`}>
+                  <div class="milestone__block">
+                    <Cube
+                      size={58}
+                      tone={entry.state === 'done' ? 'orange' : 'wood'}
+                      eyes={entry.state === 'done' ? 'open' : 'none'}
+                      paint={entry.state === 'painting'}
+                      style={`--blink-delay:${index * 0.7}s`}
+                      contact
+                    />
+                  </div>
+                  {'datetime' in entry ? (
+                    <time class="milestone__date" datetime={entry.datetime}>{entry.date}</time>
+                  ) : (
+                    <span class="milestone__date">{entry.date}</span>
+                  )}
+                  <h3>{entry.title}</h3>
+                  <p>{entry.body}</p>
+                </li>
+              ))
+            }
+          </ol>
+          <div class="slab slab--roadmap" aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="closing">
+      <div class="wrap closing__grid">
+        <div class="closing__scene" aria-label="The orange block with eyes on its desk, with a sleeping sage block, a raw wood block, and a steaming mug" role="img">
+          <div class="desk">
+            <div class="desk__leg desk__leg--l"></div>
+            <div class="desk__leg desk__leg--r"></div>
+            <div class="desk__top"></div>
+            <div class="desk__edge"></div>
+          </div>
+          <div class="closing__cube closing__cube--sleep">
+            <Cube size={92} tone="sage" eyes="closed" contact />
+          </div>
+          <div class="closing__cube closing__cube--big" data-follow>
+            <Cube size={150} eyes="open" contact />
+          </div>
+          <div class="mug">
+            <span class="mug__steam"><i></i><i></i><i></i></span>
+            <span class="mug__handle"></span>
+            <span class="mug__body"></span>
+            <span class="mug__shadow"></span>
+          </div>
+          <div class="closing__cube closing__cube--raw">
+            <Cube size={64} tone="wood" contact />
+          </div>
+        </div>
+        <div>
+          <h2>Follow the build.</h2>
+          <p>
+            Star the repository to watch milestones land, read the manifesto to
+            see why it is being built this way, or open the architecture and
+            the accepted decisions to see where it is going.
+          </p>
+          <div class="closing__actions">
+            <a class="btn" href={repo}>
+              <Icon name="github" />
+              <span>Star on GitHub</span>
+            </a>
+            <a class="btn btn--paper" href={docs.manifesto}>Read the manifesto</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot__grid">
+      <div class="foot__brand">
+        <Logo size={30} />
+        <div>
+          <strong>Cubebot</strong>
+          <p>Persistent AI agents on Kubernetes you control.</p>
+        </div>
+      </div>
+      <nav class="foot__links" aria-label="Project">
+        <a href={repo}>GitHub</a>
+        <a href={docs.manifesto}>Manifesto</a>
+        <a href={docs.architecture}>Architecture</a>
+        <a href={docs.adrs}>Decisions</a>
+      </nav>
+      <p class="foot__note">Built in the open. Under development. © 2026 Cubebot.</p>
+    </div>
+  </footer>
+</Base>
+
+<script>
+  import '../scripts/cube'
+  import '../scripts/reveal'
+  import '../scripts/nav'
+</script>
+
+<style>
+  /* Header: sticks to the top and picks up a shadow once the page scrolls. */
+  .top {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding-block: 18px;
+    background: var(--desk);
+  }
+  @supports (animation-timeline: scroll()) {
+    .top {
+      animation: top-shadow linear both;
+      animation-timeline: scroll();
+      animation-range: 0 120px;
+    }
+  }
+  @keyframes top-shadow {
+    to {
+      box-shadow: 0 12px 24px -16px rgb(var(--shadow) / 0.4);
+    }
+  }
+  .top__row {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .top__nav {
+    display: flex;
+    gap: 22px;
+    margin-left: auto;
+    font-weight: 600;
+  }
+  .top__nav a {
+    text-decoration: none;
+    padding: 6px 2px;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.15s ease-out;
+  }
+  .top__nav a:hover,
+  .top__nav a.is-current {
+    border-bottom-color: var(--orange);
+  }
+  .top__cta {
+    padding: 10px 16px 12px;
+  }
+
+  /* Hero */
+  .hero {
+    padding-block: clamp(32px, 7vw, 88px) clamp(48px, 8vw, 110px);
+    overflow: clip;
+  }
+  .hero__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: center;
+  }
+  h1 {
+    font-size: clamp(2.8rem, 7.2vw, 5.6rem);
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
+  }
+  .hero__lede {
+    max-width: var(--measure);
+    margin-top: 28px;
+    font-size: clamp(1.1rem, 1.6vw, 1.3rem);
+    line-height: 1.5;
+    color: var(--ink-soft);
+  }
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 28px;
+    margin-top: 36px;
+  }
+  /* Rubber-stamped on the desk: ink outline, slight tilt, no fill. */
+  .stamp {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 32px;
+    padding: 7px 14px;
+    border: 2px solid var(--orange-base);
+    border-radius: 6px;
+    color: var(--orange-base);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    transform: rotate(-1.4deg);
+    mask-image: radial-gradient(circle at 30% 60%, transparent 0.5px, #000 1.2px);
+  }
+  .stamp :global(svg) {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Hero scene: a wooden desk seen slightly from above, blocks standing on it. */
+  .hero__scene {
+    --desk-surface: 118px; /* distance from scene bottom to the desk's top surface */
+    position: relative;
+    height: 460px;
+  }
+  .desk {
+    position: absolute;
+    left: -6%;
+    right: -6%;
+    bottom: 40px;
+    height: 140px;
+  }
+  .desk__top {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 54px;
+    height: 34px;
+    border-radius: 10px 10px 3px 3px;
+    background:
+      repeating-linear-gradient(
+        93deg,
+        transparent 0 22px,
+        rgb(201 162 107 / 0.22) 22px 23px,
+        transparent 23px 51px,
+        rgb(201 162 107 / 0.12) 51px 54px
+      ),
+      linear-gradient(180deg, #f3deba, #e6c99c);
+    box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.5);
+  }
+  .desk__edge {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 34px;
+    height: 22px;
+    border-radius: 0 0 8px 8px;
+    background: linear-gradient(180deg, var(--wood-deep), var(--wood-grain));
+    box-shadow: 0 14px 26px -12px rgb(var(--shadow) / 0.45);
+  }
+  .desk__leg {
+    position: absolute;
+    bottom: 0;
+    width: 22px;
+    height: 44px;
+    border-radius: 0 0 7px 7px;
+    background: linear-gradient(90deg, #b8955d, #a37f49);
+  }
+  .desk__leg--l {
+    left: 6%;
+  }
+  .desk__leg--r {
+    right: 6%;
+  }
+
+  .hero__big {
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--desk-surface) + 22px);
+    translate: -50% 0;
+    animation: bob 4.6s ease-in-out infinite;
+  }
+  .hero__big :global(.contact) {
+    animation: shade 4.6s ease-in-out infinite;
+  }
+  .hero__small {
+    position: absolute;
+  }
+  .hero__small--sleep {
+    left: 1%;
+    bottom: calc(var(--desk-surface) + 10px);
+  }
+  .hero__small--sleep :global(.cube) {
+    --ry: 34deg;
+  }
+  /* The raw block sits closer to the viewer, in front of the cube's corner. */
+  .hero__small--raw {
+    left: 23%;
+    bottom: calc(var(--desk-surface) - 6px);
+  }
+  .hero__small--raw :global(.cube) {
+    --ry: -24deg;
+  }
+
+  /* A small plant keeps the cube company. */
+  .plant {
+    position: absolute;
+    right: -2%;
+    bottom: calc(var(--desk-surface) + 6px);
+    width: 64px;
+    height: 110px;
+  }
+  .plant__pot {
+    position: absolute;
+    left: 10px;
+    bottom: 0;
+    width: 44px;
+    height: 38px;
+    border-radius: 4px 4px 10px 10px;
+    clip-path: polygon(0 0, 100% 0, 88% 100%, 12% 100%);
+    background: linear-gradient(90deg, var(--orange-deep), var(--orange) 55%, var(--orange-deep));
+  }
+  .plant__pot::before {
+    content: '';
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    top: 0;
+    height: 9px;
+    background: var(--orange-top);
+  }
+  .plant__leaf {
+    position: absolute;
+    bottom: 30px;
+    left: 24px;
+    width: 18px;
+    height: 56px;
+    border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+    background: linear-gradient(180deg, var(--sage-top), var(--sage-deep));
+    transform-origin: 50% 100%;
+    animation: sway 5.2s ease-in-out infinite;
+  }
+  .plant__leaf--1 {
+    transform: rotate(-28deg);
+  }
+  .plant__leaf--2 {
+    height: 66px;
+    transform: rotate(2deg);
+    animation-delay: 0.6s;
+  }
+  .plant__leaf--3 {
+    transform: rotate(30deg);
+    animation-delay: 1.1s;
+  }
+  .plant__shadow {
+    position: absolute;
+    left: 0;
+    bottom: -8px;
+    width: 64px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(var(--shadow) / 0.26), transparent);
+  }
+
+  @keyframes bob {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-9px);
+    }
+  }
+  @keyframes shade {
+    0%,
+    100% {
+      transform: translateX(-50%) scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: translateX(-50%) scale(0.9);
+      opacity: 0.75;
+    }
+  }
+  @keyframes sway {
+    0%,
+    100% {
+      rotate: 0deg;
+    }
+    50% {
+      rotate: 5deg;
+    }
+  }
+
+  /* Section rhythm */
+  section {
+    padding-block: clamp(56px, 9vw, 120px);
+    scroll-margin-top: 72px;
+  }
+  h2 {
+    font-size: clamp(2rem, 4.2vw, 3.1rem);
+    max-width: 18ch;
+  }
+  h2 + p,
+  .anatomy__intro p,
+  .status__head p,
+  .closing p {
+    max-width: var(--measure);
+    margin-top: 20px;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+  }
+
+  /* Slab: a short wooden shelf blocks rest on. Top surface plus a darker front edge. */
+  .slab {
+    position: relative;
+    height: 34px;
+  }
+  .slab::before,
+  .slab::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+  }
+  .slab::before {
+    top: 0;
+    height: 20px;
+    border-radius: 8px 8px 2px 2px;
+    background:
+      repeating-linear-gradient(
+        93deg,
+        transparent 0 22px,
+        rgb(201 162 107 / 0.22) 22px 23px,
+        transparent 23px 51px,
+        rgb(201 162 107 / 0.12) 51px 54px
+      ),
+      linear-gradient(180deg, #f3deba, #e6c99c);
+    box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.5);
+  }
+  .slab::after {
+    top: 20px;
+    height: 14px;
+    border-radius: 0 0 6px 6px;
+    background: linear-gradient(180deg, var(--wood-deep), var(--wood-grain));
+    box-shadow: 0 12px 24px -12px rgb(var(--shadow) / 0.45);
+  }
+
+  /* Anatomy */
+  .anatomy {
+    background: var(--desk-deep);
+  }
+  .anatomy__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 180px minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: start;
+  }
+  .anatomy__intro {
+    position: sticky;
+    top: 96px;
+  }
+  .anatomy__hint {
+    font-size: 0.95rem !important;
+    margin-top: 28px !important;
+  }
+  .tower {
+    position: relative;
+    height: calc(6 * 92px + 150px);
+    perspective: 1400px;
+  }
+  .tower__slot {
+    position: absolute;
+    left: 44px;
+    bottom: 92px;
+    transform: translateY(calc(-1 * var(--i) * 92px));
+  }
+  /* Opacity would flatten the 3D block, so the tower only drops into place,
+     from higher up and with a small overshoot, pod first. */
+  :global(.js) .tower .tower__drop {
+    opacity: 1;
+    transform: translateY(-140px);
+  }
+  :global(.js) .tower.is-in .tower__drop {
+    transform: translateY(0);
+    transition: transform 0.6s cubic-bezier(0.34, 1.35, 0.64, 1) calc(var(--i) * 120ms);
+  }
+  /* Each block turns to face you as it scrolls into view. */
+  @supports (animation-timeline: view()) {
+    .tower :global(.cube__body) {
+      animation: turn linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 100%;
+    }
+  }
+  @keyframes turn {
+    from {
+      transform: rotateX(var(--rx)) rotateY(calc(var(--ry) + 70deg));
+    }
+    to {
+      transform: rotateX(var(--rx)) rotateY(var(--ry));
+    }
+  }
+  .tower__base {
+    position: absolute;
+    left: -28px;
+    right: -28px;
+    bottom: 50px;
+  }
+  .tower__slot :global(.cube) {
+    --ry: 28deg;
+  }
+  /* Hovering a part lifts and turns its block in the stack. */
+  .anatomy__grid:has(.anatomy__item:nth-child(1):hover) .tower__slot:nth-child(1) :global(.cube),
+  .anatomy__grid:has(.anatomy__item:nth-child(2):hover) .tower__slot:nth-child(2) :global(.cube),
+  .anatomy__grid:has(.anatomy__item:nth-child(3):hover) .tower__slot:nth-child(3) :global(.cube),
+  .anatomy__grid:has(.anatomy__item:nth-child(4):hover) .tower__slot:nth-child(4) :global(.cube),
+  .anatomy__grid:has(.anatomy__item:nth-child(5):hover) .tower__slot:nth-child(5) :global(.cube),
+  .anatomy__grid:has(.anatomy__item:nth-child(6):hover) .tower__slot:nth-child(6) :global(.cube) {
+    --ry: 58deg;
+    translate: 18px -6px;
+  }
+  .anatomy__list {
+    margin: 0;
+    display: grid;
+    gap: 30px;
+  }
+  .anatomy__item {
+    padding: 6px 10px;
+    margin: -6px -10px;
+    border-radius: var(--radius);
+    transition: background-color 0.2s ease-out;
+  }
+  .anatomy__item:hover {
+    background: rgb(255 253 249 / 0.55);
+  }
+  .anatomy__item dt {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 800;
+    font-size: 1.2rem;
+    letter-spacing: -0.015em;
+  }
+  .anatomy__item dd {
+    margin: 10px 0 0;
+    color: var(--ink-soft);
+  }
+
+  /* Chips: small blocks seen from the front. Pick one up on hover. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px 8px;
+    border-radius: 8px;
+    border-bottom: 3px solid var(--orange-deep);
+    background: var(--orange);
+    color: var(--ink);
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    line-height: 1.25;
+    transition:
+      translate 0.2s var(--settle),
+      box-shadow 0.2s ease-out;
+  }
+  .chips .chip:hover {
+    translate: 0 -3px;
+    box-shadow: 0 10px 16px -8px rgb(var(--shadow) / 0.4);
+  }
+  .chip--orange {
+    background: var(--orange);
+    border-bottom-color: var(--orange-deep);
+  }
+  .chip--sage {
+    background: var(--sage);
+    border-bottom-color: var(--sage-deep);
+  }
+  .chip--paper {
+    background: var(--paper);
+    border-bottom-color: var(--paper-deep);
+  }
+  .chip--wood {
+    background: var(--wood);
+    border-bottom-color: var(--wood-deep);
+  }
+  /* Half-painted: the orange end stops before the lettering. */
+  .chip--half {
+    padding-left: 20px;
+    background: var(--wood);
+    border-bottom-color: var(--wood-deep);
+    box-shadow: inset 10px 0 0 var(--orange);
+  }
+  .chips .chip--half:hover {
+    box-shadow:
+      inset 10px 0 0 var(--orange),
+      0 10px 16px -8px rgb(var(--shadow) / 0.4);
+  }
+
+  /* How it works */
+  .how__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: end;
+  }
+  .how__head p {
+    margin-top: 0;
+  }
+  .how__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(32px, 6vw, 96px);
+    margin-top: 56px;
+    align-items: center;
+  }
+  /* The cluster is a wooden rack: blocks stand on three shelves, cables run
+     between them behind the shelves, and messages ride the cables. The scene
+     is a fixed 620 x 600 box so cables and blocks scale together. */
+  .cluster {
+    --w: 620;
+    --h: 600;
+    position: relative;
+    width: 100%;
+    max-width: 620px;
+    aspect-ratio: 620 / 600;
+    margin-inline: auto;
+    container-type: inline-size;
+  }
+  .cluster__cables {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: rgb(var(--shadow) / 0.45);
+    stroke-width: 3;
+    stroke-linecap: round;
+  }
+  .cluster__cable--dashed {
+    stroke-dasharray: 7 8;
+  }
+  .cluster__cables circle {
+    fill: var(--orange);
+    stroke: none;
+  }
+  .cluster__post {
+    position: absolute;
+    top: calc(118 / var(--h) * 100%);
+    bottom: calc(44 / var(--h) * 100%);
+    width: calc(14 / var(--w) * 100%);
+    border-radius: 4px 4px 2px 2px;
+    background: linear-gradient(90deg, #b8955d, #a37f49);
+  }
+  .cluster__post--l {
+    left: calc(50 / var(--w) * 100%);
+  }
+  .cluster__post--r {
+    left: calc(494 / var(--w) * 100%);
+  }
+  .cluster__shelf {
+    position: absolute;
+    left: calc(60 / var(--w) * 100%);
+    width: calc(440 / var(--w) * 100%);
+    top: calc(var(--y) / var(--h) * 100%);
+  }
+  .cluster__shelf--api {
+    left: calc(518 / var(--w) * 100%);
+    width: calc(92 / var(--w) * 100%);
+  }
+  /* --x / --y: block center and the shelf it stands on; --s: size in container width. */
+  .cluster__node {
+    position: absolute;
+    left: calc(var(--x) / var(--w) * 100%);
+    bottom: calc((var(--h) - var(--y)) / var(--h) * 100% + 6px);
+    translate: -50% 0;
+    display: grid;
+    justify-items: center;
+    font-size: clamp(0.72rem, 2.6cqw, 0.9rem);
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--ink-soft);
+  }
+  .cluster__node :global(.cube) {
+    --size: calc(var(--s) * 1cqw);
+  }
+  /* Paper tags hang under the shelf; cables run behind them. */
+  .cluster__node span {
+    position: absolute;
+    top: calc(100% + 42px);
+    padding: 2px 9px 3px;
+    border-radius: 6px;
+    border-bottom: 2px solid var(--paper-deep);
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .steps {
+    display: grid;
+    gap: 30px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  .step__n {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    border-bottom: 3px solid var(--orange-deep);
+    background: var(--orange);
+    font-weight: 800;
+  }
+  .step h3 {
+    font-size: 1.25rem;
+    margin-top: 8px;
+  }
+  .step p {
+    margin-top: 8px;
+    color: var(--ink-soft);
+  }
+
+  /* Status */
+  .status {
+    background: var(--desk-deep);
+  }
+  .status__head {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: end;
+  }
+  /* The paint shop: the painted block watches a raw one get its coat. */
+  .paintshop {
+    position: relative;
+    height: 250px;
+  }
+  .paintshop__floor {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 16px;
+  }
+  .paintshop__painter {
+    position: absolute;
+    left: 10%;
+    bottom: 64px;
+  }
+  .paintshop__painter :global(.cube) {
+    --ry: -34deg;
+    animation: bob 4.6s ease-in-out infinite;
+  }
+  .paintshop__block {
+    position: absolute;
+    left: 50%;
+    bottom: 66px;
+  }
+  /* A can of the same orange, open on the floor. */
+  .can {
+    position: absolute;
+    left: 37%;
+    bottom: 50px;
+    width: 40px;
+    height: 44px;
+  }
+  .can__body {
+    position: absolute;
+    inset: 0;
+    border-radius: 3px 3px 7px 7px;
+    background: linear-gradient(90deg, #fffdf9, #e2d9c8);
+  }
+  .can__body::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 14px;
+    height: 13px;
+    background: var(--orange);
+  }
+  .can__body::after {
+    content: '';
+    position: absolute;
+    left: 6px;
+    top: 4px;
+    width: 5px;
+    height: 16px;
+    border-radius: 0 0 3px 3px;
+    background: var(--orange-deep);
+  }
+  .can__top {
+    position: absolute;
+    left: -2px;
+    right: -2px;
+    top: -5px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--orange-deep);
+    box-shadow:
+      inset 0 -2px 0 var(--orange),
+      inset 0 2px 0 rgb(255 255 255 / 0.25);
+  }
+  .can__shadow {
+    position: absolute;
+    left: -8px;
+    right: -8px;
+    bottom: -8px;
+    height: 14px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(var(--shadow) / 0.26), transparent);
+  }
+  .status__rows {
+    display: grid;
+    gap: 28px;
+    margin-top: 44px;
+  }
+  .status__row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    align-items: start;
+    padding-top: 24px;
+    border-top: 2px solid rgb(var(--shadow) / 0.1);
+  }
+  .status__row h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1rem;
+    padding-top: 4px;
+  }
+  .swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border-bottom: 3px solid var(--orange-deep);
+    background: var(--orange);
+  }
+  .swatch--half {
+    background: linear-gradient(90deg, var(--orange) 0 50%, var(--wood) 50%);
+    border-bottom-color: var(--wood-deep);
+  }
+  .swatch--wood {
+    background: var(--wood);
+    border-bottom-color: var(--wood-deep);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .status__note {
+    margin-top: 40px;
+    max-width: var(--measure);
+    color: var(--ink-soft);
+    font-size: 0.98rem;
+  }
+
+  /* Roadmap */
+  .roadmap .wrap {
+    position: relative;
+  }
+  .roadmap__row {
+    position: relative;
+    margin-top: 56px;
+  }
+  .timeline {
+    display: grid;
+    grid-template-columns: repeat(9, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .milestone {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+  }
+  /* Blocks rest on the roadmap shelf; the text hangs below it. */
+  .milestone__block {
+    position: relative;
+    height: 96px;
+    display: grid;
+    place-items: end start;
+    padding-left: 8px;
+    margin-bottom: 48px;
+  }
+  .milestone:hover .milestone__block :global(.cube) {
+    translate: 0 -8px;
+    --ry: 44deg;
+  }
+  .milestone__date {
+    /* Two lines reserved so the heading row shares one baseline. */
+    min-height: 2.6em;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--orange-base);
+    letter-spacing: 0.01em;
+  }
+  .milestone--raw .milestone__date {
+    color: var(--ink-soft);
+  }
+  .milestone h3 {
+    font-size: 1.05rem;
+  }
+  .milestone p {
+    font-size: 0.9rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+  }
+  .slab--roadmap {
+    position: absolute;
+    left: -16px;
+    right: -16px;
+    top: 100px;
+    z-index: -1;
+  }
+
+  /* Closing: the same desk as the hero, a mug of something warm beside it. */
+  .closing__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(32px, 6vw, 80px);
+    align-items: center;
+  }
+  .closing__scene {
+    --desk-surface: 118px;
+    position: relative;
+    height: 380px;
+  }
+  .closing__cube {
+    position: absolute;
+  }
+  .closing__cube--big {
+    left: 52%;
+    bottom: calc(var(--desk-surface) + 14px);
+    translate: -50% 0;
+    animation: bob 4.6s ease-in-out infinite;
+  }
+  .closing__cube--big :global(.contact) {
+    animation: shade 4.6s ease-in-out infinite;
+  }
+  .closing__cube--sleep {
+    left: 0;
+    bottom: calc(var(--desk-surface) + 8px);
+  }
+  .closing__cube--sleep :global(.cube) {
+    --ry: 36deg;
+  }
+  .closing__cube--raw {
+    right: 2%;
+    bottom: calc(var(--desk-surface) - 4px);
+  }
+  .closing__cube--raw :global(.cube) {
+    --ry: -26deg;
+  }
+  .mug {
+    position: absolute;
+    left: 21%;
+    bottom: calc(var(--desk-surface) - 2px);
+    width: 48px;
+    height: 54px;
+  }
+  .mug__body {
+    position: absolute;
+    inset: 0;
+    border-radius: 5px 5px 14px 14px;
+    background: linear-gradient(90deg, #fffdf9, #ece4d5);
+  }
+  .mug__body::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 11px;
+    height: 7px;
+    background: var(--orange);
+  }
+  .mug__body::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: -3px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--paper-deep);
+  }
+  .mug__handle {
+    position: absolute;
+    right: -15px;
+    top: 13px;
+    width: 20px;
+    height: 24px;
+    border: 7px solid #ece4d5;
+    border-left: 0;
+    border-radius: 0 13px 13px 0;
+  }
+  .mug__shadow {
+    position: absolute;
+    left: -8px;
+    right: -16px;
+    bottom: -9px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgb(var(--shadow) / 0.26), transparent);
+  }
+  .mug__steam i {
+    position: absolute;
+    bottom: 100%;
+    width: 6px;
+    height: 20px;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.9);
+    filter: blur(2px);
+    opacity: 0;
+    animation: steam 2.8s ease-in-out infinite;
+  }
+  .mug__steam i:nth-child(1) {
+    left: 10px;
+  }
+  .mug__steam i:nth-child(2) {
+    left: 21px;
+    animation-delay: 0.9s;
+  }
+  .mug__steam i:nth-child(3) {
+    left: 32px;
+    animation-delay: 1.8s;
+  }
+  @keyframes steam {
+    0% {
+      translate: 0 8px;
+      scale: 0.8;
+      opacity: 0;
+    }
+    30% {
+      opacity: 0.9;
+    }
+    100% {
+      translate: 4px -28px;
+      scale: 1.2;
+      opacity: 0;
+    }
+  }
+  .closing__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 32px;
+  }
+
+  /* Footer */
+  .foot {
+    padding-block: 40px 48px;
+    border-top: 2px solid rgb(var(--shadow) / 0.1);
+  }
+  .foot__grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 24px 48px;
+    align-items: center;
+  }
+  .foot__brand {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .foot__brand p {
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+  .foot__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 22px;
+    font-weight: 600;
+  }
+  .foot__links a {
+    text-decoration: none;
+  }
+  .foot__links a:hover {
+    text-decoration: underline;
+  }
+  .foot__note {
+    grid-column: 1 / -1;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 960px) {
+    .top__nav {
+      display: none;
+    }
+    .hero__grid,
+    .how__grid,
+    .how__head,
+    .status__head,
+    .closing__grid {
+      grid-template-columns: 1fr;
+    }
+    .how__head p {
+      margin-top: 20px;
+    }
+    .hero {
+      padding-top: 16px;
+    }
+    .hero__scene {
+      --desk-surface: 86px;
+      height: 330px;
+      order: -1;
+    }
+    .desk {
+      bottom: 20px;
+      height: 110px;
+    }
+    .desk__leg {
+      height: 36px;
+    }
+    .hero__big :global(.cube) {
+      --size: 150px;
+    }
+    .plant {
+      right: 0;
+      scale: 0.8;
+      transform-origin: bottom right;
+    }
+    .hero__lede {
+      margin-top: 18px;
+      font-size: 1.05rem;
+    }
+    .hero__actions {
+      margin-top: 26px;
+    }
+    .hero__small--sleep {
+      left: 0;
+    }
+    .hero__small--sleep :global(.cube) {
+      --size: 76px;
+    }
+    .hero__small--raw {
+      left: 24%;
+    }
+    .hero__small--raw :global(.cube) {
+      --size: 54px;
+    }
+    .anatomy__grid {
+      grid-template-columns: 1fr;
+    }
+    .anatomy__intro {
+      position: static;
+    }
+    .anatomy__hint {
+      display: none;
+    }
+    /* Two rows of three blocks on a short shelf. */
+    .tower {
+      height: 300px;
+      perspective: 900px;
+    }
+    .tower__slot {
+      left: calc(6% + var(--i) * 31%);
+      bottom: 74px;
+      transform: none;
+    }
+    .tower__slot:nth-child(n + 4) {
+      left: calc(6% + (var(--i) - 3) * 31%);
+      bottom: calc(74px + 64px);
+    }
+    .tower__slot :global(.cube) {
+      --size: 64px;
+    }
+    :global(.js) .tower .tower__drop {
+      transform: translateY(-60px);
+    }
+    .tower__base {
+      left: 0;
+      right: 0;
+      bottom: 30px;
+    }
+    .paintshop {
+      height: 230px;
+    }
+    .timeline {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+    .milestone {
+      grid-template-columns: 88px 1fr;
+      grid-template-areas:
+        'block time'
+        'block title'
+        'block body';
+      gap: 4px 16px;
+      padding-block: 18px;
+      border-top: 2px solid rgb(var(--shadow) / 0.1);
+    }
+    .milestone__block {
+      grid-area: block;
+      height: auto;
+      margin: 0;
+      padding: 0;
+      align-items: start;
+    }
+    .milestone__date {
+      grid-area: time;
+      min-height: 0;
+    }
+    .milestone h3 {
+      grid-area: title;
+    }
+    .milestone p {
+      grid-area: body;
+    }
+    .slab--roadmap {
+      display: none;
+    }
+    .status__row {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .closing__scene {
+      --desk-surface: 86px;
+      height: 300px;
+      margin-top: 32px;
+    }
+    .mug {
+      left: 18%;
+      scale: 0.85;
+      transform-origin: bottom left;
+    }
+    .closing__cube--big :global(.cube) {
+      --size: 120px;
+    }
+    .closing__cube--sleep :global(.cube) {
+      --size: 72px;
+    }
+    .closing__cube--raw :global(.cube) {
+      --size: 52px;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .tower__slot :global(.cube) {
+      --size: 56px;
+    }
+    .tower__slot:nth-child(n + 4) {
+      bottom: calc(74px + 56px);
+    }
+    /* A taller rack so tags clear the shelf below; cables stretch with it. */
+    .cluster {
+      aspect-ratio: 620 / 820;
+    }
+    .cluster__node span {
+      top: calc(100% + 38px);
+      max-width: 9ch;
+      white-space: normal;
+      text-align: center;
+      line-height: 1.2;
+    }
+    .paintshop__painter {
+      left: 2%;
+    }
+    .paintshop__block {
+      left: 46%;
+    }
+    .can {
+      left: 28%;
+    }
+    .paintshop__painter :global(.cube) {
+      --size: 78px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero__big,
+    .hero__big :global(.contact),
+    .closing__cube--big,
+    .closing__cube--big :global(.contact),
+    .paintshop__painter :global(.cube),
+    .plant__leaf,
+    .mug__steam i,
+    .top {
+      animation: none;
+    }
+    .cluster__cables circle {
+      display: none;
+    }
+    :global(.js) .tower .tower__drop {
+      transform: none;
+    }
+    .tower :global(.cube__body) {
+      animation: none;
+    }
+  }
+</style>

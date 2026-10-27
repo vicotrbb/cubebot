@@ -1,0 +1,516 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-26T00:00:00Z",
+  "title": "Design System: Cubebot",
+  "extensions": {
+    "colorMeta": {
+      "orange": {
+        "role": "primary",
+        "displayName": "Painted Orange",
+        "canonical": "#f26a1b",
+        "tonalRamp": [
+          "#3a1704",
+          "#6b2a08",
+          "#a6420a",
+          "#c9530f",
+          "#f26a1b",
+          "#ff8a3d",
+          "#ffb588",
+          "#ffe3d0"
+        ]
+      },
+      "orange-top": {
+        "role": "primary",
+        "displayName": "Orange Top (lit face)",
+        "canonical": "#ff8a3d",
+        "tonalRamp": [
+          "#3a1704",
+          "#6b2a08",
+          "#a6420a",
+          "#c9530f",
+          "#f26a1b",
+          "#ff8a3d",
+          "#ffb588",
+          "#ffe3d0"
+        ]
+      },
+      "orange-deep": {
+        "role": "primary",
+        "displayName": "Orange Deep (side / bottom edge)",
+        "canonical": "#c9530f",
+        "tonalRamp": [
+          "#3a1704",
+          "#6b2a08",
+          "#a6420a",
+          "#c9530f",
+          "#f26a1b",
+          "#ff8a3d",
+          "#ffb588",
+          "#ffe3d0"
+        ]
+      },
+      "orange-base": {
+        "role": "primary",
+        "displayName": "Orange Base (underside, stamp)",
+        "canonical": "#a6420a",
+        "tonalRamp": [
+          "#3a1704",
+          "#6b2a08",
+          "#a6420a",
+          "#c9530f",
+          "#f26a1b",
+          "#ff8a3d",
+          "#ffb588",
+          "#ffe3d0"
+        ]
+      },
+      "sage": {
+        "role": "secondary",
+        "displayName": "Sage (sleeping)",
+        "canonical": "#9bb7a4",
+        "tonalRamp": [
+          "#1e2b23",
+          "#3b4f43",
+          "#587865",
+          "#6f8f7a",
+          "#9bb7a4",
+          "#b4cbbb",
+          "#cfdfd4",
+          "#e9f0ec"
+        ]
+      },
+      "sage-top": {
+        "role": "secondary",
+        "displayName": "Sage Top",
+        "canonical": "#b4cbbb",
+        "tonalRamp": [
+          "#1e2b23",
+          "#3b4f43",
+          "#587865",
+          "#6f8f7a",
+          "#9bb7a4",
+          "#b4cbbb",
+          "#cfdfd4",
+          "#e9f0ec"
+        ]
+      },
+      "sage-deep": {
+        "role": "secondary",
+        "displayName": "Sage Deep",
+        "canonical": "#6f8f7a",
+        "tonalRamp": [
+          "#1e2b23",
+          "#3b4f43",
+          "#587865",
+          "#6f8f7a",
+          "#9bb7a4",
+          "#b4cbbb",
+          "#cfdfd4",
+          "#e9f0ec"
+        ]
+      },
+      "paper": {
+        "role": "tertiary",
+        "displayName": "Paper (infrastructure)",
+        "canonical": "#fffdf9",
+        "tonalRamp": [
+          "#2a2620",
+          "#55503f",
+          "#8c856f",
+          "#d2c9b8",
+          "#e8e1d4",
+          "#f3eee5",
+          "#fffdf9",
+          "#ffffff"
+        ]
+      },
+      "paper-deep": {
+        "role": "tertiary",
+        "displayName": "Paper Deep",
+        "canonical": "#e8e1d4",
+        "tonalRamp": [
+          "#2a2620",
+          "#55503f",
+          "#8c856f",
+          "#d2c9b8",
+          "#e8e1d4",
+          "#f3eee5",
+          "#fffdf9",
+          "#ffffff"
+        ]
+      },
+      "wood": {
+        "role": "tertiary",
+        "displayName": "Birch Wood (raw / planned)",
+        "canonical": "#e9cfa5",
+        "tonalRamp": [
+          "#3a2c17",
+          "#6e5530",
+          "#b8955d",
+          "#c9a26b",
+          "#d4b380",
+          "#e9cfa5",
+          "#f2dfbf",
+          "#faf1e3"
+        ]
+      },
+      "wood-deep": {
+        "role": "tertiary",
+        "displayName": "Wood Deep",
+        "canonical": "#d4b380",
+        "tonalRamp": [
+          "#3a2c17",
+          "#6e5530",
+          "#b8955d",
+          "#c9a26b",
+          "#d4b380",
+          "#e9cfa5",
+          "#f2dfbf",
+          "#faf1e3"
+        ]
+      },
+      "wood-grain": {
+        "role": "tertiary",
+        "displayName": "Wood Grain (shelf lip)",
+        "canonical": "#c9a26b",
+        "tonalRamp": [
+          "#3a2c17",
+          "#6e5530",
+          "#b8955d",
+          "#c9a26b",
+          "#d4b380",
+          "#e9cfa5",
+          "#f2dfbf",
+          "#faf1e3"
+        ]
+      },
+      "desk": {
+        "role": "neutral",
+        "displayName": "Desk (page ground)",
+        "canonical": "#f6efe4",
+        "tonalRamp": [
+          "#2b2420",
+          "#5e5249",
+          "#8c7f73",
+          "#bfb3a4",
+          "#d9cfbf",
+          "#efe3d1",
+          "#f6efe4",
+          "#fcf9f4"
+        ]
+      },
+      "desk-deep": {
+        "role": "neutral",
+        "displayName": "Desk Deep (alternate section)",
+        "canonical": "#efe3d1",
+        "tonalRamp": [
+          "#2b2420",
+          "#5e5249",
+          "#8c7f73",
+          "#bfb3a4",
+          "#d9cfbf",
+          "#efe3d1",
+          "#f6efe4",
+          "#fcf9f4"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Ink (warm near-black)",
+        "canonical": "#2b2420",
+        "tonalRamp": [
+          "#2b2420",
+          "#3f3630",
+          "#5e5249",
+          "#7d7066",
+          "#9c9085",
+          "#bdb3a9",
+          "#ded7cf",
+          "#f3efe9"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Ink Soft (secondary text)",
+        "canonical": "#5e5249",
+        "tonalRamp": [
+          "#2b2420",
+          "#3f3630",
+          "#5e5249",
+          "#7d7066",
+          "#9c9085",
+          "#bdb3a9",
+          "#ded7cf",
+          "#f3efe9"
+        ]
+      }
+    },
+    "cubeFaceBases": {
+      "note": "Hard-coded in global.css per tone, not :root tokens.",
+      "orange": {
+        "top": "#ff8a3d",
+        "side": "#c9530f",
+        "base": "#a6420a"
+      },
+      "sage": {
+        "top": "#b4cbbb",
+        "side": "#6f8f7a",
+        "base": "#587865"
+      },
+      "paper": {
+        "top": "#ffffff",
+        "side": "#e8e1d4",
+        "base": "#d2c9b8"
+      },
+      "wood": {
+        "top": "#f2dfbf",
+        "side": "#d4b380",
+        "base": "#b8955d"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero headline only (h1)."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section headings (h2), max 18ch."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Anatomy terms, step titles, status row heads, wordmark."
+      },
+      "lede": {
+        "displayName": "Lede",
+        "purpose": "Hero subline and section intros in Ink Soft, max 62ch."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Running copy; descriptions under titles are Ink Soft."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Nav and footer links, captions, milestone copy."
+      },
+      "stamp": {
+        "displayName": "Stamp",
+        "purpose": "Chip text and the rotated outline stamp."
+      }
+    },
+    "shadows": [
+      {
+        "name": "button-lift",
+        "value": "0 8px 18px -6px rgb(43 36 32 / 0.35)",
+        "purpose": "Resting block button."
+      },
+      {
+        "name": "button-lift-hover",
+        "value": "0 12px 22px -6px rgb(43 36 32 / 0.38)",
+        "purpose": "Block button raised 2px on hover."
+      },
+      {
+        "name": "button-press",
+        "value": "0 4px 10px -4px rgb(43 36 32 / 0.35)",
+        "purpose": "Block button pressed 2px down."
+      },
+      {
+        "name": "shelf-drop",
+        "value": "0 10px 24px -10px rgb(43 36 32 / 0.35), inset 0 2px 0 rgb(255 255 255 / 0.35)",
+        "purpose": "Wood shelf and tray."
+      },
+      {
+        "name": "contact",
+        "value": "radial-gradient(closest-side, rgb(43 36 32 / 0.28), rgb(43 36 32 / 0))",
+        "purpose": "Blurred ellipse under a block resting on the desk (1.35w x 0.28h of block, 0.22 below)."
+      },
+      {
+        "name": "face-edge",
+        "value": "inset 0 0 0 1px rgb(255 255 255 / 0.18)",
+        "purpose": "Hairline highlight on every cube face."
+      },
+      {
+        "name": "divider",
+        "value": "2px solid rgb(43 36 32 / 0.1)",
+        "purpose": "Status rows and footer top border."
+      }
+    ],
+    "motion": [
+      {
+        "name": "settle",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The only easing: block landing, button lift, arrow nudge."
+      },
+      {
+        "name": "land",
+        "value": "transform 0.55s settle, opacity 0.3s ease-out, stagger 90ms per item, from translateY(-34px)",
+        "purpose": "Blocks land once when their group enters view (IntersectionObserver, rootMargin 0 0 -12%)."
+      },
+      {
+        "name": "press",
+        "value": "transform 0.18s settle, box-shadow 0.18s ease-out, border-bottom-width 0.12s ease-out",
+        "purpose": "Block button hover/active."
+      },
+      {
+        "name": "blink",
+        "value": "5.4s infinite, scaleY 1 -> 0.08 at 94-96%, second eye delayed 60ms",
+        "purpose": "Open eyes on an active agent block."
+      },
+      {
+        "name": "bob",
+        "value": "translateY 0 -> -9px -> 0 over 4.6s ease-in-out infinite",
+        "purpose": "Hero cube idle."
+      },
+      {
+        "name": "pointer-follow",
+        "value": "rest rotateX(-18deg) rotateY(28deg); range +/-14deg pitch, +/-24deg yaw; lerp 0.12 per frame",
+        "purpose": "Hero cube turns toward the pointer."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "no reveal, no blink, no bob, no follow, scroll-behavior auto",
+        "purpose": "prefers-reduced-motion: static poses."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "stack",
+        "value": "960px"
+      },
+      {
+        "name": "compact",
+        "value": "560px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Block Button",
+      "kind": "button",
+      "refersTo": "button-block",
+      "description": "Primary call to action: a painted orange block you press.",
+      "html": "<a class=\"ds-btn\" href=\"#\"><svg viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2.17c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5z\"/></svg>Star on GitHub</a>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px 16px; border: 0; border-radius: 10px; border-bottom: 4px solid #c9530f; background: #f26a1b; color: #2b2420; font: 700 1.0625rem/1.55 'Rubik', system-ui, sans-serif; letter-spacing: -0.01em; text-decoration: none; box-shadow: 0 8px 18px -6px rgb(43 36 32 / 0.35); transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease-out, border-bottom-width 0.12s ease-out; } .ds-btn svg { width: 20px; height: 20px; flex: none; } .ds-btn:hover { transform: translateY(-2px); box-shadow: 0 12px 22px -6px rgb(43 36 32 / 0.38); } .ds-btn:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: 0 4px 10px -4px rgb(43 36 32 / 0.35); } .ds-btn:focus-visible { outline: 3px solid #f26a1b; outline-offset: 3px; }"
+    },
+    {
+      "name": "Paper Block Button",
+      "kind": "button",
+      "refersTo": "button-block-paper",
+      "description": "Secondary action: the same block, unpainted paper.",
+      "html": "<a class=\"ds-btn-paper\" href=\"#\">Read the manifesto</a>",
+      "css": ".ds-btn-paper { display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px 16px; border: 0; border-radius: 10px; border-bottom: 4px solid #e8e1d4; background: #fffdf9; color: #2b2420; font: 700 1.0625rem/1.55 'Rubik', system-ui, sans-serif; letter-spacing: -0.01em; text-decoration: none; box-shadow: 0 8px 18px -6px rgb(43 36 32 / 0.35); transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease-out, border-bottom-width 0.12s ease-out; } .ds-btn-paper:hover { transform: translateY(-2px); box-shadow: 0 12px 22px -6px rgb(43 36 32 / 0.38); } .ds-btn-paper:active { transform: translateY(2px); border-bottom-width: 2px; box-shadow: 0 4px 10px -4px rgb(43 36 32 / 0.35); } .ds-btn-paper:focus-visible { outline: 3px solid #f26a1b; outline-offset: 3px; }"
+    },
+    {
+      "name": "Arrow Link",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Inline text link with orange underline and an arrow that nudges on hover.",
+      "html": "<a class=\"ds-link\" href=\"#\">Read the architecture <svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M5 12h14M13 6l6 6-6 6\"/></svg></a>",
+      "css": ".ds-link { display: inline-flex; align-items: center; gap: 6px; color: #2b2420; font: 600 1.0625rem/1.55 'Rubik', system-ui, sans-serif; text-decoration: underline; text-decoration-color: #f26a1b; text-decoration-thickness: 2px; text-underline-offset: 0.18em; } .ds-link svg { width: 18px; height: 18px; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); } .ds-link:hover { text-decoration-color: #2b2420; } .ds-link:hover svg { transform: translateX(3px); } .ds-link:focus-visible { outline: 3px solid #f26a1b; outline-offset: 3px; border-radius: 6px; }"
+    },
+    {
+      "name": "Status Chips",
+      "kind": "chip",
+      "refersTo": "chip-orange",
+      "description": "Small blocks seen from the front; tone is status (orange implemented, half-painted in progress, wood planned, paper infrastructure, sage sleeping).",
+      "html": "<div class=\"ds-chips\"><span class=\"ds-chip ds-chip--orange\">Built-in sign-in</span><span class=\"ds-chip ds-chip--half\">Cluster fencing</span><span class=\"ds-chip ds-chip--wood\">Rooms and delegation</span><span class=\"ds-chip ds-chip--paper\">journal</span><span class=\"ds-chip ds-chip--sage\">sleeping</span></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 10px; } .ds-chip { display: inline-flex; align-items: center; padding: 6px 12px 8px; border-radius: 8px; border-bottom: 3px solid #c9530f; background: #f26a1b; color: #2b2420; font: 700 0.92rem/1.25 'Rubik', system-ui, sans-serif; letter-spacing: -0.005em; } .ds-chip--sage { background: #9bb7a4; border-bottom-color: #6f8f7a; } .ds-chip--paper { background: #fffdf9; border-bottom-color: #e8e1d4; } .ds-chip--wood { background: #e9cfa5; border-bottom-color: #d4b380; } .ds-chip--half { padding-left: 20px; background: #e9cfa5; border-bottom-color: #d4b380; box-shadow: inset 10px 0 0 #f26a1b; }"
+    },
+    {
+      "name": "Stamp",
+      "kind": "custom",
+      "refersTo": "stamp",
+      "description": "Rubber-stamped status tag: orange-base outline, slight tilt, speckled ink. Sits below actions, never above a heading.",
+      "html": "<span class=\"ds-stamp\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M14 4l6 6-8 8H6v-6z\"/><path d=\"M6 20h12\"/></svg>Under development. Building in the open since October 2026.</span>",
+      "css": ".ds-stamp { display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border: 2px solid #a6420a; border-radius: 6px; color: #a6420a; font: 700 0.95rem/1.25 'Rubik', system-ui, sans-serif; letter-spacing: 0.01em; transform: rotate(-1.4deg); mask-image: radial-gradient(circle at 30% 60%, transparent 0.5px, #000 1.2px); } .ds-stamp svg { width: 18px; height: 18px; }"
+    },
+    {
+      "name": "Header Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link",
+      "description": "Logo and wordmark left, 600-weight links with an orange underline on hover, compact orange block button right.",
+      "html": "<header class=\"ds-top\"><a class=\"ds-brand\" href=\"#\"><svg width=\"36\" height=\"36\" viewBox=\"0 0 64 64\" aria-hidden=\"true\"><path d=\"M32 4 56 16v32L32 60 8 48V16z\" fill=\"#F26A1B\"/><path d=\"M32 4 56 16 32 28 8 16z\" fill=\"#FF8A3D\"/><path d=\"M32 28v32L8 48V16z\" fill=\"#F26A1B\"/><path d=\"M32 28v32l24-12V16z\" fill=\"#C9530F\"/><path d=\"M15.5 30.5c2.2-.4 4 1.8 3.8 4.6-.2 3-2.1 5.4-4.2 5-2-.5-3.2-3-2.9-5.6.2-2.2 1.5-3.7 3.3-4zM24.5 35.5c2.2-.4 4 1.8 3.8 4.6-.2 3-2.1 5.4-4.2 5-2-.5-3.2-3-2.9-5.6.2-2.2 1.5-3.7 3.3-4z\" fill=\"#2B2420\"/></svg>Cubebot</a><nav class=\"ds-nav\"><a href=\"#\">Agents</a><a href=\"#\">How it works</a><a href=\"#\">Status</a><a href=\"#\">Roadmap</a></nav><a class=\"ds-top-cta\" href=\"#\">GitHub</a></header>",
+      "css": ".ds-top { display: flex; align-items: center; gap: 28px; padding: 18px 0; background: #f6efe4; font-family: 'Rubik', system-ui, sans-serif; color: #2b2420; } .ds-brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; color: inherit; text-decoration: none; } .ds-nav { display: flex; gap: 22px; margin-left: auto; font-weight: 600; } .ds-nav a { color: inherit; text-decoration: none; padding: 6px 2px; border-bottom: 2px solid transparent; transition: border-color 0.15s ease-out; } .ds-nav a:hover { border-bottom-color: #f26a1b; } .ds-nav a:focus-visible, .ds-top-cta:focus-visible { outline: 3px solid #f26a1b; outline-offset: 3px; border-radius: 6px; } .ds-top-cta { display: inline-flex; align-items: center; padding: 10px 16px 12px; border-radius: 10px; border-bottom: 4px solid #c9530f; background: #f26a1b; color: #2b2420; font-weight: 700; letter-spacing: -0.01em; text-decoration: none; box-shadow: 0 8px 18px -6px rgb(43 36 32 / 0.35); transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.18s ease-out; } .ds-top-cta:hover { transform: translateY(-2px); box-shadow: 0 12px 22px -6px rgb(43 36 32 / 0.38); }"
+    },
+    {
+      "name": "Cube",
+      "kind": "custom",
+      "refersTo": "step-number",
+      "description": "Signature CSS-3D painted block with eyes (open = active agent). Resting on a contact shadow.",
+      "html": "<div class=\"ds-cube\" aria-hidden=\"true\"><div class=\"ds-cube__body\"><div class=\"ds-face ds-face--front\"><div class=\"ds-eyes\"><span class=\"ds-eye\"><svg viewBox=\"0 0 40 40\" fill=\"currentColor\"><path d=\"M19 3c10-1 17 7 16 17-1 9-8 17-17 16C8 35 3 28 4 19 5 10 10 4 19 3z\"/></svg></span><span class=\"ds-eye\" style=\"animation-delay:0.06s\"><svg viewBox=\"0 0 40 40\" fill=\"currentColor\"><path d=\"M21 4c9 0 16 8 15 17-1 10-9 16-18 15C9 35 3 28 4 19 5 10 12 4 21 4z\"/></svg></span></div></div><div class=\"ds-face ds-face--back\"></div><div class=\"ds-face ds-face--right\"></div><div class=\"ds-face ds-face--left\"></div><div class=\"ds-face ds-face--top\"></div><div class=\"ds-face ds-face--bottom\"></div></div><div class=\"ds-contact\"></div></div>",
+      "css": ".ds-cube { --size: 120px; position: relative; width: var(--size); height: var(--size); margin: 20px auto 50px; perspective: calc(var(--size) * 9); } .ds-cube__body { position: absolute; inset: 0; transform-style: preserve-3d; transform: rotateX(-18deg) rotateY(28deg); } .ds-face { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(165deg, color-mix(in oklab, #f26a1b, white 7%), #f26a1b 45%, color-mix(in oklab, #f26a1b, black 7%)); backface-visibility: hidden; } .ds-face--front { transform: translateZ(calc(var(--size) / 2)); } .ds-face--back { transform: rotateY(180deg) translateZ(calc(var(--size) / 2)); } .ds-face--right, .ds-face--left { background: #c9530f; } .ds-face--right { transform: rotateY(90deg) translateZ(calc(var(--size) / 2)); } .ds-face--left { transform: rotateY(-90deg) translateZ(calc(var(--size) / 2)); } .ds-face--top { background: #ff8a3d; transform: rotateX(90deg) translateZ(calc(var(--size) / 2)); } .ds-face--bottom { background: #a6420a; transform: rotateX(-90deg) translateZ(calc(var(--size) / 2)); } .ds-eyes { display: flex; gap: calc(var(--size) * 0.1); width: calc(var(--size) * 0.56); transform: translateY(calc(var(--size) * 0.02)); } .ds-eye { width: calc(var(--size) * 0.23); height: calc(var(--size) * 0.23); color: #2b2420; transform-origin: 50% 55%; animation: ds-blink 5.4s infinite; } .ds-eye svg { width: 100%; height: 100%; display: block; } @keyframes ds-blink { 0%, 91%, 100% { transform: scaleY(1); } 94%, 96% { transform: scaleY(0.08); } } .ds-contact { position: absolute; left: 50%; bottom: calc(var(--size) * -0.22); width: calc(var(--size) * 1.35); height: calc(var(--size) * 0.28); translate: -50% 0; border-radius: 50%; background: radial-gradient(closest-side, rgb(43 36 32 / 0.28), rgb(43 36 32 / 0)); } @media (prefers-reduced-motion: reduce) { .ds-eye { animation: none; } }"
+    },
+    {
+      "name": "Slab",
+      "kind": "card",
+      "refersTo": "chip-wood",
+      "description": "The short wooden shelf blocks rest on: grained top surface over a darker front edge, blurred warm drop.",
+      "html": "<div class=\"ds-slab\"></div>",
+      "css": ".ds-slab { position: relative; height: 34px; margin-bottom: 14px; } .ds-slab::before, .ds-slab::after { content: ''; position: absolute; left: 0; right: 0; } .ds-slab::before { top: 0; height: 20px; border-radius: 8px 8px 2px 2px; background: repeating-linear-gradient(93deg, transparent 0 22px, rgb(201 162 107 / 0.22) 22px 23px, transparent 23px 51px, rgb(201 162 107 / 0.12) 51px 54px), linear-gradient(180deg, #f3deba, #e6c99c); box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.5); } .ds-slab::after { top: 20px; height: 14px; border-radius: 0 0 6px 6px; background: linear-gradient(180deg, #d4b380, #c9a26b); box-shadow: 0 12px 24px -12px rgb(43 36 32 / 0.45); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Wooden Blocks on the Desk",
+    "overview": "Cubebot is a warm desk with painted wooden blocks on it. The ground is pale paper-warm desk, a birch shelf runs through the scenes, and the only saturated color is the orange paint on the blocks. One painted block has eyes: that block is the agent, and every other block is a part of its body or a neighbor in its cluster. The page explains the product by stacking blocks rather than by framing screenshots or laying out feature cards. Sections sit directly on the desk; depth comes from a block's own darker bottom edge and a soft contact shadow underneath it, never from floating panels.\n\nThe type is one face, Rubik, used heavy and tight for headings (stamped letterforms) and regular for reading. Motion is physical and small: a block lands once with a single ease-out settle, the hero cube bobs, blinks, and turns toward the pointer. Nothing glows, nothing slides in from the side, nothing is dark.\n\nThe world carries one content rule from the product: honesty about state. Implemented, in progress, and planned are always visually distinct (painted, half-painted, raw wood), so a reader can tell what runs today without reading the copy.",
+    "keyCharacteristics": [
+      "Light warm desk ground; one saturated paint color (orange); sage as the single cool relief",
+      "Blocks, not cards: a painted face with a darker bottom edge and a blurred contact shadow",
+      "Rubik throughout; Black/ExtraBold headings with negative tracking, Regular body",
+      "Material tones double as status: orange = painted/active, sage = sleeping, paper = infrastructure, wood = raw/planned",
+      "Motion is one settle, one blink, one bob; reduced motion freezes every pose"
+    ],
+    "rules": [
+      {
+        "name": "The One Paint Rule",
+        "body": "Orange is paint, not decoration. It appears on blocks, block buttons, chips, underlines, and the focus ring, and nowhere else: no orange text headings, no orange backgrounds, no gradient text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tone Is Status Rule",
+        "body": "A block's material tells its state. Orange is painted/implemented/active, half-painted (orange end on raw wood) is in progress, raw wood is planned, paper is infrastructure, sage is sleeping. Never use these tones decoratively against their meaning.",
+        "section": "colors"
+      },
+      {
+        "name": "The Warm Shadow Rule",
+        "body": "No black or cool shadows. Every shadow and divider is rgb(43 36 32 / a).",
+        "section": "colors"
+      },
+      {
+        "name": "The Heavy Heading Rule",
+        "body": "Headings are 800 or 900 with negative tracking and line-height <= 1.05. There is no light or thin display setting.",
+        "section": "typography"
+      },
+      {
+        "name": "The No Kicker Rule",
+        "body": "Nothing sits above a heading. Status and date stamps live below the actions, not as an eyebrow.",
+        "section": "typography"
+      },
+      {
+        "name": "The Blurred Contact Rule",
+        "body": "Every external shadow is blurred and warm. Hard, zero-blur offset shadows do not exist here; the one zero-blur inset (the half-painted chip's orange end) is paint, not shadow.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Bottom Edge Rule",
+        "body": "A pressable or status-bearing block always shows its darker bottom edge in the same tone family (*-deep). Pressing shrinks the edge from 4px to 2px and moves the block down 2px.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do build every interactive or status element as a block: tone face, *-deep bottom edge, 8\u201310px radius, ink text.",
+      "Do show state through material: orange painted, half-painted, raw wood, paper, sage. Implemented, in progress, and planned must be distinguishable without reading.",
+      "Do keep orange the only saturated color and sage the only cool one.",
+      "Do rest blocks on wood shelves or trays with a blurred contact shadow when they sit on the desk.",
+      "Do use one settle easing and land things once; give reduced-motion users a static pose.",
+      "Do set headings in Rubik 800\u2013900 with negative tracking and cap reading copy at 62ch."
+    ],
+    "donts": [
+      "Don't use cards or bordered panels as page structure; sections are flat regions of the desk, alternating Desk and Desk Deep.",
+      "Don't put a kicker or eyebrow above a heading.",
+      "Don't use gradient text, orange headings, or a dark hero.",
+      "Don't use zero-blur offset shadows or black/cool shadows; shadows are warm ink, blurred.",
+      "Don't add a second typeface, light display weights, or uppercase tracking.",
+      "Don't give eyes to a block that is not an agent, or open eyes to one that is sleeping."
+    ]
+  }
+}

@@ -8,6 +8,7 @@ export default defineConfig([
     '**/node_modules/**',
     '**/.output/**',
     '**/.tanstack/**',
+    '**/.astro/**',
     '**/dist/**',
     'target/**',
     '**/.venv/**',

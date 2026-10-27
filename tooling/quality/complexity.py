@@ -29,6 +29,7 @@ ARTIFACT_DIRS = {
     "dist",
     ".output",
     ".tanstack",
+    ".astro",
     "__pycache__",
     ".ruff_cache",
     ".pytest_cache",

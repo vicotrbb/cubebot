@@ -39,6 +39,7 @@ cubebot/
 ├── modules/
 │   ├── protocol/
 │   └── providers/
+├── site/
 ├── tooling/
 ├── deploy/
 ├── tests/
@@ -70,5 +71,7 @@ The web app owns the console and future PWA. Routes compose features. Feature-sp
 `tooling/quality` owns the complexity scanner, regression tests, Python project, lockfile, and version pin. The root `justfile` selects this environment explicitly. The scanner still walks the entire repository and enforces complexity <= 15 per function.
 
 Tests for one package live with that package. `tests/system` owns checks of running applications. Installation packaging belongs in `deploy`; Dockerfiles belong to their applications and use the repository root as their build context. The current local PostgreSQL Compose configuration remains at the root.
+
+`site` is the public landing site: a standalone Astro project with its own lockfile, outside the Bun workspace so it deploys to any static host without the console's dependencies. It contains no Cubebot runtime code. Its scripts are TypeScript and pass the same complexity and lint gates; `.astro` templates are formatted by hand because no Prettier plugin is installed. `PRODUCT.md`, `DESIGN.md` and `.impeccable/` at the root record the product and visual design decisions that the site and the future console share.
 
 Root Cargo and Bun manifests define their respective workspace members explicitly. Rust toolchain and formatting files, lockfiles, editor settings, and repository-wide commands stay at the root for normal tool discovery.

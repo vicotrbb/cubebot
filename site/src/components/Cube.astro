@@ -1,0 +1,144 @@
+---
+interface Props {
+  size?: number
+  tone?: 'orange' | 'sage' | 'paper' | 'wood'
+  eyes?: 'open' | 'closed' | 'none'
+  label?: string
+  class?: string
+  style?: string
+  contact?: boolean
+  /** true: static half-painted block; 'live': paints itself face by face, forever. */
+  paint?: boolean | 'live'
+}
+
+const {
+  size = 120,
+  tone = 'orange',
+  eyes = 'none',
+  label,
+  class: className,
+  style = '',
+  contact = false,
+  paint = false,
+} = Astro.props
+
+// Order in which faces come to the front as the live block turns backwards.
+const sides = ['right', 'back', 'left'] as const
+const strokes = [0, 1, 2, 3]
+---
+
+<div
+  class:list={[
+    'cube',
+    `cube--${tone}`,
+    { 'cube--painting': paint === true, 'cube--live': paint === 'live' },
+    className,
+  ]}
+  style={`--cube-size:${size}px;${style}`}
+  aria-hidden="true"
+>
+  <div class="cube__body">
+    <div class="face face--front">
+      {
+        paint === true && (
+          <svg class="paint" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <rect x="0" y="85" width="100" height="15" />
+            <path d="M0 71 H93 q6 1 6 7.5 T93 86 H0z" />
+            <path class="paint__alt" d="M0 57 H97 q3 2 3 7 T97 72 H0z" />
+            <rect x="0" y="43" width="96" height="15.5" rx="3" />
+          </svg>
+        )
+      }
+      {
+        paint === 'live' && (
+          <svg class="paint" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {strokes.map((k) => (
+              <rect class:list={['paint__wet', { paint__alt: k % 2 }]} style={`--f:0;--k:${k}`} x="0" y={85 - k * 14} width="96" height="15.5" rx="3" />
+            ))}
+          </svg>
+        )
+      }
+      {
+        eyes !== 'none' && (
+          <div class="eyes">
+            <span class:list={['eye', { 'eye--closed': eyes === 'closed' }]}>
+              {eyes === 'closed' ? (
+                <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+                  <path d="M6 22c5 6 23 6 28 0" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 40 40" fill="currentColor">
+                  <path d="M19 3c10-1 17 7 16 17-1 9-8 17-17 16C8 35 3 28 4 19 5 10 10 4 19 3z" />
+                  <circle cx="13.5" cy="13.5" r="4.2" fill="#fffdf9" />
+                </svg>
+              )}
+            </span>
+            <span
+              class:list={['eye', { 'eye--closed': eyes === 'closed' }]}
+              style="--blink-delay:0.06s"
+            >
+              {eyes === 'closed' ? (
+                <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round">
+                  <path d="M6 22c5 6 23 6 28 0" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 40 40" fill="currentColor">
+                  <path d="M21 4c9 0 16 8 15 17-1 10-9 16-18 15C9 35 3 28 4 19 5 10 12 4 21 4z" />
+                  <circle cx="14.5" cy="14" r="4.2" fill="#fffdf9" />
+                </svg>
+              )}
+            </span>
+          </div>
+        )
+      }
+      {
+        eyes === 'open' && (
+          <>
+            <span class="blush blush--l" />
+            <span class="blush blush--r" />
+          </>
+        )
+      }
+      {label && <span class="face__label">{label}</span>}
+    </div>
+    {
+      sides.map((side, f) => (
+        <div class={`face face--${side}`}>
+          {paint === 'live' && (
+            <svg class="paint" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {strokes.map((k) => (
+                <rect class:list={['paint__wet', { paint__alt: k % 2 }]} style={`--f:${f + 1};--k:${k}`} x="0" y={85 - k * 14} width="96" height="15.5" rx="3" />
+              ))}
+            </svg>
+          )}
+        </div>
+      ))
+    }
+    <div class="face face--top"></div>
+    <div class="face face--bottom"></div>
+  </div>
+  {
+    paint === 'live' && (
+      <div class="cube__hand">
+        <svg class="brush" viewBox="0 0 40 100">
+          <rect x="14" y="0" width="12" height="54" rx="5" fill="#d4b380" />
+          <rect x="16" y="3" width="4" height="48" rx="2" fill="#f2dfbf" />
+          <rect x="10" y="52" width="20" height="14" rx="2" fill="#7d7268" />
+          <rect x="12" y="55" width="16" height="2" fill="#a89b8e" />
+          <path d="M8 65 H32 V85 Q20 96 8 85z" fill="#c9530f" />
+          <path d="M10 83 Q20 91 30 83" stroke="#f26a1b" stroke-width="2.5" fill="none" />
+        </svg>
+      </div>
+    )
+  }
+  {contact && <div class="contact"></div>}
+  {
+    eyes === 'closed' && (
+      <span class="zz">
+        <i>z</i>
+        <i>z</i>
+        <i>z</i>
+      </span>
+    )
+  }
+</div>

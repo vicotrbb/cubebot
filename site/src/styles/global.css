@@ -1,0 +1,608 @@
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/fonts/rubik-latin.woff2') format('woff2');
+}
+
+:root {
+  --desk: #f6efe4;
+  --desk-deep: #efe3d1;
+  --wood: #e9cfa5;
+  --wood-deep: #d4b380;
+  --wood-grain: #c9a26b;
+  --orange: #f26a1b;
+  --orange-top: #ff8a3d;
+  --orange-deep: #c9530f;
+  --orange-base: #a6420a;
+  --ink: #2b2420;
+  --ink-soft: #5e5249;
+  --sage: #9bb7a4;
+  --sage-top: #b4cbbb;
+  --sage-deep: #6f8f7a;
+  --paper: #fffdf9;
+  --paper-deep: #e8e1d4;
+  --shadow: 43 36 32;
+  --settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --radius: 10px;
+  --measure: 62ch;
+  --gutter: clamp(16px, 5vw, 64px);
+  --font: 'Rubik', system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--desk);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--orange);
+  color: var(--paper);
+}
+
+:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+
+p {
+  margin: 0;
+  text-wrap: pretty;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: var(--orange);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  text-decoration-color: var(--ink);
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+.wrap {
+  width: min(1180px, 100% - 2 * var(--gutter));
+  margin-inline: auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Block button: a painted wooden block you can press. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 22px 16px;
+  border: 0;
+  border-radius: var(--radius);
+  border-bottom: 4px solid var(--orange-deep);
+  background: var(--orange);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  box-shadow: 0 8px 18px -6px rgb(var(--shadow) / 0.35);
+  transition:
+    transform 0.18s var(--settle),
+    box-shadow 0.18s ease-out,
+    border-bottom-width 0.12s ease-out;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 22px -6px rgb(var(--shadow) / 0.38);
+  text-decoration: none;
+}
+
+.btn:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+  box-shadow: 0 4px 10px -4px rgb(var(--shadow) / 0.35);
+}
+
+.btn--paper {
+  background: var(--paper);
+  border-bottom-color: var(--paper-deep);
+}
+
+.btn svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.link svg {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.2s var(--settle);
+}
+
+.link:hover svg {
+  transform: translateX(3px);
+}
+
+/* Registered so a block can turn smoothly when --ry changes on hover. */
+@property --ry {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 28deg;
+}
+@property --rx {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: -18deg;
+}
+
+/* 3D block. Faces live on a body that rotates; a wrapper carries idle motion. */
+.cube {
+  /* Inline --cube-size is the default; stylesheet --size overrides win. */
+  --size: var(--cube-size, 120px);
+  --rx: -18deg;
+  --ry: 28deg;
+  --face: var(--orange);
+  --face-top: var(--orange-top);
+  --face-side: var(--orange-deep);
+  --face-base: var(--orange-base);
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  perspective: calc(var(--size) * 9);
+  transition:
+    --ry 0.45s var(--settle),
+    translate 0.3s var(--settle);
+}
+
+.cube--sage {
+  --face: var(--sage);
+  --face-top: var(--sage-top);
+  --face-side: var(--sage-deep);
+  --face-base: #587865;
+}
+
+.cube--paper {
+  --face: var(--paper);
+  --face-top: #ffffff;
+  --face-side: var(--paper-deep);
+  --face-base: #d2c9b8;
+}
+
+.cube--wood {
+  --face: var(--wood);
+  --face-top: #f2dfbf;
+  --face-side: var(--wood-deep);
+  --face-base: #b8955d;
+}
+
+.cube__body {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+}
+
+/* Faces meet at crisp edges; paint is lit from the top-left. */
+.face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--face), white 7%),
+    var(--face) 45%,
+    color-mix(in oklab, var(--face), black 7%)
+  );
+  backface-visibility: hidden;
+}
+
+.face--front {
+  transform: translateZ(calc(var(--size) / 2));
+}
+.face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--size) / 2));
+}
+.face--right,
+.face--left {
+  background: linear-gradient(
+    180deg,
+    var(--face-side),
+    color-mix(in oklab, var(--face-side), black 12%)
+  );
+}
+.face--right {
+  transform: rotateY(90deg) translateZ(calc(var(--size) / 2));
+}
+.face--left {
+  transform: rotateY(-90deg) translateZ(calc(var(--size) / 2));
+}
+.face--top {
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--face-top), white 14%),
+    var(--face-top) 60%
+  );
+  transform: rotateX(90deg) translateZ(calc(var(--size) / 2));
+}
+.face--bottom {
+  background: var(--face-base);
+  transform: rotateX(-90deg) translateZ(calc(var(--size) / 2));
+}
+
+.face__label {
+  font-weight: 800;
+  font-size: calc(var(--size) * 0.2);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-transform: lowercase;
+}
+
+.cube--paper .face__label,
+.cube--wood .face__label {
+  color: var(--ink);
+}
+
+/* A wood block being painted. Static (`paint`): three finished strokes and one
+   wet stroke on the front, the side painted to the last finished stroke.
+   Live (`paint="live"`): every side face carries four strokes. The brush lays
+   them bottom-up over 4.8s, the block turns a quarter backwards over 0.8s so
+   the fresh face comes forward and the painted one shows as the right side,
+   and a face resets only while it is hidden at the back. Period 22.4s. */
+.paint {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--orange);
+}
+.paint__alt {
+  fill: color-mix(in oklab, var(--orange), white 6%);
+}
+.cube--painting .face--left {
+  background: linear-gradient(
+    180deg,
+    var(--face-side) 43%,
+    var(--orange-deep) 43%,
+    color-mix(in oklab, var(--orange-deep), black 10%)
+  );
+}
+.paint__wet {
+  width: 0;
+  animation: stroke 22.4s calc(var(--f) * 5.6s + var(--k) * 1.2s) linear
+    infinite both;
+}
+.cube--live .cube__body {
+  animation: quarter 22.4s linear infinite;
+}
+/* The hand floats just in front of the resting front face and does not turn. */
+.cube__hand {
+  position: absolute;
+  inset: 0;
+  transform: rotateX(var(--rx)) rotateY(var(--ry))
+    translateZ(calc(var(--size) / 2 + 2px));
+  pointer-events: none;
+}
+.brush {
+  position: absolute;
+  left: 2%;
+  top: -8%;
+  width: 34%;
+  height: 74%;
+  transform-origin: 50% 88%;
+  filter: drop-shadow(0 2px 2px rgb(var(--shadow) / 0.25));
+  animation: brushloop 5.6s ease-in-out infinite;
+}
+@keyframes stroke {
+  0% {
+    width: 0;
+  }
+  4.02%,
+  50% {
+    width: 96px;
+  }
+  50.01%,
+  100% {
+    width: 0;
+  }
+}
+@keyframes quarter {
+  0%,
+  21.43% {
+    transform: rotateX(var(--rx)) rotateY(var(--ry));
+    animation-timing-function: ease-in-out;
+  }
+  25%,
+  46.43% {
+    transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 90deg));
+    animation-timing-function: ease-in-out;
+  }
+  50%,
+  71.43% {
+    transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 180deg));
+    animation-timing-function: ease-in-out;
+  }
+  75%,
+  96.43% {
+    transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 270deg));
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 360deg));
+  }
+}
+/* Four left-to-right passes climbing the face, then a dip toward the can. */
+@keyframes brushloop {
+  0% {
+    translate: 0 calc(var(--size) * 0.435);
+    rotate: -22deg;
+  }
+  16.07% {
+    translate: calc(var(--size) * 0.62) calc(var(--size) * 0.435);
+    rotate: -24deg;
+  }
+  21.43% {
+    translate: 0 calc(var(--size) * 0.29);
+    rotate: -20deg;
+  }
+  37.5% {
+    translate: calc(var(--size) * 0.62) calc(var(--size) * 0.29);
+    rotate: -24deg;
+  }
+  42.86% {
+    translate: 0 calc(var(--size) * 0.145);
+    rotate: -20deg;
+  }
+  58.93% {
+    translate: calc(var(--size) * 0.62) calc(var(--size) * 0.145);
+    rotate: -24deg;
+  }
+  64.29% {
+    translate: 0 0;
+    rotate: -20deg;
+  }
+  80.36% {
+    translate: calc(var(--size) * 0.62) 0;
+    rotate: -24deg;
+  }
+  89.29%,
+  94.64% {
+    translate: calc(var(--size) * -0.46) calc(var(--size) * 0.5);
+    rotate: -40deg;
+  }
+  100% {
+    translate: 0 calc(var(--size) * 0.435);
+    rotate: -22deg;
+  }
+}
+
+/* Eyes glance toward the pointer through --look-x/--look-y on the block body;
+   idle blocks look around on their own. */
+.eyes {
+  display: flex;
+  gap: calc(var(--size) * 0.1);
+  width: calc(var(--size) * 0.56);
+  transform: translate(
+    var(--look-x, 0px),
+    calc(var(--size) * 0.02 + var(--look-y, 0px))
+  );
+  transition: transform 0.25s ease-out;
+  animation: glance 9s ease-in-out var(--blink-delay, 0s) infinite;
+}
+[data-follow] .eyes {
+  animation: none;
+}
+@keyframes glance {
+  0%,
+  38%,
+  100% {
+    translate: 0 0;
+  }
+  44%,
+  58% {
+    translate: calc(var(--size) * -0.045) calc(var(--size) * 0.015);
+  }
+  64%,
+  80% {
+    translate: calc(var(--size) * 0.045) 0;
+  }
+}
+
+/* Sleeping blocks breathe out little z's. */
+.zz {
+  position: absolute;
+  left: 82%;
+  top: 2%;
+  font-weight: 900;
+  color: var(--ink);
+  pointer-events: none;
+}
+.zz i {
+  position: absolute;
+  font-style: normal;
+  font-size: calc(var(--size) * 0.16);
+  line-height: 1;
+  opacity: 0;
+  animation: zz 3.9s ease-out infinite;
+}
+.zz i:nth-child(2) {
+  font-size: calc(var(--size) * 0.2);
+  animation-delay: 1.3s;
+}
+.zz i:nth-child(3) {
+  font-size: calc(var(--size) * 0.24);
+  animation-delay: 2.6s;
+}
+@keyframes zz {
+  0% {
+    translate: 0 0;
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    translate: calc(var(--size) * 0.3) calc(var(--size) * -0.55);
+    opacity: 0;
+  }
+}
+
+.blush {
+  position: absolute;
+  top: 58%;
+  width: calc(var(--size) * 0.16);
+  height: calc(var(--size) * 0.09);
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.22);
+}
+.blush--l {
+  left: 12%;
+}
+.blush--r {
+  right: 12%;
+}
+
+.eye {
+  width: calc(var(--size) * 0.23);
+  height: calc(var(--size) * 0.23);
+  color: var(--ink);
+  transform-origin: 50% 55%;
+  animation: blink 5.4s var(--blink-delay, 0s) infinite;
+}
+
+.eye svg {
+  width: 100%;
+  height: 100%;
+}
+
+.eye--closed {
+  animation: none;
+}
+
+@keyframes blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  94%,
+  96% {
+    transform: scaleY(0.08);
+  }
+}
+
+/* Contact shadow under a block that rests on the desk. */
+.contact {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--size) * -0.22);
+  width: calc(var(--size) * 1.35);
+  height: calc(var(--size) * 0.28);
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--shadow) / 0.28),
+    rgb(var(--shadow) / 0)
+  );
+  pointer-events: none;
+}
+
+/* Scroll reveal: visible by default, hidden only when JS can reveal it. */
+.js [data-reveal] .reveal-item {
+  opacity: 0;
+  transform: translateY(-34px);
+}
+
+.js [data-reveal].is-in .reveal-item {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    transform 0.55s var(--settle) calc(var(--i, 0) * 90ms),
+    opacity 0.3s ease-out calc(var(--i, 0) * 90ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .eye,
+  .eyes,
+  .brush,
+  .cube--live .cube__body,
+  .js [data-reveal] .reveal-item {
+    animation: none;
+    transition: none;
+    opacity: 1;
+    transform: none;
+  }
+  .cube--live .cube__body {
+    transform: rotateX(var(--rx)) rotateY(var(--ry));
+  }
+  /* Still: three strokes on the front, the brush resting at the fourth. */
+  .paint__wet {
+    animation: none;
+  }
+  .face--front .paint__wet:not([style*='--k:3']) {
+    width: 96px;
+  }
+  .zz {
+    display: none;
+  }
+}

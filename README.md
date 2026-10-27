@@ -42,6 +42,7 @@ The orchestrator accepts exported `CUBEBOT_BIND_ADDR` and `RUST_LOG` variables. 
 | `tooling/quality`   | Complexity gate, regression tests, and Python development environment |
 | `tests/system`      | Smoke checks spanning built application processes                     |
 | `deploy`            | Installation packaging; Dockerfiles live with their apps              |
+| `site`              | Public landing site: standalone static Astro build, no runtime code   |
 | `docs/adr`          | Accepted product and architecture decisions                           |
 
 See [repository layout](docs/development/repository-layout.md) for the complete module map and dependency rules. The agent package builds `cubebot-agent` and `cubebot-tool-runner`. The runtime starts its authenticated control and text-inference loop when configured. Text-chat lifecycle pods launch only that runtime; the pre-existing tool runner is excluded from the MVP and is never launched by that pod compiler. The runtime binary also supports the trusted init-container operation `--initialize-storage runtime|tools`, which creates and verifies its role directory beneath `/storage`. The tool runner belongs to the agent app and will run in its separate tool container.

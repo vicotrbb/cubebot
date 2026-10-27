@@ -18,3 +18,5 @@ dist/
 .tools/
 .impeccable/hook.cache.json
 apps/web/src/routeTree.gen.ts
+.astro/
+*.astro
