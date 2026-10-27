@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -17,6 +18,11 @@ with patch.object(sys, "path", [str(SOURCE.parent), *sys.path]):
 
 
 class DatabaseCleanupTests(unittest.TestCase):
+    def setUp(self):
+        permissions = patch.object(RUNNER.os, "chmod")
+        permissions.start()
+        self.addCleanup(permissions.stop)
+
     def test_lost_start_acknowledgement_still_attempts_owned_cleanup(self):
         primary = RuntimeError("start response lost")
         with (
@@ -71,6 +77,24 @@ class DatabaseCleanupTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 RUNNER.run_database("owned", {}, "fixture", "/fixture", lambda *_: None)
         owner.assert_called_once()
+
+
+class DatabaseMountPermissionTests(unittest.TestCase):
+    def test_parent_allows_container_uid_traversal_before_launch(self):
+        observed = []
+        with tempfile.TemporaryDirectory() as data:
+
+            def launch(*_args, **_kwargs):
+                observed.append(Path(data).stat().st_mode & 0o777)
+                raise RuntimeError("controlled startup stop")
+
+            with (
+                patch.object(RUNNER, "run", side_effect=launch),
+                patch.object(RUNNER, "cleanup_database", return_value=[]),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "controlled startup stop"):
+                    RUNNER.run_database("owned", {}, "fixture", data, lambda *_: None)
+        self.assertEqual(observed, [0o711])
 
 
 if __name__ == "__main__":

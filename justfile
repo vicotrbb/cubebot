@@ -81,3 +81,7 @@ cluster-admission:
 # Uses the shipped agent images and a test-only CSI backend in an owned cluster.
 cluster-startup:
     uv run --project tooling/quality --locked python tests/system/cluster_startup.py
+
+# Builds shipped images; requires an external evidence directory and provider key file.
+cluster-chat:
+    uv run --project tooling/quality --locked python tests/system/cluster_chat.py

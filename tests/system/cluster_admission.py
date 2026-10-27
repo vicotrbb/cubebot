@@ -48,14 +48,7 @@ def fingerprint():
     ).splitlines()
     for name in sorted(names):
         path = Path(name)
-        if path.suffix in {
-            ".rs",
-            ".sql",
-            ".toml",
-            ".py",
-            ".yaml",
-            ".yml",
-        } or path.name in {"Cargo.lock", "justfile", "Dockerfile"}:
+        if path.is_file():
             digest.update(name.encode() + b"\0" + path.read_bytes())
     return digest.hexdigest()
 

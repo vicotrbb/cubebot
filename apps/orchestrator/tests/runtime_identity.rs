@@ -1151,7 +1151,86 @@ async fn text_grants_are_single_use_and_recovered_results_commit_once() {
             .as_deref(),
         Some("execution_interrupted")
     );
+    verify_stale_text_outcomes(
+        &auth,
+        &session.token,
+        &work,
+        &admin,
+        conversation.id,
+        &issued,
+    )
+    .await;
     f.task.abort();
+}
+
+async fn verify_stale_text_outcomes(
+    auth: &RuntimeIdentity,
+    token: &str,
+    work: &cubebot_orchestrator::work::Work,
+    admin: &cubebot_orchestrator::identity::Actor,
+    conversation: Uuid,
+    expired: &cubebot_protocol::chat::InferenceGrant,
+) {
+    use cubebot_protocol::{
+        chat::{ChatEvidence, Outcome},
+        runtime::JournalRecord,
+    };
+    work.retry(
+        admin,
+        conversation,
+        expired.turn,
+        &cubebot_orchestrator::work::RetryMessage {
+            request_id: Uuid::new_v4(),
+            expected_authority: Some(expired.authority),
+        },
+    )
+    .await
+    .unwrap();
+    let current = auth.claim_text(token).await.unwrap().unwrap();
+    assert_ne!(current.authority, expired.authority);
+    let stale = JournalRecord {
+        sequence: 2,
+        payload: serde_json::to_vec(&ChatEvidence::TextOutcome {
+            turn: expired.turn,
+            authority: expired.authority,
+            outcome: Outcome::Complete {
+                response: "stale response".into(),
+            },
+        })
+        .unwrap(),
+    };
+    auth.retain_journal(token, &stale).await.unwrap();
+    let pending = work
+        .history(admin, conversation, 0)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(pending.authority_id, Some(current.authority));
+    assert_eq!(pending.status, "running");
+    assert!(pending.response.is_none());
+    let committed = JournalRecord {
+        sequence: 3,
+        payload: serde_json::to_vec(&ChatEvidence::TextOutcome {
+            turn: current.turn,
+            authority: current.authority,
+            outcome: Outcome::Complete {
+                response: "current response".into(),
+            },
+        })
+        .unwrap(),
+    };
+    auth.retain_journal(token, &committed).await.unwrap();
+    auth.retain_journal(token, &committed).await.unwrap();
+    auth.retain_journal(token, &stale).await.unwrap();
+    let final_turn = work
+        .history(admin, conversation, 0)
+        .await
+        .unwrap()
+        .pop()
+        .unwrap();
+    assert_eq!(final_turn.status, "complete");
+    assert_eq!(final_turn.response.as_deref(), Some("current response"));
 }
 
 struct TextProvider {
@@ -1413,6 +1492,91 @@ async fn native_repeated_transient_failure_waits_after_two_attempts_and_manual_r
 async fn native_provider_authentication_rejection_does_not_retry_automatically() {
     native_failure("REJECT_PROVIDER", 1).await;
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn native_lost_provider_response_waits_without_replaying_an_accepted_request() {
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Lost response").await;
+    let (origin, server) = runtime_server(auth).await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let provider_origin = format!("http://{}", listener.local_addr().unwrap());
+    let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let accepted = calls.clone();
+    let provider = tokio::spawn(async move {
+        loop {
+            let (socket, _) = listener.accept().await.unwrap();
+            receive_provider_request(socket).await;
+            accepted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // The complete request was received; deliberately lose the response.
+        }
+    });
+    let child = spawn_native_text(&origin, &provider_origin);
+    let before = wait_native_waiting(&work, &admin, conversation).await;
+    assert_eq!(before.error.as_deref(), Some("provider_unavailable"));
+    assert!(before.response.is_none());
+    tokio::time::sleep(std::time::Duration::from_secs(6)).await;
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    work.retry(
+        &admin,
+        conversation,
+        before.id,
+        &cubebot_orchestrator::work::RetryMessage {
+            request_id: Uuid::new_v4(),
+            expected_authority: before.authority_id,
+        },
+    )
+    .await
+    .unwrap();
+    let after = wait_native_waiting(&work, &admin, conversation).await;
+    assert_ne!(before.authority_id, after.authority_id);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap().len(),
+        1
+    );
+    drop(child);
+    server.abort();
+    provider.abort();
+    f.task.abort();
+}
+
+async fn receive_provider_request(mut socket: tokio::net::TcpStream) {
+    use tokio::io::AsyncReadExt;
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let mut bytes = Vec::new();
+        loop {
+            let mut chunk = [0_u8; 4096];
+            let count = socket.read(&mut chunk).await.unwrap();
+            assert_ne!(count, 0);
+            bytes.extend_from_slice(&chunk[..count]);
+            assert!(bytes.len() <= 256 * 1024);
+            if complete_provider_request(&bytes) {
+                return;
+            }
+        }
+    })
+    .await
+    .unwrap();
+}
+
+fn complete_provider_request(bytes: &[u8]) -> bool {
+    let Some(end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
+        return false;
+    };
+    let headers = std::str::from_utf8(&bytes[..end]).unwrap();
+    let length: usize = headers
+        .lines()
+        .filter_map(|line| line.split_once(':'))
+        .find(|(name, _)| name.eq_ignore_ascii_case("content-length"))
+        .unwrap()
+        .1
+        .trim()
+        .parse()
+        .unwrap();
+    bytes.len() >= end + 4 + length
+}
+
 async fn native_failure(message: &str, expected: usize) {
     let f = fixture().await;
     let (auth, work, admin, conversation) = native_chat_setup(&f, message).await;
