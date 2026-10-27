@@ -2,24 +2,40 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const OUTPUT_LIMIT: usize = 8192;
+pub const LEASE_MILLIS: u64 = 60_000;
 pub const REQUEST_LIMIT: usize = 16384;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(from = "InvocationWire")]
 pub struct Invocation {
     pub id: Uuid,
     pub authority: Uuid,
     pub command: String,
-    pub seconds: u64,
+}
+// Retained intents from the first terminal implementation include `seconds`.
+// Read that historical field without reintroducing a command-duration policy.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InvocationWire {
+    id: Uuid,
+    authority: Uuid,
+    command: String,
+    #[serde(default, rename = "seconds")]
+    _legacy_seconds: Option<u64>,
+}
+impl From<InvocationWire> for Invocation {
+    fn from(value: InvocationWire) -> Self {
+        Self {
+            id: value.id,
+            authority: value.authority,
+            command: value.command,
+        }
+    }
 }
 impl Invocation {
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.id.is_nil() || self.authority.is_nil() {
             return Err("missing invocation identity");
-        }
-        if !(1..=30).contains(&self.seconds) {
-            return Err("terminal duration must be 1..30 seconds");
         }
         if self.command.is_empty() || self.command.len() > 8192 || self.command.contains('\0') {
             return Err("invalid terminal command");
@@ -44,6 +60,13 @@ pub struct Authorization {
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct Renewal {
+    pub turn: Uuid,
+    pub authority: Uuid,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Permit {
     pub milliseconds: u64,
 }
@@ -63,22 +86,16 @@ pub enum Request {
 
 impl Outcome {
     pub fn validate(&self) -> Result<(), &'static str> {
-        let output = match self {
-            Self::Exited { output, .. } => output,
-            Self::Stopped { output, reason } => {
+        match self {
+            Self::Stopped { reason, .. }
                 if !matches!(
                     reason.as_str(),
-                    "cancelled" | "duration_limit" | "output_limit"
-                ) {
-                    return Err("invalid terminal stop reason");
-                }
-                output
+                    "cancelled" | "authority_expired" | "duration_limit" | "output_limit"
+                ) =>
+            {
+                Err("invalid terminal stop reason")
             }
-            Self::Uncertain => return Ok(()),
-        };
-        if output.len() > OUTPUT_LIMIT {
-            return Err("terminal output too large");
+            _ => Ok(()),
         }
-        Ok(())
     }
 }

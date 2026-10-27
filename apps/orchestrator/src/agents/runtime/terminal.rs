@@ -59,3 +59,22 @@ impl RuntimeIdentity {
             .collect()
     }
 }
+
+impl RuntimeIdentity {
+    pub async fn renew_terminal(
+        &self,
+        token: &str,
+        input: &cubebot_protocol::terminal::Renewal,
+    ) -> Result<Permit, Error> {
+        if !self.terminal_enabled {
+            return Err(Error::Unauthorized);
+        }
+        let actor = self.authenticate(token, RuntimeAccess::Active).await?;
+        let mut tx = self.lock_runtime(&actor).await?;
+        self.recheck(token, &actor, &mut tx).await?;
+        let milliseconds = crate::work::terminal::renew(&mut tx, &actor, input).await?;
+        self.recheck(token, &actor, &mut tx).await?;
+        tx.commit().await?;
+        Ok(Permit { milliseconds })
+    }
+}

@@ -14,7 +14,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let result = match args.first().map(String::as_str) {
         Some("serve") => return serve(),
         Some("filesystem") => filesystem()?,
-        Some("terminal" | "terminal-cancel") if args.len() == 2 => terminal(&args[0], &args[1])?,
+        Some("terminal" | "terminal-cancel" | "terminal-renew" | "terminal-half-close")
+            if (2..=3).contains(&args.len()) =>
+        {
+            terminal_request(&args)?
+        }
         Some("session") if args.len() == 2 => return session(&args[1]),
         Some("udp-session") if args.len() == 2 => return udp_session(&args[1]),
         Some("connect") if args.len() == 2 => connect(&args[1])?,
@@ -281,26 +285,54 @@ fn serve_push(address: &str, control: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn terminal(mode: &str, request: &str) -> Result<Value, Box<dyn std::error::Error>> {
+fn terminal(
+    mode: &str,
+    request: &str,
+    lease_millis: u64,
+) -> Result<Value, Box<dyn std::error::Error>> {
     let mut socket =
         std::os::unix::net::UnixStream::connect("/run/cubebot-executor/terminal.sock")?;
-    socket.set_read_timeout(Some(Duration::from_secs(40)))?;
+    socket.set_read_timeout(Some(Duration::from_secs(150)))?;
     let invocation: cubebot_protocol::terminal::Invocation = serde_json::from_str(request)?;
     invocation.validate().map_err(std::io::Error::other)?;
-    let not_after_millis =
-        cubebot_agent::execution::terminal::monotonic_millis()? + invocation.seconds * 1000;
+    let not_after_millis = cubebot_agent::execution::terminal::monotonic_millis()? + lease_millis;
     let request = serde_json::to_vec(&cubebot_protocol::terminal::Request::Execute {
         invocation,
         not_after_millis,
     })?;
     socket.write_all(&(request.len() as u32).to_be_bytes())?;
     socket.write_all(&request)?;
+    terminal_exchange(socket, mode, lease_millis)
+}
+fn terminal_exchange(
+    socket: std::os::unix::net::UnixStream,
+    mode: &str,
+    lease_millis: u64,
+) -> Result<Value, Box<dyn std::error::Error>> {
     if mode == "terminal-cancel" {
         std::thread::sleep(Duration::from_millis(200));
         return Ok(json!({"cancel_requested":true}));
     }
+    if mode == "terminal-half-close" {
+        socket.shutdown(std::net::Shutdown::Write)?;
+    }
+    let continuing = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let renewal = if mode == "terminal-renew" {
+        Some(renew_terminal(
+            socket.try_clone()?,
+            continuing.clone(),
+            lease_millis,
+        ))
+    } else {
+        None
+    };
     let mut output = Vec::new();
-    socket.take(65536).read_to_end(&mut output)?;
+    let read = socket.take(65536).read_to_end(&mut output);
+    continuing.store(false, std::sync::atomic::Ordering::SeqCst);
+    if let Some(renewal) = renewal {
+        let _ = renewal.join();
+    }
+    read?;
     Ok(serde_json::from_slice(&output)?)
 }
 
@@ -385,4 +417,34 @@ async fn http_request(
         .await?
         .status()
         .is_success())
+}
+
+fn renew_terminal(
+    mut socket: std::os::unix::net::UnixStream,
+    continuing: Arc<std::sync::atomic::AtomicBool>,
+    lease_millis: u64,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        while continuing.load(std::sync::atomic::Ordering::SeqCst) {
+            std::thread::sleep(Duration::from_millis(200));
+            let Ok(now) = cubebot_agent::execution::terminal::monotonic_millis() else {
+                return;
+            };
+            if socket
+                .write_all(&(now + lease_millis).to_be_bytes())
+                .is_err()
+            {
+                return;
+            }
+        }
+    })
+}
+
+fn terminal_request(args: &[String]) -> Result<Value, Box<dyn std::error::Error>> {
+    let lease = args
+        .get(2)
+        .map(|value| value.parse())
+        .transpose()?
+        .unwrap_or(60000);
+    terminal(&args[0], &args[1], lease)
 }

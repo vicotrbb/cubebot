@@ -5,7 +5,10 @@ use crate::{
 use cubebot_protocol::chat::{ChatEvidence, Outcome};
 use std::time::{Duration, Instant};
 
-pub(super) async fn execute(client: &RuntimeClient, journal: &mut Journal) -> Result<(), Error> {
+pub(super) async fn execute(
+    client: &mut RuntimeClient,
+    journal: &mut Journal,
+) -> Result<(), Error> {
     let start = Instant::now();
     let Some(grant) = client.claim_text().await? else {
         return Ok(());
@@ -30,11 +33,11 @@ pub(super) async fn execute(client: &RuntimeClient, journal: &mut Journal) -> Re
 async fn infer(
     grant: &cubebot_protocol::chat::InferenceGrant,
     deadline: Instant,
-    client: &RuntimeClient,
+    client: &mut RuntimeClient,
     journal: &mut Journal,
 ) -> Result<Outcome, Error> {
-    if grant.max_tool_calls > 0 && std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1") {
-        return super::terminal::infer(grant, deadline, client, journal).await;
+    if grant.terminal_enabled && std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1") {
+        return super::terminal::infer(grant, client, journal).await;
     }
     let provider = match configured_provider() {
         Ok(provider) => provider,

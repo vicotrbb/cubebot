@@ -23,40 +23,59 @@ pub(crate) async fn authorize(
     actor: &RuntimeActor,
     input: &Authorization,
 ) -> Result<u64, Error> {
-    let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_turns t JOIN chat_authorities g ON g.id=t.authority_id JOIN provider_connection p ON p.revision=g.provider_revision JOIN runtime_session_access s ON s.attempt_id=g.attempt_id WHERE t.id=$1 AND t.conversation_id=$2 AND g.id=$3 AND g.attempt_id=$4 AND g.expires_at>clock_timestamp()+interval '1 second' AND t.status IN ('running','retrying') AND g.terminal_budget=8 AND s.active AND (p.access->>'mode'='all_agents' OR p.access->'agents' @> jsonb_build_array($2::uuid)))")
-        .bind(input.turn).bind(actor.agent).bind(input.invocation.authority).bind(actor.attempt).fetch_one(&mut **tx).await?;
+    renew(
+        tx,
+        actor,
+        &cubebot_protocol::terminal::Renewal {
+            turn: input.turn,
+            authority: input.invocation.authority,
+        },
+    )
+    .await?;
+    let request =
+        serde_json::to_value(&input.invocation).map_err(|_| Error::InvalidConfiguration)?;
+    let prior: Option<Value> =
+        sqlx::query_scalar("SELECT request FROM terminal_invocations WHERE id=$1")
+            .bind(input.invocation.id)
+            .fetch_optional(&mut **tx)
+            .await?;
+    if let Some(prior) = prior {
+        if prior != request {
+            return Err(Error::Conflict);
+        }
+        let renewed = sqlx::query("UPDATE terminal_invocations SET expires_at=(SELECT expires_at FROM chat_authorities WHERE id=$2) WHERE id=$1 AND expires_at>clock_timestamp() AND outcome IS NULL")
+            .bind(input.invocation.id).bind(input.invocation.authority).execute(&mut **tx).await?;
+        if renewed.rows_affected() != 1 {
+            return Err(Error::Unauthorized);
+        }
+    } else {
+        sqlx::query("INSERT INTO terminal_invocations(id,turn_id,authority_id,request,expires_at) SELECT $1,$2,id,$4,expires_at FROM chat_authorities WHERE id=$3")
+            .bind(input.invocation.id).bind(input.turn).bind(input.invocation.authority).bind(request).execute(&mut **tx).await?;
+    }
+    remaining(tx, input.invocation.authority).await
+}
+
+pub(crate) async fn renew(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: &RuntimeActor,
+    input: &cubebot_protocol::terminal::Renewal,
+) -> Result<u64, Error> {
+    let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_turns t JOIN chat_authorities g ON g.id=t.authority_id JOIN provider_connection p ON p.revision=g.provider_revision JOIN runtime_session_access s ON s.attempt_id=g.attempt_id WHERE t.id=$1 AND t.conversation_id=$2 AND g.id=$3 AND g.attempt_id=$4 AND g.expires_at>clock_timestamp() AND t.status IN ('running','retrying') AND g.terminal_enabled AND s.active AND (p.access->>'mode'='all_agents' OR p.access->'agents' @> jsonb_build_array($2::uuid)))")
+        .bind(input.turn).bind(actor.agent).bind(input.authority).bind(actor.attempt).fetch_one(&mut **tx).await?;
     if !allowed || !super::runtime::sender_allowed(tx, input.turn).await? {
         return Err(Error::Unauthorized);
     }
-    let request =
-        serde_json::to_value(&input.invocation).map_err(|_| Error::InvalidConfiguration)?;
-    if let Some(old) =
-        sqlx::query_scalar::<_, Value>("SELECT request FROM terminal_invocations WHERE id=$1")
-            .bind(input.invocation.id)
-            .fetch_optional(&mut **tx)
-            .await?
-    {
-        if old != request {
-            return Err(Error::Conflict);
-        }
-    } else {
-        let count: i64 =
-            sqlx::query_scalar("SELECT count(*) FROM terminal_invocations WHERE authority_id=$1")
-                .bind(input.invocation.authority)
-                .fetch_one(&mut **tx)
-                .await?;
-        if count >= 8 {
-            return Err(Error::Unauthorized);
-        }
-        sqlx::query("INSERT INTO terminal_invocations(id,turn_id,authority_id,request,expires_at) SELECT $1,$2,id,$4,LEAST(expires_at,clock_timestamp()+make_interval(secs=>$5)) FROM chat_authorities WHERE id=$3")
-            .bind(input.invocation.id).bind(input.turn).bind(input.invocation.authority).bind(request).bind(input.invocation.seconds as f64).execute(&mut **tx).await?;
-    }
-    let remaining: i64 = sqlx::query_scalar("SELECT floor(extract(epoch FROM (expires_at-clock_timestamp()))*1000)::bigint FROM terminal_invocations WHERE id=$1 AND outcome IS NULL")
-        .bind(input.invocation.id).fetch_optional(&mut **tx).await?.ok_or(Error::Unauthorized)?;
-    if remaining < 1 {
+    let renewed = sqlx::query("UPDATE chat_authorities SET expires_at=clock_timestamp()+interval '60 seconds' WHERE id=$1 AND expires_at>clock_timestamp()")
+        .bind(input.authority).execute(&mut **tx).await?;
+    if renewed.rows_affected() != 1 {
         return Err(Error::Unauthorized);
     }
-    Ok(remaining as u64)
+    remaining(tx, input.authority).await
+}
+async fn remaining(tx: &mut Transaction<'_, Postgres>, authority: Uuid) -> Result<u64, Error> {
+    let milliseconds: i64 = sqlx::query_scalar("SELECT floor(extract(epoch FROM (expires_at-clock_timestamp()))*1000)::bigint FROM chat_authorities WHERE id=$1")
+        .bind(authority).fetch_one(&mut **tx).await?;
+    u64::try_from(milliseconds).map_err(|_| Error::Unauthorized)
 }
 pub(crate) async fn outcome(
     tx: &mut Transaction<'_, Postgres>,

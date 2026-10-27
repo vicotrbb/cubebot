@@ -9,7 +9,7 @@ pub struct InferenceGrant {
     pub expires_in_seconds: u64,
     pub max_attempts: u8,
     #[serde(default)]
-    pub max_tool_calls: u8,
+    pub terminal_enabled: bool,
     pub model: String,
     pub provider_revision: i64,
     pub api_key: String,

@@ -71,7 +71,7 @@ async fn terminal_calls_are_native_bounded_and_return_their_provider_identity() 
         assert_eq!(body["tools"][0]["name"], "terminal");
         assert_eq!(body["parallel_tool_calls"], false);
         Json(
-            json!({"status":"completed","output":[{"type":"function_call","name":"terminal","call_id":"call_1","arguments":"{\"command\":\"printf hello\",\"seconds\":2}"}]}),
+            json!({"status":"completed","output":[{"type":"function_call","name":"terminal","call_id":"call_1","arguments":"{\"command\":\"printf hello\"}"}]}),
         )
     }
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

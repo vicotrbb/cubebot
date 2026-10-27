@@ -22,6 +22,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/control", get(control))
         .route("/api/runtime/text/claim", post(claim_text))
         .route("/api/runtime/terminal", post(terminal))
+        .route("/api/runtime/terminal/renew", post(renew_terminal))
         .route("/api/runtime/terminal/pending", get(pending_terminal))
         .route("/api/runtime/drained", post(drained))
         .layer(DefaultBodyLimit::max(20 * 1024))
@@ -165,6 +166,18 @@ async fn pending_terminal(
 ) -> Result<Json<Vec<cubebot_protocol::terminal::Authorization>>, Failure> {
     identity
         .pending_terminal(bearer(&headers)?)
+        .await
+        .map(Json)
+        .map_err(Failure::from)
+}
+
+async fn renew_terminal(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Json(input): Json<cubebot_protocol::terminal::Renewal>,
+) -> Result<Json<cubebot_protocol::terminal::Permit>, Failure> {
+    identity
+        .renew_terminal(bearer(&headers)?, &input)
         .await
         .map(Json)
         .map_err(Failure::from)

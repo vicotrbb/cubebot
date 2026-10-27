@@ -142,12 +142,11 @@ def k(config, *args, **kwargs):
     return admission.kubectl(config, "-n", NAMESPACE, *args, **kwargs)
 
 
-def invoke(config, command, seconds=3, identity=None):
+def invoke(config, command, lease_seconds=3, identity=None, renew=False):
     request = identity or {
         "id": str(uuid.uuid4()),
         "authority": str(uuid.uuid4()),
         "command": command,
-        "seconds": seconds,
     }
     result = k(
         config,
@@ -157,11 +156,17 @@ def invoke(config, command, seconds=3, identity=None):
         "runtime",
         "--",
         "/usr/local/bin/isolation-probe",
-        "terminal",
+        "terminal-renew" if renew else "terminal",
         json.dumps(request),
-        timeout=45,
+        str(lease_seconds * 1000),
+        timeout=150,
     )
-    return json.loads(result)
+    result = json.loads(result)
+    if "\n\nFull output: " in result.get("output", ""):
+        preview, _, path = result["output"].rpartition("\n\nFull output: ")
+        assert path == "/home/agent/.cubebot-terminal-output/" + request["id"] + ".log"
+        result["output"] = preview
+    return result
 
 
 def create_pod(config, manifest):
@@ -191,19 +196,29 @@ def commands(config):
         result
     )
     assert "Permission denied" in result["output"], result
-    result = invoke(config, "yes output", seconds=2)
-    assert result["status"] == "stopped" and result["reason"] == "output_limit", result
-    assert len(result["output"].encode()) <= 8192, result
+    large = {
+        "id": str(uuid.uuid4()),
+        "authority": str(uuid.uuid4()),
+        "command": "head -c 1048576 /dev/zero",
+    }
+    result = invoke(config, "", identity=large)
+    assert result["status"] == "exited" and result["code"] == 0, result
+    retained = invoke(
+        config, "wc -c < .cubebot-terminal-output/" + large["id"] + ".log"
+    )
+    assert retained["output"].strip() == "1048576", retained
     result = invoke(
         config,
         "setsid sh -c 'sleep 2; echo escaped > escaped' "
         "</dev/null >/dev/null 2>&1 & sleep 20",
-        seconds=1,
+        lease_seconds=1,
     )
-    assert result["status"] == "stopped" and result["reason"] == "duration_limit", (
+    assert result["status"] == "stopped" and result["reason"] == "authority_expired", (
         result
     )
-    result = invoke(config, "sleep 3; test ! -e escaped && cat retained", seconds=5)
+    result = invoke(
+        config, "sleep 3; test ! -e escaped && cat retained", lease_seconds=5
+    )
     assert result == {"status": "exited", "code": 0, "output": "retained"}, result
 
 
@@ -212,7 +227,6 @@ def hostile(config):
         "id": str(uuid.uuid4()),
         "authority": str(uuid.uuid4()),
         "command": "touch unauthorized",
-        "seconds": 1,
     }
     result = invoke(
         config,
@@ -236,8 +250,48 @@ def hostile(config):
         "terminal-cancel",
         json.dumps(request),
     )
-    result = invoke(config, "sleep 3; test ! -e cancel-escaped", seconds=5)
+    result = invoke(config, "sleep 3; test ! -e cancel-escaped", lease_seconds=5)
     assert result == {"status": "exited", "code": 0, "output": ""}, result
+
+
+def half_closed_authority(config):
+    request = {
+        "id": str(uuid.uuid4()),
+        "authority": str(uuid.uuid4()),
+        "command": "touch halfclosed-effect",
+    }
+    response = k(
+        config,
+        "exec",
+        "terminal",
+        "-c",
+        "runtime",
+        "--",
+        "/usr/local/bin/isolation-probe",
+        "terminal-half-close",
+        json.dumps(request),
+    )
+    assert json.loads(response) == {
+        "status": "stopped",
+        "reason": "cancelled",
+        "output": "",
+    }
+    assert invoke(config, "test ! -e halfclosed-effect")["code"] == 0
+
+
+def hostile_output(config):
+    request = {"id": str(uuid.uuid4()), "authority": str(uuid.uuid4()), "command": ""}
+    path = ".cubebot-terminal-output/" + request["id"] + ".log"
+    request["command"] = "rm -- " + path + "; ln -s /proc/1/environ " + path
+    result = invoke(config, "", identity=request)
+    assert result["code"] == 0 and "preview unavailable" in result["output"], result
+    request["id"] = str(uuid.uuid4())
+    path = ".cubebot-terminal-output/" + request["id"] + ".log"
+    request["command"] = "rm -- " + path + "; mkfifo " + path
+    started = time.monotonic()
+    result = invoke(config, "", identity=request, lease_seconds=1, renew=True)
+    assert result["code"] == 0 and "preview unavailable" in result["output"], result
+    assert time.monotonic() - started < 8, result
 
 
 def process_limit(config):
@@ -245,7 +299,7 @@ def process_limit(config):
     result = invoke(
         config,
         'i=0; while [ "$i" -lt 200 ]; do sleep 20 & i=$((i+1)); done; wait',
-        seconds=2,
+        lease_seconds=2,
     )
     assert time.monotonic() - started < 8, result
     assert result["status"] in ("exited", "stopped"), result
@@ -316,7 +370,7 @@ def http_networks(config):
         result = invoke(
             config,
             "/usr/local/bin/isolation-probe connect " + shlex.quote(url),
-            seconds=5,
+            lease_seconds=5,
         )
         assert result["status"] == "exited", result
         assert json.loads(result["output"])["connected"] == expected, (url, result)
@@ -357,7 +411,6 @@ def retained(config, manifest):
         "id": str(uuid.uuid4()),
         "authority": str(uuid.uuid4()),
         "command": "echo once >> effects; cat effects",
-        "seconds": 3,
     }
     first = invoke(config, "", identity=request)
     assert first["output"] == "once\n", first
@@ -390,10 +443,16 @@ def qualify(config, name, fixture, artifacts, images):
     try:
         create_pod(config, manifest)
         commands(config)
+        continued = invoke(
+            config, "sleep 65; printf continued", lease_seconds=1, renew=True
+        )
+        assert continued["code"] == 0 and continued["output"] == "continued", continued
         networks(config)
         http_networks(config)
         queued_authority(config)
         hostile(config)
+        hostile_output(config)
+        half_closed_authority(config)
         process_limit(config)
         retained(config, manifest)
         (artifacts / "mechanisms.json").write_text(
@@ -416,20 +475,22 @@ def qualify(config, name, fixture, artifacts, images):
 def main():
     artifacts = evidence_directory(os.environ["CUBEBOT_QUALIFICATION_DIRECTORY"])
     name = "cubebot-terminal-" + uuid.uuid4().hex[:12]
-    builder = name + "-build"
+    supplied = os.environ.get("CUBEBOT_QUALIFICATION_BUILDER")
+    builder = supplied or name + "-build"
     config = artifacts / "kubeconfig"
     baseline = admission.fingerprint()
     try:
-        isolation.docker(
-            "buildx", "create", "--name", builder, "--driver", "docker-container"
-        )
+        if not supplied:
+            isolation.docker(
+                "buildx", "create", "--name", builder, "--driver", "docker-container"
+            )
         images = isolation.build(builder, name, targets=("qualification",))
         if admission.fingerprint() != baseline:
             raise RuntimeError("source changed during build")
         admission.cluster(config, name, artifacts, partial(qualify, images=images))
     finally:
         config.unlink(missing_ok=True)
-        failures = isolation.cleanup(name, builder)
+        failures = isolation.cleanup(name, None if supplied else builder)
         if failures:
             raise RuntimeError("owned cleanup failed: " + "; ".join(failures))
     if admission.fingerprint() != baseline:

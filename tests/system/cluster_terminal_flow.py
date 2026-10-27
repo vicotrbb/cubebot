@@ -20,7 +20,11 @@ PROMPT = (
     "the workspace. Run the script each time using exactly "
     "./terminal-qualification.sh as the entire terminal command, without echoing "
     "$? or appending commands. The tool returns the exit code itself. "
-    "Do not claim success before observing the terminal results."
+    "After fixing the script, run it nine times using nine separate terminal calls "
+    "with exactly ./terminal-qualification.sh as each command; do not combine "
+    "those runs into a loop. Finally run exactly sleep 65; ./terminal-qualification.sh "
+    "in one terminal call and verify its output and exit status. "
+    "Do not claim success before observing all terminal results."
 )
 
 
@@ -47,9 +51,9 @@ def execute(f, current, script):
     )
 
 
-def native_turn(f, identity, text):
+def native_turn(f, identity, text, timeout=100):
     turn = chat.send(f, identity, text)
-    result = chat.outcome(f, identity, turn, ("complete", "waiting"))
+    result = chat.outcome(f, identity, turn, ("complete", "waiting"), timeout=timeout)
     assert result["status"] == "complete", result
     assert result["terminal"], result
     return result
@@ -80,20 +84,31 @@ def acceptance(f):
             lambda: next(iter(chat.history(f, identity)), None),
             timeout=600,
         )
-        result = chat.outcome(f, identity, turn, ("complete", "waiting"))
+        result = chat.outcome(f, identity, turn, ("complete", "waiting"), timeout=240)
     else:
-        result = native_turn(f, identity, PROMPT)
-    assert result["status"] == "complete", result
-    results = [item["outcome"] for item in result["terminal"] if item["outcome"]]
-    assert any(item.get("code") == 7 for item in results), results
-    assert any(
-        item.get("code") == 0 and "42" in item.get("output", "") for item in results
-    ), results
+        result = native_turn(f, identity, PROMPT, timeout=240)
+    verify_acceptance(result)
     current = chat.running(f, identity)
     assert len(current["spec"]["containers"]) == 2
     assert execute(f, current, "sh /home/agent/terminal-qualification.sh") == "42"
     f.save("terminal-acceptance.json", result)
     return identity, current
+
+
+def verify_acceptance(result):
+    assert result["status"] == "complete", result
+    assert len(result["terminal"]) > 8, result
+    results = [item["outcome"] for item in result["terminal"] if item["outcome"]]
+    assert any(item.get("code") == 7 for item in results), results
+    long = [
+        tool
+        for tool in result["terminal"]
+        if tool["command"] == "sleep 65; ./terminal-qualification.sh"
+    ]
+    assert len(long) == 1, long
+    outcome = long[0]["outcome"]
+    assert outcome["status"] == "exited" and outcome["code"] == 0, outcome
+    assert outcome["output"].partition("\n\nFull output: ")[0].strip() == "42", outcome
 
 
 def secret_denial(f, identity, key):
@@ -137,31 +152,33 @@ def active_tool(f, identity, turn):
         f.save("terminal-history.json", chat.history(f, identity))
 
 
+def settled_tools(f, identity, turn):
+    def inspect():
+        result = next(
+            row for row in chat.history(f, identity) if row["id"] == turn["id"]
+        )
+        return (
+            result
+            if result["terminal"]
+            and all(tool["outcome"] is not None for tool in result["terminal"])
+            else None
+        )
+
+    return wait_for("durable terminal outcomes after interruption", inspect, timeout=40)
+
+
 def cancellation(f, identity, current):
     turn = chat.send(
         f,
         identity,
-        "Use terminal with a 30 second limit to run: "
-        "sleep 20; echo bad > /home/agent/cancel-escaped",
+        "Use terminal to run: sleep 20; echo bad > /home/agent/cancel-escaped",
     )
     active_tool(f, identity, turn)
     f.request(
         f"/api/conversations/{identity}/messages/{turn['id']}/cancel", {}, expected=204
     )
     result = chat.outcome(f, identity, turn, ("cancelled",))
-    wait_for(
-        "cancelled executor result",
-        lambda: next(
-            (
-                row
-                for row in chat.history(f, identity)
-                if row["id"] == turn["id"]
-                and all(tool["outcome"] is not None for tool in row["terminal"])
-            ),
-            None,
-        ),
-        timeout=40,
-    )
+    settled_tools(f, identity, turn)
     assert result["response"] is None
     assert (
         execute(f, current, "test ! -e /home/agent/cancel-escaped && echo stopped")
@@ -173,12 +190,11 @@ def partition_expiry(f, identity, current):
     turn = chat.send(
         f,
         identity,
-        "Use terminal with a 3 second limit to run: "
-        "sleep 20; echo bad > /home/agent/expiry-escaped",
+        "Use terminal to run: sleep 90; echo bad > /home/agent/expiry-escaped",
     )
     active_tool(f, identity, turn)
     with chat.partition(f, current):
-        time.sleep(5)
+        time.sleep(65)
         assert (
             execute(
                 f,
@@ -187,6 +203,7 @@ def partition_expiry(f, identity, current):
             )
             == "bounded"
         )
+    settled_tools(f, identity, turn)
     result = chat.outcome(f, identity, turn, ("complete", "waiting"))
     assert any(
         tool["outcome"] and tool["outcome"]["status"] in ("stopped", "uncertain")
@@ -204,8 +221,7 @@ def revocation(f, identity, current, key):
     turn = chat.send(
         f,
         identity,
-        "Use terminal with seconds 30: "
-        "sleep 20; echo bad > /home/agent/revocation-escaped",
+        "Use terminal: sleep 20; echo bad > /home/agent/revocation-escaped",
     )
     active_tool(f, identity, turn)
     chat.configure(f, key, {"mode": "explicit_grants", "agents": []})
@@ -228,7 +244,7 @@ def in_flight_crash(f, identity, current, role):
     turn = chat.send(
         f,
         identity,
-        "Use terminal with seconds 30 to run exactly: echo once >> "
+        "Use terminal to run exactly: echo once >> "
         + marker
         + "; sleep 20; echo escaped >> "
         + marker,

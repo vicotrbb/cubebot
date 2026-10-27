@@ -304,7 +304,6 @@ function TerminalResults({ message }: { message: Turn }) {
           {tool.outcome && 'output' in tool.outcome && (
             <div>
               <pre>{tool.outcome.output}</pre>
-              <p className="muted">Output capture is limited to 8 KiB.</p>
             </div>
           )}
         </details>

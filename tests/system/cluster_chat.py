@@ -29,6 +29,7 @@ def evidence_directory(value):
 
 
 def diagnostics(f):
+    runtime_diagnostics(f)
     for resource in ("pods", "persistentvolumeclaims", "events"):
         try:
             f.save(f"{resource}.json", json.loads(f.k("get", resource, "-o", "json")))
@@ -40,6 +41,23 @@ def diagnostics(f):
             (f.artifacts / f"{name}.log").write_text(result)
         except Exception as error:
             print(f"Diagnostic {name} unavailable: {error}", file=sys.stderr)
+
+
+def runtime_diagnostics(f):
+    try:
+        pods = json.loads(f.k("get", "pods", "-o", "json"))["items"]
+        for pod in pods:
+            name = pod["metadata"]["name"]
+            if not name.startswith("cb-"):
+                continue
+            for container in ("runtime", "tools"):
+                try:
+                    output = f.k("logs", name, "-c", container, "--tail=100")
+                    (f.artifacts / (name + "-" + container + ".log")).write_text(output)
+                except Exception as error:
+                    print(f"Agent log unavailable: {error}", file=sys.stderr)
+    except Exception as error:
+        print(f"Agent inventory unavailable: {error}", file=sys.stderr)
 
 
 def workflow(config, name, fixture, artifacts, images):

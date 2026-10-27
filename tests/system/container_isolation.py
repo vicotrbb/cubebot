@@ -871,8 +871,9 @@ def cleanup(prefix, builder):
     commands = [
         (["docker", "rm", "--force", prefix], prefix),
         (["docker", "volume", "rm", prefix], f"volume:{prefix}"),
-        (["docker", "buildx", "rm", "--force", builder], builder),
     ]
+    if builder:
+        commands.append((["docker", "buildx", "rm", "--force", builder], builder))
     commands.extend(
         (["docker", "image", "rm", f"{prefix}-{target}"], f"{prefix}-{target}")
         for target in ("runtime", "tools", "qualification")

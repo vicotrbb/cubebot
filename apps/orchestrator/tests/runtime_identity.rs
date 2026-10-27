@@ -1660,7 +1660,6 @@ async fn terminal_authority_is_finite_immutable_and_cancelled_in_flight() {
             id: Uuid::new_v4(),
             authority: grant.authority,
             command: "printf hello".into(),
-            seconds: 30,
         },
     };
     assert!(
@@ -1675,12 +1674,12 @@ async fn terminal_authority_is_finite_immutable_and_cancelled_in_flight() {
         .authorize_terminal(&session.token, &input)
         .await
         .unwrap();
-    assert!(first.milliseconds > 0 && first.milliseconds <= 30000);
+    assert!(first.milliseconds > 0 && first.milliseconds <= 60000);
     let replay = auth
         .authorize_terminal(&session.token, &input)
         .await
         .unwrap();
-    assert!(replay.milliseconds <= first.milliseconds);
+    assert!(replay.milliseconds >= first.milliseconds.saturating_sub(10));
     let mut changed = Authorization {
         turn: input.turn,
         invocation: input.invocation.clone(),
@@ -1724,7 +1723,6 @@ async fn uncertain_terminal_effects_cannot_be_requeued_and_stale_results_cannot_
             id: Uuid::new_v4(),
             authority: grant.authority,
             command: "touch uncertain".into(),
-            seconds: 5,
         },
     };
     auth.authorize_terminal(&session.token, &input)
@@ -1792,7 +1790,6 @@ async fn terminal_completion_reconciles_its_own_custody_without_becoming_stale()
         id: Uuid::new_v4(),
         authority: grant.authority,
         command: "printf hello".into(),
-        seconds: 5,
     };
     auth.authorize_terminal(
         &session.token,
@@ -1841,7 +1838,7 @@ async fn terminal_completion_reconciles_its_own_custody_without_becoming_stale()
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn text_authorities_cannot_gain_tools_and_terminal_budgets_are_finite() {
+async fn text_authorities_cannot_gain_tools_and_terminal_calls_have_no_count_budget() {
     use cubebot_protocol::terminal::{Authorization, Invocation};
     let f = fixture().await;
     let (auth, work, admin, conversation) = native_chat_setup(&f, "Old text authority").await;
@@ -1850,7 +1847,7 @@ async fn text_authorities_cannot_gain_tools_and_terminal_budgets_are_finite() {
         .await
         .unwrap();
     let old = auth.claim_text(&session.token).await.unwrap().unwrap();
-    assert_eq!(old.max_tool_calls, 0);
+    assert!(!old.terminal_enabled);
     let auth = auth.with_terminal(true);
     let request = Authorization {
         turn: old.turn,
@@ -1858,7 +1855,6 @@ async fn text_authorities_cannot_gain_tools_and_terminal_budgets_are_finite() {
             id: Uuid::new_v4(),
             authority: old.authority,
             command: "true".into(),
-            seconds: 30,
         },
     };
     assert!(
@@ -1872,21 +1868,20 @@ async fn text_authorities_cannot_gain_tools_and_terminal_budgets_are_finite() {
         conversation,
         &cubebot_orchestrator::work::SendMessage {
             request_id: Uuid::new_v4(),
-            message: "New bounded authority".into(),
+            message: "New terminal authority".into(),
         },
     )
     .await
     .unwrap();
     let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    assert_eq!(grant.max_tool_calls, 8);
-    for _ in 0..8 {
+    assert!(grant.terminal_enabled);
+    for _ in 0..12 {
         let request = Authorization {
             turn: grant.turn,
             invocation: Invocation {
                 id: Uuid::new_v4(),
                 authority: grant.authority,
                 command: "true".into(),
-                seconds: 30,
             },
         };
         auth.authorize_terminal(&session.token, &request)
@@ -1899,13 +1894,47 @@ async fn text_authorities_cannot_gain_tools_and_terminal_budgets_are_finite() {
             id: Uuid::new_v4(),
             authority: grant.authority,
             command: "true".into(),
-            seconds: 30,
         },
     };
-    assert!(
-        auth.authorize_terminal(&session.token, &request)
-            .await
-            .is_err()
-    );
+    auth.authorize_terminal(&session.token, &request)
+        .await
+        .unwrap();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn active_terminal_authority_renews_without_a_turn_deadline_but_never_revives_expiry() {
+    use cubebot_protocol::terminal::Renewal;
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Renewable terminal").await;
+    let auth = auth.with_terminal(true);
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
+    let request = Renewal {
+        turn: grant.turn,
+        authority: grant.authority,
+    };
+    sqlx::query("UPDATE chat_authorities SET created_at=clock_timestamp()-interval '1 day', expires_at=clock_timestamp()+interval '5 seconds' WHERE id=$1").bind(grant.authority).execute(&f.pool).await.unwrap();
+    let renewed = auth.renew_terminal(&session.token, &request).await.unwrap();
+    assert!(renewed.milliseconds > 50000);
+    work.cancel(&admin, conversation, grant.turn).await.unwrap();
+    assert!(auth.renew_terminal(&session.token, &request).await.is_err());
+    sqlx::query("UPDATE chat_turns SET status='running' WHERE id=$1")
+        .bind(grant.turn)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE chat_authorities SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+    )
+    .bind(grant.authority)
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    assert!(auth.renew_terminal(&session.token, &request).await.is_err());
     f.task.abort();
 }

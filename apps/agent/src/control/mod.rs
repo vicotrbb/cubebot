@@ -138,7 +138,6 @@ impl RuntimeClient {
                 || grant.authority.is_nil()
                 || grant.provider_revision < 1
                 || grant.max_attempts != 2
-                || !matches!(grant.max_tool_calls, 0 | 8)
                 || !(1..=60).contains(&grant.expires_in_seconds))
         {
             return Err(Error::Protocol);
@@ -261,7 +260,7 @@ impl RuntimeClient {
             .map_err(|_| Error::Unavailable)?;
         let permit: cubebot_protocol::terminal::Permit = transport::decode(response).await?;
         self.valid_session()?;
-        if !(1..=30000).contains(&permit.milliseconds) {
+        if !(1..=cubebot_protocol::terminal::LEASE_MILLIS).contains(&permit.milliseconds) {
             return Err(Error::Protocol);
         }
         Ok(permit)
@@ -287,5 +286,25 @@ impl RuntimeClient {
             item.invocation.validate().map_err(|_| Error::Protocol)?;
         }
         Ok(pending)
+    }
+}
+
+impl RuntimeClient {
+    pub async fn renew_terminal(
+        &self,
+        input: &cubebot_protocol::terminal::Renewal,
+    ) -> Result<cubebot_protocol::terminal::Permit, Error> {
+        let response = self
+            .request(reqwest::Method::POST, "api/runtime/terminal/renew")?
+            .json(input)
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        let permit: cubebot_protocol::terminal::Permit = transport::decode(response).await?;
+        self.valid_session()?;
+        if !(1..=cubebot_protocol::terminal::LEASE_MILLIS).contains(&permit.milliseconds) {
+            return Err(Error::Protocol);
+        }
+        Ok(permit)
     }
 }

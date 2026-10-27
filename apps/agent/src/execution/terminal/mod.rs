@@ -1,4 +1,5 @@
 //! Trusted PID-1 supervisor. Commands have a distinct UID and no runtime mounts.
+mod lease;
 mod process;
 mod store;
 use cubebot_protocol::terminal::{REQUEST_LIMIT, Request};
@@ -84,12 +85,30 @@ async fn session(
             }
         }
     };
-    let response = serde_json::to_vec(&outcome)?;
-    // The outcome is already durable. Losing its delivery must not kill the supervisor.
+    reply(stream, &outcome).await
+}
+
+async fn reply(
+    stream: &mut UnixStream,
+    outcome: &cubebot_protocol::terminal::Outcome,
+) -> io::Result<()> {
+    let response = serde_json::to_vec(outcome)?;
+    // Completion is durable before delivery. Half-close the reply, then let the
+    // caller stop its renewals and close, avoiding a reset from unread frames.
     let _ = stream.write_all(&response).await;
     let _ = stream.shutdown().await;
+    let _ = tokio::time::timeout(
+        std::time::Duration::from_millis(cubebot_protocol::terminal::LEASE_MILLIS),
+        async {
+            let mut pending = [0u8; 1024];
+            while stream.read(&mut pending).await? != 0 {}
+            Ok::<(), io::Error>(())
+        },
+    )
+    .await;
     Ok(())
 }
+
 async fn read_request(stream: &mut UnixStream) -> io::Result<Request> {
     let size = stream.read_u32().await? as usize;
     if size > REQUEST_LIMIT {
@@ -126,4 +145,38 @@ pub fn monotonic_millis() -> io::Result<u64> {
     };
     let stamp = clock_gettime(ClockId::CLOCK_MONOTONIC).map_err(io::Error::other)?;
     u64::try_from(stamp.num_milliseconds()).map_err(io::Error::other)
+}
+
+#[cfg(test)]
+mod reply_tests {
+    use super::*;
+    #[tokio::test]
+    async fn response_completion_does_not_reset_pending_renewals() {
+        let (mut server, mut caller) = UnixStream::pair().unwrap();
+        let task = tokio::spawn(async move {
+            reply(
+                &mut server,
+                &cubebot_protocol::terminal::Outcome::Exited {
+                    code: Some(0),
+                    output: "done".into(),
+                },
+            )
+            .await
+            .unwrap();
+        });
+        caller.write_u64(123).await.unwrap();
+        let mut bytes = Vec::new();
+        caller.read_to_end(&mut bytes).await.unwrap();
+        let result: cubebot_protocol::terminal::Outcome = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            result,
+            cubebot_protocol::terminal::Outcome::Exited {
+                code: Some(0),
+                output: "done".into()
+            }
+        );
+        assert!(!task.is_finished());
+        drop(caller);
+        task.await.unwrap();
+    }
 }

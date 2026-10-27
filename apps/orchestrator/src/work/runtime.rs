@@ -42,9 +42,8 @@ impl Work {
             }
         };
         let messages = context(tx, actor, message).await?;
-        let tool_budget = u8::from(terminal_enabled) * 8;
-        let authority: Uuid = sqlx::query_scalar("INSERT INTO chat_authorities (turn_id,attempt_id,provider_revision,terminal_budget) VALUES ($1,$2,$3,$4) RETURNING id")
-            .bind(turn).bind(actor.attempt).bind(revision).bind(i16::from(tool_budget)).fetch_one(&mut **tx).await?;
+        let authority: Uuid = sqlx::query_scalar("INSERT INTO chat_authorities (turn_id,attempt_id,provider_revision,terminal_enabled) VALUES ($1,$2,$3,$4) RETURNING id")
+            .bind(turn).bind(actor.attempt).bind(revision).bind(terminal_enabled).fetch_one(&mut **tx).await?;
         sqlx::query(
             "UPDATE chat_turns SET status='running',authority_id=$2,error=NULL WHERE id=$1",
         )
@@ -57,7 +56,7 @@ impl Work {
             authority,
             expires_in_seconds: 60,
             max_attempts: 2,
-            max_tool_calls: tool_budget,
+            terminal_enabled,
             model,
             provider_revision: revision,
             api_key,

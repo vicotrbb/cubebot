@@ -93,7 +93,7 @@ async fn cycle(
 }
 
 async fn advance_work(
-    client: &RuntimeClient,
+    client: &mut RuntimeClient,
     journal: &mut Journal,
     disposition: RuntimeDisposition,
 ) -> Result<(), crate::control::Error> {

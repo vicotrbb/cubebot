@@ -1,94 +1,109 @@
-use cubebot_protocol::terminal::{Invocation, OUTPUT_LIMIT, Outcome};
+use cubebot_protocol::terminal::{Invocation, Outcome};
 use std::{io, process::Stdio, time::Duration};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    net::UnixStream,
-    process::Command,
-};
+use tokio::{io::AsyncReadExt, net::UnixStream, process::Command};
 
 pub(super) async fn execute(
     request: &Invocation,
     not_after_millis: u64,
     stream: &mut UnixStream,
 ) -> io::Result<Outcome> {
-    if !caller_present(stream) {
+    let Some(mut lease) = super::lease::Lease::new(not_after_millis)? else {
+        return Ok(stopped("authority_expired"));
+    };
+    if !caller_connected(stream)? {
         return Ok(stopped("cancelled"));
     }
-    let Some(deadline) = execution_deadline(not_after_millis, request.seconds)? else {
-        return Ok(stopped("cancelled"));
-    };
-    let (mut child, stdout, stderr) = spawn_user(&request.command)?;
-    let (send, mut receive) = tokio::sync::mpsc::channel(8);
-    let out = tokio::spawn(capture(stdout, send.clone()));
-    let err = tokio::spawn(capture(stderr, send.clone()));
-    drop(send);
-    let timer = tokio::time::sleep_until(deadline);
-    tokio::pin!(timer);
-    let mut output = Vec::new();
-    let mut signal = [0u8; 1];
+    let path = output_path(request.id);
+    let mut child = spawn_user(&request.command, &path)?;
     let outcome = loop {
+        let deadline = lease.deadline;
         tokio::select! {
             status = child.wait() => break Outcome::Exited { code: status?.code(), output: String::new() },
-            _ = &mut timer => break stopped("duration_limit"),
-            _ = stream.read(&mut signal) => break stopped("cancelled"),
-            Some(chunk) = receive.recv() => {
-                let available = OUTPUT_LIMIT - output.len();
-                output.extend_from_slice(&chunk[..chunk.len().min(available)]);
-                if chunk.len() > available { break stopped("output_limit"); }
+            _ = tokio::time::sleep_until(deadline) => break stopped("authority_expired"),
+            size = stream.read(&mut lease.bytes[lease.received..]) => {
+                if !lease.receive(size?)? { break stopped("cancelled"); }
             }
         }
     };
-    // PID namespaces make -1 cover descendants even after setsid/double-fork.
-    // PID 1 is excluded by Linux. Failure terminates the trusted server.
+    // Stop detached descendants before releasing the workspace or reading the output.
     kill_namespace().await?;
     let _ = child.wait().await;
     reap_namespace().await?;
-    // Drain both pipes after all writers are proven stopped.
-    while let Some(chunk) = receive.recv().await {
-        let available = OUTPUT_LIMIT - output.len();
-        output.extend_from_slice(&chunk[..chunk.len().min(available)]);
-    }
-    out.await.map_err(io::Error::other)??;
-    err.await.map_err(io::Error::other)??;
-    Ok(with_output(outcome, output))
-}
-fn with_output(outcome: Outcome, bytes: Vec<u8>) -> Outcome {
-    let mut output = String::from_utf8_lossy(&bytes).into_owned();
-    let mut end = output.len().min(OUTPUT_LIMIT);
-    while !output.is_char_boundary(end) {
-        end -= 1;
-    }
-    output.truncate(end);
-    match outcome {
+    let preview = preview(&path).await;
+    kill_namespace().await?;
+    reap_namespace().await?;
+    let output = format!(
+        "{}\n\nFull output: {path}",
+        String::from_utf8_lossy(&preview)
+    );
+    Ok(match outcome {
         Outcome::Exited { code, .. } => Outcome::Exited { code, output },
         Outcome::Stopped { reason, .. } => Outcome::Stopped { reason, output },
         Outcome::Uncertain => Outcome::Uncertain,
-    }
+    })
 }
-
 fn stopped(reason: &str) -> Outcome {
     Outcome::Stopped {
         reason: reason.into(),
         output: String::new(),
     }
 }
-async fn capture(
-    mut input: impl AsyncRead + Unpin,
-    send: tokio::sync::mpsc::Sender<Vec<u8>>,
-) -> io::Result<()> {
-    let mut bytes = [0; 1024];
-    loop {
-        match input.read(&mut bytes).await {
-            Ok(0) => return Ok(()),
-            Err(error) => return Err(error),
-            Ok(size) => {
-                if send.send(bytes[..size].to_vec()).await.is_err() {
-                    return Ok(());
-                }
-            }
-        }
+fn output_path(id: uuid::Uuid) -> String {
+    format!("/home/agent/.cubebot-terminal-output/{id}.log")
+}
+
+fn spawn_user(command: &str, output: &str) -> io::Result<tokio::process::Child> {
+    user_command().args([
+        "/bin/sh", "-c",
+        r#"cd /home/agent && mkdir -p -- .cubebot-terminal-output && exec /bin/bash --noprofile --norc -c "$1" > "$2" 2>&1"#,
+        "terminal", command, output,
+    ]).stdout(Stdio::null()).stderr(Stdio::null()).spawn()
+}
+async fn preview(path: &str) -> Vec<u8> {
+    // This is a response preview, never a capture limit or reason to stop a command.
+    let result = user_command()
+        .args([
+            "/usr/bin/timeout",
+            "--kill-after=1",
+            "2",
+            "/usr/bin/tail",
+            "-c",
+            "8192",
+            "--",
+            path,
+        ])
+        .output()
+        .await;
+    match result {
+        Ok(output) if output.status.success() => output.stdout,
+        _ => b"Output preview unavailable; inspect the retained workspace file.".to_vec(),
     }
 }
+fn user_command() -> Command {
+    // Keep the process-isolation policy; it is independent of task duration and output.
+    let mut command = Command::new("/usr/bin/prlimit");
+    command
+        .args([
+            "--nproc=128:128",
+            "--",
+            "/usr/bin/setpriv",
+            "--reuid=10002",
+            "--regid=10002",
+            "--clear-groups",
+            "--no-new-privs",
+            "--inh-caps=-all",
+            "--ambient-caps=-all",
+        ])
+        .env_clear()
+        .env("HOME", "/home/agent")
+        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+        .env("LANG", "C.UTF-8")
+        .current_dir("/")
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
+    command
+}
+
 async fn kill_namespace() -> io::Result<()> {
     if std::process::id() != 1 {
         return Err(io::Error::other("unsafe process namespace"));
@@ -120,90 +135,38 @@ async fn reap_namespace() -> io::Result<()> {
     }
 }
 
-fn caller_present(stream: &UnixStream) -> bool {
-    matches!(stream.try_read(&mut [0u8; 1]), Err(error) if error.kind() == io::ErrorKind::WouldBlock)
+fn caller_connected(stream: &UnixStream) -> io::Result<bool> {
+    use nix::poll::{PollFd, PollFlags, poll};
+    use std::os::fd::AsFd;
+    let shutdown = PollFlags::POLLHUP | PollFlags::POLLERR;
+    #[cfg(target_os = "linux")]
+    let shutdown = shutdown | PollFlags::from_bits_retain(nix::libc::POLLRDHUP);
+    let mut descriptors = [PollFd::new(stream.as_fd(), shutdown)];
+    poll(&mut descriptors, 0u8).map_err(io::Error::other)?;
+    Ok(!descriptors[0]
+        .revents()
+        .unwrap_or(PollFlags::POLLERR)
+        .intersects(shutdown))
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn lossy_decoding_cannot_expand_output_past_the_bound() {
-        let outcome = with_output(stopped("output_limit"), vec![255; OUTPUT_LIMIT]);
-        assert!(outcome.validate().is_ok());
+    use tokio::io::AsyncWriteExt;
+    #[tokio::test]
+    async fn buffered_renewals_are_not_mistaken_for_a_disconnected_caller() {
+        let (mut caller, executor) = UnixStream::pair().unwrap();
+        caller.write_u64(1).await.unwrap();
+        assert!(caller_connected(&executor).unwrap());
+        drop(caller);
+        assert!(!caller_connected(&executor).unwrap());
     }
-}
-
-fn execution_deadline(not_after: u64, seconds: u64) -> io::Result<Option<tokio::time::Instant>> {
-    let start = tokio::time::Instant::now();
-    let remaining = not_after.saturating_sub(super::monotonic_millis()?);
-    if remaining == 0 || remaining > 30000 {
-        return Ok(None);
-    }
-    Ok(Some(
-        start + Duration::from_millis(remaining.min(seconds * 1000)),
-    ))
-}
-
-fn spawn_user(
-    command: &str,
-) -> io::Result<(
-    tokio::process::Child,
-    tokio::process::ChildStdout,
-    tokio::process::ChildStderr,
-)> {
-    // ponytail: the hard per-UID process limit is shared across agents on a node.
-    // Use qualified per-Pod cgroup PID limits before increasing parallel capacity.
-    let mut child = Command::new("/usr/bin/prlimit")
-        .args([
-            "--nproc=128:128",
-            "--",
-            "/usr/bin/setpriv",
-            "--reuid=10002",
-            "--regid=10002",
-            "--clear-groups",
-            "--no-new-privs",
-            "--inh-caps=-all",
-            "--ambient-caps=-all",
-            "/bin/sh",
-            "-c",
-            "cd /home/agent && exec /bin/bash --noprofile --norc -c \"$1\"",
-            "terminal",
-            command,
-        ])
-        .env_clear()
-        .env("HOME", "/home/agent")
-        .env("PATH", "/usr/local/bin:/usr/bin:/bin")
-        .env("LANG", "C.UTF-8")
-        .current_dir("/")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| io::Error::other("missing stdout"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| io::Error::other("missing stderr"))?;
-    Ok((child, stdout, stderr))
-}
-
-#[cfg(test)]
-mod authority_tests {
-    use super::*;
-    #[test]
-    fn waiting_cannot_renew_expired_or_excessive_authority() {
-        let now = super::super::monotonic_millis().unwrap();
-        assert!(
-            execution_deadline(now.saturating_sub(1), 30)
-                .unwrap()
-                .is_none()
-        );
-        assert!(execution_deadline(now + 60000, 30).unwrap().is_none());
-        assert!(execution_deadline(now + 10000, 1).unwrap().is_some());
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn a_half_closed_caller_cannot_start_work_even_with_buffered_frames() {
+        let (mut caller, executor) = UnixStream::pair().unwrap();
+        caller.write_u64(1).await.unwrap();
+        let caller = caller.into_std().unwrap();
+        caller.shutdown(std::net::Shutdown::Write).unwrap();
+        assert!(!caller_connected(&executor).unwrap());
     }
 }

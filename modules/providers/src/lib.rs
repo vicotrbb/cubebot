@@ -96,15 +96,19 @@ impl OpenAi {
             .json(&body)
             .send()
             .await
-            .map_err(|_| Error::Unavailable)?;
+            .map_err(unavailable)?;
         if !response.status().is_success() {
+            eprintln!(
+                "Provider HTTP failure: status={}",
+                response.status().as_u16()
+            );
             return Err(match response.status().as_u16() {
                 429 | 500..=599 => Error::Transient,
                 _ => Error::Rejected,
             });
         }
         let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unavailable)? {
+        while let Some(chunk) = response.chunk().await.map_err(unavailable)? {
             if bytes.len() + chunk.len() > 256 * 1024 {
                 return Err(Error::InvalidResponse);
             }
@@ -145,3 +149,14 @@ fn append_content(text: &mut String, value: &Value) -> Result<(), Error> {
 }
 
 pub mod tools;
+
+// Do not format reqwest errors: their URLs and request data are not diagnostics.
+fn unavailable(error: reqwest::Error) -> Error {
+    eprintln!(
+        "Provider transport unavailable: timeout={} connect={} body={}",
+        error.is_timeout(),
+        error.is_connect(),
+        error.is_body()
+    );
+    Error::Unavailable
+}
