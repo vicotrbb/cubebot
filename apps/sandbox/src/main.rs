@@ -1,4 +1,6 @@
 //! One agent sandbox (ADR 0084). Only the `kvm` backend may carry an isolation claim.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod kvm;
 mod process;
 use std::process::ExitCode;
 
@@ -13,8 +15,10 @@ fn main() -> ExitCode {
     };
     let result = match backend {
         "process" => process::run(),
-        // shortcut: the guest VMM is not built yet, refuse instead of silently running unisolated.
-        "kvm" => Err(std::io::Error::other("kvm backend is not implemented")),
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        "kvm" => kvm::run(),
+        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        "kvm" => Err(std::io::Error::other("the kvm backend needs x86_64 Linux")),
         _ => Err(std::io::Error::other("unknown sandbox backend")),
     };
     match result {

@@ -58,6 +58,10 @@ check: format-check lint test build
 smoke:
     uv run --project tooling/quality --locked python tests/system/smoke.py
 
+# Builds the guest into target/guest and boots it on the kvm backend; skips off x86_64 Linux.
+guest-boot:
+    uv run --project tooling/quality --locked python tests/system/guest_boot.py
+
 db-up:
     docker compose --env-file .env up -d --wait postgres
 
