@@ -1,8 +1,7 @@
 //! The KVM ABI subset this VMM uses, from `linux/kvm.h` for x86_64.
 use nix::{
-    ioctl_none, ioctl_read, ioctl_readwrite_bad, ioctl_write_int_bad, ioctl_write_ptr,
-    ioctl_write_ptr_bad, request_code_none, request_code_readwrite, request_code_write,
-    sys::ioctl::ioctl_num_type,
+    ioctl_read, ioctl_readwrite_bad, ioctl_write_int_bad, ioctl_write_ptr, ioctl_write_ptr_bad,
+    request_code_none, request_code_readwrite, request_code_write, sys::ioctl::ioctl_num_type,
 };
 
 const KVMIO: u8 = 0xAE;
@@ -153,9 +152,11 @@ pub struct Io {
     pub data_offset: u64,
 }
 
-ioctl_none!(get_api_version, KVMIO, 0x00);
+// KVM rejects a nonzero argument on several _IO ioctls, so pass an explicit 0 rather than ioctl_none!,
+// which leaves the argument register undefined.
+ioctl_write_int_bad!(get_api_version, request_code_none!(KVMIO, 0x00));
 ioctl_write_int_bad!(create_vm, request_code_none!(KVMIO, 0x01));
-ioctl_none!(get_vcpu_mmap_size, KVMIO, 0x04);
+ioctl_write_int_bad!(get_vcpu_mmap_size, request_code_none!(KVMIO, 0x04));
 ioctl_readwrite_bad!(
     get_supported_cpuid,
     request_code_readwrite!(KVMIO, 0x05, 8),
@@ -163,10 +164,10 @@ ioctl_readwrite_bad!(
 );
 ioctl_write_int_bad!(create_vcpu, request_code_none!(KVMIO, 0x41));
 ioctl_write_ptr!(set_user_memory_region, KVMIO, 0x46, MemoryRegion);
-ioctl_none!(create_irqchip, KVMIO, 0x60);
+ioctl_write_int_bad!(create_irqchip, request_code_none!(KVMIO, 0x60));
 ioctl_write_ptr!(irq_line, KVMIO, 0x61, IrqLevel);
 ioctl_write_ptr!(create_pit2, KVMIO, 0x77, PitConfig);
-ioctl_none!(run, KVMIO, 0x80);
+ioctl_write_int_bad!(run, request_code_none!(KVMIO, 0x80));
 ioctl_write_ptr!(set_regs, KVMIO, 0x82, Regs);
 ioctl_read!(get_sregs, KVMIO, 0x83, Sregs);
 ioctl_write_ptr!(set_sregs, KVMIO, 0x84, Sregs);

@@ -34,7 +34,7 @@ pub fn run() -> io::Result<u8> {
         .write(true)
         .open("/dev/kvm")
         .map_err(|error| io::Error::other(format!("/dev/kvm: {error}")))?;
-    if unsafe { sys::get_api_version(kvm.as_raw_fd()) }.map_err(failed("KVM_GET_API_VERSION"))?
+    if unsafe { sys::get_api_version(kvm.as_raw_fd(), 0) }.map_err(failed("KVM_GET_API_VERSION"))?
         != sys::API_VERSION
     {
         return Err(io::Error::other("unsupported KVM API version"));
@@ -55,7 +55,7 @@ pub fn run() -> io::Result<u8> {
 
 /// Runs the vCPU until the guest shuts down, serving its port I/O.
 fn run_vcpu(kvm: &File, vcpu: &OwnedFd, vm: RawFd) -> io::Result<u8> {
-    let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd()) }
+    let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd(), 0) }
         .map_err(failed("KVM_GET_VCPU_MMAP_SIZE"))?;
     let run = unsafe {
         mmap(
@@ -71,7 +71,7 @@ fn run_vcpu(kvm: &File, vcpu: &OwnedFd, vm: RawFd) -> io::Result<u8> {
     .cast::<sys::Run>();
     let mut serial = serial::Serial::default();
     loop {
-        unsafe { sys::run(vcpu.as_raw_fd()) }.map_err(failed("KVM_RUN"))?;
+        unsafe { sys::run(vcpu.as_raw_fd(), 0) }.map_err(failed("KVM_RUN"))?;
         let run = unsafe { run.as_ptr().as_mut().ok_or(Errno::EFAULT)? };
         match run.exit_reason {
             sys::EXIT_IO => port_io(run, &mut serial, vm)?,
@@ -134,7 +134,7 @@ fn guest_memory(vm: &OwnedFd) -> io::Result<&'static mut [u8]> {
         // Intel VMX needs three pages for the real-mode TSS; this is the address every VMM uses.
         Errno::result(libc::ioctl(fd, sys::SET_TSS_ADDR, 0xfffb_d000_u64))
             .map_err(failed("KVM_SET_TSS_ADDR"))?;
-        sys::create_irqchip(fd).map_err(failed("KVM_CREATE_IRQCHIP"))?;
+        sys::create_irqchip(fd, 0).map_err(failed("KVM_CREATE_IRQCHIP"))?;
         sys::create_pit2(fd, &sys::PitConfig::default()).map_err(failed("KVM_CREATE_PIT2"))?;
         // The mapping lives until the process exits, and the host touches it only before the vCPU runs.
         Ok(std::slice::from_raw_parts_mut(host.as_ptr().cast(), MEMORY))
