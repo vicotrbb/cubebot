@@ -4,7 +4,7 @@ Configuration and HTTP behavior of what currently runs. Open qualification gaps 
 
 ## Runtime and lifecycle
 
-See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox --backend <kvm|process>` from `apps/sandbox` (ADR 0084), which runs `cubebot-agent`. The `kvm` backend is not implemented yet and refuses to start; `process` runs the agent as a plain child for development with no isolation claim. The agent runs terminal commands itself when the terminal flag is set.
+See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox --backend <kvm|process>` from `apps/sandbox` (ADR 0084), which runs `cubebot-agent`. The `kvm` backend is not implemented yet and refuses to start; `process` runs the agent as a plain child for development with no isolation claim. The agent runs its tools itself, as the configured tool user, when the terminal flag is set.
 
 The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter, durable resource reservations and a fixed pod/PVC specification compiler. Controlled HTTP, PostgreSQL and manifest tests cover these boundaries; explicit reconciliation provisions and observes installation anchors, workspace claims and pods, and explicit installation configuration now activates serial lifecycle reconciliation at startup. The compiler requires digest-pinned images, a dedicated runtime service account, HTTPS orchestrator origin and CSI support for ReadWriteOncePod.
 

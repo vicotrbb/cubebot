@@ -86,9 +86,8 @@ fn body(request: &Request) -> Value {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| json!({"type":"function","name":tool.name,"description":tool.description,"strict":true,"parameters":tool.parameters}))
+            .map(|tool| json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters}))
             .collect();
-        body["parallel_tool_calls"] = json!(false);
         if request.tools_disabled {
             body["tool_choice"] = json!("none");
         }
@@ -127,12 +126,12 @@ fn completed(response: &Value) -> Result<Event, Error> {
         .as_array()
         .ok_or(Error::InvalidResponse)?;
     let mut text = String::new();
-    let mut function = None;
+    let mut calls = Vec::new();
     for item in output {
         match item["type"].as_str() {
             Some("reasoning") => (),
             Some("message") => append_content(&mut text, &item["content"])?,
-            Some("function_call") if function.is_none() => function = Some(function_call(item)?),
+            Some("function_call") => calls.push(function_call(item)?),
             _ => return Err(Error::InvalidResponse),
         }
     }
@@ -145,7 +144,7 @@ fn completed(response: &Value) -> Result<Event, Error> {
             output_tokens,
         });
     Ok(Event::Done {
-        reply: reply(text, function, Value::Array(output.clone()))?,
+        reply: reply(text, calls, Value::Array(output.clone()))?,
         usage,
     })
 }

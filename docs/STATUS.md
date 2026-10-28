@@ -7,7 +7,7 @@ Updated 2026-10-28. This page lists what runs and what has not been qualified. [
 - Built-in sign-in/out, accounts, invitations, teams, scoped grants and optional OpenID Connect.
 - Authorized agent creation, editing and lifecycle intent, with Kubernetes reconciliation when a controller is configured.
 - Encrypted OpenAI API-key/model configuration and one permanent text conversation per agent, served by the native Rust runtime through the website.
-- A terminal implementation, disabled by default, run by the agent inside its sandbox. See [terminal execution](development/bounded-terminal.md).
+- Built-in tools (`bash`, file, `glob`, `grep`) and an MCP client for stdio and Streamable HTTP servers, disabled by default, run by the agent inside its sandbox as a configured tool user, with parallel calls. See [tool execution](development/bounded-terminal.md). MCP tools have no per-tool grants yet.
 - `cubebot-sandbox` with the development `process` backend, launched as one container per agent by the Kubernetes controller or, without a cluster, through Docker.
 
 Evidence: [text chat](development/text-chat-mvp.md), [cluster admission](development/cluster-admission.md), [cluster startup](development/cluster-startup.md), [layout verification](development/layout-verification.md).
@@ -20,7 +20,7 @@ Evidence: [text chat](development/text-chat-mvp.md), [cluster admission](develop
 
 Agent system
 
-- Rooms, delegation, memory, skills, browser, MCP, integrations, triggers, notifications, PWA/push and token streaming are not implemented. Responses commit as complete messages.
+- Rooms, delegation, memory, skills, browser, integrations, triggers, notifications, PWA/push and token streaming are not implemented. Responses commit as complete messages.
 - Room content workflows and event streaming are not implemented.
 - Tool-journal crash-window behavior on CSI is unqualified. Each channel polls PostgreSQL once a second; delivery latency and database load at scale are unmeasured.
 

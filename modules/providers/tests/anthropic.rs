@@ -51,9 +51,12 @@ async fn messages(headers: HeaderMap, Json(body): Json<Value>) -> Response {
     assert_eq!(body["cache_control"], json!({"type":"ephemeral"}));
     assert_eq!(body["system"], "Be brief.");
     assert_eq!(body["tools"][0]["input_schema"], json!({"type":"object"}));
+    assert_eq!(body["tool_choice"], json!({"type":"auto"}));
+    // Parallel results share the user message that answers their assistant message.
     assert_eq!(
-        body["tool_choice"],
-        json!({"type":"auto","disable_parallel_tool_use":true})
+        body["messages"][3]["content"],
+        json!([{"type":"tool_result","tool_use_id":"toolu_a","content":"one"},
+            {"type":"tool_result","tool_use_id":"toolu_b","content":"two"}])
     );
     assert_eq!(
         body["messages"][0],
@@ -115,14 +118,28 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         Message::User("Hello".into()),
         Message::Assistant(cubebot_providers::Reply {
             text: "Before".into(),
-            call: None,
+            calls: Vec::new(),
             native: Value::Null,
         }),
+        Message::Assistant(cubebot_providers::Reply {
+            text: String::new(),
+            calls: Vec::new(),
+            native: json!([{"type":"tool_use","id":"toolu_a"},{"type":"tool_use","id":"toolu_b"}]),
+        }),
+        Message::ToolResult {
+            call_id: "toolu_a".into(),
+            output: "one".into(),
+        },
+        Message::ToolResult {
+            call_id: "toolu_b".into(),
+            output: "two".into(),
+        },
     ];
     let tools = [Tool {
         name: "terminal".into(),
         description: "Run".into(),
         parameters: json!({"type":"object"}),
+        strict: true,
     }];
     let request = Request {
         model: "test-model",
@@ -155,7 +172,9 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
             output_tokens: 20
         })
     );
-    let call = reply.call.as_ref().unwrap();
+    let [call] = &reply.calls[..] else {
+        panic!("expected one call");
+    };
     assert_eq!(
         (call.call_id.as_str(), call.name.as_str()),
         ("toolu_1", "terminal")

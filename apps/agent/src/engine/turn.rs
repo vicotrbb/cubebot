@@ -1,7 +1,7 @@
-//! One turn: streamed model steps and serial terminal calls, reported as ordered events. Tool
+//! One turn: streamed model steps and parallel tool calls, reported as ordered events. Tool
 //! calls are journaled before they run and are never recovered by running them again.
 use super::attempts::{Entry, Store};
-use crate::context::Context;
+use crate::{context::Context, tools::Registry};
 use cubebot_protocol::{
     runtime::{EVENT_BYTES, ProviderKind, Turn, TurnEvent},
     terminal::Outcome,
@@ -10,8 +10,7 @@ use cubebot_providers::{
     Anthropic, Error, Event as ProviderEvent, FunctionCall, Limits, Message, OpenAi, Provider,
     Reply, Request, Usage,
 };
-use futures_util::StreamExt;
-use serde_json::json;
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use std::{
     io,
     sync::{Arc, Mutex},
@@ -64,8 +63,10 @@ pub(super) async fn run(
     turn: Turn,
     events: UnboundedSender<Event>,
     store: Arc<Mutex<Store>>,
+    tools: Option<Arc<Registry>>,
     cancel: watch::Receiver<bool>,
 ) {
+    let tools = tools.as_deref();
     let mut run = Run {
         turn: turn.turn,
         next: turn.sequence,
@@ -74,11 +75,11 @@ pub(super) async fn run(
     let end = match turn.provider {
         ProviderKind::Openai => {
             let provider = configured(OpenAi::new, OpenAi::for_loopback_tests);
-            start(provider, &turn, &mut run, &store, cancel).await
+            start(provider, &turn, &mut run, &store, tools, cancel).await
         }
         ProviderKind::Anthropic => {
             let provider = configured(Anthropic::new, Anthropic::for_loopback_tests);
-            start(provider, &turn, &mut run, &store, cancel).await
+            start(provider, &turn, &mut run, &store, tools, cancel).await
         }
     };
     run.emit(end, None);
@@ -100,17 +101,14 @@ async fn start<P: Provider>(
     turn: &Turn,
     run: &mut Run,
     store: &Mutex<Store>,
+    registry: Option<&Registry>,
     mut cancel: watch::Receiver<bool>,
 ) -> TurnEvent {
     let provider = match provider {
         Ok(provider) => provider,
         Err(error) => return failed(error.code()),
     };
-    let tools = if std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1") {
-        vec![crate::tools::terminal_definition()]
-    } else {
-        Vec::new()
-    };
+    let tools = registry.map_or_else(Vec::new, |registry| registry.definitions().to_vec());
     let capabilities = provider.capabilities();
     if !tools.is_empty() && !capabilities.tool_calls {
         return failed("provider_rejected");
@@ -136,6 +134,7 @@ async fn start<P: Provider>(
         max_output_tokens: limits.max_output_tokens,
         run,
         store,
+        tools: registry,
         cancel,
     }
     .converse(&mut context)
@@ -148,6 +147,7 @@ struct Session<'a, P> {
     max_output_tokens: Option<u64>,
     run: &'a mut Run,
     store: &'a Mutex<Store>,
+    tools: Option<&'a Registry>,
     cancel: watch::Receiver<bool>,
 }
 
@@ -162,23 +162,25 @@ impl<P: Provider> Session<'_, P> {
             self.usage(usage);
             // Compaction waits for a safe point: after the tool result, or before the reply.
             let full = context.full(usage);
-            let call = reply.call.clone();
+            let calls = reply.calls.clone();
             let response = reply.text.clone();
             context.messages.push(Message::Assistant(reply));
-            let Some(call) = call else {
+            if calls.is_empty() {
                 if full {
                     self.compact(context).await;
                 }
                 return done(response);
-            };
-            let output = match self.call(!context.tools.is_empty(), &call).await {
-                Ok(output) => output,
+            }
+            let outputs = match self.call(&calls).await {
+                Ok(outputs) => outputs,
                 Err(code) => return failed(code),
             };
-            context.messages.push(Message::ToolResult {
-                call_id: call.call_id,
-                output,
-            });
+            for (call, output) in calls.into_iter().zip(outputs) {
+                context.messages.push(Message::ToolResult {
+                    call_id: call.call_id,
+                    output,
+                });
+            }
             if full {
                 self.compact(context).await;
             }
@@ -242,19 +244,50 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    async fn call(&mut self, offered: bool, call: &FunctionCall) -> Result<String, &'static str> {
-        let command = offered
-            .then(|| crate::tools::terminal_arguments(&call.name, &call.arguments).ok())
-            .flatten()
-            .ok_or("provider_invalid_response")?;
+    /// Journals every call before any starts, runs them in parallel and journals each result as
+    /// it arrives. Outputs come back in call order.
+    async fn call(&mut self, calls: &[FunctionCall]) -> Result<Vec<String>, &'static str> {
+        let tools = self.tools.ok_or("provider_invalid_response")?;
+        let prepared = prepare(tools, calls);
+        let mut running = FuturesUnordered::new();
+        let mut unfinished = Vec::new();
+        for (index, (id, name, input, call)) in prepared.into_iter().enumerate() {
+            self.journal(TurnEvent::ToolCall { id, name, input })?;
+            unfinished.push(id);
+            running.push(async move { (index, id, call.await) });
+        }
+        let mut outputs = vec![String::new(); calls.len()];
         let mut cancel = self.cancel.clone();
-        let outcome = execute(self.run, self.store, command.command, &mut cancel)
-            .await
-            .map_err(|_| "journal_unavailable")?;
+        while !running.is_empty() {
+            tokio::select! {
+                Some((index, id, outcome)) = running.next() => {
+                    unfinished.retain(|other| *other != id);
+                    outputs[index] = serde_json::to_string(&outcome).unwrap_or_default();
+                    self.journal(TurnEvent::ToolResult { id, outcome })?;
+                }
+                _ = cancel.wait_for(|cancelled| *cancelled) => break,
+            }
+        }
+        // Dropping the unfinished calls kills their process groups before their output is read.
+        drop(running);
+        for id in unfinished {
+            let output = tools.preview(id);
+            let outcome = Outcome::Stopped {
+                reason: "cancelled".into(),
+                output,
+            };
+            self.journal(TurnEvent::ToolResult { id, outcome })?;
+        }
         if *cancel.borrow() {
             return Err("cancelled");
         }
-        Ok(serde_json::to_string(&outcome).unwrap_or_default())
+        Ok(outputs)
+    }
+
+    fn journal(&mut self, event: TurnEvent) -> Result<(), &'static str> {
+        self.run
+            .journaled(self.store, event)
+            .map_err(|_| "journal_unavailable")
     }
 
     /// Summarizes with the same model and replaces the context only with a valid summary.
@@ -272,7 +305,7 @@ impl<P: Provider> Session<'_, P> {
         let summary = TurnEvent::Summary {
             text: reply.text.clone(),
         };
-        if reply.call.is_some() || !fits(&summary) {
+        if !reply.calls.is_empty() || !fits(&summary) {
             return keep_context();
         }
         self.run.emit(summary, None);
@@ -313,44 +346,35 @@ fn done(response: String) -> TurnEvent {
     }
 }
 
-async fn execute(
-    run: &mut Run,
-    store: &Mutex<Store>,
-    command: String,
-    cancel: &mut watch::Receiver<bool>,
-) -> io::Result<Outcome> {
-    let id = Uuid::new_v4();
-    let input = json!({ "command": command });
-    run.journaled(
-        store,
-        TurnEvent::ToolCall {
-            id,
-            name: "terminal".into(),
-            input,
-        },
-    )?;
-    let workspace = std::env::var("CUBEBOT_WORKSPACE_DIRECTORY").unwrap_or_default();
-    let outcome = match super::process::spawn(id, &command, &workspace) {
-        Ok((mut child, path)) => {
-            let status = tokio::select! {
-                status = child.wait() => status.ok().map(|status| status.code()),
-                _ = cancel.wait_for(|cancelled| *cancelled) => None,
+/// Every call with its arguments and unstarted run. A call that cannot run is still recorded,
+/// with unparsable arguments kept as text, and answers the model with why, so it can correct
+/// the call while the rest of the response runs.
+#[allow(clippy::type_complexity)]
+fn prepare<'a>(
+    tools: &'a Registry,
+    calls: &[FunctionCall],
+) -> Vec<(Uuid, String, serde_json::Value, crate::tools::Running<'a>)> {
+    calls
+        .iter()
+        .map(|call| {
+            let id = Uuid::new_v4();
+            let parsed = serde_json::from_str(&call.arguments);
+            let running = match &parsed {
+                Ok(input) => tools.call(&call.name, id, input),
+                Err(_) => Err("arguments are not valid JSON"),
             };
-            super::process::finish(child, &path, status).await
-        }
-        Err(error) => Outcome::Exited {
-            code: None,
-            output: format!("The command did not start: {error}"),
-        },
-    };
-    run.journaled(
-        store,
-        TurnEvent::ToolResult {
-            id,
-            outcome: outcome.clone(),
-        },
-    )?;
-    Ok(outcome)
+            let running = running.unwrap_or_else(|reason| {
+                Box::pin(async move {
+                    Outcome::Exited {
+                        code: None,
+                        output: format!("The call was not run: {reason}."),
+                    }
+                })
+            });
+            let input = parsed.unwrap_or_else(|_| call.arguments.clone().into());
+            (id, call.name.clone(), input, running)
+        })
+        .collect()
 }
 
 fn failed(code: &str) -> TurnEvent {

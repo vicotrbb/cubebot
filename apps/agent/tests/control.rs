@@ -10,7 +10,12 @@ use axum::{
 };
 use cubebot_agent::control::{Config, Error, RuntimeClient};
 use serde_json::{Value, json};
-use std::{os::unix::fs::DirBuilderExt, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    os::unix::fs::{DirBuilderExt, MetadataExt},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::{Mutex, mpsc};
 use uuid::Uuid;
 
@@ -187,6 +192,8 @@ fn root() -> PathBuf {
     root
 }
 fn spawn(origin: &str, root: &std::path::Path) -> std::process::Child {
+    // The test's own user stands in for the tool user, as on the development backend.
+    let owner = std::fs::metadata(root).unwrap();
     std::process::Command::new(env!("CARGO_BIN_EXE_cubebot-agent"))
         .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
         .env("CUBEBOT_BOOTSTRAP_TOKEN_FILE", root.join("token"))
@@ -194,6 +201,10 @@ fn spawn(origin: &str, root: &std::path::Path) -> std::process::Child {
         .env("CUBEBOT_WORKSPACE_DIRECTORY", root.join("workspace"))
         .env("CUBEBOT_TEST_PROVIDER_ORIGIN", format!("{origin}/"))
         .env("CUBEBOT_TERMINAL_ENABLED", "1")
+        .env(
+            "CUBEBOT_TOOL_USER",
+            format!("{}:{}", owner.uid(), owner.gid()),
+        )
         .spawn()
         .unwrap()
 }
@@ -260,24 +271,26 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
 }
 
 #[tokio::test]
-async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_a_command() {
+async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_parallel_calls() {
     let root = root();
     let earlier = Uuid::new_v4();
     let call = Uuid::new_v4();
     let mut journal = cubebot_agent::journal::Journal::open(&root.join("tools")).unwrap();
     journal
         .append(
-            json!({"turn":earlier,"sequence":7,"event":{"kind":"tool_call","id":call,"name":"terminal","input":{"command":"touch effect"}}})
+            json!({"turn":earlier,"sequence":7,"event":{"kind":"tool_call","id":call,"name":"bash","input":{"command":"touch effect"}}})
                 .to_string()
                 .as_bytes(),
         )
         .unwrap();
     drop(journal);
     let mut fake = fake(vec![responses(
-        json!([{"type":"function_call","name":"terminal","call_id":"c1","arguments":"{\"command\":\"sleep 30\"}"}]),
+        json!([{"type":"function_call","name":"bash","call_id":"c1","arguments":"{\"command\":\"sleep 30\"}"},
+            {"type":"function_call","name":"edit_file","call_id":"c2","arguments":"{\"path\":\"notes.txt\",\"old_string\":\"world\",\"new_string\":\"there\",\"replace_all\":false}"}]),
         json!({"input_tokens":9,"output_tokens":2}),
     )])
     .await;
+    std::fs::write(root.join("workspace/notes.txt"), "hello world").unwrap();
     let mut child = spawn(&fake.origin, &root);
     assert_eq!(fake.event(7).await["kind"], "tool_call");
     assert_eq!(
@@ -293,21 +306,108 @@ async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_a_
     let started = fake.event(2).await;
     assert_eq!(started["kind"], "tool_call");
     assert_eq!(started["input"], json!({"command":"sleep 30"}));
+    // Both calls are journaled before either runs; the edit finishes while the command runs.
+    let edit = fake.event(3).await;
+    assert_eq!(edit["name"], "edit_file");
+    let edited = fake.event(4).await;
+    assert_eq!(edited["id"], edit["id"]);
+    assert_eq!(edited["outcome"]["code"], 0, "{edited}");
+    assert_eq!(
+        std::fs::read_to_string(root.join("workspace/notes.txt")).unwrap(),
+        "hello there"
+    );
     fake.deliver(json!({"type":"cancel","turn":id}));
-    let stopped = fake.event(3).await;
+    let stopped = fake.event(5).await;
     assert_eq!(stopped["id"], started["id"]);
     assert_eq!(stopped["outcome"]["status"], "stopped");
     assert_eq!(stopped["outcome"]["reason"], "cancelled");
     assert_eq!(
-        fake.event(4).await,
+        fake.event(6).await,
         json!({"kind":"error","code":"cancelled"})
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
-    fake.ack(id, 1..=4);
+    fake.ack(id, 1..=6);
     fake.drain(&mut child).await;
     let journal = cubebot_agent::journal::Journal::open(&root.join("tools")).unwrap();
     assert!(journal.pending().is_empty());
     drop(journal);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
+    let mut fake = fake(vec![
+        responses(
+            json!([{"type":"function_call","name":"nope","call_id":"c1","arguments":"{}"},
+                {"type":"function_call","name":"bash","call_id":"c2","arguments":"{\"command\":\"printf hi\"}"},
+                {"type":"function_call","name":"bash","call_id":"c3","arguments":"not json"}]),
+            json!({"input_tokens":9,"output_tokens":2}),
+        ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"Fixed"}]}]),
+            json!({"input_tokens":20,"output_tokens":1}),
+        ),
+    ])
+    .await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let id = Uuid::new_v4();
+    fake.deliver(turn(id, 1, "Go"));
+    assert_eq!(fake.event(1).await["kind"], "usage");
+    let unknown = fake.event(2).await;
+    assert_eq!(
+        (&unknown["name"], &unknown["input"]),
+        (&json!("nope"), &json!({}))
+    );
+    let ran = fake.event(3).await;
+    let garbled = fake.event(4).await;
+    assert_eq!(garbled["input"], "not json");
+    let mut results = [
+        fake.event(5).await,
+        fake.event(6).await,
+        fake.event(7).await,
+    ];
+    let order = |result: &Value| {
+        [&unknown, &ran, &garbled]
+            .iter()
+            .position(|call| call["id"] == result["id"])
+    };
+    results.sort_by_key(order);
+    assert_eq!(
+        results[0]["outcome"],
+        json!({"status":"exited","code":null,"output":"The call was not run: no tool has this name."})
+    );
+    assert_eq!(results[1]["outcome"]["code"], 0);
+    assert_eq!(
+        results[2]["outcome"]["output"],
+        "The call was not run: arguments are not valid JSON."
+    );
+    assert_eq!(fake.event(8).await["kind"], "text_delta");
+    assert_eq!(fake.event(9).await["kind"], "usage");
+    assert_eq!(
+        fake.event(10).await,
+        json!({"kind":"done","response":"Fixed"})
+    );
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    // Both results go back to the model, in call order.
+    let request = fake.provider.lock().unwrap()[1].clone();
+    let outputs: Vec<&Value> = request["input"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["type"] == "function_call_output")
+        .collect();
+    let ids: Vec<&Value> = outputs.iter().map(|output| &output["call_id"]).collect();
+    assert_eq!(ids, [&json!("c1"), &json!("c2"), &json!("c3")]);
+    assert!(
+        outputs[0]["output"]
+            .as_str()
+            .unwrap()
+            .contains("no tool has this name")
+    );
+    fake.ack(id, 1..=10);
+    fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }
 

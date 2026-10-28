@@ -86,19 +86,30 @@ impl Provider for Anthropic {
 fn body(request: &Request) -> Result<Value, Error> {
     // The Messages API requires an output limit; callers pass the model's own.
     let limit = request.max_output_tokens.ok_or(Error::Configuration)?;
-    let messages: Vec<Value> = request
-        .messages
-        .iter()
-        .map(|message| match message {
+    let mut messages: Vec<Value> = Vec::new();
+    for message in request.messages {
+        let value = match message {
             Message::User(text) => json!({"role":"user","content":text}),
             Message::Assistant(reply) if reply.native.is_array() => {
                 json!({"role":"assistant","content":reply.native})
             }
             Message::Assistant(reply) => json!({"role":"assistant","content":reply.text}),
-            Message::ToolResult { call_id, output } => json!({"role":"user","content":[
-                {"type":"tool_result","tool_use_id":call_id,"content":output}]}),
-        })
-        .collect();
+            Message::ToolResult { call_id, output } => {
+                let result = json!({"type":"tool_result","tool_use_id":call_id,"content":output});
+                // Parallel results answer one assistant message, so they share one user message.
+                if let Some(Value::Array(content)) = messages
+                    .last_mut()
+                    .filter(|last| last["content"][0]["type"] == "tool_result")
+                    .map(|last| &mut last["content"])
+                {
+                    content.push(result);
+                    continue;
+                }
+                json!({"role":"user","content":[result]})
+            }
+        };
+        messages.push(value);
+    }
     // Automatic caching moves one breakpoint to the end of the history each turn, so the
     // resent prefix is read from cache instead of billed in full.
     let mut body = json!({"model":request.model,"max_tokens":limit,"messages":messages,
@@ -110,12 +121,12 @@ fn body(request: &Request) -> Result<Value, Error> {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":true}))
+            .map(|tool| json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":tool.strict}))
             .collect();
         body["tool_choice"] = if request.tools_disabled {
             json!({"type":"none"})
         } else {
-            json!({"type":"auto","disable_parallel_tool_use":true})
+            json!({"type":"auto"})
         };
     }
     Ok(body)
@@ -230,19 +241,18 @@ impl Messages {
             _ => return Err(Error::InvalidResponse),
         }
         let mut text = String::new();
-        let mut function = None;
+        let mut calls = Vec::new();
         for block in &self.blocks {
             match block["type"].as_str() {
                 Some("text") => text.push_str(block["text"].as_str().unwrap_or_default()),
-                Some("tool_use") if function.is_none() => {
+                Some("tool_use") => {
                     let field = |name: &str| block[name].as_str().ok_or(Error::InvalidResponse);
-                    function = Some(call(
+                    calls.push(call(
                         field("id")?,
                         field("name")?,
                         block["input"].to_string(),
                     )?);
                 }
-                Some("tool_use") => return Err(Error::InvalidResponse),
                 _ => (),
             }
         }
@@ -254,11 +264,7 @@ impl Messages {
                     output_tokens,
                 });
         Ok(Event::Done {
-            reply: reply(
-                text,
-                function,
-                Value::Array(std::mem::take(&mut self.blocks)),
-            )?,
+            reply: reply(text, calls, Value::Array(std::mem::take(&mut self.blocks)))?,
             usage,
         })
     }

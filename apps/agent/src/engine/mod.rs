@@ -1,7 +1,6 @@
 //! The agent's own loop: one channel to the switchboard and one turn at a time. Events wait in an
 //! outbox until the ledger acknowledges them, so a reconnect resends rather than loses them.
 mod attempts;
-mod process;
 mod turn;
 use crate::control::{Channel, Config, Error, RuntimeClient};
 use attempts::Store;
@@ -24,7 +23,8 @@ pub async fn run() -> Result<(), &'static str> {
     let config = Config::from_environment().map_err(|_| "invalid runtime configuration")?;
     let root =
         std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY").ok_or("runtime storage not configured")?;
-    let mut agent = Agent::open(Path::new(&root))?;
+    let tools = crate::tools::Registry::load().await?.map(Arc::new);
+    let mut agent = Agent::open(Path::new(&root), tools)?;
     let mut client = RuntimeClient::new(config).map_err(|_| "runtime transport unavailable")?;
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
         .map_err(|_| "runtime signal handler unavailable")?;
@@ -66,12 +66,13 @@ struct Agent {
     sender: mpsc::UnboundedSender<turn::Event>,
     events: mpsc::UnboundedReceiver<turn::Event>,
     bootstrapped: bool,
+    tools: Option<Arc<crate::tools::Registry>>,
     active: Option<Active>,
     drain: Option<Uuid>,
 }
 
 impl Agent {
-    fn open(root: &Path) -> Result<Self, &'static str> {
+    fn open(root: &Path, tools: Option<Arc<crate::tools::Registry>>) -> Result<Self, &'static str> {
         let metadata =
             std::fs::symlink_metadata(root).map_err(|_| "private runtime storage unavailable")?;
         if !metadata.is_dir() || metadata.mode() & 0o077 != 0 {
@@ -93,6 +94,7 @@ impl Agent {
             sender,
             events,
             bootstrapped: false,
+            tools,
             active: None,
             drain: None,
         })
@@ -169,6 +171,7 @@ impl Agent {
                     work,
                     self.sender.clone(),
                     self.store.clone(),
+                    self.tools.clone(),
                     cancelled,
                 ));
                 self.active = Some(Active { turn, cancel, task });

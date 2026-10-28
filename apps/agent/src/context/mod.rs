@@ -22,7 +22,7 @@ impl Context {
             messages.push(Message::User(exchange.message.clone()));
             messages.push(Message::Assistant(Reply {
                 text: exchange.response.clone(),
-                call: None,
+                calls: Vec::new(),
                 native: serde_json::Value::Null,
             }));
         }
