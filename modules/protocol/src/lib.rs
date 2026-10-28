@@ -14,7 +14,6 @@ pub enum LivenessStatus {
     Alive,
 }
 
-pub mod chat;
 pub mod network;
 pub mod runtime;
 

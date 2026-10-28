@@ -80,14 +80,7 @@ export function turn(value: unknown) {
   const data = record(value)
   const status = string(data.status)
   if (
-    ![
-      'queued',
-      'running',
-      'retrying',
-      'waiting',
-      'complete',
-      'cancelled',
-    ].includes(status)
+    !['queued', 'running', 'waiting', 'complete', 'cancelled'].includes(status)
   )
     throw new Error('Invalid server response.')
   return {
@@ -97,7 +90,6 @@ export function turn(value: unknown) {
     status,
     response: nullable(data.response),
     error: nullable(data.error),
-    authority_id: nullable(data.authority_id),
     terminal: array(data.terminal, terminalProgress),
   }
 }

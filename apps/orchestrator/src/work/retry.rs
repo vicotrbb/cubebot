@@ -7,7 +7,6 @@ use uuid::Uuid;
 #[serde(deny_unknown_fields)]
 pub struct RetryMessage {
     pub request_id: Uuid,
-    pub expected_authority: Option<Uuid>,
 }
 
 impl Work {
@@ -29,13 +28,18 @@ impl Work {
             .bind(agent)
             .execute(&mut *tx)
             .await?;
-        let previous: Option<(Uuid,Option<Uuid>)> = sqlx::query_as("SELECT turn_id,previous_authority FROM chat_retries WHERE actor_id=$1 AND request_id=$2")
-            .bind(actor.id).bind(input.request_id).fetch_optional(&mut *tx).await?;
+        let previous: Option<Uuid> = sqlx::query_scalar(
+            "SELECT turn_id FROM chat_retries WHERE actor_id=$1 AND request_id=$2",
+        )
+        .bind(actor.id)
+        .bind(input.request_id)
+        .fetch_optional(&mut *tx)
+        .await?;
         match previous {
-            Some((id, authority)) if id == turn && authority == input.expected_authority => (),
+            Some(id) if id == turn => (),
             Some(_) => return Err(IdentityError::Conflict),
             None => {
-                requeue(&mut tx, actor, agent, turn, input).await?;
+                requeue(&mut tx, actor, agent, turn, input.request_id).await?;
             }
         }
         let turn = read_turn(&mut tx, conversation, turn).await?;
@@ -49,14 +53,19 @@ async fn requeue(
     actor: &Actor,
     agent: crate::agents::AgentId,
     turn: Uuid,
-    input: &RetryMessage,
+    request: Uuid,
 ) -> Result<(), IdentityError> {
-    let updated: Option<Uuid> = sqlx::query_scalar("UPDATE chat_turns SET status='queued',error=NULL,authority_id=NULL WHERE id=$1 AND conversation_id=$2 AND status='waiting' AND NOT EXISTS(SELECT 1 FROM terminal_invocations i WHERE i.turn_id=chat_turns.id AND (i.outcome IS NULL OR i.outcome->>'status'='uncertain')) AND authority_id IS NOT DISTINCT FROM $3 RETURNING id")
-                    .bind(turn).bind(agent).bind(input.expected_authority).fetch_optional(&mut **tx).await?;
+    // Never rerun a turn whose tool effects are unknown.
+    let updated: Option<Uuid> = sqlx::query_scalar("UPDATE chat_turns SET status='queued',error=NULL WHERE id=$1 AND conversation_id=$2 AND status='waiting' AND NOT EXISTS(SELECT 1 FROM turn_events c WHERE c.turn_id=chat_turns.id AND c.payload->>'kind'='tool_call' AND NOT EXISTS(SELECT 1 FROM turn_events r WHERE r.turn_id=c.turn_id AND r.payload->>'kind'='tool_result' AND r.payload->>'id'=c.payload->>'id' AND r.payload->'outcome'->>'status'<>'uncertain')) RETURNING id")
+                    .bind(turn).bind(agent).fetch_optional(&mut **tx).await?;
     updated.ok_or(IdentityError::Conflict)?;
     super::wake(tx, agent).await?;
-    sqlx::query("INSERT INTO chat_retries (actor_id,request_id,turn_id,previous_authority) VALUES ($1,$2,$3,$4)")
-                    .bind(actor.id).bind(input.request_id).bind(turn).bind(input.expected_authority).execute(&mut **tx).await?;
+    sqlx::query("INSERT INTO chat_retries (actor_id,request_id,turn_id) VALUES ($1,$2,$3)")
+        .bind(actor.id)
+        .bind(request)
+        .bind(turn)
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
@@ -65,6 +74,6 @@ async fn read_turn(
     conversation: Uuid,
     turn: Uuid,
 ) -> Result<Turn, IdentityError> {
-    sqlx::query_as("SELECT id,sequence,message,status,response,error,authority_id FROM chat_turns WHERE id=$1 AND conversation_id=$2")
+    sqlx::query_as("SELECT id,sequence,message,status,response,error FROM chat_turns WHERE id=$1 AND conversation_id=$2")
         .bind(turn).bind(conversation).fetch_optional(&mut **tx).await?.ok_or(IdentityError::NotFound)
 }

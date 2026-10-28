@@ -61,9 +61,6 @@ impl DockerConfig {
         }
         Self::parse(&input).map(Some)
     }
-    pub fn terminal_enabled(&self) -> bool {
-        self.terminal_enabled
-    }
 }
 fn loopback(origin: &openidconnect::reqwest::Url) -> bool {
     origin.host_str().is_some_and(|host| {

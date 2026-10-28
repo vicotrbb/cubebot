@@ -1,91 +1,71 @@
-//! Local terminal attempts. An intent is durable before its command starts and is never re-run.
+//! Local crash recovery for tool effects. A call is durable before its command starts and is
+//! never run again; after a crash it is reported once, with its outcome or as uncertain.
 use crate::journal::Journal;
-use cubebot_protocol::terminal::{Invocation, Outcome};
+use cubebot_protocol::{runtime::TurnEvent, terminal::Outcome};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, io, path::Path};
+use std::{io, path::Path};
 use uuid::Uuid;
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-enum Record {
-    Intent { request: Invocation },
-    Outcome { id: Uuid, outcome: Outcome },
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Entry {
+    pub turn: Uuid,
+    pub sequence: u64,
+    pub event: TurnEvent,
 }
 pub(super) struct Store {
     journal: Journal,
-    admission_fenced: bool,
-    invocations: HashMap<Uuid, (Invocation, Outcome)>,
 }
 impl Store {
     pub fn open(path: &Path) -> io::Result<Self> {
-        let journal = Journal::open(path)?;
-        let mut invocations = HashMap::new();
-        for record in journal.pending() {
-            match serde_json::from_slice::<Record>(&record.payload)? {
-                Record::Intent { request } => {
-                    if invocations
-                        .insert(request.id, (request, Outcome::Uncertain))
-                        .is_some()
-                    {
-                        return Err(io::Error::other("duplicate terminal intent"));
-                    }
-                }
-                Record::Outcome { id, outcome } => {
-                    let entry = invocations
-                        .get_mut(&id)
-                        .ok_or_else(|| io::Error::other("outcome without intent"))?;
-                    entry.1 = outcome;
-                }
-            }
-        }
         Ok(Self {
-            journal,
-            invocations,
-            admission_fenced: false,
+            journal: Journal::open(path)?,
         })
     }
-    pub fn lookup(&self, id: Uuid, authority: Uuid) -> io::Result<Outcome> {
-        match self.invocations.get(&id) {
-            Some((request, outcome)) if request.authority == authority => Ok(outcome.clone()),
-            None => Ok(Outcome::Uncertain),
-            _ => Err(io::Error::other("terminal authority conflict")),
-        }
+    /// Returns the journal sequence that acknowledges this entry.
+    pub fn record(&mut self, entry: &Entry) -> io::Result<u64> {
+        self.journal.append(&serde_json::to_vec(entry)?)
     }
-    pub fn begin(&mut self, request: &Invocation) -> io::Result<Option<Outcome>> {
-        if self.admission_fenced {
-            return Err(io::Error::other("terminal execution not settled"));
-        }
-        if let Some((prior, outcome)) = self.invocations.get(&request.id) {
-            if prior != request {
-                return Err(io::Error::other("terminal identity conflict"));
+    /// Called once the ledger has the entry and everything before it.
+    pub fn acknowledge(&mut self, through: u64) -> io::Result<()> {
+        self.journal.acknowledge(through)
+    }
+    /// Unacknowledged entries in order. A call without a result gets an uncertain result in the
+    /// sequence reserved for it, acknowledged with the call.
+    pub fn pending(&self) -> io::Result<Vec<(Entry, u64)>> {
+        let mut pending = Vec::new();
+        for record in self.journal.pending() {
+            let entry: Entry = serde_json::from_slice(&record.payload)?;
+            // Calls are serial: a result always follows its own call.
+            if !matches!(entry.event, TurnEvent::ToolResult { .. }) {
+                settle(&mut pending);
             }
-            return Ok(Some(outcome.clone()));
+            pending.push((entry, record.sequence));
         }
-        // An error may unwind this session before the server observes its failure.
-        // Fence queued writers before journaling or starting any effects.
-        self.admission_fenced = true;
-        self.append(&Record::Intent {
-            request: request.clone(),
-        })?;
-        self.invocations
-            .insert(request.id, (request.clone(), Outcome::Uncertain));
-        Ok(None)
+        settle(&mut pending);
+        Ok(pending)
     }
-    pub fn finish(&mut self, id: Uuid, outcome: &Outcome) -> io::Result<()> {
-        self.append(&Record::Outcome {
-            id,
-            outcome: outcome.clone(),
-        })?;
-        self.invocations
-            .get_mut(&id)
-            .ok_or_else(|| io::Error::other("missing terminal intent"))?
-            .1 = outcome.clone();
-        self.admission_fenced = false;
-        Ok(())
-    }
-    fn append(&mut self, record: &Record) -> io::Result<()> {
-        self.journal.append(&serde_json::to_vec(record)?)?;
-        Ok(())
+}
+fn settle(pending: &mut Vec<(Entry, u64)>) {
+    if let Some((
+        Entry {
+            turn,
+            sequence,
+            event: TurnEvent::ToolCall { id, .. },
+        },
+        journal,
+    )) = pending.last()
+    {
+        let uncertain = Entry {
+            turn: *turn,
+            sequence: sequence + 1,
+            event: TurnEvent::ToolResult {
+                id: *id,
+                outcome: Outcome::Uncertain,
+            },
+        };
+        let journal = *journal;
+        pending.push((uncertain, journal));
     }
 }
 
@@ -93,61 +73,59 @@ impl Store {
 mod tests {
     use super::*;
 
-    #[test]
-    fn an_unsettled_execution_cannot_admit_a_queued_command() {
-        let root = std::env::temp_dir().join(format!("cubebot-terminal-{}", Uuid::new_v4()));
-        let first = Invocation {
-            id: Uuid::new_v4(),
-            authority: Uuid::new_v4(),
-            command: "first effects".into(),
-        };
-        let second = Invocation {
-            id: Uuid::new_v4(),
-            authority: first.authority,
-            command: "second effects".into(),
-        };
-        let mut store = Store::open(&root).unwrap();
-        assert!(store.begin(&first).unwrap().is_none());
-        // An execution error unwinds the session without calling finish.
-        assert!(store.begin(&second).is_err());
-        store
-            .finish(
-                first.id,
-                &Outcome::Exited {
-                    code: Some(0),
-                    output: String::new(),
-                },
-            )
-            .unwrap();
-        assert!(store.begin(&second).unwrap().is_none());
-        drop(store);
-        std::fs::remove_dir_all(root).unwrap();
+    fn call(turn: Uuid, sequence: u64) -> Entry {
+        Entry {
+            turn,
+            sequence,
+            event: TurnEvent::ToolCall {
+                id: Uuid::new_v4(),
+                name: "terminal".into(),
+                input: serde_json::json!({"command":"echo once"}),
+            },
+        }
     }
 
     #[test]
-    fn restart_preserves_uncertainty_and_rejects_changed_identity() {
-        let root = std::env::temp_dir().join(format!("cubebot-terminal-{}", Uuid::new_v4()));
-        let request = Invocation {
-            id: Uuid::new_v4(),
-            authority: Uuid::new_v4(),
-            command: "echo once".into(),
+    fn restart_reports_unfinished_calls_as_uncertain_and_forgets_acknowledged_ones() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let turn = Uuid::new_v4();
+        let mut store = Store::open(&root).unwrap();
+        let first = call(turn, 4);
+        let journal = store.record(&first).unwrap();
+        let TurnEvent::ToolCall { id, .. } = first.event else {
+            unreachable!()
         };
-        let mut store = Store::open(&root).unwrap();
-        assert!(store.begin(&request).unwrap().is_none());
-        drop(store);
-        let mut store = Store::open(&root).unwrap();
-        assert_eq!(store.begin(&request).unwrap(), Some(Outcome::Uncertain));
-        let mut changed = request.clone();
-        changed.command = "echo twice".into();
-        assert!(store.begin(&changed).is_err());
-        let outcome = Outcome::Exited {
-            code: Some(7),
-            output: "failure".into(),
+        let finished = Entry {
+            turn,
+            sequence: 5,
+            event: TurnEvent::ToolResult {
+                id,
+                outcome: Outcome::Exited {
+                    code: Some(0),
+                    output: String::new(),
+                },
+            },
         };
-        store.finish(request.id, &outcome).unwrap();
+        let done = store.record(&finished).unwrap();
+        store.record(&call(turn, 6)).unwrap();
         drop(store);
+
         let mut store = Store::open(&root).unwrap();
-        assert_eq!(store.begin(&request).unwrap(), Some(outcome));
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 4);
+        assert_eq!(pending[0], (first, journal));
+        assert_eq!(pending[1], (finished, done));
+        assert_eq!(pending[3].0.sequence, 7);
+        assert!(matches!(
+            pending[3].0.event,
+            TurnEvent::ToolResult {
+                outcome: Outcome::Uncertain,
+                ..
+            }
+        ));
+        assert_eq!(pending[3].1, pending[2].1);
+        store.acknowledge(done).unwrap();
+        assert_eq!(store.pending().unwrap().len(), 2);
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

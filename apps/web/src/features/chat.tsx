@@ -43,8 +43,6 @@ function stateLabel(message: Turn) {
   if (message.status === 'queued')
     return 'Queued. Waiting for the agent to become available.'
   if (message.status === 'running') return 'Agent is responding…'
-  if (message.status === 'retrying')
-    return 'Retrying the selected model after a temporary provider error…'
   if (message.status === 'cancelled')
     return 'Cancelled. Workspace changes may already have occurred.'
   if (
@@ -192,10 +190,7 @@ function Retry({
   message: Turn
   onRetried: () => Promise<void>
 }) {
-  const [attempt, setAttempt] = useState<{
-    request_id: string
-    expected_authority: string | null
-  } | null>(null)
+  const [attempt, setAttempt] = useState<{ request_id: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   return (
@@ -206,10 +201,7 @@ function Retry({
         onClick={async () => {
           setBusy(true)
           setError('')
-          const input = attempt ?? {
-            request_id: crypto.randomUUID(),
-            expected_authority: message.authority_id,
-          }
+          const input = attempt ?? { request_id: crypto.randomUUID() }
           setAttempt(input)
           try {
             await request(
@@ -265,9 +257,7 @@ function Exchange({
             />
           )}
         <TerminalResults message={message} />
-        {['queued', 'running', 'retrying', 'waiting'].includes(
-          message.status,
-        ) && (
+        {['queued', 'running', 'waiting'].includes(message.status) && (
           <Stop
             conversation={conversation}
             message={message}

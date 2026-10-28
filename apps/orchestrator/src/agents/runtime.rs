@@ -1,9 +1,7 @@
-//! Short-lived runtime identity. It does not grant a turn or permission to execute effects.
+//! Runtime identity for one sandbox incarnation, and its channel.
+mod channel;
 mod drain;
-mod journal;
 mod sessions;
-mod terminal;
-mod text;
 use super::{
     AgentId,
     kubernetes::{Attempt, AttemptId, Error, Kubernetes, Registry, ResourceObject, ReviewedPod},
@@ -20,7 +18,6 @@ pub struct RuntimeIdentity {
     /// `None` serves cluster-less Docker sandboxes, which bootstrap with a per-container token.
     api: Option<Kubernetes>,
     connections: Option<crate::connections::Connections>,
-    terminal_enabled: bool,
 }
 #[derive(Serialize)]
 pub struct RuntimeSession {
@@ -29,8 +26,6 @@ pub struct RuntimeSession {
     pub attempt: AttemptId,
     pub epoch: i64,
     pub version: i64,
-    /// Upper bound measured from the client's request start, never from response receipt.
-    pub expires_in_seconds: u64,
 }
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct RuntimeActor {
@@ -49,7 +44,6 @@ impl RuntimeIdentity {
             pool,
             api: Some(Kubernetes::new(config, namespace)?),
             connections: None,
-            terminal_enabled: false,
         })
     }
     pub fn docker(pool: PgPool) -> Self {
@@ -57,8 +51,14 @@ impl RuntimeIdentity {
             pool,
             api: None,
             connections: None,
-            terminal_enabled: false,
         }
+    }
+    pub fn with_credentials(mut self, credentials: crate::connections::Credentials) -> Self {
+        self.connections = Some(crate::connections::Connections::new(
+            self.pool.clone(),
+            credentials,
+        ));
+        self
     }
     pub async fn bootstrap(
         &self,
@@ -150,7 +150,6 @@ impl From<RuntimeSession> for cubebot_protocol::runtime::RuntimeSession {
             attempt: value.attempt.0,
             epoch: value.epoch,
             version: value.version,
-            expires_in_seconds: value.expires_in_seconds,
         }
     }
 }

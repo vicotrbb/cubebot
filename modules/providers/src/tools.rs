@@ -11,6 +11,8 @@ pub struct Step {
     pub output: Vec<Value>,
     pub call: Option<FunctionCall>,
     pub text: String,
+    /// Input and output tokens, zero when the provider omits them.
+    pub usage: (u64, u64),
 }
 impl OpenAi {
     pub async fn tool_step(
@@ -20,17 +22,15 @@ impl OpenAi {
         input: &[Value],
         tools: &[Value],
     ) -> Result<Step, Error> {
-        let value = self
-            .send(
-                key,
-                json!({
-                    "model":model,"input":input,"store":false,"max_output_tokens":2048,
-                    "parallel_tool_calls":false,"include":["reasoning.encrypted_content"],
-                    "tools":tools
-                }),
-            )
-            .await?;
-        parse(value)
+        let mut body = json!({
+            "model":model,"input":input,"store":false,"max_output_tokens":2048,
+            "include":["reasoning.encrypted_content"]
+        });
+        if !tools.is_empty() {
+            body["tools"] = json!(tools);
+            body["parallel_tool_calls"] = json!(false);
+        }
+        parse(self.send(key, body).await?)
     }
 }
 fn parse(value: Value) -> Result<Step, Error> {
@@ -45,6 +45,10 @@ fn parse(value: Value) -> Result<Step, Error> {
         output,
         call: None,
         text: String::new(),
+        usage: (
+            value["usage"]["input_tokens"].as_u64().unwrap_or(0),
+            value["usage"]["output_tokens"].as_u64().unwrap_or(0),
+        ),
     };
     for item in &step.output {
         match item["type"].as_str() {

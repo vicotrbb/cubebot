@@ -13,7 +13,8 @@ use uuid::Uuid;
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn runtime_sessions_are_finite_rotatable_and_separate_from_human_credentials() {
+async fn runtime_sessions_last_for_the_incarnation_rotate_and_stay_separate_from_human_credentials()
+{
     let f = fixture().await;
     let instance = Uuid::new_v4();
     let first = f.auth.bootstrap("projected-token", instance).await.unwrap();
@@ -24,7 +25,6 @@ async fn runtime_sessions_are_finite_rotatable_and_separate_from_human_credentia
         .unwrap();
     assert_eq!(actor.agent, f.agent);
     assert_eq!(actor.attempt, f.attempt);
-    assert_eq!(first.expires_in_seconds, 120);
     let stored: String =
         sqlx::query_scalar("SELECT to_jsonb(s)::text FROM agent_runtime_sessions s")
             .fetch_one(&f.pool)
@@ -52,12 +52,18 @@ async fn runtime_sessions_are_finite_rotatable_and_separate_from_human_credentia
             .is_err()
     );
     assert_eq!(second.version, first.version + 1);
-    sqlx::query("UPDATE agent_runtime_sessions SET expires_at = clock_timestamp() - interval '1 second', created_at = clock_timestamp() - interval '2 minutes'").execute(&f.pool).await.unwrap();
+    // No clock ends the credential; only the incarnation ending revokes it.
+    sqlx::query(
+        "UPDATE agent_runtime_sessions SET created_at = clock_timestamp() - interval '30 days'",
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     assert!(
         f.auth
-            .authenticate(&second.token, RuntimeAccess::Recovery)
+            .authenticate(&second.token, RuntimeAccess::Active)
             .await
-            .is_err()
+            .is_ok()
     );
     f.task.abort();
 }
@@ -447,7 +453,7 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn drain_reports_recheck_expiry_after_waiting_for_lifecycle_lock() {
+async fn drain_reports_recheck_revocation_after_waiting_for_lifecycle_lock() {
     use cubebot_orchestrator::agents::LifecycleAction;
     let f = fixture().await;
     let session = f
@@ -470,7 +476,13 @@ async fn drain_reports_recheck_expiry_after_waiting_for_lifecycle_lock() {
     });
     // Wait until PostgreSQL proves the report is contending on the held lifecycle lock.
     wait_for_runtime_lock(&f.pool).await;
-    sqlx::query("UPDATE agent_runtime_sessions SET created_at = clock_timestamp() - interval '3 minutes', expires_at = clock_timestamp() - interval '1 second' WHERE attempt_id = $1").bind(f.attempt).execute(&mut *transaction).await.unwrap();
+    sqlx::query(
+        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
+    )
+    .bind(f.attempt)
+    .execute(&mut *transaction)
+    .await
+    .unwrap();
     transaction.commit().await.unwrap();
     assert!(report.await.unwrap().is_err());
     let acknowledged: bool = sqlx::query_scalar(
@@ -498,7 +510,7 @@ async fn wait_for_runtime_lock(pool: &sqlx::PgPool) {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn drain_http_workflow_requires_machine_identity_and_retains_acknowledgement() {
+async fn drain_is_requested_and_acknowledged_on_the_channel() {
     use cubebot_orchestrator::agents::LifecycleAction;
     let f = fixture().await;
     let session = f
@@ -508,51 +520,35 @@ async fn drain_http_workflow_requires_machine_identity_and_retains_acknowledgeme
         .unwrap();
     lifecycle(&f, LifecycleAction::Retire, 2).await;
     let (origin, task) = runtime_server(f.auth.clone()).await;
-    let client = openidconnect::reqwest::Client::new();
-    let response = client
-        .get(format!("{origin}/api/runtime/control"))
-        .bearer_auth(&session.token)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(response.status(), 200);
-    assert_eq!(response.headers()["cache-control"], "no-store");
-    let control: Value = serde_json::from_slice(&response.bytes().await.unwrap()).unwrap();
-    assert_eq!(control["disposition"], "drain");
-    let body = json!({"request_id":control["drain"]["request_id"]});
-    let identity = Identity::new(f.pool.clone());
-    let human = identity
+    let human = Identity::new(f.pool.clone())
         .login("admin", "administrator password")
         .await
         .unwrap();
-    let denied = client
-        .post(format!("{origin}/api/runtime/drained"))
-        .bearer_auth(human.token)
-        .header("content-type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(denied.status(), 401);
-    let accepted = client
-        .post(format!("{origin}/api/runtime/drained"))
-        .bearer_auth(&session.token)
-        .header("content-type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(accepted.status(), 200);
-    assert_eq!(accepted.headers()["cache-control"], "no-store");
-    let result: Value = serde_json::from_slice(&accepted.bytes().await.unwrap()).unwrap();
-    assert_eq!(result["acknowledged"], true);
+    assert!(try_channel(&origin, &human.token).await.is_err());
+    let mut channel = open_channel(&origin, &session.token).await;
+    let drain = delivery(&mut channel).await;
+    assert_eq!(drain["type"], "drain");
+    report(
+        &mut channel,
+        json!({"type":"drained","request_id":drain["request_id"]}),
+    )
+    .await;
+    assert_eq!(delivery(&mut channel).await, json!({"type":"revoked"}));
+    let acknowledged: bool = sqlx::query_scalar(
+        "SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1",
+    )
+    .bind(f.attempt)
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert!(acknowledged);
     task.abort();
     f.task.abort();
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn actual_native_runtime_synchronizes_retained_evidence_before_persisted_drain() {
+async fn actual_native_runtime_acknowledges_a_persisted_drain_and_exits() {
     use cubebot_orchestrator::agents::LifecycleAction;
     use std::os::unix::fs::DirBuilderExt;
     let f = fixture().await;
@@ -563,7 +559,6 @@ async fn actual_native_runtime_synchronizes_retained_evidence_before_persisted_d
         .mode(0o700)
         .create(&root)
         .unwrap();
-    seed_native_journal(&root);
     let token = root.join("token");
     std::fs::write(&token, "projected-native-token").unwrap();
     let binary = std::env::current_exe()
@@ -595,17 +590,7 @@ async fn actual_native_runtime_synchronizes_retained_evidence_before_persisted_d
         .await
         .unwrap();
     assert_eq!(phase, "bound");
-    assert!(root.join("journal/state").is_file());
-    assert!(!root.join("journal/0000000000000001.entry").exists());
-    let retained: Vec<u8> = sqlx::query_scalar(
-        "SELECT payload FROM agent_journal_records WHERE agent_id = $1 AND sequence = 1",
-    )
-    .bind(f.agent)
-    .fetch_one(&f.pool)
-    .await
-    .unwrap();
-    assert_eq!(retained, vec![255u8; 65536]);
-
+    assert!(root.join("tools/state").is_file());
     std::fs::remove_dir_all(root).unwrap();
     task.abort();
     f.task.abort();
@@ -772,463 +757,6 @@ async fn human_status_http_reports_observed_facts_without_runtime_secrets_or_wor
     f.task.abort();
 }
 
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn journal_receipts_are_contiguous_immutable_and_hold_active_admission() {
-    use cubebot_protocol::runtime::JournalRecord;
-    let f = fixture().await;
-    let instance = Uuid::new_v4();
-    let session = f.auth.bootstrap("projected-token", instance).await.unwrap();
-    let first = JournalRecord {
-        sequence: 1,
-        payload: b"unresolved dispatch".to_vec(),
-    };
-    assert!(
-        f.auth
-            .retain_journal(
-                &session.token,
-                &JournalRecord {
-                    sequence: 2,
-                    payload: vec![]
-                }
-            )
-            .await
-            .is_err()
-    );
-    let (accepted, repeated) = tokio::join!(
-        f.auth.retain_journal(&session.token, &first),
-        f.auth.retain_journal(&session.token, &first)
-    );
-    let receipt = accepted.unwrap();
-    assert!(repeated.is_ok());
-    assert_eq!(receipt.sequence, 1);
-    assert_eq!(receipt.actor.agent, f.agent.0);
-    let replay = f.auth.retain_journal(&session.token, &first).await.unwrap();
-    assert_eq!(receipt.payload_digest, replay.payload_digest);
-    assert!(
-        f.auth
-            .retain_journal(
-                &session.token,
-                &JournalRecord {
-                    sequence: 1,
-                    payload: b"changed".to_vec()
-                }
-            )
-            .await
-            .is_err()
-    );
-    assert!(
-        f.auth
-            .authenticate(&session.token, RuntimeAccess::Active)
-            .await
-            .is_err()
-    );
-    assert!(
-        f.auth
-            .authenticate(&session.token, RuntimeAccess::Recovery)
-            .await
-            .is_ok()
-    );
-    let next = f.auth.bootstrap("projected-token", instance).await.unwrap();
-    assert!(f.auth.retain_journal(&session.token, &first).await.is_err());
-    f.auth.retain_journal(&next.token, &first).await.unwrap();
-    f.auth
-        .retain_journal(
-            &next.token,
-            &JournalRecord {
-                sequence: 2,
-                payload: b"known local outcome".to_vec(),
-            },
-        )
-        .await
-        .unwrap();
-    let retained: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM agent_journal_records WHERE agent_id = $1")
-            .bind(f.agent)
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
-    assert_eq!(retained, 2);
-    f.task.abort();
-}
-
-// Independent on-disk fixture exercises the native binary without an app-to-app dependency.
-fn seed_native_journal(root: &std::path::Path) {
-    use std::os::unix::fs::DirBuilderExt;
-    let path = root.join("journal");
-    std::fs::DirBuilder::new()
-        .mode(0o700)
-        .create(&path)
-        .unwrap();
-    let mut state = b"CBJNL001".to_vec();
-    state.extend(1u64.to_be_bytes());
-    state.extend(0u64.to_be_bytes());
-    write_sealed(&path.join("state"), state);
-    let mut record = 1u64.to_be_bytes().to_vec();
-    record.extend(65536u32.to_be_bytes());
-    record.extend(vec![255u8; 65536]);
-    write_sealed(&path.join("0000000000000001.entry"), record);
-    use std::os::unix::fs::OpenOptionsExt;
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path.join("lock"))
-        .unwrap();
-}
-fn write_sealed(path: &std::path::Path, mut bytes: Vec<u8>) {
-    use sha2::{Digest, Sha256};
-    use std::{io::Write, os::unix::fs::OpenOptionsExt};
-    bytes.extend(Sha256::digest(&bytes));
-    let mut file = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(path)
-        .unwrap();
-    file.write_all(&bytes).unwrap();
-    file.sync_all().unwrap();
-}
-
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn journal_http_accepts_bounded_evidence_and_rejects_human_or_malformed_reports() {
-    let f = fixture().await;
-    let session = f.auth.bootstrap("projected", Uuid::new_v4()).await.unwrap();
-    let human = Identity::new(f.pool.clone())
-        .login("admin", "administrator password")
-        .await
-        .unwrap();
-    let (origin, task) = runtime_server(f.auth.clone()).await;
-    let client = openidconnect::reqwest::Client::new();
-    let url = format!("{origin}/api/runtime/journal");
-    let body = json!({"sequence":1,"payload":vec![255u8;65536]});
-    let denied = client
-        .post(&url)
-        .bearer_auth(human.token)
-        .header("content-type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(denied.status(), 401);
-    assert_eq!(denied.headers()["cache-control"], "no-store");
-    let accepted = client
-        .post(&url)
-        .bearer_auth(&session.token)
-        .header("content-type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(accepted.status(), 200);
-    assert_eq!(accepted.headers()["cache-control"], "no-store");
-    assert!(accepted.bytes().await.unwrap().len() < 1024);
-    for (body, status) in [
-        (json!({"sequence":0,"payload":[]}), 400),
-        (json!({"sequence":2,"payload":vec![0;65537]}), 400),
-        (json!({"sequence":2,"payload":[],"agent":f.agent}), 422),
-    ] {
-        let response = client
-            .post(&url)
-            .bearer_auth(&session.token)
-            .header("content-type", "application/json")
-            .body(body.to_string())
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(response.status(), status);
-    }
-    let oversized = client
-        .post(&url)
-        .bearer_auth(&session.token)
-        .header("content-type", "application/json")
-        .body(" ".repeat(272 * 1024 + 1))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(oversized.status(), 413);
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM agent_journal_records WHERE agent_id = $1")
-            .bind(f.agent)
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
-    assert_eq!(count, 1);
-    task.abort();
-    f.task.abort();
-}
-
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn journal_reports_recheck_expiry_after_waiting_for_lifecycle_lock() {
-    use cubebot_protocol::runtime::JournalRecord;
-    let f = fixture().await;
-    let session = f.auth.bootstrap("projected", Uuid::new_v4()).await.unwrap();
-    let mut transaction = f.pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM agents WHERE id = $1 FOR UPDATE")
-        .bind(f.agent)
-        .execute(&mut *transaction)
-        .await
-        .unwrap();
-    let auth = f.auth.clone();
-    let report = tokio::spawn(async move {
-        auth.retain_journal(
-            &session.token,
-            &JournalRecord {
-                sequence: 1,
-                payload: b"evidence".to_vec(),
-            },
-        )
-        .await
-    });
-    wait_for_runtime_lock(&f.pool).await;
-    sqlx::query("UPDATE agent_runtime_sessions SET created_at = clock_timestamp() - interval '3 minutes',expires_at = clock_timestamp() - interval '1 second' WHERE attempt_id = $1").bind(f.attempt).execute(&mut *transaction).await.unwrap();
-    transaction.commit().await.unwrap();
-    assert!(report.await.unwrap().is_err());
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM agent_journal_records WHERE agent_id = $1")
-            .bind(f.agent)
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
-    assert_eq!(count, 0);
-    f.task.abort();
-}
-
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn text_grants_are_single_use_and_recovered_results_commit_once() {
-    use cubebot_orchestrator::{
-        connections::{ConfigureProvider, Connections, Credentials},
-        work::{SendMessage, Work},
-    };
-    use cubebot_protocol::chat::{ChatEvidence, Outcome};
-    let f = fixture().await;
-    let identity = Identity::new(f.pool.clone());
-    let session = identity
-        .login("admin", "administrator password")
-        .await
-        .unwrap();
-    let admin = identity.authenticate(&session.token).await.unwrap();
-    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
-    connections
-        .configure(
-            &admin,
-            &ConfigureProvider {
-                request_id: Uuid::new_v4(),
-                expected_revision: 0,
-                model: "test-model".into(),
-                api_key: "test-secret".into(),
-                access: None,
-            },
-        )
-        .await
-        .unwrap();
-    let auth = f.auth.clone().with_credentials(Credentials::new([7; 32]));
-    let work = Work::new(f.pool.clone());
-    let conversation = work.conversation(&admin, f.agent).await.unwrap();
-    work.send(
-        &admin,
-        conversation.id,
-        &SendMessage {
-            request_id: Uuid::new_v4(),
-            message: "Hello".into(),
-        },
-    )
-    .await
-    .unwrap();
-    let session = auth
-        .bootstrap("projected-token", Uuid::new_v4())
-        .await
-        .unwrap();
-    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    assert_eq!(grant.api_key, "test-secret");
-    assert_eq!(grant.messages.last().unwrap().content, "Hello");
-    assert!(grant.expires_in_seconds <= 60);
-    assert!(auth.claim_text(&session.token).await.unwrap().is_none());
-    let evidence = ChatEvidence::TextOutcome {
-        turn: grant.turn,
-        authority: grant.authority,
-        outcome: Outcome::Complete {
-            response: "Hello back".into(),
-        },
-    };
-    let record = cubebot_protocol::runtime::JournalRecord {
-        sequence: 1,
-        payload: serde_json::to_vec(&evidence).unwrap(),
-    };
-    auth.retain_journal(&session.token, &record).await.unwrap();
-    auth.retain_journal(&session.token, &record).await.unwrap();
-    let history = work.history(&admin, conversation.id, 0).await.unwrap();
-    assert_eq!(history.len(), 1);
-    assert_eq!(history[0].response.as_deref(), Some("Hello back"));
-    assert!(
-        auth.authenticate(&session.token, RuntimeAccess::Active)
-            .await
-            .is_ok()
-    );
-    connections
-        .configure(
-            &admin,
-            &ConfigureProvider {
-                request_id: Uuid::new_v4(),
-                expected_revision: 1,
-                model: "test-model".into(),
-                api_key: "test-secret".into(),
-                access: Some(
-                    cubebot_orchestrator::connections::ProviderAccess::ExplicitGrants {
-                        agents: vec![],
-                    },
-                ),
-            },
-        )
-        .await
-        .unwrap();
-    work.send(
-        &admin,
-        conversation.id,
-        &SendMessage {
-            request_id: Uuid::new_v4(),
-            message: "Restricted".into(),
-        },
-    )
-    .await
-    .unwrap();
-    assert!(auth.claim_text(&session.token).await.unwrap().is_none());
-    let blocked = work
-        .history(&admin, conversation.id, 0)
-        .await
-        .unwrap()
-        .pop()
-        .unwrap();
-    assert_eq!(blocked.status, "waiting");
-    assert!(blocked.authority_id.is_none());
-    connections
-        .configure(
-            &admin,
-            &ConfigureProvider {
-                request_id: Uuid::new_v4(),
-                expected_revision: 2,
-                model: "test-model".into(),
-                api_key: "test-secret".into(),
-                access: Some(
-                    cubebot_orchestrator::connections::ProviderAccess::ExplicitGrants {
-                        agents: vec![f.agent.0],
-                    },
-                ),
-            },
-        )
-        .await
-        .unwrap();
-    let retry = cubebot_orchestrator::work::RetryMessage {
-        request_id: Uuid::new_v4(),
-        expected_authority: None,
-    };
-    work.retry(&admin, conversation.id, blocked.id, &retry)
-        .await
-        .unwrap();
-    let issued = auth.claim_text(&session.token).await.unwrap().unwrap();
-    work.retry(&admin, conversation.id, blocked.id, &retry)
-        .await
-        .unwrap();
-    assert!(auth.claim_text(&session.token).await.unwrap().is_none());
-    sqlx::query(
-        "UPDATE chat_authorities SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
-    )
-    .bind(issued.authority)
-    .execute(&f.pool)
-    .await
-    .unwrap();
-    work.recover_expired().await.unwrap();
-    assert_eq!(
-        work.history(&admin, conversation.id, 0).await.unwrap()[1]
-            .error
-            .as_deref(),
-        Some("execution_interrupted")
-    );
-    verify_stale_text_outcomes(
-        &auth,
-        &session.token,
-        &work,
-        &admin,
-        conversation.id,
-        &issued,
-    )
-    .await;
-    f.task.abort();
-}
-
-async fn verify_stale_text_outcomes(
-    auth: &RuntimeIdentity,
-    token: &str,
-    work: &cubebot_orchestrator::work::Work,
-    admin: &cubebot_orchestrator::identity::Actor,
-    conversation: Uuid,
-    expired: &cubebot_protocol::chat::InferenceGrant,
-) {
-    use cubebot_protocol::{
-        chat::{ChatEvidence, Outcome},
-        runtime::JournalRecord,
-    };
-    work.retry(
-        admin,
-        conversation,
-        expired.turn,
-        &cubebot_orchestrator::work::RetryMessage {
-            request_id: Uuid::new_v4(),
-            expected_authority: Some(expired.authority),
-        },
-    )
-    .await
-    .unwrap();
-    let current = auth.claim_text(token).await.unwrap().unwrap();
-    assert_ne!(current.authority, expired.authority);
-    let stale = JournalRecord {
-        sequence: 2,
-        payload: serde_json::to_vec(&ChatEvidence::TextOutcome {
-            turn: expired.turn,
-            authority: expired.authority,
-            outcome: Outcome::Complete {
-                response: "stale response".into(),
-            },
-        })
-        .unwrap(),
-    };
-    auth.retain_journal(token, &stale).await.unwrap();
-    let pending = work
-        .history(admin, conversation, 0)
-        .await
-        .unwrap()
-        .pop()
-        .unwrap();
-    assert_eq!(pending.authority_id, Some(current.authority));
-    assert_eq!(pending.status, "running");
-    assert!(pending.response.is_none());
-    let committed = JournalRecord {
-        sequence: 3,
-        payload: serde_json::to_vec(&ChatEvidence::TextOutcome {
-            turn: current.turn,
-            authority: current.authority,
-            outcome: Outcome::Complete {
-                response: "current response".into(),
-            },
-        })
-        .unwrap(),
-    };
-    auth.retain_journal(token, &committed).await.unwrap();
-    auth.retain_journal(token, &committed).await.unwrap();
-    auth.retain_journal(token, &stale).await.unwrap();
-    let final_turn = work
-        .history(admin, conversation, 0)
-        .await
-        .unwrap()
-        .pop()
-        .unwrap();
-    assert_eq!(final_turn.status, "complete");
-    assert_eq!(final_turn.response.as_deref(), Some("current response"));
-}
-
 struct TextProvider {
     fail_first: bool,
     started: tokio::sync::Notify,
@@ -1277,20 +805,20 @@ async fn text_reply(
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn native_text_result_survives_control_server_restart_without_repeating_inference() {
-    native_recovery(false).await;
+async fn native_text_turn_completes_through_the_channel_with_recorded_events() {
+    native_text(false).await;
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn native_transient_failure_retries_once_with_durable_progress_and_the_same_model() {
-    native_recovery(true).await;
+async fn native_transient_failure_retries_once_with_the_same_model() {
+    native_text(true).await;
 }
 
-async fn native_recovery(first_failure: bool) {
+async fn native_text(first_failure: bool) {
     let f = fixture().await;
     let (auth, work, admin, conversation) = native_chat_setup(&f, "Hello").await;
-    let (origin, server) = runtime_server(auth.clone()).await;
+    let (origin, server) = runtime_server(auth).await;
     let state = std::sync::Arc::new(TextProvider {
         fail_first: first_failure,
         started: tokio::sync::Notify::new(),
@@ -1301,43 +829,35 @@ async fn native_recovery(first_failure: bool) {
         .route("/responses", axum::routing::post(text_reply))
         .with_state(state.clone());
     let (provider_origin, provider) = http_server(provider_router).await;
-    let mut child = spawn_native_text(&origin, &provider_origin);
-    let root = child.root.clone();
+    let child = spawn_native_text(&origin, &provider_origin);
     tokio::time::timeout(std::time::Duration::from_secs(10), state.started.notified())
         .await
         .unwrap();
     assert_eq!(
         work.history(&admin, conversation, 0).await.unwrap()[0].status,
-        if first_failure { "retrying" } else { "running" }
+        "running"
     );
-    let restarted =
-        recover_control_server(&origin, auth, server, &state, &root, first_failure).await;
+    state.finish.notify_one();
     wait_native_response(&work, &admin, conversation).await;
     assert_eq!(
         state.calls.load(std::sync::atomic::Ordering::SeqCst),
         1 + usize::from(first_failure)
     );
-    child.process.kill().unwrap();
-    child.process.wait().unwrap();
+    drop(child);
     let history = work.history(&admin, conversation, 0).await.unwrap();
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].response.as_deref(), Some("Durable native reply"));
-    std::fs::remove_dir_all(root).unwrap();
-    restarted.abort();
+    let kinds: Vec<String> = sqlx::query_scalar(
+        "SELECT payload->>'kind' FROM turn_events WHERE turn_id = $1 ORDER BY sequence",
+    )
+    .bind(history[0].id)
+    .fetch_all(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(kinds, ["usage", "text_delta", "done"]);
+    server.abort();
     provider.abort();
     f.task.abort();
-}
-async fn wait_native_evidence(root: &std::path::Path, sequence: u64) {
-    for _ in 0..100 {
-        if root
-            .join(format!("journal/{sequence:016x}.entry"))
-            .is_file()
-        {
-            return;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-    panic!("native response was not journaled during control outage");
 }
 async fn wait_native_response(
     work: &cubebot_orchestrator::work::Work,
@@ -1419,35 +939,6 @@ async fn native_chat_setup(
         conversation.id,
     )
 }
-async fn restart_runtime_server(
-    origin: &str,
-    auth: RuntimeIdentity,
-) -> tokio::task::JoinHandle<()> {
-    let listener = tokio::net::TcpListener::bind(origin.trim_start_matches("http://"))
-        .await
-        .unwrap();
-    tokio::spawn(async move {
-        axum::serve(listener, cubebot_orchestrator::api::runtime_router(auth))
-            .await
-            .unwrap();
-    })
-}
-
-async fn recover_control_server(
-    origin: &str,
-    auth: RuntimeIdentity,
-    server: tokio::task::JoinHandle<()>,
-    state: &TextProvider,
-    root: &std::path::Path,
-    first_failure: bool,
-) -> tokio::task::JoinHandle<()> {
-    server.abort();
-    let _ = server.await;
-    state.finish.notify_one();
-    wait_native_evidence(root, if first_failure { 3 } else { 2 }).await;
-    restart_runtime_server(origin, auth).await
-}
-
 fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeChild {
     use std::os::unix::fs::DirBuilderExt;
     let root = std::env::temp_dir().join(format!("cubebot-native-text-{}", Uuid::new_v4()));
@@ -1519,13 +1010,12 @@ async fn native_lost_provider_response_waits_without_replaying_an_accepted_reque
         before.id,
         &cubebot_orchestrator::work::RetryMessage {
             request_id: Uuid::new_v4(),
-            expected_authority: before.authority_id,
         },
     )
     .await
     .unwrap();
     let after = wait_native_waiting(&work, &admin, conversation).await;
-    assert_ne!(before.authority_id, after.authority_id);
+    assert_eq!(before.id, after.id);
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(
         work.history(&admin, conversation, 0).await.unwrap().len(),
@@ -1595,7 +1085,6 @@ async fn native_failure(message: &str, expected: usize) {
     );
     let retry = cubebot_orchestrator::work::RetryMessage {
         request_id: Uuid::new_v4(),
-        expected_authority: before.authority_id,
     };
     work.retry(&admin, conversation, before.id, &retry)
         .await
@@ -1604,7 +1093,7 @@ async fn native_failure(message: &str, expected: usize) {
         .await
         .unwrap();
     let after = wait_native_waiting(&work, &admin, conversation).await;
-    assert_ne!(before.authority_id, after.authority_id);
+    assert_eq!(before.id, after.id);
     assert_eq!(
         state.calls.load(std::sync::atomic::Ordering::SeqCst),
         expected * 2
@@ -1638,299 +1127,323 @@ async fn wait_native_waiting(
     panic!("native provider failure did not enter durable waiting");
 }
 
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+async fn try_channel(
+    origin: &str,
+    token: &str,
+) -> Result<Socket, tokio_tungstenite::tungstenite::Error> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let mut request = format!("{}/api/runtime/channel", origin.replacen("http", "ws", 1))
+        .into_client_request()
+        .unwrap();
+    request
+        .headers_mut()
+        .insert("authorization", format!("Bearer {token}").parse().unwrap());
+    tokio_tungstenite::connect_async(request)
+        .await
+        .map(|(socket, _)| socket)
+}
+async fn open_channel(origin: &str, token: &str) -> Socket {
+    try_channel(origin, token).await.unwrap()
+}
+async fn report(channel: &mut Socket, value: Value) {
+    use futures_util::SinkExt;
+    channel
+        .send(tokio_tungstenite::tungstenite::Message::Text(
+            value.to_string().into(),
+        ))
+        .await
+        .unwrap();
+}
+/// The next delivery, or `null` once the orchestrator closes the channel.
+async fn delivery(channel: &mut Socket) -> Value {
+    use futures_util::StreamExt;
+    use tokio_tungstenite::tungstenite::Message;
+    loop {
+        let next = tokio::time::timeout(std::time::Duration::from_secs(10), channel.next())
+            .await
+            .expect("channel delivery");
+        match next {
+            Some(Ok(Message::Text(text))) => return serde_json::from_str(&text).unwrap(),
+            Some(Ok(Message::Ping(_) | Message::Pong(_))) => (),
+            _ => return Value::Null,
+        }
+    }
+}
+async fn event(channel: &mut Socket, turn: &Value, sequence: u64, event: Value) {
+    report(
+        channel,
+        json!({"type":"event","turn":turn,"sequence":sequence,"event":event}),
+    )
+    .await;
+    assert_eq!(
+        delivery(channel).await,
+        json!({"type":"ack","turn":turn,"sequence":sequence})
+    );
+}
+async fn send(
+    work: &cubebot_orchestrator::work::Work,
+    admin: &cubebot_orchestrator::identity::Actor,
+    conversation: Uuid,
+    message: &str,
+) {
+    work.send(
+        admin,
+        conversation,
+        &cubebot_orchestrator::work::SendMessage {
+            request_id: Uuid::new_v4(),
+            message: message.into(),
+        },
+    )
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn terminal_authority_is_finite_immutable_and_cancelled_in_flight() {
-    use cubebot_protocol::terminal::{Authorization, Invocation};
+async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_events() {
     let f = fixture().await;
-    let (auth, work, admin, conversation) = native_chat_setup(&f, "Terminal authority").await;
-    let auth = auth.with_terminal(true);
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "First").await;
+    send(&work, &admin, conversation, "Second").await;
     let session = auth
         .bootstrap("projected-token", Uuid::new_v4())
         .await
         .unwrap();
-    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    let input = Authorization {
-        turn: grant.turn,
-        invocation: Invocation {
-            id: Uuid::new_v4(),
-            authority: grant.authority,
-            command: "printf hello".into(),
-        },
-    };
-    assert!(
-        auth.clone()
-            .with_terminal(false)
-            .authorize_terminal(&session.token, &input)
+    let (origin, server) = runtime_server(auth).await;
+    assert!(try_channel(&origin, "cb_runtime_unknown").await.is_err());
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let first = delivery(&mut channel).await;
+    assert_eq!(first["type"], "turn");
+    assert_eq!(first["message"], "First");
+    assert_eq!(first["sequence"], 1);
+    assert_eq!(first["model"], "controlled-model");
+    assert_eq!(first["api_key"], "controlled-key");
+    assert_eq!(first["history"], json!([]));
+    let turn = first["turn"].clone();
+    let attempt: Option<Uuid> =
+        sqlx::query_scalar("SELECT attempt_id FROM chat_turns WHERE id = $1")
+            .bind(Uuid::parse_str(turn.as_str().unwrap()).unwrap())
+            .fetch_one(&f.pool)
             .await
-            .is_err()
+            .unwrap();
+    assert_eq!(attempt, Some(f.attempt.0));
+    // A second pull while a turn is active is not another turn.
+    report(&mut channel, json!({"type":"pull"})).await;
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap()[1].status,
+        "queued"
     );
-    let auth = auth.with_terminal(true);
-    let first = auth
-        .authorize_terminal(&session.token, &input)
-        .await
-        .unwrap();
-    assert!(first.milliseconds > 0 && first.milliseconds <= 60000);
-    let replay = auth
-        .authorize_terminal(&session.token, &input)
-        .await
-        .unwrap();
-    assert!(replay.milliseconds >= first.milliseconds.saturating_sub(10));
-    let mut changed = Authorization {
-        turn: input.turn,
-        invocation: input.invocation.clone(),
-    };
-    changed.invocation.command = "different effects".into();
-    assert!(
-        auth.authorize_terminal(&session.token, &changed)
+
+    event(
+        &mut channel,
+        &turn,
+        1,
+        json!({"kind":"text_delta","text":"Ans"}),
+    )
+    .await;
+    event(
+        &mut channel,
+        &turn,
+        1,
+        json!({"kind":"text_delta","text":"resent differently"}),
+    )
+    .await;
+    let call = Uuid::new_v4();
+    event(
+        &mut channel,
+        &turn,
+        2,
+        json!({"kind":"tool_call","id":call,"name":"terminal","input":{"command":"touch x"}}),
+    )
+    .await;
+    let running = work.history(&admin, conversation, 0).await.unwrap();
+    assert_eq!(running[0].terminal[0].status, "running");
+    assert_eq!(running[0].terminal[0].command, "touch x");
+    event(
+        &mut channel,
+        &turn,
+        3,
+        json!({"kind":"done","response":"Answer"}),
+    )
+    .await;
+    // The pull still pending from earlier now receives the next turn.
+    let second = delivery(&mut channel).await;
+    assert_eq!(second["message"], "Second");
+    assert_eq!(
+        second["history"],
+        json!([{"message":"First","response":"Answer"}])
+    );
+    event(
+        &mut channel,
+        &turn,
+        4,
+        json!({"kind":"error","code":"provider_unavailable"}),
+    )
+    .await;
+    let settled = work.history(&admin, conversation, 0).await.unwrap();
+    assert_eq!(settled[0].status, "complete");
+    assert_eq!(settled[0].response.as_deref(), Some("Answer"));
+    // The run ended without the call's result, so its effects are uncertain.
+    assert_eq!(settled[0].terminal[0].status, "uncertain");
+    let delta: Value =
+        sqlx::query_scalar("SELECT payload FROM turn_events WHERE turn_id = $1 AND sequence = 1")
+            .bind(settled[0].id)
+            .fetch_one(&f.pool)
             .await
-            .is_err()
-    );
-    work.cancel(&admin, conversation, grant.turn).await.unwrap();
-    assert!(
-        auth.authorize_terminal(&session.token, &input)
-            .await
-            .is_err()
-    );
-    let history = work.history(&admin, conversation, 0).await.unwrap();
-    assert_eq!(history[0].status, "cancelled");
-    assert_eq!(history[0].terminal[0].command, "printf hello");
+            .unwrap();
+    assert_eq!(delta["text"], "Ans");
+    // An event for a turn this agent does not own closes the channel.
+    report(
+        &mut channel,
+        json!({"type":"event","turn":Uuid::new_v4(),"sequence":1,"event":{"kind":"done","response":"x"}}),
+    )
+    .await;
+    assert_eq!(delivery(&mut channel).await, Value::Null);
+    server.abort();
     f.task.abort();
 }
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn uncertain_terminal_effects_cannot_be_requeued_and_stale_results_cannot_uncancel() {
-    use cubebot_protocol::{
-        chat::{ChatEvidence, Outcome},
-        terminal::{Authorization, Invocation},
-    };
+async fn cancel_and_revocation_are_messages_on_the_channel() {
     let f = fixture().await;
-    let (auth, work, admin, conversation) = native_chat_setup(&f, "Uncertain effects").await;
-    let auth = auth.with_terminal(true);
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Long work").await;
     let session = auth
         .bootstrap("projected-token", Uuid::new_v4())
         .await
         .unwrap();
-    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    let input = Authorization {
-        turn: grant.turn,
-        invocation: Invocation {
-            id: Uuid::new_v4(),
-            authority: grant.authority,
-            command: "touch uncertain".into(),
-        },
-    };
-    auth.authorize_terminal(&session.token, &input)
-        .await
-        .unwrap();
-    sqlx::query("UPDATE chat_turns SET status='waiting' WHERE id=$1")
-        .bind(grant.turn)
-        .execute(&f.pool)
-        .await
-        .unwrap();
-    assert!(
-        work.retry(
-            &admin,
-            conversation,
-            grant.turn,
-            &cubebot_orchestrator::work::RetryMessage {
-                request_id: Uuid::new_v4(),
-                expected_authority: Some(grant.authority)
-            }
-        )
-        .await
-        .is_err()
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let turn = delivery(&mut channel).await["turn"].clone();
+    let id = Uuid::parse_str(turn.as_str().unwrap()).unwrap();
+    work.cancel(&admin, conversation, id).await.unwrap();
+    assert_eq!(
+        delivery(&mut channel).await,
+        json!({"type":"cancel","turn":turn})
     );
-    work.cancel(&admin, conversation, grant.turn).await.unwrap();
-    let payload = serde_json::to_vec(&ChatEvidence::TextOutcome {
-        turn: grant.turn,
-        authority: grant.authority,
-        outcome: Outcome::Complete {
-            response: "stale result".into(),
-        },
-    })
-    .unwrap();
-    auth.retain_journal(
-        &session.token,
-        &cubebot_protocol::runtime::JournalRecord {
-            sequence: 1,
-            payload,
-        },
+    event(
+        &mut channel,
+        &turn,
+        1,
+        json!({"kind":"error","code":"cancelled"}),
     )
-    .await
-    .unwrap();
+    .await;
     assert_eq!(
         work.history(&admin, conversation, 0).await.unwrap()[0].status,
         "cancelled"
     );
-    f.task.abort();
-}
-
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn terminal_completion_reconciles_its_own_custody_without_becoming_stale() {
-    use cubebot_protocol::{
-        chat::{ChatEvidence, Outcome},
-        terminal::{Authorization, Invocation},
-    };
-    let f = fixture().await;
-    let (auth, work, admin, conversation) = native_chat_setup(&f, "Terminal result").await;
-    let auth = auth.with_terminal(true);
-    let session = auth
-        .bootstrap("projected-token", Uuid::new_v4())
-        .await
-        .unwrap();
-    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    let invocation = Invocation {
-        id: Uuid::new_v4(),
-        authority: grant.authority,
-        command: "printf hello".into(),
-    };
-    auth.authorize_terminal(
-        &session.token,
-        &Authorization {
-            turn: grant.turn,
-            invocation: invocation.clone(),
-        },
-    )
-    .await
-    .unwrap();
-    let evidence = [
-        ChatEvidence::TerminalOutcome {
-            turn: grant.turn,
-            authority: grant.authority,
-            invocation: invocation.id,
-            outcome: cubebot_protocol::terminal::Outcome::Exited {
-                code: Some(0),
-                output: "hello".into(),
-            },
-        },
-        ChatEvidence::TextOutcome {
-            turn: grant.turn,
-            authority: grant.authority,
-            outcome: Outcome::Complete {
-                response: "verified hello".into(),
-            },
-        },
-    ];
-    for (index, record) in evidence.iter().enumerate() {
-        auth.retain_journal(
-            &session.token,
-            &cubebot_protocol::runtime::JournalRecord {
-                sequence: index as u64 + 1,
-                payload: serde_json::to_vec(record).unwrap(),
-            },
-        )
-        .await
-        .unwrap();
-    }
-    let history = work.history(&admin, conversation, 0).await.unwrap();
-    assert_eq!(history[0].status, "complete");
-    assert_eq!(history[0].response.as_deref(), Some("verified hello"));
-    assert_eq!(history[0].terminal[0].status, "exited");
-    f.task.abort();
-}
-
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn text_authorities_cannot_gain_tools_and_terminal_calls_have_no_count_budget() {
-    use cubebot_protocol::terminal::{Authorization, Invocation};
-    let f = fixture().await;
-    let (auth, work, admin, conversation) = native_chat_setup(&f, "Old text authority").await;
-    let session = auth
-        .bootstrap("projected-token", Uuid::new_v4())
-        .await
-        .unwrap();
-    let old = auth.claim_text(&session.token).await.unwrap().unwrap();
-    assert!(!old.terminal_enabled);
-    let auth = auth.with_terminal(true);
-    let request = Authorization {
-        turn: old.turn,
-        invocation: Invocation {
-            id: Uuid::new_v4(),
-            authority: old.authority,
-            command: "true".into(),
-        },
-    };
-    assert!(
-        auth.authorize_terminal(&session.token, &request)
-            .await
-            .is_err()
-    );
-    work.cancel(&admin, conversation, old.turn).await.unwrap();
-    work.send(
-        &admin,
-        conversation,
-        &cubebot_orchestrator::work::SendMessage {
-            request_id: Uuid::new_v4(),
-            message: "New terminal authority".into(),
-        },
-    )
-    .await
-    .unwrap();
-    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    assert!(grant.terminal_enabled);
-    for _ in 0..12 {
-        let request = Authorization {
-            turn: grant.turn,
-            invocation: Invocation {
-                id: Uuid::new_v4(),
-                authority: grant.authority,
-                command: "true".into(),
-            },
-        };
-        auth.authorize_terminal(&session.token, &request)
-            .await
-            .unwrap();
-    }
-    let request = Authorization {
-        turn: grant.turn,
-        invocation: Invocation {
-            id: Uuid::new_v4(),
-            authority: grant.authority,
-            command: "true".into(),
-        },
-    };
-    auth.authorize_terminal(&session.token, &request)
-        .await
-        .unwrap();
-    f.task.abort();
-}
-
-#[tokio::test]
-#[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn active_terminal_authority_renews_without_a_turn_deadline_but_never_revives_expiry() {
-    use cubebot_protocol::terminal::Renewal;
-    let f = fixture().await;
-    let (auth, work, admin, conversation) = native_chat_setup(&f, "Renewable terminal").await;
-    let auth = auth.with_terminal(true);
-    let session = auth
-        .bootstrap("projected-token", Uuid::new_v4())
-        .await
-        .unwrap();
-    let grant = auth.claim_text(&session.token).await.unwrap().unwrap();
-    let request = Renewal {
-        turn: grant.turn,
-        authority: grant.authority,
-    };
-    sqlx::query("UPDATE chat_authorities SET created_at=clock_timestamp()-interval '1 day', expires_at=clock_timestamp()+interval '5 seconds' WHERE id=$1").bind(grant.authority).execute(&f.pool).await.unwrap();
-    let renewed = auth.renew_terminal(&session.token, &request).await.unwrap();
-    assert!(renewed.milliseconds > 50000);
-    work.cancel(&admin, conversation, grant.turn).await.unwrap();
-    assert!(auth.renew_terminal(&session.token, &request).await.is_err());
-    sqlx::query("UPDATE chat_turns SET status='running' WHERE id=$1")
-        .bind(grant.turn)
-        .execute(&f.pool)
-        .await
-        .unwrap();
     sqlx::query(
-        "UPDATE chat_authorities SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
     )
-    .bind(grant.authority)
+    .bind(f.attempt)
     .execute(&f.pool)
     .await
     .unwrap();
-    assert!(auth.renew_terminal(&session.token, &request).await.is_err());
+    assert_eq!(delivery(&mut channel).await, json!({"type":"revoked"}));
+    assert_eq!(delivery(&mut channel).await, Value::Null);
+    assert!(try_channel(&origin, &session.token).await.is_err());
+    server.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn uncertain_tool_effects_block_retry_until_an_outcome_is_reported() {
+    use cubebot_orchestrator::work::RetryMessage;
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Run it").await;
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let turn = delivery(&mut channel).await["turn"].clone();
+    let id = Uuid::parse_str(turn.as_str().unwrap()).unwrap();
+    let call = Uuid::new_v4();
+    event(
+        &mut channel,
+        &turn,
+        1,
+        json!({"kind":"tool_call","id":call,"name":"terminal","input":{"command":"rm data"}}),
+    )
+    .await;
+    event(
+        &mut channel,
+        &turn,
+        2,
+        json!({"kind":"error","code":"provider_unavailable"}),
+    )
+    .await;
+    let waiting = work.history(&admin, conversation, 0).await.unwrap();
+    assert_eq!(waiting[0].status, "waiting");
+    assert_eq!(waiting[0].terminal[0].status, "uncertain");
+    let retry = RetryMessage {
+        request_id: Uuid::new_v4(),
+    };
+    assert!(work.retry(&admin, conversation, id, &retry).await.is_err());
+    // A recovered sandbox reports the outcome it journaled before the crash.
+    let outcome = json!({"status":"exited","code":0,"output":"removed"});
+    event(
+        &mut channel,
+        &turn,
+        3,
+        json!({"kind":"tool_result","id":call,"outcome":outcome}),
+    )
+    .await;
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap()[0].terminal[0].status,
+        "exited"
+    );
+    work.retry(&admin, conversation, id, &retry).await.unwrap();
+    report(&mut channel, json!({"type":"pull"})).await;
+    let again = delivery(&mut channel).await;
+    assert_eq!(again["turn"], turn);
+    assert_eq!(again["sequence"], 4);
+    assert_eq!(again["prior"][0]["kind"], "tool_call");
+    assert_eq!(again["prior"][1]["outcome"], outcome);
+    server.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_lost_sandbox_interrupts_its_running_turn() {
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Interrupted").await;
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    delivery(&mut channel).await;
+    work.recover_interrupted().await.unwrap();
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap()[0].status,
+        "running"
+    );
+    sqlx::query(
+        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
+    )
+    .bind(f.attempt)
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    work.recover_interrupted().await.unwrap();
+    let turn = work
+        .history(&admin, conversation, 0)
+        .await
+        .unwrap()
+        .remove(0);
+    assert_eq!(turn.status, "waiting");
+    assert_eq!(turn.error.as_deref(), Some("execution_interrupted"));
+    server.abort();
     f.task.abort();
 }

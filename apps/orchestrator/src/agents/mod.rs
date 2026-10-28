@@ -1,4 +1,4 @@
-//! Installation-owned definitions and explicit Kubernetes reconciliation. Per-turn authority remains pending.
+//! Installation-owned definitions and explicit Kubernetes reconciliation.
 mod commands;
 mod definitions;
 pub mod kubernetes;
