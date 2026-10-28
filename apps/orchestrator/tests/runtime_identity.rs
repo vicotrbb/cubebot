@@ -766,41 +766,34 @@ struct TextProvider {
 async fn text_reply(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<TextProvider>>,
     axum::Json(body): axum::Json<Value>,
-) -> (axum::http::StatusCode, axum::Json<Value>) {
+) -> axum::response::Response {
+    use axum::{http::StatusCode, response::IntoResponse};
+    // An immediate retry-after keeps bounded retries fast without changing their count.
+    let failure = |status| (status, [("retry-after", "0")], "controlled failure").into_response();
     assert_eq!(body["model"], "controlled-model");
     assert_eq!(body["store"], false);
+    assert_eq!(body["stream"], true);
     let call = state
         .calls
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let input = body["input"].as_array().unwrap().last().unwrap()["content"]
         .as_str()
         .unwrap();
-    if input == "FAIL_PROVIDER" {
-        return (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            axum::Json(json!({"error":"controlled outage"})),
-        );
+    if input == "FAIL_PROVIDER" || (state.fail_first && call == 0) {
+        return failure(StatusCode::SERVICE_UNAVAILABLE);
     }
     if input == "REJECT_PROVIDER" {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            axum::Json(json!({"error":"controlled rejection"})),
-        );
-    }
-    if state.fail_first && call == 0 {
-        return (
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            axum::Json(json!({"error":"transient fixture"})),
-        );
+        return failure(StatusCode::UNAUTHORIZED);
     }
     state.started.notify_one();
     state.finish.notified().await;
+    let completed = json!({"type":"response.completed","response":{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Durable native reply"}]}]}});
+    let delta = json!({"type":"response.output_text.delta","delta":"Durable native reply"});
     (
-        axum::http::StatusCode::OK,
-        axum::Json(
-            json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Durable native reply"}]}]}),
-        ),
+        [("content-type", "text/event-stream")],
+        format!("data: {delta}\n\ndata: {completed}\n\n"),
     )
+        .into_response()
 }
 
 #[tokio::test]
@@ -854,7 +847,8 @@ async fn native_text(first_failure: bool) {
     .fetch_all(&f.pool)
     .await
     .unwrap();
-    assert_eq!(kinds, ["usage", "text_delta", "done"]);
+    // The fixture reports no usage, which is never recorded as zero.
+    assert_eq!(kinds, ["text_delta", "done"]);
     server.abort();
     provider.abort();
     f.task.abort();
@@ -913,7 +907,9 @@ async fn native_chat_setup(
             &ConfigureProvider {
                 request_id: Uuid::new_v4(),
                 expected_revision: 0,
+                provider: cubebot_protocol::runtime::ProviderKind::Openai,
                 model: "controlled-model".into(),
+                context_window: Some(128_000),
                 api_key: "controlled-key".into(),
                 access: None,
             },
@@ -970,9 +966,9 @@ fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeChild {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn native_repeated_transient_failure_waits_after_two_attempts_and_manual_retry_is_idempotent()
-{
-    native_failure("FAIL_PROVIDER", 2).await;
+async fn native_repeated_transient_failure_waits_after_bounded_attempts_and_manual_retry_is_idempotent()
+ {
+    native_failure("FAIL_PROVIDER", 4).await;
 }
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
@@ -1218,7 +1214,10 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     assert_eq!(first["type"], "turn");
     assert_eq!(first["message"], "First");
     assert_eq!(first["sequence"], 1);
+    assert_eq!(first["provider"], "openai");
     assert_eq!(first["model"], "controlled-model");
+    assert_eq!(first["context_window"], 128_000);
+    assert_eq!(first["summary"], Value::Null);
     assert_eq!(first["api_key"], "controlled-key");
     assert_eq!(first["history"], json!([]));
     let turn = first["turn"].clone();

@@ -1,13 +1,16 @@
 //! Model arguments are data. Only the trusted runtime supplies invocation authority.
+use cubebot_providers::Tool;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::json;
 
-pub(crate) fn terminal_definition() -> Value {
-    json!({"type":"function","name":"terminal",
-        "description":"Execute a command using /bin/bash --noprofile --norc in the persistent workspace. The result includes the command exit status as code; run programs directly without appending echo $? which masks that status. Commands are serialized. Full combined output is retained in the workspace file reported by the result; the result text shows a tail preview. Use shell commands to inspect or analyze that file when needed. Check exit status and verify results. Cancellation cannot undo effects. Never blindly repeat uncertain effects.",
-        "strict":true,"parameters":{"type":"object","properties":{
+pub(crate) fn terminal_definition() -> Tool {
+    Tool {
+        name: "terminal".into(),
+        description: "Execute a command using /bin/bash --noprofile --norc in the persistent workspace. The result includes the command exit status as code; run programs directly without appending echo $? which masks that status. Commands are serialized. Full combined output is retained in the workspace file reported by the result; the result text shows a tail preview. Use shell commands to inspect or analyze that file when needed. Check exit status and verify results. Cancellation cannot undo effects. Never blindly repeat uncertain effects.".into(),
+        parameters: json!({"type":"object","properties":{
             "command":{"type":"string"}},
-            "required":["command"],"additionalProperties":false}})
+            "required":["command"],"additionalProperties":false}),
+    }
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -5,7 +5,7 @@ use crate::{
     agents::{kubernetes::Error, runtime::RuntimeActor},
     connections::Connections,
 };
-use cubebot_protocol::runtime::{Exchange, Turn, TurnEvent};
+use cubebot_protocol::runtime::{EVENT_BYTES, Exchange, Turn, TurnEvent};
 use uuid::Uuid;
 
 impl Work {
@@ -33,7 +33,7 @@ impl Work {
             wait(tx, turn, "sender_access_revoked").await?;
             return Ok(None);
         }
-        let Some((model, api_key, _)) = provider(tx, connections, actor).await else {
+        let Some(inference) = provider(tx, connections, actor).await else {
             wait(tx, turn, "provider_unavailable").await?;
             return Ok(None);
         };
@@ -47,8 +47,7 @@ impl Work {
                 .bind(actor.agent)
                 .fetch_one(&mut **tx)
                 .await?;
-        let history: Vec<(String,String)> = sqlx::query_as("SELECT message,response FROM (SELECT sequence,message,response FROM chat_turns WHERE conversation_id=$1 AND status='complete' ORDER BY sequence DESC LIMIT 12) h ORDER BY sequence")
-            .bind(actor.agent).fetch_all(&mut **tx).await?;
+        let (summary, history) = history(tx, actor).await?;
         let prior: Vec<serde_json::Value> = sqlx::query_scalar("SELECT payload FROM (SELECT sequence,payload FROM turn_events WHERE turn_id=$1 AND payload->>'kind' IN ('tool_call','tool_result') ORDER BY sequence DESC LIMIT 16) p ORDER BY sequence")
             .bind(turn).fetch_all(&mut **tx).await?;
         let last: i64 = sqlx::query_scalar(
@@ -62,12 +61,12 @@ impl Work {
             sequence: last as u64 + 1,
             message,
             instructions,
-            model,
-            api_key,
-            history: history
-                .into_iter()
-                .map(|(message, response)| Exchange { message, response })
-                .collect(),
+            provider: inference.provider,
+            model: inference.model,
+            api_key: inference.api_key,
+            context_window: inference.context_window,
+            summary,
+            history,
             prior: prior
                 .into_iter()
                 .map(serde_json::from_value)
@@ -128,7 +127,7 @@ fn payload(sequence: u64, event: &TurnEvent) -> Result<serde_json::Value, Error>
     let payload = serde_json::to_value(event).map_err(|_| Error::InvalidConfiguration)?;
     if sequence == 0
         || sequence > i64::MAX as u64
-        || payload.to_string().len() > 64 * 1024
+        || payload.to_string().len() > EVENT_BYTES
         || !valid(event)
     {
         return Err(Error::InvalidConfiguration);
@@ -153,10 +152,12 @@ async fn settle(
 }
 
 fn valid(event: &TurnEvent) -> bool {
-    let text = |value: &str| value.len() <= 32768 && !value.contains('\0');
+    // Length is bounded by the encoded event as a whole.
+    let text = |value: &str| !value.contains('\0');
     match event {
         TurnEvent::TextDelta { text: delta } => text(delta),
         TurnEvent::Done { response } => !response.is_empty() && text(response),
+        TurnEvent::Summary { text: summary } => !summary.is_empty() && text(summary),
         TurnEvent::Error { code } => matches!(
             code.as_str(),
             "provider_unavailable"
@@ -192,10 +193,32 @@ async fn sender_allowed(
         .bind(turn).fetch_one(&mut **tx).await?)
 }
 
+/// The latest summary and every completed exchange from the turn it was written in onward,
+/// since a summary can precede its own turn's response.
+async fn history(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+) -> Result<(Option<String>, Vec<Exchange>), Error> {
+    // shortcut: scans the conversation's summary events per claim; index payload kinds if
+    // long conversations make claims slow.
+    let summary: Option<(String, i64)> = sqlx::query_as("SELECT e.payload->>'text', t.sequence FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND e.payload->>'kind'='summary' ORDER BY t.sequence DESC, e.sequence DESC LIMIT 1")
+        .bind(actor.agent).fetch_optional(&mut **tx).await?;
+    let from = summary.as_ref().map_or(0, |(_, sequence)| *sequence);
+    let history: Vec<(String, String)> = sqlx::query_as("SELECT message,response FROM chat_turns WHERE conversation_id=$1 AND status='complete' AND sequence>=$2 ORDER BY sequence")
+        .bind(actor.agent).bind(from).fetch_all(&mut **tx).await?;
+    Ok((
+        summary.map(|(text, _)| text),
+        history
+            .into_iter()
+            .map(|(message, response)| Exchange { message, response })
+            .collect(),
+    ))
+}
+
 async fn provider(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,
     actor: &RuntimeActor,
-) -> Option<(String, String, i64)> {
+) -> Option<crate::connections::Inference> {
     connections?.inference(tx, actor.agent).await.ok()
 }

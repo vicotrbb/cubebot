@@ -133,7 +133,9 @@ export function AgentForm({
 
 export function ProviderForm({ onClose }: { onClose: () => void }) {
   const [revision, setRevision] = useState<number | null>(null)
+  const [kind, setKind] = useState<'openai' | 'anthropic'>('openai')
   const [model, setModel] = useState('')
+  const [window, setWindow] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -144,7 +146,9 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
     try {
       const current = provider(await request('/provider'))
       setRevision(current?.revision ?? 0)
+      setKind(current?.provider ?? 'openai')
       setModel(current?.model ?? '')
+      setWindow(current?.context_window?.toString() ?? '')
     } catch (error) {
       setError(failure(error))
     } finally {
@@ -155,8 +159,8 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
     <section className="settings">
       <h2>AI provider</h2>
       <p>
-        One OpenAI connection and model for eligible agents. Only administrators
-        can change this setting.
+        One OpenAI or Anthropic connection and model for eligible agents. Only
+        administrators can change this setting.
       </p>
       {revision === null ? (
         <button disabled={busy} onClick={load}>
@@ -176,7 +180,9 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
                 await request('/provider', {
                   request_id: requestId,
                   expected_revision: revision,
+                  provider: kind,
                   model,
+                  context_window: window === '' ? null : Number(window),
                   api_key: input.get('api_key'),
                 }),
               )
@@ -192,6 +198,18 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
           }}
         >
           <label>
+            Provider
+            <select
+              value={kind}
+              onChange={(event) =>
+                setKind(event.target.value as 'openai' | 'anthropic')
+              }
+            >
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </label>
+          <label>
             Model
             <input
               value={model}
@@ -201,6 +219,26 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
               placeholder="Enter an available model ID"
             />
           </label>
+          <label>
+            Context window (tokens)
+            <input
+              value={window}
+              onChange={(event) => setWindow(event.target.value)}
+              type="number"
+              min={1024}
+              max={100000000}
+              required={kind === 'openai'}
+              placeholder={
+                kind === 'anthropic'
+                  ? 'Reported by Anthropic when left empty'
+                  : 'The model window, for example 128000'
+              }
+            />
+          </label>
+          <p className="muted">
+            Conversations are summarized when the provider reports 80% of this
+            window in use.
+          </p>
           <label>
             API key
             <input

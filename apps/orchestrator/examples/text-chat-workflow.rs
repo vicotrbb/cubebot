@@ -37,7 +37,9 @@ async fn main() {
             &ConfigureProvider {
                 request_id: Uuid::new_v4(),
                 expected_revision: 0,
+                provider: cubebot_protocol::runtime::ProviderKind::Openai,
                 model,
+                context_window: Some(128_000),
                 api_key: key,
                 access: None,
             },
@@ -107,20 +109,18 @@ async fn controlled_provider() -> (String, tokio::task::JoinHandle<()>) {
     });
     (origin, task)
 }
-async fn reply(Json(body): Json<Value>) -> (StatusCode, Json<Value>) {
+async fn reply(Json(body): Json<Value>) -> axum::response::Response {
+    use axum::response::IntoResponse;
     let text = body["input"].as_array().unwrap().last().unwrap()["content"]
         .as_str()
         .unwrap();
     if text.contains("FAIL_PROVIDER") {
-        return (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error":"controlled outage"})),
-        );
+        return (StatusCode::SERVICE_UNAVAILABLE, "controlled outage").into_response();
     }
+    let completed = json!({"type":"response.completed","response":{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":format!("Controlled reply: {text}")}]}]}});
     (
-        StatusCode::OK,
-        Json(
-            json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":format!("Controlled reply: {text}")}]}]}),
-        ),
+        [("content-type", "text/event-stream")],
+        format!("data: {completed}\n\n"),
     )
+        .into_response()
 }

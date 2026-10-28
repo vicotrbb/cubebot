@@ -117,6 +117,8 @@ def configure(f, key, access=None, model="gpt-4.1-mini"):
         expected_revision=previous["revision"] if previous else 0,
         api_key=key,
         model=model,
+        provider="openai",
+        context_window=128000,
     )
     if access is not None:
         body["access"] = access
