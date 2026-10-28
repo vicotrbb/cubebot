@@ -1,0 +1,47 @@
+name: Nightly
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cluster:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      HAS_PROVIDER_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.11.26'
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+        with:
+          just-version: '1.55.1'
+      - name: Install Rust toolchain from repository pin
+        run: rustup show active-toolchain
+      - run: uv sync --project tooling/quality --locked
+      - name: Install verified kind v0.33.0
+        run: |
+          mkdir -p .tools
+          curl -fsSLo .tools/kind-v0.33.0 https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          echo 'aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d  .tools/kind-v0.33.0' | sha256sum --check
+          chmod +x .tools/kind-v0.33.0
+      - run: just cluster-admission
+      - run: just cluster-startup
+      - run: just cluster-terminal
+        env:
+          CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-terminal
+      - name: Write provider key outside the checkout
+        if: env.HAS_PROVIDER_KEY == 'true'
+        run: (umask 077 && printf '%s' "$OPENAI_API_KEY" > "$RUNNER_TEMP/openai-key")
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - run: just cluster-chat
+        if: env.HAS_PROVIDER_KEY == 'true'
+        env:
+          CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-chat
+          OPENAI_API_KEY_FILE: ${{ runner.temp }}/openai-key

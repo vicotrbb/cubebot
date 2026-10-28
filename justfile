@@ -66,13 +66,15 @@ db-up:
 db-down:
     docker compose --env-file .env down
 
-# Uses an isolated disposable local PostgreSQL; never an existing application DB.
+# Reuses a running `just db-up` server, else a disposable one; never an application DB.
 integration:
     uv run --project tooling/quality --locked python tests/system/integration.py
 
 # Builds owned temporary images and compares Linux isolation mechanisms; not full G1-G3.
 container-isolation:
     uv run --project tooling/quality --locked python tests/system/container_isolation.py
+
+# cluster-* recipes run nightly in CI (.github/workflows/nightly.yml), not per push.
 
 # Owns a disposable local cluster and PostgreSQL; never uses the default kubeconfig.
 cluster-admission:

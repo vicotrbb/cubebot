@@ -1,5 +1,4 @@
-#[path = "support/kubernetes.rs"]
-mod fixtures;
+use crate::fixtures;
 use axum::{
     Json, Router,
     body::Bytes,

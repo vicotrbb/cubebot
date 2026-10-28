@@ -5,6 +5,22 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+autotests = false
+
+# Bins carry no unit tests; skipping their harnesses avoids empty test binaries.
+[[bin]]
+name = "cubebot-orchestrator"
+path = "src/main.rs"
+test = false
+
+[[bin]]
+name = "cubebot-admin"
+path = "src/bin/cubebot-admin.rs"
+test = false
+
+[[test]]
+name = "orchestrator"
+path = "tests/main.rs"
 
 [dependencies]
 argon2 = "0.5"

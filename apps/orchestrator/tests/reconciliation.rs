@@ -1,6 +1,5 @@
-#[path = "support/registry.rs"]
-mod registry_support;
-mod support;
+use crate::registry_support;
+use crate::support;
 use axum::{
     Json, Router,
     body::Bytes,
