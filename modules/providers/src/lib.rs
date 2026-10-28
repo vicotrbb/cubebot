@@ -40,12 +40,15 @@ impl Error {
     }
 }
 
-/// A function tool. `parameters` is a strict JSON schema.
+/// A function tool. `parameters` is a JSON schema the provider enforces when `strict`.
 #[derive(Clone)]
 pub struct Tool {
     pub name: String,
     pub description: String,
     pub parameters: Value,
+    /// Strict schemas must close every object and require every property; external schemas
+    /// rarely do, so they are sent as advisory.
+    pub strict: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -59,7 +62,8 @@ pub struct FunctionCall {
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub text: String,
-    pub call: Option<FunctionCall>,
+    /// Calls the model made in this response, in order; they may run in parallel.
+    pub calls: Vec<FunctionCall>,
     /// The provider's own output, replayed verbatim to the same provider so reasoning state
     /// survives; `Null` for history that only has text.
     pub native: Value,
@@ -247,11 +251,15 @@ fn events<'a, D: Decoder + 'a>(
     })
 }
 
-fn reply(text: String, call: Option<FunctionCall>, native: Value) -> Result<Reply, Error> {
-    if (call.is_none() && text.is_empty()) || text.contains('\0') {
+fn reply(text: String, calls: Vec<FunctionCall>, native: Value) -> Result<Reply, Error> {
+    if (calls.is_empty() && text.is_empty()) || text.contains('\0') {
         return Err(Error::InvalidResponse);
     }
-    Ok(Reply { text, call, native })
+    Ok(Reply {
+        text,
+        calls,
+        native,
+    })
 }
 
 fn call(call_id: &str, name: &str, arguments: String) -> Result<FunctionCall, Error> {

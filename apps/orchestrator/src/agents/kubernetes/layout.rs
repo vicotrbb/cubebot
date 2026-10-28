@@ -92,10 +92,15 @@ impl Layout {
         });
         let sandbox = &mut value["containers"][0];
         if self.terminal {
+            // shortcut: the process backend cannot switch users, so tools run as the sandbox's
+            // own user; the kvm guest will name a separate one.
             sandbox["env"]
                 .as_array_mut()
                 .expect("fixed environment")
-                .push(json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}));
+                .extend([
+                    json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}),
+                    json!({"name":"CUBEBOT_TOOL_USER","value":"10001:10001"}),
+                ]);
         }
         if self.backend == Backend::Kvm {
             // shortcut: the tap device will also need NET_ADMIN once the kvm backend boots guests.

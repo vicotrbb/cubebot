@@ -80,6 +80,10 @@ fn terminal_flag_and_control_ca_are_explicit() {
     );
     assert!(
         env.iter()
+            .any(|item| item["name"] == "CUBEBOT_TOOL_USER" && item["value"] == "10001:10001")
+    );
+    assert!(
+        env.iter()
             .any(|item| item["name"] == "CUBEBOT_CONTROL_CA_FILE"
                 && item["value"] == "/run/cubebot/control-ca/ca.crt")
     );

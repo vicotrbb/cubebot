@@ -1255,7 +1255,7 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
         &mut channel,
         &turn,
         2,
-        json!({"kind":"tool_call","id":call,"name":"terminal","input":{"command":"touch x"}}),
+        json!({"kind":"tool_call","id":call,"name":"bash","input":{"command":"touch x"}}),
     )
     .await;
     let running = work.history(&admin, conversation, 0).await.unwrap();

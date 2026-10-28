@@ -30,43 +30,48 @@ impl Store {
     pub fn acknowledge(&mut self, through: u64) -> io::Result<()> {
         self.journal.acknowledge(through)
     }
-    /// Unacknowledged entries in order. A call without a result gets an uncertain result in the
-    /// sequence reserved for it, acknowledged with the call.
+    /// Unacknowledged entries in order. Each call without a result gets an uncertain result,
+    /// acknowledged with the call. A batch of parallel calls emits nothing between its first call
+    /// and its last result, so the sequences after the batch's latest entry are reserved for it.
     pub fn pending(&self) -> io::Result<Vec<(Entry, u64)>> {
         let mut pending = Vec::new();
         for record in self.journal.pending() {
             let entry: Entry = serde_json::from_slice(&record.payload)?;
-            // Calls are serial: a result always follows its own call.
-            if !matches!(entry.event, TurnEvent::ToolResult { .. }) {
-                settle(&mut pending);
-            }
             pending.push((entry, record.sequence));
         }
-        settle(&mut pending);
+        let unfinished: Vec<(Uuid, Uuid, u64)> = pending
+            .iter()
+            .filter_map(|(entry, journal)| match entry.event {
+                TurnEvent::ToolCall { id, .. } if !finished(&pending, id) => {
+                    Some((entry.turn, id, *journal))
+                }
+                _ => None,
+            })
+            .collect();
+        for (turn, id, journal) in unfinished {
+            let latest = pending
+                .iter()
+                .filter(|(entry, _)| entry.turn == turn)
+                .map(|(entry, _)| entry.sequence)
+                .max()
+                .unwrap_or_default();
+            let uncertain = Entry {
+                turn,
+                sequence: latest + 1,
+                event: TurnEvent::ToolResult {
+                    id,
+                    outcome: Outcome::Uncertain,
+                },
+            };
+            pending.push((uncertain, journal));
+        }
         Ok(pending)
     }
 }
-fn settle(pending: &mut Vec<(Entry, u64)>) {
-    if let Some((
-        Entry {
-            turn,
-            sequence,
-            event: TurnEvent::ToolCall { id, .. },
-        },
-        journal,
-    )) = pending.last()
-    {
-        let uncertain = Entry {
-            turn: *turn,
-            sequence: sequence + 1,
-            event: TurnEvent::ToolResult {
-                id: *id,
-                outcome: Outcome::Uncertain,
-            },
-        };
-        let journal = *journal;
-        pending.push((uncertain, journal));
-    }
+fn finished(pending: &[(Entry, u64)], call: Uuid) -> bool {
+    pending
+        .iter()
+        .any(|(entry, _)| matches!(entry.event, TurnEvent::ToolResult { id, .. } if id == call))
 }
 
 #[cfg(test)]
@@ -126,6 +131,39 @@ mod tests {
         assert_eq!(pending[3].1, pending[2].1);
         store.acknowledge(done).unwrap();
         assert_eq!(store.pending().unwrap().len(), 2);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn an_interrupted_parallel_batch_reports_each_unfinished_call_after_its_latest_entry() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let turn = Uuid::new_v4();
+        let mut store = Store::open(&root).unwrap();
+        let (first, second) = (call(turn, 2), call(turn, 3));
+        let id = |entry: &Entry| match entry.event {
+            TurnEvent::ToolCall { id, .. } => id,
+            _ => unreachable!(),
+        };
+        store.record(&first).unwrap();
+        let second_journal = store.record(&second).unwrap();
+        let result = Entry {
+            turn,
+            sequence: 4,
+            event: TurnEvent::ToolResult {
+                id: id(&first),
+                outcome: Outcome::Uncertain,
+            },
+        };
+        store.record(&result).unwrap();
+        drop(store);
+
+        let pending = Store::open(&root).unwrap().pending().unwrap();
+        assert_eq!(pending.len(), 4);
+        assert_eq!(pending[3].0.sequence, 5);
+        assert_eq!(pending[3].1, second_journal);
+        assert!(
+            matches!(pending[3].0.event, TurnEvent::ToolResult { id: done, .. } if done == id(&second))
+        );
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

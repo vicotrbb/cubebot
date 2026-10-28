@@ -208,7 +208,14 @@ impl Docker {
             args.extend(["--network", "host"]);
         }
         if self.config.terminal_enabled {
-            args.extend(["--env", "CUBEBOT_TERMINAL_ENABLED=1"]);
+            // shortcut: the process backend cannot switch users, so tools run as the agent's own
+            // user; the kvm guest will name a separate one.
+            args.extend([
+                "--env",
+                "CUBEBOT_TERMINAL_ENABLED=1",
+                "--env",
+                "CUBEBOT_TOOL_USER=10001:10001",
+            ]);
         }
         if self.config.backend == Backend::Kvm {
             args.extend(["--device", "/dev/kvm"]);

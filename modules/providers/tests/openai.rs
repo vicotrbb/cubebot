@@ -96,7 +96,7 @@ async fn streams_text_deltas_then_the_completed_reply_without_an_output_cap() {
     };
     assert_eq!(format!("{first}{second}"), "Hello back");
     assert_eq!(reply.text, "Hello back");
-    assert!(reply.call.is_none());
+    assert!(reply.calls.is_empty());
     assert_eq!(
         *usage,
         Some(Usage {
@@ -170,11 +170,12 @@ async fn a_stream_that_ends_before_completion_is_never_a_partial_reply() {
 }
 
 #[tokio::test]
-async fn terminal_calls_are_serial_and_replay_native_output_with_their_result() {
+async fn parallel_calls_arrive_together_and_replay_native_output_with_their_result() {
     async fn tool_reply(Json(body): Json<Value>) -> Response {
         assert_eq!(body["tools"][0]["name"], "terminal");
         assert_eq!(body["tools"][0]["strict"], true);
-        assert_eq!(body["parallel_tool_calls"], false);
+        assert_eq!(body["tools"][1]["strict"], false);
+        assert!(body.get("parallel_tool_calls").is_none());
         // The earlier reasoning and call are replayed verbatim before their output.
         assert_eq!(body["input"][2]["type"], "reasoning");
         assert_eq!(body["input"][3]["call_id"], "call_0");
@@ -184,14 +185,15 @@ async fn terminal_calls_are_serial_and_replay_native_output_with_their_result() 
         );
         sse(&[
             json!({"type":"response.completed","response":{"status":"completed","output":[
-            {"type":"function_call","name":"terminal","call_id":"call_1","arguments":"{\"command\":\"printf hello\"}"}]}}),
+            {"type":"function_call","name":"terminal","call_id":"call_1","arguments":"{\"command\":\"printf hello\"}"},
+            {"type":"function_call","name":"terminal","call_id":"call_2","arguments":"{\"command\":\"true\"}"}]}}),
         ])
     }
     let (origin, task) = serve(Router::new().route("/responses", post(tool_reply))).await;
     let provider = OpenAi::for_loopback_tests(&origin).unwrap();
     let earlier = cubebot_providers::Reply {
         text: String::new(),
-        call: None,
+        calls: Vec::new(),
         native: json!([{"type":"reasoning","encrypted_content":"opaque"},
             {"type":"function_call","name":"terminal","call_id":"call_0","arguments":"{}"}]),
     };
@@ -203,16 +205,28 @@ async fn terminal_calls_are_serial_and_replay_native_output_with_their_result() 
             output: "done".into(),
         },
     ];
-    let tools = [Tool {
-        name: "terminal".into(),
-        description: "Run".into(),
-        parameters: json!({"type":"object"}),
-    }];
+    let tools = [
+        Tool {
+            name: "terminal".into(),
+            description: "Run".into(),
+            parameters: json!({"type":"object"}),
+            strict: true,
+        },
+        Tool {
+            name: "external".into(),
+            description: "Anything".into(),
+            parameters: json!({"type":"object"}),
+            strict: false,
+        },
+    ];
     let events = collect(&provider, &request(&messages, &tools)).await;
     let [Event::Done { reply, usage: None }] = &events[..] else {
         panic!("missing usage must stay unknown");
     };
-    let call = reply.call.as_ref().unwrap();
+    let [call, second] = &reply.calls[..] else {
+        panic!("expected two calls");
+    };
+    assert_eq!(second.call_id, "call_2");
     assert_eq!(call.call_id, "call_1");
     assert_eq!(call.name, "terminal");
     assert!(call.arguments.contains("printf hello"));
