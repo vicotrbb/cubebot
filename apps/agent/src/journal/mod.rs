@@ -57,6 +57,24 @@ impl Journal {
         Ok(journal)
     }
 
+    /// Children spawned by parallel tool tests hold a copy of the lock descriptor between fork and
+    /// exec, so a reopen right after a drop can briefly see the lock held. Wait out only that error.
+    #[cfg(test)]
+    pub(crate) fn reopen(path: &Path) -> io::Result<Self> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match Self::open(path) {
+                Err(error)
+                    if error.to_string().contains("already locked")
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                result => return result,
+            }
+        }
+    }
+
     pub fn pending(&self) -> &[Record] {
         &self.records
     }

@@ -115,7 +115,9 @@ mod tests {
         store.record(&call(turn, 6)).unwrap();
         drop(store);
 
-        let mut store = Store::open(&root).unwrap();
+        let mut store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
         let pending = store.pending().unwrap();
         assert_eq!(pending.len(), 4);
         assert_eq!(pending[0], (first, journal));
@@ -157,7 +159,10 @@ mod tests {
         store.record(&result).unwrap();
         drop(store);
 
-        let pending = Store::open(&root).unwrap().pending().unwrap();
+        let store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
+        let pending = store.pending().unwrap();
         assert_eq!(pending.len(), 4);
         assert_eq!(pending[3].0.sequence, 5);
         assert_eq!(pending[3].1, second_journal);
