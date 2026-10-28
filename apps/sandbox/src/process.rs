@@ -14,14 +14,7 @@ use std::{
 };
 
 pub fn run() -> io::Result<u8> {
-    if let Some(journal) = std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY") {
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(&journal)?;
-        // Volumes with an fsGroup hand new directories the setgid bit; keep the journal private.
-        std::fs::set_permissions(&journal, std::fs::Permissions::from_mode(0o700))?;
-    }
+    private_journal()?;
     let agent = std::env::current_exe()?.with_file_name("cubebot-agent");
     let child = Pid::from_raw(Command::new(agent).spawn()?.id() as i32);
     let mut signals = SigSet::empty();
@@ -42,6 +35,18 @@ pub fn run() -> io::Result<u8> {
             _ => (),
         }
     }
+}
+
+fn private_journal() -> io::Result<()> {
+    if let Some(journal) = std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY") {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&journal)?;
+        // Volumes with an fsGroup hand new directories the setgid bit; keep the journal private.
+        std::fs::set_permissions(&journal, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
 }
 
 /// Reaps every exited child and returns the agent's exit code once it has stopped.

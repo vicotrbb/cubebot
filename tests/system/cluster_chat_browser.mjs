@@ -32,9 +32,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   if (process.env.CUBEBOT_BROWSER_WAITING === '1') {
     await page.getByRole('button', { name: 'Provider unreachable' }).click()
-    await page
-      .getByText(/Waiting: (provider unavailable|authority expired)/)
-      .waitFor()
+    await page.getByText(/Waiting: provider unavailable/).waitFor()
     await page
       .getByRole('button', { name: 'Retry response', exact: true })
       .waitFor()

@@ -1,19 +1,19 @@
 //! Terminal commands run as children of the agent inside its sandbox.
-use cubebot_protocol::terminal::{Invocation, Outcome};
+use cubebot_protocol::terminal::Outcome;
 use std::{
     io::{self, Read, Seek, SeekFrom},
     process::Stdio,
 };
 use tokio::process::{Child, Command};
 
-pub(super) fn spawn(invocation: &Invocation, workspace: &str) -> io::Result<(Child, String)> {
-    let output = format!("{workspace}/.cubebot-terminal-output/{}.log", invocation.id);
+pub(super) fn spawn(id: uuid::Uuid, command: &str, workspace: &str) -> io::Result<(Child, String)> {
+    let output = format!("{workspace}/.cubebot-terminal-output/{id}.log");
     let child = Command::new("/bin/sh")
         .args([
             "-c",
             r#"mkdir -p -- "$HOME/.cubebot-terminal-output" && cd "$HOME" && exec /bin/bash --noprofile --norc -c "$1" > "$2" 2>&1"#,
             "terminal",
-            &invocation.command,
+            command,
             &output,
         ])
         // Commands share the sandbox with the agent, but not its environment.
@@ -30,7 +30,7 @@ pub(super) fn spawn(invocation: &Invocation, workspace: &str) -> io::Result<(Chi
     Ok((child, output))
 }
 
-/// `status` is `None` when authority ended before the command exited.
+/// `status` is `None` when the turn was cancelled before the command exited.
 pub(super) async fn finish(mut child: Child, path: &str, status: Option<Option<i32>>) -> Outcome {
     // shortcut: only the command's process group is stopped; a descendant that calls setsid
     // survives until the sandbox stops. Kill the whole guest session once the kvm backend exists.
@@ -48,7 +48,7 @@ pub(super) async fn finish(mut child: Child, path: &str, status: Option<Option<i
     match status {
         Some(code) => Outcome::Exited { code, output },
         None => Outcome::Stopped {
-            reason: "authority_expired".into(),
+            reason: "cancelled".into(),
             output,
         },
     }
@@ -78,12 +78,12 @@ mod tests {
         let workspace =
             std::env::temp_dir().join(format!("cubebot-process-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&workspace).unwrap();
-        let invocation = Invocation {
-            id: uuid::Uuid::new_v4(),
-            authority: uuid::Uuid::new_v4(),
-            command: "pwd; printf '%s' \"${CUBEBOT_JOURNAL_DIRECTORY:-clean}\"; exit 4".into(),
-        };
-        let (mut child, path) = spawn(&invocation, workspace.to_str().unwrap()).unwrap();
+        let (mut child, path) = spawn(
+            uuid::Uuid::new_v4(),
+            "pwd; printf '%s' \"${CUBEBOT_JOURNAL_DIRECTORY:-clean}\"; exit 4",
+            workspace.to_str().unwrap(),
+        )
+        .unwrap();
         let code = child.wait().await.unwrap().code();
         let Outcome::Exited { code, output } = finish(child, &path, Some(code)).await else {
             panic!("command did not exit");

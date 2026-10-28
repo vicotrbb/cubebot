@@ -26,6 +26,6 @@ Public diagnostics stay under the run's ignored `target/cubebot-startup-*` direc
 
 The [recorded run](evidence/2026-10-26-cluster-startup.json) passed on Kubernetes 1.36.4 with the shipped arm64 images: all initializers succeeded, the scheduler rejected the competing RWOP mount, and the same PVC retained the expected bytes across different Pod UIDs. Both epochs settled after explicit fixture-operator stop, and owned-resource cleanup completed. The initial run failed because native Kustomize requires a supported filename; the fixture now writes `kustomization.yaml`.
 
-G1–G3, the `kvm` backend, authenticated runtime operation, tool execution, finite authority and grant renewal remain open. The recorded runs predate ADR 0084 and used the earlier runtime/tools pod.
+G1–G3, the `kvm` backend, authenticated runtime operation, and tool execution remain open. The recorded runs predate ADR 0084 and used the earlier runtime/tools pod.
 
 The later [real-cluster identity run](evidence/2026-10-26-cluster-identity.json) passed those projected-token and epoch assertions as well as the original storage/startup workflow. Rejection of the removed Pod is an end-to-end Cubebot identity result; it does not establish immediate Kubernetes JWT revocation or physical executor fencing.

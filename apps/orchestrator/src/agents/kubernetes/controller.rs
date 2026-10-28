@@ -34,13 +34,13 @@ impl Controller {
         layout: Layout,
         identity: PodIdentity,
     ) -> Result<Self, Error> {
-        let terminal_enabled = layout.terminal_enabled();
         let api = Kubernetes::new(config.clone(), &identity.namespace)?;
         let sandbox = Reconciler::new(pool.clone(), config.clone(), &identity.namespace, layout)?;
-        let runtime = credentials(
-            RuntimeIdentity::new(pool.clone(), config, &identity.namespace)?
-                .with_terminal(terminal_enabled),
-        )?;
+        let runtime = credentials(RuntimeIdentity::new(
+            pool.clone(),
+            config,
+            &identity.namespace,
+        )?)?;
         let owner = Owner::acquire(&pool, &api, identity).await?;
         Ok(Self {
             owner,
@@ -58,9 +58,7 @@ impl Controller {
     }
     /// Cluster-less sandboxes under development ownership; there is no pod to prove ownership.
     pub async fn docker(pool: PgPool, config: DockerConfig) -> Result<Self, Error> {
-        let runtime = credentials(
-            RuntimeIdentity::docker(pool.clone()).with_terminal(config.terminal_enabled()),
-        )?;
+        let runtime = credentials(RuntimeIdentity::docker(pool.clone()))?;
         let owner = Owner::database_only(&pool).await?;
         Ok(Self {
             mode: Mode::Docker(Box::new(Lifecycle {
@@ -86,7 +84,7 @@ impl Controller {
             }
             self.owner.check().await?;
             crate::work::Work::new(self.pool.clone())
-                .recover_expired()
+                .recover_interrupted()
                 .await?;
             let batch = self.batch(cursor).await?;
             self.reconcile_batch(&batch, &stop).await?;

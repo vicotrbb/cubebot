@@ -1,4 +1,4 @@
-//! Machine identity and lifecycle control; these messages convey no per-turn authority.
+//! Machine identity and the runtime channel. The agent credential lasts for its sandbox's lifetime.
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -16,8 +16,6 @@ pub struct RuntimeSession {
     pub attempt: Uuid,
     pub epoch: i64,
     pub version: i64,
-    /// Maximum lifetime measured from the client's bootstrap request start.
-    pub expires_in_seconds: u64,
 }
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,43 +25,126 @@ pub struct RuntimeActor {
     pub epoch: i64,
     pub version: i64,
 }
+
+/// Orchestrator to agent over `/api/runtime/channel`.
 #[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DrainRequest {
-    pub request_id: Uuid,
-    pub acknowledged: bool,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct DrainAcknowledgement {
-    pub request_id: Uuid,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeDisposition {
-    Available,
-    Hold,
-    Drain,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RuntimeControl {
-    pub actor: RuntimeActor,
-    pub disposition: RuntimeDisposition,
-    pub drain: Option<DrainRequest>,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Delivery {
+    Turn(Turn),
+    /// The event is durable in the ledger.
+    Ack {
+        turn: Uuid,
+        sequence: u64,
+    },
+    Cancel {
+        turn: Uuid,
+    },
+    Drain {
+        request_id: Uuid,
+    },
+    /// The credential no longer authorizes this sandbox; stop work.
+    Revoked,
 }
 
-/// Opaque recovery evidence, never a state commit or authority to execute.
+/// The one active turn. Provider material is current at delivery; never log it.
 #[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct JournalRecord {
+pub struct Turn {
+    pub turn: Uuid,
+    /// First event sequence for this run; earlier sequences belong to previous runs.
     pub sequence: u64,
-    pub payload: Vec<u8>,
+    pub message: String,
+    pub instructions: String,
+    pub model: String,
+    pub api_key: String,
+    /// Recent completed exchanges, oldest first. Context assembly is the agent's job.
+    pub history: Vec<Exchange>,
+    /// Tool events from earlier runs of this turn.
+    pub prior: Vec<TurnEvent>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct JournalReceipt {
-    pub actor: RuntimeActor,
-    pub sequence: u64,
-    pub payload_digest: [u8; 32],
+pub struct Exchange {
+    pub message: String,
+    pub response: String,
+}
+
+/// Agent to orchestrator over `/api/runtime/channel`.
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Report {
+    /// Ready for the next turn.
+    Pull,
+    Event {
+        turn: Uuid,
+        sequence: u64,
+        event: TurnEvent,
+    },
+    Drained {
+        request_id: Uuid,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TurnEvent {
+    TextDelta {
+        text: String,
+    },
+    ToolCall {
+        id: Uuid,
+        name: String,
+        input: serde_json::Value,
+    },
+    ToolResult {
+        id: Uuid,
+        outcome: crate::terminal::Outcome,
+    },
+    Usage {
+        input_tokens: u64,
+        output_tokens: u64,
+    },
+    Done {
+        response: String,
+    },
+    Error {
+        code: String,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn channel_messages_round_trip_with_their_tags() {
+        let report = Report::Event {
+            turn: Uuid::nil(),
+            sequence: 3,
+            event: TurnEvent::Done {
+                response: "ok".into(),
+            },
+        };
+        let text = serde_json::to_string(&report).unwrap();
+        assert!(text.contains(r#""type":"event""#) && text.contains(r#""kind":"done""#));
+        assert!(matches!(
+            serde_json::from_str::<Report>(&text).unwrap(),
+            Report::Event { sequence: 3, .. }
+        ));
+        let turn = Delivery::Turn(Turn {
+            turn: Uuid::nil(),
+            sequence: 1,
+            message: "hi".into(),
+            instructions: String::new(),
+            model: "m".into(),
+            api_key: "k".into(),
+            history: Vec::new(),
+            prior: Vec::new(),
+        });
+        let text = serde_json::to_string(&turn).unwrap();
+        assert!(matches!(
+            serde_json::from_str::<Delivery>(&text).unwrap(),
+            Delivery::Turn(Turn { sequence: 1, .. })
+        ));
+        assert!(serde_json::from_str::<Report>(r#"{"type":"claim"}"#).is_err());
+    }
 }

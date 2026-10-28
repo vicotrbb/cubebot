@@ -63,7 +63,6 @@ test('terminal outcomes and cancellation retain attributed command results', asy
     status: 'cancelled',
     response: null,
     error: 'cancelled',
-    authority_id: 'grant',
     terminal: [
       {
         id: 'invocation',

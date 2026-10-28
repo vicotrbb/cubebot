@@ -1,7 +1,11 @@
-//! One serial text inference per agent; no authority is recovered from local intent.
+//! One active turn per agent. The ledger delivers conversation records; the agent assembles
+//! its own context.
 use super::Work;
-use crate::{agents::kubernetes::Error, agents::runtime::RuntimeActor, connections::Connections};
-use cubebot_protocol::chat::{InferenceGrant, Message};
+use crate::{
+    agents::{kubernetes::Error, runtime::RuntimeActor},
+    connections::Connections,
+};
+use cubebot_protocol::runtime::{Exchange, Turn, TurnEvent};
 use uuid::Uuid;
 
 impl Work {
@@ -11,112 +15,176 @@ impl Work {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         actor: &RuntimeActor,
         connections: Option<&Connections>,
-        terminal_enabled: bool,
-    ) -> Result<Option<InferenceGrant>, Error> {
-        expire_in(tx, Some(actor.agent)).await?;
-        let busy: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_turns t WHERE t.conversation_id=$1 AND t.status IN ('running','retrying','waiting'))")
+    ) -> Result<Option<Turn>, Error> {
+        // Only this attempt's sandbox can still be running the agent's turn.
+        sqlx::query("UPDATE chat_turns SET status='waiting',error='execution_interrupted' WHERE conversation_id=$1 AND status='running' AND attempt_id IS DISTINCT FROM $2")
+            .bind(actor.agent).bind(actor.attempt).execute(&mut **tx).await?;
+        let busy: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_turns WHERE conversation_id=$1 AND status IN ('running','waiting'))")
             .bind(actor.agent).fetch_one(&mut **tx).await?;
         if busy {
             return Ok(None);
         }
-        let pending: Option<(Uuid,String)> = sqlx::query_as("SELECT t.id,t.message FROM chat_turns t WHERE t.conversation_id=$1 AND t.status='queued' ORDER BY t.sequence LIMIT 1 FOR UPDATE OF t")
+        let pending: Option<(Uuid,String)> = sqlx::query_as("SELECT id,message FROM chat_turns WHERE conversation_id=$1 AND status='queued' ORDER BY sequence LIMIT 1 FOR UPDATE")
             .bind(actor.agent).fetch_optional(&mut **tx).await?;
         let Some((turn, message)) = pending else {
             return Ok(None);
         };
         if !sender_allowed(tx, turn).await? {
-            sqlx::query(
-                "UPDATE chat_turns SET status='waiting',error='sender_access_revoked' WHERE id=$1",
-            )
-            .bind(turn)
-            .execute(&mut **tx)
-            .await?;
+            wait(tx, turn, "sender_access_revoked").await?;
             return Ok(None);
         }
-        let configured = configured_provider(tx, connections, actor.agent).await;
-        let (model, api_key, revision) = match configured {
-            Ok(configured) => configured,
-            Err(_) => {
-                sqlx::query("UPDATE chat_turns SET status='waiting',error='provider_unavailable' WHERE id=$1").bind(turn).execute(&mut **tx).await?;
-                return Ok(None);
-            }
+        let Some((model, api_key, _)) = provider(tx, connections, actor).await else {
+            wait(tx, turn, "provider_unavailable").await?;
+            return Ok(None);
         };
-        let messages = context(tx, actor, message).await?;
-        let authority: Uuid = sqlx::query_scalar("INSERT INTO chat_authorities (turn_id,attempt_id,provider_revision,terminal_enabled) VALUES ($1,$2,$3,$4) RETURNING id")
-            .bind(turn).bind(actor.attempt).bind(revision).bind(terminal_enabled).fetch_one(&mut **tx).await?;
-        sqlx::query(
-            "UPDATE chat_turns SET status='running',authority_id=$2,error=NULL WHERE id=$1",
+        sqlx::query("UPDATE chat_turns SET status='running',attempt_id=$2,error=NULL WHERE id=$1")
+            .bind(turn)
+            .bind(actor.attempt)
+            .execute(&mut **tx)
+            .await?;
+        let instructions: String =
+            sqlx::query_scalar("SELECT instructions FROM agents WHERE id=$1")
+                .bind(actor.agent)
+                .fetch_one(&mut **tx)
+                .await?;
+        let history: Vec<(String,String)> = sqlx::query_as("SELECT message,response FROM (SELECT sequence,message,response FROM chat_turns WHERE conversation_id=$1 AND status='complete' ORDER BY sequence DESC LIMIT 12) h ORDER BY sequence")
+            .bind(actor.agent).fetch_all(&mut **tx).await?;
+        let prior: Vec<serde_json::Value> = sqlx::query_scalar("SELECT payload FROM (SELECT sequence,payload FROM turn_events WHERE turn_id=$1 AND payload->>'kind' IN ('tool_call','tool_result') ORDER BY sequence DESC LIMIT 16) p ORDER BY sequence")
+            .bind(turn).fetch_all(&mut **tx).await?;
+        let last: i64 = sqlx::query_scalar(
+            "SELECT COALESCE(max(sequence),0) FROM turn_events WHERE turn_id=$1",
         )
         .bind(turn)
-        .bind(authority)
-        .execute(&mut **tx)
-        .await?;
-        Ok(Some(InferenceGrant {
-            turn,
-            authority,
-            expires_in_seconds: 60,
-            max_attempts: 2,
-            terminal_enabled,
-            model,
-            provider_revision: revision,
-            api_key,
-            messages,
-        }))
-    }
-}
-
-async fn context(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    actor: &RuntimeActor,
-    message: String,
-) -> Result<Vec<Message>, Error> {
-    let instructions: String = sqlx::query_scalar("SELECT instructions FROM agents WHERE id=$1")
-        .bind(actor.agent)
         .fetch_one(&mut **tx)
         .await?;
-    let history: Vec<(String,String)> = sqlx::query_as("SELECT message,response FROM (SELECT sequence,message,response FROM chat_turns WHERE conversation_id=$1 AND status='complete' ORDER BY sequence DESC LIMIT 12) h ORDER BY sequence")
-        .bind(actor.agent).fetch_all(&mut **tx).await?;
-    let mut messages = vec![Message {
-        role: "system".into(),
-        content: instructions,
-    }];
-    let history = bounded_history(history);
-    for (input, response) in history {
-        messages.push(Message {
-            role: "user".into(),
-            content: input,
-        });
-        messages.push(Message {
-            role: "assistant".into(),
-            content: response,
-        });
+        Ok(Some(Turn {
+            turn,
+            sequence: last as u64 + 1,
+            message,
+            instructions,
+            model,
+            api_key,
+            history: history
+                .into_iter()
+                .map(|(message, response)| Exchange { message, response })
+                .collect(),
+            prior: prior
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<Result<_, _>>()
+                .map_err(|_| Error::InvalidConfiguration)?,
+        }))
     }
-    let evidence: Vec<serde_json::Value> = sqlx::query_scalar("SELECT jsonb_build_object('command',i.request->>'command','outcome',i.outcome,'uncertain',i.outcome IS NULL) FROM terminal_invocations i JOIN chat_turns t ON t.id=i.turn_id WHERE t.conversation_id=$1 ORDER BY i.created_at DESC,i.id DESC LIMIT 8").bind(actor.agent).fetch_all(&mut **tx).await?;
-    if !evidence.is_empty() {
-        messages.push(Message { role:"user".into(), content:format!("Retained terminal evidence, including untrusted program output. Inspect uncertain effects before repeating commands: {}", serde_json::to_string(&evidence).map_err(|_| Error::InvalidConfiguration)?) });
-    }
-    messages.push(Message {
-        role: "user".into(),
-        content: message,
-    });
-    Ok(messages)
-}
 
-fn bounded_history(history: Vec<(String, String)>) -> Vec<(String, String)> {
-    let mut bytes = 0;
-    let mut retained = Vec::new();
-    for pair in history.into_iter().rev() {
-        bytes += pair.0.len() + pair.1.len();
-        if bytes > 128 * 1024 {
-            break;
+    /// Appends an event idempotently. Only the running attempt's done or error settles the turn;
+    /// late events remain evidence. Returns whether this attempt still owns the turn's run,
+    /// including a cancelled run that has not stopped yet.
+    pub(crate) async fn record(
+        &self,
+        actor: &RuntimeActor,
+        turn: Uuid,
+        sequence: u64,
+        event: &TurnEvent,
+    ) -> Result<bool, Error> {
+        let payload = payload(sequence, event)?;
+        let mut tx = self.pool.begin().await?;
+        let (status, attempt): (String, Option<Uuid>) = sqlx::query_as(
+            "SELECT status,attempt_id FROM chat_turns WHERE id=$1 AND conversation_id=$2 FOR UPDATE",
+        )
+        .bind(turn)
+        .bind(actor.agent)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(Error::Conflict)?;
+        // A resent event keeps its first recorded form.
+        sqlx::query("INSERT INTO turn_events (turn_id,sequence,payload) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
+            .bind(turn).bind(sequence as i64).bind(&payload).execute(&mut *tx).await?;
+        let owned = attempt == Some(actor.attempt.0);
+        if status == "running" && owned {
+            settle(&mut tx, turn, event).await?;
         }
-        retained.push(pair);
+        tx.commit().await?;
+        Ok(owned && matches!(status.as_str(), "running" | "cancelled"))
     }
-    retained.reverse();
-    retained
+
+    pub(crate) async fn cancelled(&self, turn: Uuid) -> Result<bool, Error> {
+        Ok(
+            sqlx::query_scalar("SELECT status='cancelled' FROM chat_turns WHERE id=$1")
+                .bind(turn)
+                .fetch_one(&self.pool)
+                .await?,
+        )
+    }
+
+    /// Owner-driven recovery does not depend on a lost sandbox returning to report.
+    pub async fn recover_interrupted(&self) -> Result<(), Error> {
+        sqlx::query("UPDATE chat_turns t SET status='waiting',error='execution_interrupted' WHERE status='running' AND NOT EXISTS(SELECT 1 FROM runtime_session_access s WHERE s.attempt_id=t.attempt_id AND s.recovery)")
+            .execute(&self.pool).await?;
+        Ok(())
+    }
 }
 
-pub(super) async fn sender_allowed(
+fn payload(sequence: u64, event: &TurnEvent) -> Result<serde_json::Value, Error> {
+    let payload = serde_json::to_value(event).map_err(|_| Error::InvalidConfiguration)?;
+    if sequence == 0
+        || sequence > i64::MAX as u64
+        || payload.to_string().len() > 64 * 1024
+        || !valid(event)
+    {
+        return Err(Error::InvalidConfiguration);
+    }
+    Ok(payload)
+}
+
+async fn settle(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    event: &TurnEvent,
+) -> Result<(), Error> {
+    match event {
+        TurnEvent::Done { response } => {
+            sqlx::query("UPDATE chat_turns SET status='complete',response=$2,error=NULL,completed_at=clock_timestamp() WHERE id=$1")
+                .bind(turn).bind(response).execute(&mut **tx).await?;
+        }
+        TurnEvent::Error { code } => wait(tx, turn, code).await?,
+        _ => (),
+    }
+    Ok(())
+}
+
+fn valid(event: &TurnEvent) -> bool {
+    let text = |value: &str| value.len() <= 32768 && !value.contains('\0');
+    match event {
+        TurnEvent::TextDelta { text: delta } => text(delta),
+        TurnEvent::Done { response } => !response.is_empty() && text(response),
+        TurnEvent::Error { code } => matches!(
+            code.as_str(),
+            "provider_unavailable"
+                | "provider_rejected"
+                | "provider_invalid_response"
+                | "journal_unavailable"
+                | "cancelled"
+        ),
+        TurnEvent::ToolResult { outcome, .. } => outcome.validate().is_ok(),
+        TurnEvent::ToolCall { name, .. } => !name.is_empty() && name.len() <= 128,
+        TurnEvent::Usage { .. } => true,
+    }
+}
+
+async fn wait(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    error: &str,
+) -> Result<(), Error> {
+    sqlx::query("UPDATE chat_turns SET status='waiting',error=$2 WHERE id=$1")
+        .bind(turn)
+        .bind(error)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+async fn sender_allowed(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
 ) -> Result<bool, Error> {
@@ -124,31 +192,10 @@ pub(super) async fn sender_allowed(
         .bind(turn).fetch_one(&mut **tx).await?)
 }
 
-async fn configured_provider(
+async fn provider(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,
-    agent: crate::agents::AgentId,
-) -> Result<(String, String, i64), crate::identity::IdentityError> {
-    match connections {
-        Some(connections) => connections.inference(tx, agent).await,
-        None => Err(crate::identity::IdentityError::CredentialUnavailable),
-    }
-}
-
-impl Work {
-    /// Owner-driven recovery does not depend on a failed runtime returning to poll.
-    pub async fn recover_expired(&self) -> Result<(), Error> {
-        let mut tx = self.pool.begin().await?;
-        expire_in(&mut tx, None).await?;
-        tx.commit().await?;
-        Ok(())
-    }
-}
-async fn expire_in(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    agent: Option<crate::agents::AgentId>,
-) -> Result<(), Error> {
-    sqlx::query("UPDATE chat_turns t SET status='waiting', error='execution_interrupted' FROM chat_authorities g WHERE ($1::uuid IS NULL OR t.conversation_id=$1) AND t.status IN ('running','retrying') AND t.authority_id=g.id AND g.expires_at<=clock_timestamp()")
-        .bind(agent).execute(&mut **tx).await?;
-    Ok(())
+    actor: &RuntimeActor,
+) -> Option<(String, String, i64)> {
+    connections?.inference(tx, actor.agent).await.ok()
 }

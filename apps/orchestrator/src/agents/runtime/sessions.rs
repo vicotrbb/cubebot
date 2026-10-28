@@ -21,7 +21,8 @@ impl RuntimeIdentity {
             .await?;
         sqlx::query_scalar::<_,Uuid>("SELECT id FROM agent_resources WHERE id = $1 AND agent_id = $2 AND kind = 'pod' AND phase = 'bound' AND uid = $3 FOR UPDATE")
             .bind(attempt.id).bind(attempt.agent).bind(&reviewed.pod_uid).fetch_optional(&mut *transaction).await?.ok_or(Error::Unauthorized)?;
-        let version: i64 = sqlx::query_scalar("INSERT INTO agent_runtime_sessions (attempt_id,instance_id,pod_uid,service_account_uid,token_hash,expires_at) VALUES ($1,$2,$3,$4,$5,clock_timestamp() + interval '120 seconds') ON CONFLICT (attempt_id) DO UPDATE SET token_hash = EXCLUDED.token_hash, expires_at = EXCLUDED.expires_at, version = agent_runtime_sessions.version + 1 WHERE agent_runtime_sessions.instance_id = EXCLUDED.instance_id AND agent_runtime_sessions.pod_uid = EXCLUDED.pod_uid AND agent_runtime_sessions.service_account_uid = EXCLUDED.service_account_uid RETURNING version")
+        // The credential lasts for this sandbox incarnation; the same process may rotate it.
+        let version: i64 = sqlx::query_scalar("INSERT INTO agent_runtime_sessions (attempt_id,instance_id,pod_uid,service_account_uid,token_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET token_hash = EXCLUDED.token_hash, version = agent_runtime_sessions.version + 1 WHERE agent_runtime_sessions.instance_id = EXCLUDED.instance_id AND agent_runtime_sessions.pod_uid = EXCLUDED.pod_uid AND agent_runtime_sessions.service_account_uid = EXCLUDED.service_account_uid RETURNING version")
             .bind(attempt.id).bind(instance).bind(&reviewed.pod_uid).bind(&reviewed.service_account_uid).bind(digest(&token)).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
         transaction.commit().await?;
         Ok(RuntimeSession {
@@ -30,7 +31,6 @@ impl RuntimeIdentity {
             attempt: attempt.id,
             epoch: attempt.epoch,
             version,
-            expires_in_seconds: 120,
         })
     }
 

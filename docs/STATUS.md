@@ -14,7 +14,7 @@ Evidence: [text chat](development/text-chat-mvp.md), [cluster admission](develop
 
 ## Code behind the accepted design
 
-[ADR 0083](adr/0083-agent-centric-execution-in-a-sandbox-boundary.md) replaces per-turn grants and invocation leases with coarse agent authority, and [ADR 0084](adr/0084-in-house-vmm-as-the-agent-sandbox.md) makes Cubebot's own KVM VMM the sandbox. The tool container, network initializer and kernel egress baseline are gone; the agent runs its tools itself. The code still uses finite per-turn inference grants and renewable terminal authority. The `kvm` backend is not implemented: no agent runs in a VM, so no deployment has an isolation boundary between agent-run code and the pod.
+[ADR 0083](adr/0083-agent-centric-execution-in-a-sandbox-boundary.md) replaces per-turn grants and invocation leases with coarse agent authority, and [ADR 0084](adr/0084-in-house-vmm-as-the-agent-sandbox.md) makes Cubebot's own KVM VMM the sandbox. The tool container, network initializer and kernel egress baseline are gone; the agent runs its tools itself. Runtime control is one authenticated WebSocket per sandbox, with an agent credential that lasts for the sandbox incarnation; per-turn grants, terminal leases and journal custody are gone. The `kvm` backend is not implemented: no agent runs in a VM, so no deployment has an isolation boundary between agent-run code and the pod.
 
 ## Not yet qualified
 
@@ -22,7 +22,7 @@ Agent system
 
 - Rooms, delegation, memory, skills, browser, MCP, integrations, triggers, notifications, PWA/push and token streaming are not implemented. Responses commit as complete messages.
 - Room content workflows and event streaming are not implemented.
-- Typed invocation/result reconciliation, semantic reconciliation of recovered outcomes and journal crash-window behavior on CSI are unfinished.
+- Tool-journal crash-window behavior on CSI is unqualified. Each channel polls PostgreSQL once a second; delivery latency and database load at scale are unmeasured.
 
 Kubernetes and isolation
 

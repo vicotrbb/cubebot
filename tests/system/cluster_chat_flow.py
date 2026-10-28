@@ -127,7 +127,7 @@ def configure(f, key, access=None, model="gpt-4.1-mini"):
 
 def retry(f, identity, turn):
     path = f"/api/conversations/{identity}/messages/{turn['id']}/retry"
-    body = command(expected_authority=turn["authority_id"])
+    body = command()
     result = f.request(path, body)
     assert f.request(path, body)["id"] == result["id"]
     return result
@@ -255,7 +255,7 @@ def exclusive_storage(f, current):
 
 
 def in_flight_control_crash(f):
-    identity = agent(f, "Journal during control crash")
+    identity = agent(f, "Outbox during control crash")
     lifecycle(f, identity, "wake")
     current = running(f, identity)
     controller = json.loads(f.k("get", "pod", "orchestrator", "-o", "json"))
@@ -266,31 +266,22 @@ def in_flight_control_crash(f):
             outcome(f, identity, turn, ("running",))
             signal(f, controller, "SIGSTOP")
             stopped = True
-
-        def journaled_outcome():
-            names = f.k(
-                "exec",
-                current["metadata"]["name"],
-                "--",
-                "ls",
-                "/var/lib/cubebot/runtime/journal",
-            ).splitlines()
-            return len([name for name in names if name.endswith(".entry")]) >= 2
-
-        wait_for(
-            "durable intent and outcome during control outage", journaled_outcome, 55
-        )
+        # The reply arrives during the outage and waits in the agent's outbox.
+        time.sleep(20)
     finally:
         if stopped:
             signal(f, controller, "SIGKILL")
     wait_for("crashed control plane recovery", lambda: available(f))
     assert outcome(f, identity, turn)["response"]
     assert (
-        f.sql(f"SELECT count(*) FROM chat_authorities WHERE turn_id='{turn['id']}'")
+        f.sql(
+            f"SELECT count(*) FROM turn_events WHERE turn_id='{turn['id']}' "
+            "AND payload->>'kind'='done'"
+        )
         == "1"
     )
     print(
-        "PASS granted inference and journal recovery through a control-plane crash",
+        "PASS turn events resent through a control-plane crash commit once",
         flush=True,
     )
 
@@ -340,10 +331,6 @@ def interrupted_inference(f):
         assert (
             waiting["error"] == "execution_interrupted" and waiting["response"] is None
         )
-        assert (
-            f.sql(f"SELECT count(*) FROM chat_authorities WHERE turn_id='{turn['id']}'")
-            == "1"
-        )
     retry(f, identity, waiting)
     assert outcome(f, identity, turn)["response"]
     assert len(history(f, identity)) == 1
@@ -361,11 +348,7 @@ def provider_partition(f):
         turn = send(f, identity, "Reply with recovered.")
         waiting = outcome(f, identity, turn, ("waiting",))
         assert waiting["response"] is None
-        assert waiting["error"] in ("provider_unavailable", "authority_expired")
-        assert (
-            f.sql(f"SELECT count(*) FROM chat_authorities WHERE turn_id='{turn['id']}'")
-            == "1"
-        )
+        assert waiting["error"] == "provider_unavailable"
     time.sleep(6)
     assert outcome(f, identity, turn, ("waiting",), timeout=2)["response"] is None
     print(
@@ -425,9 +408,7 @@ def provider_changes(f, key):
     configure(f, key, {"mode": "explicit_grants", "agents": []})
     turn = send(f, identity, "Reply with enabled.")
     waiting = outcome(f, identity, turn, ("waiting",))
-    assert (
-        waiting["error"] == "provider_unavailable" and waiting["authority_id"] is None
-    )
+    assert waiting["error"] == "provider_unavailable"
     configure(
         f, key, {"mode": "all_agents"}, model="cubebot-nonexistent-qualification-model"
     )
@@ -481,9 +462,7 @@ def permissions(f):
             )
         f.request(f"/api/conversations/{identity}/messages", token=token, expected=404)
     waiting = outcome(f, identity, turn, ("waiting",))
-    assert (
-        waiting["error"] == "sender_access_revoked" and waiting["authority_id"] is None
-    )
+    assert waiting["error"] == "sender_access_revoked"
     print("PASS revoked sender cannot read or start accepted queued work", flush=True)
 
 

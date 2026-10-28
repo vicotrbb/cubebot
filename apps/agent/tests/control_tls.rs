@@ -23,8 +23,9 @@ async fn exchange(trusted: bool, hostname: &str) -> Result<(), Error> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let task = tokio::spawn(async move {
+        let acceptor = TlsAcceptor::from(Arc::new(server));
         let (stream, _) = listener.accept().await.unwrap();
-        let Ok(mut stream) = TlsAcceptor::from(Arc::new(server)).accept(stream).await else {
+        let Ok(mut stream) = acceptor.accept(stream).await else {
             return;
         };
         let mut input = [0; 4096];
@@ -35,7 +36,7 @@ async fn exchange(trusted: bool, hostname: &str) -> Result<(), Error> {
                 .starts_with("POST /api/runtime/bootstrap ")
         );
         let body = format!(
-            r#"{{"token":"cb_runtime_{}","agent":"00000000-0000-0000-0000-000000000001","attempt":"00000000-0000-0000-0000-000000000002","epoch":1,"version":1,"expires_in_seconds":120}}"#,
+            r#"{{"token":"cb_runtime_{}","agent":"00000000-0000-0000-0000-000000000001","attempt":"00000000-0000-0000-0000-000000000002","epoch":1,"version":1}}"#,
             "a".repeat(64)
         );
         let response = format!(
@@ -45,6 +46,10 @@ async fn exchange(trusted: bool, hostname: &str) -> Result<(), Error> {
         );
         stream.write_all(response.as_bytes()).await.unwrap();
         stream.shutdown().await.unwrap();
+        // The channel verifies the same selected CA.
+        let (stream, _) = listener.accept().await.unwrap();
+        let stream = acceptor.accept(stream).await.unwrap();
+        tokio_tungstenite::accept_async(stream).await.unwrap();
     });
     let token = std::env::temp_dir().join(format!("cubebot-tls-{}", uuid::Uuid::new_v4()));
     std::fs::write(&token, "test-only-projected-token").unwrap();
@@ -52,10 +57,11 @@ async fn exchange(trusted: bool, hostname: &str) -> Result<(), Error> {
     if trusted {
         config = config.with_root_certificate(CA).unwrap();
     }
-    let outcome = tokio::time::timeout(
-        Duration::from_secs(15),
-        RuntimeClient::new(config).unwrap().bootstrap(),
-    )
+    let mut client = RuntimeClient::new(config).unwrap();
+    let outcome = tokio::time::timeout(Duration::from_secs(15), async {
+        client.bootstrap().await?;
+        client.connect().await.map(drop)
+    })
     .await
     .unwrap();
     task.await.unwrap();

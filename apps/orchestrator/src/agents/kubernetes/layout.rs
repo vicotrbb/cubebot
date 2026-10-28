@@ -45,9 +45,6 @@ impl Layout {
         self.terminal = enabled;
         self
     }
-    pub fn terminal_enabled(&self) -> bool {
-        self.terminal
-    }
     pub fn with_control_ca(mut self, config_map: &str) -> Result<Self, Error> {
         if config_map.len() > 253
             || !config_map.split('.').all(|part| {

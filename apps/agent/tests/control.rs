@@ -1,108 +1,269 @@
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{
+        State, WebSocketUpgrade,
+        ws::{Message, WebSocket},
+    },
     http::HeaderMap,
+    response::Response,
     routing::{get, post},
 };
-use cubebot_agent::control::{Config, RuntimeClient};
+use cubebot_agent::control::{Config, Error, RuntimeClient};
 use serde_json::{Value, json};
-use std::sync::{Arc, Mutex};
+use std::{os::unix::fs::DirBuilderExt, path::PathBuf, sync::Arc, time::Duration};
+use tokio::sync::{Mutex, mpsc};
 use uuid::Uuid;
 
-struct Api {
-    instance: Option<Uuid>,
-    version: u64,
-    request: Uuid,
-    token: String,
-    wrong_actor: bool,
-    acknowledgements: usize,
-    controls: usize,
-}
-async fn bootstrap(State(state): State<Arc<Mutex<Api>>>, Json(body): Json<Value>) -> Json<Value> {
-    let mut state = state.lock().unwrap();
-    assert_eq!(body["token"], state.token);
-    let instance: Uuid = serde_json::from_value(body["instance"].clone()).unwrap();
-    assert!(!instance.is_nil());
-    if let Some(previous) = state.instance {
-        assert_eq!(instance, previous);
-    }
-    state.instance = Some(instance);
-    state.version += 1;
-    Json(
-        json!({"token":format!("cb_runtime_{}", "a".repeat(64)),"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(2),"epoch":1,"version":state.version,"expires_in_seconds":120}),
-    )
-}
-async fn control(State(state): State<Arc<Mutex<Api>>>, headers: HeaderMap) -> Json<Value> {
-    assert_eq!(
-        headers["authorization"],
-        format!("Bearer cb_runtime_{}", "a".repeat(64))
-    );
-    let mut state = state.lock().unwrap();
-    state.controls += 1;
-    Json(
-        json!({"actor":{"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(if state.wrong_actor {3} else {2}),"epoch":1,"version":state.version},"disposition":"drain","drain":{"request_id":state.request,"acknowledged":false}}),
-    )
-}
-async fn drained(
-    State(state): State<Arc<Mutex<Api>>>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> Json<Value> {
-    assert_eq!(
-        headers["authorization"],
-        format!("Bearer cb_runtime_{}", "a".repeat(64))
-    );
-    let mut state = state.lock().unwrap();
-    assert_eq!(body["request_id"], json!(state.request));
-    state.acknowledgements += 1;
-    Json(json!({"request_id":state.request,"acknowledged":true}))
+fn issued() -> Value {
+    json!({"token":format!("cb_runtime_{}", "a".repeat(64)),"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(2),"epoch":1,"version":1})
 }
 
-#[tokio::test]
-async fn native_client_bootstraps_renews_and_reports_bound_drain() {
-    let path = std::env::temp_dir().join(format!("cubebot-control-{}", Uuid::new_v4()));
-    std::fs::write(&path, "projected-first").unwrap();
-    let state = Arc::new(Mutex::new(Api {
-        instance: None,
-        version: 0,
-        request: Uuid::new_v4(),
-        token: "projected-first".into(),
-        wrong_actor: false,
-        acknowledgements: 0,
-        controls: 0,
-    }));
+/// A scripted orchestrator: the test reads every report and chooses every delivery.
+#[derive(Clone)]
+struct Channel {
+    reports: mpsc::UnboundedSender<Value>,
+    deliveries: Arc<Mutex<mpsc::UnboundedReceiver<Value>>>,
+    provider: Arc<std::sync::Mutex<Vec<Value>>>,
+}
+struct Fake {
+    origin: String,
+    reports: mpsc::UnboundedReceiver<Value>,
+    deliveries: mpsc::UnboundedSender<Value>,
+    provider: Arc<std::sync::Mutex<Vec<Value>>>,
+    task: tokio::task::JoinHandle<()>,
+}
+async fn fake(replies: Vec<Value>) -> Fake {
+    let (reports, received) = mpsc::unbounded_channel();
+    let (deliveries, scripted) = mpsc::unbounded_channel();
+    let provider = Arc::new(std::sync::Mutex::new(replies));
     let router = Router::new()
-        .route("/api/runtime/bootstrap", post(bootstrap))
-        .route("/api/runtime/control", get(control))
-        .route("/api/runtime/drained", post(drained))
-        .with_state(state.clone());
+        .route(
+            "/api/runtime/bootstrap",
+            post(|Json(body): Json<Value>| async move {
+                assert_eq!(body["token"], "projected-token");
+                Json(issued())
+            }),
+        )
+        .route("/api/runtime/channel", get(upgrade))
+        .route("/responses", post(model))
+        .with_state(Channel {
+            reports,
+            deliveries: Arc::new(Mutex::new(scripted)),
+            provider: provider.clone(),
+        });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let task = tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
     });
-    let config = Config::new(&origin, path.clone()).unwrap();
-    let mut client = RuntimeClient::new(config).unwrap();
-    assert!(client.control().await.is_err());
-    client.bootstrap().await.unwrap();
-    let first = client.control().await.unwrap();
-    assert_eq!(first.actor.version, 1);
-    let request = first.drain.unwrap().request_id;
-    assert!(
-        client
-            .acknowledge_drain(request)
-            .await
-            .unwrap()
-            .acknowledged
+    Fake {
+        origin,
+        reports: received,
+        deliveries,
+        provider,
+        task,
+    }
+}
+async fn upgrade(
+    State(channel): State<Channel>,
+    headers: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Response {
+    assert_eq!(
+        headers["authorization"],
+        format!("Bearer cb_runtime_{}", "a".repeat(64))
     );
-    std::fs::write(&path, "projected-second").unwrap();
-    state.lock().unwrap().token = "projected-second".into();
-    client.bootstrap().await.unwrap();
-    assert_eq!(client.control().await.unwrap().actor.version, 2);
-    state.lock().unwrap().wrong_actor = true;
-    assert!(client.control().await.is_err());
-    task.abort();
-    std::fs::remove_file(path).unwrap();
+    upgrade.on_upgrade(move |socket| relay(channel, socket))
+}
+async fn relay(channel: Channel, mut socket: WebSocket) {
+    let mut scripted = channel.deliveries.lock().await;
+    loop {
+        tokio::select! {
+            incoming = socket.recv() => match incoming {
+                Some(Ok(Message::Text(text))) => {
+                    channel.reports.send(serde_json::from_str(&text).unwrap()).unwrap();
+                }
+                _ => return,
+            },
+            delivery = scripted.recv() => match delivery {
+                Some(Value::Null) | None => return,
+                Some(delivery) => {
+                    socket.send(Message::Text(delivery.to_string().into())).await.unwrap();
+                }
+            },
+        }
+    }
+}
+async fn model(State(channel): State<Channel>, Json(body): Json<Value>) -> Json<Value> {
+    let mut replies = channel.provider.lock().unwrap();
+    let reply = replies.remove(0);
+    replies.push(body);
+    Json(reply)
+}
+
+impl Fake {
+    async fn expect(&mut self) -> Value {
+        tokio::time::timeout(Duration::from_secs(15), self.reports.recv())
+            .await
+            .expect("agent report")
+            .unwrap()
+    }
+    fn deliver(&self, delivery: Value) {
+        self.deliveries.send(delivery).unwrap();
+    }
+    async fn event(&mut self, sequence: u64) -> Value {
+        let report = self.expect().await;
+        assert_eq!(report["type"], "event", "{report}");
+        assert_eq!(report["sequence"], sequence, "{report}");
+        report["event"].clone()
+    }
+    fn ack(&self, turn: Uuid, sequences: impl IntoIterator<Item = u64>) {
+        for sequence in sequences {
+            self.deliver(json!({"type":"ack","turn":turn,"sequence":sequence}));
+        }
+    }
+    async fn drain(&mut self, child: &mut std::process::Child) {
+        let request = Uuid::new_v4();
+        self.deliver(json!({"type":"drain","request_id":request}));
+        assert_eq!(
+            self.expect().await,
+            json!({"type":"drained","request_id":request})
+        );
+        self.deliver(json!({"type":"revoked"}));
+        assert!(child_exit(child).await.success());
+        self.task.abort();
+    }
+}
+
+fn root() -> PathBuf {
+    let root = std::env::temp_dir().join(format!("cubebot-native-{}", Uuid::new_v4()));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&root)
+        .unwrap();
+    std::fs::write(root.join("token"), "projected-token").unwrap();
+    std::fs::create_dir(root.join("workspace")).unwrap();
+    root
+}
+fn spawn(origin: &str, root: &std::path::Path) -> std::process::Child {
+    std::process::Command::new(env!("CARGO_BIN_EXE_cubebot-agent"))
+        .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
+        .env("CUBEBOT_BOOTSTRAP_TOKEN_FILE", root.join("token"))
+        .env("CUBEBOT_JOURNAL_DIRECTORY", root)
+        .env("CUBEBOT_WORKSPACE_DIRECTORY", root.join("workspace"))
+        .env("CUBEBOT_TEST_PROVIDER_ORIGIN", format!("{origin}/"))
+        .env("CUBEBOT_TERMINAL_ENABLED", "1")
+        .spawn()
+        .unwrap()
+}
+async fn child_exit(child: &mut std::process::Child) -> std::process::ExitStatus {
+    for _ in 0..500 {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    child.kill().unwrap();
+    child.wait().unwrap();
+    panic!("native runtime did not exit");
+}
+fn turn(id: Uuid, sequence: u64, message: &str) -> Value {
+    json!({"type":"turn","turn":id,"sequence":sequence,"message":message,"instructions":"Be brief.",
+        "model":"test-model","api_key":"test-key",
+        "history":[{"message":"Earlier","response":"Before"}],"prior":[]})
+}
+
+#[tokio::test]
+async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconnect() {
+    let mut fake = fake(vec![
+        json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}],"usage":{"input_tokens":9,"output_tokens":2}}),
+    ])
+    .await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let id = Uuid::new_v4();
+    fake.deliver(turn(id, 3, "Hello"));
+    assert_eq!(
+        fake.event(3).await,
+        json!({"kind":"usage","input_tokens":9,"output_tokens":2})
+    );
+    assert_eq!(
+        fake.event(4).await,
+        json!({"kind":"text_delta","text":"Hello back"})
+    );
+    assert_eq!(
+        fake.event(5).await,
+        json!({"kind":"done","response":"Hello back"})
+    );
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let request = fake.provider.lock().unwrap()[0].clone();
+    assert_eq!(request["model"], "test-model");
+    assert_eq!(
+        request["input"],
+        json!([{"role":"system","content":"Be brief."},{"role":"user","content":"Earlier"},
+            {"role":"assistant","content":"Before"},{"role":"user","content":"Hello"}])
+    );
+    // Only the first event reaches the ledger before the connection drops.
+    fake.ack(id, [3]);
+    fake.deliver(Value::Null);
+    fake.event(4).await;
+    fake.event(5).await;
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.ack(id, [4, 5]);
+    fake.drain(&mut child).await;
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_a_command() {
+    let root = root();
+    let earlier = Uuid::new_v4();
+    let call = Uuid::new_v4();
+    let mut journal = cubebot_agent::journal::Journal::open(&root.join("tools")).unwrap();
+    journal
+        .append(
+            json!({"turn":earlier,"sequence":7,"event":{"kind":"tool_call","id":call,"name":"terminal","input":{"command":"touch effect"}}})
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+    drop(journal);
+    let mut fake = fake(vec![
+        json!({"status":"completed","output":[{"type":"function_call","name":"terminal","call_id":"c1","arguments":"{\"command\":\"sleep 30\"}"}]}),
+    ])
+    .await;
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.event(7).await["kind"], "tool_call");
+    assert_eq!(
+        fake.event(8).await,
+        json!({"kind":"tool_result","id":call,"outcome":{"status":"uncertain"}})
+    );
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.ack(earlier, [7, 8]);
+
+    let id = Uuid::new_v4();
+    fake.deliver(turn(id, 1, "Wait"));
+    assert_eq!(fake.event(1).await["kind"], "usage");
+    let started = fake.event(2).await;
+    assert_eq!(started["kind"], "tool_call");
+    assert_eq!(started["input"], json!({"command":"sleep 30"}));
+    fake.deliver(json!({"type":"cancel","turn":id}));
+    let stopped = fake.event(3).await;
+    assert_eq!(stopped["id"], started["id"]);
+    assert_eq!(stopped["outcome"]["status"], "stopped");
+    assert_eq!(stopped["outcome"]["reason"], "cancelled");
+    assert_eq!(
+        fake.event(4).await,
+        json!({"kind":"error","code":"cancelled"})
+    );
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.ack(id, 1..=4);
+    fake.drain(&mut child).await;
+    let journal = cubebot_agent::journal::Journal::open(&root.join("tools")).unwrap();
+    assert!(journal.pending().is_empty());
+    drop(journal);
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -120,64 +281,10 @@ fn rejects_nonconfidential_remote_origins_and_access_bearing_urls() {
     assert!(Config::new("http://127.0.0.1:1234", "/token".into()).is_ok());
 }
 
-#[tokio::test]
-async fn native_process_completes_empty_journal_drain_and_retains_checkpoint() {
-    use std::os::unix::fs::DirBuilderExt;
-    let root = std::env::temp_dir().join(format!("cubebot-native-{}", Uuid::new_v4()));
-    std::fs::DirBuilder::new()
-        .mode(0o700)
-        .create(&root)
-        .unwrap();
-    let token = root.join("token");
-    std::fs::write(&token, "projected-process").unwrap();
-    let state = Arc::new(Mutex::new(Api {
-        instance: None,
-        version: 0,
-        request: Uuid::new_v4(),
-        token: "projected-process".into(),
-        wrong_actor: false,
-        acknowledgements: 0,
-        controls: 0,
-    }));
-    let router = Router::new()
-        .route("/api/runtime/bootstrap", post(bootstrap))
-        .route("/api/runtime/control", get(control))
-        .route("/api/runtime/drained", post(drained))
-        .with_state(state);
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let origin = format!("http://{}", listener.local_addr().unwrap());
-    let task = tokio::spawn(async move {
-        axum::serve(listener, router).await.unwrap();
-    });
-    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_cubebot-agent"))
-        .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
-        .env("CUBEBOT_BOOTSTRAP_TOKEN_FILE", token)
-        .env("CUBEBOT_JOURNAL_DIRECTORY", &root)
-        .spawn()
-        .unwrap();
-    let status = child_exit(&mut child).await;
-    assert!(status.success());
-    assert!(root.join("journal/state").is_file());
-    task.abort();
-    std::fs::remove_dir_all(root).unwrap();
-}
-async fn child_exit(child: &mut std::process::Child) -> std::process::ExitStatus {
-    for _ in 0..100 {
-        if let Some(status) = child.try_wait().unwrap() {
-            return status;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-    }
-    child.kill().unwrap();
-    child.wait().unwrap();
-    panic!("native runtime did not finish the drain");
-}
-
 #[derive(Clone, Copy)]
 enum BadReply {
     Oversized,
     Redirect,
-    Expired,
 }
 async fn bad_bootstrap(State(reply): State<BadReply>) -> axum::response::Response {
     use axum::response::IntoResponse;
@@ -188,22 +295,14 @@ async fn bad_bootstrap(State(reply): State<BadReply>) -> axum::response::Respons
             [("location", "/leak")],
         )
             .into_response(),
-        BadReply::Expired => {
-            tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
-            Json(issued(1)).into_response()
-        }
     }
 }
-fn issued(expires: u64) -> Value {
-    json!({"token":format!("cb_runtime_{}", "a".repeat(64)),"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(2),"epoch":1,"version":1,"expires_in_seconds":expires})
-}
 #[tokio::test]
-async fn bootstrap_rejects_oversized_redirected_and_already_expired_responses() {
-    use cubebot_agent::control::Error;
-    for case in [BadReply::Oversized, BadReply::Redirect, BadReply::Expired] {
+async fn bootstrap_rejects_oversized_and_redirected_responses() {
+    for case in [BadReply::Oversized, BadReply::Redirect] {
         let router = Router::new()
             .route("/api/runtime/bootstrap", post(bad_bootstrap))
-            .route("/leak", axum::routing::any(|| async { Json(issued(120)) }))
+            .route("/leak", axum::routing::any(|| async { Json(issued()) }))
             .with_state(case);
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
@@ -218,133 +317,8 @@ async fn bootstrap_rejects_oversized_redirected_and_already_expired_responses() 
             (case, result),
             (BadReply::Oversized, Err(Error::Protocol))
                 | (BadReply::Redirect, Err(Error::Unavailable))
-                | (BadReply::Expired, Err(Error::Expired))
         ));
-        assert!(client.requires_bootstrap());
-        assert!(client.control().await.is_err());
-        task.abort();
-        std::fs::remove_file(path).unwrap();
-    }
-}
-
-#[tokio::test]
-async fn native_process_retains_pending_evidence_and_never_acknowledges_clean_drain() {
-    use std::os::unix::fs::DirBuilderExt;
-    for signal in ["-INT", "-TERM"] {
-        let root = std::env::temp_dir().join(format!("cubebot-pending-{}", Uuid::new_v4()));
-        std::fs::DirBuilder::new()
-            .mode(0o700)
-            .create(&root)
-            .unwrap();
-        let mut journal = cubebot_agent::journal::Journal::open(&root.join("journal")).unwrap();
-        journal.append(b"unsynchronized outcome").unwrap();
-        drop(journal);
-        let token = root.join("token");
-        std::fs::write(&token, "projected-pending").unwrap();
-        let state = Arc::new(Mutex::new(Api {
-            instance: None,
-            version: 0,
-            request: Uuid::new_v4(),
-            token: "projected-pending".into(),
-            wrong_actor: false,
-            acknowledgements: 0,
-            controls: 0,
-        }));
-        let router = Router::new()
-            .route("/api/runtime/bootstrap", post(bootstrap))
-            .route("/api/runtime/control", get(control))
-            .route("/api/runtime/drained", post(drained))
-            .with_state(state.clone());
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let origin = format!("http://{}", listener.local_addr().unwrap());
-        let task = tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
-        let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_cubebot-agent"))
-            .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
-            .env("CUBEBOT_BOOTSTRAP_TOKEN_FILE", token)
-            .env("CUBEBOT_JOURNAL_DIRECTORY", &root)
-            .spawn()
-            .unwrap();
-        for _ in 0..100 {
-            if state.lock().unwrap().controls > 0 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-        let bootstrapped = state.lock().unwrap().controls > 0;
-        let running = child.try_wait().unwrap().is_none();
-        if running {
-            assert!(
-                std::process::Command::new("kill")
-                    .arg(signal)
-                    .arg(child.id().to_string())
-                    .status()
-                    .unwrap()
-                    .success()
-            );
-        }
-        let status = child_exit(&mut child).await;
-        let acknowledgements = state.lock().unwrap().acknowledgements;
-        let journal = cubebot_agent::journal::Journal::open(&root.join("journal")).unwrap();
-        assert!(bootstrapped);
-        assert!(running);
-        assert!(status.success());
-        assert_eq!(acknowledgements, 0);
-        assert_eq!(journal.pending()[0].payload, b"unsynchronized outcome");
-        drop(journal);
-        task.abort();
-        std::fs::remove_dir_all(root).unwrap();
-    }
-}
-
-async fn journal_receipt(
-    State(wrong): State<u8>,
-    headers: HeaderMap,
-    Json(record): Json<Value>,
-) -> Json<Value> {
-    use sha2::{Digest, Sha256};
-    assert!(
-        headers["authorization"]
-            .to_str()
-            .unwrap()
-            .starts_with("Bearer cb_runtime_")
-    );
-    assert_eq!(record, json!({"sequence":1,"payload":b"evidence"}));
-    let digest: [u8; 32] = Sha256::digest(b"evidence").into();
-    let mut result = json!({"actor":{"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(2),"epoch":1,"version":1},"sequence":1,"payload_digest":digest});
-    match wrong {
-        1 => result["sequence"] = json!(2),
-        2 => result["actor"]["attempt"] = json!(Uuid::from_u128(3)),
-        3 => result["payload_digest"] = json!(vec![0; 32]),
-        _ => {}
-    }
-    Json(result)
-}
-#[tokio::test]
-async fn journal_client_requires_receipt_identity_sequence_and_exact_digest() {
-    for wrong in 0..4 {
-        let router = Router::new()
-            .route("/api/runtime/journal", post(journal_receipt))
-            .with_state(wrong)
-            .merge(Router::new().route(
-                "/api/runtime/bootstrap",
-                post(|| async { Json(issued(120)) }),
-            ));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let origin = format!("http://{}", listener.local_addr().unwrap());
-        let task = tokio::spawn(async move {
-            axum::serve(listener, router).await.unwrap();
-        });
-        let path = std::env::temp_dir().join(format!("cubebot-journal-client-{}", Uuid::new_v4()));
-        std::fs::write(&path, "projected").unwrap();
-        let mut client = RuntimeClient::new(Config::new(&origin, path.clone()).unwrap()).unwrap();
-        client.bootstrap().await.unwrap();
-        assert_eq!(
-            client.synchronize_record(1, b"evidence").await.is_ok(),
-            wrong == 0
-        );
+        assert!(matches!(client.connect().await, Err(Error::Credential)));
         task.abort();
         std::fs::remove_file(path).unwrap();
     }

@@ -10,6 +10,8 @@ pub struct Config {
     /// A fixed bootstrap token, used instead of `token_file` by Docker sandboxes.
     pub(super) token: Option<String>,
     pub(super) root_certificates: Vec<reqwest::Certificate>,
+    /// The same certificates for the channel's TLS connection.
+    pub(super) root_pem: Vec<u8>,
 }
 impl Config {
     pub fn new(origin: &str, token_file: PathBuf) -> Result<Self, Error> {
@@ -35,6 +37,7 @@ impl Config {
             token_file,
             token: None,
             root_certificates: Vec::new(),
+            root_pem: Vec::new(),
         })
     }
     pub fn with_root_certificate(mut self, pem: &[u8]) -> Result<Self, Error> {
@@ -46,6 +49,7 @@ impl Config {
         if self.root_certificates.is_empty() {
             return Err(Error::Configuration);
         }
+        self.root_pem = pem.to_vec();
         Ok(self)
     }
     pub fn from_environment() -> Result<Self, Error> {

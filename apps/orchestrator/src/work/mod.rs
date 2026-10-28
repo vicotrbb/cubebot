@@ -1,6 +1,5 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
 mod access;
-pub(crate) mod evidence;
 mod retry;
 mod runtime;
 pub(crate) mod terminal;
@@ -40,7 +39,6 @@ pub struct Turn {
     pub status: String,
     pub response: Option<String>,
     pub error: Option<String>,
-    pub authority_id: Option<Uuid>,
     #[sqlx(skip)]
     pub terminal: Vec<terminal::Progress>,
 }
@@ -78,7 +76,7 @@ impl Work {
         let mut tx = self.pool.begin().await?;
         let canonical =
             access::conversation(&mut tx, actor, conversation, "conversation.read").await?;
-        let mut turns = sqlx::query_as("SELECT id,sequence,message,status,response,error,authority_id FROM chat_turns WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 100")
+        let mut turns = sqlx::query_as("SELECT id,sequence,message,status,response,error FROM chat_turns WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 100")
             .bind(canonical).bind(after).fetch_all(&mut *tx).await?;
         Self::progress(&mut tx, &mut turns).await?;
         tx.commit().await?;
@@ -112,14 +110,14 @@ impl Work {
                 return Err(IdentityError::Conflict);
             }
             return Ok(sqlx::query_as(
-                "SELECT id,sequence,message,status,response,error,authority_id FROM chat_turns WHERE id=$1",
+                "SELECT id,sequence,message,status,response,error FROM chat_turns WHERE id=$1",
             )
             .bind(id)
             .fetch_one(&mut *tx)
             .await?);
         }
         wake(&mut tx, agent).await?;
-        let turn = sqlx::query_as("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message) VALUES ($1,$2,$3,$4) RETURNING id,sequence,message,status,response,error,authority_id")
+        let turn = sqlx::query_as("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message) VALUES ($1,$2,$3,$4) RETURNING id,sequence,message,status,response,error")
             .bind(conversation).bind(actor.id).bind(input.request_id).bind(&input.message).fetch_one(&mut *tx).await?;
         tx.commit().await?;
         Ok(turn)

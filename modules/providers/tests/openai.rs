@@ -1,5 +1,4 @@
 use axum::{Json, Router, http::HeaderMap, routing::post};
-use cubebot_protocol::chat::Message;
 use cubebot_providers::OpenAi;
 use serde_json::{Value, json};
 
@@ -8,8 +7,9 @@ async fn reply(headers: HeaderMap, Json(body): Json<Value>) -> Json<Value> {
     assert_eq!(body["store"], false);
     assert_eq!(body["input"][0]["content"], "Hello");
     assert!(body.get("tools").is_none());
+    assert!(body.get("parallel_tool_calls").is_none());
     Json(
-        json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}]}),
+        json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}],"usage":{"input_tokens":5,"output_tokens":2}}),
     )
 }
 
@@ -23,18 +23,18 @@ async fn sends_a_bounded_stateless_text_request_and_extracts_output() {
             .unwrap();
     });
     let provider = OpenAi::for_loopback_tests(&origin).unwrap();
-    let result = provider
-        .complete(
+    let step = provider
+        .tool_step(
             "test-model",
             "controlled-key",
-            &[Message {
-                role: "user".into(),
-                content: "Hello".into(),
-            }],
+            &[json!({"role":"user","content":"Hello"})],
+            &[],
         )
         .await
         .unwrap();
-    assert_eq!(result, "Hello back");
+    assert_eq!(step.text, "Hello back");
+    assert!(step.call.is_none());
+    assert_eq!(step.usage, (5, 2));
     assert!(OpenAi::for_loopback_tests("https://elsewhere.example/").is_err());
     task.abort();
 }
@@ -55,11 +55,13 @@ async fn provider_failure_does_not_expose_remote_payloads_or_accept_partial_text
         .await
         .unwrap();
     });
-    let error = OpenAi::for_loopback_tests(&origin)
+    let Err(error) = OpenAi::for_loopback_tests(&origin)
         .unwrap()
-        .complete("test", "test", &[])
+        .tool_step("test", "test", &[], &[])
         .await
-        .unwrap_err();
+    else {
+        panic!("provider rejection was accepted");
+    };
     assert_eq!(error.code(), "provider_rejected");
     assert!(!format!("{error:?}").contains("sensitive"));
     task.abort();

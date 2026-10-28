@@ -8,7 +8,13 @@ pub struct DrainRequest {
     pub request_id: Uuid,
     pub acknowledged: bool,
 }
-pub use cubebot_protocol::runtime::RuntimeDisposition;
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuntimeDisposition {
+    Available,
+    Hold,
+    Drain,
+}
 #[derive(Serialize)]
 pub struct RuntimeControl {
     pub actor: RuntimeActor,
@@ -103,23 +109,5 @@ impl RuntimeIdentity {
         sqlx::query_scalar::<_,Uuid>("SELECT attempt_id FROM runtime_session_access WHERE attempt_id = $1 AND version = $2 AND token_hash = $3 AND recovery")
             .bind(actor.attempt).bind(actor.version).bind(super::sessions::digest(token)).fetch_optional(&mut **transaction).await?.ok_or(Error::Unauthorized)?;
         Ok(())
-    }
-}
-
-impl From<DrainRequest> for cubebot_protocol::runtime::DrainRequest {
-    fn from(value: DrainRequest) -> Self {
-        Self {
-            request_id: value.request_id,
-            acknowledged: value.acknowledged,
-        }
-    }
-}
-impl From<RuntimeControl> for cubebot_protocol::runtime::RuntimeControl {
-    fn from(value: RuntimeControl) -> Self {
-        Self {
-            actor: value.actor.into(),
-            disposition: value.disposition,
-            drain: value.drain.map(Into::into),
-        }
     }
 }
