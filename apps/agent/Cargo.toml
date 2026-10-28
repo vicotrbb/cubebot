@@ -10,10 +10,12 @@ publish.workspace = true
 [[bin]]
 name = "cubebot-agent"
 path = "src/main.rs"
+test = false
 
 [[bin]]
 name = "cubebot-tool-runner"
 path = "src/bin/tool-runner.rs"
+test = false
 
 [dependencies]
 cubebot-providers = { path = "../../modules/providers" }

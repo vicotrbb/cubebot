@@ -33,3 +33,10 @@ cognitive_complexity = "deny"
 lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
+
+# Debug-built Argon2 makes every test login take seconds.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3

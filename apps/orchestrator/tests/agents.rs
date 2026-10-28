@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use cubebot_orchestrator::{
     agents::{AgentId, Agents, CreateAgent},
     identity::{

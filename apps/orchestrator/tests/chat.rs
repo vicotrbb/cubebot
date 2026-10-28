@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use cubebot_orchestrator::{
     agents::{AgentId, Agents, CreateAgent},
     identity::{Identity, IdentityError},
@@ -177,7 +177,7 @@ async fn every_agent_has_exactly_one_conversation_even_before_it_is_opened() {
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn legacy_histories_merge_without_broadening_private_grants() {
-    let pool = support::unmigrated_database().await;
+    let pool = support::create_database(None).await;
     let migrations = sqlx::migrate!("./migrations");
     for migration in migrations.iter().filter(|migration| migration.version < 23) {
         sqlx::raw_sql(&migration.sql).execute(&pool).await.unwrap();

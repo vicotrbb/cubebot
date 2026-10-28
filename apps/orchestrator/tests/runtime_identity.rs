@@ -1,8 +1,4 @@
-#[path = "support/registry.rs"]
-mod registry_support;
-#[path = "support/runtime.rs"]
-mod runtime_support;
-mod support;
+use crate::runtime_support;
 use axum::Router;
 use cubebot_orchestrator::{
     agents::{

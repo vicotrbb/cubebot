@@ -1,4 +1,4 @@
-mod support;
+use crate::support;
 use axum::{
     body::Body,
     http::{Request, StatusCode},

@@ -1,5 +1,4 @@
-#[path = "support/kubernetes.rs"]
-mod fixtures;
+use crate::fixtures;
 use cubebot_orchestrator::agents::kubernetes::{termination_proven, verify_pod};
 use fixtures::{identity, pod};
 use serde_json::json;

@@ -1,6 +1,4 @@
-#[path = "support/registry.rs"]
-mod registry_support;
-mod support;
+use crate::registry_support;
 use cubebot_orchestrator::{
     agents::{
         AgentId, Agents, LifecycleAction, LifecycleCommand,

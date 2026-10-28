@@ -142,7 +142,7 @@ Team/grant, suspension and revocation mutation responses include an ID and revis
 just integration
 ```
 
-This builds the orchestrator/operator binaries, starts an isolated disposable PostgreSQL 18 container with a generated password and temporary host-backed data directory, runs real database/HTTP tests, signed local OIDC issuer workflows and process restarts, then removes that container and its test data. It never uses the database in `.env` or another application's database. Ordinary `cargo test` explicitly reports the database cases as ignored; `just integration` runs them and fails if Docker or PostgreSQL is unavailable.
+This builds the orchestrator/operator binaries, starts an isolated disposable PostgreSQL 18 container with a generated password and temporary host-backed data directory, runs real database/HTTP tests, signed local OIDC issuer workflows and process restarts, then removes that container and its test data. When `just db-up` is running it reuses that server instead: it creates databases named `cubebot_it_<run>*` and drops them afterwards, and never touches the application database. Migrations run once into a `cubebot_template_<hash>` database, which persists on a reused server; each test copies it with `CREATE DATABASE ... TEMPLATE`. Tests run in parallel, one process per test, because password hashing limits concurrent work per process. Ordinary `cargo test` explicitly reports the database cases as ignored; `just integration` runs them and fails if Docker or PostgreSQL is unavailable.
 
 ## Builds and containers
 
