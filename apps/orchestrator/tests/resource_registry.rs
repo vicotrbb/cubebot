@@ -13,20 +13,17 @@ use uuid::Uuid;
 fn network_upgrade_specs() -> (PodSpec, PodSpec) {
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let network =
-        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
-            .unwrap();
+        cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap();
     let layout = cubebot_orchestrator::agents::kubernetes::Layout::new(
-        image,
         image,
         "cubebot-runtime",
         "https://cubebot.test",
-        None,
+        cubebot_orchestrator::agents::sandbox::Backend::Process,
         network,
     )
     .unwrap();
     let current = layout.pod("workspace").unwrap();
     let mut legacy = current.clone();
-    legacy.init_containers.as_mut().unwrap().remove(0);
     legacy.dns_policy = Some("ClusterFirst".into());
     legacy.dns_config = None;
     (legacy, current)
@@ -84,7 +81,10 @@ async fn dispatched_legacy_pods_hold_policy_upgrade_without_replacement() {
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn reservation_replays_and_recovers_a_lost_create_response_without_transferring_uid() {
     let (pool, registry, agent) = setup().await;
-    let spec:PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let spec: PodSpec = serde_json::from_value(
+        json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]}),
+    )
+    .unwrap();
     let first = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec.clone())))
         .await
@@ -150,7 +150,7 @@ async fn reservation_replays_and_recovers_a_lost_create_response_without_transfe
 fn terminate(pod: &mut k8s_openapi::api::core::v1::Pod) {
     pod.metadata.deletion_timestamp =
         Some(serde_json::from_value(json!("2026-10-26T12:00:00Z")).unwrap());
-    pod.status = Some(serde_json::from_value(json!({"phase":"Failed","containerStatuses":[{"name":"runtime","image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":"containerd://runtime-id","state":{"terminated":{"exitCode":1,"reason":"Error","containerID":"containerd://runtime-id","startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}},{"name":"tools","image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":"containerd://tools-id","state":{"terminated":{"exitCode":0,"reason":"Completed","containerID":"containerd://tools-id","startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}}]})).unwrap());
+    pod.status = Some(serde_json::from_value(json!({"phase":"Failed","containerStatuses":[{"name":"sandbox","image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":"containerd://sandbox-id","state":{"terminated":{"exitCode":1,"reason":"Error","containerID":"containerd://sandbox-id","startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}}]})).unwrap());
 }
 
 async fn setup() -> (sqlx::PgPool, Registry, AgentId) {
@@ -219,7 +219,10 @@ async fn changed_anchor_and_unplanned_security_changes_are_rejected() {
     anchor.metadata.resource_version = Some("4".into());
     anchor.metadata.uid = Some("replacement-anchor".into());
     assert!(registry.bind_anchor(&anchor).await.is_err());
-    let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let spec: PodSpec = serde_json::from_value(
+        json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]}),
+    )
+    .unwrap();
     let attempt = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec)))
         .await
@@ -253,7 +256,7 @@ async fn changed_anchor_and_unplanned_security_changes_are_rejected() {
 async fn unsent_plans_can_be_cancelled_but_dispatched_attempts_cannot() {
     let (_, registry, agent) = setup().await;
     let spec = || {
-        ResourceSpec::Pod(Box::new(serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap()))
+        ResourceSpec::Pod(Box::new(serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]})).unwrap()))
     };
     let first = registry.reserve(agent, 2, spec()).await.unwrap();
     registry.cancel_planned(first.id).await.unwrap();
@@ -279,7 +282,7 @@ async fn restart_replaces_an_unsent_plan_without_abandoning_a_dispatched_attempt
     let actor = identity.authenticate(&session.token).await.unwrap();
     let agents = Agents::new(pool);
     let spec = || {
-        ResourceSpec::Pod(Box::new(serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap()))
+        ResourceSpec::Pod(Box::new(serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]})).unwrap()))
     };
     let first = registry.reserve(agent, 2, spec()).await.unwrap();
     agents
@@ -323,7 +326,10 @@ async fn restart_replaces_an_unsent_plan_without_abandoning_a_dispatched_attempt
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn preparation_is_retained_without_changing_retry_identity_or_accepting_drift() {
     let (pool, registry, agent) = setup().await;
-    let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let spec: PodSpec = serde_json::from_value(
+        json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]}),
+    )
+    .unwrap();
     let first = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec.clone())))
         .await
@@ -398,7 +404,10 @@ async fn server_preparation_precedes_dispatch_and_reconnect_uses_the_retained_ma
     });
     let config = kube::Config::new(url.parse().unwrap());
     let client = Kubernetes::new(config, "cubebot-test").unwrap();
-    let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let spec: PodSpec = serde_json::from_value(
+        json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]}),
+    )
+    .unwrap();
     let reserved = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec.clone())))
         .await
@@ -462,7 +471,10 @@ fn verify_preparation_calls(calls: &[(bool, serde_json::Value)]) {
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn competing_valid_preparations_cannot_change_the_committed_manifest() {
     let (_, registry, agent) = setup().await;
-    let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let spec: PodSpec = serde_json::from_value(
+        json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]}),
+    )
+    .unwrap();
     let attempt = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec)))
         .await
@@ -494,7 +506,7 @@ async fn competing_valid_preparations_cannot_change_the_committed_manifest() {
 async fn migration_preserves_legacy_dispatch_without_qualifying_unsent_cancellations() {
     let (pool, registry, agent) = setup().await;
     let spec = || {
-        ResourceSpec::Pod(Box::new(serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap()))
+        ResourceSpec::Pod(Box::new(serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]})).unwrap()))
     };
     let cancelled = registry.reserve(agent, 2, spec()).await.unwrap();
     registry.cancel_planned(cancelled.id).await.unwrap();
@@ -529,7 +541,10 @@ async fn migration_preserves_legacy_dispatch_without_qualifying_unsent_cancellat
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn a_prepared_attempt_grants_dispatch_to_exactly_one_caller() {
     let (_, registry, agent) = setup().await;
-    let spec: PodSpec = serde_json::from_value(json!({"restartPolicy":"Never","containers":[{"name":"runtime","image":"runtime-test"},{"name":"tools","image":"tools-test"}]})).unwrap();
+    let spec: PodSpec = serde_json::from_value(
+        json!({"restartPolicy":"Never","containers":[{"name":"sandbox","image":"sandbox-test"}]}),
+    )
+    .unwrap();
     let attempt = registry
         .reserve(agent, 2, ResourceSpec::Pod(Box::new(spec)))
         .await

@@ -45,44 +45,67 @@ impl Reconciler {
         })
     }
     pub async fn reconcile(&self, agent: AgentId) -> Result<ReconcileResult, Error> {
-        let (revision, generation, state): (i64, i64, String) = sqlx::query_as(
-            "SELECT revision,restart_generation,desired_state FROM agents WHERE id = $1",
-        )
-        .bind(agent)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(Error::Conflict)?;
-        let verified = match self.inspect_pod(agent, generation, &state).await? {
-            super::recovery::Inspection::Vacant => None,
-            super::recovery::Inspection::Healthy(id) => Some(id),
-            super::recovery::Inspection::Held(outcome) => return Ok(outcome),
-        };
-        if state != "running" {
-            return Ok(ReconcileResult::Idle);
-        }
-        self.provision(agent, revision, verified).await
+        let (revision, generation, state) = self.intent(agent).await?;
+        self.converge(agent, revision, generation, state == "running")
+            .await
     }
-    async fn provision(
+    pub(super) async fn intent(&self, agent: AgentId) -> Result<(i64, i64, String), Error> {
+        sqlx::query_as("SELECT revision,restart_generation,desired_state FROM agents WHERE id = $1")
+            .bind(agent)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(Error::Conflict)
+    }
+    /// Settles any stale or unwanted pod first; a replacement never starts before that.
+    pub(super) async fn converge(
         &self,
         agent: AgentId,
         revision: i64,
+        generation: i64,
+        running: bool,
+    ) -> Result<ReconcileResult, Error> {
+        let verified = match self.settle(agent, generation, running).await? {
+            Ok(verified) => verified,
+            Err(outcome) => return Ok(outcome),
+        };
+        if !running {
+            return Ok(ReconcileResult::Idle);
+        }
+        let workspace = match self.prepare_workspace(agent, revision).await? {
+            Ok(workspace) => workspace,
+            Err(attempt) => return Ok(ReconcileResult::Uncertain { attempt }),
+        };
+        self.provision(agent, revision, &workspace, verified).await
+    }
+    /// The verified healthy pod attempt, or the outcome that holds this agent.
+    pub(super) async fn settle(
+        &self,
+        agent: AgentId,
+        generation: i64,
+        running: bool,
+    ) -> Result<Result<Option<AttemptId>, ReconcileResult>, Error> {
+        Ok(match self.inspect_pod(agent, generation, running).await? {
+            super::recovery::Inspection::Vacant => Ok(None),
+            super::recovery::Inspection::Healthy(id) => Ok(Some(id)),
+            super::recovery::Inspection::Held(outcome) => Err(outcome),
+        })
+    }
+    /// The installation anchor and the agent's bound workspace.
+    pub(super) async fn prepare_workspace(
+        &self,
+        agent: AgentId,
+        revision: i64,
+    ) -> Result<Result<Attempt, AttemptId>, Error> {
+        self.anchor().await?;
+        self.claim(agent, revision).await
+    }
+    pub(super) async fn provision(
+        &self,
+        agent: AgentId,
+        revision: i64,
+        workspace: &Attempt,
         verified: Option<AttemptId>,
     ) -> Result<ReconcileResult, Error> {
-        self.anchor().await?;
-        let workspace = self
-            .registry
-            .reserve(
-                agent,
-                revision,
-                ResourceSpec::Workspace(Box::new(self.layout.workspace())),
-            )
-            .await?;
-        let workspace_id = workspace.id;
-        let Some(workspace) = self.ensure(workspace).await? else {
-            return Ok(ReconcileResult::Uncertain {
-                attempt: workspace_id,
-            });
-        };
         let name = workspace
             .object
             .metadata()
@@ -94,7 +117,7 @@ impl Reconciler {
             .reserve(
                 agent,
                 revision,
-                ResourceSpec::Pod(Box::new(self.layout.text_chat_pod(name)?)),
+                ResourceSpec::Pod(Box::new(self.layout.pod(name)?)),
             )
             .await?;
         let pod_id = pod.id;
@@ -102,9 +125,26 @@ impl Reconciler {
             return Ok(ReconcileResult::Uncertain { attempt: pod_id });
         }
         Ok(ReconcileResult::Provisioned {
-            workspace: workspace_id,
+            workspace: workspace.id,
             pod: pod_id,
         })
+    }
+    /// The bound workspace attempt, or the id of one whose object is missing.
+    async fn claim(
+        &self,
+        agent: AgentId,
+        revision: i64,
+    ) -> Result<Result<Attempt, AttemptId>, Error> {
+        let workspace = self
+            .registry
+            .reserve(
+                agent,
+                revision,
+                ResourceSpec::Workspace(Box::new(self.layout.workspace())),
+            )
+            .await?;
+        let id = workspace.id;
+        Ok(self.ensure(workspace).await?.ok_or(id))
     }
     async fn anchor(&self) -> Result<(), Error> {
         let expected = self.registry.configure(&self.namespace).await?;

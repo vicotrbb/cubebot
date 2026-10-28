@@ -50,12 +50,10 @@ pub async fn fixture() -> Fixture {
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let layout = Layout::new(
         image,
-        image,
         "cubebot-runtime",
         "https://cubebot.test",
-        None,
-        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
-            .unwrap(),
+        cubebot_orchestrator::agents::sandbox::Backend::Process,
+        cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap(),
     )
     .unwrap();
     let attempt = registry

@@ -1,4 +1,6 @@
 //! Native bounded text-turn loop with durable recovery evidence.
+mod attempts;
+mod process;
 mod terminal;
 mod text;
 use crate::{

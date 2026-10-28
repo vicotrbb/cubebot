@@ -1,3 +1,4 @@
+//! Local terminal attempts. An intent is durable before its command starts and is never re-run.
 use crate::journal::Journal;
 use cubebot_protocol::terminal::{Invocation, Outcome};
 use serde::{Deserialize, Serialize};

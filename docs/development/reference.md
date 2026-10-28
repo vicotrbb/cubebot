@@ -4,15 +4,13 @@ Configuration and HTTP behavior of what currently runs. Open qualification gaps 
 
 ## Runtime and lifecycle
 
-See [repository layout](repository-layout.md) for the complete module map and dependency rules. The agent package builds `cubebot-agent` and `cubebot-tool-runner`. The runtime starts its authenticated control and text-inference loop when configured. Text-chat lifecycle pods launch only that runtime; the default text-chat layout excludes the tool runner. An explicit terminal installation flag selects the separate supervisor container and network initializer. The runtime binary also supports the trusted init-container operation `--initialize-storage runtime|tools`, which creates and verifies its role directory beneath `/storage`. The tool runner belongs to the agent app and will run in its separate tool container.
+See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox --backend <kvm|process>` from `apps/sandbox` (ADR 0084), which runs `cubebot-agent`. The `kvm` backend is not implemented yet and refuses to start; `process` runs the agent as a plain child for development with no isolation claim. The agent runs terminal commands itself when the terminal flag is set.
 
-The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter, durable resource reservations and a fixed pod/PVC specification compiler. Controlled HTTP, PostgreSQL and manifest tests cover these boundaries; explicit reconciliation provisions and observes installation anchors, workspace claims and pods, and explicit installation configuration now activates serial lifecycle reconciliation at startup. The compiler requires digest-pinned images, a dedicated runtime service account, HTTPS orchestrator origin and CSI support for ReadWriteOncePod. Its gated terminal layout installs UID-aware kernel egress filtering.
+The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter, durable resource reservations and a fixed pod/PVC specification compiler. Controlled HTTP, PostgreSQL and manifest tests cover these boundaries; explicit reconciliation provisions and observes installation anchors, workspace claims and pods, and explicit installation configuration now activates serial lifecycle reconciliation at startup. The compiler requires digest-pinned images, a dedicated runtime service account, HTTPS orchestrator origin and CSI support for ReadWriteOncePod.
 
 Kubernetes clients are constructed from explicit configuration with transport retries disabled; reconciliation owns safe recovery rather than replaying effectful requests. Explicit reconciliation now drains, requests guarded pod shutdown, retains terminal evidence, releases only its own execution finalizer and permits a later pod epoch. The same recovery path handles a proven terminal pod without advancing the agent's desired generation; partial runtime failure, NodeLost and deletion latch that physical attempt into drain. Authenticated quiescence reports alone never authorize replacement; a missing pod without retained terminal proof remains uncertain.
 
 Runtime bootstrap TokenReview and 120-second identity sessions are enabled with explicit controller configuration. Runtime identity does not grant a turn or permission to invoke tools. The native runtime now bootstraps, renews machine identity, polls control and reports an empty-journal drain before exiting. It requires `CUBEBOT_ORCHESTRATOR_ORIGIN`, `CUBEBOT_BOOTSTRAP_TOKEN_FILE` and a private existing `CUBEBOT_JOURNAL_DIRECTORY`; the journal occupies its `journal` subdirectory. HTTPS is required except for literal loopback HTTP used in local tests. Redirects, automatic retries and environment proxy discovery are disabled. Pending journal records are uploaded through authenticated immutable custody receipts before local cleanup. Unreconciled central evidence holds Active eligibility while retaining finite Recovery access. Custody does not commit an execution outcome or authorize replay. Text turns now use finite inference grants, journal intent/results privately and reconcile replies idempotently into PostgreSQL. Tool admission additionally requires explicit terminal eligibility and the disabled-by-default installation flag.
-
-`just container-isolation` builds disposable runtime/tool/qualification images and compares Linux filesystem and network mechanisms in an isolated Docker namespace.
 
 ## Local database
 
@@ -97,22 +95,19 @@ Set `CUBEBOT_CONTROLLER_CONFIG` to a local JSON file and configure `CUBEBOT_DATA
 ```json
 {
   "connection": { "kind": "in_cluster" },
-  "runtime_image": "registry.example/cubebot-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "tools_image": "registry.example/cubebot-agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "sandbox_image": "registry.example/cubebot-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "backend": "kvm",
   "runtime_service_account": "cubebot-runtime",
   "orchestrator_origin": "https://cubebot.example",
-  "network": {
-    "infrastructure": ["10.244.0.0/16", "10.96.0.0/12", "192.0.2.10/32"],
-    "dns": ["10.96.0.10"]
-  }
+  "network": { "dns": ["10.96.0.10"] }
 }
 ```
 
-Replace the example topology with the installation's actual Pod, Service, node, API, metadata, translation and public infrastructure destinations. `network` is required; CIDRs must be canonical and use the actual packet address family. IPv4-mapped IPv6 infrastructure prefixes are rejected. Supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. The same addresses are allowed only on TCP/UDP port 53 by the tool policy. The network initializer runs first as root with only NET_ADMIN, no identity/workspace mounts, no privilege escalation and a read-only root filesystem. Cluster admission must permit this explicit setup capability; Cubebot never changes admission policy or starts tools without successful initialization.
+`network` is required; supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. Egress control is pod-level NetworkPolicy, which governs exactly one agent. `backend` is `kvm` or `process`; `kvm` adds a `devices.kubevirt.io/kvm` resource limit so the pod gets `/dev/kvm` from a device plugin, and `process` is development-only.
 
-Replace both example image digests with the built installation images. Optional `runtime_class` selects an installed Kubernetes RuntimeClass. For an explicitly selected kubeconfig, replace `connection` with `{"kind":"kubeconfig","path":"/trusted/kubeconfig","context":"cubebot"}`. The service never discovers the default context. Kubernetes transport requires certificate-verified HTTPS, with literal loopback HTTP allowed for local controlled workflows. The orchestrator origin supplied to agents requires HTTPS.
+Replace the example image digest with the built sandbox image. For an explicitly selected kubeconfig, replace `connection` with `{"kind":"kubeconfig","path":"/trusted/kubeconfig","context":"cubebot"}`. The service never discovers the default context. Kubernetes transport requires certificate-verified HTTPS, with literal loopback HTTP allowed for local controlled workflows. The orchestrator origin supplied to agents requires HTTPS.
 
-For an orchestrator endpoint signed by a private CA, set optional `control_ca_config_map` to an administrator-managed ConfigMap in the installation namespace containing a `ca.crt` PEM bundle. The compiler mounts that key read-only only in the trusted runtime and sets `CUBEBOT_CONTROL_CA_FILE`. Public roots remain trusted; certificate and hostname checks remain enabled. A missing key blocks Pod startup; an unreadable, empty, malformed or oversized bundle blocks runtime startup. The maximum bundle size is 64 KiB. Trust is loaded at runtime process startup, so replace Pods to apply CA changes. The ConfigMap contains public CA certificates, never a CA private key.
+For an orchestrator endpoint signed by a private CA, set optional `control_ca_config_map` to an administrator-managed ConfigMap in the installation namespace containing a `ca.crt` PEM bundle. The compiler mounts that key read-only in the sandbox container and sets `CUBEBOT_CONTROL_CA_FILE`. Public roots remain trusted; certificate and hostname checks remain enabled. A missing key blocks Pod startup; an unreadable, empty, malformed or oversized bundle blocks runtime startup. The maximum bundle size is 64 KiB. Trust is loaded at runtime process startup, so replace Pods to apply CA changes. The ConfigMap contains public CA certificates, never a CA private key.
 
 The controller scans durable agent intent in keyset batches of 32 and waits five seconds after each full scan. It checks process ownership before each reconciliation and bounds each attempt to sixty seconds. HTTP handling proceeds concurrently. Shutdown stops admission, settles handlers and the current reconciliation, then releases ownership. Ownership-check failure stops both loops and retains the claim. Agent drain and physical termination rules still control whether a replacement Pod is allowed.
 
@@ -159,4 +154,20 @@ docker build -t cubebot-orchestrator:dev -f apps/orchestrator/Dockerfile .
 docker build -t cubebot-web:dev -f apps/web/Dockerfile .
 ```
 
-Container recipes default to distinct non-root runtime/tool users. The runtime image also packages the trusted `--initialize-network` setup command, verified in the [disposable Linux fixture](container-isolation.md); the retained full tool layout requires it before tools start. The MVP text-only layout omits both tools and privileged network initialization.
+The sandbox image (`apps/sandbox/Dockerfile`) runs as UID 10001 and contains `cubebot-sandbox` and `cubebot-agent`.
+
+### Docker sandboxes without a cluster
+
+Set `CUBEBOT_DOCKER_CONFIG` to a JSON file instead of `CUBEBOT_CONTROLLER_CONFIG`:
+
+```json
+{
+  "image": "cubebot-sandbox:dev",
+  "backend": "process",
+  "orchestrator_origin": "http://host.docker.internal:8080"
+}
+```
+
+Optional `terminal_enabled` works as in the controller configuration. The controller runs under development ownership and serves the runtime API. Each running agent gets one retained volume (`cubebot-workspace-<agent>`) and one container per epoch (`cubebot-agent-<agent>-<epoch>`) through the local `docker` CLI. Containers are recorded as pod attempts in namespace `docker`, so sessions, drains, epochs and restart generations behave as on Kubernetes: a crashed or stale container is stopped and its final state retained before a new epoch starts, and a running agent is drained before it is stopped.
+
+Each container gets a fresh bootstrap token in `CUBEBOT_BOOTSTRAP_TOKEN`; the orchestrator stores only its SHA-256 digest. The token logs in only while that container's attempt is bound and observed running. The agent accepts HTTPS, or HTTP only to loopback, so a loopback `orchestrator_origin` runs the container with host networking (on Docker Desktop, enable host networking).

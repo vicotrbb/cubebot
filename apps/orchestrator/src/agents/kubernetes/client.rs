@@ -116,6 +116,27 @@ impl Kubernetes {
         }
     }
 
+    /// Attaches a command inside the agent's sandbox container.
+    pub async fn exec(
+        &self,
+        name: &str,
+        command: &[&str],
+    ) -> Result<crate::agents::sandbox::ExecChannel, Error> {
+        validate_namespace(name)?;
+        let parameters = kube::api::AttachParams::default()
+            .container("sandbox")
+            .stdin(true)
+            .stderr(false);
+        let mut process = self.pods.exec(name, command.to_vec(), &parameters).await?;
+        let stdin = process.stdin().ok_or(Error::InvalidConfiguration)?;
+        let stdout = process.stdout().ok_or(Error::InvalidConfiguration)?;
+        Ok(crate::agents::sandbox::ExecChannel {
+            stdin: Box::new(stdin),
+            stdout: Box::new(stdout),
+            _session: Box::new(process),
+        })
+    }
+
     /// Untrusted platform observation for installation process fencing, never adoption.
     pub(crate) async fn platform_pod(&self, name: &str) -> Result<Option<Pod>, Error> {
         validate_namespace(name)?;

@@ -10,13 +10,15 @@ use super::{
 };
 pub use drain::{DrainRequest, RuntimeControl, RuntimeDisposition};
 use serde::Serialize;
+pub(crate) use sessions::{sandbox_digest, sandbox_token};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct RuntimeIdentity {
     pool: PgPool,
-    api: Kubernetes,
+    /// `None` serves cluster-less Docker sandboxes, which bootstrap with a per-container token.
+    api: Option<Kubernetes>,
     connections: Option<crate::connections::Connections>,
     terminal_enabled: bool,
 }
@@ -45,10 +47,18 @@ impl RuntimeIdentity {
     pub fn new(pool: PgPool, config: kube::Config, namespace: &str) -> Result<Self, Error> {
         Ok(Self {
             pool,
-            api: Kubernetes::new(config, namespace)?,
+            api: Some(Kubernetes::new(config, namespace)?),
             connections: None,
             terminal_enabled: false,
         })
+    }
+    pub fn docker(pool: PgPool) -> Self {
+        Self {
+            pool,
+            api: None,
+            connections: None,
+            terminal_enabled: false,
+        }
     }
     pub async fn bootstrap(
         &self,
@@ -70,17 +80,33 @@ impl RuntimeIdentity {
         projected_token: &str,
         instance: Uuid,
     ) -> Result<RuntimeSession, Error> {
-        let reviewed = self.api.review_runtime_token(projected_token).await?;
-        let attempt = self.verify_pod(&reviewed).await?;
+        let Some(api) = &self.api else {
+            let (attempt, reviewed) = self.verify_container(projected_token).await?;
+            return self.issue(attempt, reviewed, instance).await;
+        };
+        let reviewed = api.review_runtime_token(projected_token).await?;
+        let attempt = self.verify_pod(api, &reviewed).await?;
         self.issue(attempt, reviewed, instance).await
     }
-    async fn verify_pod(&self, identity: &ReviewedPod) -> Result<Attempt, Error> {
+    async fn verify_container(&self, token: &str) -> Result<(Attempt, ReviewedPod), Error> {
+        let (id, name, uid): (AttemptId, String, String) = sqlx::query_as("SELECT r.id,r.name,r.uid FROM docker_sandbox_tokens t JOIN agent_resources r ON r.id = t.attempt_id WHERE t.token_hash = $1 AND r.kind = 'pod' AND r.namespace = 'docker' AND r.phase = 'bound' AND r.kubernetes_phase = 'Running'")
+            .bind(sessions::sandbox_digest(token)?).fetch_optional(&self.pool).await?.ok_or(Error::Unauthorized)?;
+        let attempt = Registry::new(self.pool.clone()).attempt(id).await?;
+        let reviewed = ReviewedPod {
+            namespace: "docker".into(),
+            service_account: "docker".into(),
+            service_account_uid: "docker".into(),
+            pod_name: name,
+            pod_uid: uid,
+        };
+        Ok((attempt, reviewed))
+    }
+    async fn verify_pod(&self, api: &Kubernetes, identity: &ReviewedPod) -> Result<Attempt, Error> {
         let id: AttemptId = sqlx::query_scalar("SELECT id FROM agent_resources WHERE kind = 'pod' AND phase = 'bound' AND namespace = $1 AND name = $2 AND uid = $3")
             .bind(&identity.namespace).bind(&identity.pod_name).bind(&identity.pod_uid).fetch_optional(&self.pool).await?.ok_or(Error::Unauthorized)?;
         let registry = Registry::new(self.pool.clone());
         let expected = registry.attempt(id).await?;
-        let observed = self
-            .api
+        let observed = api
             .fetch_candidate(&expected.object)
             .await?
             .ok_or(Error::Unauthorized)?;

@@ -8,11 +8,10 @@ use std::io::Read;
 #[serde(deny_unknown_fields)]
 pub struct ControllerConfig {
     connection: Connection,
-    runtime_image: String,
-    tools_image: String,
+    sandbox_image: String,
+    backend: crate::agents::sandbox::Backend,
     runtime_service_account: String,
     orchestrator_origin: String,
-    runtime_class: Option<String>,
     network: cubebot_protocol::network::NetworkPolicy,
     control_ca_config_map: Option<String>,
     #[serde(default)]
@@ -61,11 +60,10 @@ impl ControllerConfig {
     }
     fn layout(&self) -> Result<Layout, Error> {
         let layout = Layout::new(
-            &self.runtime_image,
-            &self.tools_image,
+            &self.sandbox_image,
             &self.runtime_service_account,
             &self.orchestrator_origin,
-            self.runtime_class.clone(),
+            self.backend,
             self.network.clone(),
         )?
         .with_terminal(self.terminal_enabled);

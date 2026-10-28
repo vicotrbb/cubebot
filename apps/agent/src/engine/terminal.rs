@@ -8,10 +8,9 @@ use cubebot_protocol::{
     terminal::{Authorization, Invocation},
 };
 use serde_json::json;
-use std::time::{Duration, Instant};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::UnixStream,
+use std::{
+    path::Path,
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 
@@ -83,114 +82,74 @@ async fn invoke(
     client: &mut RuntimeClient,
     input: &Authorization,
 ) -> Result<(cubebot_protocol::terminal::Outcome, bool), Error> {
-    let (outcome, continuing) = admitted(client, input).await?;
-    if !matches!(outcome, cubebot_protocol::terminal::Outcome::Uncertain) {
-        return Ok((outcome, continuing));
+    // The orchestrator records the attempt before anything runs locally.
+    let deadline = execution_permit(client, input).await?;
+    let mut attempts = attempts()?;
+    if let Some(outcome) = attempts
+        .begin(&input.invocation)
+        .map_err(|_| Error::Journal)?
+    {
+        return Ok((outcome, false));
     }
-    // A distinct read-only request reconciles cancellation without replaying effects.
-    Ok((
-        tokio::time::timeout(Duration::from_secs(4), lookup(input))
-            .await
-            .ok()
-            .and_then(Result::ok)
-            .unwrap_or(cubebot_protocol::terminal::Outcome::Uncertain),
-        false,
-    ))
+    let outcome = execute(client, input, deadline).await?;
+    attempts
+        .finish(input.invocation.id, &outcome)
+        .map_err(|_| Error::Journal)?;
+    let continuing = matches!(outcome, cubebot_protocol::terminal::Outcome::Exited { .. });
+    Ok((outcome, continuing))
 }
-async fn lookup(input: &Authorization) -> Result<cubebot_protocol::terminal::Outcome, Error> {
-    let mut socket = executor_connection().await?;
-    let request = serde_json::to_vec(&cubebot_protocol::terminal::Request::Lookup {
-        id: input.invocation.id,
-        authority: input.invocation.authority,
-    })
-    .map_err(|_| Error::Protocol)?;
-    socket
-        .write_u32(request.len() as u32)
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    socket
-        .write_all(&request)
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    let mut response = Vec::new();
-    socket
-        .take(60 * 1024)
-        .read_to_end(&mut response)
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    serde_json::from_slice(&response).map_err(|_| Error::Protocol)
-}
-
-async fn admitted(
+async fn execute(
     client: &mut RuntimeClient,
     input: &Authorization,
-) -> Result<(cubebot_protocol::terminal::Outcome, bool), Error> {
-    let (mut deadline, not_after_millis) = execution_permit(client, input).await?;
-    let mut socket = executor_connection().await?;
-    let request = serde_json::to_vec(&cubebot_protocol::terminal::Request::Execute {
-        invocation: input.invocation.clone(),
-        not_after_millis,
-    })
-    .map_err(|_| Error::Protocol)?;
-    socket
-        .write_u32(request.len() as u32)
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    socket
-        .write_all(&request)
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    let (mut read, mut write) = socket.into_split();
-    let response = async {
-        let mut bytes = Vec::new();
-        (&mut read)
-            .take(60 * 1024)
-            .read_to_end(&mut bytes)
-            .await
-            .map_err(|_| Error::Unavailable)?;
-        serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)
-    };
-    tokio::pin!(response);
-    loop {
+    mut deadline: Instant,
+) -> Result<cubebot_protocol::terminal::Outcome, Error> {
+    let workspace =
+        std::env::var("CUBEBOT_WORKSPACE_DIRECTORY").map_err(|_| Error::Configuration)?;
+    let (mut child, path) =
+        super::process::spawn(&input.invocation, &workspace).map_err(|_| Error::Unavailable)?;
+    let status = loop {
         tokio::select! {
-            outcome = &mut response => return outcome.map(|outcome| (outcome, true)),
-            _ = tokio::time::sleep_until(deadline.into()) => return Ok((cubebot_protocol::terminal::Outcome::Uncertain, false)),
+            status = child.wait() => break status.ok().map(|status| status.code()),
+            _ = tokio::time::sleep_until(deadline.into()) => break None,
             _ = tokio::time::sleep(Duration::from_secs(5)) => {
                 match execution_permit(client, input).await {
-                    Ok((until, renewal)) => {
-                        deadline = until;
-                        write.write_u64(renewal).await.map_err(|_| Error::Unavailable)?;
-                    }
+                    Ok(until) => deadline = until,
                     Err(Error::Unavailable) => (),
-                    Err(_) => return Ok((cubebot_protocol::terminal::Outcome::Uncertain, false)),
+                    Err(_) => break None,
                 }
             }
         }
-    }
+    };
+    Ok(super::process::finish(child, &path, status).await)
+}
+fn attempts() -> Result<super::attempts::Store, Error> {
+    let root = std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY").ok_or(Error::Configuration)?;
+    super::attempts::Store::open(&Path::new(&root).join("attempts")).map_err(|_| Error::Journal)
 }
 async fn execution_permit(
     client: &mut RuntimeClient,
     input: &Authorization,
-) -> Result<(Instant, u64), Error> {
+) -> Result<Instant, Error> {
     if client.requires_bootstrap() {
         client.bootstrap().await?;
     }
     let start = Instant::now();
-    let clock = crate::execution::terminal::monotonic_millis().map_err(|_| Error::Unavailable)?;
     let permit = tokio::time::timeout(Duration::from_secs(2), client.authorize_terminal(input))
         .await
         .map_err(|_| Error::Unavailable)??;
-    Ok((
-        start + Duration::from_millis(permit.milliseconds),
-        clock + permit.milliseconds,
-    ))
+    Ok(start + Duration::from_millis(permit.milliseconds))
 }
 
 pub(super) async fn recover(client: &RuntimeClient, journal: &mut Journal) -> Result<(), Error> {
-    for input in client.pending_terminal().await? {
-        let outcome = match tokio::time::timeout(Duration::from_secs(4), lookup(&input)).await {
-            Ok(Ok(outcome)) => outcome,
-            _ => return Ok(()),
+    let pending = client.pending_terminal().await?;
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let attempts = attempts()?;
+    for input in pending {
+        // Unknown or unfinished attempts stay uncertain; recovery never runs them again.
+        let Ok(outcome) = attempts.lookup(input.invocation.id, input.invocation.authority) else {
+            return Ok(());
         };
         super::text::append(
             journal,
@@ -203,15 +162,6 @@ pub(super) async fn recover(client: &RuntimeClient, journal: &mut Journal) -> Re
         )?;
     }
     Ok(())
-}
-async fn executor_connection() -> Result<UnixStream, Error> {
-    let socket = UnixStream::connect("/run/cubebot-executor/terminal.sock")
-        .await
-        .map_err(|_| Error::Unavailable)?;
-    if socket.peer_cred().map_err(|_| Error::Unavailable)?.uid() != 0 {
-        return Err(Error::Rejected);
-    }
-    Ok(socket)
 }
 
 async fn refresh(client: &mut RuntimeClient, grant: &InferenceGrant) -> Result<Instant, Error> {

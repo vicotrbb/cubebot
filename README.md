@@ -43,18 +43,19 @@ cargo run --locked -p cubebot-orchestrator
 
 ## Layout
 
-| Path                | Responsibility                                                        |
-| ------------------- | --------------------------------------------------------------------- |
-| `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown   |
-| `apps/agent`        | Agent runtime and internal tool runner in one Rust package            |
-| `apps/web`          | TanStack Start frontend and future PWA                                |
-| `modules/protocol`  | Shared communication contracts                                        |
-| `modules/providers` | Bounded native OpenAI text and function-call adapter                  |
-| `tooling/quality`   | Complexity gate, regression tests, and Python development environment |
-| `tests/system`      | Smoke checks spanning built application processes                     |
-| `deploy`            | Installation packaging; Dockerfiles live with their apps              |
-| `site`              | Public landing site: standalone static Astro build, no runtime code   |
-| `docs/adr`          | Accepted product and architecture decisions                           |
+| Path                | Responsibility                                                         |
+| ------------------- | ---------------------------------------------------------------------- |
+| `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown    |
+| `apps/agent`        | Agent runtime; runs its own tools inside its sandbox                   |
+| `apps/sandbox`      | `cubebot-sandbox`: in-house KVM VMM and dev process backend (ADR 0084) |
+| `apps/web`          | TanStack Start frontend and future PWA                                 |
+| `modules/protocol`  | Shared communication contracts                                         |
+| `modules/providers` | Bounded native OpenAI text and function-call adapter                   |
+| `tooling/quality`   | Complexity gate, regression tests, and Python development environment  |
+| `tests/system`      | Smoke checks spanning built application processes                      |
+| `deploy`            | Installation packaging; Dockerfiles live with their apps               |
+| `site`              | Public landing site: standalone static Astro build, no runtime code    |
+| `docs/adr`          | Accepted product and architecture decisions                            |
 
 See [repository layout](docs/development/repository-layout.md) for the module map and dependency rules.
 

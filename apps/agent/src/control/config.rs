@@ -7,6 +7,8 @@ use std::{
 pub struct Config {
     pub(super) origin: reqwest::Url,
     pub(super) token_file: PathBuf,
+    /// A fixed bootstrap token, used instead of `token_file` by Docker sandboxes.
+    pub(super) token: Option<String>,
     pub(super) root_certificates: Vec<reqwest::Certificate>,
 }
 impl Config {
@@ -31,6 +33,7 @@ impl Config {
         Ok(Self {
             origin,
             token_file,
+            token: None,
             root_certificates: Vec::new(),
         })
     }
@@ -48,8 +51,14 @@ impl Config {
     pub fn from_environment() -> Result<Self, Error> {
         let origin =
             std::env::var("CUBEBOT_ORCHESTRATOR_ORIGIN").map_err(|_| Error::Configuration)?;
-        let path = std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE").ok_or(Error::Configuration)?;
-        let config = Self::new(&origin, path.into())?;
+        let config = match std::env::var("CUBEBOT_BOOTSTRAP_TOKEN") {
+            Ok(token) => Self::new(&origin, PathBuf::new())?.with_token(token)?,
+            Err(_) => {
+                let path =
+                    std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE").ok_or(Error::Configuration)?;
+                Self::new(&origin, path.into())?
+            }
+        };
         let Some(ca) = std::env::var_os("CUBEBOT_CONTROL_CA_FILE") else {
             return Ok(config);
         };
@@ -61,6 +70,17 @@ impl Config {
             .map_err(|_| Error::Configuration)?;
         config.with_root_certificate(&pem)
     }
+    pub fn with_token(mut self, token: String) -> Result<Self, Error> {
+        valid_token(token.as_bytes())?;
+        self.token = Some(token);
+        Ok(self)
+    }
+    pub(super) fn bootstrap_token(&self) -> Result<String, Error> {
+        match &self.token {
+            Some(token) => Ok(token.clone()),
+            None => projected_token(&self.token_file),
+        }
+    }
 }
 pub(super) fn projected_token(path: &Path) -> Result<String, Error> {
     // Kubernetes rotates a projected token through symlinks; reopen the bounded file each time.
@@ -70,6 +90,10 @@ pub(super) fn projected_token(path: &Path) -> Result<String, Error> {
         .take(16385)
         .read_to_end(&mut bytes)
         .map_err(|_| Error::Credential)?;
+    valid_token(&bytes)?;
+    String::from_utf8(bytes).map_err(|_| Error::Credential)
+}
+fn valid_token(bytes: &[u8]) -> Result<(), Error> {
     if bytes.is_empty()
         || bytes.len() > 16384
         || bytes
@@ -78,5 +102,20 @@ pub(super) fn projected_token(path: &Path) -> Result<String, Error> {
     {
         return Err(Error::Credential);
     }
-    String::from_utf8(bytes).map_err(|_| Error::Credential)
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fixed_token_replaces_the_token_file_and_is_validated() {
+        let config = Config::new("http://127.0.0.1:1", "/missing".into()).unwrap();
+        assert!(config.bootstrap_token().is_err());
+        let config = config.with_token("cb_sandbox_secret".into()).unwrap();
+        assert_eq!(config.bootstrap_token().unwrap(), "cb_sandbox_secret");
+        let config = Config::new("http://127.0.0.1:1", "/missing".into()).unwrap();
+        assert!(config.with_token("two words".into()).is_err());
+    }
 }

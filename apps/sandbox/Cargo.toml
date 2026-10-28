@@ -1,0 +1,16 @@
+[package]
+name = "cubebot-sandbox"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cubebot-sandbox"
+path = "src/main.rs"
+
+[dependencies]
+nix = { version = "0.31", features = ["process", "signal"] }
+
+[lints]
+workspace = true

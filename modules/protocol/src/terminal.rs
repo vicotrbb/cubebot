@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const LEASE_MILLIS: u64 = 60_000;
-pub const REQUEST_LIMIT: usize = 16384;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(from = "InvocationWire")]
@@ -69,19 +68,6 @@ pub struct Renewal {
 #[serde(deny_unknown_fields)]
 pub struct Permit {
     pub milliseconds: u64,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "operation", rename_all = "snake_case", deny_unknown_fields)]
-pub enum Request {
-    Execute {
-        invocation: Invocation,
-        not_after_millis: u64,
-    },
-    Lookup {
-        id: Uuid,
-        authority: Uuid,
-    },
 }
 
 impl Outcome {

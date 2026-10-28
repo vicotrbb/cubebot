@@ -101,12 +101,24 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
 async fn configured_controller(
     pool: &sqlx::PgPool,
 ) -> Result<cubebot_orchestrator::agents::kubernetes::Controller, Box<dyn Error + Send + Sync>> {
-    use cubebot_orchestrator::agents::kubernetes::{Controller, ControllerConfig};
+    use cubebot_orchestrator::agents::kubernetes::ControllerConfig;
     match ControllerConfig::environment().map_err(|_| "invalid controller configuration")? {
         Some(config) => config
             .activate(pool.clone())
             .await
             .map_err(|_| "controller ownership or configuration failed".into()),
+        None => docker_or_database_only(pool).await,
+    }
+}
+
+async fn docker_or_database_only(
+    pool: &sqlx::PgPool,
+) -> Result<cubebot_orchestrator::agents::kubernetes::Controller, Box<dyn Error + Send + Sync>> {
+    use cubebot_orchestrator::agents::{kubernetes::Controller, sandbox::DockerConfig};
+    match DockerConfig::environment().map_err(|_| "invalid Docker sandbox configuration")? {
+        Some(config) => Controller::docker(pool.clone(), config)
+            .await
+            .map_err(|_| "development ownership unavailable for Docker sandboxes".into()),
         None => Controller::database_only(pool.clone()).await.map_err(|_| {
             "database-only ownership unavailable or controller configuration required".into()
         }),
@@ -117,6 +129,7 @@ fn database_required() -> bool {
     [
         "CUBEBOT_OIDC_CONFIG",
         "CUBEBOT_CONTROLLER_CONFIG",
+        "CUBEBOT_DOCKER_CONFIG",
         "CUBEBOT_CREDENTIAL_KEY_FILE",
     ]
     .iter()

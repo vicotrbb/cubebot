@@ -279,12 +279,11 @@ def database(f):
 def orchestrator(f, dns):
     config = {
         "connection": {"kind": "in_cluster"},
-        "runtime_image": f.images["runtime"],
-        "tools_image": f.images.get("tools", f.images["runtime"]),
-        "terminal_enabled": "tools" in f.images,
+        "sandbox_image": f.images["sandbox"],
+        "backend": "process",
         "runtime_service_account": "cubebot-runtime",
         "orchestrator_origin": CONTROL,
-        "network": {"dns": [dns], "infrastructure": []},
+        "network": {"dns": [dns]},
         "control_ca_config_map": "control-ca",
     }
     f.create("ConfigMap", "controller", data={"config.json": json.dumps(config)})

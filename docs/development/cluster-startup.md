@@ -1,16 +1,16 @@
 # CSI-backed startup compatibility fixture
 
-`just cluster-startup` builds the shipped runtime and tool images, loads them into an owned disposable Kubernetes 1.36.4 cluster, and runs the real Pod compiler and reconciler against a CSI-backed workspace. It uses the same explicit kubeconfig, loopback endpoint, ownership checks and source-fingerprint guard as the [admission fixture](cluster-admission.md).
+`just cluster-startup` builds the shipped sandbox image, loads them into an owned disposable Kubernetes 1.36.4 cluster, and runs the real Pod compiler and reconciler against a CSI-backed workspace. It uses the same explicit kubeconfig, loopback endpoint, ownership checks and source-fingerprint guard as the [admission fixture](cluster-admission.md).
 
-This is a startup and clean-replacement compatibility check. It is not a working-agent demonstration. The runtime's orchestrator endpoint is deliberately unavailable; the tool runner must fail with its current explicit unimplemented message. No placeholder executor or synthetic drain acknowledgement is substituted.
+This is a startup and clean-replacement compatibility check. It is not a working-agent demonstration. The runtime's orchestrator endpoint is deliberately unavailable. The sandbox uses the development `process` backend, so no VM is booted and no isolation is claimed. No synthetic drain acknowledgement is substituted.
 
 ## Workflow
 
-1. Build the existing runtime/tools Docker targets in an owned builder. Load them into the owned node, read their actual containerd target digests, and pass those content references to the real `Layout` constructor. No image is published to a registry.
+1. Build the sandbox image in an owned builder. Load them into the owned node, read their actual containerd target digests, and pass those content references to the real `Layout` constructor. No image is published to a registry.
 2. Install a test-only CSI hostpath backend from the recorded upstream manifests, using native Kustomize for the driver image selection. Configure it as the disposable cluster's default storage class. No existing cluster or storage class is changed.
 3. Create agent identity and wake intent in isolated PostgreSQL. Let `Reconciler` prepare, create and bind the actual PVC and Pod.
-4. Require all three initialization steps to succeed, the trusted runtime to remain running, and the shipped tool runner to exit with its unimplemented error. Check that the claim is bound to the selected CSI class/driver and the runtime directory is owned by UID 10001 with mode 0700.
-5. Write known bytes in the runtime's workspace subpath. Create a separate harmless mount contender and require a real scheduler `FailedScheduling` event mentioning ReadWriteOncePod, tied to the contender's UID while the incumbent still owns the claim.
+4. Require the single `sandbox` container to keep running without a sandbox failure in its log. Check that the claim is bound to the selected CSI class/driver and the runtime directory the sandbox creates is owned by UID 10001 with mode 0700.
+5. Write known bytes in the workspace volume. Create a separate harmless mount contender and require a real scheduler `FailedScheduling` event mentioning ReadWriteOncePod, tied to the contender's UID while the incumbent still owns the claim.
 6. Request sleep and require `AwaitingDrain` while runtime control is unavailable. The fixture operator then explicitly requests deletion with UID and resource-version preconditions. Reconciliation must retain actual termination evidence, finalize the owned Pod and observe its removal. This does not prove disconnected authority, acknowledged drain or partition fencing.
 7. Wake the same agent, require a different Pod UID and the same PVC UID, and read the retained bytes. Settle the second Pod through the same explicit operator-stop path. Cleanup removes only the owned cluster, builder, images, database and private kubeconfig.
 
@@ -26,6 +26,6 @@ Public diagnostics stay under the run's ignored `target/cubebot-startup-*` direc
 
 The [recorded run](evidence/2026-10-26-cluster-startup.json) passed on Kubernetes 1.36.4 with the shipped arm64 images: all initializers succeeded, the scheduler rejected the competing RWOP mount, and the same PVC retained the expected bytes across different Pod UIDs. Both epochs settled after explicit fixture-operator stop, and owned-resource cleanup completed. The initial run failed because native Kustomize requires a supported filename; the fixture now writes `kustomization.yaml`.
 
-G1–G3, authenticated runtime operation, tool execution, finite authority and grant renewal remain open.
+G1–G3, the `kvm` backend, authenticated runtime operation, tool execution, finite authority and grant renewal remain open. The recorded runs predate ADR 0084 and used the earlier runtime/tools pod.
 
 The later [real-cluster identity run](evidence/2026-10-26-cluster-identity.json) passed those projected-token and epoch assertions as well as the original storage/startup workflow. Rejection of the removed Pod is an end-to-end Cubebot identity result; it does not establish immediate Kubernetes JWT revocation or physical executor fencing.

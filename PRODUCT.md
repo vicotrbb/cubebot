@@ -38,7 +38,7 @@ Planned (milestone plan, Tasks 2–9): cluster fencing and egress qualification;
 
 Constraints the site must respect: never claim unqualified capabilities as shipped; distinguish implemented, in progress, and planned; no pricing, customers, benchmarks, or testimonials exist; no public release yet. Complexity gate: every authored function in the repo, including site scripts, must stay at cyclomatic complexity ≤ 15.
 
-Terminology: agent, orchestrator, runtime, tool runner, room, lane, dreaming, skill, grant, connection, workspace, journal.
+Terminology: agent, orchestrator, runtime, sandbox, room, lane, dreaming, skill, grant, connection, workspace, journal.
 
 ## Brand Commitments
 
