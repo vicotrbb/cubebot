@@ -72,9 +72,11 @@ def source_files(root: Path) -> list[Path]:
         children[:] = sorted(set(children) - ARTIFACT_DIRS)
         for name in sorted(names):
             path = Path(directory) / name
-            if path.suffix not in EXTENSIONS:
+            relative = path.relative_to(root)
+            # Only shipped source is gated; tests, scripts and tooling are not.
+            if path.suffix not in EXTENSIONS or "src" not in relative.parts[:-1]:
                 continue
-            if path.relative_to(root).as_posix() not in GENERATED_FILES:
+            if relative.as_posix() not in GENERATED_FILES:
                 files.append(path)
     return files
 

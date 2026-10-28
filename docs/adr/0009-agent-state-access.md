@@ -1,8 +1,10 @@
 # ADR 0009: Agent state access through the orchestrator
 
-Status: Accepted
+Status: Partially superseded by ADR 0083
 
 Date: 2026-10-23
+
+Superseded in part by [ADR 0083](0083-agent-centric-execution-in-a-sandbox-boundary.md): the agent, not an orchestrator module, owns memory behavior, and work reporting no longer depends on execution leases. Agents still reach platform state only through authenticated orchestrator operations and never through PostgreSQL.
 
 [ADR 0008](0008-durable-storage.md) establishes PostgreSQL as the authoritative structured store. Agent pods execute model and tool work, while the orchestrator coordinates mailboxes, rooms, permissions, and lifecycle. State access needs a clear owner for authorization and persistence rules.
 

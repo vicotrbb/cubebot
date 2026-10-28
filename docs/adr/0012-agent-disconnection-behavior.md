@@ -1,8 +1,10 @@
 # ADR 0012: Bounded continuation during disconnection
 
-Status: Accepted
+Status: Partially superseded by ADR 0083
 
 Date: 2026-10-23
+
+Superseded in part by [ADR 0083](0083-agent-centric-execution-in-a-sandbox-boundary.md): there is no finite per-turn authorization window. The agent works under its long-lived sandbox authority, may start queued work while disconnected, and stops only for work that needs the orchestrator, revocation or a stopped sandbox. The local journal and idempotent reconciliation remain.
 
 The orchestrator has one active instance with recovery downtime under [ADR 0011](0011-orchestrator-availability.md). Agent pods may remain healthy while their orchestrator connection is unavailable. They cannot directly access PostgreSQL under [ADR 0009](0009-agent-state-access.md).
 

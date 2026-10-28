@@ -1,6 +1,6 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-25 for connection access and repository scaffolding. Status: consolidated architecture proposal grounded in 82 accepted ADRs. The repository now contains identity/lifecycle foundations and a minimal native text-chat implementation and a gated terminal implementation. The broader agent system described below remains intended design. See [README](README.md) for the actual runnable scope.
+Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Status: intended design grounded in 83 accepted ADRs. The code still implements the earlier per-turn grant and two-container layout; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 
@@ -26,11 +26,10 @@ flowchart TB
       O --> DB[("PostgreSQL")]
       O --> S[("Shared-file PVC")]
       O --> K["Kubernetes lifecycle module"]
-      subgraph A["One pod per running agent"]
-        R["Trusted Rust runtime"] --> T["Rust tool executor"]
-        T --> B["Browser · terminal · local MCP"]
-        T --> W[("Agent workspace PVC")]
-        R --> J[("Private recovery journal")]
+      subgraph A["One VM-class sandbox per running agent"]
+        R["Rust agent: loop, context, memory, tools"] --> B["Browser · terminal · local MCP"]
+        R --> W[("Agent workspace PVC")]
+        R --> J[("Recovery journal")]
       end
       R --> O
       O --> R
@@ -38,21 +37,21 @@ flowchart TB
     K --> API["Kubernetes API"]
     API --> A
     R --> P["OpenAI · Anthropic · compatible endpoints"]
-    T --> X["Authorized websites / integrations"]
+    B --> X["Authorized websites / integrations"]
     O --> P
 ~~~
 
-The orchestrator calls models only for its own duties, such as room coordination and proposed embedding work. Ordinary agent inference goes directly from its runtime to the provider. Arrows show logical communication; the agent opens the proposed control connection to the orchestrator.
+The orchestrator is ledger and switchboard: it records durable state, routes messages and work, enforces human permissions and starts and stops sandboxes. It calls models only for its own duties, such as room coordination and proposed embedding work. Ordinary agent inference goes directly from its runtime to the provider. Arrows show logical communication; the agent opens the proposed control connection to the orchestrator.
 
 Accepted deployment constraints:
 
 - One individual or organization per installation, with installation-owned agents and scoped managers.
 - One namespace for all namespaced installation resources. External PostgreSQL and cluster-scoped infrastructure retain their own placement.
 - One Rust orchestrator process and one active instance, accepting coordination downtime during restart.
-- One pod per running agent, containing separate trusted runtime and tool containers.
+- One pod per running agent, run on a VM-class RuntimeClass. The VM is the trust boundary; the agent and its tools share it.
 - Shared PostgreSQL for structured records; separate persistent workspaces and an orchestrator-owned volume for shared files.
 - A dedicated TanStack Start frontend with Bun and Vite, serving desktop and installable PWA.
-- Standard container runtime by default; approved optional sandbox runtimes, enforceable by installation policy.
+- Standard container runtime for the orchestrator, frontend and local development; qualified agent sandboxes require a VM-class RuntimeClass.
 
 Proposed Kubernetes implementation: deploy the orchestrator with one replica and Recreate rollout behavior, the frontend independently, and bundled PostgreSQL as a single-instance StatefulSet. Manage agent Pods directly from database intent, using separately retained PVCs. An additional Deployment or StatefulSet per agent is unnecessary for the selected initial lifecycle: the orchestrator already owns sleep, wake, retirement, and recovery. A failed node's pod replacement waits for safe reconciliation; it is not a promise of uninterrupted execution during orchestrator downtime.
 
@@ -66,17 +65,17 @@ The backend is a modular monolith. Modules own rules and transactions; they are 
 | --- | --- | --- |
 | Identity and access | Built-in accounts, OIDC identities, teams, scoped grants, effective access | authorize(actor, action, resource); explain_access(...) |
 | Agents and lifecycle | Agent definitions, configuration revisions, runtime policy, pod and workspace ownership | create_agent(...); reconcile_agent(id); retire_agent(...) |
-| Work | Conversations, room routing, goals, tasks, mailboxes, dependencies, lane admission, triggers, cancellation, budgets, acceptance | send_message(...); delegate(...); claim_turn(...); submit_result(...) |
-| Knowledge | Source lookup, memory revisions, retrieval, context checkpoints, dream reports, skill library and installations | search_memory(...); commit_changes(...); publish_skill(...) |
-| Connections and tools | Provider and integration registry, credential refresh, capability catalog, tool policy | resolve_connection(...); search_tools(...); authorize_invocation(...) |
+| Work | Conversations, room routing, goals, tasks, mailboxes, dependencies, triggers, cancellation, budgets, acceptance | send_message(...); delegate(...); next_messages(agent); record_result(...) |
+| Knowledge | Durable memory revisions, human edits, dream reports, skill library and installations; no memory policy | read_memory(...); commit_changes(...); publish_skill(...) |
+| Connections and tools | Provider and integration registry, credential refresh, per-agent eligibility and tool configuration | resolve_connection(...); sandbox_credentials(agent) |
 | Storage | Upload lifecycle, immutable blobs, domain references, integrity, controlled reclamation | publish(...); read(reference); reconcile_upload(...) |
 | Operations | Maintenance, backup/restore, upgrades, health, audit and user notifications | enter_maintenance(...); capture_backup(...); restore(...) |
 
 Keep task scheduling, messaging, triggers, and budgets inside Work initially because they must agree on admission and root-goal identity. Knowledge can contain private memory and skill submodules with distinct permissions. Extract a new module only when it has an independent invariant or demonstrated implementation variation.
 
-The Rust runtime contains the engine, context assembly, provider adapters, tool dispatch, and recovery journal. The Rust executor supervises processes and browser sessions and adapts MCP. It does not own agent turns or database access.
+The Rust agent owns its loop, lane scheduling, context assembly and compaction, memory behavior, provider calls, tools, process and browser supervision, MCP adaptation and recovery journal. It has no database access.
 
-Accepted source layout, revised on 2026-10-25: three applications under `apps/` (`orchestrator`, `agent`, and `web`) and two shared Rust libraries under `modules/` (`protocol` and `providers`). Agent-specific behavior stays inside the agent app, including its tool runner as a second executable. The runtime and tool runner still run in separate containers under ADR 0033; source ownership does not merge their execution authority. Orchestrator domains remain ordinary Rust modules within its application. Shared libraries never depend on applications. See the [repository layout](docs/development/repository-layout.md) for ownership and development paths. This replaces the earlier four-package layout proposal without introducing new services.
+Accepted source layout, revised on 2026-10-25: three applications under `apps/` (`orchestrator`, `agent`, and `web`) and two shared Rust libraries under `modules/` (`protocol` and `providers`). Agent-specific behavior stays inside the agent app. Under ADR 0083 the agent and its tools run in one sandbox; the separate tool runner is a removal candidate once that path is qualified. Orchestrator domains remain ordinary Rust modules within its application. Shared libraries never depend on applications. See the [repository layout](docs/development/repository-layout.md) for ownership and development paths. This replaces the earlier four-package layout proposal without introducing new services.
 
 The repository scaffold selects Tokio/Axum for asynchronous HTTP and tracing for diagnostics, with locked dependencies and a pinned Rust toolchain. SQLx for PostgreSQL and kube-rs for cluster interaction remain proposals until those features are implemented. The TanStack Start frontend has a locked Bun/Vite build and a smoke-tested Bun server. These checks establish scaffold compatibility, not performance or agent-system qualification. [Axum](https://docs.rs/axum/latest/axum/), [SQLx](https://docs.rs/sqlx/latest/sqlx/), [kube-rs](https://kube.rs/).
 
@@ -86,7 +85,7 @@ PostgreSQL owns agent definitions, grants, conversations, work state, mailbox de
 
 Use current-state relational tables plus transactional audit/outbox records. This is not full event sourcing. A domain transition and its durable notification are committed together. Internal workers claim small batches and commit before external calls. A polling loop remains correct when an optional notification wake-up is missed. PostgreSQL documents row-locking options useful for queue consumers and NOTIFY as a signal between sessions; the durable queue is our proposed application contract. [SELECT](https://www.postgresql.org/docs/current/sql-select.html), [NOTIFY](https://www.postgresql.org/docs/current/sql-notify.html).
 
-Each agent has a workspace PVC. Proposed layout separates runtime journal and tool-writable directories by mounts and permissions; only the tool home/workspace directories are mounted into the tool container. The runtime never executes code from that writable workspace. Workspace files are mutable; published artifacts and skill bundles are immutable snapshots in shared storage.
+Each agent has a workspace PVC mounted into its sandbox, holding the workspace and recovery journal. The agent never loads its own executable code from the writable workspace. Workspace files are mutable; published artifacts and skill bundles are immutable snapshots in shared storage.
 
 The [shared-storage proposal](docs/design/shared-storage.md) defines staging, publication, file synchronization, and crash reconciliation. It provides a native authenticated interface, not S3 compatibility, distributed replication, or a shared writable filesystem for every agent.
 
@@ -94,7 +93,7 @@ Retain durable data until explicit deletion. Retiring or sleeping releases execu
 
 ## Execution and collaboration
 
-Each agent has one serial main lane and a configurable one-to-four concurrent task lanes, default two. A lane is an execution queue, not a transcript. Main-lane work uses the agent's permanent conversation; context assembly manages that conversation and the current assignment without creating another chat session. All lanes share the agent's memory and workspace.
+Each agent schedules one serial main lane and a configurable one-to-four concurrent task lanes, default two, inside its own loop. A lane is an execution queue, not a transcript. Main-lane work uses the agent's permanent conversation; context assembly manages that conversation and the current assignment without creating another chat session. All lanes share the agent's memory and workspace.
 
 Human room mentions create independent assignments for each eligible target. An unmentioned human request invokes the tool-free coordinator, which returns a validated owner, continuation, clarification, or no-action result. Agent-authored progress does not retrigger routing. Delegation and transfer are structured operations with explicit identities and ancestry.
 
@@ -102,28 +101,27 @@ A parent waiting for children yields its execution slot. Child outcomes update d
 
 Ordinary messages queue. Steering targets a specific active assignment and is incorporated at a safe boundary. The UI distinguishes accepted steering from incorporated steering. Already-issued effects can still complete.
 
-Proposed resource coordination serializes opaque shell commands and workspace-mutating operations per agent by default, while allowing concurrent inference and independently targeted browser sessions. Native file operations can later use narrower locks after qualification. A background process retains the resource claim it needs until it exits or is explicitly supervised as an active service. Advisory path locks cannot prove that arbitrary shell programs respect declared paths.
+Inside the agent, proposed resource coordination serializes opaque shell commands and workspace-mutating operations by default, while allowing concurrent inference and independently targeted browser sessions. Native file operations can later use narrower locks after qualification. A background process retains the resource claim it needs until it exits or is explicitly supervised as an active service. Advisory path locks cannot prove that arbitrary shell programs respect declared paths.
 
 Schedules and external events enter the same work system. Each trigger chooses individual assignments or one combined pending group. Preserve event references and deduplication independently of grouping. Maintenance and overload produce explicit outcomes, never silently dropped accepted events.
 
 ## Agent loop and provider seam
 
 ~~~text
-receive authorized turn and execution epoch
-load relevant conversation, assignment, checkpoint, instructions, installed skill metadata
+pull the next messages and assignments from the switchboard
+assemble context from the conversation, checkpoint, instructions, memory and skill metadata
 repeat:
-  check authority, cancellation, steering, budget, and pending outcomes
+  apply cancellation, steering and pending outcomes
   compact at a safe boundary if context requires it
   request the selected provider/model
-  validate complete tool requests
-  authorize, journal, execute, and reconcile each invocation
-  commit eligible turn results and staged memory changes
+  journal, execute and record each tool call inside the sandbox
+  write results, memory changes and usage to the ledger
   finish, yield, pause, or continue
 ~~~
 
 Native OpenAI and Anthropic adapters and a defined OpenAI-compatible protocol subset are initial scope. Capabilities are explicit. Visual tools require suitable image input; unsupported capabilities do not silently downgrade the workflow. A provider outage retries within bounds and then waits for the selected model, without fallback.
 
-The orchestrator owns credential refresh and propagates versioned, scoped inference material. Runtime credentials are absent from tool mounts and model-visible results. Subscription authentication for Codex and Claude remains a qualification gate, not a currently supported capability. Supervising their CLI engines would contradict the accepted native-loop choice.
+The orchestrator owns credential refresh and propagates the agent's eligible provider material for the sandbox's lifetime. Credentials stay out of model-visible results and logs; tools in the sandbox can reach them, so each agent receives only its own. Subscription authentication for Codex and Claude remains a qualification gate, not a currently supported capability. Supervising their CLI engines would contradict the accepted native-loop choice.
 
 ## Memory and skills
 
@@ -137,27 +135,27 @@ The shared skill library contains immutable revisions with contributor provenanc
 
 ## Tools, browser, and integrations
 
-Expose a small native core for memory search, tool discovery, messaging, tasks, skills, browser, terminal, and artifacts. Search returns only eligible tools; invocation rechecks current permissions and resource restrictions. Never rely on a model to obey an unavailable-tool description.
+Expose a small native core for memory search, tool discovery, messaging, tasks, skills, browser, terminal, and artifacts. Search returns only eligible tools, and the agent enforces its configured tool policy before invoking one. Never rely on a model to obey an unavailable-tool description.
 
 Integrations and connections are installation-managed. Under [ADR 0081](docs/adr/0081-installation-wide-default-connection-access.md), enabled connections default to all-agents access, including future agents. Each connection can instead require specific grants. The baseline includes its approved tools and configured resource scope without individual agent assignments. Administrators still configure integrations and policies; discovery remains on demand. Eligibility does not mean copying every credential into every pod or automatically selecting a provider or account.
 
-Proposed placement: native runtime operations call orchestrator interfaces; browser, shell, and local MCP run through the executor; the executor also hosts remote MCP clients with scoped integration credentials. This gives tool network policy one execution location. The runtime still validates invocation grants, and the remote service's credentials must constrain access where available. Do not infer arbitrary resource restrictions from tool parameter names.
+Placement: native platform operations call orchestrator interfaces; browser, shell, local MCP and remote MCP clients run inside the agent's sandbox. Pod network policy therefore applies to one agent. The remote service's credentials must constrain access where available. Do not infer arbitrary resource restrictions from tool parameter names.
 
-Use one main browser session and separate task sessions, with explicitly reused authorized website logins. Propose browser automation through Chromium's protocol with structured DOM/accessibility tools and screenshot-driven interaction. Keep the executor and protocol implementation in Rust; Chromium and third-party tools retain their own implementations.
+Use one main browser session and separate task sessions, with explicitly reused authorized website logins. Propose browser automation through Chromium's protocol with structured DOM/accessibility tools and screenshot-driven interaction. Keep the agent and protocol implementation in Rust; Chromium and third-party tools retain their own implementations.
 
 Viewing is distinct from control. Human takeover obtains exclusive input ownership for the named session, waits for prior input to settle, and makes the agent reobserve the page when control returns. No queued offline pointer or keyboard replay.
 
 ## Trust and failure containment
 
-Human sessions, agent runtime identity, and tool invocation authority are separate credential classes. Proposed runtime bootstrap uses a projected, audience-bound Kubernetes service-account token mounted only in the trusted container. The orchestrator validates the token and pod identity and binds the resulting Cubebot credential to the agent incarnation. Disable automatic token mounting for the tool environment. Projected tokens and audience selection are platform mechanisms; the exchange and fencing contract are Cubebot design work. [Kubernetes projected volumes](https://kubernetes.io/docs/concepts/storage/projected-volumes/).
+The sandbox is the trust boundary ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Each running agent is one pod on a VM-class RuntimeClass. Anything inside it, including agent-run code, can reach the agent's credentials, so each sandbox holds only that agent's authority: one long-lived agent credential and its eligible provider material. Revocation means revoking the credential or stopping the sandbox; there are no per-turn grants or invocation leases.
+
+Human sessions, agent credentials and orchestrator authority remain separate classes. Proposed bootstrap uses a projected, audience-bound Kubernetes service-account token; the orchestrator validates it and the pod identity, then issues the agent credential bound to that sandbox incarnation. [Kubernetes projected volumes](https://kubernetes.io/docs/concepts/storage/projected-volumes/), [RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/).
 
 Encrypt provider and integration records in PostgreSQL using an established authenticated-encryption implementation and a versioned installation key held separately. Propose envelope encryption to separate bulk records from master-key rotation. Passwords use one-way password hashing, not reversible credential encryption. Backups require the corresponding key versions.
 
-Agents may use public internet destinations; private access requires grants. Default-deny workload rules and explicit allowed paths are necessary, but containers within a pod share networking. This creates a real unresolved implementation obligation: arbitrary tool programs must not exploit runtime-only private paths or local control sockets.
+Agents may use public internet destinations; private access requires grants. Because one pod holds one agent, default-deny NetworkPolicy per sandbox enforces that: allow the orchestrator, DNS, public egress and granted private destinations, and deny the database, Kubernetes API and other sandboxes. Qualification must test direct sockets, IPv6, alternate DNS, redirects and escape from the VM handler. [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
 
-The preferred qualification candidate is distinct non-root runtime/tool identities with enforced tool egress at the operating-system layer, plus pod NetworkPolicy and authenticated local interfaces. Compare a bounded network-setup init helper with node-managed cgroup enforcement. The former adds an elevated setup requirement; the latter adds cluster integration. Neither is accepted as proven or silently required by this draft. Qualification must test direct sockets, IPv6, alternate DNS, redirects, UID changes, browser sandbox behavior, and optional runtimes. Proxy environment variables alone fail the contract. If neither candidate meets the selected layout safely, report a design conflict before implementation rather than weakening the grant semantics. [Pod networking](https://kubernetes.io/docs/concepts/services-networking/), [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
-
-Use monotonic execution epochs and finite authority for disconnected work. A stale epoch cannot commit state, but that alone cannot stop an external request already issued. Do not hand an uncertain lane to another executor until reconciliation or qualified fencing makes replacement safe. The same principle applies to single-active orchestrator recovery.
+Use monotonic sandbox epochs. A stale epoch cannot write to the ledger, but that alone cannot stop an external request already issued. Do not start a replacement sandbox until the previous one is proven stopped or reconciled. The same principle applies to single-active orchestrator recovery.
 
 ## Console and communication
 
@@ -184,9 +182,9 @@ Emit structured logs, metrics, and trace correlation through existing Rust instr
 | P01 Work persistence | PostgreSQL state plus outbox and bounded claim workers | External broker/workflow engine adds another authoritative coordination system |
 | P02 Agent workloads | Directly reconciled Pods with retained PVCs | Per-agent StatefulSet duplicates part of lifecycle ownership; revisit if it simplifies proven recovery |
 | P03 Wire interfaces | HTTP/JSON, SSE, narrowly scoped WebSockets | gRPC everywhere adds browser adaptation without a demonstrated initial requirement |
-| P04 Workspace concurrency | Conservative executor resource claims for opaque mutations | Fully parallel arbitrary shell writes cannot be made safe through advisory path hints |
+| P04 Workspace concurrency | Conservative in-agent resource claims for opaque mutations | Fully parallel arbitrary shell writes cannot be made safe through advisory path hints |
 | P05 Retrieval | PostgreSQL lexical/vector candidates with explicit degradation | Separate vector service adds dependency; automatic prompt injection contradicts ADR 0023 |
-| P06 Tool networking | Qualify OS-enforced separation inside the accepted pod layout | Plain proxy settings cannot enforce arbitrary-program restrictions; separate pods require revisiting ADR 0033 |
+| P06 Tool networking | Per-sandbox NetworkPolicy on a VM-class RuntimeClass (ADR 0083) | In-pod UID filtering between runtime and tools added privileged setup without protecting credentials from agent-run code |
 | P07 Availability | Stop on uncertain ownership and reconcile before replacement | Lease expiry alone risks duplicate external effects |
 | P08 Deployment | Helm and a bundled single-instance database option | Operator dependency and HA database behavior are not needed for the selected initial availability |
 

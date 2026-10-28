@@ -47,7 +47,7 @@ Name: Cubebot. Logo/icon: a literal cube with two eyes, cozy and warm with perso
 ## Evidence on Hand
 
 - MANIFESTO.md, ARCHITECTURE.md (with a deployment diagram), 82 accepted ADRs under docs/adr, software specification and qualification plan under docs/design.
-- Milestone plan with checked tasks at docs/superpowers/plans/2026-10-25-cubebot.md and a dated evidence ledger at docs/development/implementation-progress.md (source for the timeline section).
+- Current state and open qualification gaps at docs/STATUS.md; dated evidence in docs/development/*.md and git history (source for the timeline section).
 - No product screenshots worth showing yet, no logo asset, no customers, no benchmarks, no press. The site must not fabricate any of these; illustrative UI must be labeled as illustration.
 
 ## Product Principles
