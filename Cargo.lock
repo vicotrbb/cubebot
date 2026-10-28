@@ -511,6 +511,7 @@ name = "cubebot-providers"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "futures-util",
  "reqwest",
  "serde_json",
  "tokio",

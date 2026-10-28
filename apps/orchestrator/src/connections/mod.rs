@@ -3,6 +3,7 @@ mod credentials;
 pub use credentials::{CredentialError, Credentials};
 
 use crate::identity::{Actor, IdentityError};
+use cubebot_protocol::runtime::ProviderKind;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Transaction};
@@ -19,17 +20,49 @@ pub struct Connections {
 pub struct ConfigureProvider {
     pub request_id: Uuid,
     pub expected_revision: i64,
+    #[serde(default = "openai")]
+    pub provider: ProviderKind,
     pub model: String,
+    /// Model window in tokens. Required for OpenAI, which cannot report it; Anthropic
+    /// reports its own when this is absent.
+    #[serde(default)]
+    pub context_window: Option<i64>,
     pub api_key: String,
     #[serde(default)]
     pub access: Option<ProviderAccess>,
 }
+fn openai() -> ProviderKind {
+    ProviderKind::Openai
+}
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct ProviderSummary {
+    pub provider: ProviderKind,
     pub model: String,
+    pub context_window: Option<i64>,
     pub revision: i64,
     pub access: sqlx::types::Json<ProviderAccess>,
+}
+type Access = sqlx::types::Json<ProviderAccess>;
+type SummaryRow = (String, String, Option<i64>, i64, Access);
+fn summary(
+    (provider, model, context_window, revision, access): SummaryRow,
+) -> Result<ProviderSummary, IdentityError> {
+    Ok(ProviderSummary {
+        provider: ProviderKind::parse(&provider).ok_or(IdentityError::InvalidInput)?,
+        model,
+        context_window,
+        revision,
+        access,
+    })
+}
+
+/// What a runtime needs for one turn. The key is never logged.
+pub(crate) struct Inference {
+    pub provider: ProviderKind,
+    pub model: String,
+    pub api_key: String,
+    pub context_window: Option<u64>,
 }
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -50,11 +83,13 @@ impl Connections {
     pub async fn inspect(&self, actor: &Actor) -> Result<Option<ProviderSummary>, IdentityError> {
         let mut transaction = self.pool.begin().await?;
         administrator(&mut transaction, actor).await?;
-        let summary = sqlx::query_as("SELECT model, revision, access FROM provider_connection")
-            .fetch_optional(&mut *transaction)
-            .await?;
+        let row: Option<SummaryRow> = sqlx::query_as(
+            "SELECT provider, model, context_window, revision, access FROM provider_connection",
+        )
+        .fetch_optional(&mut *transaction)
+        .await?;
         transaction.commit().await?;
-        Ok(summary)
+        row.map(summary).transpose()
     }
 
     pub async fn configure(
@@ -84,13 +119,15 @@ impl Connections {
             .credentials
             .encrypt(input.api_key.as_bytes(), &context)
             .map_err(|_| IdentityError::CredentialUnavailable)?;
-        sqlx::query("INSERT INTO provider_connection (model, credential, key_version, revision, updated_by,access) VALUES ($1,$2,1,$3,$4,$5) ON CONFLICT (singleton) DO UPDATE SET model=EXCLUDED.model, credential=EXCLUDED.credential, revision=EXCLUDED.revision, updated_by=EXCLUDED.updated_by, updated_at=clock_timestamp(),access=EXCLUDED.access")
-            .bind(&input.model).bind(encrypted).bind(revision).bind(actor.id).bind(sqlx::types::Json(&access)).execute(&mut *transaction).await?;
-        sqlx::query("INSERT INTO provider_commands (actor_id,request_id,input_digest,model,revision,access) VALUES ($1,$2,$3,$4,$5,$6)")
-            .bind(actor.id).bind(input.request_id).bind(digest).bind(&input.model).bind(revision).bind(sqlx::types::Json(&access)).execute(&mut *transaction).await?;
+        sqlx::query("INSERT INTO provider_connection (model, credential, key_version, revision, updated_by,access,provider,context_window) VALUES ($1,$2,1,$3,$4,$5,$6,$7) ON CONFLICT (singleton) DO UPDATE SET model=EXCLUDED.model, credential=EXCLUDED.credential, revision=EXCLUDED.revision, updated_by=EXCLUDED.updated_by, updated_at=clock_timestamp(),access=EXCLUDED.access,provider=EXCLUDED.provider,context_window=EXCLUDED.context_window")
+            .bind(&input.model).bind(encrypted).bind(revision).bind(actor.id).bind(sqlx::types::Json(&access)).bind(input.provider.as_str()).bind(input.context_window).execute(&mut *transaction).await?;
+        sqlx::query("INSERT INTO provider_commands (actor_id,request_id,input_digest,model,revision,access,provider,context_window) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)")
+            .bind(actor.id).bind(input.request_id).bind(digest).bind(&input.model).bind(revision).bind(sqlx::types::Json(&access)).bind(input.provider.as_str()).bind(input.context_window).execute(&mut *transaction).await?;
         transaction.commit().await?;
         Ok(ProviderSummary {
+            provider: input.provider,
             model: input.model.clone(),
+            context_window: input.context_window,
             revision,
             access: sqlx::types::Json(access),
         })
@@ -99,9 +136,9 @@ impl Connections {
         &self,
         tx: &mut Transaction<'_, Postgres>,
         agent: crate::agents::AgentId,
-    ) -> Result<(String, String, i64), IdentityError> {
-        let (model, encrypted, revision): (String, Vec<u8>, i64) =
-            sqlx::query_as("SELECT model,credential,revision FROM provider_connection WHERE access->>'mode'='all_agents' OR (access->>'mode'='explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))")
+    ) -> Result<Inference, IdentityError> {
+        let (provider, model, encrypted, revision, window): (String, String, Vec<u8>, i64, Option<i64>) =
+            sqlx::query_as("SELECT provider,model,credential,revision,context_window FROM provider_connection WHERE access->>'mode'='all_agents' OR (access->>'mode'='explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))")
                 .bind(agent).fetch_optional(&mut **tx)
                 .await?
                 .ok_or(IdentityError::CredentialUnavailable)?;
@@ -110,8 +147,14 @@ impl Connections {
             .credentials
             .decrypt(&encrypted, &context)
             .map_err(|_| IdentityError::CredentialUnavailable)?;
-        let key = String::from_utf8(secret).map_err(|_| IdentityError::CredentialUnavailable)?;
-        Ok((model, key, revision))
+        let api_key =
+            String::from_utf8(secret).map_err(|_| IdentityError::CredentialUnavailable)?;
+        Ok(Inference {
+            provider: ProviderKind::parse(&provider).ok_or(IdentityError::CredentialUnavailable)?,
+            model,
+            api_key,
+            context_window: window.map(|window| window as u64),
+        })
     }
 
     async fn next_revision(
@@ -173,6 +216,11 @@ fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
         || input.model.len() > 128
         || input.api_key.is_empty()
         || input.api_key.len() > 4096
+        || !input
+            .context_window
+            .map_or(input.provider == ProviderKind::Anthropic, |window| {
+                (1024..=100_000_000).contains(&window)
+            })
     {
         return Err(IdentityError::InvalidInput);
     }
@@ -233,17 +281,15 @@ async fn previous(
     request: Uuid,
     digest: &[u8],
 ) -> Result<Option<ProviderSummary>, IdentityError> {
-    let previous: Option<(Vec<u8>, String, i64, sqlx::types::Json<ProviderAccess>)> = sqlx::query_as("SELECT input_digest, model, revision, access FROM provider_commands WHERE actor_id=$1 AND request_id=$2")
+    // The command's input digest, then its summary row.
+    type CommandRow = (Vec<u8>, String, String, Option<i64>, i64, Access);
+    let previous: Option<CommandRow> = sqlx::query_as("SELECT input_digest, provider, model, context_window, revision, access FROM provider_commands WHERE actor_id=$1 AND request_id=$2")
             .bind(actor.id).bind(request).fetch_optional(&mut **transaction).await?;
-    if let Some((old, model, revision, access)) = previous {
-        if old != digest {
-            return Err(IdentityError::Conflict);
-        }
-        return Ok(Some(ProviderSummary {
-            model,
-            revision,
-            access,
-        }));
+    let Some((old, provider, model, window, revision, access)) = previous else {
+        return Ok(None);
+    };
+    if old != digest {
+        return Err(IdentityError::Conflict);
     }
-    Ok(None)
+    summary((provider, model, window, revision, access)).map(Some)
 }

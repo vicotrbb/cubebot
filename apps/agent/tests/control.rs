@@ -46,6 +46,11 @@ async fn fake(replies: Vec<Value>) -> Fake {
         )
         .route("/api/runtime/channel", get(upgrade))
         .route("/responses", post(model))
+        .route("/messages", post(model))
+        .route(
+            "/models/{id}",
+            get(|| async { Json(json!({"max_input_tokens":1000,"max_tokens":64})) }),
+        )
         .with_state(Channel {
             reports,
             deliveries: Arc::new(Mutex::new(scripted)),
@@ -94,11 +99,47 @@ async fn relay(channel: Channel, mut socket: WebSocket) {
         }
     }
 }
-async fn model(State(channel): State<Channel>, Json(body): Json<Value>) -> Json<Value> {
+/// Each scripted reply is a list of SSE payloads, or `{"status":..,"retry_after":..}`.
+async fn model(State(channel): State<Channel>, Json(body): Json<Value>) -> Response {
+    use axum::response::IntoResponse;
     let mut replies = channel.provider.lock().unwrap();
     let reply = replies.remove(0);
     replies.push(body);
-    Json(reply)
+    if let Some(status) = reply["status"].as_u64() {
+        let status = axum::http::StatusCode::from_u16(status as u16).unwrap();
+        let retry = reply["retry_after"].as_str().unwrap().to_owned();
+        return (status, [("retry-after", retry)], "controlled failure").into_response();
+    }
+    let body: String = reply
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|event| format!("data: {event}\n\n"))
+        .collect();
+    ([("content-type", "text/event-stream")], body).into_response()
+}
+/// An OpenAI stream: one delta per message text, then the completed response.
+fn responses(output: Value, usage: Value) -> Value {
+    let mut events: Vec<Value> = output
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|item| item["type"] == "message")
+        .map(|item| json!({"type":"response.output_text.delta","delta":item["content"][0]["text"]}))
+        .collect();
+    events.push(json!({"type":"response.completed","response":{"status":"completed","output":output,"usage":usage}}));
+    events.into()
+}
+/// An Anthropic stream of one text block.
+fn messages(text: &str, input_tokens: u64, output_tokens: u64) -> Value {
+    json!([
+        {"type":"message_start","message":{"usage":{"input_tokens":input_tokens,"output_tokens":1}}},
+        {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}},
+        {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":text}},
+        {"type":"content_block_stop","index":0},
+        {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":output_tokens}},
+        {"type":"message_stop"}
+    ])
 }
 
 impl Fake {
@@ -169,15 +210,16 @@ async fn child_exit(child: &mut std::process::Child) -> std::process::ExitStatus
 }
 fn turn(id: Uuid, sequence: u64, message: &str) -> Value {
     json!({"type":"turn","turn":id,"sequence":sequence,"message":message,"instructions":"Be brief.",
-        "model":"test-model","api_key":"test-key",
+        "provider":"openai","model":"test-model","api_key":"test-key","context_window":100000,
         "history":[{"message":"Earlier","response":"Before"}],"prior":[]})
 }
 
 #[tokio::test]
 async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconnect() {
-    let mut fake = fake(vec![
-        json!({"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}],"usage":{"input_tokens":9,"output_tokens":2}}),
-    ])
+    let mut fake = fake(vec![responses(
+        json!([{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}]),
+        json!({"input_tokens":9,"output_tokens":2}),
+    )])
     .await;
     let root = root();
     let mut child = spawn(&fake.origin, &root);
@@ -186,11 +228,11 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     fake.deliver(turn(id, 3, "Hello"));
     assert_eq!(
         fake.event(3).await,
-        json!({"kind":"usage","input_tokens":9,"output_tokens":2})
+        json!({"kind":"text_delta","text":"Hello back"})
     );
     assert_eq!(
         fake.event(4).await,
-        json!({"kind":"text_delta","text":"Hello back"})
+        json!({"kind":"usage","input_tokens":9,"output_tokens":2})
     );
     assert_eq!(
         fake.event(5).await,
@@ -199,6 +241,8 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
     let request = fake.provider.lock().unwrap()[0].clone();
     assert_eq!(request["model"], "test-model");
+    assert_eq!(request["stream"], true);
+    assert!(request.get("max_output_tokens").is_none());
     assert_eq!(
         request["input"],
         json!([{"role":"system","content":"Be brief."},{"role":"user","content":"Earlier"},
@@ -229,9 +273,10 @@ async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_a_
         )
         .unwrap();
     drop(journal);
-    let mut fake = fake(vec![
-        json!({"status":"completed","output":[{"type":"function_call","name":"terminal","call_id":"c1","arguments":"{\"command\":\"sleep 30\"}"}]}),
-    ])
+    let mut fake = fake(vec![responses(
+        json!([{"type":"function_call","name":"terminal","call_id":"c1","arguments":"{\"command\":\"sleep 30\"}"}]),
+        json!({"input_tokens":9,"output_tokens":2}),
+    )])
     .await;
     let mut child = spawn(&fake.origin, &root);
     assert_eq!(fake.event(7).await["kind"], "tool_call");
@@ -263,6 +308,66 @@ async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_a_
     let journal = cubebot_agent::journal::Journal::open(&root.join("tools")).unwrap();
     assert!(journal.pending().is_empty());
     drop(journal);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_eighty_percent() {
+    let mut fake = fake(vec![
+        json!({"status":429,"retry_after":"0"}),
+        messages("Hello back", 790, 20),
+        messages("The gist", 800, 5),
+    ])
+    .await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let id = Uuid::new_v4();
+    let mut work = turn(id, 1, "Hello");
+    work["provider"] = json!("anthropic");
+    work["context_window"] = Value::Null;
+    fake.deliver(work);
+    assert_eq!(
+        fake.event(1).await,
+        json!({"kind":"text_delta","text":"Hello back"})
+    );
+    assert_eq!(
+        fake.event(2).await,
+        json!({"kind":"usage","input_tokens":790,"output_tokens":20})
+    );
+    // 810 of the discovered 1000-token window: summarize before the reply settles the turn.
+    assert_eq!(fake.event(3).await["kind"], "usage");
+    assert_eq!(
+        fake.event(4).await,
+        json!({"kind":"summary","text":"The gist"})
+    );
+    assert_eq!(
+        fake.event(5).await,
+        json!({"kind":"done","response":"Hello back"})
+    );
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let requests = fake.provider.lock().unwrap().clone();
+    // The rate-limited request was resent unchanged to the same model.
+    assert_eq!(requests[0], requests[1]);
+    assert_eq!(requests[0]["model"], "test-model");
+    assert_eq!(requests[0]["max_tokens"], 64);
+    assert_eq!(requests[0]["tool_choice"]["type"], "auto");
+    let summary = &requests[2];
+    assert_eq!(summary["model"], "test-model");
+    assert_eq!(summary["tool_choice"], json!({"type":"none"}));
+    let sent = summary["messages"].as_array().unwrap();
+    assert_eq!(
+        sent[sent.len() - 2]["content"],
+        json!([{"type":"text","text":"Hello back"}])
+    );
+    assert!(
+        sent.last().unwrap()["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("Write a structured summary")
+    );
+    fake.ack(id, 1..=5);
+    fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }
 

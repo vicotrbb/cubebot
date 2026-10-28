@@ -97,7 +97,16 @@ export type Turn = ReturnType<typeof turn>
 export function provider(value: unknown) {
   if (value === null) return null
   const data = record(value)
-  return { model: string(data.model), revision: number(data.revision) }
+  const kind = string(data.provider)
+  if (kind !== 'openai' && kind !== 'anthropic')
+    throw new Error('Invalid server response.')
+  const window = data.context_window
+  return {
+    provider: kind as 'openai' | 'anthropic',
+    model: string(data.model),
+    context_window: window === null ? null : number(window),
+    revision: number(data.revision),
+  }
 }
 
 export async function pages<T extends { id: string }>(

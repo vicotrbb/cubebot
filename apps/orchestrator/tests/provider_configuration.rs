@@ -29,7 +29,9 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
     let input = ConfigureProvider {
         request_id: Uuid::new_v4(),
         expected_revision: 0,
+        provider: cubebot_protocol::runtime::ProviderKind::Openai,
         model: "test-model".into(),
+        context_window: Some(200_000),
         api_key: "secret-provider-key".into(),
         access: None,
     };
@@ -73,4 +75,26 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         restarted.configure(&admin, &stale).await,
         Err(IdentityError::Conflict)
     ));
+    // OpenAI cannot report its window; Anthropic reports its own.
+    let windowless = ConfigureProvider {
+        request_id: Uuid::new_v4(),
+        expected_revision: 1,
+        context_window: None,
+        ..stale
+    };
+    assert!(matches!(
+        restarted.configure(&admin, &windowless).await,
+        Err(IdentityError::InvalidInput)
+    ));
+    let anthropic = ConfigureProvider {
+        provider: cubebot_protocol::runtime::ProviderKind::Anthropic,
+        ..windowless
+    };
+    restarted.configure(&admin, &anthropic).await.unwrap();
+    let current = restarted.inspect(&admin).await.unwrap().unwrap();
+    assert_eq!(
+        current.provider,
+        cubebot_protocol::runtime::ProviderKind::Anthropic
+    );
+    assert_eq!((current.revision, current.context_window), (2, None));
 }

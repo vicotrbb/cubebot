@@ -109,7 +109,10 @@ impl RuntimeClient {
         } else {
             Connector::Plain
         };
-        let config = WebSocketConfig::default().max_message_size(Some(4 * 1024 * 1024));
+        // A turn carries every exchange since the last summary, bounded by the model window.
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(64 * 1024 * 1024))
+            .max_frame_size(Some(64 * 1024 * 1024));
         let (channel, _) = tokio::time::timeout(
             Duration::from_secs(10),
             tokio_tungstenite::connect_async_tls_with_config(

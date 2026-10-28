@@ -1,11 +1,17 @@
-//! One turn: model steps and serial terminal calls, reported as ordered events. Tool calls are
-//! journaled before they run and are never recovered by running them again.
+//! One turn: streamed model steps and serial terminal calls, reported as ordered events. Tool
+//! calls are journaled before they run and are never recovered by running them again.
 use super::attempts::{Entry, Store};
+use crate::context::Context;
 use cubebot_protocol::{
-    runtime::{Turn, TurnEvent},
+    runtime::{EVENT_BYTES, ProviderKind, Turn, TurnEvent},
     terminal::Outcome,
 };
-use serde_json::{Value, json};
+use cubebot_providers::{
+    Anthropic, Error, Event as ProviderEvent, FunctionCall, Limits, Message, OpenAi, Provider,
+    Reply, Request, Usage,
+};
+use futures_util::StreamExt;
+use serde_json::json;
 use std::{
     io,
     sync::{Arc, Mutex},
@@ -13,6 +19,11 @@ use std::{
 };
 use tokio::sync::{mpsc::UnboundedSender, watch};
 use uuid::Uuid;
+
+/// Model requests per step, counting the first.
+const ATTEMPTS: u32 = 4;
+/// A provider asking for a longer wait leaves the turn waiting rather than holding it.
+const LONGEST_WAIT: Duration = Duration::from_secs(60);
 
 /// An event and, for tool events, the journal sequence its acknowledgement releases.
 pub(super) type Event = (Entry, Option<u64>);
@@ -53,81 +64,252 @@ pub(super) async fn run(
     turn: Turn,
     events: UnboundedSender<Event>,
     store: Arc<Mutex<Store>>,
-    mut cancel: watch::Receiver<bool>,
+    cancel: watch::Receiver<bool>,
 ) {
     let mut run = Run {
         turn: turn.turn,
         next: turn.sequence,
         events,
     };
-    let end = converse(&turn, &mut run, &store, &mut cancel).await;
+    let end = match turn.provider {
+        ProviderKind::Openai => {
+            let provider = configured(OpenAi::new, OpenAi::for_loopback_tests);
+            start(provider, &turn, &mut run, &store, cancel).await
+        }
+        ProviderKind::Anthropic => {
+            let provider = configured(Anthropic::new, Anthropic::for_loopback_tests);
+            start(provider, &turn, &mut run, &store, cancel).await
+        }
+    };
     run.emit(end, None);
 }
 
-async fn converse(
+fn configured<P>(
+    new: fn() -> Result<P, Error>,
+    loopback: fn(&str) -> Result<P, Error>,
+) -> Result<P, Error> {
+    match std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
+        Ok(origin) => loopback(&origin),
+        Err(std::env::VarError::NotPresent) => new(),
+        Err(_) => Err(Error::Configuration),
+    }
+}
+
+async fn start<P: Provider>(
+    provider: Result<P, Error>,
     turn: &Turn,
     run: &mut Run,
     store: &Mutex<Store>,
-    cancel: &mut watch::Receiver<bool>,
+    mut cancel: watch::Receiver<bool>,
 ) -> TurnEvent {
-    let provider = match configured_provider() {
+    let provider = match provider {
         Ok(provider) => provider,
         Err(error) => return failed(error.code()),
     };
-    let tools: Vec<Value> = if std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1") {
+    let tools = if std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() == Ok("1") {
         vec![crate::tools::terminal_definition()]
     } else {
         Vec::new()
     };
-    let mut input = crate::context::assemble(turn);
-    loop {
-        let step = tokio::select! {
-            step = model_step(&provider, turn, &input, &tools) => step,
+    let capabilities = provider.capabilities();
+    if !tools.is_empty() && !capabilities.tool_calls {
+        return failed("provider_rejected");
+    }
+    let limits = match capabilities.model_limits {
+        true => tokio::select! {
+            limits = provider.limits(&turn.model, &turn.api_key) => limits,
             _ = cancel.wait_for(|cancelled| *cancelled) => return failed("cancelled"),
-        };
-        let step = match step {
-            Ok(step) => step,
-            Err(error) => return failed(error.code()),
-        };
-        run.emit(
-            TurnEvent::Usage {
-                input_tokens: step.usage.0,
-                output_tokens: step.usage.1,
-            },
-            None,
-        );
-        // JSON escaping can push a 32 KiB reply past the ledger's 64 KiB event bound.
-        if serde_json::to_vec(&step.text).map_or(true, |encoded| encoded.len() > 60 * 1024) {
-            return failed("provider_invalid_response");
+        },
+        false => Ok(Limits::default()),
+    };
+    let limits = match limits {
+        Ok(limits) => limits,
+        Err(error) => return failed(error.code()),
+    };
+    let Some(window) = turn.context_window.or(limits.context_window) else {
+        return failed("provider_invalid_response");
+    };
+    let mut context = Context::assemble(turn, tools, window);
+    Session {
+        provider: &provider,
+        turn,
+        max_output_tokens: limits.max_output_tokens,
+        run,
+        store,
+        cancel,
+    }
+    .converse(&mut context)
+    .await
+}
+
+struct Session<'a, P> {
+    provider: &'a P,
+    turn: &'a Turn,
+    max_output_tokens: Option<u64>,
+    run: &'a mut Run,
+    store: &'a Mutex<Store>,
+    cancel: watch::Receiver<bool>,
+}
+
+impl<P: Provider> Session<'_, P> {
+    async fn converse(&mut self, context: &mut Context) -> TurnEvent {
+        loop {
+            let request = context.request(self.turn, self.max_output_tokens);
+            let (reply, usage) = match self.step(&request, true).await {
+                Ok(step) => step,
+                Err(code) => return failed(code),
+            };
+            self.usage(usage);
+            // Compaction waits for a safe point: after the tool result, or before the reply.
+            let full = context.full(usage);
+            let call = reply.call.clone();
+            let response = reply.text.clone();
+            context.messages.push(Message::Assistant(reply));
+            let Some(call) = call else {
+                if full {
+                    self.compact(context).await;
+                }
+                return done(response);
+            };
+            let output = match self.call(!context.tools.is_empty(), &call).await {
+                Ok(output) => output,
+                Err(code) => return failed(code),
+            };
+            context.messages.push(Message::ToolResult {
+                call_id: call.call_id,
+                output,
+            });
+            if full {
+                self.compact(context).await;
+            }
         }
-        if !step.text.is_empty() {
-            // shortcut: one delta per model step; stream provider tokens once providers do.
-            run.emit(
-                TurnEvent::TextDelta {
-                    text: step.text.clone(),
+    }
+
+    async fn step(
+        &mut self,
+        request: &Request<'_>,
+        stream_text: bool,
+    ) -> Result<(Reply, Option<Usage>), &'static str> {
+        let mut cancel = self.cancel.clone();
+        tokio::select! {
+            step = self.retrying(request, stream_text) => step.map_err(|error| error.code()),
+            _ = cancel.wait_for(|cancelled| *cancelled) => Err("cancelled"),
+        }
+    }
+
+    /// Retries transient failures with bounded backoff, only before any text streamed so
+    /// nothing is emitted twice. The selected model and provider never change.
+    async fn retrying(
+        &mut self,
+        request: &Request<'_>,
+        stream_text: bool,
+    ) -> Result<(Reply, Option<Usage>), Error> {
+        let provider = self.provider;
+        let mut attempt = 1;
+        loop {
+            let mut streamed = false;
+            let mut events = std::pin::pin!(provider.stream(request));
+            let error = loop {
+                match events.next().await {
+                    Some(Ok(ProviderEvent::Text(text))) => {
+                        streamed = true;
+                        if stream_text {
+                            self.run.emit(TurnEvent::TextDelta { text }, None);
+                        }
+                    }
+                    Some(Ok(ProviderEvent::Done { reply, usage })) => return Ok((reply, usage)),
+                    Some(Err(error)) => break error,
+                    None => break Error::Unavailable,
+                }
+            };
+            match backoff(&error, attempt) {
+                Some(delay) if !streamed => tokio::time::sleep(delay).await,
+                _ => return Err(error),
+            }
+            attempt += 1;
+        }
+    }
+
+    fn usage(&mut self, usage: Option<Usage>) {
+        if let Some(usage) = usage {
+            self.run.emit(
+                TurnEvent::Usage {
+                    input_tokens: usage.input_tokens,
+                    output_tokens: usage.output_tokens,
                 },
                 None,
             );
         }
-        let Some(call) = step.call else {
-            return TurnEvent::Done {
-                response: step.text,
-            };
-        };
-        input.extend(step.output);
-        let Some(command) = (!tools.is_empty())
+    }
+
+    async fn call(&mut self, offered: bool, call: &FunctionCall) -> Result<String, &'static str> {
+        let command = offered
             .then(|| crate::tools::terminal_arguments(&call.name, &call.arguments).ok())
             .flatten()
-        else {
-            return failed("provider_invalid_response");
-        };
-        let Ok(outcome) = execute(run, store, command.command, cancel).await else {
-            return failed("journal_unavailable");
-        };
+            .ok_or("provider_invalid_response")?;
+        let mut cancel = self.cancel.clone();
+        let outcome = execute(self.run, self.store, command.command, &mut cancel)
+            .await
+            .map_err(|_| "journal_unavailable")?;
         if *cancel.borrow() {
-            return failed("cancelled");
+            return Err("cancelled");
         }
-        input.push(json!({"type":"function_call_output","call_id":call.call_id,"output":serde_json::to_string(&outcome).unwrap_or_default()}));
+        Ok(serde_json::to_string(&outcome).unwrap_or_default())
+    }
+
+    /// Summarizes with the same model and replaces the context only with a valid summary.
+    async fn compact(&mut self, context: &mut Context) {
+        let messages = context.summarizing();
+        let request = Request {
+            messages: &messages,
+            tools_disabled: true,
+            ..context.request(self.turn, self.max_output_tokens)
+        };
+        let Ok((reply, usage)) = self.step(&request, false).await else {
+            return keep_context();
+        };
+        self.usage(usage);
+        let summary = TurnEvent::Summary {
+            text: reply.text.clone(),
+        };
+        if reply.call.is_some() || !fits(&summary) {
+            return keep_context();
+        }
+        self.run.emit(summary, None);
+        context.compacted(&reply.text, &self.turn.message);
+    }
+}
+
+/// The previous context stays valid; the next safe point tries again.
+fn keep_context() {
+    eprintln!("Context compaction failed; keeping the previous context");
+}
+
+/// The delay before another attempt; `None` once the failure is not transient, attempts are
+/// spent, or the provider asks for a longer wait than the turn holds on for.
+fn backoff(error: &Error, attempt: u32) -> Option<Duration> {
+    if !error.retryable() || attempt >= ATTEMPTS {
+        return None;
+    }
+    // Jitter keeps agents sharing a connection from retrying in lockstep.
+    let jitter = Duration::from_millis(u64::from(Uuid::new_v4().as_bytes()[0]) * 2);
+    let delay = error
+        .retry_after()
+        .unwrap_or(Duration::from_secs(1 << (attempt - 1)))
+        + jitter;
+    (delay <= LONGEST_WAIT).then_some(delay)
+}
+
+fn fits(event: &TurnEvent) -> bool {
+    serde_json::to_vec(event).is_ok_and(|encoded| encoded.len() <= EVENT_BYTES)
+}
+
+fn done(response: String) -> TurnEvent {
+    let done = TurnEvent::Done { response };
+    if fits(&done) {
+        done
+    } else {
+        failed("provider_invalid_response")
     }
 }
 
@@ -171,34 +353,40 @@ async fn execute(
     Ok(outcome)
 }
 
-async fn model_step(
-    provider: &cubebot_providers::OpenAi,
-    turn: &Turn,
-    input: &[Value],
-    tools: &[Value],
-) -> Result<cubebot_providers::tools::Step, cubebot_providers::Error> {
-    match provider
-        .tool_step(&turn.model, &turn.api_key, input, tools)
-        .await
-    {
-        Err(error) if error.retryable() => {
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            provider
-                .tool_step(&turn.model, &turn.api_key, input, tools)
-                .await
-        }
-        result => result,
-    }
-}
-
-fn configured_provider() -> Result<cubebot_providers::OpenAi, cubebot_providers::Error> {
-    match std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
-        Ok(origin) => cubebot_providers::OpenAi::for_loopback_tests(&origin),
-        Err(std::env::VarError::NotPresent) => cubebot_providers::OpenAi::new(),
-        Err(_) => Err(cubebot_providers::Error::Configuration),
-    }
-}
-
 fn failed(code: &str) -> TurnEvent {
     TurnEvent::Error { code: code.into() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backoff_honours_retry_after_and_stays_bounded() {
+        let transient = Error::Transient(None);
+        let first = backoff(&transient, 1).unwrap();
+        assert!(first >= Duration::from_secs(1) && first < Duration::from_millis(1600));
+        assert!(backoff(&transient, 3).unwrap() >= Duration::from_secs(4));
+        assert!(backoff(&transient, ATTEMPTS).is_none());
+        let hinted = backoff(&Error::Transient(Some(Duration::from_secs(7))), 1).unwrap();
+        assert!(hinted >= Duration::from_secs(7) && hinted < Duration::from_secs(8));
+        assert!(backoff(&Error::Transient(Some(Duration::from_secs(600))), 1).is_none());
+        for error in [Error::Rejected, Error::Unavailable, Error::InvalidResponse] {
+            assert!(backoff(&error, 1).is_none());
+        }
+    }
+
+    #[test]
+    fn a_response_past_the_ledger_bound_is_refused() {
+        assert_eq!(
+            done("ok".into()),
+            TurnEvent::Done {
+                response: "ok".into()
+            }
+        );
+        assert_eq!(
+            done("x".repeat(EVENT_BYTES)),
+            failed("provider_invalid_response")
+        );
+    }
 }

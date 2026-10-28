@@ -46,6 +46,29 @@ pub enum Delivery {
     Revoked,
 }
 
+/// Largest encoded turn event the ledger accepts. Responses are not otherwise bounded.
+pub const EVENT_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderKind {
+    Openai,
+    Anthropic,
+}
+impl ProviderKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Openai => "openai",
+            Self::Anthropic => "anthropic",
+        }
+    }
+    pub fn parse(value: &str) -> Option<Self> {
+        [Self::Openai, Self::Anthropic]
+            .into_iter()
+            .find(|kind| kind.as_str() == value)
+    }
+}
+
 /// The one active turn. Provider material is current at delivery; never log it.
 #[derive(Serialize, Deserialize)]
 pub struct Turn {
@@ -54,9 +77,15 @@ pub struct Turn {
     pub sequence: u64,
     pub message: String,
     pub instructions: String,
+    pub provider: ProviderKind,
     pub model: String,
     pub api_key: String,
-    /// Recent completed exchanges, oldest first. Context assembly is the agent's job.
+    /// Configured model window in tokens; providers that report their limits may omit it.
+    pub context_window: Option<u64>,
+    /// The latest compaction summary, covering the conversation before `history`.
+    pub summary: Option<String>,
+    /// Every completed exchange since the summary, oldest first. Context assembly is the
+    /// agent's job.
     pub history: Vec<Exchange>,
     /// Tool events from earlier runs of this turn.
     pub prior: Vec<TurnEvent>,
@@ -103,6 +132,10 @@ pub enum TurnEvent {
         input_tokens: u64,
         output_tokens: u64,
     },
+    /// Replaces the earlier context for later model requests; the source history remains.
+    Summary {
+        text: String,
+    },
     Done {
         response: String,
     },
@@ -135,16 +168,22 @@ mod tests {
             sequence: 1,
             message: "hi".into(),
             instructions: String::new(),
+            provider: ProviderKind::Anthropic,
             model: "m".into(),
             api_key: "k".into(),
+            context_window: None,
+            summary: None,
             history: Vec::new(),
             prior: Vec::new(),
         });
         let text = serde_json::to_string(&turn).unwrap();
+        assert!(text.contains(r#""provider":"anthropic""#));
         assert!(matches!(
             serde_json::from_str::<Delivery>(&text).unwrap(),
             Delivery::Turn(Turn { sequence: 1, .. })
         ));
+        assert_eq!(ProviderKind::parse("openai"), Some(ProviderKind::Openai));
+        assert_eq!(ProviderKind::parse("gemini"), None);
         assert!(serde_json::from_str::<Report>(r#"{"type":"claim"}"#).is_err());
     }
 }

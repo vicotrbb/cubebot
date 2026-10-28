@@ -55,7 +55,7 @@ async fn channel(
         .await
         .map_err(Failure::from)?;
     Ok(upgrade
-        .max_message_size(128 * 1024)
+        .max_message_size(2 * cubebot_protocol::runtime::EVENT_BYTES)
         .on_upgrade(move |socket| identity.serve(token, socket)))
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
