@@ -21,7 +21,7 @@ struct Server {
     creates: Vec<String>,
     create_attempts: Vec<String>,
     alter_pod_security: bool,
-    alter_network_init: bool,
+    alter_sandbox: bool,
     lose_kind: Option<String>,
     unavailable: bool,
     requests: usize,
@@ -71,11 +71,8 @@ fn create(state: &mut Server, uri: Uri, bytes: Bytes) -> Response {
     if state.alter_pod_security && body["kind"] == "Pod" {
         body["spec"]["hostNetwork"] = json!(true);
     }
-    if state.alter_network_init && body["kind"] == "Pod" {
-        body["spec"]["initContainers"]
-            .as_array_mut()
-            .unwrap()
-            .remove(0);
+    if state.alter_sandbox && body["kind"] == "Pod" {
+        body["spec"]["containers"][0]["args"] = json!(["--backend", "kvm"]);
     }
     body["metadata"]["uid"] = json!(format!("uid-{name}"));
     body["metadata"]["resourceVersion"] = json!("1");
@@ -154,12 +151,10 @@ fn layout() -> Layout {
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     Layout::new(
         image,
-        image,
         "cubebot-runtime",
         "https://cubebot.test",
-        None,
-        cubebot_protocol::network::NetworkPolicy::new(vec![], vec!["10.96.0.10".parse().unwrap()])
-            .unwrap(),
+        cubebot_orchestrator::agents::sandbox::Backend::Process,
+        cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap(),
     )
     .unwrap()
 }
@@ -408,16 +403,16 @@ async fn unapproved_admission_changes_remain_planned_and_recover_after_policy_is
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn removal_of_runtime_storage_init_is_rejected_before_pod_dispatch() {
+async fn admission_change_to_the_sandbox_backend_is_rejected_before_pod_dispatch() {
     verify_blocked_admission(true).await;
 }
 
-async fn verify_blocked_admission(network: bool) {
+async fn verify_blocked_admission(sandbox: bool) {
     let (pool, _, agent) = registry_support::setup().await;
     let (client, state, task) = server().await;
     let reconciler = Reconciler::new(pool.clone(), client, "cubebot-test", layout()).unwrap();
-    state.lock().unwrap().alter_pod_security = !network;
-    state.lock().unwrap().alter_network_init = network;
+    state.lock().unwrap().alter_pod_security = !sandbox;
+    state.lock().unwrap().alter_sandbox = sandbox;
     assert!(reconciler.reconcile(agent).await.is_err());
     let (phase, reason, uid): (String, Option<String>, Option<String>) = sqlx::query_as(
         "SELECT phase,blocked_reason,uid FROM agent_resources WHERE agent_id = $1 AND kind = 'pod'",
@@ -431,7 +426,7 @@ async fn verify_blocked_admission(network: bool) {
     assert!(uid.is_none());
     assert_eq!(state.lock().unwrap().create_attempts.len(), 2);
     state.lock().unwrap().alter_pod_security = false;
-    state.lock().unwrap().alter_network_init = false;
+    state.lock().unwrap().alter_sandbox = false;
     assert!(matches!(
         reconciler.reconcile(agent).await.unwrap(),
         ReconcileResult::Provisioned { .. }
@@ -516,8 +511,7 @@ fn complete_pod(state: &Shared) {
         .find(|object| object["kind"] == "Pod")
         .unwrap();
     let containers = stopped_from_spec(&pod["spec"]["containers"]);
-    let initializers = stopped_from_spec(&pod["spec"]["initContainers"]);
-    pod["status"] = json!({"phase":"Succeeded","containerStatuses":containers,"initContainerStatuses":initializers});
+    pod["status"] = json!({"phase":"Succeeded","containerStatuses":containers});
 }
 fn stopped_from_spec(value: &Value) -> Vec<Value> {
     value
@@ -1076,7 +1070,7 @@ fn orchestrator_process(
     std::fs::write(&kubeconfig,json!({"apiVersion":"v1","kind":"Config","clusters":[{"name":"controlled","cluster":{"server":api.cluster_url.to_string()}}],"users":[{"name":"controlled","user":{}}],"contexts":[{"name":"controlled","context":{"cluster":"controlled","user":"controlled"}}],"current-context":"controlled"}).to_string()).unwrap();
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let configuration = directory.join("controller.json");
-    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"runtime_image":image,"tools_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"infrastructure":[],"dns":["10.96.0.10"]}}).to_string()).unwrap();
+    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"sandbox_image":image,"backend":"process","runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}}).to_string()).unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);

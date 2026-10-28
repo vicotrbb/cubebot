@@ -32,9 +32,6 @@ jobs:
           chmod +x .tools/kind-v0.33.0
       - run: just cluster-admission
       - run: just cluster-startup
-      - run: just cluster-terminal
-        env:
-          CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-terminal
       - name: Write provider key outside the checkout
         if: env.HAS_PROVIDER_KEY == 'true'
         run: (umask 077 && printf '%s' "$OPENAI_API_KEY" > "$RUNNER_TEMP/openai-key")

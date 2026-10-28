@@ -681,7 +681,7 @@ async fn partial_runtime_failure_latches_drain_even_when_the_pod_phase_still_say
     let registry = Registry::new(f.pool.clone());
     let original = f.api.lock().unwrap().pod.clone();
     let mut failed = original.clone();
-    failed.status = Some(serde_json::from_value(json!({"phase":"Running","containerStatuses":[{"name":"runtime","image":"test","imageID":"test","ready":false,"restartCount":0,"state":{"terminated":{"exitCode":1,"reason":"Error"}}}]})).unwrap());
+    failed.status = Some(serde_json::from_value(json!({"phase":"Running","containerStatuses":[{"name":"sandbox","image":"test","imageID":"test","ready":false,"restartCount":0,"state":{"terminated":{"exitCode":1,"reason":"Error"}}}]})).unwrap());
     registry
         .bind_object(f.attempt, &ResourceObject::Pod(Box::new(failed)))
         .await

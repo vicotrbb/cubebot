@@ -2,6 +2,7 @@
 members = [
     "apps/orchestrator",
     "apps/agent",
+    "apps/sandbox",
     "modules/protocol",
     "modules/providers",
 ]

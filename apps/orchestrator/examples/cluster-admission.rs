@@ -27,17 +27,13 @@ async fn verify(config: &kube::Config, namespace: &str, allowed: bool) -> Value 
     let anchor = api.create_anchor(&anchor).await.unwrap();
     registry.bind_anchor(&anchor).await.unwrap();
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    let network = NetworkPolicy::new(
-        vec![],
-        vec![required("CUBEBOT_CLUSTER_DNS").parse().unwrap()],
-    )
-    .unwrap();
+    let network =
+        NetworkPolicy::new(vec![required("CUBEBOT_CLUSTER_DNS").parse().unwrap()]).unwrap();
     let layout = Layout::new(
-        image,
         image,
         "cubebot-runtime",
         "https://orchestrator.cubebot.test",
-        None,
+        cubebot_orchestrator::agents::sandbox::Backend::Process,
         network,
     )
     .unwrap()

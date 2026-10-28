@@ -90,7 +90,8 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0080](0080-agent-completion-with-optional-human-acceptance.md) | Agent completion with optional human acceptance | Accepted |
 | [0081](0081-installation-wide-default-connection-access.md) | Installation-wide connection access by default | Accepted |
 | [0082](0082-one-permanent-conversation-per-agent.md) | One permanent conversation per agent | Accepted |
-| [0083](0083-agent-centric-execution-in-a-sandbox-boundary.md) | Agent-centric execution in a sandbox boundary | Accepted |
+| [0083](0083-agent-centric-execution-in-a-sandbox-boundary.md) | Agent-centric execution in a sandbox boundary | Accepted; sandbox mechanism amended by 0084 |
+| [0084](0084-in-house-vmm-as-the-agent-sandbox.md) | In-house VMM as the agent sandbox | Accepted |
 
 Discussion will follow dependencies and adapt to answers: installation and trust; primary workflows and operating targets; agent identity and execution; conversations, rooms, tasks, and delegation; persistence and recovery; memory and context; provider and tool integration; console and mobile access; operations and validation.
 

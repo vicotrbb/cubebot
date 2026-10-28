@@ -1,16 +1,10 @@
-//! One agent application with separate runtime and tool-runner entry points.
-//!
-//! The tool runner belongs to this app but runs in a separate container under ADR 0033.
-//! Its process must not inherit provider credentials or the runtime's platform identity.
+//! The agent application. The agent runs its own tools inside its sandbox (ADRs 0083, 0084).
 
 pub mod context;
 pub mod control;
 pub mod engine;
-pub mod execution;
 pub mod memory;
 pub mod skills;
 pub mod tools;
-
-pub mod storage;
 
 pub mod journal;

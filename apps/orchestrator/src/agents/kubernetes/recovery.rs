@@ -12,12 +12,12 @@ impl Reconciler {
         &self,
         agent: AgentId,
         generation: i64,
-        state: &str,
+        running: bool,
     ) -> Result<Inspection, Error> {
         let Some(attempt) = self.registry.current(agent, ResourceKind::Pod).await? else {
             return Ok(Inspection::Vacant);
         };
-        let current = state == "running" && attempt.target_generation == generation;
+        let current = running && attempt.target_generation == generation;
         if attempt.phase == Phase::Planned {
             if !current {
                 self.registry.cancel_planned(attempt.id).await?;

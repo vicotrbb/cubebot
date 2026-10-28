@@ -216,7 +216,7 @@ def exclusive_storage(f, current):
         [
             {
                 "name": "contender",
-                "image": f.images["runtime"],
+                "image": f.images["sandbox"],
                 "command": ["/usr/bin/true"],
                 "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}],
             }
@@ -273,7 +273,7 @@ def in_flight_control_crash(f):
                 current["metadata"]["name"],
                 "--",
                 "ls",
-                "/var/lib/cubebot/journal",
+                "/var/lib/cubebot/runtime/journal",
             ).splitlines()
             return len([name for name in names if name.endswith(".entry")]) >= 2
 
@@ -534,7 +534,7 @@ def protected_credentials(f, key, current):
             "stat",
             "-c",
             "%u:%a",
-            "/var/lib/cubebot",
+            "/var/lib/cubebot/runtime",
         )
         == "10001:700"
     )

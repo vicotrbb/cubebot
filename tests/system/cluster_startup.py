@@ -14,7 +14,7 @@ from functools import partial
 from pathlib import Path
 
 import cluster_admission as admission
-import container_isolation as isolation
+import images as fixture_images
 import integration
 
 CSI_SOURCE = "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/6fab18ae4fc4f486193b618114eeb817d9929242/"
@@ -208,8 +208,7 @@ def verify(config, name, fixture, artifacts, images):
         "CUBEBOT_CLUSTER_FIXTURE": fixture,
         "CUBEBOT_CLUSTER_DNS": dns,
         "CUBEBOT_CLUSTER_ARTIFACTS": str(artifacts),
-        "CUBEBOT_RUNTIME_IMAGE": references["runtime"],
-        "CUBEBOT_TOOLS_IMAGE": references["tools"],
+        "CUBEBOT_SANDBOX_IMAGE": references["sandbox"],
     }
     try:
         sources = install_csi(config, artifacts)
@@ -238,7 +237,7 @@ def verify(config, name, fixture, artifacts, images):
         "kind": admission.run(str(admission.KIND), "version"),
         "server": version,
         "nodes": admission.node_profile(config),
-        "images": isolation.image_metadata(images),
+        "images": fixture_images.image_metadata(images),
         "node_image_references": references,
         "csi_sources": sources,
         "csi_pods": csi,
@@ -285,10 +284,10 @@ def main():
     artifacts.mkdir()
     failed = False
     try:
-        isolation.docker(
+        fixture_images.docker(
             "buildx", "create", "--name", builder, "--driver", "docker-container"
         )
-        images = isolation.build(builder, name, targets=("runtime", "tools"))
+        images = fixture_images.build(builder, name)
         if baseline != admission.fingerprint():
             raise RuntimeError(
                 "source changed during build; rerun before accepting evidence"
@@ -304,7 +303,7 @@ def main():
         failed = True
         raise
     finally:
-        failures = isolation.cleanup(name, builder)
+        failures = fixture_images.cleanup(name, builder)
         if failures:
             print(
                 "Owned image cleanup failed: " + "; ".join(failures),

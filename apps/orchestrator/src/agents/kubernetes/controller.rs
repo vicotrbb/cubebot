@@ -1,7 +1,11 @@
 //! One serial reconciler, activated only while installation process ownership is held.
 use super::{Error, Kubernetes, Layout, Reconciler};
 use crate::{
-    agents::AgentId,
+    agents::{
+        AgentId,
+        runtime::RuntimeIdentity,
+        sandbox::{Docker, DockerConfig, drive},
+    },
     operations::ownership::{Owner, PodIdentity},
 };
 use sqlx::PgPool;
@@ -15,12 +19,13 @@ pub struct Controller {
     mode: Mode,
 }
 enum Mode {
-    Lifecycle(Box<Lifecycle>),
+    Kubernetes(Box<Lifecycle<Reconciler>>),
+    Docker(Box<Lifecycle<Docker>>),
     DatabaseOnly,
 }
-struct Lifecycle {
-    reconciler: Reconciler,
-    runtime: crate::agents::runtime::RuntimeIdentity,
+struct Lifecycle<S> {
+    sandbox: S,
+    runtime: RuntimeIdentity,
 }
 impl Controller {
     pub async fn new(
@@ -31,28 +36,16 @@ impl Controller {
     ) -> Result<Self, Error> {
         let terminal_enabled = layout.terminal_enabled();
         let api = Kubernetes::new(config.clone(), &identity.namespace)?;
-        let reconciler =
-            Reconciler::new(pool.clone(), config.clone(), &identity.namespace, layout)?;
-        let mut runtime = crate::agents::runtime::RuntimeIdentity::new(
-            pool.clone(),
-            config,
-            &identity.namespace,
-        )?
-        .with_terminal(terminal_enabled);
-        if let Some(path) = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE") {
-            let credentials =
-                crate::connections::Credentials::from_file(std::path::Path::new(&path))
-                    .map_err(|_| Error::InvalidConfiguration)?;
-            runtime = runtime.with_credentials(credentials);
-        }
+        let sandbox = Reconciler::new(pool.clone(), config.clone(), &identity.namespace, layout)?;
+        let runtime = credentials(
+            RuntimeIdentity::new(pool.clone(), config, &identity.namespace)?
+                .with_terminal(terminal_enabled),
+        )?;
         let owner = Owner::acquire(&pool, &api, identity).await?;
         Ok(Self {
             owner,
             pool,
-            mode: Mode::Lifecycle(Box::new(Lifecycle {
-                reconciler,
-                runtime,
-            })),
+            mode: Mode::Kubernetes(Box::new(Lifecycle { sandbox, runtime })),
         })
     }
     pub async fn database_only(pool: PgPool) -> Result<Self, Error> {
@@ -63,9 +56,25 @@ impl Controller {
             mode: Mode::DatabaseOnly,
         })
     }
+    /// Cluster-less sandboxes under development ownership; there is no pod to prove ownership.
+    pub async fn docker(pool: PgPool, config: DockerConfig) -> Result<Self, Error> {
+        let runtime = credentials(
+            RuntimeIdentity::docker(pool.clone()).with_terminal(config.terminal_enabled()),
+        )?;
+        let owner = Owner::database_only(&pool).await?;
+        Ok(Self {
+            mode: Mode::Docker(Box::new(Lifecycle {
+                sandbox: Docker::new(pool.clone(), config),
+                runtime,
+            })),
+            owner,
+            pool,
+        })
+    }
     pub fn runtime_router(&self) -> axum::Router {
         match &self.mode {
-            Mode::Lifecycle(lifecycle) => crate::api::runtime_router(lifecycle.runtime.clone()),
+            Mode::Kubernetes(lifecycle) => crate::api::runtime_router(lifecycle.runtime.clone()),
+            Mode::Docker(lifecycle) => crate::api::runtime_router(lifecycle.runtime.clone()),
             Mode::DatabaseOnly => axum::Router::new(),
         }
     }
@@ -112,10 +121,11 @@ impl Controller {
         }
         Ok(())
     }
-    async fn reconcile(&self, agent: AgentId) -> Result<super::ReconcileResult, Error> {
+    async fn reconcile(&self, agent: AgentId) -> Result<(), Error> {
         match &self.mode {
-            Mode::Lifecycle(lifecycle) => lifecycle.reconciler.reconcile(agent).await,
-            Mode::DatabaseOnly => Ok(super::ReconcileResult::Idle),
+            Mode::Kubernetes(lifecycle) => drive(&lifecycle.sandbox, &self.pool, agent).await,
+            Mode::Docker(lifecycle) => drive(&lifecycle.sandbox, &self.pool, agent).await,
+            Mode::DatabaseOnly => Ok(()),
         }
     }
     async fn batch(&self, cursor: AgentId) -> Result<Vec<AgentId>, Error> {
@@ -135,4 +145,12 @@ impl Controller {
     pub async fn release(self) -> Result<(), Error> {
         self.owner.release().await
     }
+}
+fn credentials(runtime: RuntimeIdentity) -> Result<RuntimeIdentity, Error> {
+    let Some(path) = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE") else {
+        return Ok(runtime);
+    };
+    let credentials = crate::connections::Credentials::from_file(std::path::Path::new(&path))
+        .map_err(|_| Error::InvalidConfiguration)?;
+    Ok(runtime.with_credentials(credentials))
 }

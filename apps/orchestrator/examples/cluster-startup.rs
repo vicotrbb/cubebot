@@ -1,4 +1,4 @@
-//! Actual CSI-backed layout startup. The tool runner remains explicitly unimplemented.
+//! Actual CSI-backed sandbox startup with the development `process` backend; no VM is booted.
 #[path = "support/cluster.rs"]
 mod cluster;
 #[path = "../tests/support/registry.rs"]
@@ -64,9 +64,9 @@ async fn main() {
     println!(
         "{}",
         json!({"workspace_uid":retained.uid,"first_pod_uid":first_pod.metadata.uid,
-        "second_pod_uid":second_pod.metadata.uid,"initializers_succeeded":true,
+        "second_pod_uid":second_pod.metadata.uid,"sandbox_started":true,"sandbox_backend":"process",
         "rwop_scheduler_rejected_second_mount":true,"rwop_rejection":rejection,"workspace_bytes_survived":true,
-        "tool_supervisor_started":true,"working_agent":false,"runtime_authenticated":false,
+        "working_agent":false,"runtime_authenticated":false,
         "actual_projected_token_exchange":true,"different_process_rejected":true,
         "removed_pod_credentials_rejected":true,"replacement_epoch_increased":true,
         "operator_stop_required":true,"scope":"CSI/layout startup and clean termination only; G1-G3 remain open"})
@@ -129,17 +129,13 @@ async fn verify_revoked(f: &Fixture, projected: &str, session: &RuntimeSession) 
     ));
 }
 fn layout() -> Layout {
-    let network = NetworkPolicy::new(
-        vec![],
-        vec![required("CUBEBOT_CLUSTER_DNS").parse().unwrap()],
-    )
-    .unwrap();
+    let network =
+        NetworkPolicy::new(vec![required("CUBEBOT_CLUSTER_DNS").parse().unwrap()]).unwrap();
     Layout::new(
-        &required("CUBEBOT_RUNTIME_IMAGE"),
-        &required("CUBEBOT_TOOLS_IMAGE"),
+        &required("CUBEBOT_SANDBOX_IMAGE"),
         "cubebot-runtime",
         "https://127.0.0.1:1",
-        None,
+        cubebot_orchestrator::agents::sandbox::Backend::Process,
         network,
     )
     .unwrap()
@@ -167,22 +163,7 @@ fn state<'a>(pod: &'a Pod, name: &str) -> Option<&'a ContainerState> {
         .as_ref()
 }
 fn startup_finished(pod: &Pod) -> bool {
-    let initialized = pod
-        .status
-        .as_ref()
-        .and_then(|status| status.init_container_statuses.as_ref())
-        .is_some_and(|items| {
-            items.len() == 5
-                && items.iter().all(|item| {
-                    item.state
-                        .as_ref()
-                        .and_then(|state| state.terminated.as_ref())
-                        .is_some_and(|exit| exit.exit_code == 0)
-                })
-        });
-    initialized
-        && state(pod, "runtime").is_some_and(|state| state.running.is_some())
-        && state(pod, "tools").is_some_and(|state| state.running.is_some())
+    state(pod, "sandbox").is_some_and(|state| state.running.is_some())
 }
 async fn started(f: &Fixture, attempt: &Attempt) -> Pod {
     for _ in 0..120 {
@@ -197,7 +178,7 @@ async fn started(f: &Fixture, attempt: &Attempt) -> Pod {
                 .logs(
                     pod.metadata.name.as_deref().unwrap(),
                     &LogParams {
-                        container: Some("tools".into()),
+                        container: Some("sandbox".into()),
                         tail_lines: Some(10),
                         limit_bytes: Some(1024),
                         ..Default::default()
@@ -205,22 +186,13 @@ async fn started(f: &Fixture, attempt: &Attempt) -> Pod {
                 )
                 .await
                 .unwrap();
-            assert!(!logs.contains("Terminal supervisor stopped"));
-            assert_eq!(
-                exec(
-                    pod.metadata.name.as_deref().unwrap(),
-                    &["/usr/bin/test", "-S", "/run/cubebot-executor/terminal.sock"],
-                    None
-                )
-                .await,
-                ""
-            );
-            save("tool-runner-log.json", &logs);
+            assert!(!logs.contains("Sandbox failed"));
+            save("sandbox-log.json", &logs);
             return *pod;
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
-    panic!("CSI-backed compiled layout did not initialize; inspect observed-pod.json");
+    panic!("CSI-backed sandbox layout did not start; inspect observed-pod.json");
 }
 fn save(name: &str, value: &impl serde::Serialize) {
     let root = std::path::PathBuf::from(required("CUBEBOT_CLUSTER_ARTIFACTS"));
@@ -256,7 +228,7 @@ async fn verify_storage(f: &Fixture, workspace: &Attempt, pod: &Pod) {
     let name = pod.metadata.name.as_deref().unwrap();
     let owner = exec(
         name,
-        &["/usr/bin/stat", "-c", "%u:%a", "/var/lib/cubebot"],
+        &["/usr/bin/stat", "-c", "%u:%a", "/var/lib/cubebot/runtime"],
         None,
     )
     .await;
@@ -336,7 +308,7 @@ async fn exec(pod: &str, args: &[&str], input: Option<&str>) -> String {
                 "--stdin",
                 pod,
                 "--container",
-                "runtime",
+                "sandbox",
                 "--",
             ])
             .args(args)
@@ -373,7 +345,7 @@ async fn verify_rwop(f: &Fixture, workspace: &Attempt) -> String {
     let contender: Pod =
         serde_json::from_value(json!({"metadata":{"name":"rwop-contender"},"spec":{
         "restartPolicy":"Never","automountServiceAccountToken":false,
-        "containers":[{"name":"contender","image":required("CUBEBOT_RUNTIME_IMAGE"),
+        "containers":[{"name":"contender","image":required("CUBEBOT_SANDBOX_IMAGE"),
             "imagePullPolicy":"IfNotPresent","command":["/usr/bin/true"],
             "volumeMounts":[{"name":"workspace","mountPath":"/workspace"}]}],
         "volumes":[{"name":"workspace","persistentVolumeClaim":{"claimName":claim}}]}}))

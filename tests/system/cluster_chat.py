@@ -50,12 +50,11 @@ def runtime_diagnostics(f):
             name = pod["metadata"]["name"]
             if not name.startswith("cb-"):
                 continue
-            for container in ("runtime", "tools"):
-                try:
-                    output = f.k("logs", name, "-c", container, "--tail=100")
-                    (f.artifacts / (name + "-" + container + ".log")).write_text(output)
-                except Exception as error:
-                    print(f"Agent log unavailable: {error}", file=sys.stderr)
+            try:
+                output = f.k("logs", name, "-c", "sandbox", "--tail=100")
+                (f.artifacts / (name + "-sandbox.log")).write_text(output)
+            except Exception as error:
+                print(f"Agent log unavailable: {error}", file=sys.stderr)
     except Exception as error:
         print(f"Agent inventory unavailable: {error}", file=sys.stderr)
 
@@ -63,14 +62,7 @@ def runtime_diagnostics(f):
 def workflow(config, name, fixture, artifacts, images):
     from cluster_chat_flow import qualify
 
-    if "tools" in images:
-        from cluster_terminal_flow import qualify
-
-    admission.namespaces(
-        config,
-        fixture,
-        ((NAMESPACE, "privileged" if "tools" in images else "baseline"),),
-    )
+    admission.namespaces(config, fixture, ((NAMESPACE, "baseline"),))
     references = startup.load_images(name, images)
     f = Fixture(config, name, artifacts, references)
     f.save("images.json", references)
@@ -127,13 +119,7 @@ def main():
                 "--driver",
                 "docker-container",
             )
-        images = build_images(
-            builder,
-            name,
-            artifacts,
-            baseline,
-            terminal=os.environ.get("CUBEBOT_QUALIFY_TERMINAL") == "1",
-        )
+        images = build_images(builder, name, artifacts, baseline)
         if admission.fingerprint() != baseline:
             raise RuntimeError("source changed during image build; repeat")
         admission.cluster(config, name, artifacts, partial(workflow, images=images))
@@ -147,16 +133,9 @@ def main():
     print("Owned text-chat qualification and cluster cleanup completed", flush=True)
 
 
-def build_images(builder, name, artifacts, source, terminal=False):
+def build_images(builder, name, artifacts, source):
     images = {}
-    roles = (
-        ("runtime", "agent"),
-        ("orchestrator", "orchestrator"),
-        ("web", "web"),
-    )
-    if terminal:
-        roles += (("tools", "agent"),)
-    for role, app in roles:
+    for role in ("sandbox", "orchestrator", "web"):
         image = f"{name}-{role}"
         args = [
             "docker",
@@ -172,10 +151,8 @@ def build_images(builder, name, artifacts, source, terminal=False):
             "--tag",
             image,
             "--file",
-            f"apps/{app}/Dockerfile",
+            f"apps/{role}/Dockerfile",
         ]
-        if role in ("runtime", "tools"):
-            args += ["--target", role]
         with (artifacts / f"build-{role}.log").open("w") as log:
             subprocess.run(
                 [*args, "."], stdout=log, stderr=log, check=True, timeout=1200
@@ -186,7 +163,7 @@ def build_images(builder, name, artifacts, source, terminal=False):
 
 def cleanup_images(name, builder):
     failures = []
-    for role in ("runtime", "orchestrator", "web", "tools"):
+    for role in ("sandbox", "orchestrator", "web"):
         try:
             admission.run("docker", "image", "rm", f"{name}-{role}")
         except RuntimeError as error:

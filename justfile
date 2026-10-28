@@ -39,7 +39,6 @@ lint: complexity
 test:
     bun test apps/web/src/api/client.test.ts
     cargo test --workspace --locked
-    cargo test -p cubebot-agent --example isolation-probe --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
 
 build:
@@ -70,10 +69,6 @@ db-down:
 integration:
     uv run --project tooling/quality --locked python tests/system/integration.py
 
-# Builds owned temporary images and compares Linux isolation mechanisms; not full G1-G3.
-container-isolation:
-    uv run --project tooling/quality --locked python tests/system/container_isolation.py
-
 # cluster-* recipes run nightly in CI (.github/workflows/nightly.yml), not per push.
 
 # Owns a disposable local cluster and PostgreSQL; never uses the default kubeconfig.
@@ -87,7 +82,3 @@ cluster-startup:
 # Builds shipped images; requires an external evidence directory and provider key file.
 cluster-chat:
     uv run --project tooling/quality --locked python tests/system/cluster_chat.py
-
-# Owns a disposable dual-stack cluster for terminal mechanism checks.
-cluster-terminal:
-    uv run --project tooling/quality --locked python tests/system/cluster_terminal.py

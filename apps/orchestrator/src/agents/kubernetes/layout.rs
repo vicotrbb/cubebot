@@ -1,46 +1,40 @@
-//! Fixed container/mount boundaries. Network enforcement is a separate qualification gate.
+//! Fixed sandbox pod and workspace shape. Network enforcement is a separate qualification gate.
 use super::{Error, client::validate_namespace};
+use crate::agents::sandbox::Backend;
 use cubebot_protocol::network::NetworkPolicy;
 use k8s_openapi::api::core::v1::{PersistentVolumeClaimSpec, PodSpec};
 use openidconnect::reqwest::Url;
 use serde_json::{Value, json};
 
 pub struct Layout {
-    runtime_image: String,
-    tools_image: String,
+    image: String,
     service_account: String,
     origin: String,
-    runtime_class: Option<String>,
+    backend: Backend,
     network: NetworkPolicy,
     control_ca: Option<String>,
     terminal: bool,
 }
 impl Layout {
     pub fn new(
-        runtime_image: &str,
-        tools_image: &str,
+        image: &str,
         service_account: &str,
         origin: &str,
-        runtime_class: Option<String>,
+        backend: Backend,
         network: NetworkPolicy,
     ) -> Result<Self, Error> {
-        validate_image(runtime_image)?;
-        validate_image(tools_image)?;
+        validate_image(image)?;
         validate_namespace(service_account)?;
         if service_account == "default" || network.dns().is_empty() {
             return Err(Error::InvalidConfiguration);
         }
-        if let Some(class) = &runtime_class {
-            validate_namespace(class)?;
-        }
         let url = Url::parse(origin).map_err(|_| Error::InvalidConfiguration)?;
         validate_origin(&url)?;
         Ok(Self {
-            runtime_image: runtime_image.into(),
-            tools_image: tools_image.into(),
+            image: image.into(),
             service_account: service_account.into(),
             origin: url.origin().ascii_serialization(),
-            runtime_class,
+            backend,
             network,
             control_ca: None,
             terminal: false,
@@ -83,6 +77,7 @@ impl Layout {
         }
     }
 
+    /// One `cubebot-sandbox` container per agent (ADR 0084); the agent runs inside it.
     pub fn pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
         validate_namespace(claim_name)?;
         let mut value = json!({
@@ -90,95 +85,39 @@ impl Layout {
             "automountServiceAccountToken":false,"serviceAccountName":self.service_account,
             "shareProcessNamespace":false,
             "enableServiceLinks":false,"dnsPolicy":"None","dnsConfig":{"nameservers":self.network.dns().iter().map(ToString::to_string).collect::<Vec<_>>()},"schedulerName":"default-scheduler",
-            "runtimeClassName":self.runtime_class,
             "securityContext":{"runAsNonRoot":true,"fsGroup":20000,"fsGroupChangePolicy":"OnRootMismatch","supplementalGroupsPolicy":"Strict","seccompProfile":{"type":"RuntimeDefault"}},
-            "initContainers":[self.initialize_network(),self.initialize("runtime",10001),self.initialize("tools",10002),self.initialize("executor",0),self.initialize_ipc()],
-            "containers":[self.runtime(),self.tools()],
+            "containers":[self.sandbox()],
             "volumes":[
                 {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name}},
                 {"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}},
-                {"name":"runtime-tmp","emptyDir":{"sizeLimit":"64Mi"}},
-                {"name":"tools-tmp","emptyDir":{"sizeLimit":"1Gi"}},
-                {"name":"executor-ipc","emptyDir":{"sizeLimit":"1Mi"}},
-                {"name":"browser-shm","emptyDir":{"medium":"Memory","sizeLimit":"256Mi"}}
+                {"name":"tmp","emptyDir":{"sizeLimit":"1Gi"}}
             ]
         });
+        let sandbox = &mut value["containers"][0];
+        if self.terminal {
+            sandbox["env"]
+                .as_array_mut()
+                .expect("fixed environment")
+                .push(json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}));
+        }
+        if self.backend == Backend::Kvm {
+            // shortcut: the tap device will also need NET_ADMIN once the kvm backend boots guests.
+            sandbox["resources"]["limits"]["devices.kubevirt.io/kvm"] = json!("1");
+        }
         if let Some(name) = &self.control_ca {
+            sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));
+            sandbox["volumeMounts"].as_array_mut().expect("fixed mounts").push(json!({"name":"control-ca","mountPath":"/run/cubebot/control-ca","readOnly":true}));
             value["volumes"].as_array_mut().expect("fixed volumes").push(json!({"name":"control-ca","configMap":{"name":name,"defaultMode":420,"items":[{"key":"ca.crt","path":"ca.crt"}]}}));
-            let runtime = &mut value["containers"][0];
-            runtime["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));
-            runtime["volumeMounts"].as_array_mut().expect("fixed mounts").push(json!({"name":"control-ca","mountPath":"/run/cubebot/control-ca","readOnly":true}));
         }
         serde_json::from_value(value).map_err(|_| Error::InvalidConfiguration)
     }
 
-    /// MVP pods carry no tool process or tool workspace, and need no privileged network init.
-    pub fn text_chat_pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
-        let mut pod = self.pod(claim_name)?;
-        if self.terminal {
-            pod.containers[0]
-                .env
-                .as_mut()
-                .expect("fixed environment")
-                .push(
-                    serde_json::from_value(json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}))
-                        .expect("fixed flag"),
-                );
-            return Ok(pod);
-        }
-        pod.containers
-            .retain(|container| container.name == "runtime");
-        if let Some(mounts) = &mut pod.containers[0].volume_mounts {
-            mounts.retain(|mount| mount.name != "executor-ipc");
-        }
-        if let Some(initializers) = &mut pod.init_containers {
-            initializers.retain(|container| container.name == "initialize-runtime");
-        }
-        if let Some(volumes) = &mut pod.volumes {
-            volumes.retain(|volume| {
-                !matches!(
-                    volume.name.as_str(),
-                    "tools-tmp" | "browser-shm" | "executor-ipc"
-                )
-            });
-        }
-        Ok(pod)
-    }
-
-    fn initialize(&self, directory: &str, uid: i64) -> Value {
-        json!({"name":format!("initialize-{directory}"),"image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-agent"],"args":["--initialize-storage",directory],
-            "securityContext":security(uid),"resources":resources("10m","32Mi","100m","64Mi"),
-            "volumeMounts":[{"name":"workspace","mountPath":"/storage"}]})
-    }
-    fn initialize_network(&self) -> Value {
-        let mut context = security(0);
-        context["runAsNonRoot"] = json!(false);
-        context["capabilities"]["add"] = json!(["NET_ADMIN"]);
-        json!({"name":"initialize-network","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-agent"],
-            "args":["--initialize-network",serde_json::to_string(&self.network).expect("validated network configuration")],
-            "securityContext":context,"resources":resources("10m","32Mi","100m","64Mi")})
-    }
-    fn initialize_ipc(&self) -> Value {
-        json!({"name":"initialize-executor-ipc","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
-            "command":["/bin/chmod","0755","/run/cubebot-executor"],"securityContext":security(0),"resources":resources("10m","32Mi","100m","64Mi"),
-            "volumeMounts":[{"name":"executor-ipc","mountPath":"/run/cubebot-executor"}]})
-    }
-    fn runtime(&self) -> Value {
-        json!({"name":"runtime","image":self.runtime_image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-agent"],"securityContext":security(10001),
-            "resources":resources("100m","128Mi","1","512Mi"),
-            "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot"}],
-            "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot","subPath":"runtime"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"runtime-tmp","mountPath":"/tmp"},{"name":"executor-ipc","mountPath":"/run/cubebot-executor","readOnly":true}]})
-    }
-    fn tools(&self) -> Value {
-        let mut context = security(0);
-        context["capabilities"]["add"] = json!(["KILL", "SETUID", "SETGID"]);
-        json!({"name":"tools","image":self.tools_image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-tool-runner"],"securityContext":context,"workingDir":"/",
-            "resources":resources("100m","256Mi","2","2Gi"),"env":[{"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}],
-            "volumeMounts":[{"name":"workspace","mountPath":"/home/agent","subPath":"tools"},{"name":"tools-tmp","mountPath":"/tmp"},{"name":"browser-shm","mountPath":"/dev/shm"},{"name":"workspace","mountPath":"/var/lib/cubebot-executor","subPath":"executor"},{"name":"executor-ipc","mountPath":"/run/cubebot-executor"}]})
+    fn sandbox(&self) -> Value {
+        json!({"name":"sandbox","image":self.image,"imagePullPolicy":"IfNotPresent",
+            "command":["/usr/local/bin/cubebot-sandbox"],"args":["--backend",self.backend.as_str()],
+            "securityContext":security(10001),"resources":resources("100m","256Mi","2","2Gi"),
+            "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"},{"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"}],
+            "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"tmp","mountPath":"/tmp"}]})
     }
 }
 fn security(uid: i64) -> Value {

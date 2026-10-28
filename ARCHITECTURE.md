@@ -1,6 +1,6 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Status: intended design grounded in 83 accepted ADRs. The code still implements the earlier per-turn grant and two-container layout; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
+Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)) and 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)). Status: intended design grounded in 84 accepted ADRs. The code still implements the earlier per-turn grants, and the sandbox's `kvm` backend is not built yet; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 
@@ -26,7 +26,7 @@ flowchart TB
       O --> DB[("PostgreSQL")]
       O --> S[("Shared-file PVC")]
       O --> K["Kubernetes lifecycle module"]
-      subgraph A["One VM-class sandbox per running agent"]
+      subgraph A["One cubebot-sandbox VM per running agent"]
         R["Rust agent: loop, context, memory, tools"] --> B["Browser · terminal · local MCP"]
         R --> W[("Agent workspace PVC")]
         R --> J[("Recovery journal")]
@@ -48,10 +48,10 @@ Accepted deployment constraints:
 - One individual or organization per installation, with installation-owned agents and scoped managers.
 - One namespace for all namespaced installation resources. External PostgreSQL and cluster-scoped infrastructure retain their own placement.
 - One Rust orchestrator process and one active instance, accepting coordination downtime during restart.
-- One pod per running agent, run on a VM-class RuntimeClass. The VM is the trust boundary; the agent and its tools share it.
+- One pod per running agent with one container, `cubebot-sandbox`, which boots the agent in a KVM guest. The VM is the trust boundary; the agent and its tools share it.
 - Shared PostgreSQL for structured records; separate persistent workspaces and an orchestrator-owned volume for shared files.
 - A dedicated TanStack Start frontend with Bun and Vite, serving desktop and installable PWA.
-- Standard container runtime for the orchestrator, frontend and local development; qualified agent sandboxes require a VM-class RuntimeClass.
+- Standard container runtime for the orchestrator, frontend and sandbox pods; qualified agent sandboxes require the `kvm` backend and nodes exposing `/dev/kvm`. The `process` backend is for development and makes no isolation claim.
 
 Proposed Kubernetes implementation: deploy the orchestrator with one replica and Recreate rollout behavior, the frontend independently, and bundled PostgreSQL as a single-instance StatefulSet. Manage agent Pods directly from database intent, using separately retained PVCs. An additional Deployment or StatefulSet per agent is unnecessary for the selected initial lifecycle: the orchestrator already owns sleep, wake, retirement, and recovery. A failed node's pod replacement waits for safe reconciliation; it is not a promise of uninterrupted execution during orchestrator downtime.
 
@@ -75,7 +75,7 @@ Keep task scheduling, messaging, triggers, and budgets inside Work initially bec
 
 The Rust agent owns its loop, lane scheduling, context assembly and compaction, memory behavior, provider calls, tools, process and browser supervision, MCP adaptation and recovery journal. It has no database access.
 
-Accepted source layout, revised on 2026-10-25: three applications under `apps/` (`orchestrator`, `agent`, and `web`) and two shared Rust libraries under `modules/` (`protocol` and `providers`). Agent-specific behavior stays inside the agent app. Under ADR 0083 the agent and its tools run in one sandbox; the separate tool runner is a removal candidate once that path is qualified. Orchestrator domains remain ordinary Rust modules within its application. Shared libraries never depend on applications. See the [repository layout](docs/development/repository-layout.md) for ownership and development paths. This replaces the earlier four-package layout proposal without introducing new services.
+Accepted source layout, revised on 2026-10-25 and 2026-10-28: four applications under `apps/` (`orchestrator`, `agent`, `sandbox`, and `web`) and two shared Rust libraries under `modules/` (`protocol` and `providers`). Agent-specific behavior stays inside the agent app, including its tools, which run in the agent's own process and sandbox. The sandbox app owns the VMM (ADR 0084) and nothing agent-specific; it is the only crate allowed `unsafe`, for KVM ioctls and guest memory. Orchestrator domains remain ordinary Rust modules within its application. Shared libraries never depend on applications. See the [repository layout](docs/development/repository-layout.md) for ownership and development paths. This replaces the earlier four-package layout proposal without introducing new services.
 
 The repository scaffold selects Tokio/Axum for asynchronous HTTP and tracing for diagnostics, with locked dependencies and a pinned Rust toolchain. SQLx for PostgreSQL and kube-rs for cluster interaction remain proposals until those features are implemented. The TanStack Start frontend has a locked Bun/Vite build and a smoke-tested Bun server. These checks establish scaffold compatibility, not performance or agent-system qualification. [Axum](https://docs.rs/axum/latest/axum/), [SQLx](https://docs.rs/sqlx/latest/sqlx/), [kube-rs](https://kube.rs/).
 
@@ -85,7 +85,7 @@ PostgreSQL owns agent definitions, grants, conversations, work state, mailbox de
 
 Use current-state relational tables plus transactional audit/outbox records. This is not full event sourcing. A domain transition and its durable notification are committed together. Internal workers claim small batches and commit before external calls. A polling loop remains correct when an optional notification wake-up is missed. PostgreSQL documents row-locking options useful for queue consumers and NOTIFY as a signal between sessions; the durable queue is our proposed application contract. [SELECT](https://www.postgresql.org/docs/current/sql-select.html), [NOTIFY](https://www.postgresql.org/docs/current/sql-notify.html).
 
-Each agent has a workspace PVC mounted into its sandbox, holding the workspace and recovery journal. The agent never loads its own executable code from the writable workspace. Workspace files are mutable; published artifacts and skill bundles are immutable snapshots in shared storage.
+Each agent has a workspace PVC mounted into its sandbox pod and attached to the guest as a virtio-blk disk, holding the workspace and recovery journal. The agent never loads its own executable code from the writable workspace. Workspace files are mutable; published artifacts and skill bundles are immutable snapshots in shared storage.
 
 The [shared-storage proposal](docs/design/shared-storage.md) defines staging, publication, file synchronization, and crash reconciliation. It provides a native authenticated interface, not S3 compatibility, distributed replication, or a shared writable filesystem for every agent.
 
@@ -147,13 +147,13 @@ Viewing is distinct from control. Human takeover obtains exclusive input ownersh
 
 ## Trust and failure containment
 
-The sandbox is the trust boundary ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Each running agent is one pod on a VM-class RuntimeClass. Anything inside it, including agent-run code, can reach the agent's credentials, so each sandbox holds only that agent's authority: one long-lived agent credential and its eligible provider material. Revocation means revoking the credential or stopping the sandbox; there are no per-turn grants or invocation leases.
+The sandbox is the trust boundary ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Each running agent is one `cubebot-sandbox` VM in its own pod ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)); guest traffic leaves through a tap device in the pod network namespace. Anything inside it, including agent-run code, can reach the agent's credentials, so each sandbox holds only that agent's authority: one long-lived agent credential and its eligible provider material. Revocation means revoking the credential or stopping the sandbox; there are no per-turn grants or invocation leases.
 
-Human sessions, agent credentials and orchestrator authority remain separate classes. Proposed bootstrap uses a projected, audience-bound Kubernetes service-account token; the orchestrator validates it and the pod identity, then issues the agent credential bound to that sandbox incarnation. [Kubernetes projected volumes](https://kubernetes.io/docs/concepts/storage/projected-volumes/), [RuntimeClass](https://kubernetes.io/docs/concepts/containers/runtime-class/).
+Human sessions, agent credentials and orchestrator authority remain separate classes. Proposed bootstrap uses a projected, audience-bound Kubernetes service-account token; the orchestrator validates it and the pod identity, then issues the agent credential bound to that sandbox incarnation. [Kubernetes projected volumes](https://kubernetes.io/docs/concepts/storage/projected-volumes/).
 
 Encrypt provider and integration records in PostgreSQL using an established authenticated-encryption implementation and a versioned installation key held separately. Propose envelope encryption to separate bulk records from master-key rotation. Passwords use one-way password hashing, not reversible credential encryption. Backups require the corresponding key versions.
 
-Agents may use public internet destinations; private access requires grants. Because one pod holds one agent, default-deny NetworkPolicy per sandbox enforces that: allow the orchestrator, DNS, public egress and granted private destinations, and deny the database, Kubernetes API and other sandboxes. Qualification must test direct sockets, IPv6, alternate DNS, redirects and escape from the VM handler. [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
+Agents may use public internet destinations; private access requires grants. Because one pod holds one agent, default-deny NetworkPolicy per sandbox enforces that: allow the orchestrator, DNS, public egress and granted private destinations, and deny the database, Kubernetes API and other sandboxes. Qualification must test direct sockets, IPv6, alternate DNS, redirects and escape from the VMM's guest devices. [NetworkPolicy](https://kubernetes.io/docs/concepts/services-networking/network-policies/).
 
 Use monotonic sandbox epochs. A stale epoch cannot write to the ledger, but that alone cannot stop an external request already issued. Do not start a replacement sandbox until the previous one is proven stopped or reconciled. The same principle applies to single-active orchestrator recovery.
 
@@ -184,7 +184,7 @@ Emit structured logs, metrics, and trace correlation through existing Rust instr
 | P03 Wire interfaces | HTTP/JSON, SSE, narrowly scoped WebSockets | gRPC everywhere adds browser adaptation without a demonstrated initial requirement |
 | P04 Workspace concurrency | Conservative in-agent resource claims for opaque mutations | Fully parallel arbitrary shell writes cannot be made safe through advisory path hints |
 | P05 Retrieval | PostgreSQL lexical/vector candidates with explicit degradation | Separate vector service adds dependency; automatic prompt injection contradicts ADR 0023 |
-| P06 Tool networking | Per-sandbox NetworkPolicy on a VM-class RuntimeClass (ADR 0083) | In-pod UID filtering between runtime and tools added privileged setup without protecting credentials from agent-run code |
+| P06 Tool networking | Per-sandbox NetworkPolicy applied to the guest's tap device (ADRs 0083, 0084) | In-pod UID filtering between runtime and tools added privileged setup without protecting credentials from agent-run code |
 | P07 Availability | Stop on uncertain ownership and reconcile before replacement | Lease expiry alone risks duplicate external effects |
 | P08 Deployment | Helm and a bundled single-instance database option | Operator dependency and HA database behavior are not needed for the selected initial availability |
 

@@ -23,7 +23,7 @@ fn ready_failed_or_missing_objects_do_not_establish_executor_termination() {
     assert!(!termination_proven(&pod));
     pod.status = Some(serde_json::from_value(json!({"phase":"Failed"})).unwrap());
     assert!(!termination_proven(&pod));
-    pod.status = Some(serde_json::from_value(json!({"phase":"Failed","containerStatuses":[{"name":"runtime","image":"test","imageID":"test","ready":false,"restartCount":0,"state":{"terminated":{"exitCode":1}}},{"name":"tools","image":"test","imageID":"test","ready":false,"restartCount":0,"state":{"running":{}}}]})).unwrap());
+    pod.status = Some(serde_json::from_value(json!({"phase":"Failed","containerStatuses":[{"name":"sandbox","image":"test","imageID":"test","ready":false,"restartCount":0,"state":{"running":{}}}]})).unwrap());
     assert!(!termination_proven(&pod));
     fixtures::terminate(&mut pod);
     assert!(termination_proven(&pod));

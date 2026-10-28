@@ -75,7 +75,7 @@ impl RuntimeClient {
     }
     pub async fn bootstrap(&mut self) -> Result<(), Error> {
         self.session = None;
-        let token = config::projected_token(&self.config.token_file)?;
+        let token = self.config.bootstrap_token()?;
         let start = Instant::now();
         let response = self
             .http

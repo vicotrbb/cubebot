@@ -65,7 +65,7 @@ fn application_stopped(pod: &Pod) -> bool {
         .unwrap_or_default()
         .iter()
         .any(|container| {
-            matches!(container.name.as_str(), "runtime" | "tools")
+            container.name == "sandbox"
                 && container
                     .state
                     .as_ref()
@@ -78,13 +78,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn executor_exit_requires_recovery_even_while_runtime_is_running() {
+    fn sandbox_exit_requires_recovery_even_while_the_pod_reports_running() {
         let pod: Pod = serde_json::from_value(serde_json::json!({
             "status": {
                 "phase": "Running",
                 "conditions": [{"type": "Ready", "status": "True"}],
                 "containerStatuses": [{
-                    "name": "tools", "image": "fixture", "imageID": "fixture",
+                    "name": "sandbox", "image": "fixture", "imageID": "fixture",
                     "ready": false, "restartCount": 0,
                     "state": {"terminated": {"exitCode": 137}}
                 }]

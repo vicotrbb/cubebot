@@ -84,20 +84,9 @@ pub fn termination_proven(pod: &Pod) -> bool {
     {
         return false;
     }
-    let expected: &[&str] = match spec.containers.len() {
-        1 => &["runtime"],
-        2 => &["runtime", "tools"],
-        _ => return false,
-    };
-    let shape = spec.containers.len() == expected.len()
-        && expected.iter().all(|name| {
-            spec.containers
-                .iter()
-                .any(|container| container.name == *name)
-        });
+    let shape = spec.containers.len() == 1 && spec.containers[0].name == "sandbox";
     let containers = status.container_statuses.as_deref().unwrap_or_default();
-    let stopped = containers.len() == expected.len()
-        && expected.iter().all(|name| stopped_named(containers, name));
+    let stopped = containers.len() == 1 && stopped_named(containers, "sandbox");
     shape && stopped && init_stopped(pod)
 }
 
@@ -151,57 +140,4 @@ fn known_exit(exit: &ContainerStateTerminated) -> bool {
         _ => false,
     };
     known && timed
-}
-
-/// Stopping remaining executors is distinct from proving the whole attempt stopped.
-pub(super) fn runtime_termination_proven(pod: &Pod) -> bool {
-    let Some(spec) = &pod.spec else {
-        return false;
-    };
-    let Some(status) = &pod.status else {
-        return false;
-    };
-    spec.restart_policy.as_deref() == Some("Never")
-        && status.reason.as_deref() != Some("NodeLost")
-        && spec
-            .ephemeral_containers
-            .as_ref()
-            .is_none_or(|items| items.is_empty())
-        && spec
-            .containers
-            .iter()
-            .any(|container| container.name == "runtime")
-        && stopped_named(
-            status.container_statuses.as_deref().unwrap_or_default(),
-            "runtime",
-        )
-        && init_stopped(pod)
-}
-
-#[cfg(test)]
-mod partial_stop_tests {
-    use super::*;
-    #[test]
-    fn a_known_dead_runtime_can_authorize_stop_but_never_replacement() {
-        let mut pod: Pod = serde_json::from_value(serde_json::json!({
-            "spec":{"restartPolicy":"Never","containers":[{"name":"runtime"},{"name":"tools"}]},
-            "status":{"phase":"Running","containerStatuses":[
-                {"name":"runtime","image":"fixture","imageID":"fixture","ready":false,"restartCount":0,"containerID":"containerd://runtime","state":{"terminated":{"containerID":"containerd://runtime","reason":"Error","exitCode":137,"startedAt":"2026-10-27T10:00:00Z","finishedAt":"2026-10-27T10:00:01Z"}}},
-                {"name":"tools","image":"fixture","imageID":"fixture","ready":true,"restartCount":0,"containerID":"containerd://tools","state":{"running":{}}}
-            ]}
-        })).unwrap();
-        assert!(runtime_termination_proven(&pod));
-        assert!(!termination_proven(&pod));
-        pod.status.as_mut().unwrap().reason = Some("NodeLost".into());
-        assert!(!runtime_termination_proven(&pod));
-        pod.status.as_mut().unwrap().reason = None;
-        pod.status
-            .as_mut()
-            .unwrap()
-            .container_statuses
-            .as_mut()
-            .unwrap()[0]
-            .container_id = None;
-        assert!(!runtime_termination_proven(&pod));
-    }
 }

@@ -55,6 +55,20 @@ pub(super) fn digest(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
+/// A Docker sandbox bootstrap token: `cb_sandbox_` and 64 hex digits, minted per container.
+pub(crate) fn sandbox_token() -> String {
+    format!("cb_sandbox_{}", &token()["cb_runtime_".len()..])
+}
+pub(crate) fn sandbox_digest(token: &str) -> Result<Vec<u8>, Error> {
+    let secret = token
+        .strip_prefix("cb_sandbox_")
+        .ok_or(Error::Unauthorized)?;
+    if secret.len() != 64 || !secret.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(Error::Unauthorized);
+    }
+    Ok(digest(token))
+}
+
 fn validate_token(token: &str) -> Result<(), Error> {
     let secret = token
         .strip_prefix("cb_runtime_")

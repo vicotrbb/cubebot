@@ -17,7 +17,7 @@ pub fn identity() -> Identity {
 }
 
 pub fn pod(identity: &Identity) -> Pod {
-    serde_json::from_value(json!({"metadata":{"name":"agent-test","namespace":"cubebot-test","uid":"pod-uid", "resourceVersion":"1", "finalizers":["cubebot.dev/execution-stopped", "other-controller.example/retain"], "labels":{"cubebot.dev/installation":identity.installation.to_string(),"cubebot.dev/agent":identity.agent.0.to_string(),"cubebot.dev/attempt":identity.attempt.to_string()},"ownerReferences":[{"apiVersion":"v1","kind":"ConfigMap","name":identity.anchor_name,"uid":identity.anchor_uid,"controller":true}]},"spec":{"restartPolicy":"Never","containers":[{"name":"runtime","image":"test"},{"name":"tools","image":"test"}]}})).unwrap()
+    serde_json::from_value(json!({"metadata":{"name":"agent-test","namespace":"cubebot-test","uid":"pod-uid", "resourceVersion":"1", "finalizers":["cubebot.dev/execution-stopped", "other-controller.example/retain"], "labels":{"cubebot.dev/installation":identity.installation.to_string(),"cubebot.dev/agent":identity.agent.0.to_string(),"cubebot.dev/attempt":identity.attempt.to_string()},"ownerReferences":[{"apiVersion":"v1","kind":"ConfigMap","name":identity.anchor_name,"uid":identity.anchor_uid,"controller":true}]},"spec":{"restartPolicy":"Never","containers":[{"name":"sandbox","image":"test"}]}})).unwrap()
 }
 
 pub fn recorded(identity: Identity) -> RecordedPod {
@@ -32,5 +32,5 @@ pub fn recorded(identity: Identity) -> RecordedPod {
 pub fn terminate(pod: &mut Pod) {
     pod.metadata.deletion_timestamp =
         Some(serde_json::from_value(json!("2026-10-26T12:00:00Z")).unwrap());
-    pod.status = Some(serde_json::from_value(json!({"phase":"Failed","containerStatuses":[{"name":"runtime","image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":"containerd://runtime-id","state":{"terminated":{"exitCode":1,"reason":"Error","containerID":"containerd://runtime-id","startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}},{"name":"tools","image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":"containerd://tools-id","state":{"terminated":{"exitCode":0,"reason":"Completed","containerID":"containerd://tools-id","startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}}]})).unwrap());
+    pod.status = Some(serde_json::from_value(json!({"phase":"Failed","containerStatuses":[{"name":"sandbox","image":"test","imageID":"test","ready":false,"restartCount":0,"containerID":"containerd://sandbox-id","state":{"terminated":{"exitCode":1,"reason":"Error","containerID":"containerd://sandbox-id","startedAt":"2026-10-26T11:00:00Z","finishedAt":"2026-10-26T12:00:01Z"}}}]})).unwrap());
 }

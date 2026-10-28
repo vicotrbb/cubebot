@@ -21,15 +21,14 @@ cubebot/
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── main.rs
-│   │       ├── bin/
-│   │       │   └── tool-runner.rs
 │   │       ├── engine/
 │   │       ├── context/
 │   │       ├── memory/
 │   │       ├── skills/
 │   │       ├── tools/
-│   │       ├── execution/
 │   │       └── control/
+│   ├── sandbox/
+│   │   └── src/
 │   └── web/
 │       └── src/
 │           ├── routes/
@@ -52,9 +51,11 @@ Each Rust app also has a package-local `src/lib.rs` declaring its internal modul
 
 The orchestrator owns installation-wide state and rules. `api` translates HTTP requests; the other modules own identity/access, agent lifecycle, durable work, knowledge records, installation connections, shared storage, and operations. Database migrations stay with this application. Domain operations that must commit together use one PostgreSQL transaction; module organization does not introduce remote services or independent databases.
 
-The agent owns the native loop and all agent-specific behavior. `engine` coordinates turns and recovery; `context` assembles and compacts working context; `memory` owns extraction and dreaming behavior; `skills` loads installed skill revisions; `tools` discovers and dispatches calls; `execution` owns tool-runner behavior; `control` communicates with the orchestrator. The orchestrator remains authoritative for durable records, grants, credential refresh, and memory/skill revisions.
+The agent owns the native loop and all agent-specific behavior. `engine` coordinates turns and recovery; `context` assembles and compacts working context; `memory` owns extraction and dreaming behavior; `skills` loads installed skill revisions; `tools` discovers and dispatches calls; `control` communicates with the orchestrator. The orchestrator remains authoritative for durable records, grants, credential refresh, and memory/skill revisions.
 
-The agent package has two binaries: `cubebot-agent` from `src/main.rs` and `cubebot-tool-runner` from `src/bin/tool-runner.rs`. They belong to one application but run in different containers under [ADR 0033](../adr/0033-separate-runtime-and-tool-containers.md). The tool runner must not inherit runtime identity or provider credentials. The runtime now supports authenticated text-turn grants, native OpenAI inference and durable result recovery. Text-chat lifecycle dispatch launches only the runtime; the pre-existing tool runner remains unavailable and is excluded from that Pod.
+The agent package has one binary, `cubebot-agent`, and runs its own tools inside its sandbox (ADR 0083).
+
+The sandbox app builds `cubebot-sandbox`, the VMM that runs one agent ([ADR 0084](../adr/0084-in-house-vmm-as-the-agent-sandbox.md)). It owns KVM and guest devices and nothing agent-specific; it is the only crate allowed `unsafe`, for KVM ioctls and guest memory.
 
 The web app owns the console and future PWA. Routes compose features. Feature-specific state and components stay with their feature; reusable interface primitives belong in `components`; API client/types and event transport belong in `api`. The text-chat workspace now implements sign-in/out, authorized agent management, provider configuration and durable conversations.
 

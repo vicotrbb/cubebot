@@ -19,17 +19,6 @@ impl RuntimeIdentity {
             .invocation
             .validate()
             .map_err(|_| Error::InvalidConfiguration)?;
-        let wire = cubebot_protocol::terminal::Request::Execute {
-            invocation: input.invocation.clone(),
-            not_after_millis: u64::MAX,
-        };
-        if serde_json::to_vec(&wire)
-            .map_err(|_| Error::InvalidConfiguration)?
-            .len()
-            > cubebot_protocol::terminal::REQUEST_LIMIT
-        {
-            return Err(Error::InvalidConfiguration);
-        }
         let actor = self.authenticate(token, RuntimeAccess::Active).await?;
         let mut tx = self.lock_runtime(&actor).await?;
         self.recheck(token, &actor, &mut tx).await?;

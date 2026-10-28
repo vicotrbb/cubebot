@@ -45,5 +45,4 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - run: docker build -f apps/orchestrator/Dockerfile .
       - run: docker build -f apps/web/Dockerfile .
-      - run: docker build --target runtime -f apps/agent/Dockerfile .
-      - run: docker build --target tools -f apps/agent/Dockerfile .
+      - run: docker build -f apps/sandbox/Dockerfile .

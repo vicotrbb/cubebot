@@ -9,6 +9,7 @@ pub use authentication::ReviewedPod;
 mod observation;
 mod reconcile;
 mod recovery;
+mod sandbox;
 mod shutdown;
 pub use reconcile::{ReconcileResult, Reconciler};
 mod layout;
@@ -32,6 +33,7 @@ pub enum Error {
     OwnershipMismatch,
     TerminationUnproven,
     Api(kube::Error),
+    Sandbox(std::io::Error),
 }
 
 impl From<kube::Error> for Error {
