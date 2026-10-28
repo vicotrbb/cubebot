@@ -49,14 +49,17 @@ class ComplexityTests(unittest.TestCase):
                         functions[0].cyclomatic_complexity > LIMIT, expected == 16
                     )
 
-    def test_new_directories_and_tests_are_checked_but_build_output_is_not(self):
+    def test_only_new_src_directories_are_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             names = (
-                "new-module/test_case.rs",
-                "apps/web/new.tsx",
+                "new-module/src/lib.rs",
+                "apps/web/src/new.tsx",
+                "tooling/src/check.py",
+                "apps/agent/tests/case.rs",
                 "tooling/check.py",
-                "target/generated.rs",
+                "src.rs",
+                "target/src/generated.rs",
                 "apps/web/node_modules/library/index.js",
                 "apps/web/src/routeTree.gen.ts",
             )
@@ -71,7 +74,8 @@ class ComplexityTests(unittest.TestCase):
 
     def test_command_fails_for_one_violation_even_among_simple_functions(self):
         with tempfile.TemporaryDirectory() as directory:
-            source = Path(directory) / "main.rs"
+            source = Path(directory) / "src/main.rs"
+            source.parent.mkdir()
             source.write_text(sample(".rs", 14), encoding="utf-8")
             self.assertEqual(self.run_checker(directory).returncode, 0)
             source.write_text(sample(".rs", 15) + "\nfn simple() {}", encoding="utf-8")

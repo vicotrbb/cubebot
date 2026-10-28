@@ -16,10 +16,10 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0006](0006-native-rust-agent-engine.md) | Native Rust agent engine | Accepted |
 | [0007](0007-agent-idle-lifecycle.md) | Agent idle lifecycle | Accepted |
 | [0008](0008-durable-storage.md) | Durable storage | Accepted |
-| [0009](0009-agent-state-access.md) | Agent state access through the orchestrator | Accepted |
+| [0009](0009-agent-state-access.md) | Agent state access through the orchestrator | Partially superseded by 0083 |
 | [0010](0010-orchestrator-process-structure.md) | One orchestrator process | Accepted |
 | [0011](0011-orchestrator-availability.md) | One active orchestrator with automatic restart | Accepted |
-| [0012](0012-agent-disconnection-behavior.md) | Bounded continuation during disconnection | Accepted |
+| [0012](0012-agent-disconnection-behavior.md) | Bounded continuation during disconnection | Partially superseded by 0083 |
 | [0013](0013-tool-autonomy.md) | Autonomous tool use within granted permissions | Accepted |
 | [0014](0014-room-routing.md) | Direct mentions and a tool-free room coordinator | Accepted |
 | [0015](0015-multiple-room-mentions.md) | Independent assignments for multiple room mentions | Accepted |
@@ -38,9 +38,9 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0028](0028-installation-managed-provider-connections.md) | Installation-managed provider connections | Accepted |
 | [0029](0029-model-default-and-purpose-overrides.md) | Default agent model with optional purpose overrides | Accepted |
 | [0030](0030-retry-selected-model-without-fallback.md) | Retry and wait for the selected model | Accepted |
-| [0031](0031-direct-inference-and-propagated-authentication.md) | Direct provider inference with propagated authentication | Accepted |
+| [0031](0031-direct-inference-and-propagated-authentication.md) | Direct provider inference with propagated authentication | Partially superseded by 0083 |
 | [0032](0032-orchestrator-owned-provider-authentication-refresh.md) | Orchestrator-owned provider authentication refresh | Accepted |
-| [0033](0033-separate-runtime-and-tool-containers.md) | Separate runtime and tool containers within each agent pod | Accepted |
+| [0033](0033-separate-runtime-and-tool-containers.md) | Separate runtime and tool containers within each agent pod | Superseded by 0083 |
 | [0034](0034-agent-software-installation.md) | Agent-directed software installation within grants | Accepted |
 | [0035](0035-tool-network-access-defaults.md) | Public internet access with grants for private destinations | Accepted |
 | [0036](0036-structured-and-visual-browser-interaction.md) | Structured browser tools with visual interaction | Accepted |
@@ -90,6 +90,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0080](0080-agent-completion-with-optional-human-acceptance.md) | Agent completion with optional human acceptance | Accepted |
 | [0081](0081-installation-wide-default-connection-access.md) | Installation-wide connection access by default | Accepted |
 | [0082](0082-one-permanent-conversation-per-agent.md) | One permanent conversation per agent | Accepted |
+| [0083](0083-agent-centric-execution-in-a-sandbox-boundary.md) | Agent-centric execution in a sandbox boundary | Accepted |
 
 Discussion will follow dependencies and adapt to answers: installation and trust; primary workflows and operating targets; agent identity and execution; conversations, rooms, tasks, and delegation; persistence and recovery; memory and context; provider and tool integration; console and mobile access; operations and validation.
 

@@ -1,8 +1,10 @@
 # ADR 0033: Separate runtime and tool containers within each agent pod
 
-Status: Accepted
+Status: Superseded by ADR 0083
 
 Date: 2026-10-23
+
+Superseded by [ADR 0083](0083-agent-centric-execution-in-a-sandbox-boundary.md): the runtime and its tools run together in one VM-class sandbox per agent. The trust boundary is the sandbox edge, not separate containers inside one pod. Container restart reconciliation and untrusted-workspace handling still apply.
 
 The native agent runtime holds provider authentication and Cubebot execution authority. Agent-directed commands and browser workloads need workspace access without inheriting that authority. The deployment model calls for one running pod per agent.
 

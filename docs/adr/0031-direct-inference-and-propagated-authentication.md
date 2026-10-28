@@ -1,8 +1,10 @@
 # ADR 0031: Direct provider inference with propagated authentication
 
-Status: Accepted
+Status: Partially superseded by ADR 0083
 
 Date: 2026-10-23
+
+Superseded in part by [ADR 0083](0083-agent-centric-execution-in-a-sandbox-boundary.md): provider authentication is propagated for the sandbox's lifetime, not as per-turn inference grants. Direct inference and orchestrator-owned refresh remain.
 
 Provider connections are installation-managed under ADR 0028. Agent runtimes need a concrete inference path that supports the bounded continuation during orchestrator outages selected in ADR 0012.
 
