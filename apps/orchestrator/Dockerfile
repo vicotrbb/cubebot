@@ -3,6 +3,7 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY apps/orchestrator ./apps/orchestrator
 COPY apps/agent ./apps/agent
+COPY apps/sandbox ./apps/sandbox
 COPY modules ./modules
 RUN cargo build --locked --release -p cubebot-orchestrator
 

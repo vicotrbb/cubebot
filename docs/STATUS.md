@@ -14,7 +14,7 @@ Evidence: [text chat](development/text-chat-mvp.md), [cluster admission](develop
 
 ## Code behind the accepted design
 
-[ADR 0083](adr/0083-agent-centric-execution-in-a-sandbox-boundary.md) replaces per-turn grants and invocation leases with coarse agent authority, and [ADR 0084](adr/0084-in-house-vmm-as-the-agent-sandbox.md) makes Cubebot's own KVM VMM the sandbox. The tool container, network initializer and kernel egress baseline are gone; the agent runs its tools itself. Runtime control is one authenticated WebSocket per sandbox, with an agent credential that lasts for the sandbox incarnation; per-turn grants, terminal leases and journal custody are gone. The `kvm` backend is not implemented: no agent runs in a VM, so no deployment has an isolation boundary between agent-run code and the pod.
+[ADR 0083](adr/0083-agent-centric-execution-in-a-sandbox-boundary.md) replaces per-turn grants and invocation leases with coarse agent authority, and [ADR 0084](adr/0084-in-house-vmm-as-the-agent-sandbox.md) makes Cubebot's own KVM VMM the sandbox. The tool container, network initializer and kernel egress baseline are gone; the agent runs its tools itself. Runtime control is one authenticated WebSocket per sandbox, with an agent credential that lasts for the sandbox incarnation; per-turn grants, terminal leases and journal custody are gone. The `kvm` backend only boots a guest kernel whose init is the agent, with a serial console and no virtio devices; `just guest-boot` checks that in CI. The guest agent cannot reach the orchestrator, so no working agent runs in a VM and no deployment has an isolation boundary between agent-run code and the pod.
 
 ## Not yet qualified
 

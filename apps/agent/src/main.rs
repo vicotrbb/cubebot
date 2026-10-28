@@ -11,6 +11,7 @@ async fn main() -> ExitCode {
         eprintln!("Unknown runtime arguments");
         return ExitCode::FAILURE;
     }
+    eprintln!("cubebot-agent {} starting", env!("CARGO_PKG_VERSION"));
     match cubebot_agent::engine::run().await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
