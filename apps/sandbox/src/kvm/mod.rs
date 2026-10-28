@@ -7,7 +7,10 @@ mod sys;
 use nix::{
     errno::Errno,
     libc,
-    sys::mman::{MapFlags, ProtFlags, mmap, mmap_anonymous},
+    sys::{
+        mman::{MapFlags, ProtFlags, mmap, mmap_anonymous},
+        signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction},
+    },
 };
 use std::{
     fs::File,
@@ -23,23 +26,37 @@ const SERIAL: std::ops::RangeInclusive<u16> = 0x3f8..=0x3ff;
 const SERIAL_IRQ: u32 = 4;
 
 pub fn run() -> io::Result<u8> {
-    let kernel = std::fs::read(configured("CUBEBOT_GUEST_KERNEL")?)?;
-    let initramfs = std::fs::read(configured("CUBEBOT_GUEST_INITRAMFS")?)?;
-    let kvm = File::options().read(true).write(true).open("/dev/kvm")?;
-    if unsafe { sys::get_api_version(kvm.as_raw_fd()) }? != sys::API_VERSION {
+    exit_on_termination()?;
+    let kernel = read_configured("CUBEBOT_GUEST_KERNEL")?;
+    let initramfs = read_configured("CUBEBOT_GUEST_INITRAMFS")?;
+    let kvm = File::options()
+        .read(true)
+        .write(true)
+        .open("/dev/kvm")
+        .map_err(|error| io::Error::other(format!("/dev/kvm: {error}")))?;
+    if unsafe { sys::get_api_version(kvm.as_raw_fd()) }.map_err(failed("KVM_GET_API_VERSION"))?
+        != sys::API_VERSION
+    {
         return Err(io::Error::other("unsupported KVM API version"));
     }
-    let vm = unsafe { OwnedFd::from_raw_fd(sys::create_vm(kvm.as_raw_fd(), 0)?) };
+    let vm = unsafe {
+        OwnedFd::from_raw_fd(sys::create_vm(kvm.as_raw_fd(), 0).map_err(failed("KVM_CREATE_VM"))?)
+    };
     let memory = guest_memory(&vm)?;
     let entry = boot::load(memory, &kernel, &initramfs, CMDLINE)?;
-    let vcpu = unsafe { OwnedFd::from_raw_fd(sys::create_vcpu(vm.as_raw_fd(), 0)?) };
+    let vcpu = unsafe {
+        OwnedFd::from_raw_fd(
+            sys::create_vcpu(vm.as_raw_fd(), 0).map_err(failed("KVM_CREATE_VCPU"))?,
+        )
+    };
     configure_vcpu(&kvm, &vcpu, entry)?;
     run_vcpu(&kvm, &vcpu, vm.as_raw_fd())
 }
 
 /// Runs the vCPU until the guest shuts down, serving its port I/O.
 fn run_vcpu(kvm: &File, vcpu: &OwnedFd, vm: RawFd) -> io::Result<u8> {
-    let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd()) }?;
+    let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd()) }
+        .map_err(failed("KVM_GET_VCPU_MMAP_SIZE"))?;
     let run = unsafe {
         mmap(
             None,
@@ -49,11 +66,12 @@ fn run_vcpu(kvm: &File, vcpu: &OwnedFd, vm: RawFd) -> io::Result<u8> {
             vcpu,
             0,
         )
-    }?
+    }
+    .map_err(failed("mmap kvm_run"))?
     .cast::<sys::Run>();
     let mut serial = serial::Serial::default();
     loop {
-        unsafe { sys::run(vcpu.as_raw_fd()) }?;
+        unsafe { sys::run(vcpu.as_raw_fd()) }.map_err(failed("KVM_RUN"))?;
         let run = unsafe { run.as_ptr().as_mut().ok_or(Errno::EFAULT)? };
         match run.exit_reason {
             sys::EXIT_IO => port_io(run, &mut serial, vm)?,
@@ -64,8 +82,31 @@ fn run_vcpu(kvm: &File, vcpu: &OwnedFd, vm: RawFd) -> io::Result<u8> {
     }
 }
 
-fn configured(name: &str) -> io::Result<std::ffi::OsString> {
-    std::env::var_os(name).ok_or_else(|| io::Error::other(format!("{name} is not set")))
+/// As container PID 1 the default SIGTERM disposition is ignored; stopping the sandbox ends the VM.
+fn exit_on_termination() -> io::Result<()> {
+    extern "C" fn terminate(signal: libc::c_int) {
+        unsafe { libc::_exit(128 + signal) }
+    }
+    let action = SigAction::new(
+        SigHandler::Handler(terminate),
+        SaFlags::empty(),
+        SigSet::empty(),
+    );
+    for signal in [Signal::SIGTERM, Signal::SIGINT] {
+        unsafe { sigaction(signal, &action) }.map_err(failed("sigaction"))?;
+    }
+    Ok(())
+}
+
+fn failed(operation: &'static str) -> impl Fn(Errno) -> io::Error {
+    move |error| io::Error::other(format!("{operation}: {error}"))
+}
+
+fn read_configured(name: &str) -> io::Result<Vec<u8>> {
+    let path =
+        std::env::var_os(name).ok_or_else(|| io::Error::other(format!("{name} is not set")))?;
+    std::fs::read(&path)
+        .map_err(|error| io::Error::other(format!("{name} {}: {error}", path.display())))
 }
 
 /// Maps the single guest memory region at guest physical address 0, with the in-kernel PIC, IOAPIC
@@ -79,7 +120,8 @@ fn guest_memory(vm: &OwnedFd) -> io::Result<&'static mut [u8]> {
             ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
             MapFlags::MAP_PRIVATE | MapFlags::MAP_NORESERVE,
         )
-    }?;
+    }
+    .map_err(failed("mmap guest memory"))?;
     let region = sys::MemoryRegion {
         slot: 0,
         flags: 0,
@@ -88,11 +130,12 @@ fn guest_memory(vm: &OwnedFd) -> io::Result<&'static mut [u8]> {
         userspace_addr: host.as_ptr() as u64,
     };
     unsafe {
-        sys::set_user_memory_region(fd, &region)?;
+        sys::set_user_memory_region(fd, &region).map_err(failed("KVM_SET_USER_MEMORY_REGION"))?;
         // Intel VMX needs three pages for the real-mode TSS; this is the address every VMM uses.
-        Errno::result(libc::ioctl(fd, sys::SET_TSS_ADDR, 0xfffb_d000_u64))?;
-        sys::create_irqchip(fd)?;
-        sys::create_pit2(fd, &sys::PitConfig::default())?;
+        Errno::result(libc::ioctl(fd, sys::SET_TSS_ADDR, 0xfffb_d000_u64))
+            .map_err(failed("KVM_SET_TSS_ADDR"))?;
+        sys::create_irqchip(fd).map_err(failed("KVM_CREATE_IRQCHIP"))?;
+        sys::create_pit2(fd, &sys::PitConfig::default()).map_err(failed("KVM_CREATE_PIT2"))?;
         // The mapping lives until the process exits, and the host touches it only before the vCPU runs.
         Ok(std::slice::from_raw_parts_mut(host.as_ptr().cast(), MEMORY))
     }
@@ -108,9 +151,10 @@ fn configure_vcpu(kvm: &File, vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
     };
     let mut sregs = sys::Sregs::default();
     unsafe {
-        sys::get_supported_cpuid(kvm.as_raw_fd(), &mut cpuid)?;
-        sys::set_cpuid2(fd, &cpuid)?;
-        sys::get_sregs(fd, &mut sregs)?;
+        sys::get_supported_cpuid(kvm.as_raw_fd(), &mut cpuid)
+            .map_err(failed("KVM_GET_SUPPORTED_CPUID"))?;
+        sys::set_cpuid2(fd, &cpuid).map_err(failed("KVM_SET_CPUID2"))?;
+        sys::get_sregs(fd, &mut sregs).map_err(failed("KVM_GET_SREGS"))?;
     }
     let code = sys::Segment {
         limit: 0xffff_ffff,
@@ -146,8 +190,8 @@ fn configure_vcpu(kvm: &File, vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
         ..Default::default()
     };
     unsafe {
-        sys::set_sregs(fd, &sregs)?;
-        sys::set_regs(fd, &regs)?;
+        sys::set_sregs(fd, &sregs).map_err(failed("KVM_SET_SREGS"))?;
+        sys::set_regs(fd, &regs).map_err(failed("KVM_SET_REGS"))?;
     }
     Ok(())
 }
@@ -187,7 +231,8 @@ fn port_io(run: &mut sys::Run, serial: &mut serial::Serial, vm: RawFd) -> io::Re
 
 fn pulse(vm: RawFd, irq: u32) -> io::Result<()> {
     for level in [1, 0] {
-        unsafe { sys::irq_line(vm, &sys::IrqLevel { irq, level }) }?;
+        unsafe { sys::irq_line(vm, &sys::IrqLevel { irq, level }) }
+            .map_err(failed("KVM_IRQ_LINE"))?;
     }
     Ok(())
 }
