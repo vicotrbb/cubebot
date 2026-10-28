@@ -153,6 +153,7 @@ fn configure_vcpu(kvm: &File, vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
     unsafe {
         sys::get_supported_cpuid(kvm.as_raw_fd(), &mut cpuid)
             .map_err(failed("KVM_GET_SUPPORTED_CPUID"))?;
+        as_vcpu_zero(&mut cpuid);
         sys::set_cpuid2(fd, &cpuid).map_err(failed("KVM_SET_CPUID2"))?;
         sys::get_sregs(fd, &mut sregs).map_err(failed("KVM_GET_SREGS"))?;
     }
@@ -196,6 +197,17 @@ fn configure_vcpu(kvm: &File, vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
     Ok(())
 }
 
+/// The supported CPUID carries the host CPU's APIC ID; the guest's only CPU is APIC 0.
+fn as_vcpu_zero(cpuid: &mut sys::Cpuid) {
+    for entry in cpuid.entries.iter_mut().take(cpuid.nent as usize) {
+        match entry.function {
+            0x1 => entry.ebx &= 0x00ff_ffff,
+            0xb | 0x1f => entry.edx = 0,
+            _ => (),
+        }
+    }
+}
+
 /// Serves the 16550 at COM1; other ports read as zero and ignore writes, as on an empty bus.
 fn port_io(run: &mut sys::Run, serial: &mut serial::Serial, vm: RawFd) -> io::Result<()> {
     let sys::Io {
@@ -235,4 +247,33 @@ fn pulse(vm: RawFd, irq: u32) -> io::Result<()> {
             .map_err(failed("KVM_IRQ_LINE"))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cpuid_reports_apic_zero_and_keeps_other_leaves() {
+        let mut cpuid = sys::Cpuid {
+            nent: 3,
+            padding: 0,
+            entries: [sys::CpuidEntry::default(); 256],
+        };
+        for (entry, function) in cpuid.entries.iter_mut().zip([0x1, 0xb, 0x7]) {
+            *entry = sys::CpuidEntry {
+                function,
+                ebx: 0x0201_0800,
+                edx: 2,
+                ..Default::default()
+            };
+        }
+        as_vcpu_zero(&mut cpuid);
+        assert_eq!(cpuid.entries[0].ebx, 0x0001_0800);
+        assert_eq!(cpuid.entries[1].edx, 0);
+        assert_eq!(
+            (cpuid.entries[2].ebx, cpuid.entries[2].edx),
+            (0x0201_0800, 2)
+        );
+    }
 }

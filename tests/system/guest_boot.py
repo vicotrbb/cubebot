@@ -1,4 +1,4 @@
-"""Boot the kvm sandbox backend; require the agent startup line within 2 seconds."""
+"""Boot the kvm backend: agent startup line within 2 s, then a clean VM exit."""
 
 import os
 import platform
@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GUEST = ROOT / "target/guest"
 STARTUP = b"cubebot-agent "
 DEADLINE = 2.0
+SHUTDOWN = 10.0
 
 
 def main() -> int:
@@ -44,34 +45,42 @@ def main() -> int:
         env=environment,
     )
     try:
-        return wait_for_startup(sandbox, started)
+        return check(sandbox, started)
     finally:
         sandbox.kill()
         sandbox.wait()
 
 
-def wait_for_startup(sandbox: subprocess.Popen, started: float) -> int:
-    output = b""
+def check(sandbox: subprocess.Popen, started: float) -> int:
+    output, seen = relay(sandbox, started + DEADLINE, b"", STARTUP)
+    if not seen:
+        print(f"\nguest-boot failed: no agent startup line within {DEADLINE}s")
+        return 1
+    print(f"\nguest-boot: agent started in {time.monotonic() - started:.2f}s")
+    # Unconfigured, the agent exits; the guest then reboots, which must end the VM.
+    _, closed = relay(sandbox, started + SHUTDOWN, output, None)
+    if not closed or sandbox.wait(timeout=1) != 0:
+        print(f"guest-boot failed: the VM did not exit cleanly within {SHUTDOWN}s")
+        return 1
+    print("guest-boot: guest shutdown ended the VM")
+    return 0
+
+
+def relay(sandbox: subprocess.Popen, deadline: float, output: bytes, until):
+    """Echo guest output until `until` appears, or until EOF when it is None."""
     with selectors.DefaultSelector() as selector:
         selector.register(sandbox.stdout, selectors.EVENT_READ)
-        while (remaining := started + DEADLINE - time.monotonic()) > 0:
-            if not selector.select(remaining):
-                break
+        while until is None or until not in output:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not selector.select(remaining):
+                return output, False
             chunk = os.read(sandbox.stdout.fileno(), 65536)
             if not chunk:
-                break
+                return output, until is None
             sys.stdout.buffer.write(chunk)
             sys.stdout.flush()
             output += chunk
-            if STARTUP in output:
-                elapsed = time.monotonic() - started
-                print(f"\nguest-boot: agent started in {elapsed:.2f}s")
-                return 0
-    print(
-        f"\nguest-boot failed: no agent startup line within {DEADLINE}s",
-        file=sys.stderr,
-    )
-    return 1
+    return output, True
 
 
 if __name__ == "__main__":
