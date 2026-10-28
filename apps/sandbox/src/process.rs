@@ -7,14 +7,20 @@ use nix::{
     },
     unistd::Pid,
 };
-use std::{io, os::unix::fs::DirBuilderExt, process::Command};
+use std::{
+    io,
+    os::unix::fs::{DirBuilderExt, PermissionsExt},
+    process::Command,
+};
 
 pub fn run() -> io::Result<u8> {
     if let Some(journal) = std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY") {
         std::fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
-            .create(journal)?;
+            .create(&journal)?;
+        // Volumes with an fsGroup hand new directories the setgid bit; keep the journal private.
+        std::fs::set_permissions(&journal, std::fs::Permissions::from_mode(0o700))?;
     }
     let agent = std::env::current_exe()?.with_file_name("cubebot-agent");
     let child = Pid::from_raw(Command::new(agent).spawn()?.id() as i32);
