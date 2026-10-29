@@ -1,6 +1,6 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)) and 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)). Status: intended design grounded in 84 accepted ADRs. The sandbox's `kvm` backend is not built yet; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
+Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)) and 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)). Status: intended design grounded in 84 accepted ADRs. The sandbox boots every agent in a KVM guest; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 
@@ -51,7 +51,7 @@ Accepted deployment constraints:
 - One pod per running agent with one container, `cubebot-sandbox`, which boots the agent in a KVM guest. The VM is the trust boundary; the agent and its tools share it.
 - Shared PostgreSQL for structured records; separate persistent workspaces and an orchestrator-owned volume for shared files.
 - A dedicated TanStack Start frontend with Bun and Vite, serving desktop and installable PWA.
-- Standard container runtime for the orchestrator, frontend and sandbox pods; qualified agent sandboxes require the `kvm` backend and nodes exposing `/dev/kvm`. The `process` backend is for development and makes no isolation claim.
+- Standard container runtime for the orchestrator, frontend and sandbox pods; agent sandboxes are KVM guests and need nodes exposing `/dev/kvm`.
 
 Proposed Kubernetes implementation: deploy the orchestrator with one replica and Recreate rollout behavior, the frontend independently, and bundled PostgreSQL as a single-instance StatefulSet. Manage agent Pods directly from database intent, using separately retained PVCs. An additional Deployment or StatefulSet per agent is unnecessary for the selected initial lifecycle: the orchestrator already owns sleep, wake, retirement, and recovery. A failed node's pod replacement waits for safe reconciliation; it is not a promise of uninterrupted execution during orchestrator downtime.
 

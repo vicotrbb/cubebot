@@ -32,6 +32,8 @@ def build(builder, prefix):
         image,
         "--file",
         "apps/sandbox/Dockerfile",
+        "--build-context",
+        "guest=target/guest",
         ".",
     )
     return {"sandbox": image}

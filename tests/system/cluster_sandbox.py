@@ -4,9 +4,8 @@ Needs x86_64 Linux with /dev/kvm, the kernel build tools of tooling/guest, the
 cluster-chat prerequisites (Docker, the pinned kind, kubectl, OpenSSL), a fresh
 CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
 
-A generic device plugin hands /dev/kvm and /dev/net/tun to sandbox pods under the
-KubeVirt resource names the orchestrator requests. The fixture installs the egress and
-ingress NetworkPolicy an installation must provide for sandboxes. A real model chooses
+The fixture installs the egress and ingress NetworkPolicy an installation must provide
+for sandboxes. A real model chooses
 when to run the commands it is given inside each guest; every assertion reads the
 ledger's tool calls and results, Kubernetes or the node, never the model's reply.
 Evidence goes to cluster-sandbox.json in the qualification directory.
@@ -32,10 +31,6 @@ from cluster_chat_flow import (
 )
 from cluster_chat_setup import NAMESPACE, available, wait_for
 
-PLUGIN = (
-    "docker.io/squat/generic-device-plugin:a11f990"
-    "@sha256:5c48f7a16cfb37c4e07731bfa384b9dba6e12d2b0fb4350d8a321d49f12ac494"
-)
 INSTRUCTIONS = (
     "You operate a test sandbox. Run each command you are given with one bash tool "
     "call, exactly as written and unchanged, in the order given, then reply with the "
@@ -120,65 +115,8 @@ def address(f, kind, name, namespace=None):
 
 
 def install(f):
-    """The kvm device plugin and the sandbox NetworkPolicy an installation provides."""
-    devices = [
-        {"name": name, "groups": [{"count": 8, "paths": [{"path": path}]}]}
-        for name, path in (("kvm", "/dev/kvm"), ("tun", "/dev/net/tun"))
-    ]
-    args = ["--domain", "devices.kubevirt.io"]
-    for device in devices:
-        args += ["--device", json.dumps(device)]
-    plugin = {
-        "apiVersion": "apps/v1",
-        "kind": "DaemonSet",
-        "metadata": {"name": "device-plugin", "namespace": "kube-system"},
-        "spec": {
-            "selector": {"matchLabels": {"app": "device-plugin"}},
-            "template": {
-                "metadata": {"labels": {"app": "device-plugin"}},
-                "spec": {
-                    "automountServiceAccountToken": False,
-                    "containers": [
-                        {
-                            "name": "plugin",
-                            "image": PLUGIN,
-                            "args": args,
-                            "securityContext": {"privileged": True},
-                            "volumeMounts": [
-                                {
-                                    "name": "plugins",
-                                    "mountPath": "/var/lib/kubelet/device-plugins",
-                                },
-                                {"name": "dev", "mountPath": "/dev"},
-                            ],
-                        }
-                    ],
-                    "volumes": [
-                        {
-                            "name": "plugins",
-                            "hostPath": {"path": "/var/lib/kubelet/device-plugins"},
-                        },
-                        {"name": "dev", "hostPath": {"path": "/dev"}},
-                    ],
-                },
-            },
-        },
-    }
-    admission.kubectl(f.config, "create", "-f", "-", input=json.dumps(plugin))
-    name = f"{f.name}-control-plane"
-
-    def advertised():
-        status = json.loads(
-            admission.kubectl(f.config, "get", "node", name, "-o", "json")
-        )
-        allocatable = status["status"]["allocatable"]
-        return all(
-            allocatable.get(f"devices.kubevirt.io/{device}", "0") != "0"
-            for device in ("kvm", "tun")
-        )
-
-    wait_for("kvm and tun device advertisement", advertised)
-    f.k("create", "-f", "-", input=json.dumps(policy(f, name)))
+    """The sandbox NetworkPolicy an installation provides."""
+    f.k("create", "-f", "-", input=json.dumps(policy(f, f"{f.name}-control-plane")))
 
 
 def policy(f, name):
@@ -266,7 +204,7 @@ def vm(f, current, evidence):
     """The sandbox holds a KVM VM and no agent runs in the pod itself."""
     limits = current["spec"]["containers"][0]["resources"]["limits"]
     assert limits["devices.kubevirt.io/kvm"] == "1"
-    assert current["spec"]["containers"][0]["args"] == ["run", "--backend", "kvm"]
+    assert current["spec"]["containers"][0]["args"] == ["run"]
     held = vms(f, container(current))
     assert len(held) == 1, held
     names = f.k(
@@ -468,12 +406,4 @@ def qualify(f):
 
 
 if __name__ == "__main__":
-    chat.main(
-        "cubebot-sandbox-",
-        guest=True,
-        qualify=qualify,
-        level="privileged",
-        backend="kvm",
-        terminal_enabled=True,
-        qualified=True,
-    )
+    chat.main("cubebot-sandbox-", qualify=qualify, terminal_enabled=True)

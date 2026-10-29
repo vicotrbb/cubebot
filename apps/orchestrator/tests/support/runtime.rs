@@ -52,7 +52,6 @@ pub async fn fixture() -> Fixture {
         image,
         "cubebot-runtime",
         "https://cubebot.test",
-        cubebot_orchestrator::agents::sandbox::Backend::Process,
         cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap(),
     )
     .unwrap();

@@ -39,7 +39,10 @@ async fn fixture() -> Fixture {
     let program = root.join("docker");
     std::fs::write(&program, FAKE).unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
-    let config = DockerConfig::parse(r#"{"image":"cubebot-sandbox:test","backend":"process","orchestrator_origin":"http://127.0.0.1:8080"}"#).unwrap();
+    let config = DockerConfig::parse(
+        r#"{"image":"cubebot-sandbox:test","orchestrator_origin":"https://cubebot.test"}"#,
+    )
+    .unwrap();
     let docker = Docker::new(pool.clone(), config).with_program(program.to_str().unwrap());
     Fixture {
         pool,
@@ -62,6 +65,7 @@ impl Fixture {
         let (args, token) = (read("args"), read("token"));
         assert!(token.starts_with("cb_sandbox_") && !args.contains("cb_sandbox_"));
         assert!(args.lines().any(|line| line == "CUBEBOT_BOOTSTRAP_TOKEN"));
+        assert!(args.contains("\n/dev/kvm\n") && args.ends_with("\ncubebot-sandbox:test\nrun\n"));
         token
     }
     fn set(&self, epoch: i64, status: &str) {

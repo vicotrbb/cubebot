@@ -72,7 +72,7 @@ fn create(state: &mut Server, uri: Uri, bytes: Bytes) -> Response {
         body["spec"]["hostNetwork"] = json!(true);
     }
     if state.alter_sandbox && body["kind"] == "Pod" {
-        body["spec"]["containers"][0]["args"] = json!(["run", "--backend", "kvm"]);
+        body["spec"]["containers"][0]["args"] = json!(["run", "--debug"]);
     }
     body["metadata"]["uid"] = json!(format!("uid-{name}"));
     body["metadata"]["resourceVersion"] = json!("1");
@@ -153,7 +153,6 @@ fn layout() -> Layout {
         image,
         "cubebot-runtime",
         "https://cubebot.test",
-        cubebot_orchestrator::agents::sandbox::Backend::Process,
         cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap(),
     )
     .unwrap()
@@ -403,7 +402,7 @@ async fn unapproved_admission_changes_remain_planned_and_recover_after_policy_is
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn admission_change_to_the_sandbox_backend_is_rejected_before_pod_dispatch() {
+async fn admission_change_to_the_sandbox_arguments_is_rejected_before_pod_dispatch() {
     verify_blocked_admission(true).await;
 }
 
@@ -1070,7 +1069,7 @@ fn orchestrator_process(
     std::fs::write(&kubeconfig,json!({"apiVersion":"v1","kind":"Config","clusters":[{"name":"controlled","cluster":{"server":api.cluster_url.to_string()}}],"users":[{"name":"controlled","user":{}}],"contexts":[{"name":"controlled","context":{"cluster":"controlled","user":"controlled"}}],"current-context":"controlled"}).to_string()).unwrap();
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let configuration = directory.join("controller.json");
-    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"sandbox_image":image,"backend":"process","runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}}).to_string()).unwrap();
+    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"sandbox_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}}).to_string()).unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);

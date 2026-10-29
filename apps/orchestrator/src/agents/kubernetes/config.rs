@@ -9,16 +9,12 @@ use std::io::Read;
 pub struct ControllerConfig {
     connection: Connection,
     sandbox_image: String,
-    backend: crate::agents::sandbox::Backend,
     runtime_service_account: String,
     orchestrator_origin: String,
     network: cubebot_protocol::network::NetworkPolicy,
     control_ca_config_map: Option<String>,
     #[serde(default)]
     terminal_enabled: bool,
-    /// A qualified installation claims agent isolation, which only the `kvm` backend provides.
-    #[serde(default)]
-    qualified: bool,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -32,7 +28,6 @@ impl ControllerConfig {
             return Err(Error::InvalidConfiguration);
         }
         let config: Self = serde_json::from_str(input).map_err(|_| Error::InvalidConfiguration)?;
-        crate::agents::sandbox::require_isolation(config.qualified, config.backend)?;
         config.layout()?;
         if let Connection::Kubeconfig { path, context } = &config.connection
             && (path.is_empty() || context.is_empty())
@@ -67,7 +62,6 @@ impl ControllerConfig {
             &self.sandbox_image,
             &self.runtime_service_account,
             &self.orchestrator_origin,
-            self.backend,
             self.network.clone(),
         )?
         .with_terminal(self.terminal_enabled);

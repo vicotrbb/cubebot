@@ -8,7 +8,7 @@ The native provider adapters carry stateless function calls, several per respons
 
 Every tool runs as the unprivileged user named by `CUBEBOT_TOOL_USER` (`uid:gid`, never root), in its own process group, with `HOME` and the working directory set to `CUBEBOT_WORKSPACE_DIRECTORY` and no inherited agent environment. File tools run as that user too, so the kernel bounds what a call can touch: `read_file` is `cat`, `write_file` a fixed bash script fed the content on standard input, `glob` bash pathname expansion (`**` needs bash 4 or later and is refused with exit code 2 otherwise), `grep` `grep -rnIE`, and `edit_file` re-executes `cubebot-agent edit-file` as the tool user. Model arguments are passed as program arguments or standard input and are never evaluated as code. With tools enabled the agent refuses to start without a valid tool user.
 
-Only a privileged agent can switch users. The `process` backend runs the agent unprivileged, so its controller sets the tool user to the sandbox's own uid (10001); that is no separation and no isolation claim. The `kvm` guest must name a separate user.
+Only a privileged agent can switch users. The guest agent runs as root, and the controller sets the tool user to uid 10001.
 
 ## Output
 

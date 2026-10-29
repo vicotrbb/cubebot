@@ -514,10 +514,11 @@ def protected_credentials(f, key, current):
             "--",
             "stat",
             "-c",
-            "%u:%a",
-            "/var/lib/cubebot/runtime",
+            "%u",
+            # The journal lives inside the guest's workspace disk.
+            "/var/lib/cubebot/workspace.ext4",
         )
-        == "10001:700"
+        == "0"
     )
     assert key not in f.k(
         "exec", current["metadata"]["name"], "--", "cat", "/proc/1/environ"

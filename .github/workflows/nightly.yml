@@ -8,9 +8,11 @@ permissions:
   contents: read
 
 jobs:
+  # Every sandbox is a KVM guest (ADR 0084): GitHub's x86_64 Ubuntu runners expose /dev/kvm,
+  # and kind's privileged node hands it to the device plugin.
   cluster:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 240
     env:
       HAS_PROVIDER_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
     steps:
@@ -24,6 +26,13 @@ jobs:
       - name: Install Rust toolchain from repository pin
         run: rustup show active-toolchain
       - run: uv sync --project tooling/quality --locked
+      - name: Install kernel build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends bc bison flex libelf-dev
+      - name: Let the runner user open /dev/kvm
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
       - name: Install verified kind v0.33.0
         run: |
           mkdir -p .tools
@@ -41,4 +50,9 @@ jobs:
         if: env.HAS_PROVIDER_KEY == 'true'
         env:
           CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-chat
+          OPENAI_API_KEY_FILE: ${{ runner.temp }}/openai-key
+      - run: just cluster-sandbox
+        if: env.HAS_PROVIDER_KEY == 'true'
+        env:
+          CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-sandbox
           OPENAI_API_KEY_FILE: ${{ runner.temp }}/openai-key

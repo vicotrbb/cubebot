@@ -4,34 +4,9 @@ pub use docker::{Docker, DockerConfig};
 
 use super::AgentId;
 use crate::agents::kubernetes::Error;
-use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::future::Future;
 use tokio::io::{AsyncRead, AsyncWrite};
-
-/// `process` runs the agent as a plain child for development and never carries an isolation claim.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Backend {
-    Kvm,
-    Process,
-}
-impl Backend {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Kvm => "kvm",
-            Self::Process => "process",
-        }
-    }
-}
-
-/// A qualified installation refuses to start with the `process` backend.
-pub(crate) fn require_isolation(qualified: bool, backend: Backend) -> Result<(), Error> {
-    if qualified && backend == Backend::Process {
-        return Err(Error::InvalidConfiguration);
-    }
-    Ok(())
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
