@@ -123,7 +123,7 @@ impl Layout {
 
     fn sandbox(&self) -> Value {
         json!({"name":"sandbox","image":self.image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-sandbox"],"args":["--backend",self.backend.as_str()],
+            "command":["/usr/local/bin/cubebot-sandbox"],"args":["run","--backend",self.backend.as_str()],
             "securityContext":security(10001),"resources":resources("100m","256Mi","2","2Gi"),
             "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"},{"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"}],
             "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"tmp","mountPath":"/tmp"}]})

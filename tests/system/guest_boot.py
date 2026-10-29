@@ -6,7 +6,8 @@ ARP. In it the sandbox boots the guest twice on one workspace disk. Each boot mu
 reach a stand-in orchestrator at the pod's address over TLS with the forwarded
 bootstrap token, report liveness over vsock, and on SIGTERM exit with the agent's
 status 0, leaving the workspace filesystem clean.
-The second boot must reopen the journal lock file the first one created. The stand-in
+The second boot must reopen the journal lock file the first one created. Before both,
+the sandbox must refuse to start in the host's own network namespace. The stand-in
 only records the bootstrap request, so this is not agent qualification.
 """
 
@@ -64,6 +65,10 @@ def main() -> int:
 def acceptance(directory: Path, requests: queue.Queue) -> int:
     (directory / "token").write_text(TOKEN)
     workspace = directory / "workspace.img"
+    failure = host_refusal(directory, workspace)
+    if failure:
+        print(f"guest-boot failed: {failure}")
+        return 1
     inode = None
     for boot in (1, 2):
         failure = run_guest(directory, workspace, requests)
@@ -88,20 +93,38 @@ def acceptance(directory: Path, requests: queue.Queue) -> int:
     return 0
 
 
+def host_refusal(directory: Path, workspace: Path):
+    """In the host's network namespace `run` refuses before touching an interface."""
+    result = subprocess.run(
+        ["sudo", "env"]
+        + [
+            f"{name}={value}"
+            for name, value in environment(directory, workspace).items()
+        ]
+        + [ROOT / "target/debug/cubebot-sandbox", "run", "--backend", "kvm"],
+        capture_output=True,
+        text=True,
+        timeout=DEADLINE,
+    )
+    if result.returncode == 0 or "own network namespace" not in result.stderr:
+        return f"the sandbox did not refuse the host network namespace: {result.stderr}"
+    if (
+        subprocess.run(["ip", "link", "show", "tap0"], capture_output=True).returncode
+        == 0
+    ):
+        return "the refused sandbox left a tap device on the host"
+    return None
+
+
 def run_guest(directory: Path, workspace: Path, requests: queue.Queue):
     """Returns why a boot failed, or None."""
-    environment = {
-        "CUBEBOT_GUEST_KERNEL": GUEST / "bzImage",
-        "CUBEBOT_GUEST_ROOT": GUEST / "root.ext4",
-        "CUBEBOT_GUEST_WORKSPACE": workspace,
-        "CUBEBOT_ORCHESTRATOR_ORIGIN": f"https://{HOST}:{PORT}/",
-        "CUBEBOT_BOOTSTRAP_TOKEN_FILE": directory / "token",
-        "CUBEBOT_CONTROL_CA_FILE": directory / "ca.pem",
-    }
     sandbox = subprocess.Popen(
         ["sudo", "ip", "netns", "exec", NAMESPACE, "env"]
-        + [f"{name}={value}" for name, value in environment.items()]
-        + [ROOT / "target/debug/cubebot-sandbox", "--backend", "kvm"],
+        + [
+            f"{name}={value}"
+            for name, value in environment(directory, workspace).items()
+        ]
+        + [ROOT / "target/debug/cubebot-sandbox", "run", "--backend", "kvm"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
@@ -111,6 +134,17 @@ def run_guest(directory: Path, workspace: Path, requests: queue.Queue):
         if sandbox.poll() is None:
             subprocess.run(["sudo", "pkill", "-KILL", "-x", "cubebot-sandbox"])
         sandbox.wait()
+
+
+def environment(directory: Path, workspace: Path):
+    return {
+        "CUBEBOT_GUEST_KERNEL": GUEST / "bzImage",
+        "CUBEBOT_GUEST_ROOT": GUEST / "root.ext4",
+        "CUBEBOT_GUEST_WORKSPACE": workspace,
+        "CUBEBOT_ORCHESTRATOR_ORIGIN": f"https://{HOST}:{PORT}/",
+        "CUBEBOT_BOOTSTRAP_TOKEN_FILE": directory / "token",
+        "CUBEBOT_CONTROL_CA_FILE": directory / "ca.pem",
+    }
 
 
 class Console:

@@ -8,6 +8,7 @@ use super::{
 };
 pub use drain::{DrainRequest, RuntimeControl, RuntimeDisposition};
 use serde::Serialize;
+pub use sessions::revoke;
 pub(crate) use sessions::{sandbox_digest, sandbox_token};
 use sqlx::PgPool;
 use uuid::Uuid;

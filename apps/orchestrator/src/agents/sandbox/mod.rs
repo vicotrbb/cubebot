@@ -25,6 +25,14 @@ impl Backend {
     }
 }
 
+/// A qualified installation refuses to start with the `process` backend.
+pub(crate) fn require_isolation(qualified: bool, backend: Backend) -> Result<(), Error> {
+    if qualified && backend == Backend::Process {
+        return Err(Error::InvalidConfiguration);
+    }
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Absent,

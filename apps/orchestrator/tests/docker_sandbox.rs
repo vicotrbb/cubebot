@@ -2,7 +2,7 @@ use crate::registry_support;
 use cubebot_orchestrator::agents::{
     AgentId,
     kubernetes::Error,
-    runtime::{RuntimeAccess, RuntimeIdentity},
+    runtime::{self, RuntimeAccess, RuntimeIdentity},
     sandbox::{Docker, DockerConfig, Sandbox, Status, drive},
 };
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
@@ -15,13 +15,13 @@ name() { while [ "$#" -gt 1 ]; do [ "$1" = --name ] && { echo "$2"; return; }; s
 case "$1 $2" in
 "volume create") eval "echo \${$#}" ;;
 "volume ls") echo "${4#name=^}" | tr -d '$' ;;
-"container create") n=$(name "$@"); printf '%s\n' "$@" > "$state/$n.args"; echo created > "$state/$n"; echo "id-$n" ;;
+"container create") n=$(name "$@"); printf '%s\n' "$@" > "$state/$n.args"; printf '%s' "$CUBEBOT_BOOTSTRAP_TOKEN" > "$state/$n.token"; echo created > "$state/$n"; echo "id-$n" ;;
 "container inspect")
   n=$5; [ -f "$state/$n" ] || { echo "Error: No such container: $n" >&2; exit 1; }
   if [ "$4" = '{{.Id}}' ]; then echo "id-$n"; else printf '{"Status":"%s","ExitCode":%s}\n' "$(cat "$state/$n")" "${EXIT:-0}"; fi ;;
 "container start") echo running > "$state/$3" ;;
 "container stop") echo exited > "$state/$3" ;;
-"container rm") rm "$state/$3" "$state/$3.args" ;;
+"container rm") rm "$state/$3" "$state/$3.args" "$state/$3.token" ;;
 *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 "#;
@@ -52,17 +52,17 @@ impl Fixture {
     fn container(&self, epoch: i64) -> String {
         format!("cubebot-agent-{}-{epoch}", self.agent.0)
     }
+    /// The token reaches the CLI through its environment, never its arguments.
     fn token(&self, epoch: i64) -> String {
-        let args = std::fs::read_to_string(
-            self.root
-                .join("state")
-                .join(format!("{}.args", self.container(epoch))),
-        )
-        .unwrap();
-        args.lines()
-            .find_map(|line| line.strip_prefix("CUBEBOT_BOOTSTRAP_TOKEN="))
-            .unwrap()
-            .to_owned()
+        let state = self.root.join("state");
+        let read = |suffix: &str| {
+            std::fs::read_to_string(state.join(format!("{}.{suffix}", self.container(epoch))))
+                .unwrap()
+        };
+        let (args, token) = (read("args"), read("token"));
+        assert!(token.starts_with("cb_sandbox_") && !args.contains("cb_sandbox_"));
+        assert!(args.lines().any(|line| line == "CUBEBOT_BOOTSTRAP_TOKEN"));
+        token
     }
     fn set(&self, epoch: i64, status: &str) {
         std::fs::write(self.root.join("state").join(self.container(epoch)), status).unwrap();
@@ -157,5 +157,26 @@ async fn sleep_and_restart_wait_for_drain_before_stopping_a_running_agent() {
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.docker.status(f.agent).await.unwrap(), Status::Absent);
     assert!(f.docker.workspace(f.agent).await.unwrap().is_some());
+    std::fs::remove_dir_all(&f.root).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_revoked_credential_authorizes_nothing_and_cannot_be_reissued() {
+    let f = fixture().await;
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    let identity = RuntimeIdentity::docker(f.pool.clone());
+    let instance = Uuid::new_v4();
+    let session = identity.bootstrap(&f.token(1), instance).await.unwrap();
+    assert_eq!(runtime::revoke(&f.pool, f.agent).await.unwrap(), 1);
+    assert!(matches!(
+        identity
+            .authenticate(&session.token, RuntimeAccess::Recovery)
+            .await,
+        Err(Error::Unauthorized)
+    ));
+    // The same container cannot exchange its bootstrap token for a fresh credential.
+    assert!(identity.bootstrap(&f.token(1), instance).await.is_err());
+    assert_eq!(runtime::revoke(&f.pool, f.agent).await.unwrap(), 0);
     std::fs::remove_dir_all(&f.root).unwrap();
 }

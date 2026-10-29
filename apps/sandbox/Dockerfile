@@ -34,4 +34,4 @@ ENV CUBEBOT_GUEST_KERNEL=/usr/share/cubebot/guest/bzImage \
     CUBEBOT_GUEST_ROOT=/usr/share/cubebot/guest/root.ext4
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/cubebot-sandbox"]
-CMD ["--backend", "kvm"]
+CMD ["run", "--backend", "kvm"]

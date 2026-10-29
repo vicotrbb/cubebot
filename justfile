@@ -86,3 +86,7 @@ cluster-startup:
 # Builds shipped images; requires an external evidence directory and provider key file.
 cluster-chat:
     uv run --project tooling/quality --locked python tests/system/cluster_chat.py
+
+# ADR 0083 sandbox scenarios on the kvm backend; x86_64 Linux with /dev/kvm, as cluster-chat.
+cluster-sandbox:
+    uv run --project tooling/quality --locked python tests/system/cluster_sandbox.py

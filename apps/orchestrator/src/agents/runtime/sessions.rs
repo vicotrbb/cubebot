@@ -22,7 +22,7 @@ impl RuntimeIdentity {
         sqlx::query_scalar::<_,Uuid>("SELECT id FROM agent_resources WHERE id = $1 AND agent_id = $2 AND kind = 'pod' AND phase = 'bound' AND uid = $3 FOR UPDATE")
             .bind(attempt.id).bind(attempt.agent).bind(&reviewed.pod_uid).fetch_optional(&mut *transaction).await?.ok_or(Error::Unauthorized)?;
         // The credential lasts for this sandbox incarnation; the same process may rotate it.
-        let version: i64 = sqlx::query_scalar("INSERT INTO agent_runtime_sessions (attempt_id,instance_id,pod_uid,service_account_uid,token_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET token_hash = EXCLUDED.token_hash, version = agent_runtime_sessions.version + 1 WHERE agent_runtime_sessions.instance_id = EXCLUDED.instance_id AND agent_runtime_sessions.pod_uid = EXCLUDED.pod_uid AND agent_runtime_sessions.service_account_uid = EXCLUDED.service_account_uid RETURNING version")
+        let version: i64 = sqlx::query_scalar("INSERT INTO agent_runtime_sessions (attempt_id,instance_id,pod_uid,service_account_uid,token_hash) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (attempt_id) DO UPDATE SET token_hash = EXCLUDED.token_hash, version = agent_runtime_sessions.version + 1 WHERE agent_runtime_sessions.instance_id = EXCLUDED.instance_id AND agent_runtime_sessions.pod_uid = EXCLUDED.pod_uid AND agent_runtime_sessions.service_account_uid = EXCLUDED.service_account_uid AND agent_runtime_sessions.revoked_at IS NULL RETURNING version")
             .bind(attempt.id).bind(instance).bind(&reviewed.pod_uid).bind(&reviewed.service_account_uid).bind(digest(&token)).fetch_optional(&mut *transaction).await?.ok_or(Error::Conflict)?;
         transaction.commit().await?;
         Ok(RuntimeSession {
@@ -44,6 +44,14 @@ impl RuntimeIdentity {
         sqlx::query_as("SELECT agent_id AS agent,attempt_id AS attempt,epoch,version FROM runtime_session_access WHERE token_hash = $1 AND recovery AND (NOT $2 OR active)")
             .bind(digest(token)).bind(active).fetch_optional(&self.pool).await?.ok_or(Error::Unauthorized)
     }
+}
+/// Revokes the agent credential of every incarnation of `agent` (ADR 0083). The sandbox keeps
+/// running but can no longer write to the ledger, receive work or bootstrap again; a later
+/// incarnation gets a new credential. Returns how many credentials were revoked.
+pub async fn revoke(pool: &sqlx::PgPool, agent: AgentId) -> Result<u64, Error> {
+    let revoked = sqlx::query("UPDATE agent_runtime_sessions s SET revoked_at = clock_timestamp() FROM agent_resources r WHERE r.id = s.attempt_id AND r.agent_id = $1 AND s.revoked_at IS NULL")
+        .bind(agent).execute(pool).await?;
+    Ok(revoked.rows_affected())
 }
 fn token() -> String {
     let mut bytes = [0_u8; 32];

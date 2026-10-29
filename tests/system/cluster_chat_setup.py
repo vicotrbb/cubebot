@@ -276,7 +276,7 @@ def database(f):
     f.ready("postgres")
 
 
-def orchestrator(f, dns):
+def orchestrator(f, dns, **controller):
     config = {
         "connection": {"kind": "in_cluster"},
         "sandbox_image": f.images["sandbox"],
@@ -285,6 +285,7 @@ def orchestrator(f, dns):
         "orchestrator_origin": CONTROL,
         "network": {"dns": [dns]},
         "control_ca_config_map": "control-ca",
+        **controller,
     }
     f.create("ConfigMap", "controller", data={"config.json": json.dumps(config)})
     f.create(
@@ -430,11 +431,11 @@ def available(f):
         return False
 
 
-def setup(f, dns):
+def setup(f, dns, **controller):
     certificate(f)
     rbac(f)
     database(f)
-    orchestrator(f, dns)
+    orchestrator(f, dns, **controller)
     f.labeled_pod(
         "web",
         {"name": "web", "image": f.images["web"]},

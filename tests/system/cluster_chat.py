@@ -59,10 +59,20 @@ def runtime_diagnostics(f):
         print(f"Agent inventory unavailable: {error}", file=sys.stderr)
 
 
-def workflow(config, name, fixture, artifacts, images):
-    from cluster_chat_flow import qualify
+def workflow(
+    config,
+    name,
+    fixture,
+    artifacts,
+    images,
+    qualify=None,
+    level="baseline",
+    **controller,
+):
+    if qualify is None:
+        from cluster_chat_flow import qualify
 
-    admission.namespaces(config, fixture, ((NAMESPACE, "baseline"),))
+    admission.namespaces(config, fixture, ((NAMESPACE, level),))
     references = startup.load_images(name, images)
     f = Fixture(config, name, artifacts, references)
     f.save("images.json", references)
@@ -81,7 +91,7 @@ def workflow(config, name, fixture, artifacts, images):
     process = None
     try:
         startup.install_csi(config, artifacts)
-        setup(f, dns)
+        setup(f, dns, **controller)
         process = forward(f)
         wait_for("verified HTTPS API", lambda: available(f))
         f.token = f.request(
@@ -101,9 +111,10 @@ def workflow(config, name, fixture, artifacts, images):
                 process.wait(timeout=10)
 
 
-def main():
+def main(prefix="cubebot-chat-", guest=False, **options):
+    """`guest` puts the kvm guest in the sandbox image; `options` go to workflow."""
     artifacts = evidence_directory(os.environ["CUBEBOT_QUALIFICATION_DIRECTORY"])
-    name = "cubebot-chat-" + uuid.uuid4().hex[:12]
+    name = prefix + uuid.uuid4().hex[:12]
     config = artifacts / "kubeconfig"
     baseline = admission.fingerprint()
     supplied = os.environ.get("CUBEBOT_QUALIFICATION_BUILDER")
@@ -119,10 +130,21 @@ def main():
                 "--driver",
                 "docker-container",
             )
-        images = build_images(builder, name, artifacts, baseline)
+        if guest:
+            with (artifacts / "build-guest.log").open("w") as log:
+                subprocess.run(
+                    [sys.executable, "tooling/guest/build.py"],
+                    stdout=log,
+                    stderr=log,
+                    check=True,
+                    timeout=3600,
+                )
+        images = build_images(builder, name, artifacts, baseline, guest)
         if admission.fingerprint() != baseline:
             raise RuntimeError("source changed during image build; repeat")
-        admission.cluster(config, name, artifacts, partial(workflow, images=images))
+        admission.cluster(
+            config, name, artifacts, partial(workflow, images=images, **options)
+        )
     finally:
         config.unlink(missing_ok=True)
         cleanup_images(name, builder if not supplied else None)
@@ -130,10 +152,10 @@ def main():
         raise RuntimeError(
             "source changed during qualification; repeat on final source"
         )
-    print("Owned text-chat qualification and cluster cleanup completed", flush=True)
+    print("Owned qualification and cluster cleanup completed", flush=True)
 
 
-def build_images(builder, name, artifacts, source):
+def build_images(builder, name, artifacts, source, guest=False):
     images = {}
     for role in ("sandbox", "orchestrator", "web"):
         image = f"{name}-{role}"
@@ -153,6 +175,8 @@ def build_images(builder, name, artifacts, source):
             "--file",
             f"apps/{role}/Dockerfile",
         ]
+        if guest and role == "sandbox":
+            args += ["--build-context", "guest=target/guest"]
         with (artifacts / f"build-{role}.log").open("w") as log:
             subprocess.run(
                 [*args, "."], stdout=log, stderr=log, check=True, timeout=1200
