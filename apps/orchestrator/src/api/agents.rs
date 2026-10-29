@@ -17,6 +17,10 @@ struct AgentApi {
     agents: Agents,
 }
 
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(list, create, update))]
+pub(super) struct Doc;
+
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/agents", get(list).post(create))
@@ -37,6 +41,7 @@ struct Cursor {
     after: Option<AgentId>,
 }
 
+#[utoipa::path(get, path = "/api/agents", params(("after" = Option<uuid::Uuid>, Query)), responses((status = 200, body = Vec<crate::agents::Agent>)))]
 async fn list(
     State(api): State<AgentApi>,
     headers: HeaderMap,
@@ -61,6 +66,7 @@ async fn read(
     ))
 }
 
+#[utoipa::path(post, path = "/api/agents", request_body = CreateAgent, responses((status = 201, body = crate::identity::Receipt)))]
 async fn create(
     State(api): State<AgentApi>,
     headers: HeaderMap,
@@ -81,6 +87,7 @@ struct RevisionCursor {
     after: i64,
 }
 
+#[utoipa::path(post, path = "/api/agents/{id}/definition", params(("id" = uuid::Uuid, Path)), request_body = UpdateAgent, responses((status = 200, body = crate::identity::Receipt)))]
 async fn update(
     State(api): State<AgentApi>,
     headers: HeaderMap,

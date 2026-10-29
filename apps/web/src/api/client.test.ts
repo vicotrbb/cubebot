@@ -1,7 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
-import { ApiError, agent, messageProblem, pages, rejectedInput } from './client'
+import createClient from 'openapi-fetch'
+import {
+  ApiError,
+  agents,
+  merge,
+  messageProblem,
+  rejectedInput,
+} from './client'
+import type { paths } from './schema'
 
 test('message validation uses the server UTF-8 byte bound and keeps definite rejections editable', () => {
   assert.equal(messageProblem('a'.repeat(16384)), null)
@@ -35,59 +43,42 @@ test('agent loading follows every authorization-filtered page', async () => {
   const address = server.address()
   if (!address || typeof address === 'string')
     throw new Error('missing test listener')
-  const original = globalThis.fetch
-  globalThis.fetch = (input, init) =>
-    original(
-      typeof input === 'string'
-        ? new URL(input, `http://127.0.0.1:${address.port}`)
-        : input,
-      init,
-    )
+  const client = createClient<paths>({
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  })
   try {
-    assert.equal((await pages('/agents', agent)).length, 101)
+    assert.equal((await agents(client)).length, 101)
     assert.deepEqual(requests, ['', '099'])
   } finally {
-    globalThis.fetch = original
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
     )
   }
 })
 
-test('terminal outcomes and cancellation retain attributed command results', async () => {
-  const { turn } = await import('./client')
-  const result = turn({
-    id: 'turn',
-    sequence: 1,
+test('turn snapshots keep sequence order and never undo a finished turn', () => {
+  const turn = (id: string, sequence: number, status: string) => ({
+    id,
+    sequence,
+    status,
     message: 'run',
-    status: 'cancelled',
     response: null,
-    error: 'cancelled',
-    terminal: [
-      {
-        id: 'invocation',
-        command: 'exit 7',
-        status: 'exited',
-        outcome: { status: 'exited', code: 7, output: 'failure' },
-      },
-    ],
+    error: null,
+    terminal: [],
   })
-  assert.deepEqual(result.terminal[0]?.outcome, {
-    status: 'exited',
-    code: 7,
-    output: 'failure',
-  })
-  assert.throws(() =>
-    turn({
-      ...result,
-      terminal: [
-        {
-          id: 'bad',
-          command: 'run',
-          status: 'exited',
-          outcome: { status: 'unsupported' },
-        },
-      ],
-    }),
+  const finished = merge(
+    [turn('b', 2, 'queued')],
+    [turn('a', 1, 'complete'), turn('b', 2, 'running')],
   )
+  assert.deepEqual(
+    finished.map((item) => [item.id, item.status]),
+    [
+      ['a', 'complete'],
+      ['b', 'running'],
+    ],
+  )
+  const stale = merge(finished, [turn('a', 1, 'running')])
+  assert.equal(stale[0]?.status, 'complete')
+  const late = merge(stale, [{ ...turn('a', 1, 'cancelled') }])
+  assert.equal(late[0]?.status, 'cancelled')
 })

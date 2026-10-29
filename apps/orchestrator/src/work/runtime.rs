@@ -87,6 +87,11 @@ impl Work {
     ) -> Result<bool, Error> {
         let payload = payload(sequence, event)?;
         let mut tx = self.pool.begin().await?;
+        // Serializes event ids per conversation so a browser cursor never skips a late commit.
+        sqlx::query("SELECT 1 FROM conversations WHERE id=$1 FOR NO KEY UPDATE")
+            .bind(actor.agent)
+            .execute(&mut *tx)
+            .await?;
         let (status, attempt): (String, Option<Uuid>) = sqlx::query_as(
             "SELECT status,attempt_id FROM chat_turns WHERE id=$1 AND conversation_id=$2 FOR UPDATE",
         )

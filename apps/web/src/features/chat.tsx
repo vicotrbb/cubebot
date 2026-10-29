@@ -1,27 +1,28 @@
 import { useEffect, useState } from 'react'
 import {
-  array,
+  api,
+  merge,
   messageProblem,
+  ok,
   rejectedInput,
-  request,
   failure,
-  turn,
   type Turn,
+  type TurnEvent,
 } from '../api/client'
 
 async function history(id: string) {
   const messages: Turn[] = []
-  let after = 0
   for (;;) {
-    const page = array(
-      await request(`/conversations/${id}/messages?after=${after}`),
-      turn,
+    const page = await ok(
+      api.GET('/api/conversations/{conversation}/messages', {
+        params: {
+          path: { conversation: id },
+          query: { after: messages.at(-1)?.sequence ?? 0 },
+        },
+      }),
     )
     messages.push(...page)
     if (page.length < 100) return messages
-    const last = page.at(-1)
-    if (!last) return messages
-    after = last.sequence
   }
 }
 function draft(key: string) {
@@ -58,6 +59,7 @@ function stateLabel(message: Turn) {
 export function Chat({ id, accountId }: { id: string; accountId: string }) {
   const key = `cubebot:${accountId}:${id}`
   const [messages, setMessages] = useState<Turn[]>([])
+  const [streaming, setStreaming] = useState<Record<string, string>>({})
   const [text, setText] = useState(() => draft(key))
   const [pending, setPending] = useState(() => draft(`${key}:request`))
   const [error, setError] = useState('')
@@ -65,26 +67,46 @@ export function Chat({ id, accountId }: { id: string; accountId: string }) {
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
   useEffect(() => {
-    let cancelled = false
-    let timer: ReturnType<typeof setTimeout>
-    async function poll() {
-      try {
-        const messages = await history(id)
-        if (!cancelled) {
-          setMessages(messages)
-          setReadError('')
+    const source = new EventSource(`/api/conversations/${id}/events`)
+    // History loads once the stream is following, so nothing falls between the two; a
+    // reconnect reloads it to catch turns that changed without an event.
+    source.onopen = () => {
+      setReadError('')
+      history(id).then(
+        (loaded) => {
+          setMessages((current) => merge(current, loaded))
           setLoaded(true)
-        }
-      } catch (error) {
-        if (!cancelled) setReadError(failure(error))
-      }
-      if (!cancelled) timer = setTimeout(poll, 2000)
+        },
+        (error) => setReadError(failure(error)),
+      )
     }
-    void poll()
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
+    source.onerror = () =>
+      setReadError(
+        source.readyState === EventSource.CLOSED
+          ? 'Live updates stopped. Reload the page to reconnect.'
+          : 'Reconnecting to live updates…',
+      )
+    source.addEventListener('turn', (event) => {
+      const turn: Turn = JSON.parse(event.data)
+      setMessages((current) => merge(current, [turn]))
+      // shortcut: a retried turn replayed on connect shows its interrupted run's text first;
+      // record run boundaries on events if that confuses people.
+      if (turn.status !== 'running')
+        setStreaming((current) =>
+          Object.fromEntries(
+            Object.entries(current).filter(([key]) => key !== turn.id),
+          ),
+        )
+    })
+    source.addEventListener('turn_event', (event) => {
+      const { turn_id, payload }: TurnEvent = JSON.parse(event.data)
+      if (payload.kind === 'text_delta')
+        setStreaming((current) => ({
+          ...current,
+          [turn_id]: (current[turn_id] ?? '') + payload.text,
+        }))
+    })
+    return () => source.close()
   }, [id])
   async function send() {
     const problem = messageProblem(text)
@@ -101,15 +123,22 @@ export function Chat({ id, accountId }: { id: string; accountId: string }) {
     save(`${key}:request`, requestId)
     save(key, text)
     try {
-      await request(`/conversations/${id}/messages`, {
-        request_id: requestId,
-        message: text,
-      })
+      const turn = await ok(
+        api.POST('/api/conversations/{conversation}/messages', {
+          params: { path: { conversation: id } },
+          body: { request_id: requestId, message: text },
+        }),
+      )
       setText('')
       setPending('')
       save(key, '')
       save(`${key}:request`, '')
-      setMessages(await history(id))
+      // The stream may already hold a newer state of this turn.
+      setMessages((current) =>
+        current.some((known) => known.id === turn.id)
+          ? current
+          : merge(current, [turn]),
+      )
     } catch (error) {
       if (rejectedInput(error)) {
         setPending('')
@@ -135,7 +164,7 @@ export function Chat({ id, accountId }: { id: string; accountId: string }) {
             key={message.id}
             conversation={id}
             message={message}
-            onChanged={async () => setMessages(await history(id))}
+            streaming={streaming[message.id]}
           />
         ))}
       </div>
@@ -184,11 +213,9 @@ export function Chat({ id, accountId }: { id: string; accountId: string }) {
 function Retry({
   conversation,
   message,
-  onRetried,
 }: {
   conversation: string
   message: Turn
-  onRetried: () => Promise<void>
 }) {
   const [attempt, setAttempt] = useState<{ request_id: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -204,12 +231,16 @@ function Retry({
           const input = attempt ?? { request_id: crypto.randomUUID() }
           setAttempt(input)
           try {
-            await request(
-              `/conversations/${conversation}/messages/${message.id}/retry`,
-              input,
+            await ok(
+              api.POST(
+                '/api/conversations/{conversation}/messages/{turn}/retry',
+                {
+                  params: { path: { conversation, turn: message.id } },
+                  body: input,
+                },
+              ),
             )
             setAttempt(null)
-            await onRetried()
           } catch (error) {
             setError(failure(error))
           } finally {
@@ -227,11 +258,11 @@ function Retry({
 function Exchange({
   conversation,
   message,
-  onChanged,
+  streaming,
 }: {
   conversation: string
   message: Turn
-  onChanged: () => Promise<void>
+  streaming: string | undefined
 }) {
   return (
     <article className="exchange">
@@ -241,28 +272,23 @@ function Exchange({
       </div>
       <div className="agent-message">
         <span className="speaker">Agent</span>
-        {message.response !== null ? (
+        {message.response ? (
           <p>{message.response}</p>
         ) : (
-          <p className="muted" role="status">
-            {stateLabel(message)}
-          </p>
+          <>
+            {streaming && <p>{streaming}</p>}
+            <p className="muted" role="status">
+              {stateLabel(message)}
+            </p>
+          </>
         )}
         {message.status === 'waiting' &&
           !message.terminal.some((tool) => tool.status === 'uncertain') && (
-            <Retry
-              conversation={conversation}
-              message={message}
-              onRetried={onChanged}
-            />
+            <Retry conversation={conversation} message={message} />
           )}
         <TerminalResults message={message} />
         {['queued', 'running', 'waiting'].includes(message.status) && (
-          <Stop
-            conversation={conversation}
-            message={message}
-            onChanged={onChanged}
-          />
+          <Stop conversation={conversation} message={message} />
         )}
       </div>
     </article>
@@ -301,14 +327,13 @@ function TerminalResults({ message }: { message: Turn }) {
     </>
   )
 }
+/** The orchestrator delivers the cancel to the agent over its runtime channel. */
 function Stop({
   conversation,
   message,
-  onChanged,
 }: {
   conversation: string
   message: Turn
-  onChanged: () => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -321,11 +346,12 @@ function Stop({
           setBusy(true)
           setError('')
           try {
-            await request(
-              `/conversations/${conversation}/messages/${message.id}/cancel`,
-              {},
+            await ok(
+              api.POST(
+                '/api/conversations/{conversation}/messages/{turn}/cancel',
+                { params: { path: { conversation, turn: message.id } } },
+              ),
             )
-            await onChanged()
           } catch (error) {
             setError(failure(error))
           } finally {

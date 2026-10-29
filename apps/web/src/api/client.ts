@@ -1,3 +1,11 @@
+import createClient, { type Client } from 'openapi-fetch'
+import type { components, paths } from './schema'
+
+export type Account = components['schemas']['Account']
+export type Agent = components['schemas']['Agent']
+export type Turn = components['schemas']['Turn']
+export type TurnEvent = components['schemas']['Event']
+
 export class ApiError extends Error {
   constructor(public status: number) {
     super(
@@ -16,115 +24,34 @@ function errorMessage(status: number) {
   if (status === 400) return 'Check the values and try again.'
   return 'Cubebot is unavailable. Your accepted messages remain saved. Retry shortly.'
 }
-export async function request(path: string, body?: unknown): Promise<unknown> {
-  const response = await fetch(`/api${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
-    credentials: 'same-origin',
-    cache: 'no-store',
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? null : JSON.stringify(body),
-  })
+export const api = createClient<paths>({
+  credentials: 'same-origin',
+  cache: 'no-store',
+})
+/** Resolves to the response body, or throws ApiError for a failure status. */
+export async function ok<T>(
+  result: Promise<{ data?: T; response: Response }>,
+): Promise<T> {
+  const { data, response } = await result
   if (!response.ok) throw new ApiError(response.status)
-  return response.status === 204 ? null : response.json()
+  return data as T
 }
 export function failure(error: unknown) {
   return error instanceof Error
     ? error.message
     : 'The request failed. Retry shortly.'
 }
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-function record(value: unknown): Record<string, unknown> {
-  if (!isRecord(value)) throw new Error('Invalid server response.')
-  return value
-}
-function string(value: unknown): string {
-  if (typeof value !== 'string') throw new Error('Invalid server response.')
-  return value
-}
-function number(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value))
-    throw new Error('Invalid server response.')
-  return value
-}
-function nullable(value: unknown): string | null {
-  return value === null ? null : string(value)
-}
-export function array<T>(value: unknown, parse: (value: unknown) => T): T[] {
-  if (!Array.isArray(value)) throw new Error('Invalid server response.')
-  return value.map(parse)
-}
-export function account(value: unknown) {
-  const data = record(value)
-  if (typeof data.administrator !== 'boolean')
-    throw new Error('Invalid server response.')
-  return { id: string(data.id), administrator: data.administrator }
-}
-export type Account = ReturnType<typeof account>
-export function agent(value: unknown) {
-  const data = record(value)
-  const idle = data.idle_policy
-  if (idle !== 'sleep' && idle !== 'keep_running')
-    throw new Error('Invalid server response.')
-  return {
-    id: string(data.id),
-    name: string(data.name),
-    instructions: string(data.instructions),
-    revision: number(data.revision),
-    idle_policy: idle,
-  }
-}
-export type Agent = ReturnType<typeof agent>
-export function turn(value: unknown) {
-  const data = record(value)
-  const status = string(data.status)
-  if (
-    !['queued', 'running', 'waiting', 'complete', 'cancelled'].includes(status)
-  )
-    throw new Error('Invalid server response.')
-  return {
-    id: string(data.id),
-    sequence: number(data.sequence),
-    message: string(data.message),
-    status,
-    response: nullable(data.response),
-    error: nullable(data.error),
-    terminal: array(data.terminal, terminalProgress),
-  }
-}
-export type Turn = ReturnType<typeof turn>
-export function provider(value: unknown) {
-  if (value === null) return null
-  const data = record(value)
-  const kind = string(data.provider)
-  if (kind !== 'openai' && kind !== 'anthropic')
-    throw new Error('Invalid server response.')
-  const window = data.context_window
-  return {
-    provider: kind as 'openai' | 'anthropic',
-    model: string(data.model),
-    context_window: window === null ? null : number(window),
-    revision: number(data.revision),
-  }
-}
-
-export async function pages<T extends { id: string }>(
-  path: string,
-  parse: (value: unknown) => T,
-): Promise<T[]> {
-  const items: T[] = []
-  let after = ''
+export async function agents(client: Client<paths> = api) {
+  const items: Agent[] = []
   for (;;) {
-    const page = array(
-      await request(`${path}${after ? `?after=${after}` : ''}`),
-      parse,
+    const last = items.at(-1)
+    const page = await ok(
+      client.GET('/api/agents', {
+        params: { query: last ? { after: last.id } : {} },
+      }),
     )
     items.push(...page)
     if (page.length < 100) return items
-    const last = page.at(-1)
-    if (!last) return items
-    after = last.id
   }
 }
 export function messageProblem(text: string): string | null {
@@ -139,41 +66,15 @@ export function rejectedInput(error: unknown): boolean {
     error instanceof ApiError && (error.status === 400 || error.status === 413)
   )
 }
-
-function terminalProgress(value: unknown) {
-  const data = record(value)
-  return {
-    id: string(data.id),
-    command: string(data.command),
-    status: string(data.status),
-    outcome: terminalOutcome(data.outcome),
+const final = (turn: Turn) =>
+  turn.status === 'complete' || turn.status === 'cancelled'
+/** Applies turn snapshots, keeping history in sequence order. */
+export function merge(turns: Turn[], incoming: Turn[]) {
+  const byId = new Map(turns.map((turn) => [turn.id, turn]))
+  for (const turn of incoming) {
+    const known = byId.get(turn.id)
+    // A finished turn never changes back; an older read must not undo it.
+    if (!known || !final(known) || final(turn)) byId.set(turn.id, turn)
   }
-}
-function terminalOutcome(
-  value: unknown,
-):
-  | { status: 'uncertain' }
-  | { status: 'exited'; code: number | null; output: string }
-  | { status: 'stopped'; reason: string; output: string }
-  | null {
-  if (value === null) return null
-  const data = record(value)
-  switch (data.status) {
-    case 'uncertain':
-      return { status: 'uncertain' }
-    case 'exited':
-      return {
-        status: 'exited',
-        code: data.code === null ? null : number(data.code),
-        output: string(data.output),
-      }
-    case 'stopped':
-      return {
-        status: 'stopped',
-        reason: string(data.reason),
-        output: string(data.output),
-      }
-    default:
-      throw new Error('Invalid terminal outcome.')
-  }
+  return [...byId.values()].sort((a, b) => a.sequence - b.sequence)
 }

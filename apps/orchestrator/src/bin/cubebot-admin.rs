@@ -1,4 +1,5 @@
-//! Local operator commands: bootstrap, and agent credential revocation. No public registration
+//! Local operator commands: bootstrap, agent credential revocation, and the browser API document.
+//! No public registration
 //! endpoint is exposed.
 
 use cubebot_orchestrator::{
@@ -7,11 +8,15 @@ use cubebot_orchestrator::{
     operations::database,
 };
 
-const USAGE: &str = "usage: cubebot-admin bootstrap | cubebot-admin revoke-runtime <agent-id>";
+const USAGE: &str = "usage: cubebot-admin bootstrap | cubebot-admin revoke-runtime <agent-id> | cubebot-admin openapi";
 
 #[tokio::main]
 async fn main() -> Result<(), &'static str> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args == ["openapi"] {
+        println!("{}", cubebot_orchestrator::api::openapi());
+        return Ok(());
+    }
     let url = std::env::var("CUBEBOT_DATABASE_URL").map_err(|_| "database URL required")?;
     match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["bootstrap"] => bootstrap(&url).await,

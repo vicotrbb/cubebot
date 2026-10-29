@@ -1351,6 +1351,90 @@ async fn cancel_and_revocation_are_messages_on_the_channel() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn conversation_events_replay_after_a_cursor_and_then_follow_live() {
+    use axum::{body::Body, http::Request};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Stream it").await;
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let turn = delivery(&mut channel).await["turn"].clone();
+    for (sequence, text) in [(1, "Hel"), (2, "lo")] {
+        event(
+            &mut channel,
+            &turn,
+            sequence,
+            json!({"kind":"text_delta","text":text}),
+        )
+        .await;
+    }
+    // Without a cursor, replay starts at the running turn's first event.
+    let start = work.event_cursor(&admin, conversation).await.unwrap();
+    let page = work.events(&admin, conversation, start, &[]).await.unwrap();
+    let replayed: String = page
+        .events
+        .iter()
+        .map(|event| event.payload["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(replayed, "Hello");
+    assert_eq!(page.turns[0].status, "running");
+
+    let human = Identity::new(f.pool.clone())
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let response = cubebot_orchestrator::api::database_router(f.pool.clone())
+        .oneshot(
+            Request::get(format!("/api/conversations/{conversation}/events"))
+                .header("authorization", format!("Bearer {}", human.token))
+                .header("last-event-id", page.events[0].id.to_string())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["content-type"], "text/event-stream");
+    let mut body = response.into_body();
+    let mut received = String::new();
+    let mut until = async |needle: &str| {
+        while !received.contains(needle) {
+            let frame = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame())
+                .await
+                .expect("stream frame")
+                .unwrap()
+                .unwrap();
+            if let Ok(data) = frame.into_data() {
+                received.push_str(std::str::from_utf8(&data).unwrap());
+            }
+        }
+    };
+    until("\"status\":\"running\"").await;
+    event(
+        &mut channel,
+        &turn,
+        3,
+        json!({"kind":"done","response":"Hello"}),
+    )
+    .await;
+    until("\"status\":\"complete\"").await;
+    // Resuming after the first delta skips it, and the live completion arrives as a snapshot.
+    assert!(!received.contains("Hel\""));
+    assert!(received.contains("event: turn_event"));
+    assert!(received.contains("\"text\":\"lo\""));
+    assert!(received.contains("\"response\":\"Hello\""));
+    server.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn uncertain_tool_effects_block_retry_until_an_outcome_is_reported() {
     use cubebot_orchestrator::work::RetryMessage;
     let f = fixture().await;
