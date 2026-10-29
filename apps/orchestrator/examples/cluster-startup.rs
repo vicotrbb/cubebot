@@ -1,4 +1,4 @@
-//! Actual CSI-backed sandbox startup with the development `process` backend; no VM is booted.
+//! Actual CSI-backed kvm sandbox startup; the guest never reaches an orchestrator.
 #[path = "support/cluster.rs"]
 mod cluster;
 #[path = "../tests/support/registry.rs"]
@@ -64,7 +64,7 @@ async fn main() {
     println!(
         "{}",
         json!({"workspace_uid":retained.uid,"first_pod_uid":first_pod.metadata.uid,
-        "second_pod_uid":second_pod.metadata.uid,"sandbox_started":true,"sandbox_backend":"process",
+        "second_pod_uid":second_pod.metadata.uid,"sandbox_started":true,"sandbox_backend":"kvm",
         "rwop_scheduler_rejected_second_mount":true,"rwop_rejection":rejection,"workspace_bytes_survived":true,
         "working_agent":false,"runtime_authenticated":false,
         "actual_projected_token_exchange":true,"different_process_rejected":true,
@@ -135,7 +135,6 @@ fn layout() -> Layout {
         &required("CUBEBOT_SANDBOX_IMAGE"),
         "cubebot-runtime",
         "https://127.0.0.1:1",
-        cubebot_orchestrator::agents::sandbox::Backend::Process,
         network,
     )
     .unwrap()
@@ -226,13 +225,19 @@ async fn verify_storage(f: &Fixture, workspace: &Attempt, pod: &Pod) {
         "hostpath.csi.k8s.io"
     );
     let name = pod.metadata.name.as_deref().unwrap();
+    // The journal lives inside the guest's workspace disk, which only the root sandbox opens.
     let owner = exec(
         name,
-        &["/usr/bin/stat", "-c", "%u:%a", "/var/lib/cubebot/runtime"],
+        &[
+            "/usr/bin/stat",
+            "-c",
+            "%u",
+            "/var/lib/cubebot/workspace.ext4",
+        ],
         None,
     )
     .await;
-    assert_eq!(owner.trim(), "10001:700");
+    assert_eq!(owner.trim(), "0");
 }
 async fn availability(f: &Fixture, action: LifecycleAction, revision: i64) {
     let identity = Identity::new(f.pool.clone());

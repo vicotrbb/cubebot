@@ -1,6 +1,8 @@
 """Repeatable real cluster text-chat qualification, with evidence outside the repo.
 
 Supply CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
+Needs x86_64 Linux with /dev/kvm and the kernel build tools of tooling/guest: the
+sandbox image always carries the guest, and every agent runs in a KVM guest.
 Images are built from this checkout. An explicitly supplied disposable, caller-owned
 CUBEBOT_QUALIFICATION_BUILDER can reuse its cache; otherwise a new builder is removed.
 Only a fresh owned kind cluster is used; finally removes it even on failure.
@@ -66,13 +68,13 @@ def workflow(
     artifacts,
     images,
     qualify=None,
-    level="baseline",
     **controller,
 ):
     if qualify is None:
         from cluster_chat_flow import qualify
 
-    admission.namespaces(config, fixture, ((NAMESPACE, level),))
+    # The sandbox runs as root with NET_ADMIN (ADR 0084), which only privileged admits.
+    admission.namespaces(config, fixture, ((NAMESPACE, "privileged"),))
     references = startup.load_images(name, images)
     f = Fixture(config, name, artifacts, references)
     f.save("images.json", references)
@@ -91,6 +93,7 @@ def workflow(
     process = None
     try:
         startup.install_csi(config, artifacts)
+        startup.install_devices(config, name)
         setup(f, dns, **controller)
         process = forward(f)
         wait_for("verified HTTPS API", lambda: available(f))
@@ -111,8 +114,8 @@ def workflow(
                 process.wait(timeout=10)
 
 
-def main(prefix="cubebot-chat-", guest=False, **options):
-    """`guest` puts the kvm guest in the sandbox image; `options` go to workflow."""
+def main(prefix="cubebot-chat-", **options):
+    """`options` go to workflow."""
     artifacts = evidence_directory(os.environ["CUBEBOT_QUALIFICATION_DIRECTORY"])
     name = prefix + uuid.uuid4().hex[:12]
     config = artifacts / "kubeconfig"
@@ -130,16 +133,15 @@ def main(prefix="cubebot-chat-", guest=False, **options):
                 "--driver",
                 "docker-container",
             )
-        if guest:
-            with (artifacts / "build-guest.log").open("w") as log:
-                subprocess.run(
-                    [sys.executable, "tooling/guest/build.py"],
-                    stdout=log,
-                    stderr=log,
-                    check=True,
-                    timeout=3600,
-                )
-        images = build_images(builder, name, artifacts, baseline, guest)
+        with (artifacts / "build-guest.log").open("w") as log:
+            subprocess.run(
+                [sys.executable, "tooling/guest/build.py"],
+                stdout=log,
+                stderr=log,
+                check=True,
+                timeout=3600,
+            )
+        images = build_images(builder, name, artifacts, baseline)
         if admission.fingerprint() != baseline:
             raise RuntimeError("source changed during image build; repeat")
         admission.cluster(
@@ -155,7 +157,7 @@ def main(prefix="cubebot-chat-", guest=False, **options):
     print("Owned qualification and cluster cleanup completed", flush=True)
 
 
-def build_images(builder, name, artifacts, source, guest=False):
+def build_images(builder, name, artifacts, source):
     images = {}
     for role in ("sandbox", "orchestrator", "web"):
         image = f"{name}-{role}"
@@ -175,7 +177,7 @@ def build_images(builder, name, artifacts, source, guest=False):
             "--file",
             f"apps/{role}/Dockerfile",
         ]
-        if guest and role == "sandbox":
+        if role == "sandbox":
             args += ["--build-context", "guest=target/guest"]
         with (artifacts / f"build-{role}.log").open("w") as log:
             subprocess.run(

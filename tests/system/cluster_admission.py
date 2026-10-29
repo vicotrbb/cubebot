@@ -59,7 +59,6 @@ def namespaces(
     profiles=(
         ("cubebot-admission", "privileged"),
         ("cubebot-admission-baseline", "baseline"),
-        ("cubebot-admission-restricted", "restricted"),
     ),
 ):
     for name, policy in profiles:

@@ -1,6 +1,6 @@
 # Agent application
 
-One Rust package, one executable: `cubebot-agent` (`src/main.rs`). It runs inside `apps/sandbox`'s `cubebot-sandbox` (ADR 0084), in the guest VM with the `kvm` backend or as a plain child process with the development `process` backend. The agent runs its own tools in that sandbox; there is no separate tool runner.
+One Rust package, one executable: `cubebot-agent` (`src/main.rs`). It runs inside `apps/sandbox`'s `cubebot-sandbox` (ADR 0084), as the init of its KVM guest. The agent runs its own tools in that sandbox; there is no separate tool runner.
 
 Normal runtime execution runs authenticated control and bounded text inference, synchronizes typed recovery evidence and acknowledges drain after work settles. It accepts scoped grants for the selected OpenAI or Anthropic model, streams provider output, compacts its context at 80% of the model window, and retries explicit transient provider responses with bounded backoff on the same model. It never resumes inference from a recovered local intent. See [text-chat setup and results](../../docs/development/text-chat-mvp.md). Tools, including MCP server tools, are gated off by default; see [tool execution](../../docs/development/bounded-terminal.md). Browser execution remains unavailable.
 

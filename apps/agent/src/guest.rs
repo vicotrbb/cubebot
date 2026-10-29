@@ -37,7 +37,7 @@ use std::{
     time::Duration,
 };
 
-/// The workspace disk, laid out as the `process` backend's volume is.
+/// The workspace disk, laid out as the pod's workspace volume is.
 const STATE: &str = "/var/lib/cubebot";
 const JOURNAL: &str = "/var/lib/cubebot/runtime";
 const WORKSPACE: &str = "/var/lib/cubebot/workspace";

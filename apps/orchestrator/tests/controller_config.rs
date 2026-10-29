@@ -2,7 +2,7 @@ use cubebot_orchestrator::agents::kubernetes::ControllerConfig;
 use serde_json::{Value, json};
 fn valid() -> Value {
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    json!({"connection":{"kind":"in_cluster"},"sandbox_image":image,"backend":"process","runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}})
+    json!({"connection":{"kind":"in_cluster"},"sandbox_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}})
 }
 #[test]
 fn controller_accepts_only_explicit_valid_ca_config_map_names() {
@@ -38,6 +38,9 @@ fn controller_configuration_rejects_unsafe_workload_fields_and_implicit_connecti
             json!({"kind":"kubeconfig","path":"/trusted/config","context":""}),
         ),
         ("unexpected", json!(true)),
+        // The process backend is gone; configurations that still name it fail.
+        ("backend", json!("kvm")),
+        ("qualified", json!(true)),
     ] {
         let mut input = valid();
         input[key] = value;
@@ -50,7 +53,7 @@ fn controller_configuration_rejects_unsafe_workload_fields_and_implicit_connecti
 }
 
 #[test]
-fn controller_requires_explicit_dns_and_a_known_backend() {
+fn controller_requires_explicit_dns() {
     let mut input = valid();
     input.as_object_mut().unwrap().remove("network");
     assert!(ControllerConfig::parse(&input.to_string()).is_err());
@@ -59,16 +62,5 @@ fn controller_requires_explicit_dns_and_a_known_backend() {
     input["network"] = json!({"dns":["10.96.0.10"],"infrastructure":[]});
     assert!(ControllerConfig::parse(&input.to_string()).is_err());
     input["network"] = json!({"dns":["10.96.0.10"]});
-    input["backend"] = json!("kvm");
     assert!(ControllerConfig::parse(&input.to_string()).is_ok());
-    input["backend"] = json!("container");
-    assert!(ControllerConfig::parse(&input.to_string()).is_err());
-}
-#[test]
-fn a_qualified_installation_refuses_the_process_backend() {
-    let mut config = valid();
-    config["qualified"] = json!(true);
-    assert!(ControllerConfig::parse(&config.to_string()).is_err());
-    config["backend"] = json!("kvm");
-    assert!(ControllerConfig::parse(&config.to_string()).is_ok());
 }

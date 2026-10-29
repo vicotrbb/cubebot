@@ -1,4 +1,4 @@
-//! `kvm` backend: one VM with one memory region and one vCPU booting a Linux guest from a read-only
+//! The sandbox: one VM with one memory region and one vCPU booting a Linux guest from a read-only
 //! root disk, with the agent's guest init as init (ADR 0084). Its devices are a 16550 serial
 //! console relayed to stdout and virtio-mmio disks for the root and workspace, a network device on
 //! a tap, and vsock for the control channel.

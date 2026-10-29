@@ -1,6 +1,5 @@
 //! Fixed sandbox pod and workspace shape. Network enforcement is a separate qualification gate.
 use super::{Error, client::validate_namespace};
-use crate::agents::sandbox::Backend;
 use cubebot_protocol::network::NetworkPolicy;
 use k8s_openapi::api::core::v1::{PersistentVolumeClaimSpec, PodSpec};
 use openidconnect::reqwest::Url;
@@ -10,7 +9,6 @@ pub struct Layout {
     image: String,
     service_account: String,
     origin: String,
-    backend: Backend,
     network: NetworkPolicy,
     control_ca: Option<String>,
     terminal: bool,
@@ -20,7 +18,6 @@ impl Layout {
         image: &str,
         service_account: &str,
         origin: &str,
-        backend: Backend,
         network: NetworkPolicy,
     ) -> Result<Self, Error> {
         validate_image(image)?;
@@ -34,7 +31,6 @@ impl Layout {
             image: image.into(),
             service_account: service_account.into(),
             origin: url.origin().ascii_serialization(),
-            backend,
             network,
             control_ca: None,
             terminal: false,
@@ -92,8 +88,6 @@ impl Layout {
         });
         let sandbox = &mut value["containers"][0];
         if self.terminal {
-            // shortcut: the process backend cannot switch users, so tools run as the sandbox's
-            // own user; the kvm guest will name a separate one.
             sandbox["env"]
                 .as_array_mut()
                 .expect("fixed environment")
@@ -101,21 +95,6 @@ impl Layout {
                     json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}),
                     json!({"name":"CUBEBOT_TOOL_USER","value":"10001:10001"}),
                 ]);
-        }
-        if self.backend == Backend::Kvm {
-            // The sandbox creates the guest's tap and its tc redirects in the pod network namespace,
-            // which takes root with NET_ADMIN and no other capability; the namespace's Pod Security
-            // level must be privileged. fsGroup still lets it write the workspace volume.
-            // The API server copies extended-resource limits into requests; stating both keeps
-            // the prepared preview equal to the intent.
-            for side in ["requests", "limits"] {
-                let side = &mut sandbox["resources"][side];
-                side["devices.kubevirt.io/kvm"] = json!("1");
-                side["devices.kubevirt.io/tun"] = json!("1");
-            }
-            sandbox["securityContext"] = security(0);
-            sandbox["securityContext"]["capabilities"]["add"] = json!(["NET_ADMIN"]);
-            sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}));
         }
         if let Some(name) = &self.control_ca {
             sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));
@@ -127,17 +106,22 @@ impl Layout {
 
     fn sandbox(&self) -> Value {
         json!({"name":"sandbox","image":self.image,"imagePullPolicy":"IfNotPresent",
-            "command":["/usr/local/bin/cubebot-sandbox"],"args":["run","--backend",self.backend.as_str()],
-            "securityContext":security(10001),"resources":resources("100m","256Mi","2","2Gi"),
-            "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"},{"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"}],
+            "command":["/usr/local/bin/cubebot-sandbox"],"args":["run"],
+            "securityContext":security(),"resources":resources("100m","256Mi","2","2Gi"),
+            "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"},{"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"},{"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}],
             "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"tmp","mountPath":"/tmp"}]})
     }
 }
-fn security(uid: i64) -> Value {
-    json!({"runAsUser":uid,"runAsGroup":uid,"runAsNonRoot":uid != 0,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}})
+/// The sandbox creates the guest's tap and its tc redirects in the pod network namespace, which
+/// takes root with NET_ADMIN and no other capability; the namespace's Pod Security level must be
+/// privileged. fsGroup still lets it write the workspace volume.
+fn security() -> Value {
+    json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"],"add":["NET_ADMIN"]}})
 }
+/// The API server copies extended-resource limits into requests; stating both keeps the prepared
+/// preview equal to the intent.
 fn resources(cpu: &str, memory: &str, max_cpu: &str, max_memory: &str) -> Value {
-    json!({"requests":{"cpu":cpu,"memory":memory,"ephemeral-storage":"64Mi"},"limits":{"cpu":max_cpu,"memory":max_memory,"ephemeral-storage":"1Gi"}})
+    json!({"requests":{"cpu":cpu,"memory":memory,"ephemeral-storage":"64Mi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"},"limits":{"cpu":max_cpu,"memory":max_memory,"ephemeral-storage":"1Gi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"}})
 }
 fn validate_image(image: &str) -> Result<(), Error> {
     let Some((repository, digest)) = image.split_once("@sha256:") else {

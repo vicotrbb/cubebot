@@ -18,7 +18,6 @@ fn network_upgrade_specs() -> (PodSpec, PodSpec) {
         image,
         "cubebot-runtime",
         "https://cubebot.test",
-        cubebot_orchestrator::agents::sandbox::Backend::Process,
         network,
     )
     .unwrap();

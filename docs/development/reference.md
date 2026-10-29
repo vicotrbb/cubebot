@@ -4,7 +4,7 @@ Configuration and HTTP behavior of what currently runs. Open qualification gaps 
 
 ## Runtime and lifecycle
 
-See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox run --backend <kvm|process>` from `apps/sandbox` (ADR 0084), which runs `cubebot-agent`. The `kvm` backend boots the agent in a guest VM, from a sandbox image built with the guest (see the [sandbox](../../apps/sandbox/README.md)); `process` runs the agent as a plain child for development with no isolation claim. The agent runs its tools itself, as the configured tool user, when the terminal flag is set.
+See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox run` from `apps/sandbox` (ADR 0084), which boots `cubebot-agent` in a KVM guest from the guest kernel and root image the sandbox image always carries (see the [sandbox](../../apps/sandbox/README.md)). There is no other way to run an agent. The agent runs its tools itself, as the configured tool user, when the terminal flag is set.
 
 The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter, durable resource reservations and a fixed pod/PVC specification compiler. Controlled HTTP, PostgreSQL and manifest tests cover these boundaries; explicit reconciliation provisions and observes installation anchors, workspace claims and pods, and explicit installation configuration now activates serial lifecycle reconciliation at startup. The compiler requires digest-pinned images, a dedicated runtime service account, HTTPS orchestrator origin and CSI support for ReadWriteOncePod.
 
@@ -105,14 +105,13 @@ Set `CUBEBOT_CONTROLLER_CONFIG` to a local JSON file and configure `CUBEBOT_DATA
 {
   "connection": { "kind": "in_cluster" },
   "sandbox_image": "registry.example/cubebot-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "backend": "kvm",
   "runtime_service_account": "cubebot-runtime",
   "orchestrator_origin": "https://cubebot.example",
   "network": { "dns": ["10.96.0.10"] }
 }
 ```
 
-`network` is required; supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. Egress control is pod-level NetworkPolicy, which governs exactly one agent. `backend` is `kvm` or `process`; `kvm` adds `devices.kubevirt.io/kvm` and `devices.kubevirt.io/tun` resource limits so the pod gets `/dev/kvm` and `/dev/net/tun` from KubeVirt's device plugin, and runs the sandbox as root with only `NET_ADMIN`, which needs a privileged Pod Security namespace; `process` is development-only. With `"qualified": true` the orchestrator refuses to start unless `backend` is `kvm`. The guest's root image and kernel come from the sandbox image, its workspace disk is a file on the workspace PVC, and the projected token reaches the guest only over vsock.
+`network` is required; supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. Egress control is pod-level NetworkPolicy, which governs exactly one agent. Sandbox pods carry `devices.kubevirt.io/kvm` and `devices.kubevirt.io/tun` resource limits, so each gets `/dev/kvm` and `/dev/net/tun` from KubeVirt's (or a compatible) device plugin, and run the sandbox as root with only `NET_ADMIN`, which needs a privileged Pod Security namespace. Configurations that still set the removed `backend` or `qualified` fields are refused. The guest's root image and kernel come from the sandbox image, its workspace disk is a file on the workspace PVC, and the projected token reaches the guest only over vsock.
 
 Replace the example image digest with the built sandbox image. For an explicitly selected kubeconfig, replace `connection` with `{"kind":"kubeconfig","path":"/trusted/kubeconfig","context":"cubebot"}`. The service never discovers the default context. Kubernetes transport requires certificate-verified HTTPS, with literal loopback HTTP allowed for local controlled workflows. The orchestrator origin supplied to agents requires HTTPS.
 
@@ -163,7 +162,14 @@ docker build -t cubebot-orchestrator:dev -f apps/orchestrator/Dockerfile .
 docker build -t cubebot-web:dev -f apps/web/Dockerfile .
 ```
 
-The sandbox image (`apps/sandbox/Dockerfile`) runs as UID 10001 and contains `cubebot-sandbox` and `cubebot-agent`.
+The sandbox image (`apps/sandbox/Dockerfile`) contains `cubebot-sandbox`, `cubebot-agent` and the guest. Build the guest first and pass it as a build context; without it the build fails:
+
+```sh
+python3 tooling/guest/build.py
+docker build -t cubebot-sandbox:dev --build-context guest=target/guest -f apps/sandbox/Dockerfile .
+```
+
+Its default user is UID 10001; both launchers run it as root with only `NET_ADMIN`.
 
 ### Docker sandboxes without a cluster
 
@@ -172,11 +178,10 @@ Set `CUBEBOT_DOCKER_CONFIG` to a JSON file instead of `CUBEBOT_CONTROLLER_CONFIG
 ```json
 {
   "image": "cubebot-sandbox:dev",
-  "backend": "process",
-  "orchestrator_origin": "http://host.docker.internal:8080"
+  "orchestrator_origin": "https://cubebot.example"
 }
 ```
 
-Optional `terminal_enabled` and `qualified` work as in the controller configuration. The controller runs under development ownership and serves the runtime API. Each running agent gets one retained volume (`cubebot-workspace-<agent>`) and one container per epoch (`cubebot-agent-<agent>-<epoch>`) through the local `docker` CLI. Containers are recorded as pod attempts in namespace `docker`, so sessions, drains, epochs and restart generations behave as on Kubernetes: a crashed or stale container is stopped and its final state retained before a new epoch starts, and a running agent is drained before it is stopped.
+Optional `terminal_enabled` works as in the controller configuration. The Docker host must be x86_64 Linux with `/dev/kvm` and `/dev/net/tun`; each container gets both devices and runs as root in group 10001 with only `NET_ADMIN`. The controller runs under development ownership and serves the runtime API. Each running agent gets one retained volume (`cubebot-workspace-<agent>`) and one container per epoch (`cubebot-agent-<agent>-<epoch>`) through the local `docker` CLI. Containers are recorded as pod attempts in namespace `docker`, so sessions, drains, epochs and restart generations behave as on Kubernetes: a crashed or stale container is stopped and its final state retained before a new epoch starts, and a running agent is drained before it is stopped.
 
-Each container gets a fresh bootstrap token in `CUBEBOT_BOOTSTRAP_TOKEN`, passed through the `docker` CLI's environment rather than its arguments; Docker keeps it in the container's configuration until the container is removed. The orchestrator stores only its SHA-256 digest. The token logs in only while that container's attempt is bound and observed running. The agent accepts HTTPS, or HTTP only to loopback, so a loopback `orchestrator_origin` runs the container with host networking (on Docker Desktop, enable host networking).
+Each container gets a fresh bootstrap token in `CUBEBOT_BOOTSTRAP_TOKEN`, passed through the `docker` CLI's environment rather than its arguments; Docker keeps it in the container's configuration until the container is removed. The orchestrator stores only its SHA-256 digest. The token logs in only while that container's attempt is bound and observed running. `orchestrator_origin` must be HTTPS and not loopback: the guest sits on the container's own network, where the host's loopback is unreachable, and host networking would hand the host's interface to the guest.

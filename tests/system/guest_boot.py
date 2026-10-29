@@ -101,7 +101,7 @@ def host_refusal(directory: Path, workspace: Path):
             f"{name}={value}"
             for name, value in environment(directory, workspace).items()
         ]
-        + [ROOT / "target/debug/cubebot-sandbox", "run", "--backend", "kvm"],
+        + [ROOT / "target/debug/cubebot-sandbox", "run"],
         capture_output=True,
         text=True,
         timeout=DEADLINE,
@@ -124,7 +124,7 @@ def run_guest(directory: Path, workspace: Path, requests: queue.Queue):
             f"{name}={value}"
             for name, value in environment(directory, workspace).items()
         ]
-        + [ROOT / "target/debug/cubebot-sandbox", "run", "--backend", "kvm"],
+        + [ROOT / "target/debug/cubebot-sandbox", "run"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )

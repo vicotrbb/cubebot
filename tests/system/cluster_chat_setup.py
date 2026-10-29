@@ -280,7 +280,6 @@ def orchestrator(f, dns, **controller):
     config = {
         "connection": {"kind": "in_cluster"},
         "sandbox_image": f.images["sandbox"],
-        "backend": "process",
         "runtime_service_account": "cubebot-runtime",
         "orchestrator_origin": CONTROL,
         "network": {"dns": [dns]},

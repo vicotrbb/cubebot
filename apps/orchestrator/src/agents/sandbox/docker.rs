@@ -3,7 +3,7 @@
 //! Each container is a pod attempt in namespace `docker`, so sessions, drains and epochs work as on
 //! Kubernetes. The attempt is recorded before the container is created; the epoch in the container
 //! name makes creation idempotent, so a lost reply is recovered by lookup, never by a second run.
-use super::{Backend, ExecChannel, Sandbox, Status};
+use super::{ExecChannel, Sandbox, Status};
 use crate::agents::{
     AgentId,
     kubernetes::{AttemptId, Error},
@@ -20,17 +20,13 @@ use uuid::Uuid;
 #[serde(deny_unknown_fields)]
 pub struct DockerConfig {
     image: String,
-    backend: Backend,
     orchestrator_origin: String,
     #[serde(default)]
     terminal_enabled: bool,
-    #[serde(default)]
-    qualified: bool,
 }
 impl DockerConfig {
     pub fn parse(input: &str) -> Result<Self, Error> {
         let config: Self = serde_json::from_str(input).map_err(|_| Error::InvalidConfiguration)?;
-        super::require_isolation(config.qualified, config.backend)?;
         // Values become docker arguments; a leading '-' would be read as a flag.
         let argument = |value: &str| {
             !value.is_empty()
@@ -40,14 +36,14 @@ impl DockerConfig {
                     .bytes()
                     .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
         };
-        // The agent accepts HTTPS, or HTTP only to loopback (reached through host networking).
         let origin = openidconnect::reqwest::Url::parse(&config.orchestrator_origin)
             .map_err(|_| Error::InvalidConfiguration)?;
-        // A kvm sandbox on host networking would redirect the host's own interface to its guest.
+        // The guest is on the container's own network, where the host's loopback is unreachable;
+        // host networking would redirect the host's interface to the guest.
         if !argument(&config.image)
             || !argument(&config.orchestrator_origin)
-            || !(origin.scheme() == "https" || (origin.scheme() == "http" && loopback(&origin)))
-            || (config.backend == Backend::Kvm && loopback(&origin))
+            || origin.scheme() != "https"
+            || loopback(&origin)
         {
             return Err(Error::InvalidConfiguration);
         }
@@ -211,14 +207,7 @@ impl Docker {
             "--env",
             "CUBEBOT_WORKSPACE_DIRECTORY=/var/lib/cubebot/workspace",
         ];
-        let origin = openidconnect::reqwest::Url::parse(&self.config.orchestrator_origin)
-            .map_err(|_| Error::InvalidConfiguration)?;
-        if loopback(&origin) {
-            args.extend(["--network", "host"]);
-        }
         if self.config.terminal_enabled {
-            // shortcut: the process backend cannot switch users, so tools run as the agent's own
-            // user; the kvm guest will name a separate one.
             args.extend([
                 "--env",
                 "CUBEBOT_TERMINAL_ENABLED=1",
@@ -226,27 +215,21 @@ impl Docker {
                 "CUBEBOT_TOOL_USER=10001:10001",
             ]);
         }
-        if self.config.backend == Backend::Kvm {
-            // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
-            // group 10001 writes the image's workspace volume.
-            args.extend([
-                "--user",
-                "0:10001",
-                "--cap-add",
-                "NET_ADMIN",
-                "--device",
-                "/dev/kvm",
-                "--device",
-                "/dev/net/tun",
-                "--env",
-                "CUBEBOT_GUEST_WORKSPACE=/var/lib/cubebot/workspace.ext4",
-            ]);
-        }
+        // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
+        // group 10001 writes the image's workspace volume.
         args.extend([
+            "--user",
+            "0:10001",
+            "--cap-add",
+            "NET_ADMIN",
+            "--device",
+            "/dev/kvm",
+            "--device",
+            "/dev/net/tun",
+            "--env",
+            "CUBEBOT_GUEST_WORKSPACE=/var/lib/cubebot/workspace.ext4",
             self.config.image.as_str(),
             "run",
-            "--backend",
-            self.config.backend.as_str(),
         ]);
         // shortcut: Docker still keeps the token in the container's config under its data root
         // until the container is removed; deliver it over stdin if that root is not trusted.
@@ -399,18 +382,11 @@ mod tests {
 
     #[test]
     fn configuration_rejects_values_docker_would_read_as_flags() {
-        let valid = serde_json::json!({"image":"cubebot-sandbox:dev","backend":"process","orchestrator_origin":"http://127.0.0.1:8080"});
+        let valid = serde_json::json!({"image":"cubebot-sandbox:dev","orchestrator_origin":"https://cubebot.test"});
         assert!(DockerConfig::parse(&valid.to_string()).is_ok());
-        let mut kvm = valid.clone();
-        kvm["backend"] = serde_json::json!("kvm");
-        kvm["orchestrator_origin"] = serde_json::json!("https://cubebot.test");
-        assert!(DockerConfig::parse(&kvm.to_string()).is_ok());
-        kvm["qualified"] = serde_json::json!(true);
-        assert!(DockerConfig::parse(&kvm.to_string()).is_ok());
         for (key, value) in [
             ("image", serde_json::json!("--privileged")),
             ("image", serde_json::json!("image with space")),
-            ("backend", serde_json::json!("none")),
             (
                 "orchestrator_origin",
                 serde_json::json!("file:///etc/passwd"),
@@ -419,9 +395,16 @@ mod tests {
                 "orchestrator_origin",
                 serde_json::json!("http://host.docker.internal:8080"),
             ),
+            (
+                "orchestrator_origin",
+                serde_json::json!("https://127.0.0.1:8443"),
+            ),
+            (
+                "orchestrator_origin",
+                serde_json::json!("http://cubebot.test"),
+            ),
             ("unexpected", serde_json::json!(true)),
             ("backend", serde_json::json!("kvm")),
-            ("qualified", serde_json::json!(true)),
         ] {
             let mut input = valid.clone();
             input[key] = value;

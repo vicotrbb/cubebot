@@ -16,10 +16,15 @@ from pathlib import Path
 import cluster_admission as admission
 import images as fixture_images
 import integration
+from cluster_chat_setup import wait_for
 
 CSI_SOURCE = "https://raw.githubusercontent.com/kubernetes-csi/csi-driver-host-path/6fab18ae4fc4f486193b618114eeb817d9929242/"
 SNAPSHOT = (
     "https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/v8.7.0/"
+)
+PLUGIN = (
+    "docker.io/squat/generic-device-plugin:a11f990"
+    "@sha256:5c48f7a16cfb37c4e07731bfa384b9dba6e12d2b0fb4350d8a321d49f12ac494"
 )
 
 
@@ -100,6 +105,68 @@ def install_csi(config, artifacts):
         timeout=200,
     )
     return sources
+
+
+def install_devices(config, name):
+    """A generic device plugin hands /dev/kvm and /dev/net/tun to sandbox pods under the
+    KubeVirt resource names the orchestrator requests."""
+    devices = [
+        {"name": device, "groups": [{"count": 8, "paths": [{"path": path}]}]}
+        for device, path in (("kvm", "/dev/kvm"), ("tun", "/dev/net/tun"))
+    ]
+    args = ["--domain", "devices.kubevirt.io"]
+    for device in devices:
+        args += ["--device", json.dumps(device)]
+    plugin = {
+        "apiVersion": "apps/v1",
+        "kind": "DaemonSet",
+        "metadata": {"name": "device-plugin", "namespace": "kube-system"},
+        "spec": {
+            "selector": {"matchLabels": {"app": "device-plugin"}},
+            "template": {
+                "metadata": {"labels": {"app": "device-plugin"}},
+                "spec": {
+                    "automountServiceAccountToken": False,
+                    "containers": [
+                        {
+                            "name": "plugin",
+                            "image": PLUGIN,
+                            "args": args,
+                            "securityContext": {"privileged": True},
+                            "volumeMounts": [
+                                {
+                                    "name": "plugins",
+                                    "mountPath": "/var/lib/kubelet/device-plugins",
+                                },
+                                {"name": "dev", "mountPath": "/dev"},
+                            ],
+                        }
+                    ],
+                    "volumes": [
+                        {
+                            "name": "plugins",
+                            "hostPath": {"path": "/var/lib/kubelet/device-plugins"},
+                        },
+                        {"name": "dev", "hostPath": {"path": "/dev"}},
+                    ],
+                },
+            },
+        },
+    }
+    admission.kubectl(config, "create", "-f", "-", input=json.dumps(plugin))
+
+    def advertised():
+        node = f"{name}-control-plane"
+        status = json.loads(
+            admission.kubectl(config, "get", "node", node, "-o", "json")
+        )
+        allocatable = status["status"]["allocatable"]
+        return all(
+            allocatable.get(f"devices.kubevirt.io/{device}", "0") != "0"
+            for device in ("kvm", "tun")
+        )
+
+    wait_for("kvm and tun device advertisement", advertised)
 
 
 def install_driver(config, directory):
@@ -212,6 +279,7 @@ def verify(config, name, fixture, artifacts, images):
     }
     try:
         sources = install_csi(config, artifacts)
+        install_devices(config, name)
         with tempfile.TemporaryDirectory(prefix="postgres-", dir=artifacts) as data:
             integration.run_database(
                 f"{name}-postgres", env, password, data, verify_database
@@ -269,6 +337,7 @@ def main():
     ):
         raise RuntimeError("verified kind v0.33.0 is required")
     baseline = admission.fingerprint()
+    integration.run(sys.executable, "tooling/guest/build.py")
     integration.run(
         "cargo",
         "build",
