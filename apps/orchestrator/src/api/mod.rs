@@ -25,6 +25,16 @@ async fn liveness() -> Json<Liveness> {
     })
 }
 
+/// The browser API. `just api` writes it for the web client's generated types.
+pub fn openapi() -> String {
+    use utoipa::OpenApi;
+    let mut doc = identity::Doc::openapi();
+    doc.merge(agents::Doc::openapi());
+    doc.merge(connections::Doc::openapi());
+    doc.merge(work::Doc::openapi());
+    doc.to_pretty_json().unwrap_or_default()
+}
+
 /// Configured application endpoints share one concrete PostgreSQL pool.
 pub fn database_router(pool: sqlx::PgPool) -> Router {
     identity_router(pool.clone(), crate::identity::Identity::new(pool))
@@ -97,4 +107,15 @@ async fn readiness(
 /// Explicit runtime routes. Normal startup does not discover a Kubernetes configuration.
 pub fn runtime_router(identity: crate::agents::runtime::RuntimeIdentity) -> Router {
     runtime::router(identity)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_committed_browser_api_document_is_current() {
+        let committed: serde_json::Value =
+            serde_json::from_str(include_str!("../../../web/src/api/openapi.json")).unwrap();
+        let current: serde_json::Value = serde_json::from_str(&super::openapi()).unwrap();
+        assert!(committed == current, "run `just api` and commit the result");
+    }
 }

@@ -6,12 +6,14 @@ use crate::identity::{Actor, IdentityError, Receipt};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
+)]
 #[serde(transparent)]
 #[sqlx(transparent)]
 pub struct AgentId(pub Uuid);
 
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Agent {
     pub id: AgentId,
     pub name: String,
@@ -23,7 +25,7 @@ pub struct Agent {
     pub restart_generation: i64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateAgent {
     pub request_id: Uuid,

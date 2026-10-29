@@ -15,7 +15,7 @@ pub struct Connections {
     credentials: Credentials,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ConfigureProvider {
     pub request_id: Uuid,
@@ -35,12 +35,13 @@ fn openai() -> ProviderKind {
     ProviderKind::Openai
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct ProviderSummary {
     pub provider: ProviderKind,
     pub model: String,
     pub context_window: Option<i64>,
     pub revision: i64,
+    #[schema(value_type = ProviderAccess)]
     pub access: sqlx::types::Json<ProviderAccess>,
 }
 type Access = sqlx::types::Json<ProviderAccess>;
@@ -65,7 +66,7 @@ pub(crate) struct Inference {
     pub context_window: Option<u64>,
 }
 
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProviderAccess {
     #[default]

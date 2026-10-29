@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use super::{Actor, IdentityError, accounts};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct Receipt {
     pub id: Uuid,
     pub revision: i64,

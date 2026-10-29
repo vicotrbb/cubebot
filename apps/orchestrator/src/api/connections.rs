@@ -17,6 +17,10 @@ struct Api {
     connections: Connections,
 }
 
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(inspect, configure))]
+pub(super) struct Doc;
+
 pub(super) fn router(identity: Identity, connections: Connections) -> Router {
     Router::new()
         .route("/api/provider", get(inspect).post(configure))
@@ -27,6 +31,7 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
         })
 }
 
+#[utoipa::path(get, path = "/api/provider", responses((status = 200, body = Option<crate::connections::ProviderSummary>)))]
 async fn inspect(
     State(api): State<Api>,
     headers: HeaderMap,
@@ -38,6 +43,7 @@ async fn inspect(
     ))
 }
 
+#[utoipa::path(post, path = "/api/provider", request_body = ConfigureProvider, responses((status = 200, body = crate::connections::ProviderSummary)))]
 async fn configure(
     State(api): State<Api>,
     headers: HeaderMap,

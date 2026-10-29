@@ -1,0 +1,942 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "cubebot-orchestrator",
+    "description": "",
+    "license": {
+      "name": ""
+    },
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/agents": {
+      "get": {
+        "tags": [],
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Agent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAgent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/definition": {
+      "post": {
+        "tags": [],
+        "operationId": "update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAgent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/events": {
+      "get": {
+        "tags": [],
+        "summary": "Replays turn events after the cursor, then follows live. `turn_event` frames carry an\n`Event`; `turn` frames carry a `Turn` snapshot whenever its state may have changed.",
+        "operationId": "events",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": ["integer", "null"],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Event"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/messages": {
+      "get": {
+        "tags": [],
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Turn"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "send",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Turn"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/messages/{turn}/cancel": {
+      "post": {
+        "tags": [],
+        "summary": "The channel delivers the cancellation to the agent running the turn.",
+        "operationId": "cancel",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/messages/{turn}/retry": {
+      "post": {
+        "tags": [],
+        "operationId": "retry",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Turn"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/login": {
+      "post": {
+        "tags": [],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/logout": {
+      "post": {
+        "tags": [],
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/me": {
+      "get": {
+        "tags": [],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/provider": {
+      "get": {
+        "tags": [],
+        "operationId": "inspect",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ProviderSummary"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "configure",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfigureProvider"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Account": {
+        "type": "object",
+        "required": ["id", "administrator"],
+        "properties": {
+          "administrator": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Agent": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "instructions",
+          "revision",
+          "instructions_revision",
+          "desired_state",
+          "idle_policy",
+          "restart_generation"
+        ],
+        "properties": {
+          "desired_state": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "idle_policy": {
+            "$ref": "#/components/schemas/IdlePolicy"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "instructions_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "restart_generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AgentId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "ConfigureProvider": {
+        "type": "object",
+        "required": ["request_id", "expected_revision", "model", "api_key"],
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess"
+              }
+            ]
+          },
+          "api_key": {
+            "type": "string"
+          },
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "Model window in tokens. Required for OpenAI, which cannot report it; Anthropic\nreports its own when this is absent."
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateAgent": {
+        "type": "object",
+        "required": ["request_id", "name", "instructions"],
+        "properties": {
+          "instructions": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Event": {
+        "type": "object",
+        "required": ["id", "turn_id", "payload"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Conversation-wide cursor; resume with `after` or `Last-Event-ID`."
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnEvent"
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "IdlePolicy": {
+        "type": "string",
+        "enum": ["sleep", "keep_running"]
+      },
+      "Login": {
+        "type": "object",
+        "required": ["login", "password"],
+        "properties": {
+          "login": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Outcome": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["output", "status"],
+            "properties": {
+              "code": {
+                "type": ["integer", "null"],
+                "format": "int32"
+              },
+              "output": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["exited"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["reason", "output", "status"],
+            "properties": {
+              "output": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["stopped"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["uncertain"]
+              }
+            }
+          }
+        ]
+      },
+      "Progress": {
+        "type": "object",
+        "required": ["id", "turn_id", "command", "status"],
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Outcome"
+              }
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "ProviderAccess": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["all_agents"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["agents", "mode"],
+            "properties": {
+              "agents": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "mode": {
+                "type": "string",
+                "enum": ["explicit_grants"]
+              }
+            }
+          }
+        ]
+      },
+      "ProviderKind": {
+        "type": "string",
+        "enum": ["openai", "anthropic"]
+      },
+      "ProviderSummary": {
+        "type": "object",
+        "required": ["provider", "model", "revision", "access"],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/ProviderAccess"
+          },
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "Receipt": {
+        "type": "object",
+        "required": ["id", "revision"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RetryMessage": {
+        "type": "object",
+        "required": ["request_id"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SendMessage": {
+        "type": "object",
+        "required": ["request_id", "message"],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Token": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "Turn": {
+        "type": "object",
+        "required": ["id", "sequence", "message", "status", "terminal"],
+        "properties": {
+          "error": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string"
+          },
+          "response": {
+            "type": ["string", "null"]
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          },
+          "terminal": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Progress"
+            }
+          }
+        }
+      },
+      "TurnEvent": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["text", "kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["text_delta"]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "name", "input", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "input": {},
+              "kind": {
+                "type": "string",
+                "enum": ["tool_call"]
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "outcome", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["tool_result"]
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/Outcome"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["input_tokens", "output_tokens", "kind"],
+            "properties": {
+              "input_tokens": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["usage"]
+              },
+              "output_tokens": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Replaces the earlier context for later model requests; the source history remains.",
+            "required": ["text", "kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["summary"]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["response", "kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["done"]
+              },
+              "response": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["code", "kind"],
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["error"]
+              }
+            }
+          }
+        ]
+      },
+      "UpdateAgent": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "expected_revision",
+          "name",
+          "instructions",
+          "idle_policy"
+        ],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "idle_policy": {
+            "$ref": "#/components/schemas/IdlePolicy"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

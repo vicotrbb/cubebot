@@ -10,6 +10,10 @@ use uuid::Uuid;
 
 use crate::identity::{Actor, Identity, IdentityError};
 
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(login, me, logout))]
+pub(super) struct Doc;
+
 pub fn router(identity: Identity) -> Router {
     Router::new()
         .route("/api/identity/login", post(login))
@@ -40,18 +44,19 @@ async fn accounts(
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct Login {
     login: String,
     password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Token {
     token: String,
 }
 
+#[utoipa::path(post, path = "/api/identity/login", request_body = Login, responses((status = 200, body = Token)))]
 async fn login(
     State(identity): State<Identity>,
     Json(input): Json<Login>,
@@ -81,12 +86,13 @@ pub(super) async fn actor(
         .await
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Account {
     id: Uuid,
     administrator: bool,
 }
 
+#[utoipa::path(get, path = "/api/identity/me", responses((status = 200, body = Account)))]
 async fn me(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -101,6 +107,7 @@ async fn me(
     ))
 }
 
+#[utoipa::path(post, path = "/api/identity/logout", responses((status = 200, body = bool)))]
 async fn logout(
     State(identity): State<Identity>,
     headers: HeaderMap,

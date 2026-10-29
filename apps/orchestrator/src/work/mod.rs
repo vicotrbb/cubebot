@@ -1,5 +1,6 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
 mod access;
+mod events;
 mod retry;
 mod runtime;
 pub(crate) mod terminal;
@@ -7,6 +8,7 @@ use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
 };
+pub use events::{Event, Page};
 pub use retry::RetryMessage;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -24,14 +26,14 @@ pub struct Conversation {
     pub created_by: Uuid,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SendMessage {
     pub request_id: Uuid,
     pub message: String,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Turn {
     pub id: Uuid,
     pub sequence: i64,

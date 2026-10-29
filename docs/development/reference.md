@@ -95,6 +95,8 @@ The agent keeps unacknowledged events in memory and resends them after reconnect
 
 Each channel polls PostgreSQL once a second for new turns, cancellation, drain and revocation.
 
+Browsers follow a conversation through `GET /api/conversations/{id}/events`, a server-sent event stream. It replays `turn_events` after a cursor (`after` or `Last-Event-ID`; without one, from the running turn's first event), then polls twice a second. `turn_event` frames carry each event with its conversation-wide id; `turn` frames carry a turn snapshot whenever its state may have changed. Recording an event locks its conversation, so ids become visible in order and a cursor never skips one.
+
 ### Explicit lifecycle controller configuration
 
 Set `CUBEBOT_CONTROLLER_CONFIG` to a local JSON file and configure `CUBEBOT_DATABASE_URL`. Supply `CUBEBOT_POD_NAMESPACE`, `CUBEBOT_POD_NAME` and `CUBEBOT_POD_UID` from the orchestrator Pod's Downward API metadata. The observed Pod must have one regular container named `orchestrator`, RestartAlways, a dedicated service account and no ephemeral containers. The ownership proof covers that container; init containers must not run independent orchestrator instances.

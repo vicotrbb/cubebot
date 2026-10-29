@@ -3,7 +3,7 @@ use crate::identity::{Actor, IdentityError};
 use serde::Deserialize;
 use uuid::Uuid;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RetryMessage {
     pub request_id: Uuid,

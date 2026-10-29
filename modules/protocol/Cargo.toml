@@ -9,6 +9,11 @@ publish.workspace = true
 serde.workspace = true
 uuid = { version = "1", features = ["serde"] }
 serde_json = "1"
+utoipa = { version = "5.5", optional = true }
+
+[features]
+# Schemas for the orchestrator's OpenAPI document.
+openapi = ["dep:utoipa"]
 
 [lints]
 workspace = true

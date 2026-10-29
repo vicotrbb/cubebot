@@ -7,11 +7,13 @@
     "dev": "vite --host 127.0.0.1 --port 3000 --strictPort",
     "build": "vite build",
     "start": "bun .output/server/index.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "api": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
     "@tanstack/react-router": "1.170.46",
     "@tanstack/react-start": "1.169.4",
+    "openapi-fetch": "0.17.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
@@ -20,6 +22,7 @@
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",
     "nitro": "3.0.260903-beta",
+    "openapi-typescript": "7.13.0",
     "vite": "8.3.5"
   }
 }

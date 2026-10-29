@@ -1,12 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import {
-  account,
+  agents as listAgents,
+  api,
   ApiError,
-  agent,
-  pages,
   failure,
-  request,
+  ok,
   type Account,
   type Agent,
 } from '../api/client'
@@ -20,11 +19,11 @@ function Home() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   async function authenticate() {
-    setSession(account(await request('/identity/me')))
+    setSession(await ok(api.GET('/api/identity/me')))
   }
   useEffect(() => {
-    void request('/identity/me')
-      .then((value) => setSession(account(value)))
+    void ok(api.GET('/api/identity/me'))
+      .then(setSession)
       .catch((error) => {
         if (!(error instanceof ApiError && error.status === 401))
           setError(failure(error))
@@ -53,7 +52,7 @@ function Home() {
       key={session.id}
       session={session}
       onSignOut={async () => {
-        await request('/identity/logout', {})
+        await ok(api.POST('/api/identity/logout'))
         setSession(null)
         setError('')
       }}
@@ -79,7 +78,7 @@ function Workspace({
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   async function load() {
-    applyAgents(await pages('/agents', agent))
+    applyAgents(await listAgents())
   }
   function applyAgents(all: Agent[]) {
     setAgents(all)
@@ -88,7 +87,7 @@ function Workspace({
     )
   }
   useEffect(() => {
-    void pages('/agents', agent)
+    void listAgents()
       .then(applyAgents)
       .catch((error) => setError(failure(error)))
       .finally(() => setLoading(false))

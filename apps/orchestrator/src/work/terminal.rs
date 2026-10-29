@@ -7,12 +7,13 @@ use serde_json::Value;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-#[derive(Clone, Serialize, sqlx::FromRow)]
+#[derive(Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct Progress {
     pub id: Uuid,
     pub turn_id: Uuid,
     pub command: String,
     pub status: String,
+    #[schema(value_type = Option<cubebot_protocol::terminal::Outcome>)]
     pub outcome: Option<Value>,
 }
 impl Work {

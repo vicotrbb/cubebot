@@ -50,6 +50,12 @@ build:
 site-dev:
     bun run --cwd site dev
 
+# Writes the orchestrator's browser API document and the web client's types generated from it.
+api:
+    cargo run --locked -q -p cubebot-orchestrator --bin cubebot-admin openapi > apps/web/src/api/openapi.json
+    bun run --cwd apps/web api
+    bun run prettier --log-level warn --write apps/web/src/api/openapi.json apps/web/src/api/schema.d.ts
+
 # Building first generates the route tree on a fresh checkout.
 check: format-check lint test build
     bun run typecheck

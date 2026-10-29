@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { request, failure, provider, type Agent } from '../api/client'
+import { api, failure, ok, type Agent } from '../api/client'
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   const [error, setError] = useState('')
@@ -18,10 +18,14 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
           setError('')
           const data = new FormData(event.currentTarget)
           try {
-            await request('/identity/login', {
-              login: data.get('login'),
-              password: data.get('password'),
-            })
+            await ok(
+              api.POST('/api/identity/login', {
+                body: {
+                  login: String(data.get('login')),
+                  password: String(data.get('password')),
+                },
+              }),
+            )
             await onSignedIn()
           } catch (error) {
             setError(failure(error))
@@ -82,17 +86,22 @@ export function AgentForm({
           const data = new FormData(event.currentTarget)
           const input = {
             request_id: requestId,
-            name: data.get('name'),
-            instructions: data.get('instructions'),
+            name: String(data.get('name')),
+            instructions: String(data.get('instructions')),
           }
           try {
             if (existing)
-              await request(`/agents/${existing.id}/definition`, {
-                ...input,
-                expected_revision: existing.revision,
-                idle_policy: existing.idle_policy,
-              })
-            else await request('/agents', input)
+              await ok(
+                api.POST('/api/agents/{id}/definition', {
+                  params: { path: { id: existing.id } },
+                  body: {
+                    ...input,
+                    expected_revision: existing.revision,
+                    idle_policy: existing.idle_policy,
+                  },
+                }),
+              )
+            else await ok(api.POST('/api/agents', { body: input }))
             await onSaved()
           } catch (error) {
             setError(failure(error))
@@ -144,7 +153,7 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
     setBusy(true)
     setError('')
     try {
-      const current = provider(await request('/provider'))
+      const current = await ok(api.GET('/api/provider'))
       setRevision(current?.revision ?? 0)
       setKind(current?.provider ?? 'openai')
       setModel(current?.model ?? '')
@@ -176,14 +185,16 @@ export function ProviderForm({ onClose }: { onClose: () => void }) {
             const form = event.currentTarget
             const input = new FormData(form)
             try {
-              const current = provider(
-                await request('/provider', {
-                  request_id: requestId,
-                  expected_revision: revision,
-                  provider: kind,
-                  model,
-                  context_window: window === '' ? null : Number(window),
-                  api_key: input.get('api_key'),
+              const current = await ok(
+                api.POST('/api/provider', {
+                  body: {
+                    request_id: requestId,
+                    expected_revision: revision,
+                    provider: kind,
+                    model,
+                    context_window: window === '' ? null : Number(window),
+                    api_key: String(input.get('api_key')),
+                  },
                 }),
               )
               setRevision(current?.revision ?? 0)

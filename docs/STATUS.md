@@ -23,7 +23,7 @@ Agent system
 
 - Rooms, delegation, memory, skills, browser, integrations, triggers, notifications, PWA/push and token streaming are not implemented. Responses commit as complete messages.
 - Room content workflows and event streaming are not implemented.
-- Tool-journal crash-window behavior on CSI is unqualified. Each channel polls PostgreSQL once a second; delivery latency and database load at scale are unmeasured.
+- Tool-journal crash-window behavior on CSI is unqualified. Each channel polls PostgreSQL once a second, and each open browser conversation stream (`GET /api/conversations/{id}/events`) twice a second; delivery latency and database load at scale are unmeasured.
 
 Kubernetes and isolation
 
