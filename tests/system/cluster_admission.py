@@ -58,6 +58,7 @@ def namespaces(
     fixture,
     profiles=(
         ("cubebot-admission", "privileged"),
+        ("cubebot-admission-baseline", "baseline"),
         ("cubebot-admission-restricted", "restricted"),
     ),
 ):

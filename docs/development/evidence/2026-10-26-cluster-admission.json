@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-26T17:37:10.505993+00:00",
+  "timestamp": "2026-10-29T17:04:27.809557+00:00",
   "node_image": "kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed",
   "kind": "kind v0.33.0 go1.26.7 darwin/arm64",
   "server": {
@@ -19,42 +19,63 @@
   },
   "nodes": [
     {
-      "name": "cubebot-admission-9a2842850ac7-control-plane",
+      "name": "cubebot-admission-7346857f0c92-control-plane",
       "pod_cidrs": ["10.244.0.0/24", "fd00:10:244::/64"],
       "runtime": {
         "architecture": "arm64",
-        "bootID": "f2f20ea8-4352-4082-8359-6f8197be7c8d",
+        "bootID": "6b3ea1ba-12d3-4994-a4cd-5d94b67c2ed9",
         "containerRuntimeVersion": "containerd://2.3.4",
-        "kernelVersion": "7.0.14-orbstack-00380-ga7e0a2dc9535",
+        "kernelVersion": "7.2.9-orbstack-00391-g2b298d05fbd4",
         "kubeProxyVersion": "",
         "kubeletVersion": "v1.36.4",
-        "machineID": "d9210852c15145f9b9459b40cad507b9",
+        "machineID": "6ca1d1f3703140bcb2e47cb7be601ce6",
         "operatingSystem": "linux",
         "osImage": "Debian GNU/Linux 13 (trixie)",
         "swap": {
-          "capacity": 5254967296
+          "capacity": 5254311936
         },
-        "systemUUID": "d9210852c15145f9b9459b40cad507b9"
+        "systemUUID": "6ca1d1f3703140bcb2e47cb7be601ce6"
       },
       "features": {
         "supplementalGroupsPolicy": true
+      },
+      "capacity": {
+        "cpu": "3",
+        "ephemeral-storage": "504192Mi",
+        "memory": "4082596Ki",
+        "pods": "110"
+      },
+      "allocatable": {
+        "cpu": "3",
+        "ephemeral-storage": "504192Mi",
+        "memory": "4082596Ki",
+        "pods": "110"
       }
     }
   ],
   "scope": "API admission and prepared-manifest persistence; no running agent or G1-G3 qualification",
   "results": {
-    "allowed": {
+    "kvm_baseline": {
+      "backend": "kvm",
+      "namespace": "cubebot-admission-baseline",
+      "pod_security_rejected": true
+    },
+    "kvm_privileged": {
+      "backend": "kvm",
       "namespace": "cubebot-admission",
       "physical_pod_created": false,
       "repeated_preparation_stable": true,
       "server_defaulting_accepted": true
     },
-    "restricted": {
+    "process_restricted": {
+      "backend": "process",
       "namespace": "cubebot-admission-restricted",
-      "pod_security_rejected": true
+      "physical_pod_created": false,
+      "repeated_preparation_stable": true,
+      "server_defaulting_accepted": true
     }
   },
-  "source_sha256": "c4fbc413850c22502827587deb09f729651ca65ce75b851a8d6ca4600cb4c3bc",
-  "base_commit": "8dab77b782185c1a1f5557db5224758e17d68e7f",
+  "source_sha256": "224094af814b8eb8151223cbeb367a152c0165e1f56a94d618537f99b6df9a4f",
+  "base_commit": "32223f763cdb07e4e2f2347434e7578bde57ba49",
   "cleanup_completed": true
 }

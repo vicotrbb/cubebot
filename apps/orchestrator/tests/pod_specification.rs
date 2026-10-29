@@ -56,9 +56,11 @@ fn kvm_backend_requests_its_devices_and_only_net_admin() {
     let spec = serde_json::to_value(layout(Backend::Kvm).pod("workspace").unwrap()).unwrap();
     let sandbox = &spec["containers"][0];
     assert_eq!(sandbox["args"], json!(["run", "--backend", "kvm"]));
-    let limits = &sandbox["resources"]["limits"];
-    assert_eq!(limits["devices.kubevirt.io/kvm"], "1");
-    assert_eq!(limits["devices.kubevirt.io/tun"], "1");
+    for side in ["requests", "limits"] {
+        let resources = &sandbox["resources"][side];
+        assert_eq!(resources["devices.kubevirt.io/kvm"], "1");
+        assert_eq!(resources["devices.kubevirt.io/tun"], "1");
+    }
     assert_eq!(
         sandbox["securityContext"],
         json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"],"add":["NET_ADMIN"]}})
