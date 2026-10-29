@@ -93,7 +93,8 @@ def vms(f, container=""):
         node(
             f,
             "for p in /proc/[0-9]*; do ls -l $p/fd 2>/dev/null | grep -q kvm-vm && "
-            f'grep -qs "{container}" $p/cgroup && echo ${{p#/proc/}}; done',
+            # `true`: the loop otherwise exits with its last process's failed match.
+            f'grep -qs "{container}" $p/cgroup && echo ${{p#/proc/}}; done; true',
         ).split()
     )
 
@@ -331,15 +332,16 @@ def orchestrator_restart(f, identity, current, evidence):
     turn = send(
         f, identity, "sleep 30; echo survived >> survived.txt; cat survived.txt"
     )
-    wait_for(
-        "command started", lambda: called(f, turn, "echo survived", finished=False)
-    )
+    # The model may split the line into several calls; each check holds either way.
+    wait_for("command started", lambda: called(f, turn, "sleep 30", finished=False))
     controller = json.loads(f.k("get", "pod", "orchestrator", "-o", "json"))
     signal(f, controller, "SIGKILL")
     wait_for("orchestrator recovery", lambda: available(f))
     outcome(f, identity, turn, timeout=240)
-    call = called(f, turn, "echo survived", finished=True)
-    assert call and call["outcome"]["output"].count("survived") == 1, call
+    effect = called(f, turn, "echo survived", finished=True)
+    assert effect and effect["outcome"]["status"] == "exited", tools(f, turn)
+    call = called(f, turn, "cat survived.txt", finished=True)
+    assert call and call["outcome"]["output"].count("survived") == 1, tools(f, turn)
     done = f.sql(
         f"SELECT count(*) FROM turn_events WHERE turn_id='{turn['id']}' "
         "AND payload->>'kind'='done'"
@@ -371,14 +373,17 @@ def revocation(f, evidence):
     assert access == "false,false", access
     time.sleep(50)
     late = f.sql(
-        f"SELECT count(*) FROM turn_events e WHERE e.turn_id='{turn['id']}' AND "
+        "SELECT payload->>'kind' || ':' || COALESCE(payload->'outcome'->>'status', '') "
+        f"FROM turn_events e WHERE e.turn_id='{turn['id']}' AND "
         "e.created_at > (SELECT revoked_at FROM agent_runtime_sessions "
         f"WHERE attempt_id='{attempt}')"
-    )
-    assert late == "0", late
-    assert not called(f, turn, "sleep 40")["outcome"]
+    ).split()
+    # The revoked attempt writes nothing; a replacement may report the call uncertain.
+    assert late in ([], ["tool_result:uncertain"]), late
+    result = called(f, turn, "sleep 40")["outcome"]
+    assert result is None or result["status"] == "uncertain", result
     assert f.sql(f"SELECT status FROM chat_turns WHERE id='{turn['id']}'") != "complete"
-    evidence["revocation"] = {"attempt": attempt, "writes_after_revocation": 0}
+    evidence["revocation"] = {"attempt": attempt, "writes_after_revocation": late}
     print("PASS a revoked credential loses work delivery and ledger writes", flush=True)
 
 

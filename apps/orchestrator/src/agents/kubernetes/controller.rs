@@ -27,6 +27,19 @@ struct Lifecycle<S> {
     sandbox: S,
     runtime: RuntimeIdentity,
 }
+/// The kubelet can publish this container's restart after the container starts. A failed start
+/// would become the previous container the next start must prove, so retry briefly instead.
+async fn acquire(pool: &PgPool, api: &Kubernetes, identity: PodIdentity) -> Result<Owner, Error> {
+    for _ in 0..4 {
+        match Owner::acquire(pool, api, identity.clone()).await {
+            Err(Error::TerminationUnproven | Error::OwnershipMismatch) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            result => return result,
+        }
+    }
+    Owner::acquire(pool, api, identity).await
+}
 impl Controller {
     pub async fn new(
         pool: PgPool,
@@ -41,7 +54,7 @@ impl Controller {
             config,
             &identity.namespace,
         )?)?;
-        let owner = Owner::acquire(&pool, &api, identity).await?;
+        let owner = acquire(&pool, &api, identity).await?;
         Ok(Self {
             owner,
             pool,

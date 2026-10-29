@@ -1,0 +1,55 @@
+{
+  "cluster": "cubebot-sandbox-f3951b69a80f",
+  "source": "d2ea1ee5a89fa85b2305bfe23577bccb7daeab90798f8efc2c46071bdf42f1d1",
+  "vm": {
+    "pod": "ca82355b-1135-4f42-afff-d61241385982",
+    "processes": ["cubebot-sandbox", "sh"]
+  },
+  "isolation": {
+    "targets": {
+      "gateway": "10.244.0.11/443",
+      "sandbox": "10.244.0.14/22",
+      "database": "10.244.0.8/5432",
+      "database_service": "10.96.212.37/5432",
+      "kubernetes_service": "10.96.0.1/443",
+      "kubernetes_api": "172.18.0.2/6443"
+    },
+    "guest": {
+      "gateway": [0, ""],
+      "sandbox": [124, ""],
+      "database": [124, ""],
+      "database_service": [124, ""],
+      "kubernetes_service": [124, ""],
+      "kubernetes_api": [124, ""]
+    },
+    "control": {
+      "database": [0, ""],
+      "kubernetes_api": [0, ""]
+    }
+  },
+  "orchestrator_restart": {
+    "turn": "b4b4ebb3-f247-404c-ade1-ec96ffe74f19",
+    "result": {
+      "code": 0,
+      "output": "survived\n\n\nFull output: /var/lib/cubebot/workspace/.cubebot-tool-output/f18b00bd-751b-46cb-9464-75dc2401010a.log",
+      "status": "exited"
+    }
+  },
+  "stop": {
+    "vm_processes": ["8605"],
+    "after": ["8441"]
+  },
+  "revocation": {
+    "attempt": "a47b07bf-ac8e-41e5-b9ed-62f60542f5d2",
+    "writes_after_revocation": ["tool_result:uncertain"]
+  },
+  "lost_sandbox": {
+    "turn": "676ed3f8-508d-446b-b8ed-32459a3f098a",
+    "pods": [
+      "ca82355b-1135-4f42-afff-d61241385982",
+      "336145e6-1f06-4318-bee7-e9b31807695c"
+    ],
+    "effects": "committed"
+  },
+  "base_commit": "882c3d6a5e53e5eb514d7f8c4b9acf2ce3c60e3e"
+}
