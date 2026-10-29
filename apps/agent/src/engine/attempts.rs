@@ -1,5 +1,5 @@
 //! Local crash recovery for tool effects. A call is durable before its command starts and is
-//! never run again; after a crash it is reported once, with its outcome or as uncertain.
+//! never run again; after a crash it is reported with its outcome or as uncertain.
 use crate::journal::Journal;
 use cubebot_protocol::{runtime::TurnEvent, terminal::Outcome};
 use serde::{Deserialize, Serialize};
@@ -26,29 +26,27 @@ impl Store {
     pub fn record(&mut self, entry: &Entry) -> io::Result<u64> {
         self.journal.append(&serde_json::to_vec(entry)?)
     }
-    /// Called once the ledger has the entry and everything before it.
+    /// Called once the ledger has the entry and everything before it. A call stays journaled
+    /// until its result is acknowledged too, so a crash while it runs still reports it.
     pub fn acknowledge(&mut self, through: u64) -> io::Result<()> {
-        self.journal.acknowledge(through)
-    }
-    /// Unacknowledged entries in order. Each call without a result gets an uncertain result,
-    /// acknowledged with the call. A batch of parallel calls emits nothing between its first call
-    /// and its last result, so the sequences after the batch's latest entry are reserved for it.
-    pub fn pending(&self) -> io::Result<Vec<(Entry, u64)>> {
-        let mut pending = Vec::new();
-        for record in self.journal.pending() {
-            let entry: Entry = serde_json::from_slice(&record.payload)?;
-            pending.push((entry, record.sequence));
-        }
-        let unfinished: Vec<(Uuid, Uuid, u64)> = pending
+        let entries = self.entries()?;
+        let open = entries
             .iter()
-            .filter_map(|(entry, journal)| match entry.event {
-                TurnEvent::ToolCall { id, .. } if !finished(&pending, id) => {
-                    Some((entry.turn, id, *journal))
-                }
-                _ => None,
-            })
+            .filter(|(_, journal)| *journal <= through)
+            .find(|(entry, _)| unfinished(&entries, entry).is_some());
+        self.journal
+            .acknowledge(open.map_or(through, |(_, journal)| journal - 1))
+    }
+    /// Unacknowledged entries in order. Each call without a result first gets a journaled
+    /// uncertain result. A batch of parallel calls emits nothing between its first call and its
+    /// last result, so the sequences after the batch's latest entry are reserved for it.
+    pub fn pending(&mut self) -> io::Result<Vec<(Entry, u64)>> {
+        let mut pending = self.entries()?;
+        let calls: Vec<(Uuid, Uuid)> = pending
+            .iter()
+            .filter_map(|(entry, _)| Some((entry.turn, unfinished(&pending, entry)?)))
             .collect();
-        for (turn, id, journal) in unfinished {
+        for (turn, id) in calls {
             let latest = pending
                 .iter()
                 .filter(|(entry, _)| entry.turn == turn)
@@ -63,9 +61,24 @@ impl Store {
                     outcome: Outcome::Uncertain,
                 },
             };
+            let journal = self.record(&uncertain)?;
             pending.push((uncertain, journal));
         }
         Ok(pending)
+    }
+    fn entries(&self) -> io::Result<Vec<(Entry, u64)>> {
+        self.journal
+            .pending()
+            .iter()
+            .map(|record| Ok((serde_json::from_slice(&record.payload)?, record.sequence)))
+            .collect()
+    }
+}
+/// The id of `entry` when it is a call without a result among `pending`.
+fn unfinished(pending: &[(Entry, u64)], entry: &Entry) -> Option<Uuid> {
+    match entry.event {
+        TurnEvent::ToolCall { id, .. } if !finished(pending, id) => Some(id),
+        _ => None,
     }
 }
 fn finished(pending: &[(Entry, u64)], call: Uuid) -> bool {
@@ -130,9 +143,37 @@ mod tests {
                 ..
             }
         ));
-        assert_eq!(pending[3].1, pending[2].1);
+        assert!(pending[3].1 > pending[2].1);
         store.acknowledge(done).unwrap();
         assert_eq!(store.pending().unwrap().len(), 2);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn an_acknowledged_call_is_kept_until_its_result_is_acknowledged() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let turn = Uuid::new_v4();
+        let mut store = Store::open(&root).unwrap();
+        let running = call(turn, 1);
+        let journal = store.record(&running).unwrap();
+        store.acknowledge(journal).unwrap();
+        drop(store);
+
+        let mut store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 2);
+        assert_eq!(pending[0], (running, journal));
+        assert!(matches!(
+            pending[1].0.event,
+            TurnEvent::ToolResult {
+                outcome: Outcome::Uncertain,
+                ..
+            }
+        ));
+        store.acknowledge(pending[1].1).unwrap();
+        assert!(store.pending().unwrap().is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }
 
@@ -159,13 +200,13 @@ mod tests {
         store.record(&result).unwrap();
         drop(store);
 
-        let store = Store {
+        let mut store = Store {
             journal: Journal::reopen(&root).unwrap(),
         };
         let pending = store.pending().unwrap();
         assert_eq!(pending.len(), 4);
         assert_eq!(pending[3].0.sequence, 5);
-        assert_eq!(pending[3].1, second_journal);
+        assert!(pending[3].1 > second_journal);
         assert!(
             matches!(pending[3].0.event, TurnEvent::ToolResult { id: done, .. } if done == id(&second))
         );

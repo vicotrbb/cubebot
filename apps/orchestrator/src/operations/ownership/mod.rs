@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 const LOCK: i64 = 0x4355_4245_424f_5401;
 
+#[derive(Clone)]
 pub struct PodIdentity {
     pub namespace: String,
     pub name: String,

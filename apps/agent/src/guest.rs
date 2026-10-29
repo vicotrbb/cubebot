@@ -94,8 +94,10 @@ fn mount_filesystems() -> io::Result<()> {
             Some("mode=0755"),
         ),
         ("tmpfs", "/tmp", "tmpfs", private, Some("mode=1777")),
-        // The workspace disk is the second virtio disk, after the read-only root.
-        ("/dev/vdb", STATE, "ext4", private, None),
+        // The workspace disk is the second virtio disk, after the read-only root. Without delayed
+        // allocation each journal commit writes file data first, so the commit that journals a
+        // tool result also persists that tool's effects; the guest's page cache dies with the VM.
+        ("/dev/vdb", STATE, "ext4", private, Some("nodelalloc")),
         // The kernel publishes the nameservers from its ip= parameter in resolv.conf syntax.
         (
             "/proc/net/pnp",
@@ -112,10 +114,12 @@ fn mount_filesystems() -> io::Result<()> {
     Ok(())
 }
 
-/// Kernel `ip=` adds no default route through a gateway outside the address's subnet, as a /32 pod
-/// address with Calico's link-local gateway has; this adds that route on-link over netlink.
+/// Sends every packet through the kernel `ip=` gateway, as pod CNIs route: kind's ptp routes even
+/// its own subnet that way and answers no ARP for other pods, and a /32 address with Calico's
+/// link-local gateway gets no default route from `ip=`, whose netmask the kernel then guesses.
+/// So each on-link route the kernel added becomes the same prefix via the gateway, over netlink.
 fn default_route(cmdline: &str) -> io::Result<()> {
-    let Some((gateway, interface)) = off_link_gateway(cmdline) else {
+    let Some((gateway, interface)) = gateway(cmdline) else {
         return Ok(());
     };
     let socket = socket(
@@ -124,65 +128,100 @@ fn default_route(cmdline: &str) -> io::Result<()> {
         SockFlag::SOCK_CLOEXEC,
         SockProtocol::NetlinkRoute,
     )?;
-    let request = route_request(gateway, if_nametoindex(interface)?);
-    sendto(
-        socket.as_raw_fd(),
-        &request,
-        &NetlinkAddr::new(0, 0),
-        MsgFlags::empty(),
-    )?;
-    let mut reply = [0; 64];
-    let read = recv(socket.as_raw_fd(), &mut reply, MsgFlags::empty())?;
-    // The acknowledgement is an NLMSG_ERROR message whose error is zero.
-    let error = i32::from_ne_bytes(reply[16..20].try_into().expect("four bytes"));
-    match (read >= 20, u16::from_ne_bytes([reply[4], reply[5]]), error) {
-        (true, 2, 0) => Ok(()),
-        (true, 2, error) => Err(io::Error::other(format!(
-            "default route via {gateway}: {}",
-            io::Error::from_raw_os_error(-error)
-        ))),
-        _ => Err(io::Error::other("unexpected netlink reply")),
+    let index = if_nametoindex(interface)?;
+    let table = std::fs::read_to_string("/proc/net/route")?;
+    for destination in on_link(&table, interface)
+        .into_iter()
+        .chain([(Ipv4Addr::UNSPECIFIED, 0)])
+    {
+        let request = route_request(destination, gateway, index);
+        sendto(
+            socket.as_raw_fd(),
+            &request,
+            &NetlinkAddr::new(0, 0),
+            MsgFlags::empty(),
+        )?;
+        let mut reply = [0; 64];
+        let read = recv(socket.as_raw_fd(), &mut reply, MsgFlags::empty())?;
+        // The acknowledgement is an NLMSG_ERROR message whose error is zero.
+        let error = i32::from_ne_bytes(reply[16..20].try_into().expect("four bytes"));
+        match (read >= 20, u16::from_ne_bytes([reply[4], reply[5]]), error) {
+            (true, 2, 0) => (),
+            (true, 2, error) => {
+                return Err(io::Error::other(format!(
+                    "route {}/{} via {gateway}: {}",
+                    destination.0,
+                    destination.1,
+                    io::Error::from_raw_os_error(-error)
+                )));
+            }
+            _ => return Err(io::Error::other("unexpected netlink reply")),
+        }
     }
+    Ok(())
 }
 
-/// The gateway and interface of the kernel `ip=` parameter, when the gateway is off the subnet.
-fn off_link_gateway(cmdline: &str) -> Option<(Ipv4Addr, &str)> {
+/// The gateway and interface of the kernel `ip=` parameter.
+fn gateway(cmdline: &str) -> Option<(Ipv4Addr, &str)> {
     let parameter = cmdline
         .split_whitespace()
         .find_map(|parameter| parameter.strip_prefix("ip="))?;
     let fields: Vec<_> = parameter.split(':').collect();
-    let [address, _, gateway, netmask, _, interface, ..] = fields[..] else {
+    let [_, _, gateway, _, _, interface, ..] = fields[..] else {
         return None;
     };
-    let address = u32::from(address.parse::<Ipv4Addr>().ok()?);
-    let gateway = gateway.parse::<Ipv4Addr>().ok()?;
-    let netmask = u32::from(netmask.parse::<Ipv4Addr>().ok()?);
-    ((address ^ u32::from(gateway)) & netmask != 0).then_some((gateway, interface))
+    Some((gateway.parse().ok()?, interface))
 }
 
-/// RTM_NEWROUTE for `default via gateway dev interface onlink` in the main table.
-fn route_request(gateway: Ipv4Addr, interface: u32) -> Vec<u8> {
-    const LENGTH: u32 = 44;
+/// The prefixes `/proc/net/route` lists as on-link (no gateway) through `interface`.
+fn on_link(table: &str, interface: &str) -> Vec<(Ipv4Addr, u8)> {
+    table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            let [link, destination, "00000000", _, _, _, _, mask, ..] = fields[..] else {
+                return None;
+            };
+            // The kernel prints addresses as host-order hex words.
+            let word = |hex| u32::from_str_radix(hex, 16).ok().map(u32::to_le_bytes);
+            let mask = u32::from_be_bytes(word(mask)?);
+            if link != interface || mask == 0 {
+                return None;
+            }
+            Some((Ipv4Addr::from(word(destination)?), mask.count_ones() as u8))
+        })
+        .collect()
+}
+
+/// RTM_NEWROUTE replacing `destination via gateway dev interface onlink` in the main table.
+fn route_request(destination: (Ipv4Addr, u8), gateway: Ipv4Addr, interface: u32) -> Vec<u8> {
     const NEW_ROUTE: u16 = 24;
-    // NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE
-    const FLAGS: u16 = 0x605;
+    // NLM_F_REQUEST | NLM_F_ACK | NLM_F_REPLACE | NLM_F_CREATE
+    const FLAGS: u16 = 0x505;
     const ON_LINK: u32 = 4;
-    let mut message = Vec::with_capacity(LENGTH as usize);
-    message.extend_from_slice(&LENGTH.to_ne_bytes());
+    let length: u32 = if destination.1 == 0 { 44 } else { 52 };
+    let mut message = Vec::with_capacity(length as usize);
+    message.extend_from_slice(&length.to_ne_bytes());
     message.extend_from_slice(&NEW_ROUTE.to_ne_bytes());
     message.extend_from_slice(&FLAGS.to_ne_bytes());
     // Sequence and port id; the kernel fills in the port.
     message.extend_from_slice(&[0; 8]);
-    // rtmsg: IPv4, a /0 destination, main table, boot protocol, universe scope, unicast.
-    message.extend_from_slice(&[2, 0, 0, 0, 254, 3, 0, 1]);
+    // rtmsg: IPv4, the destination length, main table, boot protocol, universe scope, unicast.
+    message.extend_from_slice(&[2, destination.1, 0, 0, 254, 3, 0, 1]);
     message.extend_from_slice(&ON_LINK.to_ne_bytes());
-    // RTA_GATEWAY and RTA_OIF attributes.
+    // RTA_GATEWAY and RTA_OIF attributes, then RTA_DST unless the route is the default.
     message.extend_from_slice(&8u16.to_ne_bytes());
     message.extend_from_slice(&5u16.to_ne_bytes());
     message.extend_from_slice(&gateway.octets());
     message.extend_from_slice(&8u16.to_ne_bytes());
     message.extend_from_slice(&4u16.to_ne_bytes());
     message.extend_from_slice(&interface.to_ne_bytes());
+    if destination.1 != 0 {
+        message.extend_from_slice(&8u16.to_ne_bytes());
+        message.extend_from_slice(&1u16.to_ne_bytes());
+        message.extend_from_slice(&destination.0.octets());
+    }
     message
 }
 
@@ -352,21 +391,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn routes_only_an_off_link_gateway() {
+    fn routes_every_prefix_through_the_gateway() {
         let calico = "console=ttyS0 ip=10.0.5.7::169.254.1.1:255.255.255.255::eth0:off:: ro";
-        let gateway = Ipv4Addr::new(169, 254, 1, 1);
-        assert_eq!(off_link_gateway(calico), Some((gateway, "eth0")));
-        let bridge = "ip=10.0.5.7::10.0.5.1:255.255.255.0::eth0:off::";
-        assert_eq!(off_link_gateway(bridge), None);
-        assert_eq!(
-            off_link_gateway("ip=10.0.5.7:::255.255.255.255::eth0:off::"),
-            None
-        );
-        assert_eq!(off_link_gateway("console=ttyS0"), None);
-        let request = route_request(gateway, 2);
+        let gateway_address = Ipv4Addr::new(169, 254, 1, 1);
+        assert_eq!(gateway(calico), Some((gateway_address, "eth0")));
+        let ptp = "ip=10.244.0.7::10.244.0.1:255.255.255.0::eth0:off::";
+        assert_eq!(gateway(ptp), Some((Ipv4Addr::new(10, 244, 0, 1), "eth0")));
+        assert_eq!(gateway("ip=10.0.5.7:::255.255.255.255::eth0:off::"), None);
+        assert_eq!(gateway("console=ttyS0"), None);
+        let table = "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n\
+            eth0\t00000000\t0100F40A\t0003\t0\t0\t0\t00000000\t0\t0\t0\n\
+            eth0\t0000F40A\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n\
+            lo\t0000007F\t00000000\t0001\t0\t0\t0\t000000FF\t0\t0\t0\n";
+        assert_eq!(on_link(table, "eth0"), [(Ipv4Addr::new(10, 244, 0, 0), 24)]);
+        let request = route_request((Ipv4Addr::UNSPECIFIED, 0), gateway_address, 2);
         assert_eq!(request.len(), 44);
         assert_eq!(request[..4], 44u32.to_ne_bytes());
         assert_eq!(request[32..36], [169, 254, 1, 1]);
         assert_eq!(request[40..], 2u32.to_ne_bytes());
+        let request = route_request((Ipv4Addr::new(10, 244, 0, 0), 24), gateway_address, 2);
+        assert_eq!((request.len(), request[17]), (52, 24));
+        assert_eq!(request[44..48], [8, 0, 1, 0]);
+        assert_eq!(request[48..], [10, 244, 0, 0]);
     }
 }

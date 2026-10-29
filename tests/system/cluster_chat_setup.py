@@ -375,7 +375,9 @@ def orchestrator_environment():
 def gateway(f):
     config = """events {}\nhttp { access_log off; server { listen 443 ssl;
 ssl_certificate /tls/tls.crt; ssl_certificate_key /tls/tls.key;
-location /api/ { proxy_pass http://orchestrator:8080; }
+location /api/ { proxy_pass http://orchestrator:8080; proxy_http_version 1.1;
+proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $http_connection;
+proxy_read_timeout 1h; }
 location / { proxy_pass http://web:3000; }
 }}"""
     f.create("ConfigMap", "gateway", data={"nginx.conf": config})

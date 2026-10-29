@@ -78,7 +78,7 @@ impl Agent {
         if !metadata.is_dir() || metadata.mode() & 0o077 != 0 {
             return Err("private runtime storage required");
         }
-        let store = Store::open(&root.join("tools"))
+        let mut store = Store::open(&root.join("tools"))
             .map_err(|_| "runtime journal unavailable; recovery required")?;
         // Tool effects from before a crash are reported once, with their outcome or as uncertain.
         let outbox = store
