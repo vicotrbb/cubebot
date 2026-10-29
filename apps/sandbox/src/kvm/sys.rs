@@ -8,6 +8,7 @@ const KVMIO: u8 = 0xAE;
 pub const API_VERSION: i32 = 12;
 pub const EXIT_IO: u32 = 2;
 pub const EXIT_HLT: u32 = 5;
+pub const EXIT_MMIO: u32 = 6;
 pub const EXIT_SHUTDOWN: u32 = 8;
 pub const EXIT_IO_OUT: u8 = 1;
 /// The ioctl takes the address as an unsigned long, which the int-argument macros would sign-extend.
@@ -128,7 +129,7 @@ pub struct Cpuid {
     pub entries: [CpuidEntry; 256],
 }
 
-/// The head of `kvm_run`; `io` is the union member for KVM_EXIT_IO.
+/// The head of `kvm_run` and its exit union.
 #[repr(C)]
 pub struct Run {
     pub request_interrupt_window: u8,
@@ -140,16 +141,34 @@ pub struct Run {
     pub flags: u16,
     pub cr8: u64,
     pub apic_base: u64,
+    pub exit: Exit,
+}
+
+/// Which member is valid follows from `exit_reason`.
+#[repr(C)]
+pub union Exit {
     pub io: Io,
+    pub mmio: Mmio,
+    padding: [u64; 32],
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct Io {
     pub direction: u8,
     pub size: u8,
     pub port: u16,
     pub count: u32,
     pub data_offset: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Mmio {
+    pub phys_addr: u64,
+    pub data: [u8; 8],
+    pub len: u32,
+    pub is_write: u8,
 }
 
 // KVM rejects a nonzero argument on several _IO ioctls, so pass an explicit 0 rather than ioctl_none!,
@@ -184,6 +203,7 @@ mod tests {
         assert_eq!(size_of::<CpuidEntry>(), 40);
         assert_eq!(size_of::<PitConfig>(), 64);
         assert_eq!(std::mem::offset_of!(Run, exit_reason), 8);
-        assert_eq!(std::mem::offset_of!(Run, io), 32);
+        assert_eq!(std::mem::offset_of!(Run, exit), 32);
+        assert_eq!(size_of::<Mmio>(), 24);
     }
 }

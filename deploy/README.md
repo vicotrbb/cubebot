@@ -8,4 +8,4 @@ Application image recipes live with their applications:
 - [Web console](../apps/web/Dockerfile)
 - [Agent sandbox](../apps/sandbox/Dockerfile): `cubebot-sandbox` and `cubebot-agent`, one container per agent
 
-Build all images with the repository root as Docker context. The fixed Pod/PVC compiler and owned controller are implemented, while full Kubernetes security/storage/fencing qualification remains pending. The sandbox's `kvm` backend (ADR 0084) is not built yet; only the development `process` backend runs, with no isolation claim.
+Build all images with the repository root as Docker context. The fixed Pod/PVC compiler and owned controller are implemented, while full Kubernetes security/storage/fencing qualification remains pending. The sandbox image carries the `kvm` backend's guest (ADR 0084) only when built with `--build-context guest=target/guest` after `tooling/guest/build.py`; kvm sandboxes run as root with only `CAP_NET_ADMIN`, so their namespace's Pod Security level must be privileged. Without the guest the image runs only the development `process` backend, with no isolation claim.

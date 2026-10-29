@@ -52,15 +52,21 @@ fn sandbox_container_runs_the_configured_backend_without_privilege() {
 }
 
 #[test]
-fn kvm_backend_requests_the_kvm_device() {
+fn kvm_backend_requests_its_devices_and_only_net_admin() {
     let spec = serde_json::to_value(layout(Backend::Kvm).pod("workspace").unwrap()).unwrap();
     let sandbox = &spec["containers"][0];
     assert_eq!(sandbox["args"], json!(["--backend", "kvm"]));
+    let limits = &sandbox["resources"]["limits"];
+    assert_eq!(limits["devices.kubevirt.io/kvm"], "1");
+    assert_eq!(limits["devices.kubevirt.io/tun"], "1");
     assert_eq!(
-        sandbox["resources"]["limits"]["devices.kubevirt.io/kvm"],
-        "1"
+        sandbox["securityContext"],
+        json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"],"add":["NET_ADMIN"]}})
     );
-    assert_eq!(sandbox["securityContext"]["privileged"], false);
+    assert!(sandbox["env"].as_array().unwrap().iter().any(|item| {
+        item["name"] == "CUBEBOT_GUEST_WORKSPACE"
+            && item["value"] == "/var/lib/cubebot/workspace.ext4"
+    }));
 }
 
 #[test]

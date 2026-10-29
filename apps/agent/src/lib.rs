@@ -3,6 +3,8 @@
 pub mod context;
 pub mod control;
 pub mod engine;
+#[cfg(target_os = "linux")]
+pub mod guest;
 pub mod memory;
 pub mod skills;
 pub mod tools;

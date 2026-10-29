@@ -4,7 +4,7 @@ Configuration and HTTP behavior of what currently runs. Open qualification gaps 
 
 ## Runtime and lifecycle
 
-See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox --backend <kvm|process>` from `apps/sandbox` (ADR 0084), which runs `cubebot-agent`. The `kvm` backend is not implemented yet and refuses to start; `process` runs the agent as a plain child for development with no isolation claim. The agent runs its tools itself, as the configured tool user, when the terminal flag is set.
+See [repository layout](repository-layout.md) for the complete module map and dependency rules. Each agent pod runs one container, `cubebot-sandbox --backend <kvm|process>` from `apps/sandbox` (ADR 0084), which runs `cubebot-agent`. The `kvm` backend boots the agent in a guest VM, from a sandbox image built with the guest (see the [sandbox](../../apps/sandbox/README.md)); `process` runs the agent as a plain child for development with no isolation claim. The agent runs its tools itself, as the configured tool user, when the terminal flag is set.
 
 The backend remains a modular monolith. PostgreSQL uses SQLx with embedded versioned migrations. The agent module also has a namespaced kube-rs API adapter, durable resource reservations and a fixed pod/PVC specification compiler. Controlled HTTP, PostgreSQL and manifest tests cover these boundaries; explicit reconciliation provisions and observes installation anchors, workspace claims and pods, and explicit installation configuration now activates serial lifecycle reconciliation at startup. The compiler requires digest-pinned images, a dedicated runtime service account, HTTPS orchestrator origin and CSI support for ReadWriteOncePod.
 
@@ -110,7 +110,7 @@ Set `CUBEBOT_CONTROLLER_CONFIG` to a local JSON file and configure `CUBEBOT_DATA
 }
 ```
 
-`network` is required; supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. Egress control is pod-level NetworkPolicy, which governs exactly one agent. `backend` is `kvm` or `process`; `kvm` adds a `devices.kubevirt.io/kvm` resource limit so the pod gets `/dev/kvm` from a device plugin, and `process` is development-only.
+`network` is required; supply one to three resolver IPs. Pods use `dnsPolicy: None` with exactly those resolvers, so use fully qualified hostnames for cluster services. Egress control is pod-level NetworkPolicy, which governs exactly one agent. `backend` is `kvm` or `process`; `kvm` adds `devices.kubevirt.io/kvm` and `devices.kubevirt.io/tun` resource limits so the pod gets `/dev/kvm` and `/dev/net/tun` from KubeVirt's device plugin, and runs the sandbox as root with only `NET_ADMIN`, which needs a privileged Pod Security namespace; `process` is development-only.
 
 Replace the example image digest with the built sandbox image. For an explicitly selected kubeconfig, replace `connection` with `{"kind":"kubeconfig","path":"/trusted/kubeconfig","context":"cubebot"}`. The service never discovers the default context. Kubernetes transport requires certificate-verified HTTPS, with literal loopback HTTP allowed for local controlled workflows. The orchestrator origin supplied to agents requires HTTPS.
 

@@ -7,6 +7,11 @@ async fn main() -> ExitCode {
     if std::env::args().nth(1).as_deref() == Some("edit-file") && std::env::args().len() == 2 {
         return cubebot_agent::tools::edit_file();
     }
+    // The kvm guest's init, which runs the agent as its child.
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("guest") && std::env::args().len() == 2 {
+        return cubebot_agent::guest::init();
+    }
     if std::env::args().len() > 1 {
         eprintln!("Unknown runtime arguments");
         return ExitCode::FAILURE;

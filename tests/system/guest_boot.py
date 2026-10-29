@@ -1,18 +1,38 @@
-"""Boot the kvm backend: agent startup line within 2 s, then a clean VM exit."""
+"""Acceptance for the kvm backend (ADR 0084): x86_64 Linux, /dev/kvm, Docker and sudo.
 
+A network namespace with a veth pair stands in for an agent pod, shaped as Calico
+gives one: a /32 address behind a link-local gateway that the host answers by proxy
+ARP. In it the sandbox boots the guest twice on one workspace disk. Each boot must
+reach a stand-in orchestrator at the pod's address over TLS with the forwarded
+bootstrap token, report liveness over vsock, and on SIGTERM exit with the agent's
+status 0, leaving the workspace filesystem clean.
+The second boot must reopen the journal lock file the first one created. The stand-in
+only records the bootstrap request, so this is not agent qualification.
+"""
+
+import http.server
+import json
 import os
 import platform
-import selectors
+import queue
+import signal
+import ssl
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GUEST = ROOT / "target/guest"
-STARTUP = b"cubebot-agent "
-DEADLINE = 2.0
-SHUTDOWN = 10.0
+NAMESPACE = "cubebot-guest-test"
+HOST, POD, GATEWAY = "10.231.0.1", "10.231.0.2", "169.254.1.1"
+PORT = 8443
+TOKEN = "cb_guest_acceptance"
+LOCK = "/runtime/tools/lock"
+DEADLINE = 60.0
+SHUTDOWN = 20.0
 
 
 def main() -> int:
@@ -32,55 +52,223 @@ def main() -> int:
     subprocess.run(
         ["cargo", "build", "--locked", "-p", "cubebot-sandbox"], check=True, cwd=ROOT
     )
-    environment = {
-        **os.environ,
-        "CUBEBOT_GUEST_KERNEL": str(GUEST / "bzImage"),
-        "CUBEBOT_GUEST_INITRAMFS": str(GUEST / "initramfs.cpio"),
-    }
-    started = time.monotonic()
-    sandbox = subprocess.Popen(
-        [ROOT / "target/debug/cubebot-sandbox", "--backend", "kvm"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        env=environment,
-    )
+    pod()
     try:
-        return check(sandbox, started)
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            return acceptance(directory, orchestrator(directory))
     finally:
-        sandbox.kill()
-        sandbox.wait()
+        sudo("ip", "netns", "del", NAMESPACE)
 
 
-def check(sandbox: subprocess.Popen, started: float) -> int:
-    output, seen = relay(sandbox, started + DEADLINE, b"", STARTUP)
-    if not seen:
-        print(f"\nguest-boot failed: no agent startup line within {DEADLINE}s")
-        return 1
-    print(f"\nguest-boot: agent started in {time.monotonic() - started:.2f}s")
-    # Unconfigured, the agent exits; the guest then reboots, which must end the VM.
-    _, closed = relay(sandbox, started + SHUTDOWN, output, None)
-    if not closed or sandbox.wait(timeout=1) != 0:
-        print(f"guest-boot failed: the VM did not exit cleanly within {SHUTDOWN}s")
-        return 1
-    print("guest-boot: guest shutdown ended the VM")
+def acceptance(directory: Path, requests: queue.Queue) -> int:
+    (directory / "token").write_text(TOKEN)
+    workspace = directory / "workspace.img"
+    inode = None
+    for boot in (1, 2):
+        failure = run_guest(directory, workspace, requests)
+        if failure:
+            print(f"guest-boot failed on boot {boot}: {failure}")
+            return 1
+        if subprocess.run(["e2fsck", "-fn", workspace], capture_output=True).returncode:
+            print(f"guest-boot failed: the workspace is not clean after boot {boot}")
+            return 1
+        stat = subprocess.run(
+            ["debugfs", "-R", f"stat {LOCK}", workspace], capture_output=True, text=True
+        ).stdout
+        if "Inode:" not in stat:
+            print(f"guest-boot failed: boot {boot} left no {LOCK} on the workspace")
+            return 1
+        current = stat.split("Inode:")[1].split()[0]
+        if inode not in (None, current):
+            print(f"guest-boot failed: boot 2 replaced {LOCK} instead of reopening it")
+            return 1
+        inode = current
+        print(f"guest-boot: boot {boot} passed")
     return 0
 
 
-def relay(sandbox: subprocess.Popen, deadline: float, output: bytes, until):
-    """Echo guest output until `until` appears, or until EOF when it is None."""
-    with selectors.DefaultSelector() as selector:
-        selector.register(sandbox.stdout, selectors.EVENT_READ)
-        while until is None or until not in output:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0 or not selector.select(remaining):
-                return output, False
-            chunk = os.read(sandbox.stdout.fileno(), 65536)
-            if not chunk:
-                return output, until is None
+def run_guest(directory: Path, workspace: Path, requests: queue.Queue):
+    """Returns why a boot failed, or None."""
+    environment = {
+        "CUBEBOT_GUEST_KERNEL": GUEST / "bzImage",
+        "CUBEBOT_GUEST_ROOT": GUEST / "root.ext4",
+        "CUBEBOT_GUEST_WORKSPACE": workspace,
+        "CUBEBOT_ORCHESTRATOR_ORIGIN": f"https://{HOST}:{PORT}/",
+        "CUBEBOT_BOOTSTRAP_TOKEN_FILE": directory / "token",
+        "CUBEBOT_CONTROL_CA_FILE": directory / "ca.pem",
+    }
+    sandbox = subprocess.Popen(
+        ["sudo", "ip", "netns", "exec", NAMESPACE, "env"]
+        + [f"{name}={value}" for name, value in environment.items()]
+        + [ROOT / "target/debug/cubebot-sandbox", "--backend", "kvm"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    try:
+        return check(sandbox, Console(sandbox.stdout), requests)
+    finally:
+        if sandbox.poll() is None:
+            subprocess.run(["sudo", "pkill", "-KILL", "-x", "cubebot-sandbox"])
+        sandbox.wait()
+
+
+class Console:
+    """Echoes and keeps sandbox output, so the guest never blocks on a full pipe."""
+
+    def __init__(self, stream):
+        self.output = b""
+        self.closed = threading.Event()
+        threading.Thread(target=self.read, args=(stream,), daemon=True).start()
+
+    def read(self, stream):
+        while chunk := os.read(stream.fileno(), 65536):
             sys.stdout.buffer.write(chunk)
             sys.stdout.flush()
-            output += chunk
-    return output, True
+            self.output += chunk
+        self.closed.set()
+
+
+def check(sandbox: subprocess.Popen, console: Console, requests: queue.Queue):
+    deadline = time.monotonic() + DEADLINE
+    if not until(lambda: b"Guest agent alive" in console.output, deadline):
+        return "no liveness report over vsock"
+    try:
+        source, token = requests.get(timeout=max(deadline - time.monotonic(), 0))
+    except queue.Empty:
+        return "the agent did not reach the orchestrator"
+    if (source, token) != (POD, TOKEN):
+        return f"bootstrap came from {source} with an unexpected token"
+    # Bootstrap retries queue more requests; each boot checks only its own first one.
+    while not requests.empty():
+        requests.get()
+    sandbox.send_signal(signal.SIGTERM)
+    if not console.closed.wait(SHUTDOWN) or sandbox.wait(timeout=5) != 0:
+        return f"the VM did not exit 0 within {SHUTDOWN}s of SIGTERM"
+    for line, failure in [
+        (b"Runtime startup failed", "the agent could not start, or open its journal"),
+        (b"Guest workspace unmount failed", "the guest did not unmount its workspace"),
+    ]:
+        if line in console.output:
+            return failure
+    return None
+
+
+def until(condition, deadline: float) -> bool:
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.1)
+    return condition()
+
+
+def pod():
+    """A namespace whose eth0 reaches the host at HOST, as Calico gives an agent pod."""
+    sudo("ip", "netns", "add", NAMESPACE)
+    sudo(
+        "ip",
+        "link",
+        "add",
+        "cubebot-guest",
+        "type",
+        "veth",
+        "peer",
+        "name",
+        "eth0",
+        "netns",
+        NAMESPACE,
+    )
+    sudo("ip", "addr", "add", f"{HOST}/32", "dev", "cubebot-guest")
+    sudo("ip", "link", "set", "cubebot-guest", "up")
+    sudo("ip", "route", "add", f"{POD}/32", "dev", "cubebot-guest")
+    sudo("sysctl", "-q", "net.ipv4.conf.cubebot-guest.proxy_arp=1")
+    inside = ["ip", "-n", NAMESPACE]
+    sudo(*inside, "addr", "add", f"{POD}/32", "dev", "eth0")
+    sudo(*inside, "link", "set", "eth0", "up")
+    sudo(*inside, "route", "add", GATEWAY, "dev", "eth0", "scope", "link")
+    sudo(*inside, "route", "add", "default", "via", GATEWAY, "dev", "eth0")
+
+
+def orchestrator(directory: Path) -> queue.Queue:
+    """A TLS listener on HOST that records each bootstrap's source address and token."""
+    certificates(directory)
+    requests = queue.Queue()
+
+    class Bootstrap(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            if self.path == "/api/runtime/bootstrap":
+                requests.put((self.client_address[0], json.loads(body).get("token")))
+            self.send_response(503)
+            self.end_headers()
+
+        def log_message(self, *_):
+            pass
+
+    server = http.server.ThreadingHTTPServer((HOST, PORT), Bootstrap)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(directory / "server.pem", directory / "server.key")
+    server.socket = context.wrap_socket(server.socket, server_side=True)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return requests
+
+
+def certificates(directory: Path):
+    """A private CA and a certificate for HOST: rustls refuses a self-signed leaf."""
+    extensions = directory / "server.ext"
+    extensions.write_text(
+        f"subjectAltName=IP:{HOST}\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n"
+    )
+    key = ["-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes"]
+    openssl(
+        "req",
+        "-x509",
+        *key,
+        "-keyout",
+        "ca.key",
+        "-out",
+        "ca.pem",
+        "-days",
+        "1",
+        "-subj",
+        "/CN=cubebot guest test",
+        cwd=directory,
+    )
+    openssl(
+        "req",
+        *key,
+        "-keyout",
+        "server.key",
+        "-out",
+        "server.csr",
+        "-subj",
+        f"/CN={HOST}",
+        cwd=directory,
+    )
+    openssl(
+        "x509",
+        "-req",
+        "-in",
+        "server.csr",
+        "-CA",
+        "ca.pem",
+        "-CAkey",
+        "ca.key",
+        "-CAcreateserial",
+        "-out",
+        "server.pem",
+        "-days",
+        "1",
+        "-extfile",
+        extensions,
+        cwd=directory,
+    )
+
+
+def openssl(*arguments, cwd: Path):
+    subprocess.run(["openssl", *arguments], check=True, capture_output=True, cwd=cwd)
+
+
+def sudo(*command):
+    subprocess.run(["sudo", *command], check=True)
 
 
 if __name__ == "__main__":
