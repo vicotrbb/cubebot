@@ -6,6 +6,7 @@ mod support;
 use cubebot_orchestrator::agents::kubernetes::{
     Error, Kubernetes, Layout, ResourceObject, ResourceSpec,
 };
+use cubebot_orchestrator::agents::sandbox::Backend;
 use cubebot_protocol::network::NetworkPolicy;
 #[path = "support/cluster.rs"]
 mod cluster;
@@ -15,11 +16,23 @@ use serde_json::{Value, json};
 #[tokio::main]
 async fn main() {
     let config = configuration().await;
-    let allowed = verify(&config, "cubebot-admission", true).await;
-    let denied = verify(&config, "cubebot-admission-restricted", false).await;
-    println!("{}", json!({"allowed":allowed,"restricted":denied}));
+    // ADR 0084: the process pod meets restricted; the kvm pod runs as root with NET_ADMIN,
+    // which baseline forbids, so it needs a privileged namespace.
+    let process = verify(
+        &config,
+        "cubebot-admission-restricted",
+        Backend::Process,
+        true,
+    )
+    .await;
+    let kvm = verify(&config, "cubebot-admission", Backend::Kvm, true).await;
+    let kvm_baseline = verify(&config, "cubebot-admission-baseline", Backend::Kvm, false).await;
+    println!(
+        "{}",
+        json!({"process_restricted":process,"kvm_privileged":kvm,"kvm_baseline":kvm_baseline})
+    );
 }
-async fn verify(config: &kube::Config, namespace: &str, allowed: bool) -> Value {
+async fn verify(config: &kube::Config, namespace: &str, backend: Backend, allowed: bool) -> Value {
     verify_namespace(config, namespace).await;
     let (pool, registry, agent) = registry_support::setup().await;
     let api = Kubernetes::new(config.clone(), namespace).unwrap();
@@ -33,7 +46,7 @@ async fn verify(config: &kube::Config, namespace: &str, allowed: bool) -> Value 
         image,
         "cubebot-runtime",
         "https://orchestrator.cubebot.test",
-        cubebot_orchestrator::agents::sandbox::Backend::Process,
+        backend,
         network,
     )
     .unwrap()
@@ -63,7 +76,7 @@ async fn verify(config: &kube::Config, namespace: &str, allowed: bool) -> Value 
         .await
         .unwrap();
     let result = api.prepare(&pod.intent).await;
-    let report = check_preview(&api, &registry, &pod, result, namespace, allowed).await;
+    let report = check_preview(&api, &registry, &pod, result, namespace, backend, allowed).await;
     assert!(
         api.fetch_candidate(&workspace.intent)
             .await
@@ -79,16 +92,18 @@ async fn check_preview(
     pod: &cubebot_orchestrator::agents::kubernetes::Attempt,
     result: Result<ResourceObject, Error>,
     namespace: &str,
+    backend: Backend,
     allowed: bool,
 ) -> Value {
+    let backend = backend.as_str();
     if !allowed {
         assert!(
             matches!(result,Err(Error::Api(kube::Error::Api(status))) if status.code==403 && status.message.contains("violates PodSecurity"))
         );
-        return json!({"namespace":namespace,"pod_security_rejected":true});
+        return json!({"namespace":namespace,"backend":backend,"pod_security_rejected":true});
     }
     let preview = result.unwrap();
-    save_preview("pod", &pod.intent, &preview);
+    save_preview(&format!("{backend}-pod"), &pod.intent, &preview);
     registry.record_prepared(pod.id, &preview).await.unwrap();
     let repeated = api.prepare(&pod.intent).await.unwrap();
     registry.record_prepared(pod.id, &repeated).await.unwrap();
@@ -96,7 +111,7 @@ async fn check_preview(
     assert!(retained.prepared);
     assert!(retained.uid.is_none());
     assert!(api.fetch_candidate(&pod.intent).await.unwrap().is_none());
-    json!({"namespace":namespace,"server_defaulting_accepted":true,"repeated_preparation_stable":true,"physical_pod_created":false})
+    json!({"namespace":namespace,"backend":backend,"server_defaulting_accepted":true,"repeated_preparation_stable":true,"physical_pod_created":false})
 }
 
 fn save_preview(kind: &str, intent: &ResourceObject, preview: &ResourceObject) {

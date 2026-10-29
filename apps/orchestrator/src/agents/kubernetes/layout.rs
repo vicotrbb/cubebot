@@ -106,9 +106,13 @@ impl Layout {
             // The sandbox creates the guest's tap and its tc redirects in the pod network namespace,
             // which takes root with NET_ADMIN and no other capability; the namespace's Pod Security
             // level must be privileged. fsGroup still lets it write the workspace volume.
-            let limits = &mut sandbox["resources"]["limits"];
-            limits["devices.kubevirt.io/kvm"] = json!("1");
-            limits["devices.kubevirt.io/tun"] = json!("1");
+            // The API server copies extended-resource limits into requests; stating both keeps
+            // the prepared preview equal to the intent.
+            for side in ["requests", "limits"] {
+                let side = &mut sandbox["resources"][side];
+                side["devices.kubevirt.io/kvm"] = json!("1");
+                side["devices.kubevirt.io/tun"] = json!("1");
+            }
             sandbox["securityContext"] = security(0);
             sandbox["securityContext"]["capabilities"]["add"] = json!(["NET_ADMIN"]);
             sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}));
