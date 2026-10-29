@@ -21,7 +21,7 @@ serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 tokio = { workspace = true, features = ["process", "io-util"] }
-nix = { version = "0.31", features = ["signal"] }
+nix = { version = "0.31", features = ["fs", "mount", "net", "process", "reboot", "signal", "socket"] }
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 webpki-roots = "1"

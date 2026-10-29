@@ -1,5 +1,6 @@
 //! The Linux x86 boot protocol's 64-bit entry (Documentation/arch/x86/boot.rst): places a bzImage,
-//! initramfs, command line, zero page, GDT and identity page tables in guest memory.
+//! command line, zero page, GDT and identity page tables in guest memory. The guest mounts its root
+//! disk itself, so there is no initramfs.
 use std::io;
 
 pub const ZERO_PAGE: u64 = 0x7000;
@@ -11,25 +12,20 @@ const KERNEL: u64 = 0x10_0000;
 const EBDA: u64 = 0x9_fc00;
 
 /// Loads the guest and returns the kernel's 64-bit entry point.
-pub fn load(memory: &mut [u8], kernel: &[u8], initramfs: &[u8], cmdline: &str) -> io::Result<u64> {
+pub fn load(memory: &mut [u8], kernel: &[u8], cmdline: &str) -> io::Result<u64> {
     let header = Header::parse(kernel)?;
     let payload = &kernel[header.payload_offset..];
     put(memory, KERNEL, payload)?;
-    // The decompressor works in [pref_address, pref_address + init_size); keep the initramfs above it.
-    let reserved = (KERNEL + payload.len() as u64).max(header.pref_address + header.init_size);
-    let top = (memory.len() as u64).min(header.initrd_addr_max + 1);
-    let initrd = top
-        .checked_sub(initramfs.len() as u64)
-        .map(|address| address & !0xfff)
-        .filter(|&address| address >= reserved)
-        .ok_or_else(|| invalid("guest memory too small for the kernel and initramfs"))?;
-    put(memory, initrd, initramfs)?;
+    // The decompressor works in [pref_address, pref_address + init_size).
+    if (memory.len() as u64) < header.pref_address + header.init_size {
+        return Err(invalid("guest memory too small for the kernel"));
+    }
     if cmdline.len() >= header.cmdline_size {
         return Err(invalid("kernel command line too long"));
     }
     put(memory, CMDLINE, cmdline.as_bytes())?;
     put(memory, CMDLINE + cmdline.len() as u64, &[0])?;
-    zero_page(memory, kernel, initrd, initramfs.len() as u32)?;
+    zero_page(memory, kernel)?;
     page_tables(memory)?;
     // Null, null, 64-bit code at selector 0x10, data at 0x18: the selectors the kernel expects.
     let gdt = [0u64, 0, 0x00af_9b00_0000_ffff, 0x00cf_9300_0000_ffff];
@@ -41,7 +37,6 @@ struct Header {
     payload_offset: usize,
     pref_address: u64,
     init_size: u64,
-    initrd_addr_max: u64,
     cmdline_size: usize,
 }
 
@@ -66,20 +61,17 @@ impl Header {
             payload_offset,
             pref_address: u64::from_le_bytes(kernel[0x258..0x260].try_into().unwrap()),
             init_size: u32_at(kernel, 0x260).into(),
-            initrd_addr_max: u32_at(kernel, 0x22c).into(),
             cmdline_size: u32_at(kernel, 0x238) as usize,
         })
     }
 }
 
-fn zero_page(memory: &mut [u8], kernel: &[u8], initrd: u64, initrd_size: u32) -> io::Result<()> {
+fn zero_page(memory: &mut [u8], kernel: &[u8]) -> io::Result<()> {
     let mut page = [0u8; 4096];
     // The setup header runs from 0x1f1 to the end its own length byte at 0x201 declares.
     let end = 0x202 + kernel[0x201] as usize;
     page[0x1f1..end].copy_from_slice(&kernel[0x1f1..end]);
     page[0x210] = 0xff; // type_of_loader: undefined
-    page[0x218..0x21c].copy_from_slice(&(initrd as u32).to_le_bytes());
-    page[0x21c..0x220].copy_from_slice(&initrd_size.to_le_bytes());
     page[0x228..0x22c].copy_from_slice(&(CMDLINE as u32).to_le_bytes());
     let ram = [(0, EBDA), (KERNEL, memory.len() as u64 - KERNEL)];
     page[0x1e8] = ram.len() as u8;
@@ -144,16 +136,12 @@ mod tests {
     }
 
     #[test]
-    fn places_the_kernel_initramfs_and_boot_parameters() {
+    fn places_the_kernel_and_boot_parameters() {
         let mut memory = vec![0u8; 64 << 20];
-        let entry = load(&mut memory, &bzimage(), b"07070100", "console=ttyS0").unwrap();
+        let entry = load(&mut memory, &bzimage(), "console=ttyS0").unwrap();
         assert_eq!(entry, 0x10_0200);
         assert_eq!(memory[0x10_0000], 0xe9);
         let page = &memory[0x7000..0x8000];
-        let initrd = u32_at(page, 0x218) as usize;
-        assert_eq!(initrd, (64 << 20) - 0x1000);
-        assert_eq!(&memory[initrd..initrd + 8], b"07070100");
-        assert_eq!(u32_at(page, 0x21c), 8);
         assert_eq!(page[0x210], 0xff);
         assert_eq!(&page[0x202..0x206], b"HdrS");
         assert_eq!(page[0x1e8], 2);
@@ -167,11 +155,11 @@ mod tests {
         let mut memory = vec![0u8; 64 << 20];
         let mut old = bzimage();
         old[0x236] = 0;
-        assert!(load(&mut memory, &old, b"", "").is_err());
-        assert!(load(&mut memory, b"not a kernel", b"", "").is_err());
-        // The initramfs may not overlap the decompressor's 16-20 MiB working area.
-        let mut small = vec![0u8; 20 << 20];
-        assert!(load(&mut small, &bzimage(), &[0; 0x1000], "").is_err());
+        assert!(load(&mut memory, &old, "").is_err());
+        assert!(load(&mut memory, b"not a kernel", "").is_err());
+        // The decompressor works in 16-20 MiB.
+        let mut small = vec![0u8; 19 << 20];
+        assert!(load(&mut small, &bzimage(), "").is_err());
     }
 
     fn u64_at(bytes: &[u8], offset: u64) -> u64 {

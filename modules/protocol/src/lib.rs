@@ -14,6 +14,7 @@ pub enum LivenessStatus {
     Alive,
 }
 
+pub mod guest;
 pub mod network;
 pub mod runtime;
 

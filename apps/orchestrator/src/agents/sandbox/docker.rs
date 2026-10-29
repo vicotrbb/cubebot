@@ -40,9 +40,11 @@ impl DockerConfig {
         // The agent accepts HTTPS, or HTTP only to loopback (reached through host networking).
         let origin = openidconnect::reqwest::Url::parse(&config.orchestrator_origin)
             .map_err(|_| Error::InvalidConfiguration)?;
+        // A kvm sandbox on host networking would redirect the host's own interface to its guest.
         if !argument(&config.image)
             || !argument(&config.orchestrator_origin)
             || !(origin.scheme() == "https" || (origin.scheme() == "http" && loopback(&origin)))
+            || (config.backend == Backend::Kvm && loopback(&origin))
         {
             return Err(Error::InvalidConfiguration);
         }
@@ -218,7 +220,20 @@ impl Docker {
             ]);
         }
         if self.config.backend == Backend::Kvm {
-            args.extend(["--device", "/dev/kvm"]);
+            // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
+            // group 10001 writes the image's workspace volume.
+            args.extend([
+                "--user",
+                "0:10001",
+                "--cap-add",
+                "NET_ADMIN",
+                "--device",
+                "/dev/kvm",
+                "--device",
+                "/dev/net/tun",
+                "--env",
+                "CUBEBOT_GUEST_WORKSPACE=/var/lib/cubebot/workspace.ext4",
+            ]);
         }
         args.extend([
             self.config.image.as_str(),
@@ -374,6 +389,10 @@ mod tests {
     fn configuration_rejects_values_docker_would_read_as_flags() {
         let valid = serde_json::json!({"image":"cubebot-sandbox:dev","backend":"process","orchestrator_origin":"http://127.0.0.1:8080"});
         assert!(DockerConfig::parse(&valid.to_string()).is_ok());
+        let mut kvm = valid.clone();
+        kvm["backend"] = serde_json::json!("kvm");
+        kvm["orchestrator_origin"] = serde_json::json!("https://cubebot.test");
+        assert!(DockerConfig::parse(&kvm.to_string()).is_ok());
         for (key, value) in [
             ("image", serde_json::json!("--privileged")),
             ("image", serde_json::json!("image with space")),
@@ -387,6 +406,7 @@ mod tests {
                 serde_json::json!("http://host.docker.internal:8080"),
             ),
             ("unexpected", serde_json::json!(true)),
+            ("backend", serde_json::json!("kvm")),
         ] {
             let mut input = valid.clone();
             input[key] = value;

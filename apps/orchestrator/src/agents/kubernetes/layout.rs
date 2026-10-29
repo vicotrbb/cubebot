@@ -103,8 +103,15 @@ impl Layout {
                 ]);
         }
         if self.backend == Backend::Kvm {
-            // shortcut: the tap device will also need NET_ADMIN once the kvm backend boots guests.
-            sandbox["resources"]["limits"]["devices.kubevirt.io/kvm"] = json!("1");
+            // The sandbox creates the guest's tap and its tc redirects in the pod network namespace,
+            // which takes root with NET_ADMIN and no other capability; the namespace's Pod Security
+            // level must be privileged. fsGroup still lets it write the workspace volume.
+            let limits = &mut sandbox["resources"]["limits"];
+            limits["devices.kubevirt.io/kvm"] = json!("1");
+            limits["devices.kubevirt.io/tun"] = json!("1");
+            sandbox["securityContext"] = security(0);
+            sandbox["securityContext"]["capabilities"]["add"] = json!(["NET_ADMIN"]);
+            sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}));
         }
         if let Some(name) = &self.control_ca {
             sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));
