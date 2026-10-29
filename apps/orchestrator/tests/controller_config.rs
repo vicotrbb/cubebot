@@ -64,3 +64,11 @@ fn controller_requires_explicit_dns_and_a_known_backend() {
     input["backend"] = json!("container");
     assert!(ControllerConfig::parse(&input.to_string()).is_err());
 }
+#[test]
+fn a_qualified_installation_refuses_the_process_backend() {
+    let mut config = valid();
+    config["qualified"] = json!(true);
+    assert!(ControllerConfig::parse(&config.to_string()).is_err());
+    config["backend"] = json!("kvm");
+    assert!(ControllerConfig::parse(&config.to_string()).is_ok());
+}

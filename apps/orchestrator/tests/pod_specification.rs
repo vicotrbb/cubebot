@@ -41,7 +41,7 @@ fn sandbox_container_runs_the_configured_backend_without_privilege() {
         sandbox["command"],
         json!(["/usr/local/bin/cubebot-sandbox"])
     );
-    assert_eq!(sandbox["args"], json!(["--backend", "process"]));
+    assert_eq!(sandbox["args"], json!(["run", "--backend", "process"]));
     assert_eq!(
         sandbox["securityContext"],
         json!({"runAsUser":10001,"runAsGroup":10001,"runAsNonRoot":true,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"]}})
@@ -55,7 +55,7 @@ fn sandbox_container_runs_the_configured_backend_without_privilege() {
 fn kvm_backend_requests_its_devices_and_only_net_admin() {
     let spec = serde_json::to_value(layout(Backend::Kvm).pod("workspace").unwrap()).unwrap();
     let sandbox = &spec["containers"][0];
-    assert_eq!(sandbox["args"], json!(["--backend", "kvm"]));
+    assert_eq!(sandbox["args"], json!(["run", "--backend", "kvm"]));
     let limits = &sandbox["resources"]["limits"];
     assert_eq!(limits["devices.kubevirt.io/kvm"], "1");
     assert_eq!(limits["devices.kubevirt.io/tun"], "1");

@@ -1,6 +1,6 @@
 # Sandbox application
 
-`cubebot-sandbox --backend kvm|process` runs one agent (ADR 0084). The orchestrator starts it as the only container of an agent's pod, or as a Docker container without a cluster.
+`cubebot-sandbox run --backend kvm|process` runs one agent (ADR 0084). The orchestrator starts it as the only container of an agent's pod, or as a Docker container without a cluster. On a Linux host without either, run the same command with the same `CUBEBOT_*` environment, as root with `/dev/kvm`, `/dev/net/tun`, `ip` and `tc`, inside a network namespace of its own (`ip netns exec <namespace> cubebot-sandbox run --backend kvm`) whose default route reaches the orchestrator. In the host's own namespace the `kvm` backend refuses to start, since its redirect would hand the host's interface to the guest. Keep `CUBEBOT_BOOTSTRAP_TOKEN_FILE` on a tmpfs such as `/run`: the sandbox sends its contents to the guest over vsock, and nothing passes credentials on the command line.
 
 | Backend   | What runs                                                                                  | Isolation claim |
 | --------- | ------------------------------------------------------------------------------------------ | --------------- |

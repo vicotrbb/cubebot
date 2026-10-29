@@ -9,7 +9,7 @@ use std::{
     fs::{self, File},
     io,
     net::Ipv4Addr,
-    os::fd::AsRawFd,
+    os::{fd::AsRawFd, unix::fs::MetadataExt},
     path::Path,
     process::{Command, Stdio},
 };
@@ -41,6 +41,7 @@ pub struct Network {
 }
 
 pub fn attach() -> io::Result<Network> {
+    own_namespace()?;
     let (link, gateway) = default_route(&fs::read_to_string("/proc/net/route")?)?;
     let (address, netmask) = ipv4(&link)?;
     let class = Path::new("/sys/class/net").join(&link);
@@ -56,6 +57,22 @@ pub fn attach() -> io::Result<Network> {
         mtu,
         cmdline: kernel_ip(address, gateway, netmask, &nameservers(&resolver)),
     })
+}
+
+/// On a bare host the redirect would hand the host's own interface to the guest, so `run` there
+/// needs a network namespace of its own. Kernel threads are visible only from the host's PID
+/// namespace, so a container never trips this.
+fn own_namespace() -> io::Result<()> {
+    let host = fs::read_to_string("/proc/2/comm").is_ok_and(|comm| comm.trim() == "kthreadd");
+    let namespace = |pid: &str| {
+        fs::metadata(format!("/proc/{pid}/ns/net")).map(|found| (found.dev(), found.ino()))
+    };
+    if host && namespace("self")? == namespace("1")? {
+        return Err(io::Error::other(
+            "on a host the kvm backend needs its own network namespace; run it with `ip netns exec`",
+        ));
+    }
+    Ok(())
 }
 
 /// The interface and gateway of the IPv4 default route in `/proc/net/route`.

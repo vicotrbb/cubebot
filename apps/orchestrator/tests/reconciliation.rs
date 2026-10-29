@@ -72,7 +72,7 @@ fn create(state: &mut Server, uri: Uri, bytes: Bytes) -> Response {
         body["spec"]["hostNetwork"] = json!(true);
     }
     if state.alter_sandbox && body["kind"] == "Pod" {
-        body["spec"]["containers"][0]["args"] = json!(["--backend", "kvm"]);
+        body["spec"]["containers"][0]["args"] = json!(["run", "--backend", "kvm"]);
     }
     body["metadata"]["uid"] = json!(format!("uid-{name}"));
     body["metadata"]["resourceVersion"] = json!("1");

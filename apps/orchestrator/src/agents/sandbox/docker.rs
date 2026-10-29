@@ -24,10 +24,13 @@ pub struct DockerConfig {
     orchestrator_origin: String,
     #[serde(default)]
     terminal_enabled: bool,
+    #[serde(default)]
+    qualified: bool,
 }
 impl DockerConfig {
     pub fn parse(input: &str) -> Result<Self, Error> {
         let config: Self = serde_json::from_str(input).map_err(|_| Error::InvalidConfiguration)?;
+        super::require_isolation(config.qualified, config.backend)?;
         // Values become docker arguments; a leading '-' would be read as a flag.
         let argument = |value: &str| {
             !value.is_empty()
@@ -98,8 +101,13 @@ impl Docker {
         self
     }
     async fn docker(&self, args: &[&str]) -> Result<String, Error> {
+        self.docker_with(args, &[]).await
+    }
+    /// `env` reaches the CLI's environment only, so `--env NAME` passes a value off its argv.
+    async fn docker_with(&self, args: &[&str], env: &[(&str, &str)]) -> Result<String, Error> {
         let output = Command::new(&self.program)
             .args(args)
+            .envs(env.iter().copied())
             .stdin(Stdio::null())
             .output()
             .await
@@ -178,7 +186,6 @@ impl Docker {
             "CUBEBOT_ORCHESTRATOR_ORIGIN={}",
             self.config.orchestrator_origin
         );
-        let token = format!("CUBEBOT_BOOTSTRAP_TOKEN={token}");
         let mut args = vec![
             "container",
             "create",
@@ -198,7 +205,7 @@ impl Docker {
             "--env",
             &origin,
             "--env",
-            &token,
+            "CUBEBOT_BOOTSTRAP_TOKEN",
             "--env",
             "CUBEBOT_JOURNAL_DIRECTORY=/var/lib/cubebot/runtime",
             "--env",
@@ -237,10 +244,15 @@ impl Docker {
         }
         args.extend([
             self.config.image.as_str(),
+            "run",
             "--backend",
             self.config.backend.as_str(),
         ]);
-        self.docker(&args).await.map(drop)
+        // shortcut: Docker still keeps the token in the container's config under its data root
+        // until the container is removed; deliver it over stdin if that root is not trusted.
+        self.docker_with(&args, &[("CUBEBOT_BOOTSTRAP_TOKEN", token)])
+            .await
+            .map(drop)
     }
     async fn observe(&self, attempt: &Attempt, state: Option<&Value>) -> Result<(), Error> {
         sqlx::query("UPDATE agent_resources SET kubernetes_phase = $2,observed_at = clock_timestamp() WHERE id = $1")
@@ -393,6 +405,8 @@ mod tests {
         kvm["backend"] = serde_json::json!("kvm");
         kvm["orchestrator_origin"] = serde_json::json!("https://cubebot.test");
         assert!(DockerConfig::parse(&kvm.to_string()).is_ok());
+        kvm["qualified"] = serde_json::json!(true);
+        assert!(DockerConfig::parse(&kvm.to_string()).is_ok());
         for (key, value) in [
             ("image", serde_json::json!("--privileged")),
             ("image", serde_json::json!("image with space")),
@@ -407,6 +421,7 @@ mod tests {
             ),
             ("unexpected", serde_json::json!(true)),
             ("backend", serde_json::json!("kvm")),
+            ("qualified", serde_json::json!(true)),
         ] {
             let mut input = valid.clone();
             input[key] = value;

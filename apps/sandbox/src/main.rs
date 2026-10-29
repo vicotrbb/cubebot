@@ -7,9 +7,9 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args().skip(1).collect();
     let backend = match args.as_slice() {
-        [flag, backend] if flag == "--backend" => backend.as_str(),
+        [run, flag, backend] if run == "run" && flag == "--backend" => backend.as_str(),
         _ => {
-            eprintln!("usage: cubebot-sandbox --backend kvm|process");
+            eprintln!("usage: cubebot-sandbox run --backend kvm|process");
             return ExitCode::FAILURE;
         }
     };
