@@ -71,6 +71,40 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/skills': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['installed_skills']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/skills/{skill}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Installs a revision on the agent, or moves its installation to it. */
+    put: operations['install_skill']
+    post?: never
+    /** The skill stays in the library. */
+    delete: operations['uninstall_skill']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/definition': {
     parameters: {
       query?: never
@@ -220,6 +254,57 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/skills': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The installation's shared library, each skill at its current revision. */
+    get: operations['list_skills']
+    put?: never
+    /** 409 when the name in `SKILL.md` is taken. */
+    post: operations['publish_skill']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/skills/{skill}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Adds a revision; 409 when `expected_revision` is no longer current. */
+    put: operations['revise_skill']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/skills/{skill}/revisions/{revision}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['skill_revision']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -256,6 +341,9 @@ export interface components {
     }
     /** Format: uuid */
     AgentId: string
+    BTreeMap: {
+      [key: string]: string
+    }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
       api_key: string
@@ -302,9 +390,21 @@ export interface components {
       /** @description The model's account of the run; the committed revisions are the evidence. */
       report: string
       revisions: components['schemas']['DreamRevision'][]
+      skills: components['schemas']['DreamSkill'][]
       started_at: string
       /** @description `running` or `finished`. */
       status: string
+    }
+    /** @description A skill revision the run published, with its `SKILL.md` and the one it replaced. */
+    DreamSkill: {
+      content: string
+      name: string
+      /** @description `None` for a skill the run created. */
+      previous?: string | null
+      /** Format: int64 */
+      revision: number
+      /** Format: uuid */
+      skill: string
     }
     Event: {
       /**
@@ -318,6 +418,21 @@ export interface components {
     }
     /** @enum {string} */
     IdlePolicy: 'sleep' | 'keep_running'
+    InstallSkill: {
+      /** Format: int64 */
+      revision: number
+    }
+    /** @description An agent's installation, with the library's current revision to show available updates. */
+    InstalledSkill: {
+      /** Format: int64 */
+      current_revision: number
+      description: string
+      name: string
+      /** Format: int64 */
+      revision: number
+      /** Format: uuid */
+      skill: string
+    }
     Login: {
       login: string
       password: string
@@ -415,6 +530,9 @@ export interface components {
       /** Format: int64 */
       revision: number
     }
+    PublishSkill: {
+      files: components['schemas']['BTreeMap']
+    }
     Receipt: {
       /** Format: uuid */
       id: string
@@ -430,10 +548,45 @@ export interface components {
       /** Format: int64 */
       expected_revision: number
     }
+    ReviseSkill: {
+      /** Format: int64 */
+      expected_revision: number
+      files: components['schemas']['BTreeMap']
+    }
     SendMessage: {
       message: string
       /** Format: uuid */
       request_id: string
+    }
+    /** @description A library entry at its current revision. */
+    Skill: {
+      description: string
+      /** Format: uuid */
+      id: string
+      name: string
+      /** Format: int64 */
+      revision: number
+      updated_at: string
+    }
+    SkillRevision: {
+      created_at: string
+      description: string
+      /**
+       * Format: uuid
+       * @description The dream run that proposed this revision.
+       */
+      dream_run?: string | null
+      files: components['schemas']['BTreeMap']
+      /**
+       * Format: uuid
+       * @description The person who wrote this revision, or `None` for a dream's.
+       */
+      human?: string | null
+      name: string
+      /** Format: int64 */
+      revision: number
+      /** Format: uuid */
+      skill: string
     }
     Token: {
       token: string
@@ -664,6 +817,71 @@ export interface operations {
       path: {
         agent: string
         memory: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  installed_skills: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InstalledSkill'][]
+        }
+      }
+    }
+  }
+  install_skill: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        skill: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InstallSkill']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  uninstall_skill: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        skill: string
       }
       cookie?: never
     }
@@ -920,6 +1138,95 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ProviderSummary']
+        }
+      }
+    }
+  }
+  list_skills: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Skill'][]
+        }
+      }
+    }
+  }
+  publish_skill: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PublishSkill']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Skill']
+        }
+      }
+    }
+  }
+  revise_skill: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        skill: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviseSkill']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Skill']
+        }
+      }
+    }
+  }
+  skill_revision: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        skill: string
+        revision: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SkillRevision']
         }
       }
     }

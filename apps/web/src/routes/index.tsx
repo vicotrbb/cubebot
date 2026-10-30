@@ -13,6 +13,7 @@ import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
 import { Dreams } from '../features/dreams'
 import { Memories } from '../features/memories'
+import { Skills } from '../features/skills'
 
 export const Route = createFileRoute('/')({ component: Home })
 
@@ -66,6 +67,7 @@ type Screen =
   | { kind: 'chat' }
   | { kind: 'memories' }
   | { kind: 'dreams' }
+  | { kind: 'skills' }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
 
@@ -228,6 +230,13 @@ function AgentScreen({
           onClose={() => setScreen({ kind: 'chat' })}
         />
       )}
+      {screen.kind === 'skills' && selected && (
+        <Skills
+          key={selected.id}
+          agent={selected}
+          onClose={() => setScreen({ kind: 'chat' })}
+        />
+      )}
       {screen.kind === 'chat' &&
         (selected ? (
           <AgentChat
@@ -237,6 +246,7 @@ function AgentScreen({
             onEdit={() => setScreen({ kind: 'agent', existing: selected })}
             onMemories={() => setScreen({ kind: 'memories' })}
             onDreams={() => setScreen({ kind: 'dreams' })}
+            onSkills={() => setScreen({ kind: 'skills' })}
           />
         ) : (
           <div className="empty">
@@ -262,12 +272,14 @@ function AgentChat({
   onEdit,
   onMemories,
   onDreams,
+  onSkills,
 }: {
   selected: Agent
   session: Account
   onEdit: () => void
   onMemories: () => void
   onDreams: () => void
+  onSkills: () => void
 }) {
   return (
     <>
@@ -285,6 +297,9 @@ function AgentChat({
           </button>
           <button className="secondary" onClick={onDreams}>
             Dreams
+          </button>
+          <button className="secondary" onClick={onSkills}>
+            Skills
           </button>
           <button className="secondary" onClick={onEdit}>
             Edit agent

@@ -45,13 +45,15 @@ class Api:
         self.context = ssl.create_default_context(cafile=str(ca))
         self.token = ""
 
-    def __call__(self, path, body=None, expected=200):
+    def __call__(self, path, body=None, expected=200, method=None):
         headers = {"Authorization": f"Bearer {self.token}"}
         data = None
         if body is not None:
             data = json.dumps(body).encode()
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(self.base + path, data=data, headers=headers)
+        request = urllib.request.Request(
+            self.base + path, data=data, headers=headers, method=method
+        )
         try:
             with urllib.request.urlopen(
                 request, timeout=10, context=self.context

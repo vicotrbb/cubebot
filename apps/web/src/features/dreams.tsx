@@ -38,8 +38,9 @@ export function Dreams({
         <div>
           <h1>{agent.name}: dreams</h1>
           <p className="muted">
-            While idle, the agent tidies its memories. Each run lists the
-            revisions it actually committed; earlier revisions are kept.
+            While idle, the agent tidies its memories and may write down a
+            procedure from recent work as a skill. Each run lists the revisions
+            it actually committed; earlier revisions are kept.
           </p>
         </div>
         <div className="actions">
@@ -68,6 +69,31 @@ export function Dreams({
               </span>
             </div>
             {run.report && <p>{run.report}</p>}
+            {run.skills.length > 0 && (
+              <ul className="memory-list">
+                {run.skills.map((skill) => (
+                  <li
+                    key={`${skill.skill}:${skill.revision}`}
+                    className="memory"
+                  >
+                    <p>
+                      <strong>
+                        Skill {skill.name}, revision {skill.revision}
+                        {skill.previous == null
+                          ? ' (new, installed)'
+                          : ' (installed)'}
+                      </strong>
+                    </p>
+                    {skill.previous != null && (
+                      <p className="muted">
+                        <del>{skill.previous}</del>
+                      </p>
+                    )}
+                    <p>{skill.content}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
             {run.revisions.length === 0 ? (
               <p className="muted">No memory changed.</p>
             ) : (

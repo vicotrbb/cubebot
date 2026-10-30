@@ -143,3 +143,7 @@ docker-sandbox:
 # Three real agents dream, yield and fail through Docker (ADR 0025); same needs as docker-sandbox.
 docker-dreams:
     uv run --project tooling/quality --locked python tests/system/docker_dreams.py
+
+# Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
+docker-skills:
+    uv run --project tooling/quality --locked python tests/system/docker_skills.py

@@ -1,14 +1,17 @@
 //! Dream runs (ADR 0025). The agent decides when it is idle enough to dream; the ledger admits a
 //! run only while no turn is queued, running or waiting, tags every revision the run commits and
 //! keeps its report. Commits go through the same stale-write and human-rejection checks as a turn,
-//! so rerunning a dream over changes already made adds nothing.
-use super::{Author, Knowledge, authorize, commit_change, search};
+//! so rerunning a dream over changes already made adds nothing. A run may also publish a new or
+//! revised skill from past turns, which it installs for its own agent.
+use super::{Author, Knowledge, authorize, commit_change, search, skills};
 use crate::{
     agents::{AgentId, runtime::RuntimeActor},
     connections::Connections,
     identity::{Actor, IdentityError},
 };
-use cubebot_protocol::runtime::{Dream, DreamEnd, DreamOutcome, MemoryChange};
+use cubebot_protocol::runtime::{
+    Dream, DreamEnd, DreamOutcome, Exchange, MemoryChange, SkillChange,
+};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -16,6 +19,8 @@ use uuid::Uuid;
 /// shortcut: a run sees the 50 most recently changed memories, which bounds its prompt; page
 /// through older memories once agents hold more than a run can consolidate.
 const DREAM_MEMORIES: i64 = 50;
+/// Latest completed exchanges a run sees, for skills worth writing down.
+const DREAM_TURNS: i64 = 20;
 /// Runs the console lists, newest first.
 const LISTED_RUNS: i64 = 50;
 
@@ -33,6 +38,21 @@ pub struct DreamRun {
     pub report: String,
     #[sqlx(skip)]
     pub revisions: Vec<DreamRevision>,
+    #[sqlx(skip)]
+    pub skills: Vec<DreamSkill>,
+}
+
+/// A skill revision the run published, with its `SKILL.md` and the one it replaced.
+#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+pub struct DreamSkill {
+    #[serde(skip)]
+    pub run: Uuid,
+    pub skill: Uuid,
+    pub name: String,
+    pub revision: i64,
+    pub content: String,
+    /// `None` for a skill the run created.
+    pub previous: Option<String>,
 }
 
 /// A revision the run committed, with the content it replaced.
@@ -62,10 +82,17 @@ impl Knowledge {
         let ids: Vec<Uuid> = runs.iter().map(|run| run.id).collect();
         let revisions: Vec<DreamRevision> = sqlx::query_as("SELECT r.dream_run_id AS run,r.memory_id AS memory,r.revision,r.content,r.deleted,p.content AS previous FROM memory_revisions r LEFT JOIN memory_revisions p ON p.memory_id=r.memory_id AND p.revision=r.revision-1 WHERE r.dream_run_id=ANY($1) ORDER BY r.created_at")
             .bind(&ids).fetch_all(&mut *tx).await?;
+        let skills: Vec<DreamSkill> = sqlx::query_as("SELECT r.dream_run_id AS run,s.id AS skill,s.name,r.revision,r.files->>'SKILL.md' AS content,p.files->>'SKILL.md' AS previous FROM skill_revisions r JOIN skills s ON s.id=r.skill_id LEFT JOIN skill_revisions p ON p.skill_id=r.skill_id AND p.revision=r.revision-1 WHERE r.dream_run_id=ANY($1) ORDER BY r.created_at")
+            .bind(&ids).fetch_all(&mut *tx).await?;
         tx.commit().await?;
         for revision in revisions {
             if let Some(run) = runs.iter_mut().find(|run| run.id == revision.run) {
                 run.revisions.push(revision);
+            }
+        }
+        for skill in skills {
+            if let Some(run) = runs.iter_mut().find(|run| run.id == skill.run) {
+                run.skills.push(skill);
             }
         }
         Ok(runs)
@@ -106,6 +133,9 @@ pub(crate) async fn start_dream(
         .execute(&mut *tx)
         .await?;
     let memories = search(&mut tx, actor.agent, None, DREAM_MEMORIES).await?;
+    let turns: Vec<(String, String)> = sqlx::query_as("SELECT message,response FROM (SELECT left(message,2000) AS message,left(response,2000) AS response,sequence FROM chat_turns WHERE conversation_id=$1 AND status='complete' ORDER BY sequence DESC LIMIT $2) t ORDER BY sequence")
+        .bind(actor.agent).bind(DREAM_TURNS).fetch_all(&mut *tx).await?;
+    let skills = skills::packages(&mut *tx, actor.agent, None, skills::DREAM_SKILLS).await?;
     tx.commit().await?;
     Ok(Some(Dream {
         provider: inference.provider,
@@ -119,6 +149,11 @@ pub(crate) async fn start_dream(
                 content: memory.content,
             })
             .collect(),
+        turns: turns
+            .into_iter()
+            .map(|(message, response)| Exchange { message, response })
+            .collect(),
+        skills,
     }))
 }
 
@@ -130,14 +165,41 @@ pub(crate) async fn commit_dream(
     change: &MemoryChange,
 ) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let open: Option<Uuid> = sqlx::query_scalar("SELECT id FROM dream_runs WHERE id=$1 AND agent_id=$2 AND attempt_id=$3 AND status='running' FOR UPDATE")
-        .bind(run).bind(actor.agent).bind(actor.attempt).fetch_optional(&mut *tx).await?;
-    if open.is_none() {
+    if !open(&mut tx, actor, run).await? {
         return Ok(false);
     }
     commit_change(&mut tx, actor.agent, Author::Dream(run), change).await?;
     tx.commit().await?;
     Ok(true)
+}
+
+/// Publishes one skill of this attempt's running run and installs that revision for the agent.
+/// `metadata` is the package's validated name and description. `false` once the run has ended.
+pub(crate) async fn commit_dream_skill(
+    pool: &PgPool,
+    actor: &RuntimeActor,
+    run: Uuid,
+    change: &SkillChange,
+    metadata: &(String, String),
+) -> Result<bool, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    if !open(&mut tx, actor, run).await? {
+        return Ok(false);
+    }
+    skills::propose(&mut tx, actor.agent, run, change, metadata).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Locks this attempt's run while it is running.
+async fn open(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    run: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let open: Option<Uuid> = sqlx::query_scalar("SELECT id FROM dream_runs WHERE id=$1 AND agent_id=$2 AND attempt_id=$3 AND status='running' FOR UPDATE")
+        .bind(run).bind(actor.agent).bind(actor.attempt).fetch_optional(&mut **tx).await?;
+    Ok(open.is_some())
 }
 
 /// Ends this attempt's running run. `false` when it already ended.
@@ -152,7 +214,7 @@ pub(crate) async fn finish_dream(
         DreamOutcome::Yielded => "yielded",
         DreamOutcome::Failed => "failed",
     };
-    let ended = sqlx::query("UPDATE dream_runs SET status='finished',ended_at=clock_timestamp(),report=$5,outcome=CASE WHEN $4='completed' AND NOT EXISTS(SELECT 1 FROM memory_revisions WHERE dream_run_id=$1) THEN 'no_op' ELSE $4 END WHERE id=$1 AND agent_id=$2 AND attempt_id=$3 AND status='running'")
+    let ended = sqlx::query("UPDATE dream_runs SET status='finished',ended_at=clock_timestamp(),report=$5,outcome=CASE WHEN $4='completed' AND NOT EXISTS(SELECT 1 FROM memory_revisions WHERE dream_run_id=$1) AND NOT EXISTS(SELECT 1 FROM skill_revisions WHERE dream_run_id=$1) THEN 'no_op' ELSE $4 END WHERE id=$1 AND agent_id=$2 AND attempt_id=$3 AND status='running'")
         .bind(run).bind(actor.agent).bind(actor.attempt).bind(outcome).bind(&end.report).execute(pool).await?;
     Ok(ended.rows_affected() == 1)
 }

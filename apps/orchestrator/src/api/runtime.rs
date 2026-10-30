@@ -12,6 +12,7 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Dream, DreamEnd, Memory, MemoryChange, REPORT_BYTES, RuntimeActor, RuntimeSession,
+    SkillChange, SkillPackage,
 };
 use uuid::Uuid;
 
@@ -26,6 +27,12 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
             post(start_dream).put(finish_dream),
         )
         .route("/api/runtime/dreams/{run}/changes", post(commit_dream))
+        .route("/api/runtime/skills/{name}", get(skill))
+        // A package of at most 64 KiB, JSON-escaped.
+        .route(
+            "/api/runtime/dreams/{run}/skills",
+            post(commit_dream_skill).layer(DefaultBodyLimit::max(160 * 1024)),
+        )
         .layer(DefaultBodyLimit::max(20 * 1024))
         .layer(axum::middleware::map_response(no_store))
         .with_state(identity)
@@ -136,6 +143,40 @@ async fn commit_dream(
         StatusCode::CONFLICT
     })
 }
+/// Publishes one skill of a running run; 409 once it has ended.
+async fn commit_dream_skill(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+    Json(change): Json<SkillChange>,
+) -> Result<StatusCode, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let metadata =
+        crate::knowledge::package(&change.files).ok_or(Failure(StatusCode::BAD_REQUEST))?;
+    let open =
+        crate::knowledge::commit_dream_skill(&identity.pool, &actor, run, &change, &metadata)
+            .await
+            .map_err(unavailable)?;
+    Ok(if open {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::CONFLICT
+    })
+}
+/// The authenticated agent's installed revision of a skill; 404 when it is not installed.
+async fn skill(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+) -> Result<Json<SkillPackage>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    crate::knowledge::skill_packages(&identity.pool, actor.agent, Some(&name), 1)
+        .await
+        .map_err(unavailable)?
+        .pop()
+        .map(Json)
+        .ok_or(Failure(StatusCode::NOT_FOUND))
+}
 async fn finish_dream(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -165,7 +206,7 @@ async fn active(
         .map_err(Failure::from)
 }
 fn unavailable(error: sqlx::Error) -> Failure {
-    tracing::warn!(?error, "dream request failed");
+    tracing::warn!(?error, "runtime knowledge request failed");
     Failure(StatusCode::SERVICE_UNAVAILABLE)
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {

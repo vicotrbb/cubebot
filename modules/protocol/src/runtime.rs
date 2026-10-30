@@ -183,6 +183,35 @@ pub struct Dream {
     pub api_key: String,
     /// The agent's most recently changed memories.
     pub memories: Vec<Memory>,
+    /// The agent's latest completed exchanges, oldest first, each side cut to 2000 characters.
+    #[serde(default)]
+    pub turns: Vec<Exchange>,
+    /// The agent's installed skills at their installed revisions. A proposed skill commits to
+    /// `POST /api/runtime/dreams/{run}/skills` as a `SkillChange`.
+    #[serde(default)]
+    pub skills: Vec<SkillPackage>,
+}
+
+/// Largest skill package: the sum of its path and content bytes.
+pub const SKILL_BYTES: usize = 64 * 1024;
+
+/// One revision of a skill package: relative path to text content, with `SKILL.md` at its root.
+/// `GET /api/runtime/skills/{name}` returns the agent's installed revision.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SkillPackage {
+    pub name: String,
+    pub revision: i64,
+    pub files: std::collections::BTreeMap<String, String>,
+}
+
+/// A dream's proposed skill: new without `expected_revision`, otherwise a revision of the skill
+/// named in its `SKILL.md`. A stale revision or a taken name is dropped.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SkillChange {
+    pub expected_revision: Option<i64>,
+    pub files: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

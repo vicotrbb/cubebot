@@ -121,10 +121,14 @@ struct Write {
 }
 fn write_file(input: &Value) -> Result<Job, &'static str> {
     let Write { path, content } = parse(input)?;
-    Ok(Job {
-        stdin: Some(content.into_bytes()),
-        ..shell(WRITE, &[argument(&path)?])
-    })
+    Ok(write(argument(&path)?, content.into_bytes()))
+}
+
+pub(super) fn write(path: &str, content: Vec<u8>) -> Job {
+    Job {
+        stdin: Some(content),
+        ..shell(WRITE, &[path])
+    }
 }
 
 #[derive(Deserialize)]

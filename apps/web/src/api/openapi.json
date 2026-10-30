@@ -265,6 +265,110 @@
         }
       }
     },
+    "/api/agents/{agent}/skills": {
+      "get": {
+        "tags": [],
+        "operationId": "installed_skills",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InstalledSkill"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/skills/{skill}": {
+      "put": {
+        "tags": [],
+        "summary": "Installs a revision on the agent, or moves its installation to it.",
+        "operationId": "install_skill",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "skill",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallSkill"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "The skill stays in the library.",
+        "operationId": "uninstall_skill",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "skill",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/definition": {
       "post": {
         "tags": [],
@@ -624,6 +728,133 @@
           }
         }
       }
+    },
+    "/api/skills": {
+      "get": {
+        "tags": [],
+        "summary": "The installation's shared library, each skill at its current revision.",
+        "operationId": "list_skills",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Skill"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "409 when the name in `SKILL.md` is taken.",
+        "operationId": "publish_skill",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishSkill"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Skill"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/skills/{skill}": {
+      "put": {
+        "tags": [],
+        "summary": "Adds a revision; 409 when `expected_revision` is no longer current.",
+        "operationId": "revise_skill",
+        "parameters": [
+          {
+            "name": "skill",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseSkill"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Skill"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/skills/{skill}/revisions/{revision}": {
+      "get": {
+        "tags": [],
+        "operationId": "skill_revision",
+        "parameters": [
+          {
+            "name": "skill",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillRevision"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -701,6 +932,15 @@
       "AgentId": {
         "type": "string",
         "format": "uuid"
+      },
+      "BTreeMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "propertyNames": {
+          "type": "string"
+        }
       },
       "ConfigureProvider": {
         "type": "object",
@@ -801,7 +1041,8 @@
           "status",
           "started_at",
           "report",
-          "revisions"
+          "revisions",
+          "skills"
         ],
         "properties": {
           "ended_at": {
@@ -828,12 +1069,43 @@
               "$ref": "#/components/schemas/DreamRevision"
             }
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DreamSkill"
+            }
+          },
           "started_at": {
             "type": "string"
           },
           "status": {
             "type": "string",
             "description": "`running` or `finished`."
+          }
+        }
+      },
+      "DreamSkill": {
+        "type": "object",
+        "description": "A skill revision the run published, with its `SKILL.md` and the one it replaced.",
+        "required": ["skill", "name", "revision", "content"],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "previous": {
+            "type": ["string", "null"],
+            "description": "`None` for a skill the run created."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skill": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -858,6 +1130,48 @@
       "IdlePolicy": {
         "type": "string",
         "enum": ["sleep", "keep_running"]
+      },
+      "InstallSkill": {
+        "type": "object",
+        "required": ["revision"],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
+      "InstalledSkill": {
+        "type": "object",
+        "description": "An agent's installation, with the library's current revision to show available updates.",
+        "required": [
+          "skill",
+          "name",
+          "revision",
+          "current_revision",
+          "description"
+        ],
+        "properties": {
+          "current_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skill": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "Login": {
         "type": "object",
@@ -1094,6 +1408,16 @@
           }
         }
       },
+      "PublishSkill": {
+        "type": "object",
+        "required": ["files"],
+        "properties": {
+          "files": {
+            "$ref": "#/components/schemas/BTreeMap"
+          }
+        },
+        "additionalProperties": false
+      },
       "Receipt": {
         "type": "object",
         "required": ["id", "revision"],
@@ -1133,6 +1457,20 @@
         },
         "additionalProperties": false
       },
+      "ReviseSkill": {
+        "type": "object",
+        "required": ["files", "expected_revision"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "files": {
+            "$ref": "#/components/schemas/BTreeMap"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendMessage": {
         "type": "object",
         "required": ["request_id", "message"],
@@ -1146,6 +1484,73 @@
           }
         },
         "additionalProperties": false
+      },
+      "Skill": {
+        "type": "object",
+        "description": "A library entry at its current revision.",
+        "required": ["id", "name", "revision", "description", "updated_at"],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "SkillRevision": {
+        "type": "object",
+        "required": [
+          "skill",
+          "name",
+          "revision",
+          "description",
+          "files",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dream_run": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The dream run that proposed this revision."
+          },
+          "files": {
+            "$ref": "#/components/schemas/BTreeMap"
+          },
+          "human": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The person who wrote this revision, or `None` for a dream's."
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "skill": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "Token": {
         "type": "object",
