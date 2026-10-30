@@ -96,3 +96,46 @@ cluster-chat:
 # ADR 0083 sandbox scenarios on the kvm backend; x86_64 Linux with /dev/kvm, as cluster-chat.
 cluster-sandbox:
     uv run --project tooling/quality --locked python tests/system/cluster_sandbox.py
+
+# A self-signed control CA and a certificate for the docker0 address; kept once made, remove the directory to reissue.
+dev-ca directory=".cubebot/dev-ca":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    mkdir -p "{{ directory }}" && cd "{{ directory }}"
+    [ -f server.crt ] && exit 0
+    bridge=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+    key=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes)
+    # Strict verifiers (Python 3.13+, for one) need key usage on both certificates.
+    openssl req -x509 "${key[@]}" -keyout ca.key -out ca.crt -days 825 -subj "/CN=cubebot development control CA" \
+        -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+    openssl req "${key[@]}" -keyout server.key -out server.csr -subj "/CN=$bridge"
+    printf 'subjectAltName=IP:%s\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' "$bridge" > server.ext
+    openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -extfile server.ext
+    rm server.csr server.ext
+    # Sandbox containers run as root without CAP_DAC_OVERRIDE; the certificate is public.
+    chmod 644 ca.crt
+
+# Serves HTTPS on docker0:8443 for Docker sandboxes; needs `just db-up` and the cubebot-sandbox:dev image.
+docker-orchestrator: dev-ca
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -a; source .env; set +a
+    bridge=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+    state="$PWD/.cubebot"
+    [ -f "$state/credential.key" ] || (umask 077 && head -c 32 /dev/urandom > "$state/credential.key")
+    printf '{"image":"cubebot-sandbox:dev","orchestrator_origin":"https://%s:8443","control_ca_file":"%s","terminal_enabled":true}\n' \
+        "$bridge" "$state/dev-ca/ca.crt" > "$state/docker.json"
+    CUBEBOT_DATABASE_URL="postgres://cubebot:$POSTGRES_PASSWORD@127.0.0.1:${POSTGRES_PORT:-5432}/cubebot" \
+    CUBEBOT_BIND_ADDR="$bridge:8443" \
+    CUBEBOT_TLS_CERT_FILE="$state/dev-ca/server.crt" CUBEBOT_TLS_KEY_FILE="$state/dev-ca/server.key" \
+    CUBEBOT_CREDENTIAL_KEY_FILE="$state/credential.key" CUBEBOT_DOCKER_CONFIG="$state/docker.json" \
+        cargo run --locked -p cubebot-orchestrator
+
+# Against `just docker-orchestrator`: bootstraps the administrator and OpenAI provider once, then creates and wakes an agent.
+docker-agent name:
+    uv run --project tooling/quality --locked python tests/system/docker_sandbox.py agent "{{ name }}"
+
+# Boots one agent through Docker and runs one bash tool call; x86_64 Linux with /dev/kvm and OPENAI_API_KEY_FILE.
+docker-sandbox:
+    uv run --project tooling/quality --locked python tests/system/docker_sandbox.py

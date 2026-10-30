@@ -1,5 +1,6 @@
 use std::{error::Error, net::SocketAddr};
 
+use cubebot_orchestrator::operations::server::{Tls, serve};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -23,16 +24,45 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     };
     let listener = TcpListener::bind(address).await?;
     let address = listener.local_addr()?;
+    let listening = listening(listener)?;
+    run(listening, address).await
+}
+
+enum Listening {
+    Plain(TcpListener),
+    Tls(Tls),
+}
+
+/// Reads the PEM chain and key before ownership is taken, so a bad file fails first.
+fn listening(listener: TcpListener) -> Result<Listening, Box<dyn Error + Send + Sync>> {
+    match (
+        std::env::var_os("CUBEBOT_TLS_CERT_FILE"),
+        std::env::var_os("CUBEBOT_TLS_KEY_FILE"),
+    ) {
+        (Some(chain), Some(key)) => {
+            let (chain, key) = (std::fs::read(chain)?, std::fs::read(key)?);
+            Ok(Listening::Tls(Tls::new(listener, &chain, &key)?))
+        }
+        (None, None) => Ok(Listening::Plain(listener)),
+        _ => Err("set both CUBEBOT_TLS_CERT_FILE and CUBEBOT_TLS_KEY_FILE, or neither".into()),
+    }
+}
+
+async fn run(
+    listening: Listening,
+    address: SocketAddr,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (router, controller) = application().await?;
-    tracing::info!(%address, "orchestrator HTTP server listening");
-    cubebot_orchestrator::operations::server::serve(
-        listener,
-        router,
-        controller,
-        shutdown_signal(),
-    )
-    .await
-    .map_err(|_| "orchestrator ownership or service failed")?;
+    let scheme = match listening {
+        Listening::Tls(_) => "HTTPS",
+        Listening::Plain(_) => "HTTP",
+    };
+    tracing::info!(%address, scheme, "orchestrator server listening");
+    let served = match listening {
+        Listening::Tls(listener) => serve(listener, router, controller, shutdown_signal()).await,
+        Listening::Plain(listener) => serve(listener, router, controller, shutdown_signal()).await,
+    };
+    served.map_err(|_| "orchestrator ownership or service failed")?;
     Ok(())
 }
 

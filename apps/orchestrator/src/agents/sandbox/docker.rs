@@ -23,7 +23,11 @@ pub struct DockerConfig {
     orchestrator_origin: String,
     #[serde(default)]
     terminal_enabled: bool,
+    /// Host path of a PEM bundle the guest trusts for `orchestrator_origin`, e.g. from `just dev-ca`.
+    #[serde(default)]
+    control_ca_file: Option<String>,
 }
+const CONTROL_CA: &str = "/run/cubebot/control-ca/ca.crt";
 impl DockerConfig {
     pub fn parse(input: &str) -> Result<Self, Error> {
         let config: Self = serde_json::from_str(input).map_err(|_| Error::InvalidConfiguration)?;
@@ -44,6 +48,10 @@ impl DockerConfig {
             || !argument(&config.orchestrator_origin)
             || origin.scheme() != "https"
             || loopback(&origin)
+            || config.control_ca_file.as_deref().is_some_and(|path| {
+                // `--mount` is CSV: a comma or quote would end the source and start another option.
+                !argument(path) || !path.starts_with('/') || path.contains([',', '"'])
+            })
         {
             return Err(Error::InvalidConfiguration);
         }
@@ -207,6 +215,15 @@ impl Docker {
             "--env",
             "CUBEBOT_WORKSPACE_DIRECTORY=/var/lib/cubebot/workspace",
         ];
+        let ca_mount = self
+            .config
+            .control_ca_file
+            .as_ref()
+            .map(|path| format!("type=bind,source={path},target={CONTROL_CA},readonly"));
+        let ca_env = format!("CUBEBOT_CONTROL_CA_FILE={CONTROL_CA}");
+        if let Some(mount) = &ca_mount {
+            args.extend(["--mount", mount, "--env", &ca_env]);
+        }
         if self.config.terminal_enabled {
             args.extend([
                 "--env",
@@ -403,6 +420,8 @@ mod tests {
                 "orchestrator_origin",
                 serde_json::json!("http://cubebot.test"),
             ),
+            ("control_ca_file", serde_json::json!("ca.crt")),
+            ("control_ca_file", serde_json::json!("/a,target=/etc")),
             ("unexpected", serde_json::json!(true)),
             ("backend", serde_json::json!("kvm")),
         ] {
