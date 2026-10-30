@@ -98,6 +98,9 @@ export function AgentForm({
                     ...input,
                     expected_revision: existing.revision,
                     idle_policy: existing.idle_policy,
+                    idle_delay_seconds: Number(data.get('idle_minutes')) * 60,
+                    dreaming_model:
+                      String(data.get('dreaming_model')).trim() || null,
                   },
                 }),
               )
@@ -128,6 +131,30 @@ export function AgentForm({
             maxLength={65536}
           />
         </label>
+        {existing && (
+          <>
+            <label>
+              Idle minutes before dreaming
+              <input
+                name="idle_minutes"
+                type="number"
+                required
+                min={1}
+                max={1440}
+                defaultValue={Math.round(existing.idle_delay_seconds / 60)}
+              />
+            </label>
+            <label>
+              Dreaming model
+              <input
+                name="dreaming_model"
+                maxLength={200}
+                placeholder="Same as the provider model"
+                defaultValue={existing.dreaming_model ?? ''}
+              />
+            </label>
+          </>
+        )}
         {error && <p role="alert">{error}</p>}
         <div className="actions">
           <button disabled={busy}>{busy ? 'Saving…' : 'Save agent'}</button>

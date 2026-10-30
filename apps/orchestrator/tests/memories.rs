@@ -265,6 +265,10 @@ async fn memories_need_their_own_grants() {
         knowledge.search(&member, writer, None).await,
         Err(IdentityError::NotFound)
     ));
+    assert!(matches!(
+        knowledge.dreams(&member, writer).await,
+        Err(IdentityError::NotFound)
+    ));
     let input = CreateMemory {
         content: "Planted".into(),
     };

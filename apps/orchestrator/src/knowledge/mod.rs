@@ -1,11 +1,14 @@
 //! Owns persisted memory revisions and source links. People edit through the console; the agent's
 //! staged changes commit with the turn that made them. Every write names the revision it read, so
-//! a stale write never overwrites a newer one. Skills and dream reports are not implemented yet.
+//! a stale write never overwrites a newer one. Skills are not implemented yet.
+mod dreams;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
 };
 use cubebot_protocol::runtime::{MEMORY_BYTES, MemoryChange};
+pub use dreams::{DreamRevision, DreamRun};
+pub(crate) use dreams::{commit_dream, finish_dream, recover_dreams, start_dream};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -25,8 +28,10 @@ pub struct Memory {
     pub id: Uuid,
     pub revision: i64,
     pub content: String,
-    /// The turn whose completion wrote the current revision; `None` for a human edit.
+    /// The turn whose completion wrote the current revision; `None` for a human edit or dream.
     pub source_turn: Option<Uuid>,
+    /// The dream run that wrote the current revision.
+    pub source_dream: Option<Uuid>,
     pub edited_by_human: bool,
 }
 
@@ -43,11 +48,12 @@ pub struct ReviseMemory {
     pub expected_revision: i64,
 }
 
-/// Who wrote a revision: a person, or the agent through the turn it completed.
-#[derive(Clone, Copy)]
+/// Who wrote a revision: a person, the agent through the turn it completed, or a dream run.
+#[derive(Clone, Copy, Debug)]
 enum Author {
     Human(Uuid),
     Turn(Uuid),
+    Dream(Uuid),
 }
 
 impl Knowledge {
@@ -162,7 +168,7 @@ pub async fn commit_turn(
     changes: &[MemoryChange],
 ) -> Result<(), sqlx::Error> {
     for change in changes {
-        commit_change(tx, agent, turn, change).await?;
+        commit_change(tx, agent, Author::Turn(turn), change).await?;
     }
     Ok(())
 }
@@ -170,7 +176,7 @@ pub async fn commit_turn(
 async fn commit_change(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
-    turn: Uuid,
+    author: Author,
     change: &MemoryChange,
 ) -> Result<(), sqlx::Error> {
     let (memory, expected, content) = parts(change);
@@ -178,12 +184,12 @@ async fn commit_change(
         Some(content) if unwanted(tx, agent, memory.is_none(), content).await? => {
             "duplicate or human-rejected"
         }
-        _ => match write(tx, agent, memory, expected, content, Author::Turn(turn)).await? {
+        _ => match write(tx, agent, memory, expected, content, author).await? {
             Some(_) => return Ok(()),
             None => "stale",
         },
     };
-    tracing::info!(%turn, ?memory, reason, "memory change dropped");
+    tracing::info!(?author, ?memory, reason, "memory change dropped");
     Ok(())
 }
 
@@ -252,9 +258,10 @@ async fn write(
     content: Option<&str>,
     author: Author,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    let (human, turn) = match author {
-        Author::Human(id) => (Some(id), None),
-        Author::Turn(id) => (None, Some(id)),
+    let (human, turn, dream) = match author {
+        Author::Human(id) => (Some(id), None, None),
+        Author::Turn(id) => (None, Some(id), None),
+        Author::Dream(id) => (None, None, Some(id)),
     };
     let changed = match memory {
         None => {
@@ -264,12 +271,12 @@ async fn write(
             "UPDATE memories SET content=COALESCE($4,content),deleted=$4 IS NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$2 AND agent_id=$1 AND revision=$3 AND NOT deleted RETURNING id,revision,content,deleted"
         }
     };
-    sqlx::query_scalar(&format!("WITH m AS ({changed}) INSERT INTO memory_revisions (memory_id,revision,content,deleted,human_id,turn_id) SELECT id,revision,content,deleted,$5,$6 FROM m RETURNING memory_id"))
-        .bind(agent).bind(memory).bind(expected).bind(content).bind(human).bind(turn)
+    sqlx::query_scalar(&format!("WITH m AS ({changed}) INSERT INTO memory_revisions (memory_id,revision,content,deleted,human_id,turn_id,dream_run_id) SELECT id,revision,content,deleted,$5,$6,$7 FROM m RETURNING memory_id"))
+        .bind(agent).bind(memory).bind(expected).bind(content).bind(human).bind(turn).bind(dream)
         .fetch_optional(&mut **tx).await
 }
 
-const SELECT: &str = "SELECT m.id,m.revision,m.content,r.turn_id AS source_turn,r.human_id IS NOT NULL AS edited_by_human FROM memories m JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision";
+const SELECT: &str = "SELECT m.id,m.revision,m.content,r.turn_id AS source_turn,r.dream_run_id AS source_dream,r.human_id IS NOT NULL AS edited_by_human FROM memories m JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision";
 
 /// Any query word matches, ranked by how well; stop words alone match nothing.
 async fn search(

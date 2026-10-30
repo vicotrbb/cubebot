@@ -124,6 +124,7 @@ impl Work {
     pub async fn recover_interrupted(&self) -> Result<(), Error> {
         sqlx::query("UPDATE chat_turns t SET status='waiting',error='execution_interrupted' WHERE status='running' AND NOT EXISTS(SELECT 1 FROM runtime_session_access s WHERE s.attempt_id=t.attempt_id AND s.recovery)")
             .execute(&self.pool).await?;
+        crate::knowledge::recover_dreams(&self.pool).await?;
         Ok(())
     }
 }

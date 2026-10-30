@@ -180,6 +180,55 @@ impl MemoryClient {
         // Ten results of at most 4 KiB each, JSON-escaped.
         transport::decode_bounded(response, 256 * 1024).await
     }
+
+    /// `None` when the orchestrator does not admit the run.
+    pub async fn start_dream(&self, run: Uuid) -> Result<Option<runtime::Dream>, Error> {
+        let response = self.dream(reqwest::Method::POST, run, "")?.send().await;
+        let response = response.map_err(|_| Error::Unavailable)?;
+        if response.status() == reqwest::StatusCode::CONFLICT {
+            return Ok(None);
+        }
+        // Fifty memories of at most 4 KiB each, JSON-escaped.
+        transport::decode_bounded(response, 1024 * 1024)
+            .await
+            .map(Some)
+    }
+
+    /// `false` once the run has ended, so the change was not committed.
+    pub async fn commit_dream(
+        &self,
+        run: Uuid,
+        change: &runtime::MemoryChange,
+    ) -> Result<bool, Error> {
+        let response = self.dream(reqwest::Method::POST, run, "/changes")?;
+        let response = response.json(change).send().await;
+        match response.map_err(|_| Error::Unavailable)?.status().as_u16() {
+            204 => Ok(true),
+            409 => Ok(false),
+            _ => Err(Error::Unavailable),
+        }
+    }
+
+    pub async fn finish_dream(&self, run: Uuid, end: &runtime::DreamEnd) -> Result<(), Error> {
+        let response = self.dream(reqwest::Method::PUT, run, "")?;
+        let response = response.json(end).send().await;
+        match response.map_err(|_| Error::Unavailable)?.status().as_u16() {
+            204 | 409 => Ok(()),
+            _ => Err(Error::Unavailable),
+        }
+    }
+
+    fn dream(
+        &self,
+        method: reqwest::Method,
+        run: Uuid,
+        suffix: &str,
+    ) -> Result<reqwest::RequestBuilder, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/dreams/{run}`.
+        let url = self.url.join(&format!("dreams/{run}{suffix}"));
+        let url = url.map_err(|_| Error::Configuration)?;
+        Ok(self.http.request(method, url).bearer_auth(&self.token))
+    }
 }
 
 fn validate_session(issued: &RuntimeSession) -> Result<(), Error> {

@@ -145,13 +145,7 @@ impl Memories {
 
     /// Stages the facts in an extraction reply; anything but a JSON array of strings adds none.
     pub fn extracted(&self, reply: &str) {
-        let reply = reply.trim();
-        let reply = reply
-            .strip_prefix("```json")
-            .or_else(|| reply.strip_prefix("```"))
-            .and_then(|rest| rest.strip_suffix("```"))
-            .unwrap_or(reply);
-        let Ok(facts) = serde_json::from_str::<Vec<String>>(reply) else {
+        let Ok(facts) = serde_json::from_str::<Vec<String>>(unfenced(reply)) else {
             return;
         };
         let mut staged = self.staged.lock().unwrap();
@@ -196,7 +190,17 @@ fn id(memory: &str) -> Result<Uuid, &'static str> {
     })
 }
 
-fn valid(content: &str) -> bool {
+/// A model reply without the Markdown code fence models often wrap JSON in.
+pub(crate) fn unfenced(reply: &str) -> &str {
+    let reply = reply.trim();
+    reply
+        .strip_prefix("```json")
+        .or_else(|| reply.strip_prefix("```"))
+        .and_then(|rest| rest.strip_suffix("```"))
+        .unwrap_or(reply)
+}
+
+pub(crate) fn valid(content: &str) -> bool {
     !content.trim().is_empty() && content.len() <= MEMORY_BYTES && !content.contains('\0')
 }
 

@@ -67,6 +67,39 @@
         }
       }
     },
+    "/api/agents/{agent}/dreams": {
+      "get": {
+        "tags": [],
+        "summary": "The latest dream runs, newest first, each with the revisions it committed.",
+        "operationId": "list_dreams",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DreamRun"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{agent}/memories": {
       "get": {
         "tags": [],
@@ -618,14 +651,29 @@
           "instructions_revision",
           "desired_state",
           "idle_policy",
-          "restart_generation"
+          "restart_generation",
+          "idle_delay_seconds",
+          "activity"
         ],
         "properties": {
+          "activity": {
+            "type": "string",
+            "description": "`working`, `dreaming` or `idle` while running, otherwise the desired state such as\n`sleeping`. Dreaming needs a run whose sandbox still holds its credential."
+          },
           "desired_state": {
             "type": "string"
           },
+          "dreaming_model": {
+            "type": ["string", "null"],
+            "description": "The dreaming model on the agent's connection; `None` inherits the connection's model."
+          },
           "id": {
             "$ref": "#/components/schemas/AgentId"
+          },
+          "idle_delay_seconds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Seconds an idle agent waits before it dreams."
           },
           "idle_policy": {
             "$ref": "#/components/schemas/IdlePolicy"
@@ -720,6 +768,75 @@
         },
         "additionalProperties": false
       },
+      "DreamRevision": {
+        "type": "object",
+        "description": "A revision the run committed, with the content it replaced.",
+        "required": ["memory", "revision", "content", "deleted"],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "memory": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "previous": {
+            "type": ["string", "null"],
+            "description": "`None` for a memory the run created."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DreamRun": {
+        "type": "object",
+        "required": [
+          "id",
+          "model",
+          "status",
+          "started_at",
+          "report",
+          "revisions"
+        ],
+        "properties": {
+          "ended_at": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "model": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": ["string", "null"],
+            "description": "`completed`, `yielded`, `failed` or `no_op`; `None` while running."
+          },
+          "report": {
+            "type": "string",
+            "description": "The model's account of the run; the committed revisions are the evidence."
+          },
+          "revisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DreamRevision"
+            }
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "description": "`running` or `finished`."
+          }
+        }
+      },
       "Event": {
         "type": "object",
         "required": ["id", "turn_id", "payload"],
@@ -773,10 +890,15 @@
             "type": "integer",
             "format": "int64"
           },
+          "source_dream": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The dream run that wrote the current revision."
+          },
           "source_turn": {
             "type": ["string", "null"],
             "format": "uuid",
-            "description": "The turn whose completion wrote the current revision; `None` for a human edit."
+            "description": "The turn whose completion wrote the current revision; `None` for a human edit or dream."
           }
         }
       },
@@ -1192,12 +1314,21 @@
           "expected_revision",
           "name",
           "instructions",
-          "idle_policy"
+          "idle_policy",
+          "idle_delay_seconds"
         ],
         "properties": {
+          "dreaming_model": {
+            "type": ["string", "null"],
+            "description": "`None` dreams with the connection's model."
+          },
           "expected_revision": {
             "type": "integer",
             "format": "int64"
+          },
+          "idle_delay_seconds": {
+            "type": "integer",
+            "format": "int32"
           },
           "idle_policy": {
             "$ref": "#/components/schemas/IdlePolicy"
