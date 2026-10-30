@@ -7,8 +7,11 @@ reach a stand-in orchestrator at the pod's address over TLS with the forwarded
 bootstrap token, report liveness over vsock, and on SIGTERM exit with the agent's
 status 0, leaving the workspace filesystem clean.
 The second boot must reopen the journal lock file the first one created. Before both,
-the sandbox must refuse to start in the host's own network namespace. The stand-in
-only records the bootstrap request, so this is not agent qualification.
+the sandbox must refuse to start in the host's own network namespace. A third boot
+replaces the agent with guest_desktop.py as init (ADR 0085): the pattern it draws
+through a DRM dumb buffer must be the host's screen, and an A key the host types must
+reach its evdev stream. The stand-in only records the bootstrap request, so this is not
+agent qualification.
 """
 
 import http.server
@@ -23,7 +26,10 @@ import sys
 import tempfile
 import threading
 import time
+import zlib
 from pathlib import Path
+
+import guest_desktop
 
 ROOT = Path(__file__).resolve().parents[2]
 GUEST = ROOT / "target/guest"
@@ -32,6 +38,7 @@ HOST, POD, GATEWAY = "10.231.0.1", "10.231.0.2", "169.254.1.1"
 PORT = 8443
 TOKEN = "cb_guest_acceptance"
 LOCK = "/runtime/tools/lock"
+INIT = "/usr/local/bin/cubebot-agent"
 DEADLINE = 60.0
 SHUTDOWN = 20.0
 # Set either to boot a guest of that size instead of the sandbox's 2 vCPUs and 2 GiB.
@@ -97,6 +104,11 @@ def acceptance(directory: Path, requests: queue.Queue) -> int:
             return 1
         inode = current
         print(f"guest-boot: boot {boot} passed")
+    failure = desktop(directory, workspace)
+    if failure:
+        print(f"guest-boot failed on the desktop boot: {failure}")
+        return 1
+    print("guest-boot: desktop boot passed")
     return 0
 
 
@@ -125,22 +137,58 @@ def host_refusal(directory: Path, workspace: Path):
 
 def run_guest(directory: Path, workspace: Path, requests: queue.Queue):
     """Returns why a boot failed, or None."""
-    sandbox = subprocess.Popen(
+    sandbox = launch(environment(directory, workspace))
+    try:
+        return check(sandbox, Console(sandbox.stdout), requests)
+    finally:
+        end(sandbox)
+
+
+def desktop(directory: Path, workspace: Path):
+    """Boots a root image copy with guest_desktop.py as init; returns why it failed."""
+    root = directory / "desktop.ext4"
+    subprocess.run(["cp", "--reflink=auto", GUEST / "root.ext4", root], check=True)
+    script = Path(__file__).with_name("guest_desktop.py")
+    commands = directory / "desktop.debugfs"
+    commands.write_text(f"rm {INIT}\nwrite {script} {INIT}\nsif {INIT} mode 0100755\n")
+    subprocess.run(
+        ["debugfs", "-w", "-f", commands, root], check=True, capture_output=True
+    )
+    sandbox = launch(environment(directory, workspace) | {"CUBEBOT_GUEST_ROOT": root})
+    try:
+        console = Console(sandbox.stdout)
+        deadline = time.monotonic() + DEADLINE
+        if not until(lambda: b"Guest desktop drawn" in console.output, deadline):
+            return "the guest did not draw through DRM"
+        sandbox.send_signal(signal.SIGUSR1)
+        if not until(lambda: b"Guest screen crc32" in console.output, deadline):
+            return "the sandbox did not report its screen"
+        expected = f"Guest screen crc32 {zlib.crc32(guest_desktop.pattern()):08x}"
+        if expected.encode() not in console.output:
+            return "the host's screen is not the pattern the guest drew"
+        sandbox.send_signal(signal.SIGUSR2)
+        if not until(lambda: b"Guest key 30 pressed" in console.output, deadline):
+            return "the A key the host typed did not reach the guest's evdev"
+        return None
+    finally:
+        end(sandbox)
+
+
+def launch(variables: dict) -> subprocess.Popen:
+    """Starts the sandbox in the pod namespace; sudo relays signals sent to it."""
+    return subprocess.Popen(
         ["sudo", "ip", "netns", "exec", NAMESPACE, "env"]
-        + [
-            f"{name}={value}"
-            for name, value in environment(directory, workspace).items()
-        ]
+        + [f"{name}={value}" for name, value in variables.items()]
         + [ROOT / "target/debug/cubebot-sandbox", "run"],
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    try:
-        return check(sandbox, Console(sandbox.stdout), requests)
-    finally:
-        if sandbox.poll() is None:
-            subprocess.run(["sudo", "pkill", "-KILL", "-x", "cubebot-sandbox"])
-        sandbox.wait()
+
+
+def end(sandbox: subprocess.Popen):
+    if sandbox.poll() is None:
+        subprocess.run(["sudo", "pkill", "-KILL", "-x", "cubebot-sandbox"])
+    sandbox.wait()
 
 
 def environment(directory: Path, workspace: Path):
