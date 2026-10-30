@@ -8,6 +8,7 @@ mod browser;
 mod connections;
 mod identity;
 mod invitations;
+mod memories;
 mod oidc;
 mod runtime;
 mod work;
@@ -32,6 +33,7 @@ pub fn openapi() -> String {
     doc.merge(agents::Doc::openapi());
     doc.merge(connections::Doc::openapi());
     doc.merge(work::Doc::openapi());
+    doc.merge(memories::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
 
@@ -44,6 +46,7 @@ fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> R
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
         .merge(work::router(pool.clone(), identity.clone()))
+        .merge(memories::router(pool.clone(), identity.clone()))
         .merge(identity::router(identity.clone()))
         .merge(invitations::router(identity.clone()))
         .merge(access::router(identity))

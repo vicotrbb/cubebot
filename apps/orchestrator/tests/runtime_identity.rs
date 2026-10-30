@@ -260,10 +260,10 @@ async fn bootstrap_deadline_does_not_issue_a_session_after_waiting_on_lifecycle_
     f.task.abort();
 }
 
-async fn runtime_server(auth: RuntimeIdentity) -> (String, tokio::task::JoinHandle<()>) {
+pub(crate) async fn runtime_server(auth: RuntimeIdentity) -> (String, tokio::task::JoinHandle<()>) {
     http_server(cubebot_orchestrator::api::runtime_router(auth)).await
 }
-async fn http_server(router: Router) -> (String, tokio::task::JoinHandle<()>) {
+pub(crate) async fn http_server(router: Router) -> (String, tokio::task::JoinHandle<()>) {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let task = tokio::spawn(async move {
@@ -785,6 +785,14 @@ async fn text_reply(
     if input == "REJECT_PROVIDER" {
         return failure(StatusCode::UNAUTHORIZED);
     }
+    if input.starts_with("Before this turn ends") {
+        let none = json!({"type":"response.completed","response":{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"[]"}]}]}});
+        return (
+            [("content-type", "text/event-stream")],
+            format!("data: {none}\n\n"),
+        )
+            .into_response();
+    }
     state.started.notify_one();
     state.finish.notified().await;
     let completed = json!({"type":"response.completed","response":{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Durable native reply"}]}]}});
@@ -834,7 +842,8 @@ async fn native_text(first_failure: bool) {
     wait_native_response(&work, &admin, conversation).await;
     assert_eq!(
         state.calls.load(std::sync::atomic::Ordering::SeqCst),
-        1 + usize::from(first_failure)
+        // The reply, any retry, and a memory extraction that found nothing.
+        2 + usize::from(first_failure)
     );
     drop(child);
     let history = work.history(&admin, conversation, 0).await.unwrap();
@@ -870,7 +879,7 @@ async fn wait_native_response(
     panic!("native journal result was not committed after restart");
 }
 
-struct NativeChild {
+pub(crate) struct NativeChild {
     process: std::process::Child,
     root: std::path::PathBuf,
 }
@@ -882,7 +891,7 @@ impl Drop for NativeChild {
     }
 }
 
-async fn native_chat_setup(
+pub(crate) async fn native_chat_setup(
     f: &Fixture,
     message: &str,
 ) -> (
@@ -935,7 +944,7 @@ async fn native_chat_setup(
         conversation.id,
     )
 }
-fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeChild {
+pub(crate) fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeChild {
     use std::os::unix::fs::DirBuilderExt;
     let root = std::env::temp_dir().join(format!("cubebot-native-text-{}", Uuid::new_v4()));
     std::fs::DirBuilder::new()

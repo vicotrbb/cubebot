@@ -9,6 +9,7 @@ Updated 2026-10-29. This page lists what runs and what has not been qualified. [
 - Encrypted OpenAI API-key/model configuration and one permanent text conversation per agent, served by the native Rust runtime through the website.
 - Built-in tools (`bash`, file, `glob`, `grep`) and an MCP client for stdio and Streamable HTTP servers, disabled by default, run by the agent inside its sandbox as a configured tool user, with parallel calls. See [tool execution](development/bounded-terminal.md). MCP tools have no per-tool grants yet.
 - `cubebot-sandbox run`, which boots each agent in a KVM guest, launched as one container per agent by the Kubernetes controller or, without a cluster, through Docker. On an x86_64 Linux host with `/dev/kvm` it also runs directly, inside a network namespace of its own. The development `process` backend was removed on 2026-10-29: there is no way to run an agent outside a guest, and the sandbox image does not build without the guest.
+- Per-agent memory in PostgreSQL with full-text search: the agent's `search_memory`, `remember` and `forget` tools, turn-end extraction staged with the turn, revision history with source turns, and console search and editing guarded by `expected_revision`. See [memory](development/reference.md#memory).
 - Operator revocation of an agent's runtime credential with `cubebot-admin revoke-runtime`.
 
 Evidence: [text chat](development/text-chat-mvp.md), [cluster admission](development/cluster-admission.md), [cluster startup](development/cluster-startup.md), [layout verification](development/layout-verification.md).
@@ -21,7 +22,8 @@ Evidence: [text chat](development/text-chat-mvp.md), [cluster admission](develop
 
 Agent system
 
-- Rooms, delegation, memory, skills, browser, integrations, triggers, notifications, PWA/push and token streaming are not implemented. Responses commit as complete messages.
+- Rooms, delegation, skills, browser, integrations, triggers, notifications, PWA/push and token streaming are not implemented. Responses commit as complete messages.
+- Memory is lexical only: no embeddings or hybrid retrieval (ADR 0022), no dreaming or consolidation, suppression of content a person replaced or removed only for exact text, so a paraphrase can bring it back (ADR 0026), and no console view of revision history. Extraction runs one extra model request after every completed turn; its quality, cost and duplicate rate are unmeasured.
 - Room content workflows and event streaming are not implemented.
 - Tool-journal crash-window behavior on CSI is unqualified. Each channel polls PostgreSQL once a second, and each open browser conversation stream (`GET /api/conversations/{id}/events`) twice a second; delivery latency and database load at scale are unmeasured.
 

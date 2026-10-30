@@ -2,7 +2,7 @@
 //! outbox until the ledger acknowledges them, so a reconnect resends rather than loses them.
 mod attempts;
 mod turn;
-use crate::control::{Channel, Config, Error, RuntimeClient};
+use crate::control::{Channel, Config, Error, MemoryClient, RuntimeClient};
 use attempts::Store;
 use cubebot_protocol::runtime::{Delivery, Report, TurnEvent};
 use futures_util::{SinkExt, StreamExt};
@@ -67,6 +67,7 @@ struct Agent {
     events: mpsc::UnboundedReceiver<turn::Event>,
     bootstrapped: bool,
     tools: Option<Arc<crate::tools::Registry>>,
+    memory: Option<MemoryClient>,
     active: Option<Active>,
     drain: Option<Uuid>,
 }
@@ -95,6 +96,7 @@ impl Agent {
             events,
             bootstrapped: false,
             tools,
+            memory: None,
             active: None,
             drain: None,
         })
@@ -104,6 +106,7 @@ impl Agent {
         if !self.bootstrapped {
             client.bootstrap().await?;
             self.bootstrapped = true;
+            self.memory = client.memory();
         }
         let mut channel = client.connect().await?;
         for (entry, _) in &self.outbox {
@@ -172,6 +175,7 @@ impl Agent {
                     self.sender.clone(),
                     self.store.clone(),
                     self.tools.clone(),
+                    crate::memory::Memories::new(self.memory.clone()),
                     cancelled,
                 ));
                 self.active = Some(Active { turn, cancel, task });

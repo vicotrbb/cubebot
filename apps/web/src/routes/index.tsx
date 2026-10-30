@@ -11,6 +11,7 @@ import {
 } from '../api/client'
 import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
+import { Memories } from '../features/memories'
 
 export const Route = createFileRoute('/')({ component: Home })
 
@@ -62,6 +63,7 @@ function Home() {
 
 type Screen =
   | { kind: 'chat' }
+  | { kind: 'memories' }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
 
@@ -178,6 +180,13 @@ function Workspace({
               onCancel={() => setScreen({ kind: 'chat' })}
             />
           )}
+          {screen.kind === 'memories' && selected && (
+            <Memories
+              key={selected.id}
+              agent={selected}
+              onClose={() => setScreen({ kind: 'chat' })}
+            />
+          )}
           {screen.kind === 'provider' && (
             <ProviderForm onClose={() => setScreen({ kind: 'chat' })} />
           )}
@@ -188,6 +197,7 @@ function Workspace({
                 selected={selected}
                 session={session}
                 onEdit={() => setScreen({ kind: 'agent', existing: selected })}
+                onMemories={() => setScreen({ kind: 'memories' })}
               />
             ) : (
               <div className="empty">
@@ -207,10 +217,12 @@ function AgentChat({
   selected,
   session,
   onEdit,
+  onMemories,
 }: {
   selected: Agent
   session: Account
   onEdit: () => void
+  onMemories: () => void
 }) {
   return (
     <>
@@ -219,9 +231,14 @@ function AgentChat({
           <h1>{selected.name}</h1>
           <p className="muted">Continuous conversation</p>
         </div>
-        <button className="secondary" onClick={onEdit}>
-          Edit agent
-        </button>
+        <div className="actions">
+          <button className="secondary" onClick={onMemories}>
+            Memories
+          </button>
+          <button className="secondary" onClick={onEdit}>
+            Edit agent
+          </button>
+        </div>
       </header>
       <Chat id={selected.id} accountId={session.id} />
     </>

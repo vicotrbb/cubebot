@@ -227,10 +227,16 @@ fn turn(id: Uuid, sequence: u64, message: &str) -> Value {
 
 #[tokio::test]
 async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconnect() {
-    let mut fake = fake(vec![responses(
-        json!([{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}]),
-        json!({"input_tokens":9,"output_tokens":2}),
-    )])
+    let mut fake = fake(vec![
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"Hello back"}]}]),
+            json!({"input_tokens":9,"output_tokens":2}),
+        ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"[\"Likes short greetings\"]"}]}]),
+            json!({"input_tokens":12,"output_tokens":3}),
+        ),
+    ])
     .await;
     let root = root();
     let mut child = spawn(&fake.origin, &root);
@@ -245,12 +251,31 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
         fake.event(4).await,
         json!({"kind":"usage","input_tokens":9,"output_tokens":2})
     );
+    // Extraction streams nothing; its fact commits with the turn.
     assert_eq!(
         fake.event(5).await,
-        json!({"kind":"done","response":"Hello back"})
+        json!({"kind":"usage","input_tokens":12,"output_tokens":3})
     );
+    let done = json!({"kind":"done","response":"Hello back",
+        "memories":[{"op":"remember","content":"Likes short greetings"}]});
+    assert_eq!(fake.event(6).await, done);
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let extraction = fake.provider.lock().unwrap()[1].clone();
+    let asked = extraction["input"].as_array().unwrap().last().unwrap();
+    assert!(
+        asked["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("Before this turn ends")
+    );
     let request = fake.provider.lock().unwrap()[0].clone();
+    let tools: Vec<&Value> = request["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|tool| &tool["name"])
+        .collect();
+    assert_eq!(tools[..3], ["search_memory", "remember", "forget"]);
     assert_eq!(request["model"], "test-model");
     assert_eq!(request["stream"], true);
     assert!(request.get("max_output_tokens").is_none());
@@ -264,8 +289,9 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     fake.deliver(Value::Null);
     fake.event(4).await;
     fake.event(5).await;
+    assert_eq!(fake.event(6).await, done);
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
-    fake.ack(id, [4, 5]);
+    fake.ack(id, [4, 5, 6]);
     fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -347,6 +373,10 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
             json!([{"type":"message","content":[{"type":"output_text","text":"Fixed"}]}]),
             json!({"input_tokens":20,"output_tokens":1}),
         ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"[]"}]}]),
+            json!({"input_tokens":25,"output_tokens":1}),
+        ),
     ])
     .await;
     let root = root();
@@ -385,8 +415,9 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
     );
     assert_eq!(fake.event(8).await["kind"], "text_delta");
     assert_eq!(fake.event(9).await["kind"], "usage");
+    assert_eq!(fake.event(10).await["kind"], "usage");
     assert_eq!(
-        fake.event(10).await,
+        fake.event(11).await,
         json!({"kind":"done","response":"Fixed"})
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
@@ -406,7 +437,7 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
             .unwrap()
             .contains("no tool has this name")
     );
-    fake.ack(id, 1..=10);
+    fake.ack(id, 1..=11);
     fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -416,6 +447,7 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
     let mut fake = fake(vec![
         json!({"status":429,"retry_after":"0"}),
         messages("Hello back", 790, 20),
+        messages("[]", 810, 2),
         messages("The gist", 800, 5),
     ])
     .await;
@@ -435,14 +467,16 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
         fake.event(2).await,
         json!({"kind":"usage","input_tokens":790,"output_tokens":20})
     );
-    // 810 of the discovered 1000-token window: summarize before the reply settles the turn.
+    // 810 of the discovered 1000-token window: after extraction, summarize before the reply
+    // settles the turn.
     assert_eq!(fake.event(3).await["kind"], "usage");
+    assert_eq!(fake.event(4).await["kind"], "usage");
     assert_eq!(
-        fake.event(4).await,
+        fake.event(5).await,
         json!({"kind":"summary","text":"The gist"})
     );
     assert_eq!(
-        fake.event(5).await,
+        fake.event(6).await,
         json!({"kind":"done","response":"Hello back"})
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
@@ -452,7 +486,8 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
     assert_eq!(requests[0]["model"], "test-model");
     assert_eq!(requests[0]["max_tokens"], 64);
     assert_eq!(requests[0]["tool_choice"]["type"], "auto");
-    let summary = &requests[2];
+    assert_eq!(requests[2]["tool_choice"], json!({"type":"none"}));
+    let summary = &requests[3];
     assert_eq!(summary["model"], "test-model");
     assert_eq!(summary["tool_choice"], json!({"type":"none"}));
     let sent = summary["messages"].as_array().unwrap();
@@ -466,7 +501,7 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
             .unwrap()
             .starts_with("Write a structured summary")
     );
-    fake.ack(id, 1..=5);
+    fake.ack(id, 1..=6);
     fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -1,7 +1,7 @@
 //! One turn: streamed model steps and parallel tool calls, reported as ordered events. Tool
 //! calls are journaled before they run and are never recovered by running them again.
 use super::attempts::{Entry, Store};
-use crate::{context::Context, tools::Registry};
+use crate::{context::Context, memory::Memories, tools::Registry};
 use cubebot_protocol::{
     runtime::{EVENT_BYTES, ProviderKind, Turn, TurnEvent},
     terminal::Outcome,
@@ -64,9 +64,11 @@ pub(super) async fn run(
     events: UnboundedSender<Event>,
     store: Arc<Mutex<Store>>,
     tools: Option<Arc<Registry>>,
+    memories: Memories,
     cancel: watch::Receiver<bool>,
 ) {
     let tools = tools.as_deref();
+    let memories = &memories;
     let mut run = Run {
         turn: turn.turn,
         next: turn.sequence,
@@ -75,11 +77,11 @@ pub(super) async fn run(
     let end = match turn.provider {
         ProviderKind::Openai => {
             let provider = configured(OpenAi::new, OpenAi::for_loopback_tests);
-            start(provider, &turn, &mut run, &store, tools, cancel).await
+            start(provider, &turn, &mut run, &store, (tools, memories), cancel).await
         }
         ProviderKind::Anthropic => {
             let provider = configured(Anthropic::new, Anthropic::for_loopback_tests);
-            start(provider, &turn, &mut run, &store, tools, cancel).await
+            start(provider, &turn, &mut run, &store, (tools, memories), cancel).await
         }
     };
     run.emit(end, None);
@@ -101,18 +103,23 @@ async fn start<P: Provider>(
     turn: &Turn,
     run: &mut Run,
     store: &Mutex<Store>,
-    registry: Option<&Registry>,
+    (registry, memories): (Option<&Registry>, &Memories),
     mut cancel: watch::Receiver<bool>,
 ) -> TurnEvent {
     let provider = match provider {
         Ok(provider) => provider,
         Err(error) => return failed(error.code()),
     };
-    let tools = registry.map_or_else(Vec::new, |registry| registry.definitions().to_vec());
     let capabilities = provider.capabilities();
-    if !tools.is_empty() && !capabilities.tool_calls {
+    if !capabilities.tool_calls {
         return failed("provider_rejected");
     }
+    let mut tools = crate::memory::definitions();
+    tools.extend(
+        registry
+            .into_iter()
+            .flat_map(|registry| registry.definitions().to_vec()),
+    );
     let limits = match capabilities.model_limits {
         true => tokio::select! {
             limits = provider.limits(&turn.model, &turn.api_key) => limits,
@@ -135,6 +142,7 @@ async fn start<P: Provider>(
         run,
         store,
         tools: registry,
+        memories,
         cancel,
     }
     .converse(&mut context)
@@ -148,6 +156,7 @@ struct Session<'a, P> {
     run: &'a mut Run,
     store: &'a Mutex<Store>,
     tools: Option<&'a Registry>,
+    memories: &'a Memories,
     cancel: watch::Receiver<bool>,
 }
 
@@ -166,10 +175,13 @@ impl<P: Provider> Session<'_, P> {
             let response = reply.text.clone();
             context.messages.push(Message::Assistant(reply));
             if calls.is_empty() {
+                if let Err(code) = self.extract(context).await {
+                    return failed(code);
+                }
                 if full {
                     self.compact(context).await;
                 }
-                return done(response);
+                return done(response, self.memories.take());
             }
             let outputs = match self.call(&calls).await {
                 Ok(outputs) => outputs,
@@ -247,8 +259,7 @@ impl<P: Provider> Session<'_, P> {
     /// Journals every call before any starts, runs them in parallel and journals each result as
     /// it arrives. Outputs come back in call order.
     async fn call(&mut self, calls: &[FunctionCall]) -> Result<Vec<String>, &'static str> {
-        let tools = self.tools.ok_or("provider_invalid_response")?;
-        let prepared = prepare(tools, calls);
+        let prepared = prepare(self.tools, self.memories, calls);
         let mut running = FuturesUnordered::new();
         let mut unfinished = Vec::new();
         for (index, (id, name, input, call)) in prepared.into_iter().enumerate() {
@@ -271,7 +282,10 @@ impl<P: Provider> Session<'_, P> {
         // Dropping the unfinished calls kills their process groups before their output is read.
         drop(running);
         for id in unfinished {
-            let output = tools.preview(id);
+            let output = self
+                .tools
+                .map(|tools| tools.preview(id))
+                .unwrap_or_default();
             let outcome = Outcome::Stopped {
                 reason: "cancelled".into(),
                 output,
@@ -288,6 +302,33 @@ impl<P: Provider> Session<'_, P> {
         self.run
             .journaled(self.store, event)
             .map_err(|_| "journal_unavailable")
+    }
+
+    /// Stages facts the turn did not save. Only cancellation fails the turn; otherwise it
+    /// completes without them.
+    async fn extract(&mut self, context: &Context) -> Result<(), &'static str> {
+        let Some(prompt) = self.memories.extraction() else {
+            return Ok(());
+        };
+        let mut messages = context.messages.clone();
+        messages.push(Message::User(prompt));
+        let request = Request {
+            messages: &messages,
+            tools_disabled: true,
+            ..context.request(self.turn, self.max_output_tokens)
+        };
+        match self.step(&request, false).await {
+            Ok((reply, usage)) => {
+                self.usage(usage);
+                self.memories.extracted(&reply.text);
+                Ok(())
+            }
+            Err("cancelled") => Err("cancelled"),
+            Err(_) => {
+                eprintln!("Memory extraction failed; the turn completes without it");
+                Ok(())
+            }
+        }
     }
 
     /// Summarizes with the same model and replaces the context only with a valid summary.
@@ -337,8 +378,8 @@ fn fits(event: &TurnEvent) -> bool {
     serde_json::to_vec(event).is_ok_and(|encoded| encoded.len() <= EVENT_BYTES)
 }
 
-fn done(response: String) -> TurnEvent {
-    let done = TurnEvent::Done { response };
+fn done(response: String, memories: Vec<cubebot_protocol::runtime::MemoryChange>) -> TurnEvent {
+    let done = TurnEvent::Done { response, memories };
     if fits(&done) {
         done
     } else {
@@ -351,7 +392,8 @@ fn done(response: String) -> TurnEvent {
 /// the call while the rest of the response runs.
 #[allow(clippy::type_complexity)]
 fn prepare<'a>(
-    tools: &'a Registry,
+    tools: Option<&'a Registry>,
+    memories: &'a Memories,
     calls: &[FunctionCall],
 ) -> Vec<(Uuid, String, serde_json::Value, crate::tools::Running<'a>)> {
     calls
@@ -360,7 +402,11 @@ fn prepare<'a>(
             let id = Uuid::new_v4();
             let parsed = serde_json::from_str(&call.arguments);
             let running = match &parsed {
-                Ok(input) => tools.call(&call.name, id, input),
+                Ok(input) => memories.call(&call.name, input).unwrap_or_else(|| {
+                    tools
+                        .ok_or("no tool has this name")
+                        .and_then(|tools| tools.call(&call.name, id, input))
+                }),
                 Err(_) => Err("arguments are not valid JSON"),
             };
             let running = running.unwrap_or_else(|reason| {
@@ -403,13 +449,14 @@ mod tests {
     #[test]
     fn a_response_past_the_ledger_bound_is_refused() {
         assert_eq!(
-            done("ok".into()),
+            done("ok".into(), Vec::new()),
             TurnEvent::Done {
-                response: "ok".into()
+                response: "ok".into(),
+                memories: Vec::new(),
             }
         );
         assert_eq!(
-            done("x".repeat(EVENT_BYTES)),
+            done("x".repeat(EVENT_BYTES), Vec::new()),
             failed("provider_invalid_response")
         );
     }

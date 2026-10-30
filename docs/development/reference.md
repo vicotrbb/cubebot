@@ -87,7 +87,7 @@ The Kubernetes boundary currently supports namespaced pod/PVC creation, recorded
 - Agent to orchestrator: `pull` (ready for the next turn), `event` with `turn`, `sequence` and `event`, and `drained` with `request_id`.
 - Orchestrator to agent: `turn`, `ack` with `turn` and `sequence` once an event is durable, `cancel` with `turn`, `drain` with `request_id`, and `revoked`.
 - A `turn` carries the message, the agent's instructions, the current model and provider key, up to twelve completed earlier exchanges, tool events from earlier runs of the same turn and the first event sequence to use. The agent assembles its own context from these records.
-- Event kinds are `text_delta`, `tool_call`, `tool_result`, `usage`, `done` and `error`. The orchestrator appends each to `turn_events`, keyed by turn and sequence; a resent event keeps its first recorded form. Only `done` or `error` from the attempt running the turn settles it. Later events are retained as evidence.
+- Event kinds are `text_delta`, `tool_call`, `tool_result`, `usage`, `summary`, `done` (which may carry staged `memories`; see [Memory](#memory)) and `error`. The orchestrator appends each to `turn_events`, keyed by turn and sequence; a resent event keeps its first recorded form. Only `done` or `error` from the attempt running the turn settles it. Later events are retained as evidence.
 
 One turn runs per agent; a partial unique index enforces it. A waiting turn holds later queued turns until it is retried or cancelled. Cancelling a turn marks it `cancelled` and the channel delivers `cancel`. When the credential stops authorizing the sandbox, the channel delivers `revoked` and closes; stopping the sandbox is the hard stop. While a drain request exists the channel delivers `drain`. The agent finishes its active turn and replies `drained`, then the orchestrator records the acknowledgement and answers `revoked`. A turn left running by an attempt whose session is no longer valid becomes `waiting` with `execution_interrupted`.
 
@@ -96,6 +96,14 @@ The agent keeps unacknowledged events in memory and resends them after reconnect
 Each channel polls PostgreSQL once a second for new turns, cancellation, drain and revocation.
 
 Browsers follow a conversation through `GET /api/conversations/{id}/events`, a server-sent event stream. It replays `turn_events` after a cursor (`after` or `Last-Event-ID`; without one, from the running turn's first event), then polls twice a second. `turn_event` frames carry each event with its conversation-wide id; `turn` frames carry a turn snapshot whenever its state may have changed. Recording an event locks its conversation, so ids become visible in order and a cursor never skips one.
+
+### Memory
+
+Each agent has one memory pool in `memories`, with every revision in `memory_revisions`. A revision is authored either by a person (`human_id`) or by the agent through the turn that wrote it (`turn_id`); removal is a revision too and only hides the memory from search. Search is PostgreSQL full-text (`english` configuration): any query word matches, results are ranked by `ts_rank`, and there are no vectors.
+
+- The agent has three tools: `search_memory`, `remember` (to revise, pass a memory id and revision) and `forget`. Nothing is searched unless the agent calls `search_memory`, which uses `GET /api/runtime/memories?query=` with its agent credential and returns at most ten of that agent's own memories. An unavailable search is reported as unavailable, not as empty.
+- `remember` and `forget` stage changes in the turn. When the model's reply ends the turn, the agent makes one more request, without tools, asking for up to five durable facts the turn did not save, and stages any it returns. A turn that stages a removal skips this request: with a real model, extraction there re-saved the removed fact as a note. The staged changes travel on the `done` event as `memories` and commit in the same transaction that completes the turn. A failed or cancelled turn commits none of them. A revision or removal against a revision that is no longer current, such as one a person has since edited, is dropped. An exact duplicate of a live memory is not saved twice, and the agent cannot write back the exact text of a revision a person replaced or removed.
+- People with `memory.read` on the agent (or administrators) list and search through `GET /api/agents/{agent}/memories?query=`. With `memory.edit` they `POST` a new memory, `PUT /api/agents/{agent}/memories/{memory}` with `content` and `expected_revision`, and `DELETE` it with `?expected_revision=`; a stale revision returns 409. The console's Memories view, next to Edit agent, uses these.
 
 ### Explicit lifecycle controller configuration
 

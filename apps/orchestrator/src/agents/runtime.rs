@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct RuntimeIdentity {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
     /// `None` serves cluster-less Docker sandboxes, which bootstrap with a per-container token.
     api: Option<Kubernetes>,
     connections: Option<crate::connections::Connections>,

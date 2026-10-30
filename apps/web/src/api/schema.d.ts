@@ -20,6 +20,40 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/memories': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['search_memories']
+    put?: never
+    post: operations['create_memory']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/memories/{memory}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** 409 when `expected_revision` is no longer current. */
+    put: operations['revise_memory']
+    post?: never
+    /** Removes the memory from retrieval; its revision history is kept. */
+    delete: operations['delete_memory']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/definition': {
     parameters: {
       query?: never
@@ -215,6 +249,9 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    CreateMemory: {
+      content: string
+    }
     Event: {
       /**
        * Format: int64
@@ -231,6 +268,46 @@ export interface components {
       login: string
       password: string
     }
+    Memory: {
+      content: string
+      edited_by_human: boolean
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      revision: number
+      /**
+       * Format: uuid
+       * @description The turn whose completion wrote the current revision; `None` for a human edit.
+       */
+      source_turn?: string | null
+    }
+    /**
+     * @description A memory write staged by the agent. A revision or removal names the revision it read; a
+     *     newer one, such as a human edit, wins and the change is dropped.
+     */
+    MemoryChange:
+      | {
+          content: string
+          /** @enum {string} */
+          op: 'remember'
+        }
+      | {
+          content: string
+          /** Format: int64 */
+          expected_revision: number
+          /** Format: uuid */
+          memory: string
+          /** @enum {string} */
+          op: 'revise'
+        }
+      | {
+          /** Format: int64 */
+          expected_revision: number
+          /** Format: uuid */
+          memory: string
+          /** @enum {string} */
+          op: 'forget'
+        }
     Outcome:
       | {
           /** Format: int32 */
@@ -289,6 +366,11 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    ReviseMemory: {
+      content: string
+      /** Format: int64 */
+      expected_revision: number
+    }
     SendMessage: {
       message: string
       /** Format: uuid */
@@ -345,6 +427,7 @@ export interface components {
       | {
           /** @enum {string} */
           kind: 'done'
+          memories?: components['schemas']['MemoryChange'][]
           response: string
         }
       | {
@@ -411,6 +494,102 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Receipt']
         }
+      }
+    }
+  }
+  search_memories: {
+    parameters: {
+      query?: {
+        query?: string
+      }
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Memory'][]
+        }
+      }
+    }
+  }
+  create_memory: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateMemory']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Memory']
+        }
+      }
+    }
+  }
+  revise_memory: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        memory: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviseMemory']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Memory']
+        }
+      }
+    }
+  }
+  delete_memory: {
+    parameters: {
+      query: {
+        expected_revision: number
+      }
+      header?: never
+      path: {
+        agent: string
+        memory: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }
