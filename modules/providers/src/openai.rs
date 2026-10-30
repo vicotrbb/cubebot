@@ -62,6 +62,9 @@ impl Provider for OpenAi {
 }
 
 fn body(request: &Request) -> Value {
+    let computer = crate::computer_calls(request.messages, |item| {
+        (item["type"] == "computer_call").then(|| item["call_id"].as_str())?
+    });
     let mut input = vec![json!({"role":"system","content":request.system})];
     for message in request.messages {
         match message {
@@ -70,9 +73,17 @@ fn body(request: &Request) -> Value {
                 Value::Array(items) => input.extend(items.iter().cloned()),
                 _ => input.push(json!({"role":"assistant","content":reply.text})),
             },
-            Message::ToolResult { call_id, output } => {
-                input.push(json!({"type":"function_call_output","call_id":call_id,"output":output}))
-            }
+            Message::ToolResult {
+                call_id,
+                output,
+                image,
+            } => input.push(match image {
+                // A computer call's output is only its screenshot.
+                Some(image) if computer.contains(&&**call_id) => {
+                    json!({"type":"computer_call_output","call_id":call_id,"output":{"type":"computer_screenshot","image_url":format!("data:image/png;base64,{image}"),"detail":"original"}})
+                }
+                _ => json!({"type":"function_call_output","call_id":call_id,"output":output}),
+            }),
         }
     }
     let mut body = json!({
@@ -86,7 +97,10 @@ fn body(request: &Request) -> Value {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters}))
+            .map(|tool| match tool.computer {
+                true => json!({"type":"computer"}),
+                false => json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters}),
+            })
             .collect();
         if request.tools_disabled {
             body["tool_choice"] = json!("none");
@@ -132,6 +146,7 @@ fn completed(response: &Value) -> Result<Event, Error> {
             Some("reasoning") => (),
             Some("message") => append_content(&mut text, &item["content"])?,
             Some("function_call") => calls.push(function_call(item)?),
+            Some("computer_call") => calls.push(computer_call(item)?),
             _ => return Err(Error::InvalidResponse),
         }
     }
@@ -166,4 +181,11 @@ fn function_call(item: &Value) -> Result<crate::FunctionCall, Error> {
         field("name")?,
         field("arguments")?.into(),
     )
+}
+
+/// The call's batch of actions, as one `computer` call.
+fn computer_call(item: &Value) -> Result<crate::FunctionCall, Error> {
+    let call_id = item["call_id"].as_str().ok_or(Error::InvalidResponse)?;
+    let actions = json!({"actions":item["actions"]});
+    call(call_id, "computer", actions.to_string())
 }

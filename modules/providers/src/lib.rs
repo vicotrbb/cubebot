@@ -49,6 +49,24 @@ pub struct Tool {
     /// Strict schemas must close every object and require every property; external schemas
     /// rarely do, so they are sent as advisory.
     pub strict: bool,
+    /// The provider's own computer-use tool in place of a function. Its calls arrive as calls
+    /// of this tool: Anthropic's as `{"action": member, ...input}`, OpenAI's as
+    /// `{"actions": [...]}`, and their results go back in the provider's computer form.
+    pub computer: bool,
+}
+
+/// The call ids of computer-use calls in replayed provider output, whose results take the
+/// provider's computer form.
+fn computer_calls(messages: &[Message], native: impl Fn(&Value) -> Option<&str>) -> Vec<&str> {
+    messages
+        .iter()
+        .filter_map(|message| match message {
+            Message::Assistant(reply) => reply.native.as_array(),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(native)
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -73,7 +91,12 @@ pub struct Reply {
 pub enum Message {
     User(String),
     Assistant(Reply),
-    ToolResult { call_id: String, output: String },
+    /// `image` is a base64 PNG, such as a computer-use screenshot.
+    ToolResult {
+        call_id: String,
+        output: String,
+        image: Option<String>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

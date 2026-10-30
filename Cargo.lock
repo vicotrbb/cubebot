@@ -527,6 +527,7 @@ dependencies = [
  "cubebot-protocol",
  "nix",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]

@@ -2,6 +2,7 @@
 //! under the sandbox's unprivileged tool user, so the kernel, not path checks, bounds what a call
 //! can touch. Full output stays in the workspace and the model sees a head-and-tail preview.
 mod builtin;
+mod computer;
 mod mcp;
 
 pub use builtin::edit_file;
@@ -203,6 +204,10 @@ impl Registry {
         }
         let sandbox = Sandbox::from_environment()?;
         let mut tools = builtin::tools();
+        // The provider's computer-use tool, for models that support it (ADR 0085).
+        if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() == Ok("1") {
+            tools.push(computer::tool());
+        }
         tools.extend(mcp::tools(&sandbox).await?);
         Ok(Some(Self::new(sandbox, tools)))
     }

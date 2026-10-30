@@ -1,16 +1,20 @@
 #!/usr/bin/python3 -u
 """Init of guest-boot's desktop boot (ADR 0085), in place of the agent.
 
-Draws `pattern()` on the 1280x800 mode through a DRM dumb buffer, prints "Guest desktop
-drawn", then prints the first key the virtio keyboard's evdev device reports pressed and
-exits, which ends the VM. guest_boot.py imports `pattern()` to check the host's screen.
+Draws `pattern()` on the 1280x800 mode through a DRM dumb buffer, prints "Guest
+desktop drawn", then prints the first key the virtio keyboard's evdev device reports
+pressed. The host types it only after a person takes control, so the agent's own key
+request that follows must be refused; the script prints the arbiter's answer and exits,
+which ends the VM. guest_boot.py imports `pattern()` to check the host's screen.
 """
 
 import ctypes
 import fcntl
 import glob
+import json
 import mmap
 import os
+import socket
 import struct
 
 WIDTH, HEIGHT = 1280, 800
@@ -95,7 +99,21 @@ def main():
         )
         if (kind, value) == (1, 1):
             print(f"Guest key {code} pressed")
-            return
+            break
+    print(f"Guest agent answer {agent_key()}")
+
+
+def agent_key() -> str:
+    """Asks for a key press on the agent's desktop port, as the agent does."""
+    stream = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+    stream.connect((2, 1025))
+    request = {
+        "call": "00000000-0000-0000-0000-000000000001",
+        "action": {"action": "key", "keys": ["b"]},
+    }
+    stream.sendall(json.dumps(request).encode() + b"\n")
+    answer = stream.makefile("rb").readline()
+    return json.loads(answer).get("error", "accepted")
 
 
 if __name__ == "__main__":

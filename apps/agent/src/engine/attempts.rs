@@ -22,9 +22,18 @@ impl Store {
             journal: Journal::open(path)?,
         })
     }
-    /// Returns the journal sequence that acknowledges this entry.
+    /// Returns the journal sequence that acknowledges this entry. A screenshot is recorded
+    /// without its image, which is no effect to recover and outgrows a journal record.
     pub fn record(&mut self, entry: &Entry) -> io::Result<u64> {
-        self.journal.append(&serde_json::to_vec(entry)?)
+        let mut entry = entry.clone();
+        if let TurnEvent::ToolResult {
+            outcome: Outcome::Screenshot { image, .. },
+            ..
+        } = &mut entry.event
+        {
+            image.clear();
+        }
+        self.journal.append(&serde_json::to_vec(&entry)?)
     }
     /// Called once the ledger has the entry and everything before it. A call stays journaled
     /// until its result is acknowledged too, so a crash while it runs still reports it.
@@ -146,6 +155,32 @@ mod tests {
         assert!(pending[3].1 > pending[2].1);
         store.acknowledge(done).unwrap();
         assert_eq!(store.pending().unwrap().len(), 2);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn screenshots_are_journaled_without_their_image() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let mut store = Store::open(&root).unwrap();
+        let screenshot = Entry {
+            turn: Uuid::new_v4(),
+            sequence: 1,
+            event: TurnEvent::ToolResult {
+                id: Uuid::new_v4(),
+                outcome: Outcome::Screenshot {
+                    output: "OK".into(),
+                    image: "A".repeat(crate::journal::MAX_PAYLOAD),
+                },
+            },
+        };
+        store.record(&screenshot).unwrap();
+        let [(recorded, _)] = &store.entries().unwrap()[..] else {
+            panic!("expected one entry");
+        };
+        assert!(matches!(
+            &recorded.event,
+            TurnEvent::ToolResult { outcome: Outcome::Screenshot { image, .. }, .. } if image.is_empty()
+        ));
         std::fs::remove_dir_all(&root).unwrap();
     }
 

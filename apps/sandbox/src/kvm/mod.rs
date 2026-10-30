@@ -4,6 +4,7 @@
 //! a tap, vsock for the control channel, and the desktop's screen, keyboard and tablet (ADR 0085).
 #![allow(unsafe_code, reason = "KVM ioctls and guest memory (ADR 0084)")]
 mod boot;
+mod desktop;
 mod memory;
 mod network;
 mod serial;
@@ -46,9 +47,6 @@ const _: () = assert!((*MEMORY_MIB.1.end() as u64) << 20 <= MMIO);
 /// Root disk, workspace disk, network, vsock, screen, keyboard, tablet: free ISA interrupts once
 /// COM1 has IRQ 4. Linux names the disks vda and vdb in this order.
 const IRQS: [u32; 7] = [5, 6, 9, 10, 11, 12, 7];
-/// shortcut: SIGUSR2 types this A key press and release, standing in for ADR 0085's arbiter; drop
-/// it with SIGUSR1's screen report when the arbiter serves input and screenshots.
-const KEY_A: [(u16, u16, u32); 4] = [(1, 30, 1), (0, 0, 0), (1, 30, 0), (0, 0, 0)];
 /// The guest owns its storage paths; it mounts the workspace disk itself.
 const GUEST_OWNED: [&str; 2] = ["CUBEBOT_JOURNAL_DIRECTORY", "CUBEBOT_WORKSPACE_DIRECTORY"];
 const FILE_LIMIT: u64 = 64 << 10;
@@ -60,12 +58,9 @@ pub fn run() -> io::Result<u8> {
     let mut termination = SigSet::empty();
     termination.add(Signal::SIGTERM);
     termination.add(Signal::SIGINT);
-    let mut desktop = SigSet::empty();
-    desktop.add(Signal::SIGUSR1);
-    desktop.add(Signal::SIGUSR2);
-    for set in [termination, desktop] {
-        set.thread_block().map_err(failed("pthread_sigmask"))?;
-    }
+    termination
+        .thread_block()
+        .map_err(failed("pthread_sigmask"))?;
     let kernel = read_configured("CUBEBOT_GUEST_KERNEL")?;
     let vcpus = sized("CUBEBOT_GUEST_VCPUS", VCPUS)? as u8;
     let memory_size = (sized("CUBEBOT_GUEST_MEMORY_MIB", MEMORY_MIB)? as usize) << 20;
@@ -78,6 +73,8 @@ pub fn run() -> io::Result<u8> {
         vsock,
         gpu,
         keyboard,
+        tablet,
+        desktop,
         environment,
         cmdline,
     } = devices(vm.as_raw_fd())?;
@@ -95,7 +92,10 @@ pub fn run() -> io::Result<u8> {
     std::thread::spawn(move || refresh(environment, &refreshed, memory));
     let stopped = vsock.clone();
     std::thread::spawn(move || stop(termination, &stopped, memory));
-    std::thread::spawn(move || probe(desktop, &gpu, &keyboard, memory));
+    let arbiter = vsock.clone();
+    std::thread::spawn(move || {
+        desktop::Arbiter::new(&gpu, &keyboard, &tablet, memory).serve(desktop, &arbiter);
+    });
     // The guest ends when any vCPU stops, such as the one that triple-faults on reboot.
     let (ended, end) = mpsc::channel();
     let serial = Arc::new(Mutex::new(serial::Serial::default()));
@@ -139,6 +139,9 @@ struct Devices {
     vsock: Arc<Slot<Vsock>>,
     gpu: Arc<Slot<Gpu>>,
     keyboard: Arc<Slot<Input>>,
+    tablet: Arc<Slot<Input>>,
+    /// Requests for the screen arbiter, from the guest's desktop streams and the host channel.
+    desktop: mpsc::Receiver<desktop::Request>,
     /// The environment the guest receives first.
     environment: Vec<(String, String)>,
     /// The kernel command line, which declares the devices and the guest's network.
@@ -157,10 +160,17 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
     };
     let net = Net::new(network.tap.try_clone()?, network.mac, network.mtu);
     let net = Arc::new(Slot::new(net, irq(2)));
-    let vsock = Arc::new(Slot::new(Vsock::new(encoded), irq(3)));
+    let (requests, desktop) = mpsc::channel();
+    let socket = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")
+        .map_or_else(|| PathBuf::from(desktop::SOCKET), PathBuf::from);
+    desktop::listen(&socket, requests.clone()).map_err(|error| {
+        io::Error::other(format!("desktop socket {}: {error}", socket.display()))
+    })?;
+    let vsock = Arc::new(Slot::new(Vsock::new(encoded, requests), irq(3)));
     let gpu = Arc::new(Slot::new(Gpu::default(), irq(4)));
     let keyboard = Arc::new(Slot::new(Input::keyboard(), irq(5)));
     let tablet = Input::tablet(virtio::gpu::WIDTH, virtio::gpu::HEIGHT);
+    let tablet = Arc::new(Slot::new(tablet, irq(6)));
     let bus: [Arc<dyn Mmio>; 7] = [
         Arc::new(Slot::new(Block::new(root, true)?, irq(0))),
         Arc::new(Slot::new(Block::new(workspace, false)?, irq(1))),
@@ -168,7 +178,7 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
         vsock.clone(),
         gpu.clone(),
         keyboard.clone(),
-        Arc::new(Slot::new(tablet, irq(6))),
+        tablet.clone(),
     ];
     let devices: String = (0..bus.len())
         .map(|index| {
@@ -186,6 +196,8 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
         vsock,
         gpu,
         keyboard,
+        tablet,
+        desktop,
         environment,
         cmdline: format!("{CMDLINE} {}{devices} -- guest", network.cmdline),
     })
@@ -245,28 +257,6 @@ fn stop(termination: SigSet, vsock: &Slot<Vsock>, memory: &GuestMemory) {
         _ => signal,
     };
     std::process::exit(128 + signal as i32)
-}
-
-/// SIGUSR1 logs the screen's checksum and dirty rects, taking them; SIGUSR2 types [`KEY_A`].
-fn probe(signals: SigSet, gpu: &Slot<Gpu>, keyboard: &Slot<Input>, memory: &GuestMemory) -> ! {
-    loop {
-        let typed = match signals.wait() {
-            Ok(Signal::SIGUSR1) => {
-                let mut gpu = gpu.lock();
-                let dirty = std::mem::take(&mut gpu.device.dirty);
-                eprintln!(
-                    "Guest screen crc32 {:08x}, dirty {dirty:?}",
-                    gpu.device.checksum()
-                );
-                Ok(())
-            }
-            Ok(_) => keyboard.run(|input, queues| input.send(&KEY_A, queues, memory)),
-            Err(error) => fail(&format!("sigwait: {error}")),
-        };
-        if let Err(error) = typed {
-            fail(&format!("guest keyboard: {error}"));
-        }
-    }
 }
 
 /// Sends the guest every `*_FILE` whose contents changed, such as a projected token the kubelet

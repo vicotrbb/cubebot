@@ -12,6 +12,7 @@ pub struct Layout {
     network: NetworkPolicy,
     control_ca: Option<String>,
     terminal: bool,
+    computer_use: bool,
 }
 impl Layout {
     pub fn new(
@@ -34,11 +35,17 @@ impl Layout {
             network,
             control_ca: None,
             terminal: false,
+            computer_use: false,
         })
     }
 
     pub fn with_terminal(mut self, enabled: bool) -> Self {
         self.terminal = enabled;
+        self
+    }
+    /// Computer use needs the tool user, so it takes effect only with the terminal.
+    pub fn with_computer_use(mut self, enabled: bool) -> Self {
+        self.computer_use = enabled;
         self
     }
     pub fn with_control_ca(mut self, config_map: &str) -> Result<Self, Error> {
@@ -95,6 +102,12 @@ impl Layout {
                     json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}),
                     json!({"name":"CUBEBOT_TOOL_USER","value":"10001:10001"}),
                 ]);
+            if self.computer_use {
+                sandbox["env"]
+                    .as_array_mut()
+                    .expect("fixed environment")
+                    .push(json!({"name":"CUBEBOT_COMPUTER_ENABLED","value":"1"}));
+            }
         }
         if let Some(name) = &self.control_ca {
             sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));

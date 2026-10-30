@@ -10,7 +10,10 @@ const ID_NAME: u8 = 0x01;
 const EV_BITS: u8 = 0x11;
 const ABS_INFO: u8 = 0x12;
 const EV_KEY: u8 = 1;
+const EV_REL: u8 = 2;
 const EV_ABS: u8 = 3;
+/// REL_HWHEEL and REL_WHEEL, a tablet's scroll wheels.
+const WHEELS: [u16; 2] = [6, 8];
 const BUTTONS: [u16; 3] = [0x110, 0x111, 0x112]; // BTN_LEFT, BTN_RIGHT, BTN_MIDDLE
 
 pub struct Input {
@@ -29,7 +32,8 @@ impl Input {
         Self::new(b"cubebot keyboard", (1..=255).collect(), None)
     }
 
-    /// A pointer with three buttons whose ABS_X and ABS_Y span a `width` by `height` screen.
+    /// A pointer with three buttons and scroll wheels whose ABS_X and ABS_Y span a `width` by
+    /// `height` screen.
     pub fn tablet(width: u32, height: u32) -> Self {
         Self::new(
             b"cubebot tablet",
@@ -85,6 +89,7 @@ impl Input {
         match (self.config[0], self.config[1], self.axes) {
             (ID_NAME, 0, _) => self.name.to_vec(),
             (EV_BITS, EV_KEY, _) => bitmap(&self.keys),
+            (EV_BITS, EV_REL, Some(_)) => bitmap(&WHEELS),
             (EV_BITS, EV_ABS, Some(_)) => bitmap(&[0, 1]),
             (ABS_INFO, axis @ 0..=1, Some(axes)) => {
                 // min, max, fuzz, flat and resolution.
@@ -173,6 +178,8 @@ mod tests {
         assert!(select(&mut keyboard, EV_BITS, EV_ABS).is_empty());
         let mut tablet = Input::tablet(1280, 800);
         assert_eq!(select(&mut tablet, EV_BITS, EV_ABS), [0b11]);
+        assert_eq!(select(&mut tablet, EV_BITS, EV_REL), [0b0100_0000, 0b1]);
+        assert!(select(&mut keyboard, EV_BITS, EV_REL).is_empty());
         assert_eq!(select(&mut tablet, EV_BITS, EV_KEY)[34], 0b111);
         let y = select(&mut tablet, ABS_INFO, 1);
         assert_eq!(u32::from_le_bytes(y[4..8].try_into().unwrap()), 799);

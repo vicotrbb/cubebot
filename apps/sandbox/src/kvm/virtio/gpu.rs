@@ -94,15 +94,6 @@ impl Default for Gpu {
 }
 
 impl Gpu {
-    /// CRC-32 (ISO-HDLC, as zlib computes it) of the screen.
-    pub fn checksum(&self) -> u32 {
-        !self.screen.iter().fold(!0u32, |crc, &byte| {
-            (0..8).fold(crc ^ u32::from(byte), |crc, _| {
-                crc >> 1 ^ 0xedb8_8320 & (crc & 1).wrapping_neg()
-            })
-        })
-    }
-
     /// Serves one control request and returns how many bytes of response it wrote.
     fn serve(&mut self, chain: &Chain, memory: &GuestMemory) -> io::Result<u32> {
         // The longest fixed-size request, TRANSFER_TO_HOST_2D; missing fields read as zero.
@@ -513,14 +504,5 @@ mod tests {
         for (request, status) in refused {
             assert_eq!(driver.send(&mut gpu, request), status, "{request:x?}");
         }
-    }
-
-    #[test]
-    fn checksums_as_zlib_does() {
-        let gpu = Gpu {
-            screen: b"123456789".to_vec(),
-            ..Gpu::default()
-        };
-        assert_eq!(gpu.checksum(), 0xcbf4_3926);
     }
 }

@@ -86,6 +86,9 @@ impl Provider for Anthropic {
 fn body(request: &Request) -> Result<Value, Error> {
     // The Messages API requires an output limit; callers pass the model's own.
     let limit = request.max_output_tokens.ok_or(Error::Configuration)?;
+    let computer = crate::computer_calls(request.messages, |block| {
+        (block["toolset_name"] == "computer").then(|| block["id"].as_str())?
+    });
     let mut messages: Vec<Value> = Vec::new();
     for message in request.messages {
         let value = match message {
@@ -94,8 +97,12 @@ fn body(request: &Request) -> Result<Value, Error> {
                 json!({"role":"assistant","content":reply.native})
             }
             Message::Assistant(reply) => json!({"role":"assistant","content":reply.text}),
-            Message::ToolResult { call_id, output } => {
-                let result = json!({"type":"tool_result","tool_use_id":call_id,"content":output});
+            Message::ToolResult {
+                call_id,
+                output,
+                image,
+            } => {
+                let result = tool_result(call_id, output, image, computer.contains(&&**call_id));
                 // Parallel results answer one assistant message, so they share one user message.
                 if let Some(Value::Array(content)) = messages
                     .last_mut()
@@ -121,7 +128,10 @@ fn body(request: &Request) -> Result<Value, Error> {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":tool.strict}))
+            .map(|tool| match tool.computer {
+                true => json!({"type":"computer_toolset_20260801","configs":unserved()}),
+                false => json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":tool.strict}),
+            })
             .collect();
         body["tool_choice"] = if request.tools_disabled {
             json!({"type":"none"})
@@ -130,6 +140,52 @@ fn body(request: &Request) -> Result<Value, Error> {
         };
     }
     Ok(body)
+}
+
+/// A computer toolset call becomes a `computer` call whose action is the member's name.
+fn tool_use(block: &Value) -> Result<crate::FunctionCall, Error> {
+    let field = |name: &str| block[name].as_str().ok_or(Error::InvalidResponse);
+    if block["toolset_name"] != "computer" {
+        return call(field("id")?, field("name")?, block["input"].to_string());
+    }
+    let mut input = block["input"].clone();
+    let input = input.as_object_mut().ok_or(Error::InvalidResponse)?;
+    input.insert("action".into(), json!(field("name")?));
+    call(
+        field("id")?,
+        "computer",
+        Value::Object(input.clone()).to_string(),
+    )
+}
+
+/// Turns off the toolset members the desktop arbiter does not serve.
+fn unserved() -> Value {
+    [
+        "zoom",
+        "hold_key",
+        "left_mouse_down",
+        "left_mouse_up",
+        "cursor_position",
+    ]
+    .into_iter()
+    .map(|member| (member.to_owned(), json!({"enabled":false})))
+    .collect::<serde_json::Map<_, _>>()
+    .into()
+}
+
+/// A result with its image after the text; a computer toolset result echoes its toolset.
+fn tool_result(call_id: &str, output: &str, image: &Option<String>, computer: bool) -> Value {
+    let mut result = json!({"type":"tool_result","tool_use_id":call_id,"content":output});
+    if let Some(image) = image {
+        result["content"] = json!([
+            {"type":"text","text":output},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":image}}
+        ]);
+    }
+    if computer {
+        result["toolset_name"] = json!("computer");
+    }
+    result
 }
 
 #[derive(Default)]
@@ -245,14 +301,7 @@ impl Messages {
         for block in &self.blocks {
             match block["type"].as_str() {
                 Some("text") => text.push_str(block["text"].as_str().unwrap_or_default()),
-                Some("tool_use") => {
-                    let field = |name: &str| block[name].as_str().ok_or(Error::InvalidResponse);
-                    calls.push(call(
-                        field("id")?,
-                        field("name")?,
-                        block["input"].to_string(),
-                    )?);
-                }
+                Some("tool_use") => calls.push(tool_use(block)?),
                 _ => (),
             }
         }

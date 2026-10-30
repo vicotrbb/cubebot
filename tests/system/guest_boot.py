@@ -8,12 +8,15 @@ bootstrap token, report liveness over vsock, and on SIGTERM exit with the agent'
 status 0, leaving the workspace filesystem clean.
 The second boot must reopen the journal lock file the first one created. Before both,
 the sandbox must refuse to start in the host's own network namespace. A third boot
-replaces the agent with guest_desktop.py as init (ADR 0085): the pattern it draws
-through a DRM dumb buffer must be the host's screen, and an A key the host types must
-reach its evdev stream. The stand-in only records the bootstrap request, so this is not
-agent qualification.
+replaces the agent with guest_desktop.py as init (ADR 0085): through the host
+channel (`cubebot-sandbox desktop`), a screenshot must be the pattern it drew through a
+DRM dumb buffer, a person's key must be refused until that person takes control and then
+reach its evdev stream, and the guest's own key request must then be refused as agent
+input. The stand-in only records the bootstrap request, so this is not agent
+qualification.
 """
 
+import base64
 import http.server
 import json
 import os
@@ -21,6 +24,7 @@ import platform
 import queue
 import signal
 import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -48,6 +52,7 @@ SIZES = {
     if name in os.environ
 }
 VCPUS = int(SIZES.get("CUBEBOT_GUEST_VCPUS", 2))
+PERSON = "00000000-0000-0000-0000-00000000000a"
 
 
 def main() -> int:
@@ -160,18 +165,73 @@ def desktop(directory: Path, workspace: Path):
         deadline = time.monotonic() + DEADLINE
         if not until(lambda: b"Guest desktop drawn" in console.output, deadline):
             return "the guest did not draw through DRM"
-        sandbox.send_signal(signal.SIGUSR1)
-        if not until(lambda: b"Guest screen crc32" in console.output, deadline):
-            return "the sandbox did not report its screen"
-        expected = f"Guest screen crc32 {zlib.crc32(guest_desktop.pattern()):08x}"
-        if expected.encode() not in console.output:
-            return "the host's screen is not the pattern the guest drew"
-        sandbox.send_signal(signal.SIGUSR2)
+        screen = host(directory, {"input": person({"action": "screenshot"})})
+        if rgb(screen.get("png", "")) != expected_rgb():
+            return "the host channel's screenshot is not the pattern the guest drew"
+        key = {"input": person({"action": "key", "keys": ["a"]})}
+        if host(directory, key).get("error") != "this person does not have control":
+            return "a person's key was not refused before they took control"
+        host(directory, {"mode": {"mode": "human", "account": PERSON}})
+        if host(directory, key).get("error"):
+            return "the person holding control could not type"
         if not until(lambda: b"Guest key 30 pressed" in console.output, deadline):
-            return "the A key the host typed did not reach the guest's evdev"
+            return "the A key the person typed did not reach the guest's evdev"
+        if not until(lambda: b"Guest agent answer" in console.output, deadline):
+            return "the guest's agent key request got no answer"
+        if b"Guest agent answer a person has control" not in console.output:
+            return "agent input was not refused while a person held control"
         return None
     finally:
         end(sandbox)
+
+
+def person(action: dict) -> dict:
+    return {"account": PERSON, "action": action}
+
+
+def host(directory: Path, request: dict) -> dict:
+    """One request over the host channel, as the orchestrator sends it through exec."""
+    relay = subprocess.run(
+        ["sudo", "env", f"CUBEBOT_GUEST_DESKTOP_SOCKET={directory / 'desktop.sock'}"]
+        + [ROOT / "target/debug/cubebot-sandbox", "desktop"],
+        input=json.dumps(request).encode() + b"\n",
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    return json.loads(relay.stdout)
+
+
+def rgb(encoded: str) -> bytes:
+    """The pixels of an 8-bit RGB PNG whose rows use filters None or Up only."""
+    png = base64.b64decode(encoded)
+    if png[:8] != b"\x89PNG\r\n\x1a\n":
+        return b""
+    at, data, width = 8, b"", 0
+    while at < len(png):
+        (length,) = struct.unpack(">I", png[at : at + 4])
+        kind, body = png[at + 4 : at + 8], png[at + 8 : at + 8 + length]
+        if kind == b"IHDR":
+            width = struct.unpack(">I", body[:4])[0]
+        elif kind == b"IDAT":
+            data += body
+        at += 12 + length
+    rows, stride = zlib.decompress(data), width * 3
+    pixels, previous = bytearray(), bytes(stride)
+    for start in range(0, len(rows), stride + 1):
+        line = rows[start + 1 : start + 1 + stride]
+        if rows[start] == 2:
+            line = bytes((x + up) & 0xFF for x, up in zip(line, previous, strict=True))
+        pixels += line
+        previous = line
+    return bytes(pixels)
+
+
+def expected_rgb() -> bytes:
+    bgrx = guest_desktop.pattern()
+    rgb = bytearray(len(bgrx) // 4 * 3)
+    rgb[0::3], rgb[1::3], rgb[2::3] = bgrx[2::4], bgrx[1::4], bgrx[0::4]
+    return bytes(rgb)
 
 
 def launch(variables: dict) -> subprocess.Popen:
@@ -199,6 +259,7 @@ def environment(directory: Path, workspace: Path):
         "CUBEBOT_ORCHESTRATOR_ORIGIN": f"https://{HOST}:{PORT}/",
         "CUBEBOT_BOOTSTRAP_TOKEN_FILE": directory / "token",
         "CUBEBOT_CONTROL_CA_FILE": directory / "ca.pem",
+        "CUBEBOT_GUEST_DESKTOP_SOCKET": directory / "desktop.sock",
     } | SIZES
 
 

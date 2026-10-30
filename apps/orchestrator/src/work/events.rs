@@ -48,7 +48,7 @@ impl Work {
         let mut tx = self.pool.begin().await?;
         let canonical =
             access::conversation(&mut tx, actor, conversation, "conversation.read").await?;
-        let events: Vec<Event> = sqlx::query_as("SELECT e.id,e.turn_id,e.payload FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND e.id>$2 ORDER BY e.id LIMIT 100")
+        let events: Vec<Event> = sqlx::query_as("SELECT e.id,e.turn_id,e.payload #- '{outcome,image}' AS payload FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND e.id>$2 ORDER BY e.id LIMIT 100")
             .bind(canonical).bind(after).fetch_all(&mut *tx).await?;
         let ids: Vec<Uuid> = events
             .iter()

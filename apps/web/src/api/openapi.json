@@ -1310,6 +1310,23 @@
           },
           {
             "type": "object",
+            "description": "A computer-use call that returns the screen; `image` is a base64 PNG (ADR 0085).",
+            "required": ["output", "image", "status"],
+            "properties": {
+              "image": {
+                "type": "string"
+              },
+              "output": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["screenshot"]
+              }
+            }
+          },
+          {
+            "type": "object",
             "required": ["status"],
             "properties": {
               "status": {
