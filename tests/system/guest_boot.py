@@ -34,6 +34,13 @@ TOKEN = "cb_guest_acceptance"
 LOCK = "/runtime/tools/lock"
 DEADLINE = 60.0
 SHUTDOWN = 20.0
+# Set either to boot a guest of that size instead of the sandbox's 2 vCPUs and 2 GiB.
+SIZES = {
+    name: os.environ[name]
+    for name in ("CUBEBOT_GUEST_VCPUS", "CUBEBOT_GUEST_MEMORY_MIB")
+    if name in os.environ
+}
+VCPUS = int(SIZES.get("CUBEBOT_GUEST_VCPUS", 2))
 
 
 def main() -> int:
@@ -144,7 +151,7 @@ def environment(directory: Path, workspace: Path):
         "CUBEBOT_ORCHESTRATOR_ORIGIN": f"https://{HOST}:{PORT}/",
         "CUBEBOT_BOOTSTRAP_TOKEN_FILE": directory / "token",
         "CUBEBOT_CONTROL_CA_FILE": directory / "ca.pem",
-    }
+    } | SIZES
 
 
 class Console:
@@ -179,8 +186,12 @@ def check(sandbox: subprocess.Popen, console: Console, requests: queue.Queue):
     sandbox.send_signal(signal.SIGTERM)
     if not console.closed.wait(SHUTDOWN) or sandbox.wait(timeout=5) != 0:
         return f"the VM did not exit 0 within {SHUTDOWN}s of SIGTERM"
+    cpus = f"Brought up 1 node, {VCPUS} CPU{'s' if VCPUS > 1 else ''}".encode()
+    if cpus not in console.output:
+        return f"the guest did not bring up {VCPUS} vCPUs"
     for line, failure in [
         (b"Runtime startup failed", "the agent could not start, or open its journal"),
+        (b"APIC ID mismatch", "the guest found its CPUID and MP table APIC IDs differ"),
         (b"Guest workspace unmount failed", "the guest did not unmount its workspace"),
     ]:
         if line in console.output:

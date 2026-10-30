@@ -123,6 +123,7 @@ pub struct CpuidEntry {
 
 /// `kvm_cpuid2` with its flexible array sized to KVM_MAX_CPUID_ENTRIES.
 #[repr(C)]
+#[derive(Clone)]
 pub struct Cpuid {
     pub nent: u32,
     pub padding: u32,

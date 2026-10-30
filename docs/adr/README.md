@@ -92,6 +92,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0082](0082-one-permanent-conversation-per-agent.md) | One permanent conversation per agent | Accepted |
 | [0083](0083-agent-centric-execution-in-a-sandbox-boundary.md) | Agent-centric execution in a sandbox boundary | Accepted; sandbox mechanism amended by 0084 |
 | [0084](0084-in-house-vmm-as-the-agent-sandbox.md) | In-house VMM as the agent sandbox | Accepted |
+| [0085](0085-desktop-as-a-vmm-device.md) | Desktop as a VMM device | Accepted |
 
 Discussion will follow dependencies and adapt to answers: installation and trust; primary workflows and operating targets; agent identity and execution; conversations, rooms, tasks, and delegation; persistence and recovery; memory and context; provider and tool integration; console and mobile access; operations and validation.
 
