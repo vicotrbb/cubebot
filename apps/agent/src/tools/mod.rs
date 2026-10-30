@@ -228,6 +228,19 @@ impl Registry {
             .call(&self.sandbox, id, input)
     }
 
+    /// Writes a workspace file as the tool user, creating parent directories, so the agent's
+    /// own writes have the same reach as a tool call's.
+    pub async fn write(&self, path: &str, content: &str) -> bool {
+        let job = builtin::write(path, content.as_bytes().to_vec());
+        let mut command = self.sandbox.command(&job.argv[0]);
+        command
+            .args(&job.argv[1..])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        matches!(self.sandbox.wait(command, job.stdin).await, Ok(Some(0)))
+    }
+
     /// What a stopped call left in its retained output.
     pub fn preview(&self, id: Uuid) -> String {
         self.sandbox.preview(id)
@@ -299,6 +312,17 @@ mod tests {
                 .starts_with("Output preview unavailable")
         );
         std::fs::remove_dir_all(&sandbox.workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn the_registry_writes_files_as_the_tool_user() {
+        let registry = Registry::new(sandbox(), Vec::new());
+        let path = ".cubebot-skills/disk-triage/1/scripts/usage.sh";
+        assert!(registry.write(path, "du -sh *").await);
+        let workspace = &registry.sandbox.workspace;
+        let written = std::fs::read_to_string(workspace.join(path)).unwrap();
+        assert_eq!(written, "du -sh *");
+        std::fs::remove_dir_all(workspace).unwrap();
     }
 
     #[tokio::test]

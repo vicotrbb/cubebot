@@ -213,6 +213,7 @@ impl Agent {
                     self.store.clone(),
                     self.tools.clone(),
                     crate::memory::Memories::new(self.memory.clone()),
+                    crate::skills::Skills::new(self.memory.clone()),
                     cancelled,
                 ));
                 self.active = Some(Active { turn, cancel, task });

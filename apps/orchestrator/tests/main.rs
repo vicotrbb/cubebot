@@ -37,3 +37,4 @@ mod reconciliation;
 mod resource_registry;
 mod runtime_identity;
 mod runtime_token_review;
+mod skills;

@@ -1,15 +1,22 @@
 //! Owns persisted memory revisions and source links. People edit through the console; the agent's
 //! staged changes commit with the turn that made them. Every write names the revision it read, so
-//! a stale write never overwrites a newer one. Skills are not implemented yet.
+//! a stale write never overwrites a newer one. The shared skill library lives in `skills`.
 mod dreams;
+mod skills;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
 };
 use cubebot_protocol::runtime::{MEMORY_BYTES, MemoryChange};
-pub use dreams::{DreamRevision, DreamRun};
-pub(crate) use dreams::{commit_dream, finish_dream, recover_dreams, start_dream};
+pub use dreams::{DreamRevision, DreamRun, DreamSkill};
+pub(crate) use dreams::{
+    commit_dream, commit_dream_skill, finish_dream, recover_dreams, start_dream,
+};
 use serde::{Deserialize, Serialize};
+pub use skills::{
+    Files, InstallSkill, InstalledSkill, PublishSkill, ReviseSkill, Skill, SkillRevision, package,
+};
+pub(crate) use skills::{instructions, packages as skill_packages};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 

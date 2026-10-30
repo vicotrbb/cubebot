@@ -1,9 +1,10 @@
 //! One dream run (ADR 0025): with every lane idle, the agent asks its model to consolidate its own
-//! memories and commits the proposed changes one at a time, each naming the revision it read. A
+//! memories, and to write down a recurring procedure from its recent turns as a new or revised
+//! skill (ADR 0055). It commits the proposals one at a time, each naming the revision it read. A
 //! channel message stops the run before its next commit; what was committed stays.
 use crate::control::MemoryClient;
 use cubebot_protocol::runtime::{
-    Dream, DreamEnd, DreamOutcome, Memory, MemoryChange, ProviderKind, REPORT_BYTES,
+    Dream, DreamEnd, DreamOutcome, MemoryChange, ProviderKind, REPORT_BYTES, SkillChange,
 };
 use cubebot_providers::{Anthropic, Error, Event, Message, OpenAi, Provider, Request};
 use futures_util::StreamExt;
@@ -13,6 +14,8 @@ use uuid::Uuid;
 
 /// Changes one run may commit.
 const CHANGES: usize = 50;
+/// Skills one run may publish.
+const SKILLS: usize = 3;
 
 const SYSTEM: &str = "You maintain your own long-term memory while you are idle.";
 
@@ -20,11 +23,14 @@ const SYSTEM: &str = "You maintain your own long-term memory while you are idle.
 #[derive(Deserialize)]
 struct Reply {
     changes: Vec<serde_json::Value>,
+    #[serde(default)]
+    skills: Vec<serde_json::Value>,
     report: String,
 }
 
 struct Plan {
     changes: Vec<MemoryChange>,
+    skills: Vec<SkillChange>,
     report: String,
 }
 
@@ -69,12 +75,20 @@ async fn dream_on(
             return (DreamOutcome::Failed, plan.report);
         }
     }
+    for skill in plan.skills.iter().take(SKILLS) {
+        if *stop.borrow() {
+            return (DreamOutcome::Yielded, plan.report);
+        }
+        if !matches!(client.commit_dream_skill(run, skill).await, Ok(true)) {
+            return (DreamOutcome::Failed, plan.report);
+        }
+    }
     (DreamOutcome::Completed, plan.report)
 }
 
 /// The model's proposed changes, or why there are none; the reason becomes the run's report.
 async fn plan(dream: &Dream) -> Result<Plan, String> {
-    let messages = [Message::User(prompt(&dream.memories))];
+    let messages = [Message::User(prompt(dream))];
     let request = Request {
         model: &dream.model,
         key: &dream.api_key,
@@ -112,10 +126,12 @@ async fn reply<P: Provider>(
     Err(Error::Unavailable)
 }
 
-fn prompt(memories: &[Memory]) -> String {
-    let memories = serde_json::to_string(memories).unwrap_or_default();
+fn prompt(dream: &Dream) -> String {
+    let memories = serde_json::to_string(&dream.memories).unwrap_or_default();
+    let turns = serde_json::to_string(&dream.turns).unwrap_or_default();
+    let skills = serde_json::to_string(&dream.skills).unwrap_or_default();
     format!(
-        "Your memories, each with its id and revision: {memories}\n\nImprove them. Merge duplicates: revise the one to keep so it states everything the others did, then forget the others. Reconcile contradictions when one claim is clearly newer or better supported; otherwise leave them and say so in the report. Rewrite stale or vague summaries, and make each memory self-contained, using the words someone would search for. Never invent or drop a detail, and leave good memories alone. Reply with only a JSON object {{\"changes\":[...],\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. The report briefly says what you changed and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"report\":\"No changes needed.\"}}."
+        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision and files: {skills}\n\nFirst, improve your memories. Merge duplicates: revise the one to keep so it states everything the others did, then forget the others. Reconcile contradictions when one claim is clearly newer or better supported; otherwise leave them and say so in the report. Rewrite stale or vague summaries, and make each memory self-contained, using the words someone would search for. Never invent or drop a detail, and leave good memories alone. Then, only when the turns show a multi-step procedure that worked and will likely recur, write it as a skill, or improve an installed skill the turns showed lacking. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"report\":\"No changes needed.\"}}."
     )
 }
 
@@ -133,8 +149,14 @@ fn parse(reply: &str) -> Option<Plan> {
             MemoryChange::Forget { .. } => true,
         })
         .collect();
+    let skills = reply
+        .skills
+        .into_iter()
+        .filter_map(|skill| serde_json::from_value(skill).ok())
+        .collect();
     Some(Plan {
         changes,
+        skills,
         report: reply.report,
     })
 }
@@ -165,6 +187,11 @@ mod tests {
                 },
             ]
         );
+        assert!(plan.skills.is_empty());
+        let reply = r#"{"changes":[],"skills":[{"expected_revision":null,"files":{"SKILL.md":"---\nname: disk-triage\ndescription: x\n---\n"}},{"files":"x"}],"report":"Wrote a skill."}"#;
+        let plan = parse(reply).unwrap();
+        assert_eq!(plan.skills.len(), 1);
+        assert_eq!(plan.skills[0].expected_revision, None);
         assert!(parse("I merged them.").is_none());
         assert!(parse("[]").is_none());
     }

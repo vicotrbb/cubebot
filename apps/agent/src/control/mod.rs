@@ -188,8 +188,8 @@ impl MemoryClient {
         if response.status() == reqwest::StatusCode::CONFLICT {
             return Ok(None);
         }
-        // Fifty memories of at most 4 KiB each, JSON-escaped.
-        transport::decode_bounded(response, 1024 * 1024)
+        // Fifty memories of 4 KiB, twenty exchanges and twenty 64 KiB skills, JSON-escaped.
+        transport::decode_bounded(response, 8 * 1024 * 1024)
             .await
             .map(Some)
     }
@@ -207,6 +207,38 @@ impl MemoryClient {
             409 => Ok(false),
             _ => Err(Error::Unavailable),
         }
+    }
+
+    /// `false` once the run has ended, so the skill was not published.
+    pub async fn commit_dream_skill(
+        &self,
+        run: Uuid,
+        change: &runtime::SkillChange,
+    ) -> Result<bool, Error> {
+        let response = self.dream(reqwest::Method::POST, run, "/skills")?;
+        let response = response.json(change).send().await;
+        match response.map_err(|_| Error::Unavailable)?.status().as_u16() {
+            // A package the library refuses is dropped like a stale one; the run goes on.
+            204 | 400 => Ok(true),
+            409 => Ok(false),
+            _ => Err(Error::Unavailable),
+        }
+    }
+
+    /// This agent's installed revision of a skill; `None` when it is not installed.
+    pub async fn skill(&self, name: &str) -> Result<Option<runtime::SkillPackage>, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/skills/{name}`.
+        let url = self.url.join(&format!("skills/{name}"));
+        let url = url.map_err(|_| Error::Configuration)?;
+        let response = self.http.get(url).bearer_auth(&self.token).send().await;
+        let response = response.map_err(|_| Error::Unavailable)?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        // One package of at most 64 KiB, JSON-escaped.
+        transport::decode_bounded(response, 512 * 1024)
+            .await
+            .map(Some)
     }
 
     pub async fn finish_dream(&self, run: Uuid, end: &runtime::DreamEnd) -> Result<(), Error> {
