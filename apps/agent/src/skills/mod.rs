@@ -29,6 +29,7 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
         description: "Load one of your installed skills by the name your instructions list, before work it covers. Returns its instructions; its supporting files are written to the workspace, and you run its scripts with your ordinary tools.".into(),
         parameters: json!({"type":"object","properties":{"name":{"type":"string"}},"required":["name"],"additionalProperties":false}),
         strict: true,
+        computer: false,
     }]
 }
 

@@ -207,10 +207,11 @@ impl<P: Provider> Session<'_, P> {
                 Ok(outputs) => outputs,
                 Err(code) => return failed(code),
             };
-            for (call, output) in calls.into_iter().zip(outputs) {
+            for (call, (output, image)) in calls.into_iter().zip(outputs) {
                 context.messages.push(Message::ToolResult {
                     call_id: call.call_id,
                     output,
+                    image,
                 });
             }
             if full {
@@ -278,7 +279,10 @@ impl<P: Provider> Session<'_, P> {
 
     /// Journals every call before any starts, runs them in parallel and journals each result as
     /// it arrives. Outputs come back in call order.
-    async fn call(&mut self, calls: &[FunctionCall]) -> Result<Vec<String>, &'static str> {
+    async fn call(
+        &mut self,
+        calls: &[FunctionCall],
+    ) -> Result<Vec<(String, Option<String>)>, &'static str> {
         let prepared = prepare(self.tools, (self.memories, self.skills), calls);
         let mut running = FuturesUnordered::new();
         let mut unfinished = Vec::new();
@@ -287,13 +291,13 @@ impl<P: Provider> Session<'_, P> {
             unfinished.push(id);
             running.push(async move { (index, id, call.await) });
         }
-        let mut outputs = vec![String::new(); calls.len()];
+        let mut outputs = vec![(String::new(), None); calls.len()];
         let mut cancel = self.cancel.clone();
         while !running.is_empty() {
             tokio::select! {
                 Some((index, id, outcome)) = running.next() => {
                     unfinished.retain(|other| *other != id);
-                    outputs[index] = serde_json::to_string(&outcome).unwrap_or_default();
+                    outputs[index] = model_output(&outcome);
                     self.journal(TurnEvent::ToolResult { id, outcome })?;
                 }
                 _ = cancel.wait_for(|cancelled| *cancelled) => break,
@@ -444,6 +448,14 @@ fn prepare<'a>(
             (id, call.name.clone(), input, running)
         })
         .collect()
+}
+
+/// What the model reads of an outcome: a screenshot's image goes beside its text, not in it.
+fn model_output(outcome: &Outcome) -> (String, Option<String>) {
+    match outcome {
+        Outcome::Screenshot { output, image } => (output.clone(), Some(image.clone())),
+        _ => (serde_json::to_string(outcome).unwrap_or_default(), None),
+    }
 }
 
 fn failed(code: &str) -> TurnEvent {

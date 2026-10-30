@@ -47,6 +47,7 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
             description: description.into(),
             parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
             strict: true,
+            computer: false,
         }
     };
     let id = json!({"type":["string","null"],"description":"The id search_memory returned for the memory to correct; null for a new memory."});

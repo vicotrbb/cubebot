@@ -497,6 +497,12 @@ export interface components {
           status: 'stopped'
         }
       | {
+          image: string
+          output: string
+          /** @enum {string} */
+          status: 'screenshot'
+        }
+      | {
           /** @enum {string} */
           status: 'uncertain'
         }

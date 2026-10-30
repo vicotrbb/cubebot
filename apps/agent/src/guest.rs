@@ -1,7 +1,8 @@
 //! `cubebot-agent guest`: init of the `kvm` sandbox's guest (ADR 0084). It mounts the workspace
 //! disk, receives the agent's environment over the control channel ([`cubebot_protocol::guest`]),
 //! runs the agent as its child while reaping orphaned tool processes, rewrites received files the
-//! host refreshes, and reports liveness and then the agent's exit status to the host. When the
+//! host refreshes, and reports liveness and then the agent's exit status to the host. With
+//! computer use on it starts the desktop (ADR 0085) as the tool user. When the
 //! agent exits it syncs the disks and reboots, which ends the VM; the host ending its side of the
 //! channel stops the agent first.
 use cubebot_protocol::{
@@ -29,10 +30,13 @@ use std::{
     net::Ipv4Addr,
     os::{
         fd::AsRawFd,
-        unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
+        unix::{
+            fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt},
+            process::CommandExt,
+        },
     },
     path::Path,
-    process::{Command, ExitCode},
+    process::{Command, ExitCode, Stdio},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -45,6 +49,17 @@ const WORKSPACE: &str = "/var/lib/cubebot/workspace";
 const PRIVATE: &str = "/run/cubebot";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const REPORT_INTERVAL: Duration = Duration::from_secs(5);
+const CHROMIUM: [&str; 9] = [
+    "--no-sandbox",
+    "--test-type",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-gpu",
+    "--start-maximized",
+    "--password-store=basic",
+    "--user-data-dir=/var/lib/cubebot/workspace/.config/chromium",
+    "about:blank",
+];
 
 pub fn init() -> ExitCode {
     if let Err(error) = boot() {
@@ -69,6 +84,7 @@ fn boot() -> io::Result<()> {
     let channel = control_channel()?;
     let mut updates = BufReader::new(channel.try_clone()?);
     let environment = prepare(receive(&mut updates)?)?;
+    desktop(&environment);
     let agent = Command::new(std::env::current_exe()?)
         .env_clear()
         .envs(environment)
@@ -83,6 +99,10 @@ fn boot() -> io::Result<()> {
 
 fn mount_filesystems() -> io::Result<()> {
     let private = MsFlags::MS_NOSUID | MsFlags::MS_NODEV;
+    // The kernel's devtmpfs has neither; terminals and browsers need both.
+    for directory in ["/dev/pts", "/dev/shm"] {
+        DirBuilder::new().mode(0o755).create(directory)?;
+    }
     let mounts = [
         ("proc", "/proc", "proc", private | MsFlags::MS_NOEXEC, None),
         ("sysfs", "/sys", "sysfs", private | MsFlags::MS_NOEXEC, None),
@@ -94,6 +114,14 @@ fn mount_filesystems() -> io::Result<()> {
             Some("mode=0755"),
         ),
         ("tmpfs", "/tmp", "tmpfs", private, Some("mode=1777")),
+        ("tmpfs", "/dev/shm", "tmpfs", private, Some("mode=1777")),
+        (
+            "devpts",
+            "/dev/pts",
+            "devpts",
+            MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
+            Some("mode=0620,ptmxmode=0666"),
+        ),
         // The workspace disk is the second virtio disk, after the read-only root. Without delayed
         // allocation each journal commit writes file data first, so the commit that journals a
         // tool result also persists that tool's effects; the guest's page cache dies with the VM.
@@ -324,6 +352,98 @@ fn storage(tool_user: Option<&str>) -> io::Result<()> {
     if let Some((uid, gid)) = owner.filter(|&(uid, gid)| uid != 0 && gid != 0) {
         std::os::unix::fs::chown(WORKSPACE, Some(uid), Some(gid))?;
     }
+    Ok(())
+}
+
+/// Starts the desktop when computer use is on and a tool user is configured. A desktop that
+/// fails to start leaves the agent running without a screen.
+fn desktop(environment: &[(String, String)]) {
+    let setting = |wanted: &str| {
+        environment
+            .iter()
+            .find(|(name, _)| name == wanted)
+            .map(|(_, value)| value.as_str())
+    };
+    let user = setting("CUBEBOT_TOOL_USER")
+        .and_then(|user| user.split_once(':'))
+        .and_then(|(uid, gid)| Some((uid.parse().ok()?, gid.parse().ok()?)))
+        .filter(|&(uid, gid)| uid != 0 && gid != 0);
+    let (Some("1"), Some((uid, gid))) = (setting("CUBEBOT_COMPUTER_ENABLED"), user) else {
+        return;
+    };
+    std::thread::spawn(move || {
+        if let Err(error) = start_desktop(uid, gid) {
+            eprintln!("Guest desktop failed: {error}");
+        }
+    });
+}
+
+/// Xorg on the virtio-gpu display with the virtio keyboard (event0) and tablet (event1), which
+/// the kernel probes in the sandbox's device order, then openbox, xterm and Chromium, all as the
+/// tool user. With no udev or logind in the guest, Xorg opens the devices and its VT itself.
+fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
+    let devices = [
+        "/dev/dri/card0",
+        "/dev/input/event0",
+        "/dev/input/event1",
+        "/dev/tty0",
+        "/dev/tty1",
+    ];
+    for device in devices {
+        std::os::unix::fs::chown(device, Some(uid), Some(gid))
+            .map_err(|error| io::Error::other(format!("{device}: {error}")))?;
+    }
+    let client = |program: &str| {
+        let mut command = Command::new(program);
+        command
+            .env_clear()
+            .envs([
+                ("HOME", WORKSPACE),
+                ("PATH", PATH),
+                ("DISPLAY", ":0"),
+                ("LANG", "C.UTF-8"),
+            ])
+            .current_dir(WORKSPACE)
+            .uid(uid)
+            .gid(gid)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command
+    };
+    // VT ioctls need tty1 as the caller's controlling terminal, which `setsid -c` makes it and
+    // `-keeptty` keeps. Xorg's errors reach the console; its log is in ~/.local/share/xorg.
+    let terminal = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/tty1")?;
+    client("/usr/bin/setsid")
+        .args([
+            "-c",
+            "/usr/lib/xorg/Xorg",
+            ":0",
+            "vt1",
+            "-keeptty",
+            "-nolisten",
+            "tcp",
+            "-noreset",
+        ])
+        .stdin(terminal)
+        .stderr(Stdio::inherit())
+        .spawn()?;
+    let display = Path::new("/tmp/.X11-unix/X0");
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !display.exists() {
+        if std::time::Instant::now() > deadline {
+            return Err(io::Error::other("Xorg did not open display :0"));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    client("/usr/bin/openbox").spawn()?;
+    client("/usr/bin/xterm").spawn()?;
+    // The VM bounds Chromium, and the guest kernel has no user namespaces for its own sandbox.
+    client("/usr/bin/chromium").args(CHROMIUM).spawn()?;
+    eprintln!("Guest desktop started");
     Ok(())
 }
 

@@ -129,10 +129,12 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         Message::ToolResult {
             call_id: "toolu_a".into(),
             output: "one".into(),
+            image: None,
         },
         Message::ToolResult {
             call_id: "toolu_b".into(),
             output: "two".into(),
+            image: None,
         },
     ];
     let tools = [Tool {
@@ -140,6 +142,7 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         description: "Run".into(),
         parameters: json!({"type":"object"}),
         strict: true,
+        computer: false,
     }];
     let request = Request {
         model: "test-model",
@@ -232,6 +235,80 @@ async fn truncated_and_overloaded_streams_are_errors_not_replies() {
     assert_eq!(
         events[0].as_ref().err().unwrap().code(),
         "provider_unavailable"
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn computer_toolset_calls_become_computer_calls_and_echo_their_toolset() {
+    async fn computer(Json(body): Json<Value>) -> Response {
+        let tool = &body["tools"][0];
+        assert_eq!(tool["type"], "computer_toolset_20260801");
+        assert_eq!(tool["configs"]["zoom"], json!({"enabled":false}));
+        let result = &body["messages"][2]["content"][0];
+        assert_eq!(result["toolset_name"], "computer");
+        assert_eq!(result["content"][1]["source"]["data"], "iVBORw0KGgo=");
+        sse(&[
+            json!({"type":"message_start","message":{"usage":{"input_tokens":10}}}),
+            json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_2","name":"left_click","toolset_name":"computer","input":{}}}),
+            delta(
+                0,
+                json!({"type":"input_json_delta","partial_json":"{\"coordinate\":[5,6]}"}),
+            ),
+            json!({"type":"content_block_stop","index":0}),
+            json!({"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":5}}),
+            json!({"type":"message_stop"}),
+        ])
+    }
+    let (origin, task) = serve(Router::new().route("/messages", post(computer))).await;
+    let provider = Anthropic::for_loopback_tests(&origin).unwrap();
+    let history = [
+        Message::User("Open the browser".into()),
+        Message::Assistant(cubebot_providers::Reply {
+            text: String::new(),
+            calls: Vec::new(),
+            native: json!([{"type":"tool_use","id":"toolu_1","name":"screenshot","toolset_name":"computer","input":{}}]),
+        }),
+        Message::ToolResult {
+            call_id: "toolu_1".into(),
+            output: String::new(),
+            image: Some("iVBORw0KGgo=".into()),
+        },
+    ];
+    let tools = [Tool {
+        name: "computer".into(),
+        description: String::new(),
+        parameters: json!({}),
+        strict: false,
+        computer: true,
+    }];
+    let request = Request {
+        model: "test-model",
+        key: "controlled-key",
+        system: "",
+        messages: &history,
+        tools: &tools,
+        tools_disabled: false,
+        max_output_tokens: Some(1000),
+    };
+    let events: Vec<Event> = provider
+        .stream(&request)
+        .map(Result::unwrap)
+        .collect()
+        .await;
+    let [Event::Done { reply, .. }] = &events[..] else {
+        panic!("unexpected events");
+    };
+    let [call] = &reply.calls[..] else {
+        panic!("expected one call");
+    };
+    assert_eq!(
+        (call.call_id.as_str(), call.name.as_str()),
+        ("toolu_2", "computer")
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&call.arguments).unwrap(),
+        json!({"action":"left_click","coordinate":[5,6]})
     );
     task.abort();
 }

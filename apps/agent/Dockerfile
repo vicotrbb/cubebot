@@ -17,9 +17,14 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # kernel runs `cubebot-agent guest` as init, which mounts the workspace disk on /var/lib/cubebot.
 FROM debian:bookworm-slim
 # CUBEBOT_TOOL_USER is 10001:10001; guest init creates and chowns its home on the workspace disk.
+# The desktop (ADR 0085): Xorg's modesetting driver on virtio-gpu, evdev input, openbox, xterm
+# and Chromium, which guest init starts as the tool user when computer use is on.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
         git curl python3 build-essential ripgrep jq openssh-client \
+        xserver-xorg-core xserver-xorg-input-evdev openbox xterm chromium \
+        xfonts-base fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -m 0755 /var/lib/cubebot \
     && groupadd -g 10001 tool && useradd -u 10001 -g 10001 -M -d /var/lib/cubebot/workspace -s /bin/bash tool
+COPY apps/agent/xorg.conf /etc/X11/xorg.conf
 COPY --from=build /out/cubebot-agent /usr/local/bin/

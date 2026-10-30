@@ -15,6 +15,9 @@ pub struct ControllerConfig {
     control_ca_config_map: Option<String>,
     #[serde(default)]
     terminal_enabled: bool,
+    /// Offers the provider's computer-use tool and starts each guest's desktop (ADR 0085).
+    #[serde(default)]
+    computer_use_enabled: bool,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -64,7 +67,8 @@ impl ControllerConfig {
             &self.orchestrator_origin,
             self.network.clone(),
         )?
-        .with_terminal(self.terminal_enabled);
+        .with_terminal(self.terminal_enabled)
+        .with_computer_use(self.computer_use_enabled);
         match &self.control_ca_config_map {
             Some(name) => layout.with_control_ca(name),
             None => Ok(layout),

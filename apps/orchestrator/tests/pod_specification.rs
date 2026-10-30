@@ -63,12 +63,20 @@ fn terminal_flag_and_control_ca_are_explicit() {
     let spec = serde_json::to_value(layout().pod("workspace").unwrap()).unwrap();
     assert!(!spec.to_string().contains("CUBEBOT_TERMINAL_ENABLED"));
     assert!(!spec.to_string().contains("control-ca"));
+    let computer_alone = layout().with_computer_use(true);
+    let spec = serde_json::to_value(computer_alone.pod("workspace").unwrap()).unwrap();
+    assert!(!spec.to_string().contains("CUBEBOT_COMPUTER_ENABLED"));
     let configured = layout()
         .with_terminal(true)
+        .with_computer_use(true)
         .with_control_ca("control-ca")
         .unwrap();
     let spec = serde_json::to_value(configured.pod("workspace").unwrap()).unwrap();
     let env = spec["containers"][0]["env"].as_array().unwrap();
+    assert!(
+        env.iter()
+            .any(|item| item["name"] == "CUBEBOT_COMPUTER_ENABLED" && item["value"] == "1")
+    );
     assert!(
         env.iter()
             .any(|item| item["name"] == "CUBEBOT_TERMINAL_ENABLED" && item["value"] == "1")

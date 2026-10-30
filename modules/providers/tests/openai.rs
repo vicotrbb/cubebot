@@ -203,6 +203,7 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
         Message::ToolResult {
             call_id: "call_0".into(),
             output: "done".into(),
+            image: None,
         },
     ];
     let tools = [
@@ -211,12 +212,14 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
             description: "Run".into(),
             parameters: json!({"type":"object"}),
             strict: true,
+            computer: false,
         },
         Tool {
             name: "external".into(),
             description: "Anything".into(),
             parameters: json!({"type":"object"}),
             strict: false,
+            computer: false,
         },
     ];
     let events = collect(&provider, &request(&messages, &tools)).await;
@@ -230,5 +233,62 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
     assert_eq!(call.call_id, "call_1");
     assert_eq!(call.name, "terminal");
     assert!(call.arguments.contains("printf hello"));
+    task.abort();
+}
+
+#[tokio::test]
+async fn computer_calls_arrive_as_action_batches_and_answer_with_screenshots() {
+    async fn computer(Json(body): Json<Value>) -> Response {
+        assert_eq!(body["tools"], json!([{"type":"computer"}]));
+        assert_eq!(body["input"][3]["type"], "computer_call_output");
+        assert_eq!(
+            body["input"][3]["output"]["image_url"],
+            "data:image/png;base64,iVBORw0KGgo="
+        );
+        sse(&[
+            json!({"type":"response.completed","response":{"status":"completed","output":[
+            {"type":"computer_call","call_id":"call_2","status":"completed","actions":[
+                {"type":"click","button":"left","x":405,"y":157},{"type":"type","text":"penguin"}]}]}}),
+        ])
+    }
+    let (origin, task) = serve(Router::new().route("/responses", post(computer))).await;
+    let provider = OpenAi::for_loopback_tests(&origin).unwrap();
+    let earlier = cubebot_providers::Reply {
+        text: String::new(),
+        calls: Vec::new(),
+        native: json!([{"type":"computer_call","call_id":"call_1","actions":[{"type":"screenshot"}]}]),
+    };
+    let messages = [
+        Message::User("Search for penguins".into()),
+        Message::Assistant(earlier),
+        Message::ToolResult {
+            call_id: "call_1".into(),
+            output: "OK".into(),
+            image: Some("iVBORw0KGgo=".into()),
+        },
+    ];
+    let tools = [Tool {
+        name: "computer".into(),
+        description: String::new(),
+        parameters: json!({}),
+        strict: false,
+        computer: true,
+    }];
+    let events = collect(&provider, &request(&messages, &tools)).await;
+    let [Event::Done { reply, .. }] = &events[..] else {
+        panic!("expected one reply");
+    };
+    let [call] = &reply.calls[..] else {
+        panic!("expected one call");
+    };
+    assert_eq!(
+        (call.call_id.as_str(), call.name.as_str()),
+        ("call_2", "computer")
+    );
+    let arguments: Value = serde_json::from_str(&call.arguments).unwrap();
+    assert_eq!(
+        arguments["actions"][1],
+        json!({"type":"type","text":"penguin"})
+    );
     task.abort();
 }

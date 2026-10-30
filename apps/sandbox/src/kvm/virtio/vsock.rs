@@ -1,10 +1,15 @@
-//! virtio-vsock (virtio 1.2 §5.10) carrying only the guest's control channel
-//! ([`cubebot_protocol::guest`]): the guest may hold one stream to the host's control port, and
-//! every other packet is answered with a reset.
+//! virtio-vsock (virtio 1.2 §5.10) carrying the guest's control channel
+//! ([`cubebot_protocol::guest`]) and desktop requests ([`cubebot_protocol::desktop`]): the guest
+//! may hold one stream to the host's control port and a few to its desktop port, and every other
+//! packet is answered with a reset.
 use super::{Device, queue::Queue};
+use crate::kvm::desktop::Request;
 use crate::kvm::memory::{GuestMemory, invalid};
-use cubebot_protocol::guest::{GUEST_CID, HOST_CID, LINE_LIMIT, PORT, Report};
-use std::{collections::VecDeque, io};
+use cubebot_protocol::{
+    desktop,
+    guest::{GUEST_CID, HOST_CID, LINE_LIMIT, PORT, Report},
+};
+use std::{collections::VecDeque, io, sync::mpsc::Sender};
 
 const HEADER: usize = 44;
 const STREAM: u16 = 1;
@@ -21,6 +26,7 @@ const SHUTDOWN_SEND: u32 = 2;
 const BUFFER: u32 = 64 << 10;
 const RECEIVE: usize = 0;
 const TRANSMIT: usize = 1;
+const DESKTOP_STREAMS: usize = 4;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 struct Header {
@@ -83,9 +89,11 @@ impl Header {
     }
 }
 
-/// The open control stream and both directions of its credit (§5.10.6.3).
+/// One open stream and both directions of its credit (§5.10.6.3).
 struct Connection {
+    /// The guest's port, and the host port it connected to.
     port: u32,
+    service: u32,
     peer_buffer: u32,
     peer_forwarded: u32,
     sent: u32,
@@ -102,23 +110,33 @@ impl Connection {
         self.outbox.len().min(credit as usize)
     }
 
-    /// The whole report lines in `payload`, or None when the guest breaks the protocol.
-    fn accept(&mut self, payload: &[u8]) -> Option<Vec<Report>> {
+    /// The whole lines in `payload`, or None once the unfinished line passes `limit`.
+    fn lines(&mut self, payload: &[u8], limit: usize) -> Option<Vec<Vec<u8>>> {
         self.forwarded = self.forwarded.wrapping_add(payload.len() as u32);
         self.line.extend_from_slice(payload);
-        let mut reports = Vec::new();
+        let mut lines = Vec::new();
         while let Some(end) = self.line.iter().position(|&byte| byte == b'\n') {
-            reports.push(serde_json::from_slice(&self.line[..end]).ok()?);
-            self.line.drain(..=end);
+            lines.push(self.line.drain(..=end).take(end).collect());
         }
-        (self.line.len() <= LINE_LIMIT).then_some(reports)
+        (self.line.len() <= limit).then_some(lines)
+    }
+
+    fn header(&self, op: u16) -> Header {
+        let request = Header {
+            src_port: self.port,
+            dst_port: self.service,
+            ..Header::default()
+        };
+        request.reply(op)
     }
 }
 
 pub struct Vsock {
     config: [u8; 8],
     environment: Vec<u8>,
-    connection: Option<Connection>,
+    connections: Vec<Connection>,
+    /// Each desktop request line with the guest port to answer, for the arbiter.
+    desktop: Sender<Request>,
     /// Packets without payload, waiting for receive buffers.
     replies: VecDeque<Header>,
     alive: bool,
@@ -127,11 +145,12 @@ pub struct Vsock {
 
 impl Vsock {
     /// `environment` is the encoded message the guest receives when it connects.
-    pub fn new(environment: Vec<u8>) -> Self {
+    pub fn new(environment: Vec<u8>, desktop: Sender<Request>) -> Self {
         Self {
             config: u64::from(GUEST_CID).to_le_bytes(),
             environment,
-            connection: None,
+            connections: Vec::new(),
+            desktop,
             replies: VecDeque::new(),
             alive: false,
             exit: None,
@@ -143,77 +162,128 @@ impl Vsock {
         self.exit
     }
 
+    fn control(&mut self) -> Option<&mut Connection> {
+        self.connections.iter_mut().find(|c| c.service == PORT)
+    }
+
     /// Replaces the environment a new stream receives, and sends `changed` on the open one.
     pub fn refresh(&mut self, environment: Vec<u8>, changed: &[u8]) {
         self.environment = environment;
-        if let Some(connection) = &mut self.connection {
+        if let Some(connection) = self.control() {
             connection.outbox.extend(changed);
+        }
+    }
+
+    /// Queues the arbiter's response line on the desktop stream from guest `port`, if still open.
+    pub fn respond(&mut self, port: u32, response: &[u8]) {
+        let open = self
+            .connections
+            .iter_mut()
+            .find(|c| c.service == desktop::PORT && c.port == port);
+        if let Some(connection) = open {
+            connection.outbox.extend(response);
+            connection.outbox.push_back(b'\n');
         }
     }
 
     /// Asks the guest to stop by ending the control stream; false when no stream is open.
     pub fn shutdown(&mut self) -> bool {
-        let Some(connection) = &self.connection else {
+        let Some(connection) = self.control() else {
             return false;
         };
-        let request = Header {
-            src_port: connection.port,
-            dst_port: PORT,
-            ..Header::default()
-        };
-        self.replies.push_back(Header {
+        let shutdown = Header {
             flags: SHUTDOWN_SEND,
-            ..request.reply(SHUTDOWN)
-        });
+            ..connection.header(SHUTDOWN)
+        };
+        self.replies.push_back(shutdown);
         true
     }
 
     fn handle(&mut self, header: Header, payload: &[u8]) {
-        match header.op {
-            RESET if self.current(&header) => self.close(),
-            RESET => (),
-            REQUEST if self.connection.is_none() && control(&header) => self.open(header),
-            _ if self.current(&header) => self.serve(header, payload),
+        match (header.op, self.current(&header)) {
+            (RESET, Some(index)) => self.close(index),
+            (RESET, None) => (),
+            (REQUEST, None) if self.admits(&header) => self.open(header),
+            (_, Some(index)) => self.serve(index, header, payload),
             _ => self.replies.push_back(header.reply(RESET)),
         }
     }
 
-    fn current(&self, header: &Header) -> bool {
-        control(header)
-            && self
-                .connection
-                .as_ref()
-                .is_some_and(|c| c.port == header.src_port)
+    fn current(&self, header: &Header) -> Option<usize> {
+        if !addressed(header) {
+            return None;
+        }
+        self.connections
+            .iter()
+            .position(|c| c.port == header.src_port && c.service == header.dst_port)
+    }
+
+    /// One control stream, and a few desktop streams so no guest process can hold the only one.
+    fn admits(&self, header: &Header) -> bool {
+        let open = |service| {
+            self.connections
+                .iter()
+                .filter(|c| c.service == service)
+                .count()
+        };
+        addressed(header)
+            && match header.dst_port {
+                PORT => open(PORT) == 0,
+                desktop::PORT => open(desktop::PORT) < DESKTOP_STREAMS,
+                _ => false,
+            }
     }
 
     /// Resets a stream that broke the protocol.
     fn refuse(&mut self, header: Header) {
-        if self.current(&header) {
-            self.close();
+        if let Some(index) = self.current(&header) {
+            self.close(index);
         }
         self.replies.push_back(header.reply(RESET));
     }
 
     fn open(&mut self, request: Header) {
-        self.connection = Some(Connection {
+        let outbox = match request.dst_port {
+            PORT => self.environment.iter().copied().collect(),
+            _ => VecDeque::new(),
+        };
+        self.connections.push(Connection {
             port: request.src_port,
+            service: request.dst_port,
             peer_buffer: request.buf_alloc,
             peer_forwarded: request.fwd_cnt,
             sent: 0,
             forwarded: 0,
-            outbox: self.environment.iter().copied().collect(),
+            outbox,
             line: Vec::new(),
         });
         self.replies.push_back(request.reply(RESPONSE));
     }
 
-    fn serve(&mut self, header: Header, payload: &[u8]) {
-        let connection = self.connection.as_mut().expect("current connection");
+    fn serve(&mut self, index: usize, header: Header, payload: &[u8]) {
+        let connection = &mut self.connections[index];
         connection.peer_buffer = header.buf_alloc;
         connection.peer_forwarded = header.fwd_cnt;
         match header.op {
-            DATA => match connection.accept(payload) {
-                Some(reports) => reports.into_iter().for_each(|report| self.record(report)),
+            DATA if connection.service == PORT => match connection.lines(payload, LINE_LIMIT) {
+                Some(lines) => {
+                    for line in lines {
+                        match serde_json::from_slice(&line) {
+                            Ok(report) => self.record(report),
+                            Err(_) => return self.refuse(header),
+                        }
+                    }
+                }
+                None => return self.refuse(header),
+            },
+            DATA => match connection.lines(payload, desktop::LINE_LIMIT) {
+                Some(lines) => {
+                    for line in lines {
+                        // The arbiter outlives the device; a send can only fail at exit.
+                        let port = header.src_port;
+                        let _ = self.desktop.send(Request::Guest { port, line });
+                    }
+                }
                 None => return self.refuse(header),
             },
             CREDIT_REQUEST => (),
@@ -237,9 +307,9 @@ impl Vsock {
         }
     }
 
-    fn close(&mut self) {
-        self.connection = None;
-        if std::mem::take(&mut self.alive) {
+    fn close(&mut self, index: usize) {
+        let closed = self.connections.swap_remove(index);
+        if closed.service == PORT && std::mem::take(&mut self.alive) {
             eprintln!("Guest control channel closed");
         }
     }
@@ -277,7 +347,10 @@ impl Vsock {
                 Some(header) => (header, Vec::new()),
                 None => self.data(room as usize),
             };
-            let connection = self.connection.as_ref();
+            let connection = self
+                .connections
+                .iter()
+                .find(|c| c.port == header.dst_port && c.service == header.src_port);
             header.buf_alloc = BUFFER;
             header.fwd_cnt = connection.map_or(0, |connection| connection.forwarded);
             header.len = payload.len() as u32;
@@ -290,20 +363,19 @@ impl Vsock {
     }
 
     fn pending(&self) -> bool {
-        !self.replies.is_empty() || self.connection.as_ref().is_some_and(|c| c.sendable() > 0)
+        !self.replies.is_empty() || self.connections.iter().any(|c| c.sendable() > 0)
     }
 
     fn data(&mut self, room: usize) -> (Header, Vec<u8>) {
-        let connection = self.connection.as_mut().expect("pending data");
+        let connection = self
+            .connections
+            .iter_mut()
+            .find(|c| c.sendable() > 0)
+            .expect("pending data");
         let len = connection.sendable().min(room);
         let payload: Vec<u8> = connection.outbox.drain(..len).collect();
         connection.sent = connection.sent.wrapping_add(len as u32);
-        let request = Header {
-            src_port: connection.port,
-            dst_port: PORT,
-            ..Header::default()
-        };
-        (request.reply(DATA), payload)
+        (connection.header(DATA), payload)
     }
 
     /// Delivers packets queued outside a driver notification, such as a shutdown.
@@ -312,11 +384,11 @@ impl Vsock {
     }
 }
 
-fn control(header: &Header) -> bool {
+/// A stream packet from the guest to the host.
+fn addressed(header: &Header) -> bool {
     header.kind == STREAM
         && header.src_cid == u64::from(GUEST_CID)
         && header.dst_cid == u64::from(HOST_CID)
-        && header.dst_port == PORT
 }
 
 impl Device for Vsock {
@@ -343,7 +415,9 @@ impl Device for Vsock {
     }
 
     fn reset(&mut self) {
-        self.close();
+        while !self.connections.is_empty() {
+            self.close(0);
+        }
         self.replies.clear();
     }
 }
@@ -360,6 +434,7 @@ mod tests {
         memory: GuestMemory,
         queues: [Queue; 3],
         vsock: Vsock,
+        desktop: std::sync::mpsc::Receiver<Request>,
         sent: u16,
         posted: u16,
         received: u16,
@@ -367,10 +442,12 @@ mod tests {
 
     impl Guest {
         fn new() -> Self {
+            let (sender, desktop) = std::sync::mpsc::channel();
             Self {
                 memory: GuestMemory::map(1 << 20).unwrap(),
                 queues: [RX.queue(64), TX.queue(64), Queue::default()],
-                vsock: Vsock::new(b"A=1\0\0".to_vec()),
+                vsock: Vsock::new(b"A=1\0\0".to_vec(), sender),
+                desktop,
                 sent: 0,
                 posted: 0,
                 received: 0,
@@ -386,10 +463,14 @@ mod tests {
         }
 
         fn send(&mut self, op: u16, port: u32, credit: (u32, u32), payload: &[u8]) {
+            self.send_from(5000, op, port, credit, payload);
+        }
+
+        fn send_from(&mut self, from: u32, op: u16, port: u32, credit: (u32, u32), payload: &[u8]) {
             let header = Header {
                 src_cid: GUEST_CID.into(),
                 dst_cid: HOST_CID.into(),
-                src_port: 5000,
+                src_port: from,
                 dst_port: port,
                 len: payload.len() as u32,
                 kind: STREAM,
@@ -469,7 +550,7 @@ mod tests {
         guest.send(DATA, PORT, (4, 5), b"{\"exit\":143}\n");
         assert_eq!(guest.vsock.exit(), Some(143));
         guest.send(RESET, PORT, (4, 5), &[]);
-        assert!(guest.vsock.connection.is_none() && !guest.vsock.alive);
+        assert!(guest.vsock.connections.is_empty() && !guest.vsock.alive);
         assert!(!guest.vsock.shutdown());
     }
 
@@ -498,10 +579,62 @@ mod tests {
         guest.receive();
         guest.send(DATA, PORT, (4096, 0), b"not liveness\n");
         assert_eq!(ops(&guest.receive()), [(RESET, &b""[..])]);
-        assert!(guest.vsock.connection.is_none());
+        assert!(guest.vsock.connections.is_empty());
         guest.send(REQUEST, PORT, (4096, 0), &[]);
         guest.receive();
         guest.send(DATA, PORT, (4096, 0), &[b'x'; LINE_LIMIT + 1]);
         assert_eq!(ops(&guest.receive()), [(RESET, &b""[..])]);
+    }
+
+    #[test]
+    fn passes_desktop_lines_to_the_arbiter_and_returns_its_responses() {
+        let mut guest = Guest::new();
+        guest.post(16);
+        let port = desktop::PORT;
+        for from in 6000..6000 + DESKTOP_STREAMS as u32 {
+            guest.send_from(from, REQUEST, port, (4096, 0), &[]);
+        }
+        guest.send_from(7000, REQUEST, port, (4096, 0), &[]);
+        let replies = ops(&guest.receive())
+            .into_iter()
+            .map(|(op, _)| op)
+            .collect::<Vec<_>>();
+        assert_eq!(replies, [RESPONSE, RESPONSE, RESPONSE, RESPONSE, RESET]);
+        guest.send_from(6001, DATA, port, (4096, 0), b"{\"a\":1}\n{\"b\"");
+        guest.send_from(6001, DATA, port, (4096, 0), b":2}\n");
+        let lines: Vec<_> = guest
+            .desktop
+            .try_iter()
+            .map(|request| match request {
+                Request::Guest { port, line } => (port, line),
+                Request::Host { .. } => unreachable!(),
+            })
+            .collect();
+        assert_eq!(
+            lines,
+            [(6001, b"{\"a\":1}".to_vec()), (6001, b"{\"b\":2}".to_vec())]
+        );
+        guest.receive();
+        guest.vsock.respond(6001, b"{\"mode\":\"agent\"}");
+        guest.vsock.respond(6999, b"dropped");
+        guest
+            .vsock
+            .deliver(&mut guest.queues, &guest.memory)
+            .unwrap();
+        let packets = guest.receive();
+        assert_eq!(ops(&packets), [(DATA, &b"{\"mode\":\"agent\"}\n"[..])]);
+        assert_eq!((packets[0].0.src_port, packets[0].0.dst_port), (port, 6001));
+        assert!(
+            !guest.vsock.shutdown(),
+            "a desktop stream is not the control stream"
+        );
+        guest.send_from(
+            6002,
+            DATA,
+            port,
+            (4096, 0),
+            &[b'x'; desktop::LINE_LIMIT + 1],
+        );
+        assert_eq!(guest.vsock.connections.len(), DESKTOP_STREAMS - 1);
     }
 }

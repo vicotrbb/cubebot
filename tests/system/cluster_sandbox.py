@@ -11,6 +11,7 @@ ledger's tool calls and results, Kubernetes or the node, never the model's reply
 Evidence goes to cluster-sandbox.json in the qualification directory.
 """
 
+import base64
 import json
 import os
 import time
@@ -37,11 +38,22 @@ INSTRUCTIONS = (
     "output. Never rerun a command."
 )
 WORKSPACE_DISK = "/var/lib/cubebot/workspace.ext4"
+# An OpenAI model that takes the `computer` tool; CUBEBOT_COMPUTER_MODEL overrides it.
+COMPUTER_MODEL = "gpt-5.5"
+COMPUTER_INSTRUCTIONS = (
+    "You operate a Linux desktop through the computer tool. Look at the screen before "
+    "and after you act. Answer only from what the screen shows."
+)
+COMPUTER_TASK = (
+    "Chromium is open on your desktop. Click its address bar, go to "
+    "https://example.com, then reply with the title on that page's browser tab "
+    "exactly as it appears."
+)
 
 
-def operator(f, name):
+def operator(f, name, instructions=INSTRUCTIONS):
     created = f.request(
-        "/api/agents", command(name=name, instructions=INSTRUCTIONS), expected=201
+        "/api/agents", command(name=name, instructions=instructions), expected=201
     )
     lifecycle(f, created["id"], "wake")
     return created["id"], running(f, created["id"])
@@ -389,6 +401,116 @@ def lost_sandbox(f, identity, current, evidence):
     )
 
 
+def computer_use(f, evidence):
+    """The model opens Chromium and navigates; the ledger holds screenshots and clicks.
+
+    Computer use is an installation setting, so it is switched on last: the controller
+    configuration gains `computer_use_enabled`, the orchestrator restarts with it, and
+    the provider moves to a model with the computer tool.
+    """
+    stored = json.loads(f.k("get", "configmap", "controller", "-o", "json"))
+    settings = json.loads(stored["data"]["config.json"]) | {
+        "computer_use_enabled": True
+    }
+    patch = {"data": {"config.json": json.dumps(settings)}}
+    f.k("patch", "configmap", "controller", "--type", "merge", "-p", json.dumps(patch))
+    wait_for(
+        "the orchestrator's mounted configuration",
+        lambda: "computer_use_enabled"
+        in f.k("exec", "orchestrator", "--", "cat", "/etc/controller/config.json"),
+    )
+    signal(f, json.loads(f.k("get", "pod", "orchestrator", "-o", "json")), "SIGKILL")
+    wait_for("orchestrator recovery", lambda: available(f))
+    model = os.environ.get("CUBEBOT_COMPUTER_MODEL", COMPUTER_MODEL)
+    configure(
+        f, Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip(), model=model
+    )
+    identity, current = operator(f, "Computer", COMPUTER_INSTRUCTIONS)
+    environment = current["spec"]["containers"][0]["env"]
+    assert {"name": "CUBEBOT_COMPUTER_ENABLED", "value": "1"} in environment
+    name = current["metadata"]["name"]
+    wait_for(
+        "the guest desktop",
+        lambda: "Guest desktop started" in f.k("logs", name, "-c", "sandbox"),
+    )
+    turn = send(f, identity, COMPUTER_TASK)
+    result = outcome(f, identity, turn, timeout=900)
+    calls, results = ledger(f, turn)
+    screenshots = [r for r in results.values() if r["status"] == "screenshot"]
+    assert screenshots, results
+    for screenshot in screenshots:
+        assert base64.b64decode(screenshot["image"])[:8] == b"\x89PNG\r\n\x1a\n"
+    clicks = [call for call in calls if "click" in json.dumps(call["input"])]
+    assert clicks, calls
+    typed = [call for call in calls if "example.com" in json.dumps(call["input"])]
+    assert typed, calls
+    done = f.sql(
+        f"SELECT payload->>'response' FROM turn_events WHERE turn_id='{turn['id']}' "
+        "AND payload->>'kind'='done'"
+    )
+    assert "Example Domain" in done, done
+    # The arbiter logged each call's input with its source and the call's ledger id.
+    log = f.k("logs", name, "-c", "sandbox")
+    events = [
+        json.loads(line.split("Desktop event ", 1)[1])
+        for line in log.splitlines()
+        if "Desktop event " in line
+    ]
+    tagged = {event["call"] for event in events if event["source"] == "agent"}
+    assert {call["id"] for call in calls} <= tagged, (calls, events)
+    # The host channel, through the exec the orchestrator uses, serves the same screen.
+    request = {
+        "input": {
+            "account": "00000000-0000-0000-0000-000000000001",
+            "action": {"action": "screenshot"},
+        }
+    }
+    host = json.loads(
+        f.k(
+            "exec",
+            "-i",
+            name,
+            "-c",
+            "sandbox",
+            "--",
+            "cubebot-sandbox",
+            "desktop",
+            input=json.dumps(request) + "\n",
+        )
+    )
+    assert host["mode"] == "agent", host
+    assert base64.b64decode(host["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    evidence["computer_use"] = {
+        "turn": turn["id"],
+        "model": model,
+        "status": result["status"],
+        "calls": [call["input"] for call in calls],
+        "screenshots": len(screenshots),
+        "clicks": len(clicks),
+        "response": done,
+    }
+    print(
+        "PASS the model opens Chromium and navigates; the ledger holds its "
+        "screenshots and clicks",
+        flush=True,
+    )
+
+
+def ledger(f, turn):
+    """The turn's computer calls in order, and their outcomes by call id."""
+    rows = f.sql(
+        "SELECT payload::text FROM turn_events WHERE turn_id='{}' AND payload->>'kind' "
+        "IN ('tool_call','tool_result') ORDER BY sequence".format(turn["id"])
+    )
+    calls, results = [], {}
+    for event in map(json.loads, rows.splitlines()):
+        if event["kind"] == "tool_call" and event["name"] == "computer":
+            calls.append(event)
+        elif event["kind"] == "tool_result":
+            results[event["id"]] = event["outcome"]
+    return calls, {id: results[id] for id in (c["id"] for c in calls) if id in results}
+
+
 def qualify(f):
     install(f)
     configure(f, Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip())
@@ -401,6 +523,7 @@ def qualify(f):
     stop(f, second, other, evidence)
     revocation(f, evidence)
     lost_sandbox(f, first, current, evidence)
+    computer_use(f, evidence)
     evidence["base_commit"] = admission.run("git", "rev-parse", "HEAD")
     f.save("cluster-sandbox.json", evidence)
 

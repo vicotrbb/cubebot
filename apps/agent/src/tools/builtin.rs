@@ -49,6 +49,7 @@ pub(super) fn tools() -> Vec<Box<dyn Tool>> {
                 description,
                 parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
                 strict: true,
+                computer: false,
             },
             job,
         })

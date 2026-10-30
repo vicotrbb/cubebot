@@ -44,7 +44,7 @@ impl Work {
             .await?;
         let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
         let (summary, history) = history(tx, actor).await?;
-        let prior: Vec<serde_json::Value> = sqlx::query_scalar("SELECT payload FROM (SELECT sequence,payload FROM turn_events WHERE turn_id=$1 AND payload->>'kind' IN ('tool_call','tool_result') ORDER BY sequence DESC LIMIT 16) p ORDER BY sequence")
+        let prior: Vec<serde_json::Value> = sqlx::query_scalar("SELECT payload #- '{outcome,image}' FROM (SELECT sequence,payload FROM turn_events WHERE turn_id=$1 AND payload->>'kind' IN ('tool_call','tool_result') ORDER BY sequence DESC LIMIT 16) p ORDER BY sequence")
             .bind(turn).fetch_all(&mut **tx).await?;
         let last: i64 = sqlx::query_scalar(
             "SELECT COALESCE(max(sequence),0) FROM turn_events WHERE turn_id=$1",
