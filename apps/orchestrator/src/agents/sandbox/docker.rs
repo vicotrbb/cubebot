@@ -23,6 +23,9 @@ pub struct DockerConfig {
     orchestrator_origin: String,
     #[serde(default)]
     terminal_enabled: bool,
+    /// The guest desktop and the agent's computer tool (ADR 0085); needs `terminal_enabled`.
+    #[serde(default)]
+    computer_use_enabled: bool,
     /// Host path of a PEM bundle the guest trusts for `orchestrator_origin`, e.g. from `just dev-ca`.
     #[serde(default)]
     control_ca_file: Option<String>,
@@ -231,6 +234,9 @@ impl Docker {
                 "--env",
                 "CUBEBOT_TOOL_USER=10001:10001",
             ]);
+            if self.config.computer_use_enabled {
+                args.extend(["--env", "CUBEBOT_COMPUTER_ENABLED=1"]);
+            }
         }
         // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
         // group 10001 writes the image's workspace volume.

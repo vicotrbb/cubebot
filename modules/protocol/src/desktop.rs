@@ -10,6 +10,11 @@ pub const PORT: u32 = 1025;
 pub const LINE_LIMIT: usize = 64 << 10;
 /// The refusal of agent input while a person holds control.
 pub const PERSON_HAS_CONTROL: &str = "a person has control";
+/// The refusal of agent input after a person handed control back, until the agent takes a
+/// screenshot: what it last saw may no longer be on the screen (ADR 0039).
+pub const REOBSERVE: &str = "a person had control; take a screenshot before further input";
+/// Changed screen regions travel as square tiles of this many pixels per side.
+pub const TILE: u32 = 64;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -89,15 +94,19 @@ pub struct AgentRequest {
     pub action: Action,
 }
 
-/// From the orchestrator: a person's input or screenshot, or a mode change.
+/// From the orchestrator: a person's input or screenshot, a mode change, or the next frame.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum HostRequest {
+    /// The tiles that changed since this host channel connection's last frame; the first frame
+    /// of a connection has every tile.
+    Frame,
     Input {
         account: Uuid,
         action: Action,
     },
-    /// `human` names the person who takes control.
+    /// `human` names the person who takes control; while one person holds it, any change must
+    /// name that person.
     Mode {
         mode: Mode,
         #[serde(default)]
@@ -115,6 +124,31 @@ pub struct Response {
     /// The screen as a base64 PNG.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub png: Option<String>,
+    /// A frame's changed tiles.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tiles: Vec<Tile>,
+    /// A frame's pointer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pointer: Option<Pointer>,
+}
+
+/// One [`TILE`]-sized region at (`x`, `y`), smaller at the screen's right and bottom edges.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Tile {
+    pub x: u32,
+    pub y: u32,
+    /// A base64 PNG.
+    pub png: String,
+}
+
+/// Where the pointer is and who last moved it: a person's account, or the agent when `None`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pointer {
+    pub at: [u32; 2],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<Uuid>,
 }
 
 #[cfg(test)]
@@ -150,12 +184,16 @@ mod tests {
         let refused = Response {
             mode: Mode::Human,
             error: Some(PERSON_HAS_CONTROL.into()),
-            png: None,
+            ..Response::default()
         };
         assert_eq!(
             serde_json::to_string(&refused).unwrap(),
             r#"{"mode":"human","error":"a person has control"}"#
         );
         assert!(serde_json::from_str::<Action>(r#"{"action":"zoom"}"#).is_err());
+        assert_eq!(
+            serde_json::from_str::<HostRequest>(r#""frame""#).unwrap(),
+            HostRequest::Frame
+        );
     }
 }

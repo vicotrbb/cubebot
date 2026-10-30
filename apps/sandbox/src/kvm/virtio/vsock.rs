@@ -607,7 +607,7 @@ mod tests {
             .try_iter()
             .map(|request| match request {
                 Request::Guest { port, line } => (port, line),
-                Request::Host { .. } => unreachable!(),
+                _ => unreachable!(),
             })
             .collect();
         assert_eq!(

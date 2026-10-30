@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import {
   api,
   merge,
@@ -298,31 +298,34 @@ function TerminalResults({ message }: { message: Turn }) {
   return (
     <>
       {message.terminal.map((tool) => (
-        <details
-          className="terminal-result"
-          key={tool.id}
-          open={tool.status === 'running'}
-        >
-          <summary>Terminal · {tool.status}</summary>
-          <pre>{tool.command}</pre>
-          {tool.outcome?.status === 'exited' && (
-            <p>Exit status: {tool.outcome.code ?? 'terminated by signal'}</p>
-          )}
-          {tool.outcome?.status === 'stopped' && (
-            <p>Stopped: {tool.outcome.reason.replaceAll('_', ' ')}</p>
-          )}
-          {tool.status === 'uncertain' && (
-            <p>
-              Effects are uncertain. This command will not be repeated
-              automatically. Inspect the workspace before continuing.
+        <Fragment key={tool.id}>
+          {tool.reobserved && (
+            <p className="desktop-marker">
+              Control returned · agent re-observed the screen
             </p>
           )}
-          {tool.outcome && 'output' in tool.outcome && (
-            <div>
-              <pre>{tool.outcome.output}</pre>
-            </div>
-          )}
-        </details>
+          <details className="terminal-result" open={tool.status === 'running'}>
+            <summary>Terminal · {tool.status}</summary>
+            <pre>{tool.command}</pre>
+            {tool.outcome?.status === 'exited' && (
+              <p>Exit status: {tool.outcome.code ?? 'terminated by signal'}</p>
+            )}
+            {tool.outcome?.status === 'stopped' && (
+              <p>Stopped: {tool.outcome.reason.replaceAll('_', ' ')}</p>
+            )}
+            {tool.status === 'uncertain' && (
+              <p>
+                Effects are uncertain. This command will not be repeated
+                automatically. Inspect the workspace before continuing.
+              </p>
+            )}
+            {tool.outcome && 'output' in tool.outcome && (
+              <div>
+                <pre>{tool.outcome.output}</pre>
+              </div>
+            )}
+          </details>
+        </Fragment>
       ))}
     </>
   )

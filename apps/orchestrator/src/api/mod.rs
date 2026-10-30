@@ -6,6 +6,7 @@ mod access;
 mod agents;
 mod browser;
 mod connections;
+mod desktop;
 mod identity;
 mod invitations;
 mod memories;
@@ -47,6 +48,7 @@ pub fn database_router(pool: sqlx::PgPool) -> Router {
 fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
+        .merge(desktop::router(pool.clone(), identity.clone()))
         .merge(work::router(pool.clone(), identity.clone()))
         .merge(memories::router(pool.clone(), identity.clone()))
         .merge(skills::router(pool.clone(), identity.clone()))

@@ -3,7 +3,11 @@
 mod kvm;
 #[cfg(any(test, all(target_os = "linux", target_arch = "x86_64")))]
 mod png;
-use std::{io, os::unix::net::UnixStream, process::ExitCode};
+use std::{
+    io::{self, Read, Write},
+    os::unix::net::UnixStream,
+    process::ExitCode,
+};
 
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args().skip(1).collect();
@@ -41,11 +45,26 @@ fn desktop() -> io::Result<()> {
     let path = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")
         .unwrap_or_else(|| "/tmp/cubebot-desktop.sock".into());
     let socket = UnixStream::connect(&path)?;
-    let mut requests = socket.try_clone()?;
+    let requests = socket.try_clone()?;
     std::thread::spawn(move || {
-        let _ = io::copy(&mut io::stdin().lock(), &mut requests);
+        let _ = forward(io::stdin().lock(), &requests);
         // The arbiter answers what it already has, then sees the end.
         let _ = requests.shutdown(std::net::Shutdown::Write);
     });
-    io::copy(&mut &socket, &mut io::stdout().lock()).map(drop)
+    forward(&socket, io::stdout().lock())
+}
+
+/// Copies each read on as it arrives. `io::copy` would splice between the socket and a pipe,
+/// which holds responses back until the socket closes and stalls a conversation over the
+/// channel.
+fn forward(mut from: impl Read, mut to: impl Write) -> io::Result<()> {
+    let mut buffer = vec![0; 64 << 10];
+    loop {
+        let read = from.read(&mut buffer)?;
+        if read == 0 {
+            return Ok(());
+        }
+        to.write_all(&buffer[..read])?;
+        to.flush()?;
+    }
 }

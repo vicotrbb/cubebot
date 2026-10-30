@@ -5,7 +5,12 @@ pub use docker::{Docker, DockerConfig};
 use super::AgentId;
 use crate::agents::kubernetes::Error;
 use sqlx::PgPool;
-use std::future::Future;
+use std::{
+    collections::HashMap,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,7 +26,7 @@ pub enum Status {
 pub struct ExecChannel {
     pub stdin: Box<dyn AsyncWrite + Send + Unpin>,
     pub stdout: Box<dyn AsyncRead + Send + Unpin>,
-    pub(crate) _session: Box<dyn Send>,
+    pub _session: Box<dyn Send>,
 }
 
 pub trait Sandbox {
@@ -41,6 +46,35 @@ pub trait Sandbox {
         agent: AgentId,
     ) -> impl Future<Output = Result<Option<String>, Error>> + Send;
     fn status(&self, agent: AgentId) -> impl Future<Output = Result<Status, Error>> + Send;
+}
+
+type Opening = Pin<Box<dyn Future<Output = Result<ExecChannel, Error>> + Send>>;
+
+/// Opens the desktop host channel (ADR 0085) in an agent's running sandbox, whichever kind runs
+/// it, and counts the people connected to each agent's desktop through this orchestrator.
+#[derive(Clone)]
+pub struct Desktop {
+    open: Arc<dyn Fn(AgentId) -> Opening + Send + Sync>,
+    pub viewers: Arc<Mutex<HashMap<AgentId, usize>>>,
+}
+
+impl Desktop {
+    pub fn new<S: Sandbox + Send + Sync + 'static>(sandbox: Arc<S>) -> Self {
+        Self {
+            open: Arc::new(move |agent| {
+                let sandbox = sandbox.clone();
+                Box::pin(async move {
+                    let command = ["/usr/local/bin/cubebot-sandbox", "desktop"];
+                    sandbox.exec_channel(agent, &command).await
+                })
+            }),
+            viewers: Arc::default(),
+        }
+    }
+
+    pub async fn open(&self, agent: AgentId) -> Result<ExecChannel, Error> {
+        (self.open)(agent).await
+    }
 }
 
 /// Converges one agent's sandbox to its recorded lifecycle intent.

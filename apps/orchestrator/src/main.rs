@@ -105,7 +105,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             let controller = configured_controller(&pool).await?;
             let router =
                 match cubebot_orchestrator::api::configured_router(pool, origin, config).await {
-                    Ok(router) => router.merge(controller.runtime_router()),
+                    Ok(router) => controller.routes(router),
                     Err(_) => {
                         controller
                             .release()
