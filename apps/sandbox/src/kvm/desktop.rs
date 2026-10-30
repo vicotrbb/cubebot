@@ -1,12 +1,15 @@
 //! The screen arbiter (ADR 0085): the only reader of the screen and the only writer of the
 //! keyboard and tablet. It serves the guest agent's desktop streams and the host channel, a Unix
 //! socket that `cubebot-sandbox desktop` relays for the orchestrator, one request at a time. It
-//! holds the mode, refuses agent input while a person holds control, and logs every request with
-//! its source: the agent and its tool call, or the person's account.
+//! holds the mode, refuses agent input while a person holds control and until the agent looks
+//! again after they hand it back, and logs every request with its source: the agent and its tool
+//! call, or the person's account. Each host channel connection gets frames of the tiles that
+//! changed since its last one, encoded on its own relay thread.
 use super::virtio::{Slot, gpu::Gpu, input::Input, vsock::Vsock};
 use crate::kvm::memory::GuestMemory;
 use cubebot_protocol::desktop::{
-    Action, AgentRequest, Button, HostRequest, LINE_LIMIT, Mode, PERSON_HAS_CONTROL, Response,
+    Action, AgentRequest, Button, HostRequest, LINE_LIMIT, Mode, PERSON_HAS_CONTROL, Pointer,
+    REOBSERVE, Response, TILE, Tile,
 };
 use serde_json::{Value, json};
 use std::{
@@ -24,12 +27,20 @@ use uuid::Uuid;
 /// sandboxes sharing one host's /tmp.
 pub const SOCKET: &str = "/tmp/cubebot-desktop.sock";
 const NO_CONTROL: &str = "this person does not have control";
+const OTHER_HAS_CONTROL: &str = "another person has control";
 const SHIFT: u16 = 42;
 /// Bounds what one request queues on the input devices.
 const MAX_CLICKS: u8 = 3;
 const MAX_PATH: usize = 100;
 const MAX_WHEEL: i32 = 50;
 const MAX_KEYS: usize = 8;
+/// Input events per delivery, one shifted character, and the pause that lets the guest read one
+/// delivery before the next, near xdotool's default 12 ms per key. A slower reader, such as Xorg
+/// opening a popup, still drops a burst; the guest has no flow control back to the host.
+/// shortcut: a long `type` holds the arbiter, and so every viewer's frames, for about 10 ms per
+/// character; queue input apart from frames if that shows.
+const BATCH: usize = 8;
+const BATCH_PAUSE: std::time::Duration = std::time::Duration::from_millis(10);
 /// US layout rows: unshifted and shifted characters from the first key code.
 const ROWS: [(&str, &str, u16); 4] = [
     ("1234567890-=", "!@#$%^&*()_+", 2),
@@ -122,6 +133,15 @@ pub enum Request {
         line: Vec<u8>,
         reply: Sender<Vec<u8>>,
     },
+    /// The screen for a host channel frame.
+    Frame { reply: Sender<Snapshot> },
+}
+
+pub struct Snapshot {
+    mode: Mode,
+    pointer: Pointer,
+    /// BGRX rows of the screen's width.
+    screen: Vec<u8>,
 }
 
 /// An evdev (type, code, value) event.
@@ -135,6 +155,10 @@ pub struct Arbiter<'a> {
     pub mode: Mode,
     holder: Option<Uuid>,
     pointer: [u32; 2],
+    /// Who last moved the pointer: a person, or the agent when `None`.
+    pointer_by: Option<Uuid>,
+    /// Set when a person hands control back, until the agent's next screenshot.
+    stale: bool,
 }
 
 impl<'a> Arbiter<'a> {
@@ -152,6 +176,8 @@ impl<'a> Arbiter<'a> {
             mode: Mode::Agent,
             holder: None,
             pointer: [0, 0],
+            pointer_by: None,
+            stale: false,
         }
     }
 
@@ -171,6 +197,7 @@ impl<'a> Arbiter<'a> {
                 }
                 // A relay that went away no longer wants its response.
                 Request::Host { line, reply } => drop(reply.send(encode(&self.host(&line)))),
+                Request::Frame { reply } => drop(reply.send(self.snapshot())),
             }
         }
     }
@@ -180,12 +207,16 @@ impl<'a> Arbiter<'a> {
             return self.invalid(json!({"source":"agent"}));
         };
         let source = json!({"source":"agent","call":request.call});
-        let refusal = request.action.is_input() && self.mode == Mode::Human;
-        self.act(
-            source,
-            &request.action,
-            refusal.then_some(PERSON_HAS_CONTROL),
-        )
+        let refusal = match request.action.is_input() {
+            true if self.mode == Mode::Human => Some(PERSON_HAS_CONTROL),
+            true if self.stale => Some(REOBSERVE),
+            _ => None,
+        };
+        let response = self.act(None, source, &request.action, refusal);
+        if response.png.is_some() {
+            self.stale = false;
+        }
+        response
     }
 
     pub fn host(&mut self, line: &[u8]) -> Response {
@@ -195,9 +226,14 @@ impl<'a> Arbiter<'a> {
                 let holds = self.mode == Mode::Human && self.holder == Some(account);
                 let refusal = action.is_input() && !holds;
                 let source = json!({"source":"person","account":account});
-                self.act(source, &action, refusal.then_some(NO_CONTROL))
+                self.act(
+                    Some(account),
+                    source,
+                    &action,
+                    refusal.then_some(NO_CONTROL),
+                )
             }
-            Err(_) => self.invalid(json!({"source":"host"})),
+            Ok(HostRequest::Frame) | Err(_) => self.invalid(json!({"source":"host"})),
         }
     }
 
@@ -211,14 +247,31 @@ impl<'a> Arbiter<'a> {
             mode: self.mode,
             error,
             png,
+            ..Response::default()
         }
     }
 
-    /// `human` hands control to `account`; any other mode takes it back.
+    fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            mode: self.mode,
+            pointer: Pointer {
+                at: self.pointer,
+                account: self.pointer_by,
+            },
+            screen: self.gpu.lock().device.screen.clone(),
+        }
+    }
+
+    /// `human` hands control to `account`; any other mode takes it back. Only the person
+    /// holding control changes the mode while they hold it.
     fn switch(&mut self, mode: Mode, account: Option<Uuid>) -> Response {
         if mode == Mode::Human && account.is_none() {
             return self.response(Some("taking control names the person".into()), None);
         }
+        if self.mode == Mode::Human && self.holder != account {
+            return self.response(Some(OTHER_HAS_CONTROL.into()), None);
+        }
+        self.stale |= self.mode == Mode::Human && mode != Mode::Human;
         self.mode = mode;
         self.holder = account.filter(|_| mode == Mode::Human);
         eprintln!(
@@ -228,11 +281,26 @@ impl<'a> Arbiter<'a> {
         self.response(None, None)
     }
 
-    fn act(&mut self, mut record: Value, action: &Action, refusal: Option<&str>) -> Response {
+    /// `by` is the person acting, or the agent when `None`.
+    fn act(
+        &mut self,
+        by: Option<Uuid>,
+        mut record: Value,
+        action: &Action,
+        refusal: Option<&str>,
+    ) -> Response {
         let result = match refusal {
             Some(refusal) => Err(refusal.to_owned()),
             None => self.perform(action),
         };
+        if result.is_ok()
+            && !matches!(
+                action,
+                Action::Screenshot | Action::Type { .. } | Action::Key { .. }
+            )
+        {
+            self.pointer_by = by;
+        }
         record["action"] = logged(action);
         if let Err(error) = &result {
             record["error"] = json!(error);
@@ -358,10 +426,18 @@ impl<'a> Arbiter<'a> {
     }
 }
 
+/// Sends events in batches the guest can take: its evdev clients buffer 64 events, and one
+/// that overflows drops everything queued, so a burst such as a typed URL would vanish.
 fn send(device: &Slot<Input>, events: &[Event], memory: &GuestMemory) -> Result<(), String> {
-    device
-        .run(|input, queues| input.send(events, queues, memory))
-        .map_err(|error| format!("input device: {error}"))
+    for (at, batch) in events.chunks(BATCH).enumerate() {
+        if at > 0 {
+            std::thread::sleep(BATCH_PAUSE);
+        }
+        device
+            .run(|input, queues| input.send(batch, queues, memory))
+            .map_err(|error| format!("input device: {error}"))?;
+    }
+    Ok(())
 }
 
 fn pressed(code: u16) -> [Event; 4] {
@@ -466,9 +542,33 @@ pub fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
     Ok(())
 }
 
+/// Serves one connection; whoever took control through it and still holds it when it closes,
+/// such as an orchestrator that went away, hands control back.
 fn relay(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
+    let mut held = None;
+    let served = serve_connection(stream, requests, &mut held);
+    if let Some(account) = held {
+        let line = serde_json::to_vec(&HostRequest::Mode {
+            mode: Mode::Watch,
+            account: Some(account),
+        })?;
+        let (reply, response) = mpsc::channel();
+        if requests.send(Request::Host { line, reply }).is_ok() {
+            drop(response.recv());
+        }
+    }
+    served
+}
+
+fn serve_connection(
+    stream: UnixStream,
+    requests: &Sender<Request>,
+    held: &mut Option<Uuid>,
+) -> io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut writer = stream;
+    // The screen as this connection's last frame showed it.
+    let mut shown = Vec::new();
     loop {
         let mut line = Vec::new();
         let limit = LINE_LIMIT as u64 + 1;
@@ -478,14 +578,67 @@ fn relay(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
         if line.pop() != Some(b'\n') {
             return Err(io::Error::other("request line too long or unterminated"));
         }
-        let (reply, response) = mpsc::channel();
-        requests
-            .send(Request::Host { line, reply })
-            .map_err(io::Error::other)?;
-        let mut response = response.recv().map_err(io::Error::other)?;
+        let request = serde_json::from_slice(&line).ok();
+        let mut response = match request {
+            Some(HostRequest::Frame) => encode(&frame(requests, &mut shown)?),
+            _ => ask(requests, line)?,
+        };
+        if let Some(HostRequest::Mode { mode, account }) = request {
+            // A refused change leaves a stale account here, whose release the arbiter refuses.
+            *held = account.filter(|_| mode == Mode::Human);
+        }
         response.push(b'\n');
         writer.write_all(&response)?;
     }
+}
+
+fn ask(requests: &Sender<Request>, line: Vec<u8>) -> io::Result<Vec<u8>> {
+    let (reply, response) = mpsc::channel();
+    requests
+        .send(Request::Host { line, reply })
+        .map_err(io::Error::other)?;
+    response.recv().map_err(io::Error::other)
+}
+
+fn frame(requests: &Sender<Request>, shown: &mut Vec<u8>) -> io::Result<Response> {
+    let (reply, snapshot) = mpsc::channel();
+    requests
+        .send(Request::Frame { reply })
+        .map_err(io::Error::other)?;
+    let snapshot = snapshot.recv().map_err(io::Error::other)?;
+    Ok(Response {
+        mode: snapshot.mode,
+        tiles: tiles(&snapshot.screen, shown),
+        pointer: Some(snapshot.pointer),
+        ..Response::default()
+    })
+}
+
+/// The tiles of `screen` that differ from `shown`, every tile when `shown` is not a screen of
+/// the same size, as PNGs; `screen` becomes what is shown.
+fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
+    let (width, height) = (super::virtio::gpu::WIDTH, super::virtio::gpu::HEIGHT);
+    let stride = width as usize * 4;
+    let fresh = shown.len() != screen.len();
+    let mut changed = Vec::new();
+    for y in (0..height).step_by(TILE as usize) {
+        for x in (0..width).step_by(TILE as usize) {
+            let (w, h) = (TILE.min(width - x), TILE.min(height - y));
+            let rows = (y..y + h).map(|row| {
+                let start = row as usize * stride + x as usize * 4;
+                start..start + w as usize * 4
+            });
+            if !fresh && rows.clone().all(|row| screen[row.clone()] == shown[row]) {
+                continue;
+            }
+            let pixels: Vec<u8> = rows.flat_map(|row| screen[row].iter().copied()).collect();
+            let png = crate::png::base64(&crate::png::encode(w, h, &pixels));
+            changed.push(Tile { x, y, png });
+        }
+    }
+    shown.clear();
+    shown.extend_from_slice(screen);
+    changed
 }
 
 #[cfg(test)]
@@ -551,14 +704,6 @@ mod tests {
             arbiter.host(&line(other)).error.as_deref(),
             Some(NO_CONTROL)
         );
-        assert_eq!(
-            arbiter.host(&line(json!({"mode":{"mode":"watch"}}))).mode,
-            Mode::Watch
-        );
-        assert_eq!(
-            arbiter.host(&line(typing)).error.as_deref(),
-            Some(NO_CONTROL)
-        );
         assert!(
             arbiter
                 .host(&line(json!({"mode":{"mode":"human"}})))
@@ -566,6 +711,79 @@ mod tests {
                 .is_some()
         );
         assert!(arbiter.agent(b"{\"call\":1}").error.is_some());
+    }
+
+    #[test]
+    fn control_is_exclusive_and_the_agent_looks_again_after_it_returns() {
+        let devices = desktop();
+        let mut arbiter = Arbiter::new(
+            &devices.gpu,
+            &devices.keyboard,
+            &devices.tablet,
+            &devices.memory,
+        );
+        let (call, person) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let typing = json!({"input":{"account":person,"action":{"action":"type","text":"hi"}}});
+        let take = json!({"mode":{"mode":"human","account":person}});
+        assert_eq!(arbiter.host(&line(take)).mode, Mode::Human);
+        let other_takes = json!({"mode":{"mode":"human","account":Uuid::from_u128(3)}});
+        assert_eq!(
+            arbiter.host(&line(other_takes)).error.as_deref(),
+            Some(OTHER_HAS_CONTROL)
+        );
+        assert!(
+            arbiter
+                .host(&line(json!({"mode":{"mode":"watch"}})))
+                .error
+                .is_some()
+        );
+        let pointed = json!({"input":{"account":person,"action":{"action":"move","x":7,"y":8}}});
+        assert_eq!(arbiter.host(&line(pointed)).error, None);
+        assert_eq!(
+            (arbiter.pointer, arbiter.pointer_by),
+            ([7, 8], Some(person))
+        );
+        let hand_back = json!({"mode":{"mode":"watch","account":person}});
+        assert_eq!(arbiter.host(&line(hand_back)).mode, Mode::Watch);
+        assert_eq!(
+            arbiter.host(&line(typing)).error.as_deref(),
+            Some(NO_CONTROL)
+        );
+        let click =
+            json!({"call":call,"action":{"action":"click","at":[10,20],"button":"left","count":1}});
+        assert_eq!(
+            arbiter.agent(&line(click.clone())).error.as_deref(),
+            Some(REOBSERVE)
+        );
+        let screenshot = json!({"call":call,"action":{"action":"screenshot"}});
+        assert!(arbiter.agent(&line(screenshot)).png.is_some());
+        assert_eq!(arbiter.agent(&line(click)).error, None);
+        assert_eq!(arbiter.pointer_by, None);
+    }
+
+    #[test]
+    fn frames_carry_only_changed_tiles() {
+        let (width, height) = (
+            super::super::virtio::gpu::WIDTH,
+            super::super::virtio::gpu::HEIGHT,
+        );
+        let mut screen = vec![0; width as usize * height as usize * 4];
+        let mut shown = Vec::new();
+        let all = tiles(&screen, &mut shown);
+        assert_eq!(all.len(), 20 * 13, "the first frame has every tile");
+        assert_eq!(shown, screen);
+        assert!(tiles(&screen, &mut shown).is_empty());
+        // One pixel in the bottom row of tiles, which is 32 pixels tall.
+        screen[((790 * width + 130) * 4) as usize] = 255;
+        let changed = tiles(&screen, &mut shown);
+        assert_eq!(
+            changed
+                .iter()
+                .map(|tile| (tile.x, tile.y))
+                .collect::<Vec<_>>(),
+            [(128, 768)]
+        );
+        assert!(changed[0].png.starts_with("iVBORw0KGgo"), "a base64 PNG");
     }
 
     #[test]

@@ -77,13 +77,19 @@ fn body(request: &Request) -> Value {
                 call_id,
                 output,
                 image,
-            } => input.push(match image {
-                // A computer call's output is only its screenshot.
+            } => match image {
+                // A computer call's output is only its screenshot, so a refusal, such as while a
+                // person holds the desktop, follows it as a note the model can read.
                 Some(image) if computer.contains(&&**call_id) => {
-                    json!({"type":"computer_call_output","call_id":call_id,"output":{"type":"computer_screenshot","image_url":format!("data:image/png;base64,{image}"),"detail":"original"}})
+                    input.push(json!({"type":"computer_call_output","call_id":call_id,"output":{"type":"computer_screenshot","image_url":format!("data:image/png;base64,{image}"),"detail":"original"}}));
+                    if output != "OK" {
+                        let note = format!("The computer tool reported: {output}");
+                        input.push(json!({"role":"developer","content":note}));
+                    }
                 }
-                _ => json!({"type":"function_call_output","call_id":call_id,"output":output}),
-            }),
+                _ => input
+                    .push(json!({"type":"function_call_output","call_id":call_id,"output":output})),
+            },
         }
     }
     let mut body = json!({

@@ -511,6 +511,8 @@ export interface components {
       /** Format: uuid */
       id: string
       outcome?: null | components['schemas']['Outcome']
+      /** @description The agent's first screenshot after a person handed its desktop back. */
+      reobserved: boolean
       status: string
       /** Format: uuid */
       turn_id: string

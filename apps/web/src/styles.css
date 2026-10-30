@@ -9,6 +9,9 @@
   --muted: #aebfb6;
   --accent: #b6e8b3;
   --line: #354a41;
+  --agent: #b6e8b3;
+  --you: #8cc8ff;
+  --person: #ffb86b;
 }
 * {
   box-sizing: border-box;
@@ -382,5 +385,49 @@ button.agent-link.selected {
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+  font-size: 0.875rem;
+}
+.desktop-screen {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+.desktop-screen canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.desktop-screen canvas.controlling {
+  cursor: none;
+  outline: 2px solid var(--you);
+  outline-offset: -2px;
+}
+.desktop-pointer {
+  position: absolute;
+  transform: translate(-2px, -2px);
+  pointer-events: none;
+  padding: 1px 6px;
+  border-radius: 0 8px 8px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #101919;
+  background: var(--agent);
+}
+.desktop-pointer.you {
+  background: var(--you);
+}
+.desktop-pointer.person {
+  background: var(--person);
+}
+.desktop-latency {
+  font-variant-numeric: tabular-nums;
+}
+.desktop-marker {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--you);
+  color: var(--muted);
   font-size: 0.875rem;
 }

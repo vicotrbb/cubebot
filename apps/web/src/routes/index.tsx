@@ -11,6 +11,7 @@ import {
 } from '../api/client'
 import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
+import { Desktop } from '../features/desktop'
 import { Dreams } from '../features/dreams'
 import { Memories } from '../features/memories'
 import { Skills } from '../features/skills'
@@ -68,6 +69,7 @@ type Screen =
   | { kind: 'memories' }
   | { kind: 'dreams' }
   | { kind: 'skills' }
+  | { kind: 'desktop' }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
 
@@ -237,6 +239,14 @@ function AgentScreen({
           onClose={() => setScreen({ kind: 'chat' })}
         />
       )}
+      {screen.kind === 'desktop' && selected && (
+        <Desktop
+          key={selected.id}
+          agent={selected}
+          accountId={session.id}
+          onClose={() => setScreen({ kind: 'chat' })}
+        />
+      )}
       {screen.kind === 'chat' &&
         (selected ? (
           <AgentChat
@@ -247,6 +257,7 @@ function AgentScreen({
             onMemories={() => setScreen({ kind: 'memories' })}
             onDreams={() => setScreen({ kind: 'dreams' })}
             onSkills={() => setScreen({ kind: 'skills' })}
+            onDesktop={() => setScreen({ kind: 'desktop' })}
           />
         ) : (
           <div className="empty">
@@ -273,6 +284,7 @@ function AgentChat({
   onMemories,
   onDreams,
   onSkills,
+  onDesktop,
 }: {
   selected: Agent
   session: Account
@@ -280,6 +292,7 @@ function AgentChat({
   onMemories: () => void
   onDreams: () => void
   onSkills: () => void
+  onDesktop: () => void
 }) {
   return (
     <>
@@ -300,6 +313,9 @@ function AgentChat({
           </button>
           <button className="secondary" onClick={onSkills}>
             Skills
+          </button>
+          <button className="secondary" onClick={onDesktop}>
+            Desktop
           </button>
           <button className="secondary" onClick={onEdit}>
             Edit agent

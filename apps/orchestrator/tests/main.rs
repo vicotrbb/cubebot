@@ -16,6 +16,7 @@ mod authentication_limits;
 mod chat;
 mod controller_config;
 mod credential_encryption;
+mod desktop_http;
 mod docker_sandbox;
 mod dreams;
 mod http;

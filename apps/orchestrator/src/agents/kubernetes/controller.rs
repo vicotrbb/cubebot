@@ -4,12 +4,12 @@ use crate::{
     agents::{
         AgentId,
         runtime::RuntimeIdentity,
-        sandbox::{Docker, DockerConfig, drive},
+        sandbox::{Desktop, Docker, DockerConfig, drive},
     },
     operations::ownership::{Owner, PodIdentity},
 };
 use sqlx::PgPool;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::watch;
 use uuid::Uuid;
 
@@ -24,7 +24,7 @@ enum Mode {
     DatabaseOnly,
 }
 struct Lifecycle<S> {
-    sandbox: S,
+    sandbox: Arc<S>,
     runtime: RuntimeIdentity,
 }
 /// The kubelet can publish this container's restart after the container starts. A failed start
@@ -58,7 +58,10 @@ impl Controller {
         Ok(Self {
             owner,
             pool,
-            mode: Mode::Kubernetes(Box::new(Lifecycle { sandbox, runtime })),
+            mode: Mode::Kubernetes(Box::new(Lifecycle {
+                sandbox: Arc::new(sandbox),
+                runtime,
+            })),
         })
     }
     pub async fn database_only(pool: PgPool) -> Result<Self, Error> {
@@ -75,7 +78,7 @@ impl Controller {
         let owner = Owner::database_only(&pool).await?;
         Ok(Self {
             mode: Mode::Docker(Box::new(Lifecycle {
-                sandbox: Docker::new(pool.clone(), config),
+                sandbox: Arc::new(Docker::new(pool.clone(), config)),
                 runtime,
             })),
             owner,
@@ -88,6 +91,17 @@ impl Controller {
             Mode::Docker(lifecycle) => crate::api::runtime_router(lifecycle.runtime.clone()),
             Mode::DatabaseOnly => axum::Router::new(),
         }
+    }
+    /// The console's routes beside the runtime's, with desktop sessions reaching this
+    /// controller's sandboxes, if it has any.
+    pub fn routes(&self, console: axum::Router) -> axum::Router {
+        let router = console.merge(self.runtime_router());
+        let desktop = match &self.mode {
+            Mode::Kubernetes(lifecycle) => Desktop::new(lifecycle.sandbox.clone()),
+            Mode::Docker(lifecycle) => Desktop::new(lifecycle.sandbox.clone()),
+            Mode::DatabaseOnly => return router,
+        };
+        router.layer(axum::Extension(desktop))
     }
     pub async fn run(&mut self, mut stop: watch::Receiver<bool>) -> Result<(), Error> {
         let mut cursor = AgentId(Uuid::nil());
@@ -134,8 +148,8 @@ impl Controller {
     }
     async fn reconcile(&self, agent: AgentId) -> Result<(), Error> {
         match &self.mode {
-            Mode::Kubernetes(lifecycle) => drive(&lifecycle.sandbox, &self.pool, agent).await,
-            Mode::Docker(lifecycle) => drive(&lifecycle.sandbox, &self.pool, agent).await,
+            Mode::Kubernetes(lifecycle) => drive(&*lifecycle.sandbox, &self.pool, agent).await,
+            Mode::Docker(lifecycle) => drive(&*lifecycle.sandbox, &self.pool, agent).await,
             Mode::DatabaseOnly => Ok(()),
         }
     }

@@ -37,7 +37,7 @@ lint: complexity
     uv run --project tooling/quality --locked ruff check --config tooling/quality/pyproject.toml tooling tests
 
 test:
-    bun test apps/web/src/api/client.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
 
@@ -143,6 +143,10 @@ docker-sandbox:
 # Three real agents dream, yield and fail through Docker (ADR 0025); same needs as docker-sandbox.
 docker-dreams:
     uv run --project tooling/quality --locked python tests/system/docker_dreams.py
+
+# The console desktop view on real agents through Docker (ADRs 0039 and 0085); docker-sandbox's needs plus Node with Playwright.
+docker-desktop:
+    uv run --project tooling/quality --locked python tests/system/docker_desktop.py
 
 # Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
 docker-skills:

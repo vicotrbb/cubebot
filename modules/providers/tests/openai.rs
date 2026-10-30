@@ -245,6 +245,10 @@ async fn computer_calls_arrive_as_action_batches_and_answer_with_screenshots() {
             body["input"][3]["output"]["image_url"],
             "data:image/png;base64,iVBORw0KGgo="
         );
+        assert_eq!(
+            body["input"][4],
+            json!({"role":"developer","content":"The computer tool reported: a person has control"})
+        );
         sse(&[
             json!({"type":"response.completed","response":{"status":"completed","output":[
             {"type":"computer_call","call_id":"call_2","status":"completed","actions":[
@@ -263,7 +267,7 @@ async fn computer_calls_arrive_as_action_batches_and_answer_with_screenshots() {
         Message::Assistant(earlier),
         Message::ToolResult {
             call_id: "call_1".into(),
-            output: "OK".into(),
+            output: "a person has control".into(),
             image: Some("iVBORw0KGgo=".into()),
         },
     ];

@@ -1,6 +1,7 @@
 //! Installation-owned definitions and explicit Kubernetes reconciliation.
 mod commands;
 mod definitions;
+mod desktop;
 pub mod kubernetes;
 mod lifecycle;
 mod revisions;

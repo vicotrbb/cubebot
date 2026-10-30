@@ -1339,7 +1339,7 @@
       },
       "Progress": {
         "type": "object",
-        "required": ["id", "turn_id", "command", "status"],
+        "required": ["id", "turn_id", "command", "status", "reobserved"],
         "properties": {
           "command": {
             "type": "string"
@@ -1357,6 +1357,10 @@
                 "$ref": "#/components/schemas/Outcome"
               }
             ]
+          },
+          "reobserved": {
+            "type": "boolean",
+            "description": "The agent's first screenshot after a person handed its desktop back."
           },
           "status": {
             "type": "string"
