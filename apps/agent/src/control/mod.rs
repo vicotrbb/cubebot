@@ -134,6 +134,14 @@ impl RuntimeClient {
         })?;
         Ok(channel)
     }
+    /// Memory search for this sandbox's credential, once bootstrapped.
+    pub fn memory(&self) -> Option<MemoryClient> {
+        Some(MemoryClient {
+            http: self.http.clone(),
+            url: self.config.origin.join("api/runtime/memories").ok()?,
+            token: self.token.clone()?,
+        })
+    }
     fn tls(&self) -> Result<rustls::ClientConfig, Error> {
         use rustls::pki_types::{CertificateDer, pem::PemObject};
         let mut roots = rustls::RootCertStore {
@@ -153,6 +161,27 @@ impl RuntimeClient {
         .with_no_client_auth())
     }
 }
+#[derive(Clone)]
+pub struct MemoryClient {
+    http: reqwest::Client,
+    url: reqwest::Url,
+    token: String,
+}
+impl MemoryClient {
+    pub async fn search(&self, query: &str) -> Result<Vec<runtime::Memory>, Error> {
+        let response = self
+            .http
+            .get(self.url.clone())
+            .query(&[("query", query)])
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|_| Error::Unavailable)?;
+        // Ten results of at most 4 KiB each, JSON-escaped.
+        transport::decode_bounded(response, 256 * 1024).await
+    }
+}
+
 fn validate_session(issued: &RuntimeSession) -> Result<(), Error> {
     let secret = issued
         .token

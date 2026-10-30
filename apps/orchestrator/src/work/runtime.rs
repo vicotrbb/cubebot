@@ -105,7 +105,7 @@ impl Work {
             .bind(turn).bind(sequence as i64).bind(&payload).execute(&mut *tx).await?;
         let owned = attempt == Some(actor.attempt.0);
         if status == "running" && owned {
-            settle(&mut tx, turn, event).await?;
+            settle(&mut tx, actor, turn, event).await?;
         }
         tx.commit().await?;
         Ok(owned && matches!(status.as_str(), "running" | "cancelled"))
@@ -142,13 +142,15 @@ fn payload(sequence: u64, event: &TurnEvent) -> Result<serde_json::Value, Error>
 
 async fn settle(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
     turn: Uuid,
     event: &TurnEvent,
 ) -> Result<(), Error> {
     match event {
-        TurnEvent::Done { response } => {
+        TurnEvent::Done { response, memories } => {
             sqlx::query("UPDATE chat_turns SET status='complete',response=$2,error=NULL,completed_at=clock_timestamp() WHERE id=$1")
                 .bind(turn).bind(response).execute(&mut **tx).await?;
+            crate::knowledge::commit_turn(tx, actor.agent, turn, memories).await?;
         }
         TurnEvent::Error { code } => wait(tx, turn, code).await?,
         _ => (),
@@ -161,7 +163,11 @@ fn valid(event: &TurnEvent) -> bool {
     let text = |value: &str| !value.contains('\0');
     match event {
         TurnEvent::TextDelta { text: delta } => text(delta),
-        TurnEvent::Done { response } => !response.is_empty() && text(response),
+        TurnEvent::Done { response, memories } => {
+            !response.is_empty()
+                && text(response)
+                && memories.iter().all(crate::knowledge::valid_change)
+        }
         TurnEvent::Summary { text: summary } => !summary.is_empty() && text(summary),
         TurnEvent::Error { code } => matches!(
             code.as_str(),

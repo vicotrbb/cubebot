@@ -5,18 +5,19 @@ use crate::agents::{
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State, ws::WebSocketUpgrade},
+    extract::{DefaultBodyLimit, Query, State, ws::WebSocketUpgrade},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use cubebot_protocol::runtime::{Bootstrap, RuntimeActor, RuntimeSession};
+use cubebot_protocol::runtime::{Bootstrap, Memory, RuntimeActor, RuntimeSession};
 
 pub(super) fn router(identity: RuntimeIdentity) -> Router {
     Router::new()
         .route("/api/runtime/bootstrap", post(bootstrap))
         .route("/api/runtime/identity", get(inspect))
         .route("/api/runtime/channel", get(channel))
+        .route("/api/runtime/memories", get(memories))
         .layer(DefaultBodyLimit::max(20 * 1024))
         .layer(axum::middleware::map_response(no_store))
         .with_state(identity)
@@ -57,6 +58,42 @@ async fn channel(
     Ok(upgrade
         .max_message_size(2 * cubebot_protocol::runtime::EVENT_BYTES)
         .on_upgrade(move |socket| identity.serve(token, socket)))
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MemoryQuery {
+    query: String,
+}
+/// Searches only the authenticated agent's own memories.
+async fn memories(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Query(input): Query<MemoryQuery>,
+) -> Result<Json<Vec<Memory>>, Failure> {
+    let actor = identity
+        .authenticate(bearer(&headers)?, RuntimeAccess::Active)
+        .await
+        .map_err(Failure::from)?;
+    if input.query.trim().is_empty() || input.query.len() > 1024 || input.query.contains('\0') {
+        return Err(Failure(StatusCode::BAD_REQUEST));
+    }
+    let found = crate::knowledge::Knowledge::new(identity.pool.clone())
+        .search_for_agent(actor.agent, &input.query)
+        .await
+        .map_err(|error| {
+            tracing::warn!(?error, "memory search failed");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })?;
+    Ok(Json(
+        found
+            .into_iter()
+            .map(|memory| Memory {
+                id: memory.id,
+                revision: memory.revision,
+                content: memory.content,
+            })
+            .collect(),
+    ))
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
     headers

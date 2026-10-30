@@ -67,6 +67,171 @@
         }
       }
     },
+    "/api/agents/{agent}/memories": {
+      "get": {
+        "tags": [],
+        "operationId": "search_memories",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Memory"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_memory",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMemory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Memory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/memories/{memory}": {
+      "put": {
+        "tags": [],
+        "summary": "409 when `expected_revision` is no longer current.",
+        "operationId": "revise_memory",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "memory",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviseMemory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Memory"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Removes the memory from retrieval; its revision history is kept.",
+        "operationId": "delete_memory",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "memory",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "expected_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/definition": {
       "post": {
         "tags": [],
@@ -545,6 +710,16 @@
         },
         "additionalProperties": false
       },
+      "CreateMemory": {
+        "type": "object",
+        "required": ["content"],
+        "properties": {
+          "content": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Event": {
         "type": "object",
         "required": ["id", "turn_id", "payload"],
@@ -579,6 +754,88 @@
           }
         },
         "additionalProperties": false
+      },
+      "Memory": {
+        "type": "object",
+        "required": ["id", "revision", "content", "edited_by_human"],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "edited_by_human": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "source_turn": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The turn whose completion wrote the current revision; `None` for a human edit."
+          }
+        }
+      },
+      "MemoryChange": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["content", "op"],
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "op": {
+                "type": "string",
+                "enum": ["remember"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["memory", "expected_revision", "content", "op"],
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "expected_revision": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "memory": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "op": {
+                "type": "string",
+                "enum": ["revise"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["memory", "expected_revision", "op"],
+            "properties": {
+              "expected_revision": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "memory": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "op": {
+                "type": "string",
+                "enum": ["forget"]
+              }
+            }
+          }
+        ],
+        "description": "A memory write staged by the agent. A revision or removal names the revision it read; a\nnewer one, such as a human edit, wins and the change is dropped."
       },
       "Outcome": {
         "oneOf": [
@@ -740,6 +997,20 @@
         },
         "additionalProperties": false
       },
+      "ReviseMemory": {
+        "type": "object",
+        "required": ["content", "expected_revision"],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "SendMessage": {
         "type": "object",
         "required": ["request_id", "message"],
@@ -881,11 +1152,18 @@
           },
           {
             "type": "object",
+            "description": "Memory changes staged during the turn commit with it, or not at all.",
             "required": ["response", "kind"],
             "properties": {
               "kind": {
                 "type": "string",
                 "enum": ["done"]
+              },
+              "memories": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/MemoryChange"
+                }
               },
               "response": {
                 "type": "string"

@@ -138,12 +138,46 @@ pub enum TurnEvent {
     Summary {
         text: String,
     },
+    /// Memory changes staged during the turn commit with it, or not at all.
     Done {
         response: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        memories: Vec<MemoryChange>,
     },
     Error {
         code: String,
     },
+}
+
+/// A memory write staged by the agent. A revision or removal names the revision it read; a
+/// newer one, such as a human edit, wins and the change is dropped.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MemoryChange {
+    Remember {
+        content: String,
+    },
+    Revise {
+        memory: Uuid,
+        expected_revision: i64,
+        content: String,
+    },
+    Forget {
+        memory: Uuid,
+        expected_revision: i64,
+    },
+}
+
+/// Largest memory content in bytes.
+pub const MEMORY_BYTES: usize = 4096;
+
+/// A memory search result over `GET /api/runtime/memories?query=`.
+#[derive(Serialize, Deserialize)]
+pub struct Memory {
+    pub id: Uuid,
+    pub revision: i64,
+    pub content: String,
 }
 
 #[cfg(test)]
@@ -157,10 +191,17 @@ mod tests {
             sequence: 3,
             event: TurnEvent::Done {
                 response: "ok".into(),
+                memories: Vec::new(),
             },
         };
         let text = serde_json::to_string(&report).unwrap();
         assert!(text.contains(r#""type":"event""#) && text.contains(r#""kind":"done""#));
+        assert!(!text.contains("memories"), "{text}");
+        let staged: TurnEvent = serde_json::from_str(
+            r#"{"kind":"done","response":"ok","memories":[{"op":"forget","memory":"00000000-0000-0000-0000-000000000000","expected_revision":2}]}"#,
+        )
+        .unwrap();
+        assert!(matches!(staged, TurnEvent::Done { memories, .. } if memories.len() == 1));
         assert!(matches!(
             serde_json::from_str::<Report>(&text).unwrap(),
             Report::Event { sequence: 3, .. }
