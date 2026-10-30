@@ -1,6 +1,8 @@
 //! Virtio over MMIO (virtio 1.2 §4.2, version 2 registers). A [`Transport`] holds the registers
 //! and virtqueues of one [`Device`]; devices only see their queues and guest memory.
 pub mod block;
+pub mod gpu;
+pub mod input;
 pub mod net;
 pub mod queue;
 pub mod vsock;
@@ -24,8 +26,11 @@ pub trait Device: Send {
     const QUEUES: usize;
     /// Device-specific feature bits; the transport adds VIRTIO_F_VERSION_1.
     fn features(&self) -> u64;
-    /// Read-only device configuration space.
+    /// Device configuration space.
     fn config(&self) -> &[u8];
+    /// The driver wrote `data` at `offset` in the configuration space, which is read-only unless
+    /// the device says otherwise.
+    fn write_config(&mut self, _offset: u64, _data: &[u8]) {}
     /// Serves the driver's notification for `queue`; returns whether the device used buffers.
     fn notify(
         &mut self,
@@ -132,7 +137,11 @@ impl<D: Device> Transport<D> {
 
     /// Returns whether the write made the device use buffers, so the caller raises its interrupt.
     pub fn write(&mut self, offset: u64, data: &[u8], memory: &GuestMemory) -> io::Result<bool> {
-        // Registers are 32-bit; the configuration spaces here are read-only.
+        if offset >= CONFIG {
+            self.device.write_config(offset - CONFIG, data);
+            return Ok(false);
+        }
+        // Registers are 32-bit.
         let Ok(bytes) = <[u8; 4]>::try_from(data) else {
             return Ok(false);
         };
@@ -178,7 +187,9 @@ impl<D: Device> Transport<D> {
             0x044 => queue.is_some_and(|queue| queue.ready).into(),
             0x060 => self.interrupt,
             0x070 => self.status,
-            // 0x0fc ConfigGeneration stays 0: no configuration space here ever changes.
+            // SHMLen of a shared memory region the device lacks, as every region here (§4.2.2).
+            0x0b0 | 0x0b4 => u32::MAX,
+            // 0x0fc ConfigGeneration stays 0: only driver writes change a configuration space.
             _ => 0,
         }
     }
@@ -323,6 +334,7 @@ mod tests {
         let mut config = [0; 4];
         transport.read(0x101, &mut config);
         assert_eq!(&config, b"fg\0\0");
+        assert_eq!(read(&transport, 0xb0), u32::MAX, "no shared memory region");
         // Without VIRTIO_F_VERSION_1 the device refuses FEATURES_OK.
         write(&mut transport, 0x20, 1);
         write(&mut transport, 0x70, 1 | 2 | FEATURES_OK);
