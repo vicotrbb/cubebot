@@ -1,5 +1,5 @@
-//! The sandbox: one VM with one memory region and one vCPU booting a Linux guest from a read-only
-//! root disk, with the agent's guest init as init (ADR 0084). Its devices are a 16550 serial
+//! The sandbox: one VM with one memory region and a thread per vCPU booting a Linux guest from a
+//! read-only root disk, with the agent's guest init as init (ADR 0084). Its devices are a 16550 serial
 //! console relayed to stdout and virtio-mmio disks for the root and workspace, a network device on
 //! a tap, and vsock for the control channel.
 #![allow(unsafe_code, reason = "KVM ioctls and guest memory (ADR 0084)")]
@@ -26,20 +26,23 @@ use std::{
     os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd},
     path::{Path, PathBuf},
     process::Command,
-    sync::Arc,
+    sync::{Arc, Mutex, mpsc},
 };
 use virtio::{Mmio, Slot, block::Block, net::Net, vsock::Vsock};
 
-// shortcut: fixed guest and workspace sizes, make them configurable once ADR 0084's sizing detail
-// is decided.
-const MEMORY: usize = 256 << 20;
+// shortcut: fixed workspace size, make it configurable when an agent needs more.
 const WORKSPACE_SIZE: u64 = 8 << 30;
+/// CUBEBOT_GUEST_VCPUS and CUBEBOT_GUEST_MEMORY_MIB (ADR 0085). 32 is the guest kernel's NR_CPUS;
+/// shortcut: a 64-vCPU guest hung in reboot on a 16-core host, find why before raising it.
+const VCPUS: (u32, std::ops::RangeInclusive<u32>) = (2, 1..=32);
+const MEMORY_MIB: (u32, std::ops::RangeInclusive<u32>) = (2048, 256..=3072);
 const CMDLINE: &str = "console=ttyS0 earlyprintk=serial reboot=t panic=-1 \
     root=/dev/vda ro rootfstype=ext4 init=/usr/local/bin/cubebot-agent";
 const SERIAL: std::ops::RangeInclusive<u16> = 0x3f8..=0x3ff;
 const SERIAL_IRQ: u32 = 4;
-/// Device windows sit above guest RAM, which the E820 map ends at `MEMORY`.
+/// Device windows sit above guest RAM, which the E820 map ends at the guest memory size.
 const MMIO: u64 = 0xd000_0000;
+const _: () = assert!((*MEMORY_MIB.1.end() as u64) << 20 <= MMIO);
 /// Root disk, workspace disk, network, vsock: free ISA interrupts once COM1 has IRQ 4. Linux names
 /// the disks vda and vdb in this order.
 const IRQS: [u32; 4] = [5, 6, 9, 10];
@@ -58,8 +61,10 @@ pub fn run() -> io::Result<u8> {
         .thread_block()
         .map_err(failed("pthread_sigmask"))?;
     let kernel = read_configured("CUBEBOT_GUEST_KERNEL")?;
+    let vcpus = sized("CUBEBOT_GUEST_VCPUS", VCPUS)? as u8;
+    let memory_size = (sized("CUBEBOT_GUEST_MEMORY_MIB", MEMORY_MIB)? as usize) << 20;
     let (kvm, vm) = open_vm()?;
-    let mut memory = guest_memory(&vm)?;
+    let mut memory = guest_memory(&vm, memory_size)?;
     let Devices {
         bus,
         net,
@@ -68,14 +73,11 @@ pub fn run() -> io::Result<u8> {
         environment,
         cmdline,
     } = devices(vm.as_raw_fd())?;
-    let entry = boot::load(memory.as_mut_slice(), &kernel, &cmdline)?;
+    let entry = boot::load(memory.as_mut_slice(), &kernel, &cmdline, vcpus)?;
     let memory: &'static GuestMemory = Box::leak(Box::new(memory));
-    let vcpu = unsafe {
-        OwnedFd::from_raw_fd(
-            sys::create_vcpu(vm.as_raw_fd(), 0).map_err(failed("KVM_CREATE_VCPU"))?,
-        )
-    };
-    configure_vcpu(&kvm, &vcpu, entry)?;
+    let vcpus = create_vcpus(&kvm, vm.as_raw_fd(), vcpus, entry)?;
+    let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd(), 0) }
+        .map_err(failed("KVM_GET_VCPU_MMAP_SIZE"))? as usize;
     let receivable = net.lock().device.receivable();
     std::thread::spawn(move || {
         let error = virtio::net::receive(tap, &net, &receivable, memory).unwrap_err();
@@ -85,7 +87,17 @@ pub fn run() -> io::Result<u8> {
     std::thread::spawn(move || refresh(environment, &refreshed, memory));
     let stopped = vsock.clone();
     std::thread::spawn(move || stop(termination, &stopped, memory));
-    run_vcpu(&kvm, &vcpu, vm.as_raw_fd(), &bus, memory)?;
+    // The guest ends when any vCPU stops, such as the one that triple-faults on reboot.
+    let (ended, end) = mpsc::channel();
+    let serial = Arc::new(Mutex::new(serial::Serial::default()));
+    let vm_fd = vm.as_raw_fd();
+    for vcpu in vcpus {
+        let (ended, bus, serial) = (ended.clone(), bus.clone(), serial.clone());
+        std::thread::spawn(move || {
+            let _ = ended.send(run_vcpu(&vcpu, size, vm_fd, &bus, &serial, memory));
+        });
+    }
+    end.recv().map_err(io::Error::other)??;
     // A guest that ends without reporting an exit status failed before or while running the agent.
     Ok(vsock.lock().device.exit().unwrap_or_else(|| {
         eprintln!("Guest ended without an agent exit status");
@@ -160,20 +172,19 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
     })
 }
 
-/// Runs the vCPU until the guest shuts down, serving its port I/O and MMIO.
+/// Runs one vCPU until the guest shuts down, serving its port I/O and MMIO.
 fn run_vcpu(
-    kvm: &File,
     vcpu: &OwnedFd,
+    size: usize,
     vm: RawFd,
     bus: &[Arc<dyn Mmio>],
+    serial: &Mutex<serial::Serial>,
     memory: &GuestMemory,
 ) -> io::Result<()> {
-    let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd(), 0) }
-        .map_err(failed("KVM_GET_VCPU_MMAP_SIZE"))?;
     let run = unsafe {
         mmap(
             None,
-            NonZeroUsize::new(size as usize).ok_or(Errno::EINVAL)?,
+            NonZeroUsize::new(size).ok_or(Errno::EINVAL)?,
             ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
             MapFlags::MAP_SHARED,
             vcpu,
@@ -182,12 +193,15 @@ fn run_vcpu(
     }
     .map_err(failed("mmap kvm_run"))?
     .cast::<sys::Run>();
-    let mut serial = serial::Serial::default();
     loop {
-        unsafe { sys::run(vcpu.as_raw_fd(), 0) }.map_err(failed("KVM_RUN"))?;
+        // A waiting vCPU returns EAGAIN when its INIT arrives, and any vCPU EINTR on a signal.
+        match unsafe { sys::run(vcpu.as_raw_fd(), 0) } {
+            Err(Errno::EAGAIN | Errno::EINTR) => continue,
+            result => result.map_err(failed("KVM_RUN"))?,
+        };
         let run = unsafe { run.as_ptr().as_mut().ok_or(Errno::EFAULT)? };
         match run.exit_reason {
-            sys::EXIT_IO => port_io(run, &mut serial, vm)?,
+            sys::EXIT_IO => port_io(run, &mut serial.lock().expect("serial lock"), vm)?,
             sys::EXIT_MMIO => mmio(run, bus, memory)?,
             // reboot=t and panic=-1 turn a guest reboot, including init exiting, into a triple fault.
             sys::EXIT_HLT | sys::EXIT_SHUTDOWN => return Ok(()),
@@ -333,11 +347,28 @@ fn mmio_base(index: usize) -> u64 {
     MMIO + index as u64 * virtio::WINDOW
 }
 
+/// A size from the environment, or its default when unset.
+fn sized(name: &str, (default, range): (u32, std::ops::RangeInclusive<u32>)) -> io::Result<u32> {
+    let Some(value) = std::env::var_os(name) else {
+        return Ok(default);
+    };
+    value
+        .to_str()
+        .and_then(|value| value.parse().ok())
+        .filter(|value| range.contains(value))
+        .ok_or_else(|| {
+            let (low, high) = range.into_inner();
+            io::Error::other(format!(
+                "{name} must be a whole number from {low} to {high}"
+            ))
+        })
+}
+
 /// Maps the single guest memory region at guest physical address 0, with the in-kernel PIC, IOAPIC
 /// and PIT the guest's timer and device interrupts need.
-fn guest_memory(vm: &OwnedFd) -> io::Result<GuestMemory> {
+fn guest_memory(vm: &OwnedFd, size: usize) -> io::Result<GuestMemory> {
     let fd = vm.as_raw_fd();
-    let memory = GuestMemory::map(MEMORY)?;
+    let memory = GuestMemory::map(size)?;
     let region = sys::MemoryRegion {
         slot: 0,
         flags: 0,
@@ -356,22 +387,37 @@ fn guest_memory(vm: &OwnedFd) -> io::Result<GuestMemory> {
     Ok(memory)
 }
 
-/// Starts the vCPU in 64-bit long mode at the kernel entry with the host's supported CPUID.
-fn configure_vcpu(kvm: &File, vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
-    let fd = vcpu.as_raw_fd();
-    let mut cpuid = sys::Cpuid {
+/// Creates the vCPUs with the host's supported CPUID and their own APIC IDs. The bootstrap
+/// processor starts at the kernel entry; the rest wait in the in-kernel APIC for the guest's SIPI.
+fn create_vcpus(kvm: &File, vm: RawFd, count: u8, entry: u64) -> io::Result<Vec<OwnedFd>> {
+    let mut supported = sys::Cpuid {
         nent: 256,
         padding: 0,
         entries: [sys::CpuidEntry::default(); 256],
     };
-    let mut sregs = sys::Sregs::default();
-    unsafe {
-        sys::get_supported_cpuid(kvm.as_raw_fd(), &mut cpuid)
-            .map_err(failed("KVM_GET_SUPPORTED_CPUID"))?;
-        as_vcpu_zero(&mut cpuid);
-        sys::set_cpuid2(fd, &cpuid).map_err(failed("KVM_SET_CPUID2"))?;
-        sys::get_sregs(fd, &mut sregs).map_err(failed("KVM_GET_SREGS"))?;
+    unsafe { sys::get_supported_cpuid(kvm.as_raw_fd(), &mut supported) }
+        .map_err(failed("KVM_GET_SUPPORTED_CPUID"))?;
+    let mut vcpus = Vec::new();
+    for id in 0..count {
+        let vcpu = unsafe {
+            OwnedFd::from_raw_fd(
+                sys::create_vcpu(vm, id.into()).map_err(failed("KVM_CREATE_VCPU"))?,
+            )
+        };
+        let mut cpuid = supported.clone();
+        as_vcpu(&mut cpuid, id);
+        unsafe { sys::set_cpuid2(vcpu.as_raw_fd(), &cpuid) }.map_err(failed("KVM_SET_CPUID2"))?;
+        vcpus.push(vcpu);
     }
+    start_at(&vcpus[0], entry)?;
+    Ok(vcpus)
+}
+
+/// Starts the vCPU in 64-bit long mode at the kernel entry.
+fn start_at(vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
+    let fd = vcpu.as_raw_fd();
+    let mut sregs = sys::Sregs::default();
+    unsafe { sys::get_sregs(fd, &mut sregs) }.map_err(failed("KVM_GET_SREGS"))?;
     let code = sys::Segment {
         limit: 0xffff_ffff,
         selector: 0x10,
@@ -412,12 +458,15 @@ fn configure_vcpu(kvm: &File, vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
     Ok(())
 }
 
-/// The supported CPUID carries the host CPU's APIC ID; the guest's only CPU is APIC 0.
-fn as_vcpu_zero(cpuid: &mut sys::Cpuid) {
+/// The supported CPUID carries the host CPU's APIC ID; each vCPU reports its own, as the MP
+/// table lists it.
+fn as_vcpu(cpuid: &mut sys::Cpuid, id: u8) {
     for entry in cpuid.entries.iter_mut().take(cpuid.nent as usize) {
         match entry.function {
-            0x1 => entry.ebx &= 0x00ff_ffff,
-            0xb | 0x1f => entry.edx = 0,
+            0x1 => entry.ebx = entry.ebx & 0x00ff_ffff | u32::from(id) << 24,
+            0xb | 0x1f => entry.edx = id.into(),
+            // AMD's extended APIC ID and, one thread per core, the core ID.
+            0x8000_001e => (entry.eax, entry.ebx) = (id.into(), id.into()),
             _ => (),
         }
     }
@@ -505,13 +554,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cpuid_reports_apic_zero_and_keeps_other_leaves() {
+    fn cpuid_reports_the_vcpus_apic_id_and_keeps_other_leaves() {
         let mut cpuid = sys::Cpuid {
-            nent: 3,
+            nent: 4,
             padding: 0,
             entries: [sys::CpuidEntry::default(); 256],
         };
-        for (entry, function) in cpuid.entries.iter_mut().zip([0x1, 0xb, 0x7]) {
+        for (entry, function) in cpuid.entries.iter_mut().zip([0x1, 0xb, 0x7, 0x8000_001e]) {
             *entry = sys::CpuidEntry {
                 function,
                 ebx: 0x0201_0800,
@@ -519,9 +568,10 @@ mod tests {
                 ..Default::default()
             };
         }
-        as_vcpu_zero(&mut cpuid);
-        assert_eq!(cpuid.entries[0].ebx, 0x0001_0800);
-        assert_eq!(cpuid.entries[1].edx, 0);
+        as_vcpu(&mut cpuid, 3);
+        assert_eq!(cpuid.entries[0].ebx, 0x0301_0800);
+        assert_eq!(cpuid.entries[1].edx, 3);
+        assert_eq!((cpuid.entries[3].eax, cpuid.entries[3].ebx), (3, 3));
         assert_eq!(
             (cpuid.entries[2].ebx, cpuid.entries[2].edx),
             (0x0201_0800, 2)

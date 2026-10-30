@@ -1,6 +1,6 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)) and 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)). Status: intended design grounded in 84 accepted ADRs. The sandbox boots every agent in a KVM guest; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
+Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)), 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)) and 2026-10-30 for the desktop as VMM devices ([ADR 0085](docs/adr/0085-desktop-as-a-vmm-device.md)). Status: intended design grounded in 85 accepted ADRs. The sandbox boots every agent in a KVM guest; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 

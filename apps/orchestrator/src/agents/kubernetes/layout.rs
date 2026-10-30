@@ -104,10 +104,11 @@ impl Layout {
         serde_json::from_value(value).map_err(|_| Error::InvalidConfiguration)
     }
 
+    /// The memory limit holds the guest's default 2 GiB (ADR 0085) and the VMM around it.
     fn sandbox(&self) -> Value {
         json!({"name":"sandbox","image":self.image,"imagePullPolicy":"IfNotPresent",
             "command":["/usr/local/bin/cubebot-sandbox"],"args":["run"],
-            "securityContext":security(),"resources":resources("100m","256Mi","2","2Gi"),
+            "securityContext":security(),"resources":resources("100m","256Mi","2","3Gi"),
             "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"},{"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"},{"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}],
             "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"tmp","mountPath":"/tmp"}]})
     }

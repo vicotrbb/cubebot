@@ -27,6 +27,6 @@ Consequences: The separate tool container, privileged network initializer, in-po
 
 Alternatives considered: Keep a RuntimeClass such as Kata, which leaves the boundary outside Cubebot and unavailable without cluster-level installation. Embed rust-vmm, Firecracker or Cloud Hypervisor crates, which brings a far larger device model and dependency surface than four devices need. Use gVisor or plain containers, which do not give a hardware virtualization boundary.
 
-Open details: Guest kernel and root image build and signing; vsock control protocol; how `/dev/kvm` reaches the pod on each qualified cluster; tap and address setup inside the pod network namespace; guest memory and vCPU sizing; the sandbox qualification matrix.
+Open details: Guest kernel and root image build and signing; vsock control protocol; how `/dev/kvm` reaches the pod on each qualified cluster; tap and address setup inside the pod network namespace; guest memory and vCPU sizing (decided in ADR 0085); the sandbox qualification matrix.
 
 Validation scenarios: A sandbox on a KVM node boots the guest, mounts the workspace disk and logs through the serial console; a command in the guest cannot reach another agent, the database or the Kubernetes API, and NetworkPolicy changes take effect on guest traffic; stopping the agent ends the VM; a sandbox image built without the guest fails to build; a sandbox lost mid-command recovers from its journal and the orchestrator's attempt records without re-running the command.
