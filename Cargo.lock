@@ -490,6 +490,7 @@ dependencies = [
  "sha2",
  "sqlx",
  "tokio",
+ "tokio-rustls",
  "tokio-tungstenite",
  "tower",
  "tracing",

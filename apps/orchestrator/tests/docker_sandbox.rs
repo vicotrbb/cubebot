@@ -40,7 +40,7 @@ async fn fixture() -> Fixture {
     std::fs::write(&program, FAKE).unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
     let config = DockerConfig::parse(
-        r#"{"image":"cubebot-sandbox:test","orchestrator_origin":"https://cubebot.test"}"#,
+        r#"{"image":"cubebot-sandbox:test","orchestrator_origin":"https://172.17.0.1:8443","control_ca_file":"/srv/ca.crt"}"#,
     )
     .unwrap();
     let docker = Docker::new(pool.clone(), config).with_program(program.to_str().unwrap());
@@ -66,6 +66,7 @@ impl Fixture {
         assert!(token.starts_with("cb_sandbox_") && !args.contains("cb_sandbox_"));
         assert!(args.lines().any(|line| line == "CUBEBOT_BOOTSTRAP_TOKEN"));
         assert!(args.contains("\n/dev/kvm\n") && args.ends_with("\ncubebot-sandbox:test\nrun\n"));
+        assert!(args.contains("\ntype=bind,source=/srv/ca.crt,target=/run/cubebot/control-ca/ca.crt,readonly\n--env\nCUBEBOT_CONTROL_CA_FILE=/run/cubebot/control-ca/ca.crt\n"));
         token
     }
     fn set(&self, epoch: i64, status: &str) {

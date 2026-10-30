@@ -7,6 +7,7 @@ mod registry_support;
 #[path = "support/runtime.rs"]
 mod runtime_support;
 mod support;
+mod tls;
 
 mod access;
 mod agent_lifecycle;

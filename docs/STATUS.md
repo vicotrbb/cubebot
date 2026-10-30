@@ -32,6 +32,7 @@ Kubernetes and isolation
 - NetworkPolicy enforcement on guest traffic has passed only under kind's kindnet in one `just cluster-sandbox` run; it is not qualified on a production CNI.
 - Connected-cluster operation with a private control CA is unqualified; only local TLS tests exist.
 - Database-only development mode is not production recovery qualification.
+- The Docker backend with a `just dev-ca` control CA is checked only by the local `just docker-sandbox`. It passed once on 2026-10-30 on an x86_64 AMD host with `/dev/kvm`, with Docker running inside a privileged pod: one agent booted in a KVM guest, authenticated over HTTPS to the `docker0` address, and ran one bash tool call against OpenAI `gpt-4.1-mini`. It is not in CI.
 - `just cluster-admission` creates no running agent or workspace; CSI, CNI and full lifecycle qualification are pending.
 
 Identity and security
