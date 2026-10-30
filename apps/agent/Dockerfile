@@ -16,7 +16,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # The kvm guest's read-only root filesystem (ADR 0084). tooling/guest exports it to ext4, and the
 # kernel runs `cubebot-agent guest` as init, which mounts the workspace disk on /var/lib/cubebot.
 FROM debian:bookworm-slim
+# CUBEBOT_TOOL_USER is 10001:10001; guest init creates and chowns its home on the workspace disk.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+        git curl python3 build-essential ripgrep jq openssh-client \
     && rm -rf /var/lib/apt/lists/* \
-    && install -d -m 0755 /var/lib/cubebot
+    && install -d -m 0755 /var/lib/cubebot \
+    && groupadd -g 10001 tool && useradd -u 10001 -g 10001 -M -d /var/lib/cubebot/workspace -s /bin/bash tool
 COPY --from=build /out/cubebot-agent /usr/local/bin/
