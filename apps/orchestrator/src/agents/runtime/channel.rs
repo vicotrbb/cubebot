@@ -10,6 +10,8 @@ use uuid::Uuid;
 #[derive(Default)]
 struct Channel {
     pulling: bool,
+    /// The agent heard there is no work since it last received a turn.
+    idle: bool,
     active: Option<Uuid>,
     drain: Option<Uuid>,
 }
@@ -103,20 +105,53 @@ impl RuntimeIdentity {
             && channel.active.is_none()
             && matches!(control.disposition, RuntimeDisposition::Available)
         {
-            let mut tx = self.lock_runtime(&control.actor).await?;
-            self.recheck(token, &control.actor, &mut tx).await?;
-            let claimed = work
-                .claim(&mut tx, &control.actor, self.connections.as_ref())
-                .await?;
-            tx.commit().await?;
-            if let Some(turn) = claimed {
-                channel.pulling = false;
-                channel.active = Some(turn.turn);
-                deliveries.push(Delivery::Turn(turn));
-            }
+            deliveries.extend(self.offer(token, &control.actor, channel).await?);
         }
         Ok(deliveries)
     }
+
+    /// The next turn, or once per idle spell the notice that there is none.
+    async fn offer(
+        &self,
+        token: &str,
+        actor: &super::RuntimeActor,
+        channel: &mut Channel,
+    ) -> Result<Option<Delivery>, Error> {
+        let mut tx = self.lock_runtime(actor).await?;
+        self.recheck(token, actor, &mut tx).await?;
+        let claimed = Work::new(self.pool.clone())
+            .claim(&mut tx, actor, self.connections.as_ref())
+            .await?;
+        let delivery = match claimed {
+            Some(turn) => {
+                channel.pulling = false;
+                channel.idle = false;
+                channel.active = Some(turn.turn);
+                Some(Delivery::Turn(turn))
+            }
+            None if !channel.idle => {
+                channel.idle = true;
+                Some(Delivery::Idle {
+                    dream_after_seconds: dream_after(&mut tx, actor).await?,
+                })
+            }
+            None => None,
+        };
+        tx.commit().await?;
+        Ok(delivery)
+    }
+}
+
+/// The agent's configured idle delay before it may dream (ADR 0025).
+async fn dream_after(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &super::RuntimeActor,
+) -> Result<u64, Error> {
+    let seconds: i32 = sqlx::query_scalar("SELECT idle_delay_seconds FROM agents WHERE id=$1")
+        .bind(actor.agent)
+        .fetch_one(&mut **tx)
+        .await?;
+    Ok(seconds.unsigned_abs().into())
 }
 
 /// Sends deliveries in order; false closes the channel.

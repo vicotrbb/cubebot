@@ -1,6 +1,6 @@
 # ADR 0025: Idle-only dreaming with visible status and results
 
-Status: Accepted
+Status: Accepted; admission partially superseded by ADR 0083
 
 Date: 2026-10-23
 
@@ -8,7 +8,7 @@ Dreaming consolidates an agent's derived memory and can create or improve reusab
 
 Decision: Dream only while the agent is idle across all execution lanes. The user selected idle-only dreaming on 2026-10-23 and explicitly required visibility into both the dreaming state and its results through the management console and mobile PWA.
 
-Scheduling owns admission. Dreaming must not start alongside an active main or task turn, or take precedence over eligible queued work. New work requests cause dreaming to yield at a safe checkpoint before ordinary execution begins. A quiet main lane alone does not establish idle eligibility. Unresolved execution outcomes must be reconciled before treating a lane as idle.
+~~Scheduling owns admission.~~ Superseded by [ADR 0083](0083-agent-centric-execution-in-a-sandbox-boundary.md): lanes are a scheduling rule inside the agent loop, so the agent decides when it is idle enough to dream and the orchestrator only refuses a run while work is queued, running or waiting. Dreaming must not start alongside an active main or task turn, or take precedence over eligible queued work. New work requests cause dreaming to yield at a safe checkpoint before ordinary execution begins. A quiet main lane alone does not establish idle eligibility. Unresolved execution outcomes must be reconciled before treating a lane as idle.
 
 Scheduled dreaming can wake a sleeping agent under [ADR 0007](0007-agent-idle-lifecycle.md), subject to admission and budgets. Idle status does not trigger continuous inference. Retired agents remain ineligible under ADR 0018. Automatic extraction under ADR 0021 and necessary active-context compaction under ADR 0024 remain separate operations; this decision governs broader dreaming maintenance.
 

@@ -17,6 +17,7 @@ mod chat;
 mod controller_config;
 mod credential_encryption;
 mod docker_sandbox;
+mod dreams;
 mod http;
 mod identity;
 mod identity_http;

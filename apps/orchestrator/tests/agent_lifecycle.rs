@@ -40,14 +40,31 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         name: "Researcher v2".into(),
         instructions: "Corrected evidence".into(),
         idle_policy: IdlePolicy::KeepRunning,
+        idle_delay_seconds: 900,
+        dreaming_model: Some("dream-model".into()),
     };
     let receipt = agents.update(&actor, id, &update).await.unwrap();
     assert_eq!(receipt.revision, 2);
     assert_eq!(agents.update(&actor, id, &update).await.unwrap(), receipt);
     let definition = agents.get(&actor, id).await.unwrap();
     assert_eq!(definition.instructions_revision, 2);
+    assert_eq!(
+        (
+            definition.idle_delay_seconds,
+            definition.dreaming_model.as_deref()
+        ),
+        (900, Some("dream-model"))
+    );
+    let invalid = UpdateAgent {
+        request_id: Uuid::new_v4(),
+        expected_revision: 2,
+        idle_delay_seconds: 59,
+        ..update
+    };
+    assert!(agents.update(&actor, id, &invalid).await.is_err());
     let history = agents.revisions(&actor, id, 0).await.unwrap();
     assert_eq!(history.len(), 2);
+    assert_eq!(history[1].idle_delay_seconds, 900);
     assert_eq!(history[0].instructions, "Original");
     let (wake, receipt) = check_wake(&agents, &actor, id).await;
     check_restart_and_retire(&agents, &actor, id, wake, receipt).await;
@@ -189,6 +206,8 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         name: "First".into(),
         instructions: "Keep this text".into(),
         idle_policy: IdlePolicy::KeepRunning,
+        idle_delay_seconds: 600,
+        dreaming_model: None,
     };
     let second = UpdateAgent {
         request_id: Uuid::new_v4(),
@@ -196,6 +215,8 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         expected_revision: 1,
         instructions: first.instructions.clone(),
         idle_policy: first.idle_policy,
+        idle_delay_seconds: 600,
+        dreaming_model: None,
     };
     let (first, second) = tokio::join!(
         agents.update(&admin, id, &first),

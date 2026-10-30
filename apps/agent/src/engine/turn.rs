@@ -87,7 +87,7 @@ pub(super) async fn run(
     run.emit(end, None);
 }
 
-fn configured<P>(
+pub(super) fn configured<P>(
     new: fn() -> Result<P, Error>,
     loopback: fn(&str) -> Result<P, Error>,
 ) -> Result<P, Error> {

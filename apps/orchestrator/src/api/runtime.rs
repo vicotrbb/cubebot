@@ -5,12 +5,15 @@ use crate::agents::{
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Query, State, ws::WebSocketUpgrade},
+    extract::{DefaultBodyLimit, Path, Query, State, ws::WebSocketUpgrade},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use cubebot_protocol::runtime::{Bootstrap, Memory, RuntimeActor, RuntimeSession};
+use cubebot_protocol::runtime::{
+    Bootstrap, Dream, DreamEnd, Memory, MemoryChange, REPORT_BYTES, RuntimeActor, RuntimeSession,
+};
+use uuid::Uuid;
 
 pub(super) fn router(identity: RuntimeIdentity) -> Router {
     Router::new()
@@ -18,6 +21,11 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/identity", get(inspect))
         .route("/api/runtime/channel", get(channel))
         .route("/api/runtime/memories", get(memories))
+        .route(
+            "/api/runtime/dreams/{run}",
+            post(start_dream).put(finish_dream),
+        )
+        .route("/api/runtime/dreams/{run}/changes", post(commit_dream))
         .layer(DefaultBodyLimit::max(20 * 1024))
         .layer(axum::middleware::map_response(no_store))
         .with_state(identity)
@@ -94,6 +102,71 @@ async fn memories(
             })
             .collect(),
     ))
+}
+/// Admits a dream run; 409 when the agent may not dream now.
+async fn start_dream(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+) -> Result<Json<Dream>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    crate::knowledge::start_dream(&identity.pool, identity.connections.as_ref(), &actor, run)
+        .await
+        .map_err(unavailable)?
+        .map(Json)
+        .ok_or(Failure(StatusCode::CONFLICT))
+}
+/// Commits one change of a running run; 409 once it has ended.
+async fn commit_dream(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+    Json(change): Json<MemoryChange>,
+) -> Result<StatusCode, Failure> {
+    let actor = active(&identity, &headers).await?;
+    if !crate::knowledge::valid_change(&change) {
+        return Err(Failure(StatusCode::BAD_REQUEST));
+    }
+    let open = crate::knowledge::commit_dream(&identity.pool, &actor, run, &change)
+        .await
+        .map_err(unavailable)?;
+    Ok(if open {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::CONFLICT
+    })
+}
+async fn finish_dream(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(run): Path<Uuid>,
+    Json(end): Json<DreamEnd>,
+) -> Result<StatusCode, Failure> {
+    let actor = active(&identity, &headers).await?;
+    if end.report.len() > REPORT_BYTES || end.report.contains('\0') {
+        return Err(Failure(StatusCode::BAD_REQUEST));
+    }
+    let ended = crate::knowledge::finish_dream(&identity.pool, &actor, run, &end)
+        .await
+        .map_err(unavailable)?;
+    Ok(if ended {
+        StatusCode::NO_CONTENT
+    } else {
+        StatusCode::CONFLICT
+    })
+}
+async fn active(
+    identity: &RuntimeIdentity,
+    headers: &HeaderMap,
+) -> Result<crate::agents::runtime::RuntimeActor, Failure> {
+    identity
+        .authenticate(bearer(headers)?, RuntimeAccess::Active)
+        .await
+        .map_err(Failure::from)
+}
+fn unavailable(error: sqlx::Error) -> Failure {
+    tracing::warn!(?error, "dream request failed");
+    Failure(StatusCode::SERVICE_UNAVAILABLE)
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
     headers

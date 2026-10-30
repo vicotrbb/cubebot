@@ -18,7 +18,7 @@ pub struct RuntimeIdentity {
     pub(crate) pool: PgPool,
     /// `None` serves cluster-less Docker sandboxes, which bootstrap with a per-container token.
     api: Option<Kubernetes>,
-    connections: Option<crate::connections::Connections>,
+    pub(crate) connections: Option<crate::connections::Connections>,
 }
 #[derive(Serialize)]
 pub struct RuntimeSession {

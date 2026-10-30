@@ -29,6 +29,7 @@ def check_lifecycle(base, admin, member):
         "name": "Updated lifecycle agent",
         "instructions": "Corrected instructions",
         "idle_policy": "keep_running",
+        "idle_delay_seconds": 600,
     }
     status, updated = request(base, path + "/definition", member, update)
     assert status == 200 and updated["revision"] == 2

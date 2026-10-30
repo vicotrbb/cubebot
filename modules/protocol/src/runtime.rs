@@ -44,6 +44,10 @@ pub enum Delivery {
     },
     /// The credential no longer authorizes this sandbox; stop work.
     Revoked,
+    /// No work is waiting. An agent still idle and reconciled after the delay may ask to dream.
+    Idle {
+        dream_after_seconds: u64,
+    },
 }
 
 /// Largest encoded turn event the ledger accepts. Responses are not otherwise bounded.
@@ -168,6 +172,37 @@ pub enum MemoryChange {
         expected_revision: i64,
     },
 }
+
+/// An admitted dream run, from `POST /api/runtime/dreams/{run}`. Changes go one at a time to
+/// `POST /api/runtime/dreams/{run}/changes` as `MemoryChange`s; `PUT /api/runtime/dreams/{run}`
+/// ends it with a `DreamEnd`. Provider material is current at admission; never log it.
+#[derive(Serialize, Deserialize)]
+pub struct Dream {
+    pub provider: ProviderKind,
+    pub model: String,
+    pub api_key: String,
+    /// The agent's most recently changed memories.
+    pub memories: Vec<Memory>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DreamOutcome {
+    Completed,
+    /// Stopped for a channel message; changes committed before it stay.
+    Yielded,
+    Failed,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DreamEnd {
+    pub outcome: DreamOutcome,
+    pub report: String,
+}
+
+/// Largest dream report in bytes; escaped, it still fits a runtime request body.
+pub const REPORT_BYTES: usize = 8 * 1024;
 
 /// Largest memory content in bytes.
 pub const MEMORY_BYTES: usize = 4096;

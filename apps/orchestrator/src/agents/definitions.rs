@@ -23,7 +23,16 @@ pub struct Agent {
     pub desired_state: String,
     pub idle_policy: super::IdlePolicy,
     pub restart_generation: i64,
+    /// Seconds an idle agent waits before it dreams.
+    pub idle_delay_seconds: i32,
+    /// The dreaming model on the agent's connection; `None` inherits the connection's model.
+    pub dreaming_model: Option<String>,
+    /// `working`, `dreaming` or `idle` while running, otherwise the desired state such as
+    /// `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
+    pub activity: String,
 }
+
+const COLUMNS: &str = "g.id, g.name, g.instructions, g.revision, g.instructions_revision, g.desired_state, g.idle_policy, g.restart_generation, g.idle_delay_seconds, g.dreaming_model, CASE WHEN g.desired_state <> 'running' THEN g.desired_state WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.conversation_id = g.id AND t.status = 'running') THEN 'working' WHEN EXISTS(SELECT 1 FROM dream_runs d JOIN runtime_session_access s ON s.attempt_id = d.attempt_id AND s.active WHERE d.agent_id = g.id AND d.status = 'running') THEN 'dreaming' ELSE 'idle' END AS activity";
 
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -64,12 +73,12 @@ impl Agents {
         actor: &Actor,
         after: Option<AgentId>,
     ) -> Result<Vec<Agent>, IdentityError> {
-        Ok(sqlx::query_as("SELECT g.id, g.name, g.instructions, g.revision, g.instructions_revision, g.desired_state, g.idle_policy, g.restart_generation FROM agents g JOIN human_accounts a ON a.id = $1 AND a.active WHERE ($2::uuid IS NULL OR g.id > $2) AND (a.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = a.id AND p.scope_kind = 'agent' AND p.scope_id = g.id AND p.capability = 'agent.manage')) ORDER BY g.id LIMIT 100")
+        Ok(sqlx::query_as(&format!("SELECT {COLUMNS} FROM agents g JOIN human_accounts a ON a.id = $1 AND a.active WHERE ($2::uuid IS NULL OR g.id > $2) AND (a.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = a.id AND p.scope_kind = 'agent' AND p.scope_id = g.id AND p.capability = 'agent.manage')) ORDER BY g.id LIMIT 100"))
             .bind(actor.id).bind(after).fetch_all(&self.pool).await?)
     }
 
     pub async fn get(&self, actor: &Actor, id: AgentId) -> Result<Agent, IdentityError> {
-        sqlx::query_as("SELECT g.id, g.name, g.instructions, g.revision, g.instructions_revision, g.desired_state, g.idle_policy, g.restart_generation FROM agents g JOIN human_accounts a ON a.id = $1 AND a.active WHERE g.id = $2 AND (a.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = a.id AND p.scope_kind = 'agent' AND p.scope_id = g.id AND p.capability = 'agent.manage'))")
+        sqlx::query_as(&format!("SELECT {COLUMNS} FROM agents g JOIN human_accounts a ON a.id = $1 AND a.active WHERE g.id = $2 AND (a.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = a.id AND p.scope_kind = 'agent' AND p.scope_id = g.id AND p.capability = 'agent.manage'))"))
             .bind(actor.id).bind(id).fetch_optional(&self.pool).await?.ok_or(IdentityError::NotFound)
     }
 }

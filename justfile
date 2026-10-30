@@ -139,3 +139,7 @@ docker-agent name:
 # Boots one agent through Docker and runs one bash tool call; x86_64 Linux with /dev/kvm and OPENAI_API_KEY_FILE.
 docker-sandbox:
     uv run --project tooling/quality --locked python tests/system/docker_sandbox.py
+
+# Three real agents dream, yield and fail through Docker (ADR 0025); same needs as docker-sandbox.
+docker-dreams:
+    uv run --project tooling/quality --locked python tests/system/docker_dreams.py

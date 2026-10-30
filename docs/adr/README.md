@@ -32,7 +32,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0022](0022-hybrid-memory-retrieval.md) | Hybrid memory retrieval | Accepted |
 | [0023](0023-tool-initiated-memory-retrieval.md) | Tool-initiated memory retrieval | Accepted |
 | [0024](0024-rolling-context-compaction.md) | Rolling context compaction | Accepted |
-| [0025](0025-idle-dreaming-and-visible-results.md) | Idle-only dreaming with visible status and results | Accepted |
+| [0025](0025-idle-dreaming-and-visible-results.md) | Idle-only dreaming with visible status and results | Accepted; admission line superseded by 0083 |
 | [0026](0026-human-memory-editing.md) | Direct memory editing and conversational correction | Accepted |
 | [0027](0027-evidence-based-memory-revision.md) | Revise human-corrected memories from new evidence | Accepted |
 | [0028](0028-installation-managed-provider-connections.md) | Installation-managed provider connections | Accepted |

@@ -1,6 +1,8 @@
 //! The agent's own loop: one channel to the switchboard and one turn at a time. Events wait in an
 //! outbox until the ledger acknowledges them, so a reconnect resends rather than loses them.
+//! With no turn, no unacknowledged event and no drain for the idle delay, the agent dreams.
 mod attempts;
+mod dream;
 mod turn;
 use crate::control::{Channel, Config, Error, MemoryClient, RuntimeClient};
 use attempts::Store;
@@ -15,6 +17,7 @@ use std::{
 use tokio::{
     signal::unix::{Signal, SignalKind},
     sync::{mpsc, watch},
+    time::Instant,
 };
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
@@ -70,6 +73,9 @@ struct Agent {
     memory: Option<MemoryClient>,
     active: Option<Active>,
     drain: Option<Uuid>,
+    /// When to dream, armed by the switchboard's idle notice.
+    dream_at: Option<Instant>,
+    dreaming: Option<(watch::Sender<bool>, tokio::task::JoinHandle<()>)>,
 }
 
 impl Agent {
@@ -99,6 +105,8 @@ impl Agent {
             memory: None,
             active: None,
             drain: None,
+            dream_at: None,
+            dreaming: None,
         })
     }
 
@@ -114,6 +122,7 @@ impl Agent {
         }
         self.idle(&mut channel).await?;
         loop {
+            let dream_at = self.dream_at;
             tokio::select! {
                 message = channel.next() => {
                     let text = match message {
@@ -121,14 +130,42 @@ impl Agent {
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
                         _ => return Ok(Next::Reconnect),
                     };
+                    self.wake();
                     let delivery = serde_json::from_str(&text).map_err(|_| Error::Protocol)?;
                     if let Some(next) = self.deliver(&mut channel, delivery).await? {
                         return Ok(next);
                     }
                 }
                 Some(event) = self.events.recv() => self.forward(&mut channel, event).await?,
+                _ = until(dream_at) => self.dream(),
             }
         }
+    }
+
+    /// Any channel message disarms the idle timer and makes a running dream yield.
+    fn wake(&mut self) {
+        self.dream_at = None;
+        if let Some((stop, _)) = &self.dreaming {
+            let _ = stop.send(true);
+        }
+    }
+
+    /// Dreams only with every lane idle and every reported outcome acknowledged.
+    fn dream(&mut self) {
+        self.dream_at = None;
+        let dreaming = self
+            .dreaming
+            .as_ref()
+            .is_some_and(|(_, task)| !task.is_finished());
+        let Some(client) = self.memory.clone() else {
+            return;
+        };
+        if dreaming || self.active.is_some() || self.drain.is_some() || !self.outbox.is_empty() {
+            return;
+        }
+        let (stop, stopped) = watch::channel(false);
+        let task = tokio::spawn(dream::run(client, Uuid::new_v4(), stopped));
+        self.dreaming = Some((stop, task));
     }
 
     async fn forward(&mut self, channel: &mut Channel, event: turn::Event) -> Result<(), Error> {
@@ -190,6 +227,14 @@ impl Agent {
                 self.drain = Some(request_id);
                 self.idle(channel).await?;
             }
+            Delivery::Idle {
+                dream_after_seconds,
+            } => {
+                if self.active.is_none() {
+                    let delay = Duration::from_secs(dream_after_seconds);
+                    self.dream_at = Some(Instant::now() + delay);
+                }
+            }
             Delivery::Revoked => {
                 // Unreported effects stay uncertain in the ledger; stopping the sandbox ends them.
                 if let Some(active) = self.active.take() {
@@ -217,6 +262,13 @@ impl Agent {
                 .map_err(|_| Error::Journal)?;
         }
         Ok(())
+    }
+}
+
+async fn until(at: Option<Instant>) {
+    match at {
+        Some(at) => tokio::time::sleep_until(at).await,
+        None => std::future::pending().await,
     }
 }
 

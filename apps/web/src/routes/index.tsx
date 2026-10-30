@@ -11,6 +11,7 @@ import {
 } from '../api/client'
 import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
+import { Dreams } from '../features/dreams'
 import { Memories } from '../features/memories'
 
 export const Route = createFileRoute('/')({ component: Home })
@@ -64,6 +65,7 @@ function Home() {
 type Screen =
   | { kind: 'chat' }
   | { kind: 'memories' }
+  | { kind: 'dreams' }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
 
@@ -156,7 +158,10 @@ function Workspace({
                   setError('')
                 }}
               >
-                {agent.name}
+                {agent.name}{' '}
+                <span className="muted">
+                  {activities[agent.activity] ?? agent.activity}
+                </span>
               </button>
             ))}
           </nav>
@@ -180,37 +185,75 @@ function Workspace({
               onCancel={() => setScreen({ kind: 'chat' })}
             />
           )}
-          {screen.kind === 'memories' && selected && (
-            <Memories
-              key={selected.id}
-              agent={selected}
-              onClose={() => setScreen({ kind: 'chat' })}
-            />
-          )}
           {screen.kind === 'provider' && (
             <ProviderForm onClose={() => setScreen({ kind: 'chat' })} />
           )}
-          {screen.kind === 'chat' &&
-            (selected ? (
-              <AgentChat
-                key={selected.id}
-                selected={selected}
-                session={session}
-                onEdit={() => setScreen({ kind: 'agent', existing: selected })}
-                onMemories={() => setScreen({ kind: 'memories' })}
-              />
-            ) : (
-              <div className="empty">
-                <h1>Your agents.</h1>
-                <p>
-                  Select an agent to continue, or create one to get started.
-                </p>
-              </div>
-            ))}
+          <AgentScreen
+            screen={screen}
+            selected={selected}
+            session={session}
+            setScreen={setScreen}
+          />
         </div>
       </div>
     </main>
   )
+}
+
+/** The screens about the selected agent, or the empty state without one. */
+function AgentScreen({
+  screen,
+  selected,
+  session,
+  setScreen,
+}: {
+  screen: Screen
+  selected: Agent | null
+  session: Account
+  setScreen: (screen: Screen) => void
+}) {
+  return (
+    <>
+      {screen.kind === 'memories' && selected && (
+        <Memories
+          key={selected.id}
+          agent={selected}
+          onClose={() => setScreen({ kind: 'chat' })}
+        />
+      )}
+      {screen.kind === 'dreams' && selected && (
+        <Dreams
+          key={selected.id}
+          agent={selected}
+          onClose={() => setScreen({ kind: 'chat' })}
+        />
+      )}
+      {screen.kind === 'chat' &&
+        (selected ? (
+          <AgentChat
+            key={selected.id}
+            selected={selected}
+            session={session}
+            onEdit={() => setScreen({ kind: 'agent', existing: selected })}
+            onMemories={() => setScreen({ kind: 'memories' })}
+            onDreams={() => setScreen({ kind: 'dreams' })}
+          />
+        ) : (
+          <div className="empty">
+            <h1>Your agents.</h1>
+            <p>Select an agent to continue, or create one to get started.</p>
+          </div>
+        ))}
+    </>
+  )
+}
+
+const activities: Record<string, string> = {
+  working: 'Working',
+  dreaming: 'Dreaming',
+  idle: 'Idle',
+  sleeping: 'Sleeping',
+  retired: 'Retired',
 }
 
 function AgentChat({
@@ -218,22 +261,30 @@ function AgentChat({
   session,
   onEdit,
   onMemories,
+  onDreams,
 }: {
   selected: Agent
   session: Account
   onEdit: () => void
   onMemories: () => void
+  onDreams: () => void
 }) {
   return (
     <>
       <header className="conversation-header">
         <div>
           <h1>{selected.name}</h1>
-          <p className="muted">Continuous conversation</p>
+          <p className="muted">
+            Continuous conversation ·{' '}
+            {activities[selected.activity] ?? selected.activity}
+          </p>
         </div>
         <div className="actions">
           <button className="secondary" onClick={onMemories}>
             Memories
+          </button>
+          <button className="secondary" onClick={onDreams}>
+            Dreams
           </button>
           <button className="secondary" onClick={onEdit}>
             Edit agent

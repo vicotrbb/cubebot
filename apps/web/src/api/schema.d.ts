@@ -20,6 +20,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/dreams': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The latest dream runs, newest first, each with the revisions it committed. */
+    get: operations['list_dreams']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{agent}/memories': {
     parameters: {
       query?: never
@@ -213,8 +230,20 @@ export interface components {
       id: string
     }
     Agent: {
+      /**
+       * @description `working`, `dreaming` or `idle` while running, otherwise the desired state such as
+       *     `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
+       */
+      activity: string
       desired_state: string
+      /** @description The dreaming model on the agent's connection; `None` inherits the connection's model. */
+      dreaming_model?: string | null
       id: components['schemas']['AgentId']
+      /**
+       * Format: int32
+       * @description Seconds an idle agent waits before it dreams.
+       */
+      idle_delay_seconds: number
       idle_policy: components['schemas']['IdlePolicy']
       instructions: string
       /** Format: int64 */
@@ -252,6 +281,31 @@ export interface components {
     CreateMemory: {
       content: string
     }
+    /** @description A revision the run committed, with the content it replaced. */
+    DreamRevision: {
+      content: string
+      deleted: boolean
+      /** Format: uuid */
+      memory: string
+      /** @description `None` for a memory the run created. */
+      previous?: string | null
+      /** Format: int64 */
+      revision: number
+    }
+    DreamRun: {
+      ended_at?: string | null
+      /** Format: uuid */
+      id: string
+      model: string
+      /** @description `completed`, `yielded`, `failed` or `no_op`; `None` while running. */
+      outcome?: string | null
+      /** @description The model's account of the run; the committed revisions are the evidence. */
+      report: string
+      revisions: components['schemas']['DreamRevision'][]
+      started_at: string
+      /** @description `running` or `finished`. */
+      status: string
+    }
     Event: {
       /**
        * Format: int64
@@ -277,7 +331,12 @@ export interface components {
       revision: number
       /**
        * Format: uuid
-       * @description The turn whose completion wrote the current revision; `None` for a human edit.
+       * @description The dream run that wrote the current revision.
+       */
+      source_dream?: string | null
+      /**
+       * Format: uuid
+       * @description The turn whose completion wrote the current revision; `None` for a human edit or dream.
        */
       source_turn?: string | null
     }
@@ -436,8 +495,12 @@ export interface components {
           kind: 'error'
         }
     UpdateAgent: {
+      /** @description `None` dreams with the connection's model. */
+      dreaming_model?: string | null
       /** Format: int64 */
       expected_revision: number
+      /** Format: int32 */
+      idle_delay_seconds: number
       idle_policy: components['schemas']['IdlePolicy']
       instructions: string
       name: string
@@ -493,6 +556,27 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  list_dreams: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DreamRun'][]
         }
       }
     }

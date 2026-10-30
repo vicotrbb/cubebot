@@ -20,7 +20,13 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(search_memories, create_memory, revise_memory, delete_memory))]
+#[openapi(paths(
+    search_memories,
+    create_memory,
+    revise_memory,
+    delete_memory,
+    list_dreams
+))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -29,6 +35,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
             "/api/agents/{agent}/memories",
             get(search_memories).post(create_memory),
         )
+        .route("/api/agents/{agent}/dreams", get(list_dreams))
         .route(
             "/api/agents/{agent}/memories/{memory}",
             put(revise_memory).delete(delete_memory),
@@ -94,6 +101,20 @@ async fn revise_memory(
     Ok((
         [("cache-control", "no-store")],
         Json(api.knowledge.revise(&actor, agent, memory, &input).await?),
+    ))
+}
+
+/// The latest dream runs, newest first, each with the revisions it committed.
+#[utoipa::path(get, path = "/api/agents/{agent}/dreams", params(("agent" = Uuid, Path)), responses((status = 200, body = Vec<crate::knowledge::DreamRun>)))]
+async fn list_dreams(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.knowledge.dreams(&actor, agent).await?),
     ))
 }
 

@@ -1,0 +1,171 @@
+//! One dream run (ADR 0025): with every lane idle, the agent asks its model to consolidate its own
+//! memories and commits the proposed changes one at a time, each naming the revision it read. A
+//! channel message stops the run before its next commit; what was committed stays.
+use crate::control::MemoryClient;
+use cubebot_protocol::runtime::{
+    Dream, DreamEnd, DreamOutcome, Memory, MemoryChange, ProviderKind, REPORT_BYTES,
+};
+use cubebot_providers::{Anthropic, Error, Event, Message, OpenAi, Provider, Request};
+use futures_util::StreamExt;
+use serde::Deserialize;
+use tokio::sync::watch;
+use uuid::Uuid;
+
+/// Changes one run may commit.
+const CHANGES: usize = 50;
+
+const SYSTEM: &str = "You maintain your own long-term memory while you are idle.";
+
+/// The model's reply; each change is parsed on its own so one malformed change drops alone.
+#[derive(Deserialize)]
+struct Reply {
+    changes: Vec<serde_json::Value>,
+    report: String,
+}
+
+struct Plan {
+    changes: Vec<MemoryChange>,
+    report: String,
+}
+
+pub(super) async fn run(client: MemoryClient, run: Uuid, stop: watch::Receiver<bool>) {
+    let dream = match client.start_dream(run).await {
+        Ok(Some(dream)) => dream,
+        Ok(None) => return,
+        Err(error) => return eprintln!("Dreaming unavailable: {error}"),
+    };
+    let (outcome, mut report) = dream_on(&client, run, &dream, stop).await;
+    while report.len() > REPORT_BYTES {
+        report.pop();
+    }
+    if let Err(error) = client
+        .finish_dream(run, &DreamEnd { outcome, report })
+        .await
+    {
+        eprintln!("Dream outcome unreported: {error}");
+    }
+}
+
+async fn dream_on(
+    client: &MemoryClient,
+    run: Uuid,
+    dream: &Dream,
+    mut stop: watch::Receiver<bool>,
+) -> (DreamOutcome, String) {
+    let plan = tokio::select! {
+        plan = plan(dream) => plan,
+        _ = stop.wait_for(|stopped| *stopped) => return (DreamOutcome::Yielded, String::new()),
+    };
+    let plan = match plan {
+        Ok(plan) => plan,
+        Err(reason) => return (DreamOutcome::Failed, reason),
+    };
+    for change in plan.changes.iter().take(CHANGES) {
+        if *stop.borrow() {
+            return (DreamOutcome::Yielded, plan.report);
+        }
+        // A closed run or an unreachable ledger ends the run; a later run retries from there.
+        if !matches!(client.commit_dream(run, change).await, Ok(true)) {
+            return (DreamOutcome::Failed, plan.report);
+        }
+    }
+    (DreamOutcome::Completed, plan.report)
+}
+
+/// The model's proposed changes, or why there are none; the reason becomes the run's report.
+async fn plan(dream: &Dream) -> Result<Plan, String> {
+    let messages = [Message::User(prompt(&dream.memories))];
+    let request = Request {
+        model: &dream.model,
+        key: &dream.api_key,
+        system: SYSTEM,
+        messages: &messages,
+        tools: &[],
+        tools_disabled: true,
+        max_output_tokens: None,
+    };
+    let reply = match dream.provider {
+        ProviderKind::Openai => {
+            let provider = super::turn::configured(OpenAi::new, OpenAi::for_loopback_tests);
+            reply(provider, &request).await
+        }
+        ProviderKind::Anthropic => {
+            let provider = super::turn::configured(Anthropic::new, Anthropic::for_loopback_tests);
+            reply(provider, &request).await
+        }
+    };
+    let reply = reply.map_err(|error| format!("The model call failed: {error:?}."))?;
+    parse(&reply).ok_or_else(|| "The model's reply was not a JSON plan.".into())
+}
+
+async fn reply<P: Provider>(
+    provider: Result<P, Error>,
+    request: &Request<'_>,
+) -> Result<String, Error> {
+    let provider = provider?;
+    let mut events = std::pin::pin!(provider.stream(request));
+    while let Some(event) = events.next().await {
+        if let Event::Done { reply, .. } = event? {
+            return Ok(reply.text);
+        }
+    }
+    Err(Error::Unavailable)
+}
+
+fn prompt(memories: &[Memory]) -> String {
+    let memories = serde_json::to_string(memories).unwrap_or_default();
+    format!(
+        "Your memories, each with its id and revision: {memories}\n\nImprove them. Merge duplicates: revise the one to keep so it states everything the others did, then forget the others. Reconcile contradictions when one claim is clearly newer or better supported; otherwise leave them and say so in the report. Rewrite stale or vague summaries, and make each memory self-contained, using the words someone would search for. Never invent or drop a detail, and leave good memories alone. Reply with only a JSON object {{\"changes\":[...],\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. The report briefly says what you changed and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"report\":\"No changes needed.\"}}."
+    )
+}
+
+/// A plan with only valid changes; anything but the requested JSON object is no plan.
+fn parse(reply: &str) -> Option<Plan> {
+    let reply: Reply = serde_json::from_str(crate::memory::unfenced(reply)).ok()?;
+    let changes = reply
+        .changes
+        .into_iter()
+        .filter_map(|change| serde_json::from_value(change).ok())
+        .filter(|change| match change {
+            MemoryChange::Remember { content } | MemoryChange::Revise { content, .. } => {
+                crate::memory::valid(content)
+            }
+            MemoryChange::Forget { .. } => true,
+        })
+        .collect();
+    Some(Plan {
+        changes,
+        report: reply.report,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_plan_keeps_valid_changes_and_refuses_anything_else() {
+        let id = Uuid::new_v4();
+        let reply = format!(
+            "```json\n{{\"changes\":[{{\"op\":\"revise\",\"memory\":\"{id}\",\"expected_revision\":2,\"content\":\"Deadline is Nov 29\"}},{{\"op\":\"revise\",\"memory\":\"{id}\",\"expected_revision\":2,\"content\":\" \"}},{{\"op\":\"forget\",\"memory\":\"{id}\",\"expected_revision\":1}},{{\"op\":\"forget\",\"memory\":\"{id}\",\"expected_revision\":\"1\"}}],\"report\":\"Merged two deadlines.\"}}\n```"
+        );
+        let plan = parse(&reply).unwrap();
+        assert_eq!(plan.report, "Merged two deadlines.");
+        assert_eq!(
+            plan.changes,
+            [
+                MemoryChange::Revise {
+                    memory: id,
+                    expected_revision: 2,
+                    content: "Deadline is Nov 29".into()
+                },
+                MemoryChange::Forget {
+                    memory: id,
+                    expected_revision: 1
+                },
+            ]
+        );
+        assert!(parse("I merged them.").is_none());
+        assert!(parse("[]").is_none());
+    }
+}
