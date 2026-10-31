@@ -18,13 +18,15 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 FROM debian:bookworm-slim
 # CUBEBOT_TOOL_USER is 10001:10001; guest init creates and chowns its home on the workspace disk.
 # The desktop (ADR 0085): Xorg's modesetting driver on virtio-gpu, evdev input, openbox, xterm
-# and Chromium, which guest init starts as the tool user when computer use is on.
+# and Chromium, which guest init starts as the tool user when computer use is on; xwallpaper
+# draws wallpaper.jpg on the root window.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
         git curl python3 build-essential ripgrep jq openssh-client \
-        xserver-xorg-core xserver-xorg-input-evdev openbox xterm chromium \
+        xserver-xorg-core xserver-xorg-input-evdev openbox xterm xwallpaper chromium \
         xfonts-base fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -m 0755 /var/lib/cubebot \
     && groupadd -g 10001 tool && useradd -u 10001 -g 10001 -M -d /var/lib/cubebot/workspace -s /bin/bash tool
 COPY apps/agent/xorg.conf /etc/X11/xorg.conf
+COPY apps/agent/wallpaper.jpg /usr/share/cubebot/wallpaper.jpg
 COPY --from=build /out/cubebot-agent /usr/local/bin/

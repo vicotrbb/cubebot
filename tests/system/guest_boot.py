@@ -6,7 +6,9 @@ ARP. In it the sandbox boots the guest twice on one workspace disk. Each boot mu
 reach a stand-in orchestrator at the pod's address over TLS with the forwarded
 bootstrap token, report liveness over vsock, and on SIGTERM exit with the agent's
 status 0, leaving the workspace filesystem clean.
-The second boot must reopen the journal lock file the first one created. Before both,
+The second boot must reopen the journal lock file the first one created, and runs with
+computer use on: a person takes control and closes the maximized Chromium until the host
+channel's screenshot shows the wallpaper. Before both,
 the sandbox must refuse to start in the host's own network namespace. A third boot
 replaces the agent with guest_desktop.py as init (ADR 0085): through the host
 channel (`cubebot-sandbox desktop`), a screenshot must be the pattern it drew through a
@@ -53,6 +55,7 @@ SIZES = {
 }
 VCPUS = int(SIZES.get("CUBEBOT_GUEST_VCPUS", 2))
 PERSON = "00000000-0000-0000-0000-00000000000a"
+COMPUTER = {"CUBEBOT_COMPUTER_ENABLED": "1", "CUBEBOT_TOOL_USER": "10001:10001"}
 
 
 def main() -> int:
@@ -89,8 +92,8 @@ def acceptance(directory: Path, requests: queue.Queue) -> int:
         print(f"guest-boot failed: {failure}")
         return 1
     inode = None
-    for boot in (1, 2):
-        failure = run_guest(directory, workspace, requests)
+    for boot, computer in ((1, {}), (2, COMPUTER)):
+        failure = run_guest(directory, workspace, requests, computer)
         if failure:
             print(f"guest-boot failed on boot {boot}: {failure}")
             return 1
@@ -140,13 +143,51 @@ def host_refusal(directory: Path, workspace: Path):
     return None
 
 
-def run_guest(directory: Path, workspace: Path, requests: queue.Queue):
+def run_guest(directory: Path, workspace: Path, requests: queue.Queue, computer: dict):
     """Returns why a boot failed, or None."""
-    sandbox = launch(environment(directory, workspace))
+    sandbox = launch(environment(directory, workspace) | computer)
     try:
-        return check(sandbox, Console(sandbox.stdout), requests)
+        console = Console(sandbox.stdout)
+        failure = computer and drawn(directory, console)
+        return failure or check(sandbox, console, requests)
     finally:
         end(sandbox)
+
+
+def drawn(directory: Path, console: "Console"):
+    """Returns why the desktop never showed the wallpaper, or None."""
+    deadline = time.monotonic() + DEADLINE
+    if not until(lambda: b"Guest desktop started" in console.output, deadline):
+        return "the guest desktop did not start"
+    control = connect(directory)
+    screenshot = {"input": person({"action": "screenshot"})}
+    close = {"input": person({"action": "key", "keys": ["ctrl", "w"]})}
+
+    shown = False
+
+    # Chromium starts maximized over the wallpaper, so close it until the wallpaper shows.
+    # Xorg's root, xterm and Chromium have a few hundred colors; the photograph thousands.
+    def wallpaper() -> bool:
+        nonlocal shown
+        shown = shown or colors(ask(control, screenshot)) > 4096
+        if not shown:
+            ask(control, close)
+        return shown
+
+    try:
+        if ask(control, {"mode": {"mode": "human", "account": PERSON}}).get("error"):
+            return "the person could not take control of the desktop"
+        if not until(wallpaper, time.monotonic() + DEADLINE):
+            return "the desktop never showed the wallpaper"
+        return None
+    finally:
+        control.stdin.close()
+        control.wait()
+
+
+def colors(screen: dict) -> int:
+    pixels = rgb(screen.get("png", ""))
+    return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)})
 
 
 def desktop(directory: Path, workspace: Path):
@@ -171,13 +212,19 @@ def desktop(directory: Path, workspace: Path):
         key = {"input": person({"action": "key", "keys": ["a"]})}
         if host(directory, key).get("error") != "this person does not have control":
             return "a person's key was not refused before they took control"
-        host(directory, {"mode": {"mode": "human", "account": PERSON}})
-        if host(directory, key).get("error"):
-            return "the person holding control could not type"
-        if not until(lambda: b"Guest key 30 pressed" in console.output, deadline):
-            return "the A key the person typed did not reach the guest's evdev"
-        if not until(lambda: b"Guest agent answer" in console.output, deadline):
-            return "the guest's agent key request got no answer"
+        # The arbiter hands control back when the connection that took it closes.
+        control = connect(directory)
+        try:
+            ask(control, {"mode": {"mode": "human", "account": PERSON}})
+            if ask(control, key).get("error"):
+                return "the person holding control could not type"
+            if not until(lambda: b"Guest key 30 pressed" in console.output, deadline):
+                return "the A key the person typed did not reach the guest's evdev"
+            if not until(lambda: b"Guest agent answer" in console.output, deadline):
+                return "the guest's agent key request got no answer"
+        finally:
+            control.stdin.close()
+            control.wait()
         if b"Guest agent answer a person has control" not in console.output:
             return "agent input was not refused while a person held control"
         return None
@@ -190,16 +237,29 @@ def person(action: dict) -> dict:
 
 
 def host(directory: Path, request: dict) -> dict:
-    """One request over the host channel, as the orchestrator sends it through exec."""
-    relay = subprocess.run(
+    """One request over its own host channel connection."""
+    relay = connect(directory)
+    try:
+        return ask(relay, request)
+    finally:
+        relay.stdin.close()
+        relay.wait()
+
+
+def connect(directory: Path) -> subprocess.Popen:
+    """A host channel connection, as the orchestrator opens one through exec."""
+    return subprocess.Popen(
         ["sudo", "env", f"CUBEBOT_GUEST_DESKTOP_SOCKET={directory / 'desktop.sock'}"]
         + [ROOT / "target/debug/cubebot-sandbox", "desktop"],
-        input=json.dumps(request).encode() + b"\n",
-        capture_output=True,
-        check=True,
-        timeout=30,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
     )
-    return json.loads(relay.stdout)
+
+
+def ask(relay: subprocess.Popen, request: dict) -> dict:
+    relay.stdin.write(json.dumps(request).encode() + b"\n")
+    relay.stdin.flush()
+    return json.loads(relay.stdout.readline())
 
 
 def rgb(encoded: str) -> bytes:
