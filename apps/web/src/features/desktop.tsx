@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Agent } from '../api/client'
+import { type Agent, type LoginHandoff, api, failure, ok } from '../api/client'
 
 /** The guest screen (ADR 0085); frames and input use its pixels. */
 const WIDTH = 1280
@@ -20,13 +20,16 @@ type Press = { button: number; start: Point; path: Point[] }
 export function Desktop({
   agent,
   accountId,
+  take,
   onClose,
 }: {
   agent: Agent
   accountId: string
+  /** Watches and takes control as soon as the connection opens. */
+  take?: boolean
   onClose: () => void
 }) {
-  const [watching, setWatching] = useState(false)
+  const [watching, setWatching] = useState(Boolean(take))
   const [status, setStatus] = useState('')
   const [mode, setMode] = useState<Mode | null>(null)
   const [holding, setHolding] = useState(false)
@@ -38,7 +41,15 @@ export function Desktop({
   const socket = useRef<WebSocket | null>(null)
   // The `t` of an unanswered take; its answer says whether this viewer now has control.
   const taking = useRef<number | null>(null)
+  const wantTake = useRef(Boolean(take))
 
+  const send = useCallback((message: Record<string, unknown>) => {
+    const ws = socket.current
+    const t = performance.now()
+    if (ws?.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ ...message, t }))
+    return t
+  }, [])
   useEffect(() => {
     if (!watching) return
     const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
@@ -53,7 +64,12 @@ export function Desktop({
       setUpdates(painted)
       painted = 0
     }, 1000)
-    ws.onopen = () => setStatus('')
+    ws.onopen = () => {
+      setStatus('')
+      if (!wantTake.current) return
+      wantTake.current = false
+      taking.current = send({ kind: 'take' })
+    }
     ws.onclose = (event) => {
       setStatus(event.reason || 'The desktop connection closed.')
       setHolding(false)
@@ -88,20 +104,22 @@ export function Desktop({
       ws.close()
       socket.current = null
     }
-  }, [watching, agent.id])
+  }, [watching, agent.id, send])
 
-  const send = useCallback((message: Record<string, unknown>) => {
-    const ws = socket.current
-    const t = performance.now()
-    if (ws?.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ ...message, t }))
-    return t
-  }, [])
   const input = useCallback(
     (action: Action) => send({ kind: 'input', action }),
     [send],
   )
   useCapture(canvas, holding, input)
+  const takeControl = () => {
+    if (socket.current?.readyState === WebSocket.OPEN) {
+      taking.current = send({ kind: 'take' })
+      return
+    }
+    wantTake.current = true
+    setStatus('Connecting…')
+    setWatching(true)
+  }
 
   return (
     <section className="desktop" aria-label="Agent desktop">
@@ -125,9 +143,7 @@ export function Desktop({
           {watching && !holding && (
             <button
               disabled={mode === null || mode === 'human'}
-              onClick={() => {
-                taking.current = send({ kind: 'take' })
-              }}
+              onClick={takeControl}
             >
               Take control
             </button>
@@ -147,6 +163,7 @@ export function Desktop({
           </button>
         </div>
       </header>
+      <LoginBanner agent={agent} holding={holding} onTake={takeControl} />
       {error && <p role="alert">{error}</p>}
       <div className="desktop-screen">
         <canvas
@@ -163,6 +180,87 @@ export function Desktop({
         )}
       </div>
       {watching && <Latency samples={latency} updates={updates} />}
+    </section>
+  )
+}
+
+/** A pending login handoff (ADR 0039): the agent waits for a person to log in for it. */
+export function LoginBanner({
+  agent,
+  holding = false,
+  onTake,
+}: {
+  agent: Agent
+  holding?: boolean
+  onTake: () => void
+}) {
+  const [handoff, setHandoff] = useState<LoginHandoff | null>(null)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const refresh = useCallback(async () => {
+    const { data, response } = await api.GET('/api/agents/{id}/login', {
+      params: { path: { id: agent.id } },
+    })
+    // Without browser.view the request is refused and no banner shows.
+    if (response.ok) setHandoff(data ?? null)
+  }, [agent.id])
+  useEffect(() => {
+    // shortcut: each open view polls every 3 s; put handoffs on the conversation stream if
+    // that load shows up.
+    const poll = () => void refresh().catch(() => undefined)
+    poll()
+    const timer = setInterval(poll, 3000)
+    return () => clearInterval(timer)
+  }, [refresh])
+  if (!handoff) return null
+  async function decline() {
+    setBusy(true)
+    setError('')
+    try {
+      await ok(
+        api.POST('/api/agents/{id}/login/decline', {
+          params: { path: { id: agent.id } },
+          body: { reason },
+        }),
+      )
+      setHandoff(null)
+      setReason('')
+    } catch (error) {
+      setError(failure(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="login-handoff" aria-label="Login request">
+      <p>
+        <strong>
+          {agent.name} asks you to log in on {handoff.site}.
+        </strong>{' '}
+        {handoff.reason}
+      </p>
+      {holding ? (
+        <p className="muted">
+          Log in on the desktop, then hand back control to let the agent
+          continue.
+        </p>
+      ) : (
+        <div className="actions">
+          <button onClick={onTake}>Take control</button>
+          <input
+            aria-label="Reason for declining"
+            value={reason}
+            maxLength={2048}
+            placeholder="Reason for declining (optional, sent to the agent)"
+            onChange={(event) => setReason(event.target.value)}
+          />
+          <button className="secondary" disabled={busy} onClick={decline}>
+            {busy ? 'Declining…' : 'Decline'}
+          </button>
+        </div>
+      )}
+      {error && <p role="alert">{error}</p>}
     </section>
   )
 }

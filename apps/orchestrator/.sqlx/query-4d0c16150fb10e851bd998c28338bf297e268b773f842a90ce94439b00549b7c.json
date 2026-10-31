@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE login_handoffs h\n            SET status=CASE WHEN $3::text IS NULL THEN 'completed' ELSE 'declined' END,\n                settled_by=$2, settled_at=clock_timestamp(), declined_because=$3\n            FROM chat_turns t\n            WHERE h.agent_id=$1 AND h.status='pending' AND t.id=h.turn_id\n            RETURNING h.site, t.actor_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "site",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4d0c16150fb10e851bd998c28338bf297e268b773f842a90ce94439b00549b7c"
+}

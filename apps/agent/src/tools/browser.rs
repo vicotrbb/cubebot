@@ -3,7 +3,8 @@
 //! `main` session is a page in the profile's own context; any other session name is a task
 //! session with a browser context of its own, whose cookies end when it closes. Calls address a
 //! session's page directly, so one session never moves another's page or takes its input. Input
-//! is refused while a person holds the desktop (ADR 0085), which the arbiter is asked first.
+//! is refused while a person holds the desktop (ADR 0085), and every call while they hold it for
+//! a login handoff (ADR 0039); the arbiter is asked first.
 use super::{Running, Sandbox, Tool, computer};
 use cubebot_protocol::{
     desktop::{Action, Mode, PERSON_HAS_CONTROL},
@@ -143,9 +144,11 @@ struct State {
 impl Browser {
     async fn run(&self, call: Uuid, kind: Kind, input: &Value) -> Result<Outcome, String> {
         let name = input["session"].as_str().unwrap_or(MAIN);
-        if matches!(kind, Kind::Navigate | Kind::Click | Kind::Type) {
-            agent_has_control(call).await?;
-        }
+        agent_has_control(
+            call,
+            matches!(kind, Kind::Navigate | Kind::Click | Kind::Type),
+        )
+        .await?;
         let (cdp, page) = self.page(name, kind == Kind::Navigate).await?;
         let result = act(&cdp, &page, kind, input).await;
         let gone = cdp.send(
@@ -194,11 +197,13 @@ impl Browser {
     }
 }
 
-/// The browser bypasses the arbiter's input devices, so it asks the arbiter's mode itself.
-async fn agent_has_control(call: Uuid) -> Result<(), String> {
+/// The browser bypasses the arbiter's input devices, so it asks the arbiter's mode itself; the
+/// arbiter refuses the question itself during a login handoff.
+async fn agent_has_control(call: Uuid, input: bool) -> Result<(), String> {
     let asked = tokio::task::spawn_blocking(move || computer::ask(call, Action::Mode)).await;
     match asked {
-        Ok(Ok(response)) if response.mode == Mode::Human => Err(PERSON_HAS_CONTROL.into()),
+        Ok(Ok(response)) if response.error.is_some() => Err(response.error.unwrap_or_default()),
+        Ok(Ok(response)) if input && response.mode == Mode::Human => Err(PERSON_HAS_CONTROL.into()),
         Ok(Ok(_)) => Ok(()),
         Ok(Err(error)) => Err(format!("The desktop was not reached: {error}")),
         Err(_) => Err("The desktop was not reached.".into()),

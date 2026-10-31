@@ -226,6 +226,10 @@ docker-desktop:
 docker-browser:
     uv run --project tooling/quality --locked python tests/system/docker_browser.py
 
+# Login handoff on a real agent through Docker (ADRs 0039 and 0085); docker-desktop's needs.
+docker-login:
+    uv run --project tooling/quality --locked python tests/system/docker_login.py
+
 # Three real agents use rooms, delegation, messaging, steering, cancellation and lanes through Docker (ADRs 0005, 0014 to 0016, 0071 to 0073); same needs as docker-sandbox.
 docker-rooms:
     uv run --project tooling/quality --locked python tests/system/docker_rooms.py

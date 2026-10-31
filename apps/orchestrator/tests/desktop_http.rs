@@ -20,11 +20,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
 use uuid::Uuid;
 
-const ORIGIN: &str = "https://cubebot.test";
+pub(crate) const ORIGIN: &str = "https://cubebot.test";
 
 /// Its host channel keeps the arbiter's mode rules: one person holds control, and only they
 /// change the mode while they hold it.
-struct StandIn;
+pub(crate) struct StandIn;
 
 impl Sandbox for StandIn {
     async fn create(&self, _: AgentId) -> Result<(), Error> {
@@ -82,10 +82,10 @@ async fn arbiter(stream: tokio::io::DuplexStream) {
     }
 }
 
-type Socket =
+pub(crate) type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
-async fn open(
+pub(crate) async fn open(
     server: &str,
     agent: Uuid,
     token: &str,
@@ -108,7 +108,7 @@ async fn open(
 }
 
 /// The answer to the message sent at `t`, skipping frames.
-async fn ask(socket: &mut Socket, message: Value, t: f64) -> Value {
+pub(crate) async fn ask(socket: &mut Socket, message: Value, t: f64) -> Value {
     let mut message = message;
     message["t"] = json!(t);
     socket

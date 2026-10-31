@@ -55,6 +55,7 @@ pub fn openapi() -> String {
     doc.merge(agents::Doc::openapi());
     doc.merge(connections::Doc::openapi());
     doc.merge(work::Doc::openapi());
+    doc.merge(desktop::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
     doc.merge(memories::Doc::openapi());
     doc.merge(skills::Doc::openapi());

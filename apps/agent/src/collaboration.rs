@@ -1,9 +1,13 @@
 //! Collaboration tools (ADR 0016) and steering (ADR 0071). `delegate` gives work to an agent
 //! sharing a room and makes this turn yield when it ends, resuming as each outcome arrives; a
 //! `send_message` request is not waited for, and its reply can be relayed back. Steering from a person enters the context before
-//! the next model request, never in the middle of a tool call.
+//! the next model request, never in the middle of a tool call. `request_login` (ADR 0039) asks a
+//! person to log in through the desktop; their hand-back or refusal arrives as a new message.
 use crate::{control::MemoryClient, tools::Running};
-use cubebot_protocol::{runtime::Collaborate, terminal::Outcome};
+use cubebot_protocol::{
+    runtime::{Collaborate, RequestLogin},
+    terminal::Outcome,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -27,7 +31,15 @@ struct Send {
     expects_reply: bool,
 }
 
-pub fn definitions() -> Vec<cubebot_providers::Tool> {
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Login {
+    site: String,
+    reason: String,
+}
+
+/// `desktop` offers `request_login`, which only a lane that controls the desktop can use.
+pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     let tool = |name: &str, description: &str, reply: bool| {
         let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":"Self-contained instructions or information; the recipient sees nothing else of this conversation."}});
         if reply {
@@ -46,7 +58,14 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
             computer: false,
         }
     };
-    vec![
+    let login = cubebot_providers::Tool {
+        name: "request_login".into(),
+        description: "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.".into(),
+        parameters: json!({"type":"object","properties":{"site":{"type":"string","description":"The website's domain, such as github.com."},"reason":{"type":"string","description":"What you need the login for, shown to the person."}},"required":["site","reason"],"additionalProperties":false}),
+        strict: true,
+        computer: false,
+    };
+    let mut tools = vec![
         tool(
             "delegate",
             "Give part of this request to another agent that shares a room with you, with the result you expect back. After delegating, end your turn with a short note: you resume each time one delegated task settles, with every outcome so far, failures and their evidence included, and remain responsible for the final answer. Outcomes come back on their own: never delegate a request for the status or output of work already delegated. Mentioning an agent in text does nothing; only this tool assigns work.",
@@ -57,7 +76,9 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
             "Send a request or information to another agent that shares a room with you, without waiting for it. With expects_reply its answer arrives later as a new message to you; otherwise it stays in its own conversation.",
             true,
         ),
-    ]
+    ];
+    tools.extend(desktop.then_some(login));
+    tools
 }
 
 impl Collaboration {
@@ -80,6 +101,7 @@ impl Collaboration {
         let wait = match name {
             "delegate" => true,
             "send_message" => false,
+            "request_login" => return Some(self.login(id, input)),
             _ => return None,
         };
         let parsed = Send::deserialize(input)
@@ -96,6 +118,31 @@ impl Collaboration {
                 expects_reply: send.expects_reply,
             };
             Box::pin(self.send(request))
+        }))
+    }
+
+    fn login(&self, id: Uuid, input: &Value) -> Result<Running<'_>, &'static str> {
+        let login = Login::deserialize(input)
+            .ok()
+            .filter(|login| !login.site.trim().is_empty() && !login.reason.trim().is_empty())
+            .filter(|login| login.site.len() <= 255 && login.reason.len() <= 2048)
+            .ok_or("site and reason are required; a site is at most 255 bytes, a reason 2 KiB")?;
+        let request = RequestLogin {
+            call: id,
+            site: login.site,
+            reason: login.reason,
+        };
+        Ok(Box::pin(async move {
+            let sent = match &self.client {
+                Some(client) => client.request_login(self.turn, &request).await,
+                None => Err(crate::control::Error::Unavailable(None)),
+            };
+            let (code, output) = match sent {
+                Ok(Ok(())) => (Some(0), format!("A person was asked to log in on {}. End this turn now with a short note; a new message tells you when they finish or decline.", request.site)),
+                Ok(Err(reason)) => (Some(1), format!("Not requested: {reason}.")),
+                Err(_) => (None, "The orchestrator did not answer; the request may or may not have been recorded.".into()),
+            };
+            Outcome::Exited { code, output }
         }))
     }
 

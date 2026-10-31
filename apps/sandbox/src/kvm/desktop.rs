@@ -2,14 +2,15 @@
 //! keyboard and tablet. It serves the guest agent's desktop streams and the host channel, a Unix
 //! socket that `cubebot-sandbox desktop` relays for the orchestrator, one request at a time. It
 //! holds the mode, refuses agent input while a person holds control and until the agent looks
-//! again after they hand it back, and logs every request with its source: the agent and its tool
+//! again after they hand it back, refuses every agent request while a person holds control for a
+//! login handoff (ADR 0039), and logs every request with its source: the agent and its tool
 //! call, or the person's account. Each host channel connection gets frames of the tiles that
 //! changed since its last one, encoded on its own relay thread.
 use super::virtio::{Slot, gpu::Gpu, input::Input, vsock::Vsock};
 use crate::kvm::memory::GuestMemory;
 use cubebot_protocol::desktop::{
-    Action, AgentRequest, Button, HostRequest, LINE_LIMIT, Mode, PERSON_HAS_CONTROL, Pointer,
-    REOBSERVE, Response, TILE, Tile,
+    Action, AgentRequest, Button, HostRequest, LINE_LIMIT, LOGIN_PENDING, Mode, PERSON_HAS_CONTROL,
+    Pointer, REOBSERVE, Response, TILE, Tile,
 };
 use serde_json::{Value, json};
 use std::{
@@ -159,6 +160,8 @@ pub struct Arbiter<'a> {
     pointer_by: Option<Uuid>,
     /// Set when a person hands control back, until the agent's next screenshot.
     stale: bool,
+    /// Set while a person holds control for a login handoff.
+    handoff: bool,
 }
 
 impl<'a> Arbiter<'a> {
@@ -178,6 +181,7 @@ impl<'a> Arbiter<'a> {
             pointer: [0, 0],
             pointer_by: None,
             stale: false,
+            handoff: false,
         }
     }
 
@@ -214,6 +218,7 @@ impl<'a> Arbiter<'a> {
         };
         let source = json!({"source":"agent","call":request.call});
         let refusal = match request.action.is_input() {
+            _ if self.handoff => Some(LOGIN_PENDING),
             true if self.mode == Mode::Human => Some(PERSON_HAS_CONTROL),
             true if self.stale => Some(REOBSERVE),
             _ => None,
@@ -227,7 +232,11 @@ impl<'a> Arbiter<'a> {
 
     pub fn host(&mut self, line: &[u8]) -> Response {
         match serde_json::from_slice(line) {
-            Ok(HostRequest::Mode { mode, account }) => self.switch(mode, account),
+            Ok(HostRequest::Mode {
+                mode,
+                account,
+                handoff,
+            }) => self.switch(mode, account, handoff),
             Ok(HostRequest::Input { account, action }) => {
                 let holds = self.mode == Mode::Human && self.holder == Some(account);
                 let refusal = action.is_input() && !holds;
@@ -270,7 +279,7 @@ impl<'a> Arbiter<'a> {
 
     /// `human` hands control to `account`; any other mode takes it back. Only the person
     /// holding control changes the mode while they hold it.
-    fn switch(&mut self, mode: Mode, account: Option<Uuid>) -> Response {
+    fn switch(&mut self, mode: Mode, account: Option<Uuid>, handoff: bool) -> Response {
         if mode == Mode::Human && account.is_none() {
             return self.response(Some("taking control names the person".into()), None);
         }
@@ -280,9 +289,10 @@ impl<'a> Arbiter<'a> {
         self.stale |= self.mode == Mode::Human && mode != Mode::Human;
         self.mode = mode;
         self.holder = account.filter(|_| mode == Mode::Human);
+        self.handoff = handoff && mode == Mode::Human;
         eprintln!(
             "Desktop mode {}",
-            json!({"mode":mode,"account":self.holder})
+            json!({"mode":mode,"account":self.holder,"handoff":self.handoff})
         );
         self.response(None, None)
     }
@@ -560,6 +570,7 @@ fn relay(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
         let line = serde_json::to_vec(&HostRequest::Mode {
             mode: Mode::Watch,
             account: Some(account),
+            handoff: false,
         })?;
         let (reply, response) = mpsc::channel();
         if requests.send(Request::Host { line, reply }).is_ok() {
@@ -592,7 +603,7 @@ fn serve_connection(
             Some(HostRequest::Frame) => encode(&frame(requests, &mut shown)?)?,
             _ => ask(requests, line)?,
         };
-        if let Some(HostRequest::Mode { mode, account }) = request {
+        if let Some(HostRequest::Mode { mode, account, .. }) = request {
             // A refused change leaves a stale account here, whose release the arbiter refuses.
             *held = account.filter(|_| mode == Mode::Human);
         }
@@ -770,6 +781,35 @@ mod tests {
         assert!(arbiter.agent(&line(screenshot)).png.is_some());
         assert_eq!(arbiter.agent(&line(click)).error, None);
         assert_eq!(arbiter.pointer_by, None);
+    }
+
+    #[test]
+    fn a_login_handoff_refuses_every_agent_request_until_control_returns() {
+        let devices = desktop();
+        let mut arbiter = Arbiter::new(
+            &devices.gpu,
+            &devices.keyboard,
+            &devices.tablet,
+            &devices.memory,
+        );
+        let (call, person) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let take = json!({"mode":{"mode":"human","account":person,"handoff":true}});
+        assert_eq!(arbiter.host(&line(take)).error, None);
+        let screenshot = json!({"call":call,"action":{"action":"screenshot"}});
+        let mode = json!({"call":call,"action":{"action":"mode"}});
+        for request in [&screenshot, &mode] {
+            let refused = arbiter.agent(&line(request.clone()));
+            assert_eq!(
+                (refused.error.as_deref(), refused.png),
+                (Some(LOGIN_PENDING), None)
+            );
+        }
+        let typing = json!({"input":{"account":person,"action":{"action":"type","text":"pw"}}});
+        assert_eq!(arbiter.host(&line(typing)).error, None);
+        let hand_back = json!({"mode":{"mode":"watch","account":person}});
+        assert_eq!(arbiter.host(&line(hand_back)).error, None);
+        assert!(arbiter.agent(&line(screenshot)).png.is_some());
+        assert_eq!(arbiter.agent(&line(mode)).error, None);
     }
 
     #[test]

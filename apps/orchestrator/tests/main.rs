@@ -20,6 +20,7 @@ mod credential_encryption;
 mod desktop_http;
 mod docker_sandbox;
 mod dreams;
+mod handoffs;
 mod http;
 mod identity;
 mod identity_http;

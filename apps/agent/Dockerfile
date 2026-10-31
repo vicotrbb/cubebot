@@ -29,4 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && groupadd -g 10001 tool && useradd -u 10001 -g 10001 -M -d /var/lib/cubebot/workspace -s /bin/bash tool
 COPY apps/agent/xorg.conf /etc/X11/xorg.conf
 COPY apps/agent/wallpaper.jpg /usr/share/cubebot/wallpaper.jpg
+# A person who logs in for the agent (ADR 0039) must not leave the password in the profile on the
+# workspace disk, which the agent's tools can read; a managed policy on the read-only root holds.
+COPY apps/agent/chromium-policy.json /etc/chromium/policies/managed/cubebot.json
 COPY --from=build /out/cubebot-agent /usr/local/bin/

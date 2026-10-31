@@ -408,6 +408,75 @@
         }
       }
     },
+    "/api/agents/{id}/login": {
+      "get": {
+        "tags": [],
+        "summary": "The agent's pending login handoff; 204 when none is pending.",
+        "operationId": "pending_login",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginHandoff"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/login/decline": {
+      "post": {
+        "tags": [],
+        "summary": "Declines the pending login handoff and tells the agent why; 404 when none is pending.",
+        "operationId": "decline_login",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation}/events": {
       "get": {
         "tags": [],
@@ -1329,6 +1398,17 @@
         },
         "additionalProperties": false
       },
+      "DeclineLogin": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Returned to the agent; empty when the person gave none."
+          }
+        },
+        "additionalProperties": false
+      },
       "Delivery": {
         "type": "object",
         "required": ["turn", "agent_id", "agent", "status"],
@@ -1532,6 +1612,23 @@
           }
         },
         "additionalProperties": false
+      },
+      "LoginHandoff": {
+        "type": "object",
+        "required": ["id", "site", "reason"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "description": "The agent's words: untrusted text to show, never markup."
+          },
+          "site": {
+            "type": "string"
+          }
+        }
       },
       "Member": {
         "type": "object",

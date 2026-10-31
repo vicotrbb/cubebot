@@ -142,6 +142,16 @@ pub struct Collaborate {
     #[serde(default)]
     pub expects_reply: bool,
 }
+/// `POST /api/runtime/turns/{turn}/logins`: asks a person to log in on `site` through the
+/// desktop (ADR 0039). `call` is the tool call's id, so a resend records nothing new. A refusal
+/// is 409 with the reason the model reads.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestLogin {
+    pub call: Uuid,
+    pub site: String,
+    pub reason: String,
+}
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Collaborated {
