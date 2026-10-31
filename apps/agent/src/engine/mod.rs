@@ -4,7 +4,10 @@
 mod attempts;
 mod dream;
 mod turn;
-use crate::control::{Channel, Config, Error, MemoryClient, RuntimeClient};
+use crate::{
+    Caused,
+    control::{Channel, Config, Error, MemoryClient, RuntimeClient},
+};
 use attempts::Store;
 use cubebot_protocol::runtime::{Delivery, Report, TurnEvent};
 use futures_util::{SinkExt, StreamExt};
@@ -23,15 +26,17 @@ use tokio::{
 use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
-pub async fn run() -> Result<(), &'static str> {
-    let config = Config::from_environment().map_err(|_| "invalid runtime configuration")?;
+pub async fn run() -> Result<(), Caused> {
+    let config = Config::from_environment()
+        .map_err(|error| Caused::new("invalid runtime configuration", error))?;
     let root =
         std::env::var_os("CUBEBOT_JOURNAL_DIRECTORY").ok_or("runtime storage not configured")?;
     let tools = crate::tools::Registry::load().await?.map(Arc::new);
     let mut agent = Agent::open(Path::new(&root), tools)?;
-    let mut client = RuntimeClient::new(config).map_err(|_| "runtime transport unavailable")?;
+    let mut client = RuntimeClient::new(config)
+        .map_err(|error| Caused::new("runtime transport unavailable", error))?;
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
-        .map_err(|_| "runtime signal handler unavailable")?;
+        .map_err(|error| Caused::new("runtime signal handler unavailable", error))?;
     loop {
         tokio::select! {
             _ = shutdown(&mut terminate) => return Ok(()),
@@ -83,18 +88,19 @@ struct Agent {
 }
 
 impl Agent {
-    fn open(root: &Path, tools: Option<Arc<crate::tools::Registry>>) -> Result<Self, &'static str> {
-        let metadata =
-            std::fs::symlink_metadata(root).map_err(|_| "private runtime storage unavailable")?;
+    fn open(root: &Path, tools: Option<Arc<crate::tools::Registry>>) -> Result<Self, Caused> {
+        let metadata = std::fs::symlink_metadata(root)
+            .map_err(|error| Caused::new("private runtime storage unavailable", error))?;
         if !metadata.is_dir() || metadata.mode() & 0o077 != 0 {
-            return Err("private runtime storage required");
+            return Err("private runtime storage required".into());
         }
-        let mut store = Store::open(&root.join("tools"))
-            .map_err(|_| "runtime journal unavailable; recovery required")?;
+        let mut store = Store::open(&root.join("tools")).map_err(|error| {
+            Caused::new("runtime journal unavailable; recovery required", error)
+        })?;
         // Tool effects from before a crash are reported once, with their outcome or as uncertain.
         let outbox = store
             .pending()
-            .map_err(|_| "runtime journal unreadable; recovery required")?
+            .map_err(|error| Caused::new("runtime journal unreadable; recovery required", error))?
             .into_iter()
             .map(|(entry, journal)| (entry, Some(journal)))
             .collect();
@@ -135,7 +141,7 @@ impl Agent {
                         _ => return Ok(Next::Reconnect),
                     };
                     self.wake();
-                    let delivery = serde_json::from_str(&text).map_err(|_| Error::Protocol)?;
+                    let delivery = serde_json::from_str(&text).map_err(Error::protocol)?;
                     if let Some(next) = self.deliver(&mut channel, delivery).await? {
                         return Ok(next);
                     }
@@ -208,7 +214,7 @@ impl Agent {
         match delivery {
             Delivery::Turn(work) => {
                 if self.active.contains_key(&work.turn) || self.drain.is_some() {
-                    return Err(Error::Protocol);
+                    return Err(Error::Protocol(None));
                 }
                 self.start(work);
             }
@@ -290,9 +296,9 @@ impl Agent {
         if let (_, Some(journal)) = self.outbox.remove(index) {
             self.store
                 .lock()
-                .map_err(|_| Error::Journal)?
+                .map_err(|_| Error::Journal(None))?
                 .acknowledge(journal)
-                .map_err(|_| Error::Journal)?;
+                .map_err(Error::journal)?;
         }
         Ok(())
     }
@@ -313,9 +319,9 @@ fn report(entry: &attempts::Entry) -> Report {
     }
 }
 async fn send(channel: &mut Channel, report: &Report) -> Result<(), Error> {
-    let text = serde_json::to_string(report).map_err(|_| Error::Protocol)?;
+    let text = serde_json::to_string(report).map_err(Error::protocol)?;
     channel
         .send(Message::Text(text.into()))
         .await
-        .map_err(|_| Error::Unavailable)
+        .map_err(Error::unavailable)
 }

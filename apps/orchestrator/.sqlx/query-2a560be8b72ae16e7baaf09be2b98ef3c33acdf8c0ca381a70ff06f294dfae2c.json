@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            instance_id AS \"instance_id!\",\n            generation AS \"generation!\",\n            namespace AS \"namespace!\",\n            pod_name AS \"pod_name!\",\n            pod_uid AS \"pod_uid!\",\n            container_id AS \"container_id!\",\n            released_at IS NOT NULL AS \"released!\"\n        FROM orchestrator_owner\n        WHERE singleton\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "generation!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "namespace!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "pod_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "pod_uid!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "container_id!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "released!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "2a560be8b72ae16e7baaf09be2b98ef3c33acdf8c0ca381a70ff06f294dfae2c"
+}

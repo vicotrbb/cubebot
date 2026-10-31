@@ -17,7 +17,10 @@ pub struct Anthropic {
 
 impl Anthropic {
     pub fn new() -> Result<Self, Error> {
-        Self::base(Url::parse("https://api.anthropic.com/v1/").map_err(|_| Error::Configuration)?)
+        Self::base(
+            Url::parse("https://api.anthropic.com/v1/")
+                .map_err(|error| Error::Configuration(Some(error.into())))?,
+        )
     }
 
     pub fn for_loopback_tests(origin: &str) -> Result<Self, Error> {
@@ -46,14 +49,15 @@ impl Provider for Anthropic {
         }
     }
 
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic", model = model))]
     async fn limits(&self, model: &str, key: &str) -> Result<Limits, Error> {
         let mut url = self
             .base
             .join("models/")
-            .map_err(|_| Error::Configuration)?;
+            .map_err(|error| Error::Configuration(Some(error.into())))?;
         // A pushed segment is percent-encoded, so a model ID cannot change the path.
         url.path_segments_mut()
-            .map_err(|_| Error::Configuration)?
+            .map_err(|()| Error::Configuration(None))?
             .pop_if_empty()
             .push(model);
         let response = crate::send(self.authorized(self.http.get(url), key)).await?;
@@ -68,11 +72,11 @@ impl Provider for Anthropic {
         &'a self,
         request: &'a Request<'a>,
     ) -> impl Stream<Item = Result<Event, Error>> + Send + 'a {
-        crate::events::<Messages>(async move {
+        crate::events::<Messages>("anthropic", request.model, async move {
             let url = self
                 .base
                 .join("messages")
-                .map_err(|_| Error::Configuration)?;
+                .map_err(|error| Error::Configuration(Some(error.into())))?;
             let body = body(request)?;
             crate::send(
                 self.authorized(self.http.post(url), request.key)
@@ -85,7 +89,9 @@ impl Provider for Anthropic {
 
 fn body(request: &Request) -> Result<Value, Error> {
     // The Messages API requires an output limit; callers pass the model's own.
-    let limit = request.max_output_tokens.ok_or(Error::Configuration)?;
+    let limit = request
+        .max_output_tokens
+        .ok_or(Error::Configuration(None))?;
     let computer = crate::computer_calls(request.messages, |block| {
         (block["toolset_name"] == "computer").then(|| block["id"].as_str())?
     });
@@ -144,12 +150,12 @@ fn body(request: &Request) -> Result<Value, Error> {
 
 /// A computer toolset call becomes a `computer` call whose action is the member's name.
 fn tool_use(block: &Value) -> Result<crate::FunctionCall, Error> {
-    let field = |name: &str| block[name].as_str().ok_or(Error::InvalidResponse);
+    let field = |name: &str| block[name].as_str().ok_or(Error::InvalidResponse(None));
     if block["toolset_name"] != "computer" {
         return call(field("id")?, field("name")?, block["input"].to_string());
     }
     let mut input = block["input"].clone();
-    let input = input.as_object_mut().ok_or(Error::InvalidResponse)?;
+    let input = input.as_object_mut().ok_or(Error::InvalidResponse(None))?;
     input.insert("action".into(), json!(field("name")?));
     call(
         field("id")?,
@@ -240,13 +246,15 @@ impl Messages {
     }
 
     fn block(&mut self, data: &Value) -> Result<&mut Value, Error> {
-        let index = data["index"].as_u64().ok_or(Error::InvalidResponse)? as usize;
-        self.blocks.get_mut(index).ok_or(Error::InvalidResponse)
+        let index = data["index"].as_u64().ok_or(Error::InvalidResponse(None))? as usize;
+        self.blocks
+            .get_mut(index)
+            .ok_or(Error::InvalidResponse(None))
     }
 
     fn start(&mut self, data: &Value) -> Result<(), Error> {
         if data["index"].as_u64() != Some(self.blocks.len() as u64) {
-            return Err(Error::InvalidResponse);
+            return Err(Error::InvalidResponse(None));
         }
         let mut block = data["content_block"].clone();
         if block["type"] == "tool_use" {
@@ -266,7 +274,7 @@ impl Messages {
             Some("signature_delta") => ("signature", &delta["signature"]),
             _ => return Ok(()),
         };
-        let piece = piece.as_str().ok_or(Error::InvalidResponse)?;
+        let piece = piece.as_str().ok_or(Error::InvalidResponse(None))?;
         match &mut self.block(data)?[field] {
             Value::String(current) => current.push_str(piece),
             slot => *slot = json!(piece),
@@ -280,10 +288,13 @@ impl Messages {
     fn stop(&mut self, data: &Value) -> Result<(), Error> {
         let block = self.block(data)?;
         if block["type"] == "tool_use" {
-            let arguments = block["input"].as_str().ok_or(Error::InvalidResponse)?;
+            let arguments = block["input"]
+                .as_str()
+                .ok_or(Error::InvalidResponse(None))?;
             block["input"] = match arguments {
                 "" => json!({}),
-                arguments => serde_json::from_str(arguments).map_err(|_| Error::InvalidResponse)?,
+                arguments => serde_json::from_str(arguments)
+                    .map_err(|error| Error::InvalidResponse(Some(error.into())))?,
             };
         }
         Ok(())
@@ -294,7 +305,7 @@ impl Messages {
             Some("end_turn" | "tool_use" | "stop_sequence") => (),
             Some("refusal") => return Err(Error::Rejected),
             // Truncated output (`max_tokens`) or an unknown stop is not a reply.
-            _ => return Err(Error::InvalidResponse),
+            _ => return Err(Error::InvalidResponse(None)),
         }
         let mut text = String::new();
         let mut calls = Vec::new();

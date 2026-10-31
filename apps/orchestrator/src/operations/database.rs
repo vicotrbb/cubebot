@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use sqlx::{PgConnection, PgPool, postgres::PgPoolOptions};
 
+// The URL carries the database password, so the span records nothing.
+#[tracing::instrument(skip_all)]
 pub async fn connect(url: &str) -> Result<PgPool, sqlx::Error> {
     let pool = PgPoolOptions::new()
         .max_connections(10)
@@ -14,6 +16,7 @@ pub async fn connect(url: &str) -> Result<PgPool, sqlx::Error> {
     Ok(pool)
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn migrate(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
     // A cancelled migration must never return a session-level advisory lock to the pool.
     let mut connection = pool.acquire().await?.detach();
@@ -23,7 +26,7 @@ pub async fn migrate(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
 }
 
 async fn run_migrations(connection: &mut PgConnection) -> Result<(), sqlx::migrate::MigrateError> {
-    sqlx::query("SET statement_timeout = '5s'")
+    sqlx::query!("SET statement_timeout = '5s'")
         .execute(&mut *connection)
         .await?;
     sqlx::migrate!("./migrations").run(connection).await

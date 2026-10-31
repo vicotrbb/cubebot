@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE identity_oidc_policy\n        SET enabled = false, revision = revision + 1\n        WHERE singleton AND enabled\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "11eb774efb81fe6d21c3d092828fd35880b0c29a503a552b94d53d1d35f97197"
+}

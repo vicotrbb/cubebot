@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM skill_installations\n            WHERE agent_id=$1 AND skill_id=$2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc0f63ad6c12d709df349cf18f82b7c6ce99d615eb86c1cc8b7206f4b1573eb6"
+}

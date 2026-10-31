@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO agent_runtime_sessions\n                (attempt_id, instance_id, pod_uid, service_account_uid, token_hash)\n            VALUES ($1, $2, $3, $4, $5)\n            ON CONFLICT (attempt_id) DO UPDATE\n            SET token_hash = EXCLUDED.token_hash,\n                version = agent_runtime_sessions.version + 1\n            WHERE agent_runtime_sessions.instance_id = EXCLUDED.instance_id\n              AND agent_runtime_sessions.pod_uid = EXCLUDED.pod_uid\n              AND agent_runtime_sessions.service_account_uid = EXCLUDED.service_account_uid\n              AND agent_runtime_sessions.revoked_at IS NULL\n            RETURNING version\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4c84bdc43cf62ca63ab64aa7598858b6ee75925cea1bbd4b3a2d3eec2bcd5dbc"
+}

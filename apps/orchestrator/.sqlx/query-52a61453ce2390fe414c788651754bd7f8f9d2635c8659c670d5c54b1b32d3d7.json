@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO agent_definition_revisions\n            (agent_id, revision, instructions_revision, name, instructions, idle_policy,\n             idle_delay_seconds, dreaming_model, task_lanes, actor_id)\n        SELECT id, revision, instructions_revision, name, instructions, idle_policy,\n               idle_delay_seconds, dreaming_model, task_lanes, $2\n        FROM agents\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52a61453ce2390fe414c788651754bd7f8f9d2635c8659c670d5c54b1b32d3d7"
+}

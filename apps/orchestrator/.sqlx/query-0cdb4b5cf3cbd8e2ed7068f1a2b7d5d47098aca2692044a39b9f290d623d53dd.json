@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO turn_events (turn_id,sequence,payload)\n            VALUES ($1,$2,$3)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0cdb4b5cf3cbd8e2ed7068f1a2b7d5d47098aca2692044a39b9f290d623d53dd"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO docker_sandbox_tokens (attempt_id, token_hash)\n                VALUES ($1, $2)\n                ON CONFLICT (attempt_id) DO UPDATE\n                SET token_hash = EXCLUDED.token_hash\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c00a40e1ff0d94e53a7448d8887a070b0a71ddedfab1ab21b3064b57070080a3"
+}

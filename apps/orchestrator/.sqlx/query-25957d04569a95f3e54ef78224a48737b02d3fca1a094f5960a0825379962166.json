@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT m.id, m.revision, m.content, r.turn_id AS source_turn, r.dream_run_id AS source_dream, r.human_id IS NOT NULL AS \"edited_by_human!\"\n        FROM memories m\n        JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision,\n            (SELECT (SELECT string_agg('''' || replace(replace(l,'\\','\\\\'),'''','''''') || '''',' | ') FROM unnest(tsvector_to_array(to_tsvector('english',$2))) l)::tsquery AS q) s\n        WHERE m.agent_id=$1 AND NOT m.deleted AND ($2::text IS NULL OR m.search @@ s.q)\n        ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE ts_rank(m.search,s.q) END DESC, m.updated_at DESC\n        LIMIT $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "source_turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "source_dream",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "edited_by_human!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "25957d04569a95f3e54ef78224a48737b02d3fca1a094f5960a0825379962166"
+}

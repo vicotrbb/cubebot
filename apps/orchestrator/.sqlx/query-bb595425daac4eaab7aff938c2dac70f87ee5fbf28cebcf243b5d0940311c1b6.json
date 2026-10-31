@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH RECURSIVE down(id) AS (\n            SELECT id FROM chat_turns WHERE parent_turn_id=$1\n            UNION ALL\n            SELECT t.id FROM chat_turns t JOIN down d ON t.parent_turn_id=d.id\n        )\n        UPDATE chat_turns\n        SET status='cancelled', error='cancelled'\n        WHERE id IN (SELECT id FROM down) AND status NOT IN ('complete','failed','cancelled')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bb595425daac4eaab7aff938c2dac70f87ee5fbf28cebcf243b5d0940311c1b6"
+}

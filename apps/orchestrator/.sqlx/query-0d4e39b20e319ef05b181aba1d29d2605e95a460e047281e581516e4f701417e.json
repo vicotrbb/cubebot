@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO human_sessions (token_hash, account_id, expires_at)\n            VALUES ($1, $2, clock_timestamp() + interval '1 day')\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0d4e39b20e319ef05b181aba1d29d2605e95a460e047281e581516e4f701417e"
+}

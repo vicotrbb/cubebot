@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH m AS (\n            INSERT INTO memories (agent_id, content)\n            VALUES ($1, $2)\n            RETURNING id, revision, content, deleted\n        )\n        INSERT INTO memory_revisions (memory_id, revision, content, deleted, human_id, turn_id, dream_run_id)\n        SELECT id, revision, content, deleted, $3, $4, $5\n        FROM m\n        RETURNING memory_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "memory_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b73d55c58d2af211b5a76d989cb75c8e06c3a6b9c244c56516b4f2aff01aa64a"
+}

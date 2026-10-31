@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT message, response AS \"response!\"\n        FROM chat_turns\n        WHERE conversation_id=$1 AND status='complete' AND sequence>=$2\n        ORDER BY sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "response!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "d7df8d6d92955d318682582739747ae9928997eebb7b8fdf1f63db760995dbe7"
+}

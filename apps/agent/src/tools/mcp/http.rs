@@ -59,6 +59,7 @@ impl Http {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(method = method, id = id))]
     pub async fn request(&self, id: u64, method: &str, params: Value) -> Result<Value, Failure> {
         let response = self
             .post(&json!({"jsonrpc":"2.0","id":id,"method":method,"params":params}))
@@ -104,6 +105,7 @@ impl Http {
         Err(Failure::Lost)
     }
 
+    #[tracing::instrument(skip_all, fields(method = message["method"].as_str()))]
     pub async fn notify(&self, message: &Value) -> Result<(), Failure> {
         self.post(message).await.map(drop)
     }

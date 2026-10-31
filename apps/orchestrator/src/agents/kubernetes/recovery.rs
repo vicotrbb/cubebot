@@ -38,10 +38,16 @@ impl Reconciler {
         {
             attempt = self.bind(attempt, object.clone()).await?;
         }
-        let draining: bool = sqlx::query_scalar(
-            "SELECT EXISTS (SELECT 1 FROM agent_runtime_drains WHERE attempt_id = $1)",
+        let draining = sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM agent_runtime_drains
+                WHERE attempt_id = $1
+            ) AS "draining!"
+            "#,
+            attempt.id.0,
         )
-        .bind(attempt.id)
         .fetch_one(&self.pool)
         .await?;
         if !current || proof.is_some() || draining || observed.is_none() {

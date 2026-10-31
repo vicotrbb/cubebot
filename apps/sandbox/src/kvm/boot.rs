@@ -15,6 +15,7 @@ const IOAPIC: u32 = 0xfec0_0000;
 const LOCAL_APIC: u32 = 0xfee0_0000;
 
 /// Loads the guest for `vcpus` processors and returns the kernel's 64-bit entry point.
+#[tracing::instrument(name = "boot_load", skip_all, fields(vcpus = vcpus))]
 pub fn load(memory: &mut [u8], kernel: &[u8], cmdline: &str, vcpus: u8) -> io::Result<u64> {
     let header = Header::parse(kernel)?;
     let payload = &kernel[header.payload_offset..];
@@ -63,7 +64,7 @@ impl Header {
         }
         Ok(Self {
             payload_offset,
-            pref_address: u64::from_le_bytes(kernel[0x258..0x260].try_into().unwrap()),
+            pref_address: u64::from(u32_at(kernel, 0x258)) | u64::from(u32_at(kernel, 0x25c)) << 32,
             init_size: u32_at(kernel, 0x260).into(),
             cmdline_size: u32_at(kernel, 0x238) as usize,
         })
@@ -161,7 +162,7 @@ fn u16_at(bytes: &[u8], offset: usize) -> u16 {
 }
 
 fn u32_at(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
+    u32::from(u16_at(bytes, offset)) | u32::from(u16_at(bytes, offset + 2)) << 16
 }
 
 fn invalid(message: &str) -> io::Error {

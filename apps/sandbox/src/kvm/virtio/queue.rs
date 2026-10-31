@@ -64,16 +64,17 @@ impl Queue {
                 return Err(invalid("malformed virtqueue chain"));
             }
             let raw: [u8; 16] = read(memory, self.descriptors + 16 * u64::from(index))?;
-            let flags = u16::from_le_bytes([raw[12], raw[13]]);
+            let [address @ .., l0, l1, l2, l3, f0, f1, n0, n1] = raw;
+            let flags = u16::from_le_bytes([f0, f1]);
             descriptors.push(Descriptor {
-                address: u64::from_le_bytes(raw[..8].try_into().unwrap()),
-                len: u32::from_le_bytes(raw[8..12].try_into().unwrap()),
+                address: u64::from_le_bytes(address),
+                len: u32::from_le_bytes([l0, l1, l2, l3]),
                 writable: flags & WRITE != 0,
             });
             if flags & NEXT == 0 {
                 return Ok(Some(Chain { head, descriptors }));
             }
-            index = u16::from_le_bytes([raw[14], raw[15]]);
+            index = u16::from_le_bytes([n0, n1]);
         }
     }
 

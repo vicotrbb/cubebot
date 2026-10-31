@@ -555,10 +555,10 @@ async fn bootstrap_rejects_oversized_and_redirected_responses() {
         let result = client.bootstrap().await;
         assert!(matches!(
             (case, result),
-            (BadReply::Oversized, Err(Error::Protocol))
-                | (BadReply::Redirect, Err(Error::Unavailable))
+            (BadReply::Oversized, Err(Error::Protocol(_)))
+                | (BadReply::Redirect, Err(Error::Unavailable(_)))
         ));
-        assert!(matches!(client.connect().await, Err(Error::Credential)));
+        assert!(matches!(client.connect().await, Err(Error::Credential(_))));
         task.abort();
         std::fs::remove_file(path).unwrap();
     }

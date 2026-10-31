@@ -97,8 +97,18 @@ async fn rejects_expired_sessions_and_invalid_account_inputs() {
         .unwrap();
     let token = "0".repeat(64);
     // The test token has a deliberately expired interval, unlike production issuance.
-    sqlx::query("INSERT INTO human_sessions (token_hash, account_id, created_at, expires_at) SELECT $1, id, now() - interval '2 days', now() - interval '1 day' FROM human_accounts LIMIT 1")
-        .bind(sha2::Sha256::digest(token.as_bytes()).to_vec()).execute(&pool).await.unwrap();
+    sqlx::query!(
+        "
+        INSERT INTO human_sessions (token_hash, account_id, created_at, expires_at)
+        SELECT $1, id, now() - interval '2 days', now() - interval '1 day'
+        FROM human_accounts
+        LIMIT 1
+        ",
+        sha2::Sha256::digest(token.as_bytes()).to_vec(),
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         identity.authenticate(&token).await,
         Err(IdentityError::Unauthorized)

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agents\n        SET desired_state = 'sleeping'\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d82252280a19b0c340a9ae7b8ffc4f1c9e10570ceebf952409caea118b2ad6d8"
+}

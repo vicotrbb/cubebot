@@ -34,8 +34,15 @@ async fn login_budget_survives_reconnect_and_resets_after_its_window() {
             .await,
         Err(IdentityError::Unauthorized)
     ));
-    sqlx::query("UPDATE human_accounts SET auth_window_started_at = clock_timestamp() - interval '61 seconds'")
-        .execute(&pool).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE human_accounts
+        SET auth_window_started_at = clock_timestamp() - interval '61 seconds'
+        "
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     let session = identity
         .login("limited-admin", "long administrator password")
         .await
@@ -47,10 +54,15 @@ async fn login_budget_survives_reconnect_and_resets_after_its_window() {
             .unwrap()
             .administrator
     );
-    let attempts: i32 = sqlx::query_scalar("SELECT auth_attempts FROM human_accounts")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let attempts: i32 = sqlx::query_scalar!(
+        "
+        SELECT auth_attempts
+        FROM human_accounts
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(attempts, 1);
 }
 
@@ -74,15 +86,25 @@ async fn concurrent_attempts_cannot_overdraw_the_account_login_budget() {
             Err(IdentityError::Unauthorized | IdentityError::Busy)
         ));
     }
-    let attempts: i32 = sqlx::query_scalar("SELECT auth_attempts FROM human_accounts")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let attempts: i32 = sqlx::query_scalar!(
+        "
+        SELECT auth_attempts
+        FROM human_accounts
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(attempts, 10);
-    let sessions: i64 = sqlx::query_scalar("SELECT count(*) FROM human_sessions")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let sessions: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM human_sessions
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(sessions, 0);
 }
 

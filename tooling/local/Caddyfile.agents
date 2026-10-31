@@ -1,0 +1,8 @@
+import /etc/caddy/Caddyfile
+
+# Sandboxes reach the orchestrator over HTTPS on the Docker bridge, with the `just dev-ca`
+# certificate their guests trust; the orchestrator itself serves plain HTTP behind this proxy.
+https://:8443 {
+	tls /run/dev-ca/server.crt /run/dev-ca/server.key
+	reverse_proxy orchestrator:8080
+}

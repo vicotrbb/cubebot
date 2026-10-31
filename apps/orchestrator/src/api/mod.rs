@@ -23,6 +23,25 @@ pub fn router() -> Router {
     Router::new().route("/api/health/live", get(liveness))
 }
 
+/// One span per request, named by method and matched route template; never the raw path,
+/// query or headers.
+pub fn traced(router: Router) -> Router {
+    router.layer(axum::middleware::from_fn(request_span))
+}
+
+async fn request_span(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use tracing::Instrument;
+    let route = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map_or("unmatched", |path| path.as_str());
+    let span = tracing::info_span!("http.request", method = %request.method(), route);
+    next.run(request).instrument(span).await
+}
+
 async fn liveness() -> Json<Liveness> {
     Json(Liveness {
         status: LivenessStatus::Alive,
@@ -69,7 +88,9 @@ pub async fn configured_router(
     let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
         .map(|path| crate::connections::Credentials::from_file(std::path::Path::new(&path)))
         .transpose()
-        .map_err(|_| crate::identity::IdentityError::CredentialUnavailable)?;
+        .map_err(|error| {
+            crate::identity::IdentityError::CredentialUnavailable(Some(error.into()))
+        })?;
     configured_router_with_credentials(pool, origin, config, credentials).await
 }
 
@@ -109,7 +130,7 @@ pub async fn configured_router_with_credentials(
 async fn readiness(
     axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,
 ) -> axum::http::StatusCode {
-    match sqlx::query("SELECT 1").execute(&pool).await {
+    match sqlx::query!("SELECT 1 AS one").fetch_one(&pool).await {
         Ok(_) => axum::http::StatusCode::OK,
         Err(_) => axum::http::StatusCode::SERVICE_UNAVAILABLE,
     }

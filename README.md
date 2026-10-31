@@ -4,6 +4,24 @@ A Kubernetes-native home for persistent agents, shared rooms, memories, and skil
 
 **Status:** a minimal text-chat MVP runs locally: sign-in, agent management, an encrypted OpenAI connection and one permanent conversation per agent, served by the native Rust runtime. A terminal is implemented but disabled by default. See [STATUS](docs/STATUS.md) for everything not yet qualified.
 
+## Run it locally
+
+With Docker (Compose 2.23 or later) and just:
+
+```sh
+just up      # builds and starts everything, then waits until it answers
+just admin   # once: creates the administrator, prompting for a password
+```
+
+Open <http://localhost:3000>, sign in, and add an OpenAI connection in the console. `just down` stops everything and keeps your data in Docker volumes; `docker compose down -v` deletes it. The first `just up` writes `.env` with a random database password; set `CUBEBOT_PORT` there to use another port.
+
+What runs depends on the machine:
+
+- **macOS, Windows, or Linux without KVM:** PostgreSQL, the orchestrator and the console. You can sign in, manage agents and connections, and browse, but an agent cannot wake, because every agent runs in a KVM guest that needs x86_64 Linux.
+- **x86_64 Linux with `/dev/kvm`:** the same, plus agents. The first run also builds the guest kernel and root image (`make`, `gcc`, `flex`, `bison`, `bc` and the libelf headers), a sandbox image, and a local control CA. The orchestrator then starts each agent as a Docker container on this host, which needs the Docker socket and is therefore root on this machine. Set `CUBEBOT_AGENTS=0` in `.env` to leave agents off, or `CUBEBOT_AGENTS=1` to fail instead of falling back.
+
+`just up` is for running Cubebot on one machine. It is not a production deployment.
+
 ## Start developing
 
 Use Rust through rustup, Bun **1.4.0**, Node **24.18.0**, uv **0.11.26**, and just **1.55.1**. A C/C++ compiler and linker are needed to build the complexity tool. Rust **1.96.0** and Python **3.14.6** are selected by repository files; Python runs development checks only.

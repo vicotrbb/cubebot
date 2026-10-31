@@ -15,7 +15,8 @@ pub struct OpenAi {
 impl OpenAi {
     pub fn new() -> Result<Self, Error> {
         Self::endpoint(
-            Url::parse("https://api.openai.com/v1/responses").map_err(|_| Error::Configuration)?,
+            Url::parse("https://api.openai.com/v1/responses")
+                .map_err(|error| Error::Configuration(Some(error.into())))?,
         )
     }
 
@@ -23,7 +24,7 @@ impl OpenAi {
         Self::endpoint(
             crate::loopback(origin)?
                 .join("responses")
-                .map_err(|_| Error::Configuration)?,
+                .map_err(|error| Error::Configuration(Some(error.into())))?,
         )
     }
 
@@ -52,12 +53,16 @@ impl Provider for OpenAi {
         &'a self,
         request: &'a Request<'a>,
     ) -> impl Stream<Item = Result<Event, Error>> + Send + 'a {
-        crate::events::<Responses>(crate::send(
-            self.http
-                .post(self.endpoint.clone())
-                .bearer_auth(request.key)
-                .json(&body(request)),
-        ))
+        crate::events::<Responses>(
+            "openai",
+            request.model,
+            crate::send(
+                self.http
+                    .post(self.endpoint.clone())
+                    .bearer_auth(request.key)
+                    .json(&body(request)),
+            ),
+        )
     }
 }
 
@@ -128,7 +133,7 @@ impl Decoder for Responses {
     fn decode(&mut self, data: Value, events: &mut VecDeque<Event>) -> Result<bool, Error> {
         match data["type"].as_str() {
             Some("response.output_text.delta") => {
-                let delta = data["delta"].as_str().ok_or(Error::InvalidResponse)?;
+                let delta = data["delta"].as_str().ok_or(Error::InvalidResponse(None))?;
                 events.push_back(Event::Text(delta.into()));
                 Ok(false)
             }
@@ -137,7 +142,7 @@ impl Decoder for Responses {
                 Ok(true)
             }
             // Truncated output is not a reply.
-            Some("response.incomplete") => Err(Error::InvalidResponse),
+            Some("response.incomplete") => Err(Error::InvalidResponse(None)),
             Some("response.failed" | "error") => Err(Error::Transient(None)),
             _ => Ok(false),
         }
@@ -147,11 +152,11 @@ impl Decoder for Responses {
 /// The final response is authoritative; deltas were only progress.
 fn completed(response: &Value) -> Result<Event, Error> {
     if response["status"] != "completed" {
-        return Err(Error::InvalidResponse);
+        return Err(Error::InvalidResponse(None));
     }
     let output = response["output"]
         .as_array()
-        .ok_or(Error::InvalidResponse)?;
+        .ok_or(Error::InvalidResponse(None))?;
     let mut text = String::new();
     let mut calls = Vec::new();
     for item in output {
@@ -160,7 +165,7 @@ fn completed(response: &Value) -> Result<Event, Error> {
             Some("message") => append_content(&mut text, &item["content"])?,
             Some("function_call") => calls.push(function_call(item)?),
             Some("computer_call") => calls.push(computer_call(item)?),
-            _ => return Err(Error::InvalidResponse),
+            _ => return Err(Error::InvalidResponse(None)),
         }
     }
     let usage = &response["usage"];
@@ -178,17 +183,17 @@ fn completed(response: &Value) -> Result<Event, Error> {
 }
 
 fn append_content(text: &mut String, value: &Value) -> Result<(), Error> {
-    for part in value.as_array().ok_or(Error::InvalidResponse)? {
+    for part in value.as_array().ok_or(Error::InvalidResponse(None))? {
         if part["type"] != "output_text" {
-            return Err(Error::InvalidResponse);
+            return Err(Error::InvalidResponse(None));
         }
-        text.push_str(part["text"].as_str().ok_or(Error::InvalidResponse)?);
+        text.push_str(part["text"].as_str().ok_or(Error::InvalidResponse(None))?);
     }
     Ok(())
 }
 
 fn function_call(item: &Value) -> Result<crate::FunctionCall, Error> {
-    let field = |name: &str| item[name].as_str().ok_or(Error::InvalidResponse);
+    let field = |name: &str| item[name].as_str().ok_or(Error::InvalidResponse(None));
     call(
         field("call_id")?,
         field("name")?,
@@ -198,7 +203,9 @@ fn function_call(item: &Value) -> Result<crate::FunctionCall, Error> {
 
 /// The call's batch of actions, as one `computer` call.
 fn computer_call(item: &Value) -> Result<crate::FunctionCall, Error> {
-    let call_id = item["call_id"].as_str().ok_or(Error::InvalidResponse)?;
+    let call_id = item["call_id"]
+        .as_str()
+        .ok_or(Error::InvalidResponse(None))?;
     let actions = json!({"actions":item["actions"]});
     call(call_id, "computer", actions.to_string())
 }

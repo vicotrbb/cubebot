@@ -94,11 +94,17 @@ async fn revoked_and_expired_invitations_cannot_be_redeemed() {
         .invite(&admin, "expired-member", uuid::Uuid::new_v4())
         .await
         .unwrap();
-    sqlx::query("UPDATE invitations SET expires_at = now() - interval '1 second' WHERE id = $1")
-        .bind(expired.id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        UPDATE invitations
+        SET expires_at = now() - interval '1 second'
+        WHERE id = $1
+        ",
+        expired.id,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         identity
             .accept_invitation(
@@ -113,7 +119,11 @@ async fn revoked_and_expired_invitations_cannot_be_redeemed() {
 
 async fn await_blocked_redemption(pool: &sqlx::PgPool) {
     for _ in 0..150 {
-        let waiting: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query LIKE 'SELECT id FROM invitations%FOR UPDATE')")
+        let waiting: bool = sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND btrim(regexp_replace(query, '\s+', ' ', 'g')) LIKE 'SELECT id FROM invitations%FOR UPDATE') AS "value!"
+            "#
+        )
             .fetch_one(pool).await.unwrap();
         if waiting {
             return;
@@ -134,11 +144,18 @@ async fn invitation_expiring_while_redemption_waits_creates_no_account() {
         .await
         .unwrap();
     let mut blocker = pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM invitations WHERE id = $1 FOR UPDATE")
-        .bind(invitation.id)
-        .execute(&mut *blocker)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        SELECT id
+        FROM invitations
+        WHERE id = $1
+        FOR UPDATE
+        ",
+        invitation.id,
+    )
+    .fetch_all(&mut *blocker)
+    .await
+    .unwrap();
     let redemption = tokio::spawn(async move {
         identity
             .accept_invitation(
@@ -150,18 +167,32 @@ async fn invitation_expiring_while_redemption_waits_creates_no_account() {
     });
     await_blocked_redemption(&pool).await;
     // Expiry occurs after the waiting transaction began, before it acquires the lock.
-    sqlx::query("UPDATE invitations SET expires_at = clock_timestamp() + interval '100 milliseconds' WHERE id = $1")
-        .bind(invitation.id).execute(&mut *blocker).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE invitations
+        SET expires_at = clock_timestamp() + interval '100 milliseconds'
+        WHERE id = $1
+        ",
+        invitation.id,
+    )
+    .execute(&mut *blocker)
+    .await
+    .unwrap();
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     blocker.commit().await.unwrap();
     assert!(matches!(
         redemption.await.unwrap(),
         Err(IdentityError::Unauthorized)
     ));
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM human_accounts WHERE login = 'waiting-member'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM human_accounts
+        WHERE login = 'waiting-member'
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 0);
 }

@@ -28,6 +28,41 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     run(listening, address).await
 }
 
+/// A startup failure that reads, and prints from `main`, as its message alone.
+struct Failure {
+    message: &'static str,
+    source: Box<dyn Error + Send + Sync>,
+}
+
+impl std::fmt::Debug for Failure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.message, formatter)
+    }
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.message)
+    }
+}
+
+impl Error for Failure {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(self.source.as_ref())
+    }
+}
+
+fn failure<E: Error + Send + Sync + 'static>(
+    message: &'static str,
+) -> impl FnOnce(E) -> Box<dyn Error + Send + Sync> {
+    move |error| {
+        Box::new(Failure {
+            message,
+            source: Box::new(error),
+        })
+    }
+}
+
 enum Listening {
     Plain(TcpListener),
     Tls(Tls),
@@ -53,6 +88,7 @@ async fn run(
     address: SocketAddr,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (router, controller) = application().await?;
+    let router = cubebot_orchestrator::api::traced(router);
     let scheme = match listening {
         Listening::Tls(_) => "HTTPS",
         Listening::Plain(_) => "HTTP",
@@ -62,7 +98,7 @@ async fn run(
         Listening::Tls(listener) => serve(listener, router, controller, shutdown_signal()).await,
         Listening::Plain(listener) => serve(listener, router, controller, shutdown_signal()).await,
     };
-    served.map_err(|_| "orchestrator ownership or service failed")?;
+    served.map_err(failure("orchestrator ownership or service failed"))?;
     Ok(())
 }
 
@@ -94,9 +130,11 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
         Ok(url) => {
             let pool = cubebot_orchestrator::operations::database::connect(&url)
                 .await
-                .map_err(|_| "configured database connection or migration failed")?;
+                .map_err(failure(
+                    "configured database connection or migration failed",
+                ))?;
             let config = cubebot_orchestrator::identity::oidc::environment()
-                .map_err(|_| "invalid OIDC configuration")?;
+                .map_err(failure("invalid OIDC configuration"))?;
             let origin = match std::env::var("CUBEBOT_PUBLIC_ORIGIN") {
                 Ok(origin) => Some(origin),
                 Err(std::env::VarError::NotPresent) => None,
@@ -110,7 +148,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                         controller
                             .release()
                             .await
-                            .map_err(|_| "startup cleanup could not release ownership")?;
+                            .map_err(failure("startup cleanup could not release ownership"))?;
                         return Err("identity configuration failed".into());
                     }
                 };
@@ -132,11 +170,11 @@ async fn configured_controller(
     pool: &sqlx::PgPool,
 ) -> Result<cubebot_orchestrator::agents::kubernetes::Controller, Box<dyn Error + Send + Sync>> {
     use cubebot_orchestrator::agents::kubernetes::ControllerConfig;
-    match ControllerConfig::environment().map_err(|_| "invalid controller configuration")? {
+    match ControllerConfig::environment().map_err(failure("invalid controller configuration"))? {
         Some(config) => config
             .activate(pool.clone())
             .await
-            .map_err(|_| "controller ownership or configuration failed".into()),
+            .map_err(failure("controller ownership or configuration failed")),
         None => docker_or_database_only(pool).await,
     }
 }
@@ -145,13 +183,17 @@ async fn docker_or_database_only(
     pool: &sqlx::PgPool,
 ) -> Result<cubebot_orchestrator::agents::kubernetes::Controller, Box<dyn Error + Send + Sync>> {
     use cubebot_orchestrator::agents::{kubernetes::Controller, sandbox::DockerConfig};
-    match DockerConfig::environment().map_err(|_| "invalid Docker sandbox configuration")? {
+    match DockerConfig::environment().map_err(failure("invalid Docker sandbox configuration"))? {
         Some(config) => Controller::docker(pool.clone(), config)
             .await
-            .map_err(|_| "development ownership unavailable for Docker sandboxes".into()),
-        None => Controller::database_only(pool.clone()).await.map_err(|_| {
-            "database-only ownership unavailable or controller configuration required".into()
-        }),
+            .map_err(failure(
+                "development ownership unavailable for Docker sandboxes",
+            )),
+        None => Controller::database_only(pool.clone())
+            .await
+            .map_err(failure(
+                "database-only ownership unavailable or controller configuration required",
+            )),
     }
 }
 

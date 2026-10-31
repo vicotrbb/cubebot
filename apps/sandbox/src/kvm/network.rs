@@ -6,9 +6,11 @@
 use super::memory::invalid;
 use nix::{ifaddrs::getifaddrs, ioctl_write_ptr_bad, request_code_write};
 use std::{
+    fmt,
     fs::{self, File},
     io,
     net::Ipv4Addr,
+    num::ParseIntError,
     os::{fd::AsRawFd, unix::fs::MetadataExt},
     path::Path,
     process::{Command, Stdio},
@@ -40,6 +42,27 @@ pub struct Network {
     pub cmdline: String,
 }
 
+/// An `invalid` error whose message is unchanged and whose cause stays behind `source()`.
+#[derive(Debug)]
+struct Unparsable {
+    message: &'static str,
+    cause: ParseIntError,
+}
+impl fmt::Display for Unparsable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.message)
+    }
+}
+impl std::error::Error for Unparsable {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.cause)
+    }
+}
+fn unparsable(message: &'static str) -> impl Fn(ParseIntError) -> io::Error {
+    move |cause| io::Error::new(io::ErrorKind::InvalidData, Unparsable { message, cause })
+}
+
+#[tracing::instrument(name = "network_setup", skip_all)]
 pub fn attach() -> io::Result<Network> {
     own_namespace()?;
     let (link, gateway) = default_route(&fs::read_to_string("/proc/net/route")?)?;
@@ -47,7 +70,7 @@ pub fn attach() -> io::Result<Network> {
     let class = Path::new("/sys/class/net").join(&link);
     let mac = mac(&fs::read_to_string(class.join("address"))?)?;
     let mtu = fs::read_to_string(class.join("mtu"))?.trim().parse();
-    let mtu = mtu.map_err(|_| invalid("unreadable interface MTU"))?;
+    let mtu = mtu.map_err(unparsable("unreadable interface MTU"))?;
     let resolver = fs::read_to_string("/etc/resolv.conf").unwrap_or_default();
     let tap = open_tap()?;
     redirect(&link, mtu)?;
@@ -81,7 +104,7 @@ fn default_route(table: &str) -> io::Result<(String, Option<Ipv4Addr>)> {
         let fields: Vec<_> = line.split_whitespace().collect();
         if let [link, "00000000", gateway, _, _, _, _, "00000000", ..] = fields[..] {
             // The kernel prints addresses as host-order hex words.
-            let gateway = u32::from_str_radix(gateway, 16).map_err(|_| invalid("bad route"))?;
+            let gateway = u32::from_str_radix(gateway, 16).map_err(unparsable("bad route"))?;
             let gateway =
                 Some(Ipv4Addr::from(gateway.to_le_bytes())).filter(|g| !g.is_unspecified());
             return Ok((link.to_owned(), gateway));

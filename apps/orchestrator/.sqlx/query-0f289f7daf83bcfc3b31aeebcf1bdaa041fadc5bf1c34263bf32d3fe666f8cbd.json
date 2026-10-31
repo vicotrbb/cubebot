@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.name, string_agg(DISTINCT r.name,', ' ORDER BY r.name) AS \"rooms!\"\n        FROM room_members m\n        JOIN room_members n ON n.room_id=m.room_id AND n.agent_id<>m.agent_id\n        JOIN agents a ON a.id=n.agent_id AND a.desired_state<>'retired'\n        JOIN rooms r ON r.id=m.room_id\n        WHERE m.agent_id=$1\n        GROUP BY a.name\n        ORDER BY a.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "rooms!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "0f289f7daf83bcfc3b31aeebcf1bdaa041fadc5bf1c34263bf32d3fe666f8cbd"
+}

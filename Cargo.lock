@@ -467,6 +467,8 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tokio-tungstenite",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
  "webpki-roots 1.0.11",
 ]
@@ -519,6 +521,7 @@ dependencies = [
  "reqwest",
  "serde_json",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -528,6 +531,8 @@ dependencies = [
  "cubebot-protocol",
  "nix",
  "serde_json",
+ "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 

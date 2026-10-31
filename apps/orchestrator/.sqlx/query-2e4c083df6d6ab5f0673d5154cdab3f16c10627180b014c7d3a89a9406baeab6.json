@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT epoch,phase\n            FROM agent_resources\n            WHERE agent_id = $1 AND kind = 'pod'\n            ORDER BY epoch\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "epoch",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "phase",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2e4c083df6d6ab5f0673d5154cdab3f16c10627180b014c7d3a89a9406baeab6"
+}

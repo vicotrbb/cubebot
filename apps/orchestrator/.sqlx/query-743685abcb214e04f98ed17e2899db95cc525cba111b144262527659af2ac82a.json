@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT to_jsonb(s)::text AS \"value!\"\n        FROM agent_runtime_sessions s\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "743685abcb214e04f98ed17e2899db95cc525cba111b144262527659af2ac82a"
+}

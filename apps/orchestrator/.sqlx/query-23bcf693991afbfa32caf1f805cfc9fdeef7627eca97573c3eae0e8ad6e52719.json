@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET phase = 'stopped',\n                termination_proof = '{\"kind\":\"not_dispatched\"}'::jsonb,\n                updated_at = clock_timestamp()\n            WHERE id = $1\n              AND kind = 'pod'\n              AND phase = 'planned'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "23bcf693991afbfa32caf1f805cfc9fdeef7627eca97573c3eae0e8ad6e52719"
+}

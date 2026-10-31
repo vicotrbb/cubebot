@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE human_teams\n            SET active = false, revision = revision + 1\n            WHERE id = $1 AND active AND revision = $2\n            RETURNING revision AS \"revision!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "946dc1841514c2c1ed9676dd2f6c0c30b9ed42230f48db29a74c0a91000ff20b"
+}

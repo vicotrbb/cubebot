@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT c.secret_verifier AS \"secret_verifier!\"\n            FROM identity_commands c\n            JOIN human_accounts a ON a.id = c.actor_id AND a.active\n            WHERE c.actor_id = $1\n                AND c.kind = $2\n                AND c.request_id = $3\n                AND c.secret_verifier IS NOT NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "secret_verifier!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7b9a6b412cd1b437bc2c4ad6a8e027a8d7a2e2001c30c664f5b63c67682b2503"
+}

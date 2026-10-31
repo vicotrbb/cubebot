@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.id\n        FROM agents a\n        WHERE a.name=$2 AND a.id<>$1 AND a.desired_state<>'retired'\n            AND EXISTS(SELECT 1 FROM room_members m JOIN room_members n ON n.room_id=m.room_id WHERE m.agent_id=$1 AND n.agent_id=a.id)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f29c7517e40d08c9484213a590fbaa1e595ed536039a4913fa538e5b1f46c4e3"
+}

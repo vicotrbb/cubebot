@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET phase = 'stopped',\n                termination_proof = $2,\n                kubernetes_phase = $3,\n                observed_at = clock_timestamp(),\n                updated_at = clock_timestamp()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de45ca1dfc2c0459d4a672a60056a74209926836c04287feec09619c9423f8cb"
+}

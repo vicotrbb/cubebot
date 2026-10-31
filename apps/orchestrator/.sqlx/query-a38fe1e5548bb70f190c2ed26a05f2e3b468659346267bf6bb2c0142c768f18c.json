@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET phase = CASE WHEN $3 THEN 'stopped' ELSE phase END,\n                blocked_reason = NULL,\n                termination_proof = COALESCE(termination_proof, $2),\n                updated_at = clock_timestamp()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a38fe1e5548bb70f190c2ed26a05f2e3b468659346267bf6bb2c0142c768f18c"
+}

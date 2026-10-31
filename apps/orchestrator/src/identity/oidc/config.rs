@@ -17,7 +17,8 @@ pub struct Config {
 
 impl Config {
     pub fn parse(input: &str) -> Result<Self, IdentityError> {
-        let config: Self = serde_json::from_str(input).map_err(|_| IdentityError::InvalidInput)?;
+        let config: Self =
+            serde_json::from_str(input).map_err(|error| IdentityError::Invalid(error.into()))?;
         let issuer = endpoint(&config.issuer, true)?;
         let redirect = endpoint(&config.redirect_uri, true)?;
         if issuer.query().is_some()
@@ -82,7 +83,7 @@ fn validate_domain(domain: &str) -> Result<(), IdentityError> {
 }
 
 pub(super) fn endpoint(value: &str, local_http: bool) -> Result<Url, IdentityError> {
-    let url = Url::parse(value).map_err(|_| IdentityError::InvalidInput)?;
+    let url = Url::parse(value).map_err(|error| IdentityError::Invalid(error.into()))?;
     let local = matches!(url.host_str(), Some("127.0.0.1" | "[::1]" | "localhost"));
     let secure = url.scheme() == "https" || (local_http && local && url.scheme() == "http");
     if !secure
@@ -103,11 +104,11 @@ pub fn environment() -> Result<Option<(Config, Option<String>)>, IdentityError> 
         Err(std::env::VarError::NotPresent) => return Ok(None),
         Err(_) => return Err(IdentityError::InvalidInput),
     };
-    let file = std::fs::File::open(path).map_err(|_| IdentityError::InvalidInput)?;
+    let file = std::fs::File::open(path).map_err(|error| IdentityError::Invalid(error.into()))?;
     let mut input = String::new();
     file.take(65537)
         .read_to_string(&mut input)
-        .map_err(|_| IdentityError::InvalidInput)?;
+        .map_err(|error| IdentityError::Invalid(error.into()))?;
     if input.len() > 65536 {
         return Err(IdentityError::InvalidInput);
     }

@@ -52,12 +52,13 @@ pub struct Sandbox {
 
 impl Sandbox {
     /// `CUBEBOT_TOOL_USER` is `uid:gid` and never root, so tools cannot reach agent state.
-    pub fn from_environment() -> Result<Self, &'static str> {
+    pub fn from_environment() -> Result<Self, crate::Caused> {
         let workspace = std::env::var_os("CUBEBOT_WORKSPACE_DIRECTORY")
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
             .ok_or("tool workspace not configured")?;
-        let user = std::env::var("CUBEBOT_TOOL_USER").map_err(|_| "tool user not configured")?;
+        let user = std::env::var("CUBEBOT_TOOL_USER")
+            .map_err(|error| crate::Caused::new("tool user not configured", error))?;
         let (uid, gid) = user
             .split_once(':')
             .and_then(|(uid, gid)| Some((uid.parse().ok()?, gid.parse().ok()?)))
@@ -199,7 +200,7 @@ pub struct Registry {
 impl Registry {
     /// `None` when tools are disabled. An enabled but invalid configuration is an error, never
     /// a fallback to running tools as the agent.
-    pub async fn load() -> Result<Option<Self>, &'static str> {
+    pub async fn load() -> Result<Option<Self>, crate::Caused> {
         if std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() != Ok("1") {
             return Ok(None);
         }

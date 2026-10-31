@@ -142,11 +142,17 @@ async fn every_agent_has_exactly_one_conversation_even_before_it_is_opened() {
         )
         .await
         .unwrap();
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conversations WHERE agent_id=$1")
-        .bind(agent.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM conversations
+        WHERE agent_id=$1
+        "#,
+        agent.id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 1);
     let work = Work::new(pool.clone());
     let (first, second) = tokio::join!(
@@ -155,6 +161,8 @@ async fn every_agent_has_exactly_one_conversation_even_before_it_is_opened() {
     );
     assert_eq!(first.unwrap().id, agent.id);
     assert_eq!(second.unwrap().id, agent.id);
+    // Runtime SQL: inserting into the read-only conversations view must fail at run time, which a
+    // checked macro rejects at build time.
     assert!(
         sqlx::query("INSERT INTO conversations (id,agent_id,created_by) VALUES ($1,$2,$3)")
             .bind(Uuid::new_v4())
@@ -220,18 +228,29 @@ async fn legacy_histories_merge_without_broadening_private_grants() {
             .await,
         Err(IdentityError::NotFound)
     ));
-    let original_ids: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM conversation_origins ORDER BY created_at")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
+    let original_ids: Vec<Uuid> = sqlx::query_scalar!(
+        "
+        SELECT id
+        FROM conversation_origins
+        ORDER BY created_at
+        "
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
     assert_eq!(original_ids, vec![first, second]);
     assert_legacy_provenance(&pool, first, second).await;
-    let request: Uuid = sqlx::query_scalar("SELECT request_id FROM chat_turns WHERE id=$1")
-        .bind(history[0].id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let request: Uuid = sqlx::query_scalar!(
+        "
+        SELECT request_id
+        FROM chat_turns
+        WHERE id=$1
+        ",
+        history[0].id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(
         Work::new(pool)
             .send(
@@ -250,6 +269,7 @@ async fn legacy_histories_merge_without_broadening_private_grants() {
 }
 
 async fn legacy_conversation(pool: &sqlx::PgPool, agent: Uuid, actor: Uuid, message: &str) -> Uuid {
+    // Runtime SQL: targets the pre-0023 conversations table, which the current schema replaced.
     let id: Uuid = sqlx::query_scalar(
         "INSERT INTO conversations (agent_id,created_by,request_id) VALUES ($1,$2,$3) RETURNING id",
     )
@@ -259,13 +279,16 @@ async fn legacy_conversation(pool: &sqlx::PgPool, agent: Uuid, actor: Uuid, mess
     .fetch_one(pool)
     .await
     .unwrap();
-    sqlx::query(
-        "INSERT INTO chat_turns (conversation_id,actor_id,request_id,message) VALUES ($1,$2,$3,$4)",
+    sqlx::query!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message)
+        VALUES ($1,$2,$3,$4)
+        ",
+        id,
+        actor,
+        Uuid::new_v4(),
+        message,
     )
-    .bind(id)
-    .bind(actor)
-    .bind(Uuid::new_v4())
-    .bind(message)
     .execute(pool)
     .await
     .unwrap();
@@ -273,14 +296,23 @@ async fn legacy_conversation(pool: &sqlx::PgPool, agent: Uuid, actor: Uuid, mess
 }
 
 async fn assert_legacy_provenance(pool: &sqlx::PgPool, first: Uuid, second: Uuid) {
-    let origins: Vec<Uuid> =
-        sqlx::query_scalar("SELECT origin_conversation_id FROM chat_turns ORDER BY sequence")
-            .fetch_all(pool)
-            .await
-            .unwrap();
+    let origins: Vec<Uuid> = sqlx::query_scalar!(
+        r#"
+        SELECT origin_conversation_id AS "value!"
+        FROM chat_turns
+        ORDER BY sequence
+        "#
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap();
     assert_eq!(origins, vec![first, second, first]);
-    let origin: Uuid = sqlx::query_scalar(
-        "SELECT origin_conversation_id FROM access_grants WHERE revoked_at IS NOT NULL",
+    let origin: Uuid = sqlx::query_scalar!(
+        r#"
+        SELECT origin_conversation_id AS "value!"
+        FROM access_grants
+        WHERE revoked_at IS NOT NULL
+        "#
     )
     .fetch_one(pool)
     .await
@@ -351,23 +383,62 @@ struct Legacy {
     second: Uuid,
 }
 async fn seed_legacy(pool: &sqlx::PgPool) -> Legacy {
-    let admin: Uuid = sqlx::query_scalar(
-        "INSERT INTO human_accounts (login,role) VALUES ('admin','administrator') RETURNING id",
+    let admin: Uuid = sqlx::query_scalar!(
+        "
+        INSERT INTO human_accounts (login,role)
+        VALUES ('admin','administrator')
+        RETURNING id
+        "
     )
     .fetch_one(pool)
     .await
     .unwrap();
-    let member: Uuid = sqlx::query_scalar(
-        "INSERT INTO human_accounts (login,role) VALUES ('member','member') RETURNING id",
+    let member: Uuid = sqlx::query_scalar!(
+        "
+        INSERT INTO human_accounts (login,role)
+        VALUES ('member','member')
+        RETURNING id
+        "
     )
     .fetch_one(pool)
     .await
     .unwrap();
-    let agent:Uuid=sqlx::query_scalar("INSERT INTO agents (name,instructions,created_by) VALUES ('Legacy','Retain history',$1) RETURNING id").bind(admin).fetch_one(pool).await.unwrap();
+    let agent: Uuid = sqlx::query_scalar!(
+        "
+        INSERT INTO agents (name,instructions,created_by)
+        VALUES ('Legacy','Retain history',$1)
+        RETURNING id
+        ",
+        admin,
+    )
+    .fetch_one(pool)
+    .await
+    .unwrap();
     let first = legacy_conversation(pool, agent, admin, "First history").await;
     let second = legacy_conversation(pool, agent, member, "Second history").await;
-    sqlx::query("INSERT INTO access_grants (account_id,scope_kind,scope_id,capability) VALUES ($1,'conversation',$2,'conversation.read')").bind(member).bind(first).execute(pool).await.unwrap();
-    sqlx::query("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message) VALUES ($1,$2,$3,'First again')").bind(first).bind(admin).bind(Uuid::new_v4()).execute(pool).await.unwrap();
+    sqlx::query!(
+        "
+        INSERT INTO access_grants (account_id,scope_kind,scope_id,capability)
+        VALUES ($1,'conversation',$2,'conversation.read')
+        ",
+        member,
+        first,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message)
+        VALUES ($1,$2,$3,'First again')
+        ",
+        first,
+        admin,
+        Uuid::new_v4(),
+    )
+    .execute(pool)
+    .await
+    .unwrap();
     Legacy {
         admin,
         member,

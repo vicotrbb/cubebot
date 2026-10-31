@@ -34,6 +34,7 @@ struct Plan {
     report: String,
 }
 
+#[tracing::instrument(skip_all, fields(run = %run))]
 pub(super) async fn run(client: MemoryClient, run: Uuid, stop: watch::Receiver<bool>) {
     let dream = match client.start_dream(run).await {
         Ok(Some(dream)) => dream,
@@ -87,6 +88,7 @@ async fn dream_on(
 }
 
 /// The model's proposed changes, or why there are none; the reason becomes the run's report.
+#[tracing::instrument(skip_all, fields(provider = ?dream.provider, model = %dream.model))]
 async fn plan(dream: &Dream) -> Result<Plan, String> {
     let messages = [Message::User(prompt(dream))];
     let request = Request {

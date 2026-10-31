@@ -30,7 +30,7 @@ impl Reader {
                 continue;
             }
             if self.buffer.len() > EVENT_BYTES {
-                return Err(Error::InvalidResponse);
+                return Err(Error::InvalidResponse(None));
             }
             match self.response.chunk().await.map_err(unavailable)? {
                 // JSON never contains a raw carriage return, so CRLF framing reduces to LF.
@@ -44,7 +44,8 @@ impl Reader {
 }
 
 fn data(event: &[u8]) -> Result<Option<Value>, Error> {
-    let text = std::str::from_utf8(event).map_err(|_| Error::InvalidResponse)?;
+    let text =
+        std::str::from_utf8(event).map_err(|error| Error::InvalidResponse(Some(error.into())))?;
     let data: Vec<&str> = text
         .lines()
         .filter_map(|line| line.strip_prefix("data:"))
@@ -55,7 +56,7 @@ fn data(event: &[u8]) -> Result<Option<Value>, Error> {
     }
     serde_json::from_str(&data.join("\n"))
         .map(Some)
-        .map_err(|_| Error::InvalidResponse)
+        .map_err(|error| Error::InvalidResponse(Some(error.into())))
 }
 
 #[cfg(test)]

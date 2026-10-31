@@ -3,6 +3,11 @@ use std::process::ExitCode;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
+    // Quiet unless RUST_LOG asks; a subscriber already installed is kept, so the error is moot.
+    let _ = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
     // Re-executed as the tool user to apply one edit_file call.
     if std::env::args().nth(1).as_deref() == Some("edit-file") && std::env::args().len() == 2 {
         return cubebot_agent::tools::edit_file();

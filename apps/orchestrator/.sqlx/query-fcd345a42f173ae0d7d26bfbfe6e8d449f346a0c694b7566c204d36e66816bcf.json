@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.id\n        FROM agents a\n        JOIN agent_resources r ON r.agent_id = a.id\n        WHERE r.id = $1\n        FOR UPDATE OF a\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fcd345a42f173ae0d7d26bfbfe6e8d449f346a0c694b7566c204d36e66816bcf"
+}

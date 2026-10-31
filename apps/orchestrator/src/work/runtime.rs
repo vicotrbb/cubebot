@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 impl Work {
     /// Caller authenticates machine identity and holds the agent/resource transaction locks.
+    #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0))]
     pub(crate) async fn claim(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -18,14 +19,45 @@ impl Work {
         connections: Option<&Connections>,
     ) -> Result<Option<Turn>, Error> {
         // Only this attempt's sandbox can still be running the agent's turn.
-        sqlx::query("UPDATE chat_turns SET status='waiting',error='execution_interrupted' WHERE conversation_id=$1 AND status='running' AND attempt_id IS DISTINCT FROM $2")
-            .bind(actor.agent).bind(actor.attempt).execute(&mut **tx).await?;
+        sqlx::query!(
+            "
+            UPDATE chat_turns
+            SET status='waiting', error='execution_interrupted'
+            WHERE conversation_id=$1 AND status='running' AND attempt_id IS DISTINCT FROM $2
+            ",
+            actor.agent.0,
+            actor.attempt.0,
+        )
+        .execute(&mut **tx)
+        .await?;
         // A waiting turn holds its lane until it is retried or cancelled.
-        let pending: Option<(Uuid, String, bool, Option<Uuid>)> = sqlx::query_as("SELECT t.id,t.message,t.awaited,t.room_message_id FROM chat_turns t JOIN agents a ON a.id=t.conversation_id WHERE t.conversation_id=$1 AND t.status='queued' AND CASE WHEN t.awaited THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND o.awaited AND o.status IN ('running','waiting'))<a.task_lanes ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND o.status IN ('running','waiting')) END ORDER BY t.sequence LIMIT 1 FOR UPDATE OF t")
-            .bind(actor.agent).fetch_optional(&mut **tx).await?;
-        let Some((turn, message, task, room)) = pending else {
+        let pending = sqlx::query!(
+            "
+            SELECT t.id, t.message, t.awaited, t.room_message_id
+            FROM chat_turns t
+            JOIN agents a ON a.id=t.conversation_id
+            WHERE t.conversation_id=$1 AND t.status='queued'
+                AND CASE WHEN t.awaited
+                    THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND o.awaited AND o.status IN ('running','waiting'))<a.task_lanes
+                    ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND o.status IN ('running','waiting'))
+                END
+            ORDER BY t.sequence
+            LIMIT 1
+            FOR UPDATE OF t
+            ",
+            actor.agent.0,
+        )
+        .fetch_optional(&mut **tx)
+        .await?;
+        let Some(pending) = pending else {
             return Ok(None);
         };
+        let (turn, message, task, room) = (
+            pending.id,
+            pending.message,
+            pending.awaited,
+            pending.room_message_id,
+        );
         if !sender_allowed(tx, turn).await? {
             wait(tx, turn, "sender_access_revoked").await?;
             return Ok(None);
@@ -34,11 +66,17 @@ impl Work {
             wait(tx, turn, "provider_unavailable").await?;
             return Ok(None);
         };
-        sqlx::query("UPDATE chat_turns SET status='running',attempt_id=$2,error=NULL WHERE id=$1")
-            .bind(turn)
-            .bind(actor.attempt)
-            .execute(&mut **tx)
-            .await?;
+        sqlx::query!(
+            "
+            UPDATE chat_turns
+            SET status='running', attempt_id=$2, error=NULL
+            WHERE id=$1
+            ",
+            turn,
+            actor.attempt.0,
+        )
+        .execute(&mut **tx)
+        .await?;
         let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
         let instructions = super::collaboration::with_peers(tx, actor.agent, instructions).await?;
         let (summary, history, message) = context(tx, actor, task, room, message).await?;
@@ -63,6 +101,7 @@ impl Work {
     /// Appends an event idempotently. Only the running attempt's done or error settles the turn;
     /// late events remain evidence. Returns whether this attempt still owns the turn's run,
     /// including a cancelled run that has not stopped yet.
+    #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, turn = %turn))]
     pub(crate) async fn record(
         &self,
         actor: &RuntimeActor,
@@ -73,24 +112,56 @@ impl Work {
         let payload = payload(sequence, event)?;
         let mut tx = self.pool.begin().await?;
         // Serializes event ids per conversation so a browser cursor never skips a late commit.
-        sqlx::query("SELECT 1 FROM conversations WHERE id=$1 FOR NO KEY UPDATE")
-            .bind(actor.agent)
-            .execute(&mut *tx)
-            .await?;
-        let (status, attempt): (String, Option<Uuid>) = sqlx::query_as(
-            "SELECT status,attempt_id FROM chat_turns WHERE id=$1 AND conversation_id=$2 FOR UPDATE",
+        sqlx::query!(
+            "
+            SELECT 1 AS locked
+            FROM conversations
+            WHERE id=$1
+            FOR NO KEY UPDATE
+            ",
+            actor.agent.0,
         )
-        .bind(turn)
-        .bind(actor.agent)
+        .fetch_all(&mut *tx)
+        .await?;
+        let current = sqlx::query!(
+            "
+            SELECT status, attempt_id
+            FROM chat_turns
+            WHERE id=$1 AND conversation_id=$2
+            FOR UPDATE
+            ",
+            turn,
+            actor.agent.0,
+        )
         .fetch_optional(&mut *tx)
         .await?
         .ok_or(Error::Conflict)?;
+        let (status, attempt) = (current.status, current.attempt_id);
         // A resent event keeps its first recorded form.
-        sqlx::query("INSERT INTO turn_events (turn_id,sequence,payload) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING")
-            .bind(turn).bind(sequence as i64).bind(&payload).execute(&mut *tx).await?;
+        sqlx::query!(
+            "
+            INSERT INTO turn_events (turn_id, sequence, payload)
+            VALUES ($1, $2, $3)
+            ON CONFLICT DO NOTHING
+            ",
+            turn,
+            sequence as i64,
+            &payload,
+        )
+        .execute(&mut *tx)
+        .await?;
         if let TurnEvent::Steered { id, .. } = event {
-            sqlx::query("UPDATE turn_steering SET incorporated_at=clock_timestamp() WHERE id=$1 AND turn_id=$2 AND incorporated_at IS NULL")
-                .bind(id).bind(turn).execute(&mut *tx).await?;
+            sqlx::query!(
+                "
+                UPDATE turn_steering
+                SET incorporated_at=clock_timestamp()
+                WHERE id=$1 AND turn_id=$2 AND incorporated_at IS NULL
+                ",
+                id,
+                turn,
+            )
+            .execute(&mut *tx)
+            .await?;
         }
         let owned = attempt == Some(actor.attempt.0);
         if status == "running" && owned {
@@ -100,19 +171,33 @@ impl Work {
         Ok(owned && matches!(status.as_str(), "running" | "cancelled"))
     }
 
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub(crate) async fn cancelled(&self, turn: Uuid) -> Result<bool, Error> {
-        Ok(
-            sqlx::query_scalar("SELECT status='cancelled' FROM chat_turns WHERE id=$1")
-                .bind(turn)
-                .fetch_one(&self.pool)
-                .await?,
+        Ok(sqlx::query_scalar!(
+            r#"
+            SELECT status='cancelled' AS "cancelled!"
+            FROM chat_turns
+            WHERE id=$1
+            "#,
+            turn,
         )
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     /// Owner-driven recovery does not depend on a lost sandbox returning to report.
+    #[tracing::instrument(skip_all)]
     pub async fn recover_interrupted(&self) -> Result<(), Error> {
-        sqlx::query("UPDATE chat_turns t SET status='waiting',error='execution_interrupted' WHERE status='running' AND NOT EXISTS(SELECT 1 FROM runtime_session_access s WHERE s.attempt_id=t.attempt_id AND s.recovery)")
-            .execute(&self.pool).await?;
+        sqlx::query!(
+            "
+            UPDATE chat_turns t
+            SET status='waiting', error='execution_interrupted'
+            WHERE status='running'
+                AND NOT EXISTS(SELECT 1 FROM runtime_session_access s WHERE s.attempt_id=t.attempt_id AND s.recovery)
+            "
+        )
+        .execute(&self.pool)
+        .await?;
         crate::knowledge::recover_dreams(&self.pool).await?;
         Ok(())
     }
@@ -131,19 +216,32 @@ async fn earlier(
     ),
     Error,
 > {
-    let prior: Vec<serde_json::Value> = sqlx::query_scalar("SELECT payload #- '{outcome,image}' FROM (SELECT sequence,payload FROM turn_events WHERE turn_id=$1 AND payload->>'kind' IN ('tool_call','tool_result','steered') ORDER BY sequence DESC LIMIT 16) p ORDER BY sequence")
-        .bind(turn).fetch_all(&mut **tx).await?;
+    let prior = sqlx::query_scalar!(
+        r#"
+        SELECT payload #- '{outcome,image}' AS "payload!"
+        FROM (SELECT sequence,payload FROM turn_events WHERE turn_id=$1 AND payload->>'kind' IN ('tool_call','tool_result','steered') ORDER BY sequence DESC LIMIT 16) p
+        ORDER BY sequence
+        "#,
+        turn,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
     let delegations = super::collaboration::delegations(tx, turn).await?;
-    let last: i64 =
-        sqlx::query_scalar("SELECT COALESCE(max(sequence),0) FROM turn_events WHERE turn_id=$1")
-            .bind(turn)
-            .fetch_one(&mut **tx)
-            .await?;
+    let last = sqlx::query_scalar!(
+        r#"
+        SELECT COALESCE(max(sequence),0) AS "last!"
+        FROM turn_events
+        WHERE turn_id=$1
+        "#,
+        turn,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
     let prior = prior
         .into_iter()
         .map(serde_json::from_value)
         .collect::<Result<_, _>>()
-        .map_err(|_| Error::InvalidConfiguration)?;
+        .map_err(|error| Error::Configuration(error.into()))?;
     Ok((prior, last, delegations))
 }
 
@@ -177,7 +275,8 @@ fn in_room(context: String, message: String) -> String {
 }
 
 fn payload(sequence: u64, event: &TurnEvent) -> Result<serde_json::Value, Error> {
-    let payload = serde_json::to_value(event).map_err(|_| Error::InvalidConfiguration)?;
+    let payload =
+        serde_json::to_value(event).map_err(|error| Error::Configuration(error.into()))?;
     if sequence == 0
         || sequence > i64::MAX as u64
         || payload.to_string().len() > EVENT_BYTES
@@ -199,16 +298,31 @@ async fn settle(
             // A parent with open or unseen children yields instead of completing.
             match super::collaboration::after_run(tx, turn).await? {
                 "complete" => {
-                    sqlx::query("UPDATE chat_turns SET status='complete',response=$2,error=NULL,completed_at=clock_timestamp() WHERE id=$1")
-                        .bind(turn).bind(response).execute(&mut **tx).await?;
+                    sqlx::query!(
+                        "
+                        UPDATE chat_turns
+                        SET status='complete', response=$2, error=NULL, completed_at=clock_timestamp()
+                        WHERE id=$1
+                        ",
+                        turn,
+                        response,
+                    )
+                    .execute(&mut **tx)
+                    .await?;
                     super::collaboration::relay(tx, turn).await?;
                 }
                 next => {
-                    sqlx::query("UPDATE chat_turns SET status=$2,error=NULL WHERE id=$1")
-                        .bind(turn)
-                        .bind(next)
-                        .execute(&mut **tx)
-                        .await?;
+                    sqlx::query!(
+                        "
+                        UPDATE chat_turns
+                        SET status=$2, error=NULL
+                        WHERE id=$1
+                        ",
+                        turn,
+                        next,
+                    )
+                    .execute(&mut **tx)
+                    .await?;
                 }
             }
             crate::knowledge::commit_turn(tx, actor.agent, turn, memories).await?;
@@ -229,11 +343,15 @@ async fn fail(
 ) -> Result<(), Error> {
     // shortcut: a child's provider outage fails it rather than waiting (ADR 0073 keeps them
     // distinct); give children a provider wait if parents re-delegate needlessly.
-    let failed = sqlx::query(
-        "UPDATE chat_turns SET status='failed',error=$2 WHERE id=$1 AND parent_turn_id IS NOT NULL",
+    let failed = sqlx::query!(
+        "
+        UPDATE chat_turns
+        SET status='failed', error=$2
+        WHERE id=$1 AND parent_turn_id IS NOT NULL
+        ",
+        turn,
+        code,
     )
-    .bind(turn)
-    .bind(code)
     .execute(&mut **tx)
     .await?;
     if failed.rows_affected() == 0 {
@@ -273,11 +391,17 @@ async fn wait(
     turn: Uuid,
     error: &str,
 ) -> Result<(), Error> {
-    sqlx::query("UPDATE chat_turns SET status='waiting',error=$2 WHERE id=$1")
-        .bind(turn)
-        .bind(error)
-        .execute(&mut **tx)
-        .await?;
+    sqlx::query!(
+        "
+        UPDATE chat_turns
+        SET status='waiting', error=$2
+        WHERE id=$1
+        ",
+        turn,
+        error,
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -286,8 +410,20 @@ async fn sender_allowed(
     turn: Uuid,
 ) -> Result<bool, Error> {
     // Agent-originated work carries its root person's authority, checked when it was sent.
-    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_turns t JOIN human_accounts a ON a.id=t.actor_id AND a.active WHERE t.id=$1 AND (t.parent_turn_id IS NOT NULL OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id))))))")
-        .bind(turn).fetch_one(&mut **tx).await?)
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM chat_turns t
+            JOIN human_accounts a ON a.id=t.actor_id AND a.active
+            WHERE t.id=$1
+                AND (t.parent_turn_id IS NOT NULL OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id)))))
+        ) AS "allowed!"
+        "#,
+        turn,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
 /// The latest summary and every completed exchange from the turn it was written in onward,
@@ -298,18 +434,34 @@ async fn history(
 ) -> Result<(Option<String>, Vec<Exchange>), Error> {
     // shortcut: scans the conversation's summary events per claim; index payload kinds if
     // long conversations make claims slow.
-    let summary: Option<(String, i64)> = sqlx::query_as("SELECT e.payload->>'text', t.sequence FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND e.payload->>'kind'='summary' ORDER BY t.sequence DESC, e.sequence DESC LIMIT 1")
-        .bind(actor.agent).fetch_optional(&mut **tx).await?;
-    let from = summary.as_ref().map_or(0, |(_, sequence)| *sequence);
-    let history: Vec<(String, String)> = sqlx::query_as("SELECT message,response FROM chat_turns WHERE conversation_id=$1 AND status='complete' AND sequence>=$2 ORDER BY sequence")
-        .bind(actor.agent).bind(from).fetch_all(&mut **tx).await?;
-    Ok((
-        summary.map(|(text, _)| text),
-        history
-            .into_iter()
-            .map(|(message, response)| Exchange { message, response })
-            .collect(),
-    ))
+    let summary = sqlx::query!(
+        r#"
+        SELECT e.payload->>'text' AS "text!", t.sequence
+        FROM turn_events e
+        JOIN chat_turns t ON t.id=e.turn_id
+        WHERE t.conversation_id=$1 AND e.payload->>'kind'='summary'
+        ORDER BY t.sequence DESC, e.sequence DESC
+        LIMIT 1
+        "#,
+        actor.agent.0,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    let from = summary.as_ref().map_or(0, |summary| summary.sequence);
+    let history = sqlx::query_as!(
+        Exchange,
+        r#"
+        SELECT message, response AS "response!"
+        FROM chat_turns
+        WHERE conversation_id=$1 AND status='complete' AND sequence>=$2
+        ORDER BY sequence
+        "#,
+        actor.agent.0,
+        from,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok((summary.map(|summary| summary.text), history))
 }
 
 async fn provider(

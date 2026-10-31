@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT revision AS \"revision!\"\n        FROM identity_oidc_policy\n        WHERE singleton AND enabled\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "74a0da3c718d8446e6ad7aec7fec945f971cbbf18d7e2296bdfd5f0315c5e9f2"
+}

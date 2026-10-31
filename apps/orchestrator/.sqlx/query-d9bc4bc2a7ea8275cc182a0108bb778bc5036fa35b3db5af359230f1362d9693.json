@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id AS \"id: AttemptId\", agent_id AS \"agent_id: AgentId\", kind AS \"kind: ResourceKind\",\n                   epoch, target_generation, definition_revision, phase AS \"phase: Phase\", uid,\n                   blocked_reason,\n                   manifest AS \"manifest: sqlx::types::Json<serde_json::Value>\",\n                   source_manifest AS \"source_manifest: sqlx::types::Json<serde_json::Value>\",\n                   prepared\n            FROM agent_resources\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AttemptId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent_id: AgentId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind: ResourceKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "epoch",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "target_generation",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "definition_revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "phase: Phase",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "uid",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "blocked_reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "manifest: sqlx::types::Json<serde_json::Value>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "source_manifest: sqlx::types::Json<serde_json::Value>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "prepared",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d9bc4bc2a7ea8275cc182a0108bb778bc5036fa35b3db5af359230f1362d9693"
+}

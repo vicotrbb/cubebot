@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE chat_turns p\n        SET status='queued'\n        FROM chat_turns c\n        WHERE c.id=$1 AND c.awaited AND c.status IN ('complete','failed','cancelled') AND p.id=c.parent_turn_id AND p.status='delegated'\n        RETURNING p.conversation_id AS \"conversation_id: AgentId\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conversation_id: AgentId",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "621272e2590b821661f2f3bff37d2cfa0bf70c2250c9be4c9a31ef84e7a8e42f"
+}

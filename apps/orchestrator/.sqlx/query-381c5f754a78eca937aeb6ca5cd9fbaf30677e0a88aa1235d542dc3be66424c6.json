@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT phase,termination_proof IS NOT NULL AS \"retained!\"\n        FROM agent_resources\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "phase",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "retained!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "381c5f754a78eca937aeb6ca5cd9fbaf30677e0a88aa1235d542dc3be66424c6"
+}

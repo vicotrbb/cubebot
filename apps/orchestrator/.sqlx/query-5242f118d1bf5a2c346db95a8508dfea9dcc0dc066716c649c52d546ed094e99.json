@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET blocked_reason = $3,\n                updated_at = clock_timestamp()\n            WHERE id = $1\n              AND phase = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5242f118d1bf5a2c346db95a8508dfea9dcc0dc066716c649c52d546ed094e99"
+}

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                e.sequence AS \"sequence!\",\n                e.actor_id AS \"actor_id!\",\n                e.kind AS \"kind!\",\n                e.request_id AS \"request_id!\",\n                e.resource_id AS \"resource_id!\",\n                e.revision AS \"revision!\",\n                c.input_body AS \"input!: sqlx::types::Json<serde_json::Value>\"\n            FROM identity_events e\n            JOIN identity_commands c USING (actor_id, kind, request_id)\n            WHERE e.sequence > $1\n            ORDER BY e.sequence\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "actor_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "request_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "resource_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "input!: sqlx::types::Json<serde_json::Value>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ad0b7cb805e6042512a7603b2124413edf9e0f7ab6d3128e83ca5cccc3e51910"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO agents (id, name, instructions, created_by)\n        SELECT ('00000000-0000-0000-0000-' || lpad(to_hex(n), 12, '0'))::uuid, 'Hidden', 'Private instructions', $1\n        FROM generate_series(1, 110) n\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c0523195a99a9db077bf96711ac7e8f8de0c712d0f2a4d4d239ba5d6b2d8a3a6"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO human_accounts (login, password_hash, role)\n        VALUES ('persistent-user', 'test-verifier', 'administrator')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b7928bc7e5f3b5547415d8f7ee1b2d37a8876d1769710188156d20b1b4827925"
+}

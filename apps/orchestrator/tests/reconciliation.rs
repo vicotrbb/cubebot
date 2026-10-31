@@ -413,12 +413,17 @@ async fn verify_blocked_admission(sandbox: bool) {
     state.lock().unwrap().alter_pod_security = !sandbox;
     state.lock().unwrap().alter_sandbox = sandbox;
     assert!(reconciler.reconcile(agent).await.is_err());
-    let (phase, reason, uid): (String, Option<String>, Option<String>) = sqlx::query_as(
-        "SELECT phase,blocked_reason,uid FROM agent_resources WHERE agent_id = $1 AND kind = 'pod'",
+    let (phase, reason, uid): (String, Option<String>, Option<String>) = sqlx::query!(
+        "
+        SELECT phase,blocked_reason,uid
+        FROM agent_resources
+        WHERE agent_id = $1 AND kind = 'pod'
+        ",
+        agent as _,
     )
-    .bind(agent)
     .fetch_one(&pool)
     .await
+    .map(|row| (row.phase, row.blocked_reason, row.uid))
     .unwrap();
     assert_eq!(phase, "planned");
     assert_eq!(reason.as_deref(), Some("preparation_failed"));
@@ -500,7 +505,17 @@ async fn acknowledge(
     pool: &sqlx::PgPool,
     attempt: cubebot_orchestrator::agents::kubernetes::AttemptId,
 ) {
-    sqlx::query("UPDATE agent_runtime_drains SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1 WHERE attempt_id = $1").bind(attempt).execute(pool).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE agent_runtime_drains
+        SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1
+        WHERE attempt_id = $1
+        ",
+        attempt as _,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
 }
 fn complete_pod(state: &Shared) {
     let mut state = state.lock().unwrap();
@@ -590,12 +605,17 @@ async fn lost_finalizer_reply_recovers_only_from_durably_retained_terminal_proof
     complete_pod(&f.state);
     f.state.lock().unwrap().lose_finalize = true;
     assert!(f.reconciler.reconcile(f.agent).await.is_err());
-    let (phase, retained): (String, bool) = sqlx::query_as(
-        "SELECT phase,termination_proof IS NOT NULL FROM agent_resources WHERE id = $1",
+    let (phase, retained): (String, bool) = sqlx::query!(
+        r#"
+        SELECT phase,termination_proof IS NOT NULL AS "retained!"
+        FROM agent_resources
+        WHERE id = $1
+        "#,
+        f.pod as _,
     )
-    .bind(f.pod)
     .fetch_one(&f.pool)
     .await
+    .map(|row| (row.phase, row.retained))
     .unwrap();
     assert_eq!(phase, "bound");
     assert!(retained);
@@ -839,7 +859,18 @@ async fn same_generation_terminal_pod_is_fenced_before_one_new_epoch_is_created(
     assert!(
         matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
     );
-    let (bound, proof, latched): (bool, bool, bool) = sqlx::query_as("SELECT phase = 'bound',termination_proof IS NOT NULL,EXISTS(SELECT 1 FROM agent_runtime_drains WHERE attempt_id = r.id) FROM agent_resources r WHERE id = $1").bind(pod).fetch_one(&pool).await.unwrap();
+    let (bound, proof, latched): (bool, bool, bool) = sqlx::query!(
+        r#"
+        SELECT phase = 'bound' AS "bound!",termination_proof IS NOT NULL AS "proof!",EXISTS(SELECT 1 FROM agent_runtime_drains WHERE attempt_id = r.id) AS "latched!"
+        FROM agent_resources r
+        WHERE id = $1
+        "#,
+        pod as _,
+    )
+    .fetch_one(&pool)
+    .await
+    .map(|row| (row.bound, row.proof, row.latched))
+    .unwrap();
     assert!(bound && proof && latched);
     let ReconcileResult::Provisioned {
         pod: replacement,
@@ -953,8 +984,12 @@ fn platform_pod() -> Value {
 }
 async fn wait_bound_pod(pool: &sqlx::PgPool) {
     for _ in 0..200 {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM agent_resources WHERE kind = 'pod' AND phase = 'bound'",
+        let count: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT count(*) AS "count!"
+            FROM agent_resources
+            WHERE kind = 'pod' AND phase = 'bound'
+            "#
         )
         .fetch_one(pool)
         .await
@@ -1013,8 +1048,12 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
     );
     stop.send(()).unwrap();
     serving.await.unwrap().unwrap();
-    let released: bool = sqlx::query_scalar(
-        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&pool)
     .await
@@ -1031,11 +1070,16 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
     )
     .await
     .unwrap();
-    let generation: i64 =
-        sqlx::query_scalar("SELECT generation FROM orchestrator_owner WHERE singleton")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let generation: i64 = sqlx::query_scalar!(
+        "
+        SELECT generation
+        FROM orchestrator_owner
+        WHERE singleton
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(generation, 2);
     assert_eq!(state.lock().unwrap().creates.len(), 3);
     api_task.abort();
@@ -1170,8 +1214,12 @@ async fn actual_orchestrator_activates_explicit_controller_and_rejects_ownership
             .success()
     );
     assert!(process_exit(&mut process).await.success());
-    let released: bool = sqlx::query_scalar(
-        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&pool)
     .await
@@ -1184,11 +1232,16 @@ async fn actual_orchestrator_activates_explicit_controller_and_rejects_ownership
     assert!(!process_exit(&mut restarted).await.success());
     let mut uncertain = orchestrator_process(&pool, &config, true, None);
     assert!(!process_exit(&mut uncertain).await.success());
-    let generation: i64 =
-        sqlx::query_scalar("SELECT generation FROM orchestrator_owner WHERE singleton")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let generation: i64 = sqlx::query_scalar!(
+        "
+        SELECT generation
+        FROM orchestrator_owner
+        WHERE singleton
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(generation, 2);
     api_task.abort();
 }
@@ -1248,8 +1301,12 @@ async fn clean_owner_release_waits_for_in_flight_http_handlers() {
     held.entered.acquire().await.unwrap().forget();
     stop.send(()).unwrap();
     wait_listener_closed(address).await;
-    let released: bool = sqlx::query_scalar(
-        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&pool)
     .await
@@ -1259,8 +1316,12 @@ async fn clean_owner_release_waits_for_in_flight_http_handlers() {
     held.finish.add_permits(1);
     assert_eq!(request.await.unwrap(), "settled");
     serving.await.unwrap().unwrap();
-    let released: bool = sqlx::query_scalar(
-        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&pool)
     .await
@@ -1290,7 +1351,13 @@ async fn lost_owner_session_stops_http_and_controller_without_releasing_claim() 
         std::future::pending(),
     ));
     wait_bound_pod(&pool).await;
-    let killed: bool = sqlx::query_scalar("SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())").fetch_one(&pool).await.unwrap();
+    let killed: bool = sqlx::query_scalar!(
+        r#"
+        SELECT pg_terminate_backend(pid) AS "value!"
+        FROM pg_locks
+        WHERE locktype = 'advisory' AND granted AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+        "#
+    ).fetch_one(&pool).await.unwrap();
     assert!(killed);
     assert!(
         tokio::time::timeout(std::time::Duration::from_secs(8), serving)
@@ -1300,8 +1367,12 @@ async fn lost_owner_session_stops_http_and_controller_without_releasing_claim() 
             .is_err()
     );
     wait_listener_closed(address).await;
-    let released: bool = sqlx::query_scalar(
-        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&pool)
     .await
@@ -1327,8 +1398,12 @@ async fn handled_startup_errors_do_not_strand_development_ownership() {
     ] {
         let mut process = orchestrator_process(&pool, &config, false, Some((key, value)));
         assert!(!process_exit(&mut process).await.success());
-        let held: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM orchestrator_development_owner WHERE released_at IS NULL",
+        let held: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT count(*) AS "count!"
+            FROM orchestrator_development_owner
+            WHERE released_at IS NULL
+            "#
         )
         .fetch_one(&pool)
         .await

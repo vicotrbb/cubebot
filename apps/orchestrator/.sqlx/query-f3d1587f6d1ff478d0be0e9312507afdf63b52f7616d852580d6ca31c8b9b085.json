@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1\n            FROM human_accounts a\n            WHERE a.id = $1\n              AND a.active\n              AND (\n                a.role = 'administrator'\n                OR EXISTS(\n                    SELECT 1\n                    FROM effective_human_grants p\n                    WHERE p.actor_id = a.id\n                      AND p.scope_kind = 'agent'\n                      AND p.scope_id = $2\n                      AND p.capability = 'agent.manage'\n                )\n              )\n        ) AS \"allowed!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "allowed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f3d1587f6d1ff478d0be0e9312507afdf63b52f7616d852580d6ca31c8b9b085"
+}

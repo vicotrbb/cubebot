@@ -1,0 +1,6 @@
+# The console and its API on one origin, as an ingress serves them: /api to the orchestrator,
+# everything else to the web server.
+http://:3000 {
+	reverse_proxy /api/* orchestrator:8080
+	reverse_proxy web:3000
+}

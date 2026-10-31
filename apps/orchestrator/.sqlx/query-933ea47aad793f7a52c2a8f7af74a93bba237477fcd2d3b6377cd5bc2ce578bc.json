@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT origin_conversation_id AS \"value!\"\n        FROM access_grants\n        WHERE revoked_at IS NOT NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "933ea47aad793f7a52c2a8f7af74a93bba237477fcd2d3b6377cd5bc2ce578bc"
+}

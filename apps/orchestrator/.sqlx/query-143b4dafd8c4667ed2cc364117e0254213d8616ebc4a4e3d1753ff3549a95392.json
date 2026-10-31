@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO human_accounts (login, password_hash, role)\n        VALUES ('rolled-back', 'test-verifier', 'member')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "143b4dafd8c4667ed2cc364117e0254213d8616ebc4a4e3d1753ff3549a95392"
+}

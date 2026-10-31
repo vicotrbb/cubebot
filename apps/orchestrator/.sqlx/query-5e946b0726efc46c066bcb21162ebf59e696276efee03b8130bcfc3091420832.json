@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO access_grants (account_id,scope_kind,scope_id,capability)\n        VALUES ($1,'conversation',$2,'conversation.read')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5e946b0726efc46c066bcb21162ebf59e696276efee03b8130bcfc3091420832"
+}

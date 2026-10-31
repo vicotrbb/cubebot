@@ -12,14 +12,43 @@ mod sse;
 pub use anthropic::Anthropic;
 pub use openai::OpenAi;
 
-#[derive(Debug)]
+type Source = Box<dyn std::error::Error + Send + Sync>;
+
+/// Variants carry their cause, when there is one, for `source()` only.
 pub enum Error {
-    Configuration,
+    Configuration(Option<Source>),
     Unavailable,
     /// HTTP 429 or 5xx, with the delay the provider asked for when it sent one.
     Transient(Option<Duration>),
     Rejected,
-    InvalidResponse,
+    InvalidResponse(Option<Source>),
+}
+// Debug omits the cause: callers format it into reports as the variant name alone.
+impl std::fmt::Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Configuration(_) => f.write_str("Configuration"),
+            Self::Unavailable => f.write_str("Unavailable"),
+            Self::Transient(delay) => f.debug_tuple("Transient").field(delay).finish(),
+            Self::Rejected => f.write_str("Rejected"),
+            Self::InvalidResponse(_) => f.write_str("InvalidResponse"),
+        }
+    }
+}
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.code())
+    }
+}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Configuration(Some(source)) | Self::InvalidResponse(Some(source)) => {
+                Some(source.as_ref())
+            }
+            _ => None,
+        }
+    }
 }
 impl Error {
     pub fn retryable(&self) -> bool {
@@ -33,9 +62,11 @@ impl Error {
     }
     pub fn code(&self) -> &'static str {
         match self {
-            Self::Configuration | Self::Unavailable | Self::Transient(_) => "provider_unavailable",
+            Self::Configuration(_) | Self::Unavailable | Self::Transient(_) => {
+                "provider_unavailable"
+            }
             Self::Rejected => "provider_rejected",
-            Self::InvalidResponse => "provider_invalid_response",
+            Self::InvalidResponse(_) => "provider_invalid_response",
         }
     }
 }
@@ -153,7 +184,7 @@ pub trait Provider: Sync {
 
 /// Controlled-provider qualification accepts literal loopback only, never an arbitrary host.
 fn loopback(origin: &str) -> Result<Url, Error> {
-    let url = Url::parse(origin).map_err(|_| Error::Configuration)?;
+    let url = Url::parse(origin).map_err(|error| Error::Configuration(Some(error.into())))?;
     let loopback = url
         .host_str()
         .and_then(|host| {
@@ -170,7 +201,7 @@ fn loopback(origin: &str) -> Result<Url, Error> {
         || url.fragment().is_some()
         || url.path() != "/"
     {
-        return Err(Error::Configuration);
+        return Err(Error::Configuration(None));
     }
     Ok(url)
 }
@@ -185,7 +216,7 @@ fn client() -> Result<Client, Error> {
         // Long responses stream for minutes; only a stalled stream is a failure.
         .read_timeout(Duration::from_secs(120))
         .build()
-        .map_err(|_| Error::Configuration)
+        .map_err(|error| Error::Configuration(Some(error.without_url().into())))
 }
 
 async fn send(request: RequestBuilder) -> Result<Response, Error> {
@@ -223,11 +254,11 @@ async fn json(mut response: Response) -> Result<Value, Error> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(unavailable)? {
         if bytes.len() + chunk.len() > 64 * 1024 {
-            return Err(Error::InvalidResponse);
+            return Err(Error::InvalidResponse(None));
         }
         bytes.extend_from_slice(&chunk);
     }
-    serde_json::from_slice(&bytes).map_err(|_| Error::InvalidResponse)
+    serde_json::from_slice(&bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
 }
 
 /// Turns one provider's stream payloads into events.
@@ -247,10 +278,15 @@ enum Phase<F, D> {
     Open(Open<D>),
 }
 
+/// The span covers opening the request (send and status), never the event loop.
 fn events<'a, D: Decoder + 'a>(
+    provider: &'static str,
+    model: &str,
     open: impl Future<Output = Result<Response, Error>> + Send + 'a,
 ) -> impl Stream<Item = Result<Event, Error>> + Send + 'a {
-    futures_util::stream::try_unfold(Phase::Opening(Box::pin(open)), |phase| async move {
+    let span = tracing::info_span!("provider_request", provider, model);
+    let open = Box::pin(tracing::Instrument::instrument(open, span));
+    futures_util::stream::try_unfold(Phase::Opening(open), |phase| async move {
         let mut open = match phase {
             Phase::Opening(future) => Open {
                 reader: sse::Reader::new(future.await?),
@@ -276,7 +312,7 @@ fn events<'a, D: Decoder + 'a>(
 
 fn reply(text: String, calls: Vec<FunctionCall>, native: Value) -> Result<Reply, Error> {
     if (calls.is_empty() && text.is_empty()) || text.contains('\0') {
-        return Err(Error::InvalidResponse);
+        return Err(Error::InvalidResponse(None));
     }
     Ok(Reply {
         text,
@@ -292,7 +328,7 @@ fn call(call_id: &str, name: &str, arguments: String) -> Result<FunctionCall, Er
         || name.len() > 128
         || arguments.len() > 16384
     {
-        return Err(Error::InvalidResponse);
+        return Err(Error::InvalidResponse(None));
     }
     Ok(FunctionCall {
         call_id: call_id.into(),

@@ -36,6 +36,8 @@ impl Channel {
 }
 
 impl RuntimeIdentity {
+    /// One span per connection.
+    #[tracing::instrument(skip_all)]
     pub async fn serve(self, token: String, mut socket: WebSocket) {
         let mut channel = Channel::default();
         // shortcut: each connection polls the ledger every second; use LISTEN/NOTIFY if
@@ -46,7 +48,7 @@ impl RuntimeIdentity {
                 incoming = socket.recv() => match incoming {
                     Some(Ok(Message::Text(text))) => match serde_json::from_str(&text) {
                         Ok(report) => self.receive(&token, &mut channel, report).await,
-                        Err(_) => Err(Error::InvalidConfiguration),
+                        Err(error) => Err(Error::Configuration(error.into())),
                     },
                     Some(Ok(Message::Ping(_) | Message::Pong(_))) => Ok(Vec::new()),
                     _ => return,
@@ -166,10 +168,16 @@ async fn dream_after(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &super::RuntimeActor,
 ) -> Result<u64, Error> {
-    let seconds: i32 = sqlx::query_scalar("SELECT idle_delay_seconds FROM agents WHERE id=$1")
-        .bind(actor.agent)
-        .fetch_one(&mut **tx)
-        .await?;
+    let seconds = sqlx::query_scalar!(
+        "
+        SELECT idle_delay_seconds
+        FROM agents
+        WHERE id = $1
+        ",
+        actor.agent.0,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
     Ok(seconds.unsigned_abs().into())
 }
 

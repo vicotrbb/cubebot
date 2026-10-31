@@ -82,7 +82,17 @@ async fn account_creation_replays_without_journaling_passwords() {
             .await
             .unwrap()
     );
-    let payload: (String, String) = sqlx::query_as("SELECT input_body::text, secret_verifier FROM identity_commands WHERE kind = 'account.create'").fetch_one(&pool).await.unwrap();
+    let payload: (String, String) = sqlx::query!(
+        r#"
+        SELECT input_body::text AS "input_body!", secret_verifier AS "secret_verifier!"
+        FROM identity_commands
+        WHERE kind = 'account.create'
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .map(|row| (row.input_body, row.secret_verifier))
+    .unwrap();
     assert!(!payload.0.contains("password"));
     assert!(payload.1.starts_with("$argon2id$"));
     let audit = serde_json::to_string(&identity.access_events(&actor, 0).await.unwrap()).unwrap();

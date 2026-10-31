@@ -44,17 +44,25 @@ impl Reconciler {
             layout,
         })
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn reconcile(&self, agent: AgentId) -> Result<ReconcileResult, Error> {
         let (revision, generation, state) = self.intent(agent).await?;
         self.converge(agent, revision, generation, state == "running")
             .await
     }
     pub(super) async fn intent(&self, agent: AgentId) -> Result<(i64, i64, String), Error> {
-        sqlx::query_as("SELECT revision,restart_generation,desired_state FROM agents WHERE id = $1")
-            .bind(agent)
-            .fetch_optional(&self.pool)
-            .await?
-            .ok_or(Error::Conflict)
+        sqlx::query!(
+            "
+            SELECT revision, restart_generation, desired_state
+            FROM agents
+            WHERE id = $1
+            ",
+            agent.0,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|row| (row.revision, row.restart_generation, row.desired_state))
+        .ok_or(Error::Conflict)
     }
     /// Settles any stale or unwanted pod first; a replacement never starts before that.
     pub(super) async fn converge(

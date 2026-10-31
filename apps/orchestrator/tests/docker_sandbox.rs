@@ -73,8 +73,21 @@ impl Fixture {
         std::fs::write(self.root.join("state").join(self.container(epoch)), status).unwrap();
     }
     async fn phases(&self) -> Vec<(i64, String)> {
-        sqlx::query_as("SELECT epoch,phase FROM agent_resources WHERE agent_id = $1 AND kind = 'pod' ORDER BY epoch")
-            .bind(self.agent).fetch_all(&self.pool).await.unwrap()
+        sqlx::query!(
+            "
+            SELECT epoch,phase
+            FROM agent_resources
+            WHERE agent_id = $1 AND kind = 'pod'
+            ORDER BY epoch
+            ",
+            self.agent as _,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| (row.epoch, row.phase))
+        .collect()
     }
 }
 
@@ -133,16 +146,31 @@ async fn sleep_and_restart_wait_for_drain_before_stopping_a_running_agent() {
     let f = fixture().await;
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     // Restart: lifecycle bumps the generation and requests a drain of the old epoch.
-    sqlx::query("UPDATE agents SET restart_generation = restart_generation + 1 WHERE id = $1")
-        .bind(f.agent)
-        .execute(&f.pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        UPDATE agents
+        SET restart_generation = restart_generation + 1
+        WHERE id = $1
+        ",
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.phases().await, vec![(1, "bound".into())]);
     assert_eq!(f.docker.status(f.agent).await.unwrap(), Status::Running);
-    sqlx::query("UPDATE agent_runtime_drains SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1 WHERE attempt_id = (SELECT id FROM agent_resources WHERE agent_id = $1 AND epoch = 1)")
-        .bind(f.agent).execute(&f.pool).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE agent_runtime_drains
+        SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1
+        WHERE attempt_id = (SELECT id FROM agent_resources WHERE agent_id = $1 AND epoch = 1)
+        ",
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(
@@ -150,15 +178,30 @@ async fn sleep_and_restart_wait_for_drain_before_stopping_a_running_agent() {
         vec![(1, "stopped".into()), (2, "bound".into())]
     );
     // Sleep keeps the workspace and leaves no running container once drained.
-    sqlx::query("UPDATE agents SET desired_state = 'sleeping' WHERE id = $1")
-        .bind(f.agent)
-        .execute(&f.pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        UPDATE agents
+        SET desired_state = 'sleeping'
+        WHERE id = $1
+        ",
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.docker.status(f.agent).await.unwrap(), Status::Running);
-    sqlx::query("UPDATE agent_runtime_drains SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1 WHERE attempt_id = (SELECT id FROM agent_resources WHERE agent_id = $1 AND epoch = 2)")
-        .bind(f.agent).execute(&f.pool).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE agent_runtime_drains
+        SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1
+        WHERE attempt_id = (SELECT id FROM agent_resources WHERE agent_id = $1 AND epoch = 2)
+        ",
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.docker.status(f.agent).await.unwrap(), Status::Absent);
     assert!(f.docker.workspace(f.agent).await.unwrap().is_some());

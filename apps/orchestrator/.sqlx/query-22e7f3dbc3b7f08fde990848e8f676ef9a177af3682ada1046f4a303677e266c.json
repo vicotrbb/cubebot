@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET uid = $2,\n                resource_version = '1',\n                phase = 'bound',\n                updated_at = clock_timestamp()\n            WHERE id = $1\n              AND phase = 'creating'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "22e7f3dbc3b7f08fde990848e8f676ef9a177af3682ada1046f4a303677e266c"
+}

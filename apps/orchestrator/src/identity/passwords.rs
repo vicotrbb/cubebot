@@ -39,10 +39,15 @@ pub async fn hash(password: &str) -> Result<String, IdentityError> {
         Argon2::default()
             .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
             .map(|hash| hash.to_string())
-            .map_err(|_| IdentityError::Password)
+            .map_err(hash_error)
     })
     .await
-    .map_err(|_| IdentityError::Password)?
+    .map_err(|error| IdentityError::Password(error.into()))?
+}
+
+// password-hash implements std::error::Error only with its `std` feature; its messages hold no input.
+fn hash_error(error: argon2::password_hash::Error) -> IdentityError {
+    IdentityError::Password(error.to_string().into())
 }
 
 pub async fn verify(password: &str, verifier: String) -> Result<(), IdentityError> {
@@ -50,13 +55,13 @@ pub async fn verify(password: &str, verifier: String) -> Result<(), IdentityErro
     let password = password.to_owned();
     tokio::task::spawn_blocking(move || {
         let _permit = permit;
-        let parsed = PasswordHash::new(&verifier).map_err(|_| IdentityError::Password)?;
+        let parsed = PasswordHash::new(&verifier).map_err(hash_error)?;
         Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
             .map_err(|_| IdentityError::Unauthorized)
     })
     .await
-    .map_err(|_| IdentityError::Password)?
+    .map_err(|error| IdentityError::Password(error.into()))?
 }
 
 pub fn token() -> String {

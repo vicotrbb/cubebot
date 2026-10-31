@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agents\n        SET dreaming_model='dream-model'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "5d4cc84d020661a0809f2914ccf319a239e1d4806fff0264c7f09e54c918f9e1"
+}

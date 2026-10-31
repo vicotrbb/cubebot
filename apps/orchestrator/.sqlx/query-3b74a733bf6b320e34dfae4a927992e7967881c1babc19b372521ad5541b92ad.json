@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.desired_state='running'\n                AND NOT EXISTS(SELECT 1 FROM chat_turns WHERE conversation_id=g.id AND status IN ('queued','running','waiting'))\n                AND NOT EXISTS(SELECT 1 FROM dream_runs WHERE id=$2)\n                AND EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id WHERE m.agent_id=g.id AND r.dream_run_id IS NULL AND r.created_at > COALESCE((SELECT max(started_at) FROM dream_runs WHERE agent_id=g.id AND outcome IN ('completed','no_op')),'-infinity'))\n                AS \"eligible!\",\n            g.dreaming_model\n        FROM agents g\n        WHERE g.id=$1\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "eligible!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "dreaming_model",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      true
+    ]
+  },
+  "hash": "3b74a733bf6b320e34dfae4a927992e7967881c1babc19b372521ad5541b92ad"
+}

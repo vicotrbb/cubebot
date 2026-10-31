@@ -44,11 +44,12 @@ struct Header {
 
 impl Header {
     fn parse(raw: &[u8; HEADER]) -> Self {
-        let u32_at = |at: usize| u32::from_le_bytes(raw[at..at + 4].try_into().unwrap());
         let u16_at = |at: usize| u16::from_le_bytes([raw[at], raw[at + 1]]);
+        let u32_at = |at: usize| u32::from(u16_at(at)) | u32::from(u16_at(at + 2)) << 16;
+        let u64_at = |at: usize| u64::from(u32_at(at)) | u64::from(u32_at(at + 4)) << 32;
         Self {
-            src_cid: u64::from_le_bytes(raw[..8].try_into().unwrap()),
-            dst_cid: u64::from_le_bytes(raw[8..16].try_into().unwrap()),
+            src_cid: u64_at(0),
+            dst_cid: u64_at(8),
             src_port: u32_at(16),
             dst_port: u32_at(20),
             len: u32_at(24),
@@ -242,6 +243,11 @@ impl Vsock {
         self.replies.push_back(header.reply(RESET));
     }
 
+    #[tracing::instrument(
+        name = "vsock_connection",
+        skip_all,
+        fields(port = request.src_port, service = request.dst_port)
+    )]
     fn open(&mut self, request: Header) {
         let outbox = match request.dst_port {
             PORT => self.environment.iter().copied().collect(),
@@ -340,12 +346,15 @@ impl Vsock {
     fn flush(&mut self, queue: &mut Queue, memory: &GuestMemory) -> io::Result<bool> {
         let mut used = false;
         while self.pending() && queue.has_available(memory)? {
-            let chain = queue.pop(memory)?.expect("available buffer");
+            let chain = queue.pop(memory)?;
+            let chain = chain.ok_or_else(|| invalid("vsock receive queue has no buffer"))?;
             let room = chain.writable_len().checked_sub(HEADER as u64);
             let room = room.ok_or_else(|| invalid("vsock receive buffer too small"))?;
             let (mut header, payload) = match self.replies.pop_front() {
                 Some(header) => (header, Vec::new()),
-                None => self.data(room as usize),
+                None => self
+                    .data(room as usize)
+                    .ok_or_else(|| invalid("vsock has no pending data"))?,
             };
             let connection = self
                 .connections
@@ -366,16 +375,12 @@ impl Vsock {
         !self.replies.is_empty() || self.connections.iter().any(|c| c.sendable() > 0)
     }
 
-    fn data(&mut self, room: usize) -> (Header, Vec<u8>) {
-        let connection = self
-            .connections
-            .iter_mut()
-            .find(|c| c.sendable() > 0)
-            .expect("pending data");
+    fn data(&mut self, room: usize) -> Option<(Header, Vec<u8>)> {
+        let connection = self.connections.iter_mut().find(|c| c.sendable() > 0)?;
         let len = connection.sendable().min(room);
         let payload: Vec<u8> = connection.outbox.drain(..len).collect();
         connection.sent = connection.sent.wrapping_add(len as u32);
-        (connection.header(DATA), payload)
+        Some((connection.header(DATA), payload))
     }
 
     /// Delivers packets queued outside a driver notification, such as a shutdown.

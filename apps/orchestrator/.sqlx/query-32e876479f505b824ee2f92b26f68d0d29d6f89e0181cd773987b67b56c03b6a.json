@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id\n            FROM agent_resources\n            WHERE id = $1\n              AND agent_id = $2\n              AND kind = 'pod'\n              AND phase = 'bound'\n              AND uid = $3\n            FOR UPDATE\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "32e876479f505b824ee2f92b26f68d0d29d6f89e0181cd773987b67b56c03b6a"
+}

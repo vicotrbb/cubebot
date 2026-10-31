@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT acknowledged_at::text AS \"value!\"\n        FROM agent_runtime_drains\n        WHERE attempt_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "83ea0ec4d43efa9738474b53a495f097ace822e9c16fe206a5f0bfe5db08751f"
+}

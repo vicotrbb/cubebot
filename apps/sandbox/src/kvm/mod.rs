@@ -53,6 +53,7 @@ const FILE_LIMIT: u64 = 64 << 10;
 /// Well inside the kubelet's refresh of a projected token at 80% of its lifetime.
 const REFRESH: std::time::Duration = std::time::Duration::from_secs(60);
 
+#[tracing::instrument(name = "vm", skip_all)]
 pub fn run() -> io::Result<u8> {
     // Blocked before any thread starts, so only the stop thread receives them.
     let mut termination = SigSet::empty();
@@ -85,7 +86,7 @@ pub fn run() -> io::Result<u8> {
         .map_err(failed("KVM_GET_VCPU_MMAP_SIZE"))? as usize;
     let receivable = net.lock().device.receivable();
     std::thread::spawn(move || {
-        let error = virtio::net::receive(tap, &net, &receivable, memory).unwrap_err();
+        let Err(error) = virtio::net::receive(tap, &net, &receivable, memory);
         fail(&format!("guest network: {error}"));
     });
     let refreshed = vsock.clone();
@@ -108,12 +109,14 @@ pub fn run() -> io::Result<u8> {
     }
     end.recv().map_err(io::Error::other)??;
     // A guest that ends without reporting an exit status failed before or while running the agent.
-    Ok(vsock.lock().device.exit().unwrap_or_else(|| {
+    let exit = vsock.lock().device.exit();
+    Ok(exit.unwrap_or_else(|| {
         eprintln!("Guest ended without an agent exit status");
         1
     }))
 }
 
+#[tracing::instrument(name = "vm_create", skip_all)]
 fn open_vm() -> io::Result<(File, OwnedFd)> {
     let kvm = File::options()
         .read(true)
@@ -148,6 +151,7 @@ struct Devices {
     cmdline: String,
 }
 
+#[tracing::instrument(name = "device_setup", skip_all)]
 fn devices(vm: RawFd) -> io::Result<Devices> {
     let root = File::open(configured("CUBEBOT_GUEST_ROOT")?)?;
     let workspace = workspace_disk(&configured("CUBEBOT_GUEST_WORKSPACE")?)?;
@@ -232,7 +236,12 @@ fn run_vcpu(
         };
         let run = unsafe { run.as_ptr().as_mut().ok_or(Errno::EFAULT)? };
         match run.exit_reason {
-            sys::EXIT_IO => port_io(run, &mut serial.lock().expect("serial lock"), vm)?,
+            sys::EXIT_IO => {
+                let mut serial = serial
+                    .lock()
+                    .map_err(|_| io::Error::other("serial lock poisoned"))?;
+                port_io(run, &mut serial, vm)?
+            }
             sys::EXIT_MMIO => mmio(run, bus, memory)?,
             // reboot=t and panic=-1 turn a guest reboot, including init exiting, into a triple fault.
             sys::EXIT_HLT | sys::EXIT_SHUTDOWN => return Ok(()),
@@ -247,6 +256,7 @@ fn stop(termination: SigSet, vsock: &Slot<Vsock>, memory: &GuestMemory) {
     let Ok(signal) = termination.wait() else {
         fail("sigwait failed");
     };
+    let _span = tracing::info_span!("vm_shutdown", signal = signal.as_str()).entered();
     let mut open = false;
     let asked = vsock.run(|vsock, queues| {
         open = vsock.shutdown();
@@ -397,6 +407,7 @@ fn sized(name: &str, (default, range): (u32, std::ops::RangeInclusive<u32>)) -> 
 
 /// Maps the single guest memory region at guest physical address 0, with the in-kernel PIC, IOAPIC
 /// and PIT the guest's timer and device interrupts need.
+#[tracing::instrument(name = "guest_memory_setup", skip_all, fields(size = size))]
 fn guest_memory(vm: &OwnedFd, size: usize) -> io::Result<GuestMemory> {
     let fd = vm.as_raw_fd();
     let memory = GuestMemory::map(size)?;
@@ -420,6 +431,7 @@ fn guest_memory(vm: &OwnedFd, size: usize) -> io::Result<GuestMemory> {
 
 /// Creates the vCPUs with the host's supported CPUID and their own APIC IDs. The bootstrap
 /// processor starts at the kernel entry; the rest wait in the in-kernel APIC for the guest's SIPI.
+#[tracing::instrument(name = "vcpu_setup", skip_all, fields(count = count))]
 fn create_vcpus(kvm: &File, vm: RawFd, count: u8, entry: u64) -> io::Result<Vec<OwnedFd>> {
     let mut supported = sys::Cpuid {
         nent: 256,

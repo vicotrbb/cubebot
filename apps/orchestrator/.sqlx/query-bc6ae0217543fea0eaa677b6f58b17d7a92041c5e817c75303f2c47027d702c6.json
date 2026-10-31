@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO orchestrator_owner\n                (singleton, instance_id, generation, namespace, pod_name, pod_uid, container_id, previous_termination_proof)\n            VALUES (true, $1, 1, $2, $3, $4, $5, $6)\n            ON CONFLICT (singleton) DO UPDATE SET\n                instance_id = EXCLUDED.instance_id,\n                generation = orchestrator_owner.generation + 1,\n                pod_name = EXCLUDED.pod_name,\n                pod_uid = EXCLUDED.pod_uid,\n                container_id = EXCLUDED.container_id,\n                acquired_at = clock_timestamp(),\n                released_at = NULL,\n                previous_termination_proof = EXCLUDED.previous_termination_proof\n            WHERE orchestrator_owner.instance_id = $7\n                AND orchestrator_owner.generation = $8\n                AND orchestrator_owner.namespace = EXCLUDED.namespace\n            RETURNING generation AS \"generation!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "generation!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bc6ae0217543fea0eaa677b6f58b17d7a92041c5e817c75303f2c47027d702c6"
+}

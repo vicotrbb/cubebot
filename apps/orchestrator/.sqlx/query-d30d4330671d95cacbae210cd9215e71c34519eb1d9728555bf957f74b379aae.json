@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.desired_state, a.restart_generation\n            FROM agents a\n            JOIN agent_resources r ON r.agent_id = a.id\n            WHERE r.id = $1\n            FOR UPDATE OF a\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "desired_state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "restart_generation",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "d30d4330671d95cacbae210cd9215e71c34519eb1d9728555bf957f74b379aae"
+}

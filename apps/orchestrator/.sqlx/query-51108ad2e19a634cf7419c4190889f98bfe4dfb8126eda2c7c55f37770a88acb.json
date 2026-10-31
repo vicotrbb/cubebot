@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.id AS \"id!\", a.role = 'administrator' AS \"administrator!\"\n            FROM human_sessions s\n            JOIN human_accounts a ON a.id = s.account_id\n            WHERE s.token_hash = $1\n                AND s.expires_at > clock_timestamp()\n                AND a.active\n                AND (\n                    s.oidc_policy_revision IS NULL\n                    OR EXISTS(\n                        SELECT 1\n                        FROM identity_oidc_policy p\n                        WHERE p.singleton AND p.enabled AND p.revision = s.oidc_policy_revision\n                    )\n                )\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "administrator!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "51108ad2e19a634cf7419c4190889f98bfe4dfb8126eda2c7c55f37770a88acb"
+}

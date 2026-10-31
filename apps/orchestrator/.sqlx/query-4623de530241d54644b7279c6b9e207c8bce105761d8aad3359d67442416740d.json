@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT jsonb_path_query_array(mode_changes,'$[*].mode') AS \"modes!\",ended_at IS NOT NULL AS \"ended!\"\n            FROM desktop_sessions\n            WHERE agent_id=$1 AND viewer_id=$2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "modes!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "ended!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "4623de530241d54644b7279c6b9e207c8bce105761d8aad3359d67442416740d"
+}

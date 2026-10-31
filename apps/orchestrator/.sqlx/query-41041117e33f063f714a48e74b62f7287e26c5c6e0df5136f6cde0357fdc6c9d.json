@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE chat_turns\n        SET status='failed', error=$2\n        WHERE id=$1 AND parent_turn_id IS NOT NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "41041117e33f063f714a48e74b62f7287e26c5c6e0df5136f6cde0357fdc6c9d"
+}

@@ -33,7 +33,11 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
         if reply {
             properties["expects_reply"] = json!({"type":"boolean","description":"True to receive the recipient's answer back here as a new message once it is done; false for information only."});
         }
-        let required: Vec<&String> = properties.as_object().unwrap().keys().collect();
+        let required: Vec<&String> = properties
+            .as_object()
+            .into_iter()
+            .flat_map(|object| object.keys())
+            .collect();
         cubebot_providers::Tool {
             name: name.into(),
             description: description.into(),
@@ -98,7 +102,7 @@ impl Collaboration {
     async fn send(&self, request: Collaborate) -> Outcome {
         let sent = match &self.client {
             Some(client) => client.collaborate(self.turn, &request).await,
-            None => Err(crate::control::Error::Unavailable),
+            None => Err(crate::control::Error::Unavailable(None)),
         };
         let (code, output) = match sent {
             Ok(Ok(child)) if request.wait => (Some(0), format!("Delegated to {} as task {child}. End this turn now with a short note; you resume as each delegated task settles.", request.agent)),

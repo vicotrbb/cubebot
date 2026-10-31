@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE chat_turns\n            SET status='waiting', error='execution_interrupted'\n            WHERE conversation_id=$1 AND status='running' AND attempt_id IS DISTINCT FROM $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c5e57b0dfd5699550ec879ba6f32e41ef5e0bc853bc46d2fb8cbddb12c21bc7e"
+}

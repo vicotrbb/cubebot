@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT ($3 AND EXISTS(SELECT 1 FROM memories WHERE agent_id=$1 AND NOT deleted AND content=$2))\n            OR EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id AND m.agent_id=$1 JOIN memory_revisions n ON n.memory_id=r.memory_id AND n.revision=r.revision+1 AND n.human_id IS NOT NULL AND (n.deleted OR n.content<>r.content) WHERE r.content=$2)\n            AS \"unwanted!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "unwanted!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2ba60fc3d2ab33421637851565e3be9203ea106ca599dd64573fb185e3e078af"
+}

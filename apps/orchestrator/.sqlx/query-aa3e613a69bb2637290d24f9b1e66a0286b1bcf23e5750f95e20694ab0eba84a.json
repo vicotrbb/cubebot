@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH RECURSIVE down(id) AS (\n            SELECT c.id FROM chat_turns c JOIN turn_steering s ON s.turn_id=c.parent_turn_id WHERE s.id=$1 AND c.awaited\n            UNION ALL\n            SELECT t.id FROM chat_turns t JOIN down d ON t.parent_turn_id=d.id WHERE t.awaited\n        )\n        INSERT INTO turn_steering (turn_id, actor_id, request_id, message, source_steering_id)\n        SELECT c.id, s.actor_id, gen_random_uuid(), s.message, s.id\n        FROM chat_turns c\n        JOIN turn_steering s ON s.id=$1\n        WHERE c.id IN (SELECT id FROM down) AND c.status IN ('queued','running','delegated')\n        ON CONFLICT DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aa3e613a69bb2637290d24f9b1e66a0286b1bcf23e5750f95e20694ab0eba84a"
+}

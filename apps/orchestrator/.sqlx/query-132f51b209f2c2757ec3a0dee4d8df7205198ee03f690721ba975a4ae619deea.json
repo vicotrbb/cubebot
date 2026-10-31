@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT e.payload->>'text' AS \"text!\", t.sequence\n        FROM turn_events e\n        JOIN chat_turns t ON t.id=e.turn_id\n        WHERE t.conversation_id=$1 AND e.payload->>'kind'='summary'\n        ORDER BY t.sequence DESC, e.sequence DESC\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "text!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "132f51b209f2c2757ec3a0dee4d8df7205198ee03f690721ba975a4ae619deea"
+}

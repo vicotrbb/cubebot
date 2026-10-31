@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE chat_turns\n                        SET status=$2, error=NULL\n                        WHERE id=$1\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2658ce3a1445ede8048446961f143402abfd9e4c594813f37f4e4c420a7848c9"
+}

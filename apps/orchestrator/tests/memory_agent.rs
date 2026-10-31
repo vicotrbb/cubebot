@@ -148,11 +148,18 @@ impl Session {
             .unwrap()
     }
     async fn events(&self, turn: Uuid) -> Vec<Value> {
-        sqlx::query_scalar("SELECT payload FROM turn_events WHERE turn_id=$1 ORDER BY sequence")
-            .bind(turn)
-            .fetch_all(&self.pool)
-            .await
-            .unwrap()
+        sqlx::query_scalar!(
+            "
+            SELECT payload
+            FROM turn_events
+            WHERE turn_id=$1
+            ORDER BY sequence
+            ",
+            turn,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .unwrap()
     }
 }
 
@@ -398,8 +405,21 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
             .unwrap()
             .is_empty()
     );
-    let history: Vec<(i64, bool, Option<Uuid>)> = sqlx::query_as("SELECT revision,deleted,turn_id FROM memory_revisions WHERE memory_id=$1 ORDER BY revision")
-        .bind(deadline).fetch_all(&f.pool).await.unwrap();
+    let history: Vec<(i64, bool, Option<Uuid>)> = sqlx::query!(
+        "
+        SELECT revision,deleted,turn_id
+        FROM memory_revisions
+        WHERE memory_id=$1
+        ORDER BY revision
+        ",
+        deadline,
+    )
+    .fetch_all(&f.pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| (row.revision, row.deleted, row.turn_id))
+    .collect();
     assert_eq!(
         history,
         [

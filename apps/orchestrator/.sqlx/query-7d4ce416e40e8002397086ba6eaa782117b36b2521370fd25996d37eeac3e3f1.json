@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.dream_run_id AS \"run!\", s.id AS skill, s.name, r.revision, r.files->>'SKILL.md' AS \"content!\", p.files->>'SKILL.md' AS \"previous?\"\n            FROM skill_revisions r\n            JOIN skills s ON s.id=r.skill_id\n            LEFT JOIN skill_revisions p ON p.skill_id=r.skill_id AND p.revision=r.revision-1\n            WHERE r.dream_run_id=ANY($1)\n            ORDER BY r.created_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "run!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "skill",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "content!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "previous?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "7d4ce416e40e8002397086ba6eaa782117b36b2521370fd25996d37eeac3e3f1"
+}

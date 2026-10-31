@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, parent_turn_id)\n        SELECT p.conversation_id, c.actor_id, gen_random_uuid(), format('Reply from agent %s to your message:%s%s',a.name,E'\\n\\n',left(c.response,16000)), c.id\n        FROM chat_turns c\n        JOIN chat_turns p ON p.id=c.parent_turn_id\n        JOIN agents a ON a.id=c.conversation_id\n        WHERE c.id=$1 AND c.status='complete' AND c.expects_reply AND NOT c.awaited\n            AND NOT EXISTS(SELECT 1 FROM chat_turns r WHERE r.parent_turn_id=c.id AND r.conversation_id=p.conversation_id)\n        RETURNING conversation_id AS \"conversation_id: AgentId\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conversation_id: AgentId",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1e487945502b2570fe4f978c8c935a498b92a8a1051e906a00e55c2ef25e7c38"
+}

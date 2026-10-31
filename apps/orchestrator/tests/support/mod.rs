@@ -21,6 +21,7 @@ pub async fn create_database(template: Option<&str>) -> PgPool {
     let prefix = options.get_database().unwrap_or("test");
     let name = format!("{prefix}_{}", uuid::Uuid::new_v4().simple());
     let mut admin = PgConnection::connect_with(&options).await.unwrap();
+    // Runtime SQL: database names are identifiers, which cannot be bound.
     sqlx::query(&format!("CREATE DATABASE {name} {clause}"))
         .execute(&mut admin)
         .await
@@ -37,15 +38,21 @@ async fn template(options: &PgConnectOptions) -> String {
     }
     let name = format!("cubebot_template_{:016x}", hasher.finish());
     let mut admin = PgConnection::connect_with(options).await.unwrap();
-    sqlx::query("SELECT pg_advisory_lock(hashtext($1))")
-        .bind(&name)
-        .execute(&mut admin)
-        .await
-        .unwrap();
-    let ready: bool = sqlx::query_scalar(
-        "SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate)",
+    sqlx::query!(
+        "
+        SELECT pg_advisory_lock(hashtext($1))
+        ",
+        &name,
     )
-    .bind(&name)
+    .execute(&mut admin)
+    .await
+    .unwrap();
+    let ready: bool = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = $1 AND datistemplate) AS "value!"
+        "#,
+        &name,
+    )
     .fetch_one(&mut admin)
     .await
     .unwrap();
@@ -54,6 +61,7 @@ async fn template(options: &PgConnectOptions) -> String {
             format!("DROP DATABASE IF EXISTS {name}"),
             format!("CREATE DATABASE {name}"),
         ] {
+            // Runtime SQL: database names are identifiers, which cannot be bound.
             sqlx::query(&statement).execute(&mut admin).await.unwrap();
         }
         let pool = PgPool::connect_with(options.clone().database(&name))
@@ -61,6 +69,7 @@ async fn template(options: &PgConnectOptions) -> String {
             .unwrap();
         database::migrate(&pool).await.unwrap();
         pool.close().await;
+        // Runtime SQL: database names are identifiers, which cannot be bound.
         sqlx::query(&format!("ALTER DATABASE {name} IS_TEMPLATE true"))
             .execute(&mut admin)
             .await

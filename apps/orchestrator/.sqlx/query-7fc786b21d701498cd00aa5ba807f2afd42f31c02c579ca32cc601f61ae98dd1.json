@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_runtime_drains\n            SET acknowledged_at = COALESCE(acknowledged_at, clock_timestamp()),\n                acknowledged_session_version = COALESCE(acknowledged_session_version, $3)\n            WHERE attempt_id = $1\n              AND request_id = $2\n            RETURNING request_id, true AS \"acknowledged!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "acknowledged!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "7fc786b21d701498cd00aa5ba807f2afd42f31c02c579ca32cc601f61ae98dd1"
+}

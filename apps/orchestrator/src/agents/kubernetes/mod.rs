@@ -25,6 +25,8 @@ pub use ownership::{Identity, RecordedPod, termination_proven, verify_pod};
 #[derive(Debug)]
 pub enum Error {
     InvalidConfiguration,
+    /// `InvalidConfiguration` with the error that caused it.
+    Configuration(Box<dyn std::error::Error + Send + Sync>),
     Unauthorized,
     Busy,
     DeadlineExceeded,
@@ -34,6 +36,35 @@ pub enum Error {
     TerminationUnproven,
     Api(kube::Error),
     Sandbox(std::io::Error),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidConfiguration | Self::Configuration(_) => "invalid configuration",
+            Self::Unauthorized => "unauthorized",
+            Self::Busy => "busy",
+            Self::DeadlineExceeded => "deadline exceeded",
+            Self::Conflict => "conflict",
+            Self::Database(_) => "database failure",
+            Self::OwnershipMismatch => "ownership mismatch",
+            Self::TerminationUnproven => "termination unproven",
+            Self::Api(_) => "Kubernetes API failure",
+            Self::Sandbox(_) => "sandbox failure",
+        })
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Configuration(error) => Some(error.as_ref()),
+            Self::Database(error) => Some(error),
+            Self::Api(error) => Some(error),
+            Self::Sandbox(error) => Some(error),
+            _ => None,
+        }
+    }
 }
 
 impl From<kube::Error> for Error {

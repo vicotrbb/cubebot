@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agent_runtime_sessions s\n        SET revoked_at = clock_timestamp()\n        FROM agent_resources r\n        WHERE r.id = s.attempt_id\n          AND r.agent_id = $1\n          AND s.revoked_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f49e6d5ea10290a6d7c227bbfc3350c123dd67972fd86637df19d36e85c69c9a"
+}

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agents\n            SET desired_state = $2,\n                restart_generation = restart_generation\n                    + CASE WHEN $3 OR (desired_state = 'sleeping' AND $2 = 'running') THEN 1 ELSE 0 END,\n                revision = revision + 1\n            WHERE id = $1\n              AND revision = $4\n              AND desired_state <> 'retired'\n            RETURNING revision\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e3742c9ccad3b360ecd839a0ee5afdc7df6ac6da14a9767d712856cf7f736dd9"
+}

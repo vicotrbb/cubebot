@@ -30,7 +30,7 @@ pub struct Knowledge {
     pool: PgPool,
 }
 
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Memory {
     pub id: Uuid,
     pub revision: i64,
@@ -69,6 +69,7 @@ impl Knowledge {
     }
 
     /// Most relevant first for a query, most recent first without one.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn search(
         &self,
         actor: &Actor,
@@ -82,6 +83,7 @@ impl Knowledge {
         Ok(found)
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn create(
         &self,
         actor: &Actor,
@@ -92,6 +94,7 @@ impl Knowledge {
             .await
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, memory = %memory))]
     pub async fn revise(
         &self,
         actor: &Actor,
@@ -110,6 +113,7 @@ impl Knowledge {
     }
 
     /// Hides the memory from retrieval; its revisions remain.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, memory = %memory))]
     pub async fn delete(
         &self,
         actor: &Actor,
@@ -145,15 +149,24 @@ impl Knowledge {
         )
         .await?
         .ok_or(IdentityError::Conflict)?;
-        let written = sqlx::query_as(&format!("{SELECT} WHERE m.id=$1"))
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let written = sqlx::query_as!(
+            Memory,
+            r#"
+            SELECT m.id, m.revision, m.content, r.turn_id AS source_turn, r.dream_run_id AS source_dream, r.human_id IS NOT NULL AS "edited_by_human!"
+            FROM memories m
+            JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision
+            WHERE m.id=$1
+            "#,
+            id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(written)
     }
 
     /// Ownership comes from the authenticated runtime credential, never from the request.
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn search_for_agent(
         &self,
         agent: AgentId,
@@ -226,8 +239,18 @@ async fn unwanted(
     new: bool,
     content: &str,
 ) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar("SELECT ($3 AND EXISTS(SELECT 1 FROM memories WHERE agent_id=$1 AND NOT deleted AND content=$2)) OR EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id AND m.agent_id=$1 JOIN memory_revisions n ON n.memory_id=r.memory_id AND n.revision=r.revision+1 AND n.human_id IS NOT NULL AND (n.deleted OR n.content<>r.content) WHERE r.content=$2)")
-        .bind(agent).bind(content).bind(new).fetch_one(&mut **tx).await
+    sqlx::query_scalar!(
+        r#"
+        SELECT ($3 AND EXISTS(SELECT 1 FROM memories WHERE agent_id=$1 AND NOT deleted AND content=$2))
+            OR EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id AND m.agent_id=$1 JOIN memory_revisions n ON n.memory_id=r.memory_id AND n.revision=r.revision+1 AND n.human_id IS NOT NULL AND (n.deleted OR n.content<>r.content) WHERE r.content=$2)
+            AS "unwanted!"
+        "#,
+        agent.0,
+        content,
+        new,
+    )
+    .fetch_one(&mut **tx)
+    .await
 }
 
 pub fn valid_change(change: &MemoryChange) -> bool {
@@ -247,8 +270,22 @@ async fn authorize(
     agent: AgentId,
     capability: &str,
 ) -> Result<(), IdentityError> {
-    let allowed: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM agents g JOIN human_accounts a ON a.id=$1 AND a.active WHERE g.id=$2 AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability=$3)))")
-        .bind(actor.id).bind(agent).bind(capability).fetch_one(&mut **tx).await?;
+    let allowed = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM agents g
+            JOIN human_accounts a ON a.id=$1 AND a.active
+            WHERE g.id=$2
+                AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability=$3))
+        ) AS "allowed!"
+        "#,
+        actor.id,
+        agent.0,
+        capability,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
     if !allowed {
         return Err(IdentityError::NotFound);
     }
@@ -265,25 +302,80 @@ async fn write(
     content: Option<&str>,
     author: Author,
 ) -> Result<Option<Uuid>, sqlx::Error> {
-    let (human, turn, dream) = match author {
+    let by = match author {
         Author::Human(id) => (Some(id), None, None),
         Author::Turn(id) => (None, Some(id), None),
         Author::Dream(id) => (None, None, Some(id)),
     };
-    let changed = match memory {
-        None => {
-            "INSERT INTO memories (agent_id,content) VALUES ($1,$4) RETURNING id,revision,content,deleted"
-        }
-        Some(_) => {
-            "UPDATE memories SET content=COALESCE($4,content),deleted=$4 IS NULL,revision=revision+1,updated_at=clock_timestamp() WHERE id=$2 AND agent_id=$1 AND revision=$3 AND NOT deleted RETURNING id,revision,content,deleted"
-        }
-    };
-    sqlx::query_scalar(&format!("WITH m AS ({changed}) INSERT INTO memory_revisions (memory_id,revision,content,deleted,human_id,turn_id,dream_run_id) SELECT id,revision,content,deleted,$5,$6,$7 FROM m RETURNING memory_id"))
-        .bind(agent).bind(memory).bind(expected).bind(content).bind(human).bind(turn).bind(dream)
-        .fetch_optional(&mut **tx).await
+    match memory {
+        None => insert(tx, agent, content, by).await,
+        Some(memory) => update(tx, agent, memory, expected, content, by).await,
+    }
 }
 
-const SELECT: &str = "SELECT m.id,m.revision,m.content,r.turn_id AS source_turn,r.dream_run_id AS source_dream,r.human_id IS NOT NULL AS edited_by_human FROM memories m JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision";
+/// The revision's human, turn and dream run; exactly one is set.
+type By = (Option<Uuid>, Option<Uuid>, Option<Uuid>);
+
+async fn insert(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    content: Option<&str>,
+    (human, turn, dream): By,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "
+        WITH m AS (
+            INSERT INTO memories (agent_id, content)
+            VALUES ($1, $2)
+            RETURNING id, revision, content, deleted
+        )
+        INSERT INTO memory_revisions (memory_id, revision, content, deleted, human_id, turn_id, dream_run_id)
+        SELECT id, revision, content, deleted, $3, $4, $5
+        FROM m
+        RETURNING memory_id
+        ",
+        agent.0,
+        content,
+        human,
+        turn,
+        dream,
+    )
+    .fetch_optional(&mut **tx)
+    .await
+}
+
+async fn update(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    memory: Uuid,
+    expected: Option<i64>,
+    content: Option<&str>,
+    (human, turn, dream): By,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "
+        WITH m AS (
+            UPDATE memories
+            SET content=COALESCE($4,content), deleted=$4 IS NULL, revision=revision+1, updated_at=clock_timestamp()
+            WHERE id=$2 AND agent_id=$1 AND revision=$3 AND NOT deleted
+            RETURNING id, revision, content, deleted
+        )
+        INSERT INTO memory_revisions (memory_id, revision, content, deleted, human_id, turn_id, dream_run_id)
+        SELECT id, revision, content, deleted, $5, $6, $7
+        FROM m
+        RETURNING memory_id
+        ",
+        agent.0,
+        memory,
+        expected,
+        content,
+        human,
+        turn,
+        dream,
+    )
+    .fetch_optional(&mut **tx)
+    .await
+}
 
 /// Any query word matches, ranked by how well; stop words alone match nothing.
 async fn search(
@@ -293,8 +385,22 @@ async fn search(
     limit: i64,
 ) -> Result<Vec<Memory>, sqlx::Error> {
     let query = query.map(str::trim).filter(|query| !query.is_empty());
-    // Normalized lexemes, quoted with tsquery's own doubling, joined by OR.
-    let words = r#"(SELECT (SELECT string_agg('''' || replace(replace(l,'\','\\'),'''','''''') || '''',' | ') FROM unnest(tsvector_to_array(to_tsvector('english',$2))) l)::tsquery AS q) s"#;
-    sqlx::query_as(&format!("{SELECT}, {words} WHERE m.agent_id=$1 AND NOT m.deleted AND ($2::text IS NULL OR m.search @@ s.q) ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE ts_rank(m.search,s.q) END DESC, m.updated_at DESC LIMIT $3"))
-        .bind(agent).bind(query).bind(limit).fetch_all(&mut **tx).await
+    // The `s` subquery: normalized lexemes, quoted with tsquery's own doubling, joined by OR.
+    sqlx::query_as!(
+        Memory,
+        r#"
+        SELECT m.id, m.revision, m.content, r.turn_id AS source_turn, r.dream_run_id AS source_dream, r.human_id IS NOT NULL AS "edited_by_human!"
+        FROM memories m
+        JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision,
+            (SELECT (SELECT string_agg('''' || replace(replace(l,'\','\\'),'''','''''') || '''',' | ') FROM unnest(tsvector_to_array(to_tsvector('english',$2))) l)::tsquery AS q) s
+        WHERE m.agent_id=$1 AND NOT m.deleted AND ($2::text IS NULL OR m.search @@ s.q)
+        ORDER BY CASE WHEN $2::text IS NULL THEN 0 ELSE ts_rank(m.search,s.q) END DESC, m.updated_at DESC
+        LIMIT $3
+        "#,
+        agent.0,
+        query,
+        limit,
+    )
+    .fetch_all(&mut **tx)
+    .await
 }

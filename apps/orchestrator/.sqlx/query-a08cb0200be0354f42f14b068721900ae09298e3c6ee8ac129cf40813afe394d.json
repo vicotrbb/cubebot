@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE desktop_sessions\n            SET mode_changes = mode_changes\n                || jsonb_build_object('mode', $2::text, 'at', clock_timestamp())\n            WHERE id = $1\n              AND ended_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a08cb0200be0354f42f14b068721900ae09298e3c6ee8ac129cf40813afe394d"
+}

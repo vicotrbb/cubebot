@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO installation_kubernetes (singleton, namespace, anchor_name)\n            VALUES (true, $1, $2)\n            ON CONFLICT (singleton) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9db11cb3e3f7b999adf191b7c6aab92a9c64b6b0078d4592ed1bae1796f2bf28"
+}

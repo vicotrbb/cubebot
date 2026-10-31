@@ -25,7 +25,7 @@ pub struct Work {
     pub(crate) pool: PgPool,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct Conversation {
     pub id: Uuid,
     pub agent_id: AgentId,
@@ -39,7 +39,7 @@ pub struct SendMessage {
     pub message: String,
 }
 
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Turn {
     pub id: Uuid,
     pub sequence: i64,
@@ -47,16 +47,39 @@ pub struct Turn {
     pub status: String,
     pub response: Option<String>,
     pub error: Option<String>,
-    #[sqlx(skip)]
     pub terminal: Vec<terminal::Progress>,
     /// Where the request came from when a person did not send it here directly.
-    #[sqlx(skip)]
     pub origin: Option<terminal::Origin>,
     /// Work this turn delegated or sent to other agents.
-    #[sqlx(skip)]
     pub children: Vec<terminal::Child>,
-    #[sqlx(skip)]
     pub steering: Vec<Steering>,
+}
+
+/// A turn's own columns; its progress, origin, children and steering are attached after.
+pub(super) struct TurnRow {
+    pub id: Uuid,
+    pub sequence: i64,
+    pub message: String,
+    pub status: String,
+    pub response: Option<String>,
+    pub error: Option<String>,
+}
+
+impl From<TurnRow> for Turn {
+    fn from(row: TurnRow) -> Self {
+        Self {
+            id: row.id,
+            sequence: row.sequence,
+            message: row.message,
+            status: row.status,
+            response: row.response,
+            error: row.error,
+            terminal: Vec::new(),
+            origin: None,
+            children: Vec::new(),
+            steering: Vec::new(),
+        }
+    }
 }
 
 impl Work {
@@ -64,6 +87,7 @@ impl Work {
         Self { pool }
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn conversation(
         &self,
         actor: &Actor,
@@ -74,15 +98,22 @@ impl Work {
         if canonical != agent {
             return Err(IdentityError::NotFound);
         }
-        let conversation =
-            sqlx::query_as("SELECT id,agent_id,created_by FROM conversations WHERE id=$1")
-                .bind(agent)
-                .fetch_one(&mut *tx)
-                .await?;
+        let conversation = sqlx::query_as!(
+            Conversation,
+            r#"
+            SELECT id AS "id!", agent_id AS "agent_id!: AgentId", created_by AS "created_by!"
+            FROM conversations
+            WHERE id=$1
+            "#,
+            agent.0,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(conversation)
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation))]
     pub async fn history(
         &self,
         actor: &Actor,
@@ -92,13 +123,29 @@ impl Work {
         let mut tx = self.pool.begin().await?;
         let canonical =
             access::conversation(&mut tx, actor, conversation, "conversation.read").await?;
-        let mut turns = sqlx::query_as("SELECT id,sequence,message,status,response,error FROM chat_turns WHERE conversation_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 100")
-            .bind(canonical).bind(after).fetch_all(&mut *tx).await?;
+        let mut turns: Vec<Turn> = sqlx::query_as!(
+            TurnRow,
+            "
+            SELECT id, sequence, message, status, response, error
+            FROM chat_turns
+            WHERE conversation_id=$1 AND sequence>$2
+            ORDER BY sequence
+            LIMIT 100
+            ",
+            canonical.0,
+            after,
+        )
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(Turn::from)
+        .collect();
         Self::progress(&mut tx, &mut turns).await?;
         tx.commit().await?;
         Ok(turns)
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation))]
     pub async fn send(
         &self,
         actor: &Actor,
@@ -110,33 +157,62 @@ impl Work {
         access::lock_actor(&mut tx, actor).await?;
         let agent = access::conversation(&mut tx, actor, conversation, "conversation.send").await?;
         let conversation = agent.0;
-        sqlx::query("SELECT id FROM agents WHERE id=$1 FOR UPDATE")
-            .bind(agent)
-            .execute(&mut *tx)
-            .await?;
-        let previous: Option<(Uuid, String, Uuid)> = sqlx::query_as(
-            "SELECT conversation_id,message,id FROM chat_turns WHERE actor_id=$1 AND request_id=$2",
+        sqlx::query!(
+            "
+            SELECT id
+            FROM agents
+            WHERE id=$1
+            FOR UPDATE
+            ",
+            agent.0,
         )
-        .bind(actor.id)
-        .bind(input.request_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        let previous = sqlx::query!(
+            "
+            SELECT conversation_id, message, id
+            FROM chat_turns
+            WHERE actor_id=$1 AND request_id=$2
+            ",
+            actor.id,
+            input.request_id,
+        )
         .fetch_optional(&mut *tx)
         .await?;
-        if let Some((old_conversation, message, id)) = previous {
-            if old_conversation != conversation || message != input.message {
+        if let Some(previous) = previous {
+            if previous.conversation_id != conversation || previous.message != input.message {
                 return Err(IdentityError::Conflict);
             }
-            return Ok(sqlx::query_as(
-                "SELECT id,sequence,message,status,response,error FROM chat_turns WHERE id=$1",
+            return Ok(sqlx::query_as!(
+                TurnRow,
+                "
+                SELECT id, sequence, message, status, response, error
+                FROM chat_turns
+                WHERE id=$1
+                ",
+                previous.id,
             )
-            .bind(id)
             .fetch_one(&mut *tx)
-            .await?);
+            .await?
+            .into());
         }
         wake(&mut tx, agent).await?;
-        let turn = sqlx::query_as("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message) VALUES ($1,$2,$3,$4) RETURNING id,sequence,message,status,response,error")
-            .bind(conversation).bind(actor.id).bind(input.request_id).bind(&input.message).fetch_one(&mut *tx).await?;
+        let turn = sqlx::query_as!(
+            TurnRow,
+            "
+            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, sequence, message, status, response, error
+            ",
+            conversation,
+            actor.id,
+            input.request_id,
+            &input.message,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
         tx.commit().await?;
-        Ok(turn)
+        Ok(turn.into())
     }
 }
 
@@ -144,8 +220,19 @@ pub(super) async fn wake(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     agent: AgentId,
 ) -> Result<(), IdentityError> {
-    let eligible: Option<Uuid> = sqlx::query_scalar("UPDATE agents SET restart_generation=restart_generation + CASE WHEN desired_state='sleeping' THEN 1 ELSE 0 END, revision=revision + CASE WHEN desired_state='sleeping' THEN 1 ELSE 0 END, desired_state='running' WHERE id=$1 AND desired_state<>'retired' RETURNING id")
-        .bind(agent).fetch_optional(&mut **tx).await?;
+    let eligible = sqlx::query_scalar!(
+        "
+        UPDATE agents
+        SET restart_generation=restart_generation + CASE WHEN desired_state='sleeping' THEN 1 ELSE 0 END,
+            revision=revision + CASE WHEN desired_state='sleeping' THEN 1 ELSE 0 END,
+            desired_state='running'
+        WHERE id=$1 AND desired_state<>'retired'
+        RETURNING id
+        ",
+        agent.0,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
     eligible.ok_or(IdentityError::Conflict)?;
     Ok(())
 }

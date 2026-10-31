@@ -16,7 +16,7 @@ dist/
 .venv/
 .superpowers/
 .tools/
-.impeccable/hook.cache.json
 apps/web/src/routeTree.gen.ts
+apps/orchestrator/.sqlx/
 .astro/
 *.astro

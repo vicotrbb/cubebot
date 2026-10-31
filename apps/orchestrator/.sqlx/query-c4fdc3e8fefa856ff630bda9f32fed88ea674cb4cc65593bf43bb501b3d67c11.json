@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO human_teams (name)\n        SELECT 'Page ' || n\n        FROM generate_series(1, 105) n\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c4fdc3e8fefa856ff630bda9f32fed88ea674cb4cc65593bf43bb501b3d67c11"
+}

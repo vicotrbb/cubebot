@@ -28,7 +28,7 @@ pub struct RuntimeSession {
     pub epoch: i64,
     pub version: i64,
 }
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize)]
 pub struct RuntimeActor {
     pub agent: AgentId,
     pub attempt: AttemptId,
@@ -61,6 +61,7 @@ impl RuntimeIdentity {
         ));
         self
     }
+    #[tracing::instrument(skip_all)]
     pub async fn bootstrap(
         &self,
         projected_token: &str,
@@ -90,21 +91,50 @@ impl RuntimeIdentity {
         self.issue(attempt, reviewed, instance).await
     }
     async fn verify_container(&self, token: &str) -> Result<(Attempt, ReviewedPod), Error> {
-        let (id, name, uid): (AttemptId, String, String) = sqlx::query_as("SELECT r.id,r.name,r.uid FROM docker_sandbox_tokens t JOIN agent_resources r ON r.id = t.attempt_id WHERE t.token_hash = $1 AND r.kind = 'pod' AND r.namespace = 'docker' AND r.phase = 'bound' AND r.kubernetes_phase = 'Running'")
-            .bind(sessions::sandbox_digest(token)?).fetch_optional(&self.pool).await?.ok_or(Error::Unauthorized)?;
-        let attempt = Registry::new(self.pool.clone()).attempt(id).await?;
+        let row = sqlx::query!(
+            r#"
+            SELECT r.id AS "id: AttemptId", r.name, r.uid AS "uid!"
+            FROM docker_sandbox_tokens t
+            JOIN agent_resources r ON r.id = t.attempt_id
+            WHERE t.token_hash = $1
+              AND r.kind = 'pod'
+              AND r.namespace = 'docker'
+              AND r.phase = 'bound'
+              AND r.kubernetes_phase = 'Running'
+            "#,
+            sessions::sandbox_digest(token)?,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+        let attempt = Registry::new(self.pool.clone()).attempt(row.id).await?;
         let reviewed = ReviewedPod {
             namespace: "docker".into(),
             service_account: "docker".into(),
             service_account_uid: "docker".into(),
-            pod_name: name,
-            pod_uid: uid,
+            pod_name: row.name,
+            pod_uid: row.uid,
         };
         Ok((attempt, reviewed))
     }
     async fn verify_pod(&self, api: &Kubernetes, identity: &ReviewedPod) -> Result<Attempt, Error> {
-        let id: AttemptId = sqlx::query_scalar("SELECT id FROM agent_resources WHERE kind = 'pod' AND phase = 'bound' AND namespace = $1 AND name = $2 AND uid = $3")
-            .bind(&identity.namespace).bind(&identity.pod_name).bind(&identity.pod_uid).fetch_optional(&self.pool).await?.ok_or(Error::Unauthorized)?;
+        let id = sqlx::query_scalar!(
+            r#"
+            SELECT id AS "id: AttemptId"
+            FROM agent_resources
+            WHERE kind = 'pod'
+              AND phase = 'bound'
+              AND namespace = $1
+              AND name = $2
+              AND uid = $3
+            "#,
+            identity.namespace,
+            identity.pod_name,
+            identity.pod_uid,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(Error::Unauthorized)?;
         let registry = Registry::new(self.pool.clone());
         let expected = registry.attempt(id).await?;
         let observed = api

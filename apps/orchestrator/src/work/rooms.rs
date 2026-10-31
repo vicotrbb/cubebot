@@ -22,24 +22,22 @@ pub struct RoomMembers {
     pub agents: Vec<Uuid>,
 }
 
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Room {
     pub id: Uuid,
     pub name: String,
-    #[sqlx(skip)]
     pub members: Vec<Member>,
     /// The viewer may change the members.
-    #[sqlx(skip)]
     pub manage: bool,
 }
 
-#[derive(Clone, Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Clone, Serialize, utoipa::ToSchema)]
 pub struct Member {
     pub id: Uuid,
     pub name: String,
 }
 
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct RoomMessage {
     pub id: Uuid,
     pub sequence: i64,
@@ -50,11 +48,34 @@ pub struct RoomMessage {
     pub routing: String,
     /// The coordinator's question, the continued task's agent, or the failure reason.
     pub note: Option<String>,
-    #[sqlx(skip)]
     pub deliveries: Vec<Delivery>,
 }
 
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+/// A room message's own columns; its deliveries are attached after.
+struct MessageRow {
+    id: Uuid,
+    sequence: i64,
+    author: String,
+    message: String,
+    routing: String,
+    note: Option<String>,
+}
+
+impl From<MessageRow> for RoomMessage {
+    fn from(row: MessageRow) -> Self {
+        Self {
+            id: row.id,
+            sequence: row.sequence,
+            author: row.author,
+            message: row.message,
+            routing: row.routing,
+            note: row.note,
+            deliveries: Vec::new(),
+        }
+    }
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Delivery {
     pub turn: Uuid,
     #[serde(skip)]
@@ -79,9 +100,8 @@ impl RoomMessage {
     }
 }
 
-const MESSAGE: &str = "SELECT m.id,m.sequence,a.login AS author,m.message,m.routing,m.note FROM room_messages m JOIN human_accounts a ON a.id=m.actor_id";
-
 impl Work {
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn create_room(
         &self,
         actor: &Actor,
@@ -95,12 +115,17 @@ impl Work {
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
         administrator(&mut tx, actor).await?;
-        let previous: Option<Uuid> =
-            sqlx::query_scalar("SELECT id FROM rooms WHERE created_by=$1 AND request_id=$2")
-                .bind(actor.id)
-                .bind(input.request_id)
-                .fetch_optional(&mut *tx)
-                .await?;
+        let previous = sqlx::query_scalar!(
+            "
+            SELECT id
+            FROM rooms
+            WHERE created_by=$1 AND request_id=$2
+            ",
+            actor.id,
+            input.request_id,
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
         let id = match previous {
             Some(id) => id,
             None => insert_room(&mut tx, actor, name, input).await?,
@@ -111,10 +136,22 @@ impl Work {
     }
 
     /// Rooms the person may read.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn rooms(&self, actor: &Actor) -> Result<Vec<Room>, IdentityError> {
         let mut tx = self.pool.begin().await?;
-        let ids: Vec<Uuid> = sqlx::query_scalar("SELECT r.id FROM rooms r JOIN human_accounts a ON a.id=$1 AND a.active WHERE a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read') ORDER BY r.name,r.id")
-            .bind(actor.id).fetch_all(&mut *tx).await?;
+        let ids = sqlx::query_scalar!(
+            "
+            SELECT r.id
+            FROM rooms r
+            JOIN human_accounts a ON a.id=$1 AND a.active
+            WHERE a.role='administrator'
+                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read')
+            ORDER BY r.name, r.id
+            ",
+            actor.id,
+        )
+        .fetch_all(&mut *tx)
+        .await?;
         let mut rooms = Vec::with_capacity(ids.len());
         for id in ids {
             rooms.push(room(&mut tx, actor, id).await?);
@@ -125,6 +162,7 @@ impl Work {
 
     /// Administrators and `room.manage` holders replace the member set. Removed members keep
     /// the work already delivered to them.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn set_room_members(
         &self,
         actor: &Actor,
@@ -140,15 +178,17 @@ impl Work {
         if !allowed(&mut tx, actor, room, "room.manage").await? {
             return Err(IdentityError::Forbidden);
         }
-        sqlx::query("SELECT 1 FROM rooms WHERE id=$1 FOR UPDATE")
-            .bind(room)
-            .execute(&mut *tx)
-            .await?;
-        sqlx::query("DELETE FROM room_members WHERE room_id=$1 AND agent_id<>ALL($2)")
-            .bind(room)
-            .bind(&input.agents)
-            .execute(&mut *tx)
-            .await?;
+        lock(&mut tx, room).await?;
+        sqlx::query!(
+            "
+            DELETE FROM room_members
+            WHERE room_id=$1 AND agent_id<>ALL($2)
+            ",
+            room,
+            &input.agents,
+        )
+        .execute(&mut *tx)
+        .await?;
         add_members(&mut tx, room, &input.agents).await?;
         let room = self::room(&mut tx, actor, room).await?;
         tx.commit().await?;
@@ -166,6 +206,7 @@ impl Work {
 
     /// Messages after the cursor plus the touched ones whose last state the caller holds.
     /// Rechecks access on every call.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn room_feed(
         &self,
         actor: &Actor,
@@ -175,20 +216,45 @@ impl Work {
     ) -> Result<Vec<RoomMessage>, IdentityError> {
         let mut tx = self.pool.begin().await?;
         authorize(&mut tx, actor, room, "conversation.read").await?;
-        let mut messages: Vec<RoomMessage> = sqlx::query_as(&format!(
-            "({MESSAGE} WHERE m.room_id=$1 AND m.sequence>$2 ORDER BY m.sequence LIMIT 100) UNION ({MESSAGE} WHERE m.room_id=$1 AND m.id=ANY($3)) ORDER BY sequence"
-        ))
-        .bind(room)
-        .bind(after)
-        .bind(touched)
+        let mut messages: Vec<RoomMessage> = sqlx::query_as!(
+            MessageRow,
+            r#"
+            SELECT id AS "id!", sequence AS "sequence!", author AS "author!", message AS "message!", routing AS "routing!", note
+            FROM (
+                (
+                    SELECT m.id, m.sequence, a.login AS author, m.message, m.routing, m.note
+                    FROM room_messages m
+                    JOIN human_accounts a ON a.id=m.actor_id
+                    WHERE m.room_id=$1 AND m.sequence>$2
+                    ORDER BY m.sequence
+                    LIMIT 100
+                )
+                UNION
+                (
+                    SELECT m.id, m.sequence, a.login AS author, m.message, m.routing, m.note
+                    FROM room_messages m
+                    JOIN human_accounts a ON a.id=m.actor_id
+                    WHERE m.room_id=$1 AND m.id=ANY($3)
+                )
+            ) messages
+            ORDER BY sequence
+            "#,
+            room,
+            after,
+            touched,
+        )
         .fetch_all(&mut *tx)
-        .await?;
+        .await?
+        .into_iter()
+        .map(RoomMessage::from)
+        .collect();
         attach(&mut tx, &mut messages).await?;
         tx.commit().await?;
         Ok(messages)
     }
 
     /// Mentions of members deliver at once; otherwise the coordinator routes it later.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn post_room_message(
         &self,
         actor: &Actor,
@@ -200,22 +266,45 @@ impl Work {
         access::lock_actor(&mut tx, actor).await?;
         authorize(&mut tx, actor, room, "conversation.send").await?;
         // Serializes retries of one request, so both see a single message.
-        sqlx::query("SELECT 1 FROM rooms WHERE id=$1 FOR UPDATE")
-            .bind(room)
-            .execute(&mut *tx)
-            .await?;
+        lock(&mut tx, room).await?;
         let id = match previous(&mut tx, actor, room, input).await? {
             Some(id) => id,
             None => post(&mut tx, actor, room, input).await?,
         };
-        let mut messages: Vec<RoomMessage> = sqlx::query_as(&format!("{MESSAGE} WHERE m.id=$1"))
-            .bind(id)
-            .fetch_all(&mut *tx)
-            .await?;
+        let mut messages: Vec<RoomMessage> = sqlx::query_as!(
+            MessageRow,
+            r#"
+            SELECT m.id, m.sequence, a.login AS author, m.message, m.routing, m.note
+            FROM room_messages m
+            JOIN human_accounts a ON a.id=m.actor_id
+            WHERE m.id=$1
+            "#,
+            id,
+        )
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(RoomMessage::from)
+        .collect();
         attach(&mut tx, &mut messages).await?;
         tx.commit().await?;
         messages.pop().ok_or(IdentityError::NotFound)
     }
+}
+
+async fn lock(tx: &mut Transaction<'_, Postgres>, room: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "
+        SELECT 1 AS locked
+        FROM rooms
+        WHERE id=$1
+        FOR UPDATE
+        ",
+        room,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 /// The message this request already posted; a different message under it is a conflict.
@@ -225,16 +314,20 @@ async fn previous(
     room: Uuid,
     input: &SendMessage,
 ) -> Result<Option<Uuid>, IdentityError> {
-    let previous: Option<(Uuid, Uuid, String)> = sqlx::query_as(
-        "SELECT id,room_id,message FROM room_messages WHERE actor_id=$1 AND request_id=$2",
+    let previous = sqlx::query!(
+        "
+        SELECT id, room_id, message
+        FROM room_messages
+        WHERE actor_id=$1 AND request_id=$2
+        ",
+        actor.id,
+        input.request_id,
     )
-    .bind(actor.id)
-    .bind(input.request_id)
     .fetch_optional(&mut **tx)
     .await?;
     match previous {
-        Some((id, old_room, message)) if old_room == room && message == input.message => {
-            Ok(Some(id))
+        Some(previous) if previous.room_id == room && previous.message == input.message => {
+            Ok(Some(previous.id))
         }
         Some(_) => Err(IdentityError::Conflict),
         None => Ok(None),
@@ -247,12 +340,16 @@ async fn insert_room(
     name: &str,
     input: &CreateRoom,
 ) -> Result<Uuid, IdentityError> {
-    let id: Uuid = sqlx::query_scalar(
-        "INSERT INTO rooms (name,created_by,request_id) VALUES ($1,$2,$3) RETURNING id",
+    let id = sqlx::query_scalar!(
+        "
+        INSERT INTO rooms (name, created_by, request_id)
+        VALUES ($1, $2, $3)
+        RETURNING id
+        ",
+        name,
+        actor.id,
+        input.request_id,
     )
-    .bind(name)
-    .bind(actor.id)
-    .bind(input.request_id)
     .fetch_one(&mut **tx)
     .await?;
     add_members(tx, id, &input.agents).await?;
@@ -269,10 +366,14 @@ async fn add_members(
     room: Uuid,
     agents: &[Uuid],
 ) -> Result<(), IdentityError> {
-    let eligible: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM agents WHERE id=ANY($1) AND desired_state<>'retired'",
+    let eligible = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "eligible!"
+        FROM agents
+        WHERE id=ANY($1) AND desired_state<>'retired'
+        "#,
+        agents,
     )
-    .bind(agents)
     .fetch_one(&mut **tx)
     .await?;
     let mut distinct = agents.to_vec();
@@ -281,8 +382,17 @@ async fn add_members(
     if eligible != distinct.len() as i64 {
         return Err(IdentityError::InvalidInput);
     }
-    sqlx::query("INSERT INTO room_members (room_id,agent_id) SELECT $1,unnest($2::uuid[]) ON CONFLICT DO NOTHING")
-        .bind(room).bind(&distinct).execute(&mut **tx).await?;
+    sqlx::query!(
+        "
+        INSERT INTO room_members (room_id, agent_id)
+        SELECT $1, unnest($2::uuid[])
+        ON CONFLICT DO NOTHING
+        ",
+        room,
+        &distinct,
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -291,13 +401,22 @@ async fn room(
     actor: &Actor,
     id: Uuid,
 ) -> Result<Room, IdentityError> {
-    let mut room: Room = sqlx::query_as("SELECT id,name FROM rooms WHERE id=$1")
-        .bind(id)
-        .fetch_one(&mut **tx)
-        .await?;
-    room.members = members(tx, id).await?;
-    room.manage = allowed(tx, actor, id, "room.manage").await?;
-    Ok(room)
+    let row = sqlx::query!(
+        "
+        SELECT id, name
+        FROM rooms
+        WHERE id=$1
+        ",
+        id,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(Room {
+        id: row.id,
+        name: row.name,
+        members: members(tx, id).await?,
+        manage: allowed(tx, actor, id, "room.manage").await?,
+    })
 }
 
 /// Earlier room messages and the agents' replies to them, for a delivery's context. They are
@@ -306,8 +425,20 @@ pub(super) async fn context(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
 ) -> Result<String, sqlx::Error> {
-    let lines: Vec<String> = sqlx::query_scalar("SELECT format('%s: %s%s',a.login,left(m.message,1000),COALESCE((SELECT string_agg(format(E'\\n  %s replied: %s',g.name,left(t.response,1000)),'' ORDER BY t.sequence) FROM chat_turns t JOIN agents g ON g.id=t.conversation_id WHERE t.room_message_id=m.id AND t.status='complete'),'')) FROM room_messages m JOIN human_accounts a ON a.id=m.actor_id JOIN room_messages c ON c.id=$1 WHERE m.room_id=c.room_id AND m.sequence<c.sequence ORDER BY m.sequence DESC LIMIT 10")
-        .bind(message).fetch_all(&mut **tx).await?;
+    let lines = sqlx::query_scalar!(
+        r#"
+        SELECT format('%s: %s%s',a.login,left(m.message,1000),COALESCE((SELECT string_agg(format(E'\n  %s replied: %s',g.name,left(t.response,1000)),'' ORDER BY t.sequence) FROM chat_turns t JOIN agents g ON g.id=t.conversation_id WHERE t.room_message_id=m.id AND t.status='complete'),'')) AS "line!"
+        FROM room_messages m
+        JOIN human_accounts a ON a.id=m.actor_id
+        JOIN room_messages c ON c.id=$1
+        WHERE m.room_id=c.room_id AND m.sequence<c.sequence
+        ORDER BY m.sequence DESC
+        LIMIT 10
+        "#,
+        message,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
     Ok(lines.into_iter().rev().collect::<Vec<_>>().join("\n"))
 }
 
@@ -316,8 +447,19 @@ pub(super) async fn members(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
 ) -> Result<Vec<Member>, sqlx::Error> {
-    sqlx::query_as("SELECT a.id,a.name FROM room_members m JOIN agents a ON a.id=m.agent_id WHERE m.room_id=$1 AND a.desired_state<>'retired' ORDER BY a.name,a.id")
-        .bind(room).fetch_all(&mut **tx).await
+    sqlx::query_as!(
+        Member,
+        "
+        SELECT a.id, a.name
+        FROM room_members m
+        JOIN agents a ON a.id=m.agent_id
+        WHERE m.room_id=$1 AND a.desired_state<>'retired'
+        ORDER BY a.name, a.id
+        ",
+        room,
+    )
+    .fetch_all(&mut **tx)
+    .await
 }
 
 async fn post(
@@ -333,8 +475,20 @@ async fn post(
     } else {
         "routed"
     };
-    let id: Uuid = sqlx::query_scalar("INSERT INTO room_messages (room_id,actor_id,request_id,message,routing) VALUES ($1,$2,$3,$4,$5) RETURNING id")
-        .bind(room).bind(actor.id).bind(input.request_id).bind(&input.message).bind(routing).fetch_one(&mut **tx).await?;
+    let id = sqlx::query_scalar!(
+        "
+        INSERT INTO room_messages (room_id, actor_id, request_id, message, routing)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+        ",
+        room,
+        actor.id,
+        input.request_id,
+        &input.message,
+        routing,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
     for agent in mentioned {
         deliver(tx, id, agent).await?;
     }
@@ -348,8 +502,21 @@ pub(super) async fn deliver(
     agent: Uuid,
 ) -> Result<(), IdentityError> {
     super::wake(tx, crate::agents::AgentId(agent)).await?;
-    sqlx::query("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,room_message_id) SELECT $2,m.actor_id,gen_random_uuid(),format('In room %s, %s wrote:%s%s',r.name,a.login,E'\\n\\n',m.message),m.id FROM room_messages m JOIN rooms r ON r.id=m.room_id JOIN human_accounts a ON a.id=m.actor_id WHERE m.id=$1 ON CONFLICT (room_message_id,conversation_id) WHERE room_message_id IS NOT NULL DO NOTHING")
-        .bind(message).bind(agent).execute(&mut **tx).await?;
+    sqlx::query!(
+        r#"
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id)
+        SELECT $2, m.actor_id, gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\n\n',m.message), m.id
+        FROM room_messages m
+        JOIN rooms r ON r.id=m.room_id
+        JOIN human_accounts a ON a.id=m.actor_id
+        WHERE m.id=$1
+        ON CONFLICT (room_message_id,conversation_id) WHERE room_message_id IS NOT NULL DO NOTHING
+        "#,
+        message,
+        agent,
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 
@@ -387,18 +554,34 @@ async fn allowed(
     room: Uuid,
     capability: &str,
 ) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM rooms r JOIN human_accounts a ON a.id=$1 AND a.active WHERE r.id=$2 AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability=$3)))")
-        .bind(actor.id).bind(room).bind(capability).fetch_one(&mut **tx).await
+    sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(
+            SELECT 1
+            FROM rooms r
+            JOIN human_accounts a ON a.id=$1 AND a.active
+            WHERE r.id=$2
+                AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability=$3))
+        ) AS "allowed!"
+        "#,
+        actor.id,
+        room,
+        capability,
+    )
+    .fetch_one(&mut **tx)
+    .await
 }
 
 async fn administrator(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
 ) -> Result<(), IdentityError> {
-    let admin: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id=$1 AND active AND role='administrator')",
+    let admin = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id=$1 AND active AND role='administrator') AS "admin!"
+        "#,
+        actor.id,
     )
-    .bind(actor.id)
     .fetch_one(&mut **tx)
     .await?;
     admin.then_some(()).ok_or(IdentityError::Forbidden)
@@ -409,8 +592,19 @@ async fn attach(
     messages: &mut [RoomMessage],
 ) -> Result<(), IdentityError> {
     let ids: Vec<Uuid> = messages.iter().map(|message| message.id).collect();
-    let deliveries: Vec<Delivery> = sqlx::query_as("SELECT t.id AS turn,t.room_message_id,t.conversation_id AS agent_id,a.name AS agent,t.status,t.response,t.error FROM chat_turns t JOIN agents a ON a.id=t.conversation_id WHERE t.room_message_id=ANY($1) ORDER BY t.sequence")
-        .bind(ids).fetch_all(&mut **tx).await?;
+    let deliveries = sqlx::query_as!(
+        Delivery,
+        r#"
+        SELECT t.id AS turn, t.room_message_id AS "room_message_id!", t.conversation_id AS agent_id, a.name AS agent, t.status, t.response, t.error
+        FROM chat_turns t
+        JOIN agents a ON a.id=t.conversation_id
+        WHERE t.room_message_id=ANY($1)
+        ORDER BY t.sequence
+        "#,
+        &ids,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
     for delivery in deliveries {
         if let Some(message) = messages
             .iter_mut()

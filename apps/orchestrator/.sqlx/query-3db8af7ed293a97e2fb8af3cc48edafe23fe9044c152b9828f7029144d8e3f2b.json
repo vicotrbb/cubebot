@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE identity_oidc_policy\n        SET\n            revision = CASE WHEN enabled AND config_hash = $1 THEN revision ELSE revision + 1 END,\n            enabled = true,\n            config_hash = $1\n        WHERE singleton\n        RETURNING revision AS \"revision!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3db8af7ed293a97e2fb8af3cc48edafe23fe9044c152b9828f7029144d8e3f2b"
+}

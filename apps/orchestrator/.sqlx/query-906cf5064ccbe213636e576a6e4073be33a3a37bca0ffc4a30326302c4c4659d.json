@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT termination_proof AS \"termination_proof: sqlx::types::Json<Pod>\"\n            FROM agent_resources\n            WHERE id = $1\n              AND kind = 'pod'\n              AND phase = 'bound'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "termination_proof: sqlx::types::Json<Pod>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "906cf5064ccbe213636e576a6e4073be33a3a37bca0ffc4a30326302c4c4659d"
+}

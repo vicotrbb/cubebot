@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,awaited)\n                VALUES ($1,$2,gen_random_uuid(),'Delegated to you by agent Bee: job ' || $4,$3,true)\n                RETURNING id\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fea3dbe493abfe89e86e65969e2fb92fd6055aa1dcbccad95367f3fa79917da4"
+}

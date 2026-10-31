@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(\n                (SELECT active FROM runtime_session_access WHERE attempt_id = $1),\n                false\n            ) AS \"available!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "available!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "172cbc282c7b1cb94cc60a5ec861e2e5481988e1ef6ef6a9187e671e4eb5db30"
+}

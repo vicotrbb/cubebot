@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH s AS (\n                INSERT INTO skills (name)\n                VALUES ($1)\n                ON CONFLICT (name) DO NOTHING\n                RETURNING id, revision\n            )\n            INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id)\n            SELECT id, revision, $2, $3, $4, $5\n            FROM s\n            RETURNING skill_id, revision\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "skill_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "75ed4448ee1365221b6ebfa53f20bd4e328b8b558eb4dfcc1ebba11a3682a162"
+}

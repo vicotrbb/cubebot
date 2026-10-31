@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT t.id, a.name\n        FROM chat_turns t\n        JOIN agents a ON a.id=t.conversation_id\n        JOIN room_messages d ON d.id=t.room_message_id\n        JOIN room_messages m ON m.id=$1 AND m.room_id=d.room_id\n        WHERE t.id=$2 AND t.status IN ('queued','running','delegated')\n        FOR UPDATE OF t\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "260e25783681a8dc081ae098b38b2a97abe1652c9db37087ab2828d9043debbe"
+}

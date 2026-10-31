@@ -30,7 +30,8 @@ impl ControllerConfig {
         if input.len() > 65536 {
             return Err(Error::InvalidConfiguration);
         }
-        let config: Self = serde_json::from_str(input).map_err(|_| Error::InvalidConfiguration)?;
+        let config: Self =
+            serde_json::from_str(input).map_err(|error| Error::Configuration(error.into()))?;
         config.layout()?;
         if let Connection::Kubeconfig { path, context } = &config.connection
             && (path.is_empty() || context.is_empty())
@@ -43,11 +44,11 @@ impl ControllerConfig {
         let Some(path) = std::env::var_os("CUBEBOT_CONTROLLER_CONFIG") else {
             return Ok(None);
         };
-        let file = std::fs::File::open(path).map_err(|_| Error::InvalidConfiguration)?;
+        let file = std::fs::File::open(path).map_err(|error| Error::Configuration(error.into()))?;
         let mut input = String::new();
         file.take(65537)
             .read_to_string(&mut input)
-            .map_err(|_| Error::InvalidConfiguration)?;
+            .map_err(|error| Error::Configuration(error.into()))?;
         Self::parse(&input).map(Some)
     }
     pub async fn activate(self, pool: sqlx::PgPool) -> Result<Controller, Error> {
@@ -79,8 +80,9 @@ impl Connection {
     async fn load(self) -> Result<kube::Config, Error> {
         let config = match self {
             Self::InCluster => {
-                kube::Config::incluster().map_err(|_| Error::InvalidConfiguration)?
+                kube::Config::incluster().map_err(|error| Error::Configuration(error.into()))?
             }
+            // Kubeconfig errors can quote credentials or exec plugin output, so they are dropped.
             Self::Kubeconfig { path, context } => {
                 let input = kube::config::Kubeconfig::read_from(path)
                     .map_err(|_| Error::InvalidConfiguration)?;
@@ -99,7 +101,7 @@ impl Connection {
 }
 fn validate_transport(config: &kube::Config) -> Result<(), Error> {
     let url = openidconnect::reqwest::Url::parse(&config.cluster_url.to_string())
-        .map_err(|_| Error::InvalidConfiguration)?;
+        .map_err(|error| Error::Configuration(error.into()))?;
     let loopback = matches!(url.host_str(), Some("127.0.0.1" | "[::1]"));
     if config.accept_invalid_certs
         || !(url.scheme() == "https" || (url.scheme() == "http" && loopback))
@@ -113,5 +115,5 @@ fn validate_transport(config: &kube::Config) -> Result<(), Error> {
     Ok(())
 }
 fn required(key: &str) -> Result<String, Error> {
-    std::env::var(key).map_err(|_| Error::InvalidConfiguration)
+    std::env::var(key).map_err(|error| Error::Configuration(error.into()))
 }

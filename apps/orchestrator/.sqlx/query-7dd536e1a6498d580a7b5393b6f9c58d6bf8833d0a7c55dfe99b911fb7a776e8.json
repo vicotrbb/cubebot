@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT s.id AS skill, s.name, r.revision, r.description, r.files AS \"files: Json<Files>\", r.human_id AS human, r.dream_run_id AS dream_run, (to_jsonb(r.created_at) #>> '{}') AS \"created_at!\"\n            FROM skill_revisions r\n            JOIN skills s ON s.id=r.skill_id\n            WHERE r.skill_id=$1 AND r.revision=$2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "skill",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "files: Json<Files>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "human",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "dream_run",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "7dd536e1a6498d580a7b5393b6f9c58d6bf8833d0a7c55dfe99b911fb7a776e8"
+}

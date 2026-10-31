@@ -21,7 +21,7 @@ pub type Files = BTreeMap<String, String>;
 pub(super) const DREAM_SKILLS: i64 = 20;
 
 /// A library entry at its current revision.
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Skill {
     pub id: Uuid,
     pub name: String,
@@ -30,13 +30,12 @@ pub struct Skill {
     pub updated_at: String,
 }
 
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct SkillRevision {
     pub skill: Uuid,
     pub name: String,
     pub revision: i64,
     pub description: String,
-    #[sqlx(json)]
     pub files: Files,
     /// The person who wrote this revision, or `None` for a dream's.
     pub human: Option<Uuid>,
@@ -46,7 +45,7 @@ pub struct SkillRevision {
 }
 
 /// An agent's installation, with the library's current revision to show available updates.
-#[derive(Serialize, sqlx::FromRow, utoipa::ToSchema)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct InstalledSkill {
     pub skill: Uuid,
     pub name: String,
@@ -74,28 +73,57 @@ pub struct InstallSkill {
     pub revision: i64,
 }
 
-const LIBRARY: &str = "SELECT s.id,s.name,s.revision,r.description,(to_jsonb(r.created_at) #>> '{}') AS updated_at FROM skills s JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision";
-
 impl Knowledge {
     /// shortcut: the whole library by name; page once installations hold hundreds of skills.
+    #[tracing::instrument(skip_all)]
     pub async fn skills(&self, _actor: &Actor) -> Result<Vec<Skill>, IdentityError> {
-        Ok(sqlx::query_as(&format!("{LIBRARY} ORDER BY s.name"))
-            .fetch_all(&self.pool)
-            .await?)
+        Ok(sqlx::query_as!(
+            Skill,
+            r#"
+            SELECT s.id, s.name, s.revision, r.description, (to_jsonb(r.created_at) #>> '{}') AS "updated_at!"
+            FROM skills s
+            JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision
+            ORDER BY s.name
+            "#
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 
+    #[tracing::instrument(skip_all, fields(skill = %skill, revision = revision))]
     pub async fn skill_revision(
         &self,
         _actor: &Actor,
         skill: Uuid,
         revision: i64,
     ) -> Result<SkillRevision, IdentityError> {
-        sqlx::query_as("SELECT s.id AS skill,s.name,r.revision,r.description,r.files,r.human_id AS human,r.dream_run_id AS dream_run,(to_jsonb(r.created_at) #>> '{}') AS created_at FROM skill_revisions r JOIN skills s ON s.id=r.skill_id WHERE r.skill_id=$1 AND r.revision=$2")
-            .bind(skill).bind(revision).fetch_optional(&self.pool).await?
-            .ok_or(IdentityError::NotFound)
+        let found = sqlx::query!(
+            r#"
+            SELECT s.id AS skill, s.name, r.revision, r.description, r.files AS "files: Json<Files>", r.human_id AS human, r.dream_run_id AS dream_run, (to_jsonb(r.created_at) #>> '{}') AS "created_at!"
+            FROM skill_revisions r
+            JOIN skills s ON s.id=r.skill_id
+            WHERE r.skill_id=$1 AND r.revision=$2
+            "#,
+            skill,
+            revision,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(IdentityError::NotFound)?;
+        Ok(SkillRevision {
+            skill: found.skill,
+            name: found.name,
+            revision: found.revision,
+            description: found.description,
+            files: found.files.0,
+            human: found.human,
+            dream_run: found.dream_run,
+            created_at: found.created_at,
+        })
     }
 
     /// Registers a new skill; 409 when its name is taken.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn publish_skill(
         &self,
         actor: &Actor,
@@ -106,6 +134,7 @@ impl Knowledge {
 
     /// Adds a revision on top of `expected_revision`; 409 when that is no longer current. The
     /// package keeps the skill's name.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, skill = %skill))]
     pub async fn revise_skill(
         &self,
         actor: &Actor,
@@ -127,10 +156,16 @@ impl Knowledge {
         let metadata = package(files).ok_or(IdentityError::InvalidInput)?;
         let mut tx = self.pool.begin().await?;
         if let Some(skill) = skill {
-            let name: Option<String> = sqlx::query_scalar("SELECT name FROM skills WHERE id=$1")
-                .bind(skill)
-                .fetch_optional(&mut *tx)
-                .await?;
+            let name = sqlx::query_scalar!(
+                "
+                SELECT name
+                FROM skills
+                WHERE id=$1
+                ",
+                skill,
+            )
+            .fetch_optional(&mut *tx)
+            .await?;
             if name.ok_or(IdentityError::NotFound)? != metadata.0 {
                 return Err(IdentityError::InvalidInput);
             }
@@ -139,14 +174,23 @@ impl Knowledge {
         let (id, _) = write(&mut tx, skill, expected, &metadata, files, author)
             .await?
             .ok_or(IdentityError::Conflict)?;
-        let written = sqlx::query_as(&format!("{LIBRARY} WHERE s.id=$1"))
-            .bind(id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let written = sqlx::query_as!(
+            Skill,
+            r#"
+            SELECT s.id, s.name, s.revision, r.description, (to_jsonb(r.created_at) #>> '{}') AS "updated_at!"
+            FROM skills s
+            JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision
+            WHERE s.id=$1
+            "#,
+            id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(written)
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn installed_skills(
         &self,
         actor: &Actor,
@@ -154,13 +198,26 @@ impl Knowledge {
     ) -> Result<Vec<InstalledSkill>, IdentityError> {
         let mut tx = self.pool.begin().await?;
         authorize(&mut tx, actor, agent, "memory.read").await?;
-        let installed = sqlx::query_as("SELECT s.id AS skill,s.name,i.revision,s.revision AS current_revision,r.description FROM skill_installations i JOIN skills s ON s.id=i.skill_id JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision WHERE i.agent_id=$1 ORDER BY s.name")
-            .bind(agent).fetch_all(&mut *tx).await?;
+        let installed = sqlx::query_as!(
+            InstalledSkill,
+            "
+            SELECT s.id AS skill, s.name, i.revision, s.revision AS current_revision, r.description
+            FROM skill_installations i
+            JOIN skills s ON s.id=i.skill_id
+            JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision
+            WHERE i.agent_id=$1
+            ORDER BY s.name
+            ",
+            agent.0,
+        )
+        .fetch_all(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(installed)
     }
 
     /// Installs a revision, or moves an installation to it.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, skill = %skill, revision = revision))]
     pub async fn install_skill(
         &self,
         actor: &Actor,
@@ -178,6 +235,7 @@ impl Knowledge {
     }
 
     /// Removes the installation; the skill stays in the library.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, skill = %skill))]
     pub async fn uninstall_skill(
         &self,
         actor: &Actor,
@@ -186,11 +244,16 @@ impl Knowledge {
     ) -> Result<(), IdentityError> {
         let mut tx = self.pool.begin().await?;
         authorize(&mut tx, actor, agent, "agent.manage").await?;
-        sqlx::query("DELETE FROM skill_installations WHERE agent_id=$1 AND skill_id=$2")
-            .bind(agent)
-            .bind(skill)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query!(
+            "
+            DELETE FROM skill_installations
+            WHERE agent_id=$1 AND skill_id=$2
+            ",
+            agent.0,
+            skill,
+        )
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(())
     }
@@ -203,8 +266,19 @@ pub(super) async fn install(
     skill: Uuid,
     revision: i64,
 ) -> Result<bool, sqlx::Error> {
-    let installed = sqlx::query("INSERT INTO skill_installations (agent_id,skill_id,revision) SELECT $1,$2,$3 WHERE EXISTS(SELECT 1 FROM skill_revisions WHERE skill_id=$2 AND revision=$3) ON CONFLICT (agent_id,skill_id) DO UPDATE SET revision=EXCLUDED.revision,installed_at=clock_timestamp()")
-        .bind(agent).bind(skill).bind(revision).execute(&mut **tx).await?;
+    let installed = sqlx::query!(
+        "
+        INSERT INTO skill_installations (agent_id, skill_id, revision)
+        SELECT $1, $2, $3
+        WHERE EXISTS(SELECT 1 FROM skill_revisions WHERE skill_id=$2 AND revision=$3)
+        ON CONFLICT (agent_id,skill_id) DO UPDATE SET revision=EXCLUDED.revision, installed_at=clock_timestamp()
+        ",
+        agent.0,
+        skill,
+        revision,
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(installed.rows_affected() == 1)
 }
 
@@ -218,17 +292,55 @@ pub(super) async fn write(
     files: &Files,
     (human, dream): (Option<Uuid>, Option<Uuid>),
 ) -> Result<Option<(Uuid, i64)>, sqlx::Error> {
-    let changed = match skill {
-        None => {
-            "INSERT INTO skills (name) VALUES ($2) ON CONFLICT (name) DO NOTHING RETURNING id,revision"
-        }
-        Some(_) => {
-            "UPDATE skills SET revision=revision+1 WHERE id=$1 AND name=$2 AND revision=$3 RETURNING id,revision"
-        }
+    let written = match skill {
+        None => sqlx::query!(
+            "
+            WITH s AS (
+                INSERT INTO skills (name)
+                VALUES ($1)
+                ON CONFLICT (name) DO NOTHING
+                RETURNING id, revision
+            )
+            INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id)
+            SELECT id, revision, $2, $3, $4, $5
+            FROM s
+            RETURNING skill_id, revision
+            ",
+            name,
+            description,
+            Json(files) as _,
+            human,
+            dream,
+        )
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(|row| (row.skill_id, row.revision)),
+        Some(skill) => sqlx::query!(
+            "
+            WITH s AS (
+                UPDATE skills
+                SET revision=revision+1
+                WHERE id=$1 AND name=$2 AND revision=$3
+                RETURNING id, revision
+            )
+            INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id)
+            SELECT id, revision, $4, $5, $6, $7
+            FROM s
+            RETURNING skill_id, revision
+            ",
+            skill,
+            name,
+            expected,
+            description,
+            Json(files) as _,
+            human,
+            dream,
+        )
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(|row| (row.skill_id, row.revision)),
     };
-    sqlx::query_as(&format!("WITH s AS ({changed}) INSERT INTO skill_revisions (skill_id,revision,description,files,human_id,dream_run_id) SELECT id,revision,$4,$5,$6,$7 FROM s RETURNING skill_id,revision"))
-        .bind(skill).bind(name).bind(expected).bind(description).bind(Json(files)).bind(human).bind(dream)
-        .fetch_optional(&mut **tx).await
+    Ok(written)
 }
 
 /// Publishes a dream's proposed package and installs it for the agent. A revision of an unknown
@@ -240,10 +352,16 @@ pub(super) async fn propose(
     change: &SkillChange,
     metadata: &(String, String),
 ) -> Result<(), sqlx::Error> {
-    let skill: Option<Uuid> = sqlx::query_scalar("SELECT id FROM skills WHERE name=$1")
-        .bind(&metadata.0)
-        .fetch_optional(&mut **tx)
-        .await?;
+    let skill = sqlx::query_scalar!(
+        "
+        SELECT id
+        FROM skills
+        WHERE name=$1
+        ",
+        &metadata.0,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
     let expected = change.expected_revision;
     let author = (None, Some(run));
     let written = match (skill, expected) {
@@ -263,20 +381,35 @@ pub(super) async fn propose(
 }
 
 /// The agent's installed packages, or only the one called `name`.
+#[tracing::instrument(skip_all, fields(agent = %agent.0))]
 pub(crate) async fn packages<'e>(
     executor: impl sqlx::PgExecutor<'e>,
     agent: AgentId,
     name: Option<&str>,
     limit: i64,
 ) -> Result<Vec<SkillPackage>, sqlx::Error> {
-    let found: Vec<(String, i64, Json<Files>)> = sqlx::query_as("SELECT s.name,i.revision,r.files FROM skill_installations i JOIN skills s ON s.id=i.skill_id JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision WHERE i.agent_id=$1 AND ($2::text IS NULL OR s.name=$2) ORDER BY s.name LIMIT $3")
-        .bind(agent).bind(name).bind(limit).fetch_all(executor).await?;
+    let found = sqlx::query!(
+        r#"
+        SELECT s.name, i.revision, r.files AS "files: Json<Files>"
+        FROM skill_installations i
+        JOIN skills s ON s.id=i.skill_id
+        JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision
+        WHERE i.agent_id=$1 AND ($2::text IS NULL OR s.name=$2)
+        ORDER BY s.name
+        LIMIT $3
+        "#,
+        agent.0,
+        name,
+        limit,
+    )
+    .fetch_all(executor)
+    .await?;
     Ok(found
         .into_iter()
-        .map(|(name, revision, Json(files))| SkillPackage {
-            name,
-            revision,
-            files,
+        .map(|found| SkillPackage {
+            name: found.name,
+            revision: found.revision,
+            files: found.files.0,
         })
         .collect())
 }
@@ -287,18 +420,35 @@ pub(crate) async fn instructions(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
 ) -> Result<String, sqlx::Error> {
-    let instructions: String = sqlx::query_scalar("SELECT instructions FROM agents WHERE id=$1")
-        .bind(agent)
-        .fetch_one(&mut **tx)
-        .await?;
-    let installed: Vec<(String, String)> = sqlx::query_as("SELECT s.name,r.description FROM skill_installations i JOIN skills s ON s.id=i.skill_id JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision WHERE i.agent_id=$1 ORDER BY s.name")
-        .bind(agent).fetch_all(&mut **tx).await?;
+    let instructions = sqlx::query_scalar!(
+        "
+        SELECT instructions
+        FROM agents
+        WHERE id=$1
+        ",
+        agent.0,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    let installed = sqlx::query!(
+        "
+        SELECT s.name, r.description
+        FROM skill_installations i
+        JOIN skills s ON s.id=i.skill_id
+        JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision
+        WHERE i.agent_id=$1
+        ORDER BY s.name
+        ",
+        agent.0,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
     if installed.is_empty() {
         return Ok(instructions);
     }
     let lines: Vec<String> = installed
         .iter()
-        .map(|(name, description)| format!("- {name}: {description}"))
+        .map(|skill| format!("- {}: {}", skill.name, skill.description))
         .collect();
     Ok(format!(
         "{instructions}\n\nInstalled skills. Before work one of them covers, call load_skill with its name and follow its instructions:\n{}",

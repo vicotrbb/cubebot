@@ -10,6 +10,11 @@ use std::{
 };
 
 fn main() -> ExitCode {
+    // Silent unless RUST_LOG asks for spans' events; the eprintln! lines stay the output.
+    let _ = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
     let args: Vec<_> = std::env::args().skip(1).collect();
     let result = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["run"] => run(),

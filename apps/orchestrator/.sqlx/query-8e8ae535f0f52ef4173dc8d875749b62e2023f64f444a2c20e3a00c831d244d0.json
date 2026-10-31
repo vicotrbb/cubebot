@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO skill_installations (agent_id, skill_id, revision)\n        SELECT $1, $2, $3\n        WHERE EXISTS(SELECT 1 FROM skill_revisions WHERE skill_id=$2 AND revision=$3)\n        ON CONFLICT (agent_id,skill_id) DO UPDATE SET revision=EXCLUDED.revision, installed_at=clock_timestamp()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e8ae535f0f52ef4173dc8d875749b62e2023f64f444a2c20e3a00c831d244d0"
+}

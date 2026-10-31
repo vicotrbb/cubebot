@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM human_sessions\n            WHERE account_id = $1 AND oidc_policy_revision IS NOT NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "07694cad38324ec0a75fefc1b4fa1cc3ebf644a1c1a5d36c8fe5b99c7504d214"
+}

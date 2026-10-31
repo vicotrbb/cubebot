@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT namespace AS \"namespace!\"\n        FROM installation_kubernetes\n        WHERE singleton\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "namespace!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "91ecffd38c4bb97b086673a267f27e45e02e6b6dcede1f9ebf4b26fbcd0ebab8"
+}

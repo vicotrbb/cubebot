@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.id\n        FROM agents g\n        JOIN human_accounts a ON a.id = $1 AND a.active\n        WHERE g.id = $2\n          AND (\n            a.role = 'administrator'\n            OR EXISTS(\n                SELECT 1\n                FROM effective_human_grants p\n                WHERE p.actor_id = a.id\n                  AND p.scope_kind = 'agent'\n                  AND p.scope_id = g.id\n                  AND p.capability = 'agent.manage'\n            )\n          )\n        FOR UPDATE OF g\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dd7d9cf051518a4a99a563d32ee127b8a5185addcf39445c865377ad1838e11d"
+}

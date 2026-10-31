@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE chat_turns t\n            SET status='waiting', error='execution_interrupted'\n            WHERE status='running'\n                AND NOT EXISTS(SELECT 1 FROM runtime_session_access s WHERE s.attempt_id=t.attempt_id AND s.recovery)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "14ef857e9c8a7115124217b5c6bb8c46ec7440e36b9f5913d5f21b948765db08"
+}

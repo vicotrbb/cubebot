@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            input_digest AS \"input_digest!\",\n            provider AS \"provider!\",\n            model AS \"model!\",\n            context_window AS \"context_window?\",\n            revision AS \"revision!\",\n            access AS \"access!: Access\"\n        FROM provider_commands\n        WHERE actor_id = $1 AND request_id = $2\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "input_digest!",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "model!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "context_window?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "236582be17e1f72195e44db57d9195f4cd7baaa5466b9faafbf3067c51308c4c"
+}

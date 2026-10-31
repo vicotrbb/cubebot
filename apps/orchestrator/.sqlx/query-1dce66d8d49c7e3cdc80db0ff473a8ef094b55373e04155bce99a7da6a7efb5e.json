@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agent_runtime_sessions\n        SET created_at = clock_timestamp() - interval '30 days'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "1dce66d8d49c7e3cdc80db0ff473a8ef094b55373e04155bce99a7da6a7efb5e"
+}

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM oidc_flows f\n        USING identity_oidc_policy p\n        WHERE f.state_hash = $1\n            AND f.expires_at > clock_timestamp()\n            AND f.policy_revision = $2\n            AND p.singleton\n            AND p.enabled\n            AND p.revision = f.policy_revision\n        RETURNING\n            f.nonce AS \"nonce!\",\n            f.policy_revision AS \"policy_revision!\",\n            f.link_session_hash AS \"link_session_hash?\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nonce!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "policy_revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "link_session_hash?",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "159807026480204de624c3121d40be74a4babb2f38083bb4d29f0fa4ac36459a"
+}

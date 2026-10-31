@@ -136,13 +136,14 @@ impl Controller {
                 .await?;
             let batch = self.batch(cursor).await?;
             self.reconcile_batch(&batch, &stop).await?;
-            if batch.len() == 32 {
-                cursor = *batch.last().expect("full batch has last agent");
-            } else {
-                cursor = AgentId(Uuid::nil());
-                tokio::select! {
-                    _ = stop.changed() => return Ok(()),
-                    _ = tokio::time::sleep(Duration::from_secs(5)) => {},
+            match batch.last() {
+                Some(last) if batch.len() == 32 => cursor = *last,
+                _ => {
+                    cursor = AgentId(Uuid::nil());
+                    tokio::select! {
+                        _ = stop.changed() => return Ok(()),
+                        _ = tokio::time::sleep(Duration::from_secs(5)) => {},
+                    }
                 }
             }
         }
@@ -174,15 +175,24 @@ impl Controller {
             Mode::DatabaseOnly => Ok(()),
         }
     }
+    #[tracing::instrument(skip_all)]
     async fn batch(&self, cursor: AgentId) -> Result<Vec<AgentId>, Error> {
         if matches!(self.mode, Mode::DatabaseOnly) {
             return Ok(Vec::new());
         }
         tokio::time::timeout(
             Duration::from_secs(5),
-            sqlx::query_scalar("SELECT id FROM agents WHERE id > $1 ORDER BY id LIMIT 32")
-                .bind(cursor)
-                .fetch_all(&self.pool),
+            sqlx::query_scalar!(
+                r#"
+                SELECT id AS "id: AgentId"
+                FROM agents
+                WHERE id > $1
+                ORDER BY id
+                LIMIT 32
+                "#,
+                cursor.0,
+            )
+            .fetch_all(&self.pool),
         )
         .await
         .map_err(|_| Error::DeadlineExceeded)?
@@ -197,6 +207,6 @@ fn credentials(runtime: RuntimeIdentity) -> Result<RuntimeIdentity, Error> {
         return Ok(runtime);
     };
     let credentials = crate::connections::Credentials::from_file(std::path::Path::new(&path))
-        .map_err(|_| Error::InvalidConfiguration)?;
+        .map_err(|error| Error::Configuration(error.into()))?;
     Ok(runtime.with_credentials(credentials))
 }

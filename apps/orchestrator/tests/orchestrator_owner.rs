@@ -112,18 +112,27 @@ async fn connection_loss_and_missing_pod_never_prove_the_old_owner_stopped() {
         Err(cubebot_orchestrator::agents::kubernetes::Error::TerminationUnproven)
     ));
     wait_unlocked(&f.pool).await;
-    let retained: Uuid =
-        sqlx::query_scalar("SELECT instance_id FROM orchestrator_owner WHERE singleton")
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+    let retained: Uuid = sqlx::query_scalar!(
+        "
+        SELECT instance_id
+        FROM orchestrator_owner
+        WHERE singleton
+        "
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(retained, instance);
     f.task.abort();
 }
 
 async fn wait_unlocked(pool: &sqlx::PgPool) {
     for _ in 0..100 {
-        let unlocked: bool = sqlx::query_scalar("SELECT NOT EXISTS(SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database()))")
+        let unlocked: bool = sqlx::query_scalar!(
+            r#"
+            SELECT NOT EXISTS(SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())) AS "value!"
+            "#
+        )
             .fetch_one(pool).await.unwrap();
         if unlocked {
             return;
@@ -158,8 +167,12 @@ async fn same_pod_container_restart_requires_matching_prior_termination_and_reda
         .unwrap();
     assert_eq!(next.generation(), 2);
     next.check().await.unwrap();
-    let proof: String = sqlx::query_scalar(
-        "SELECT previous_termination_proof::text FROM orchestrator_owner WHERE singleton",
+    let proof: String = sqlx::query_scalar!(
+        r#"
+        SELECT previous_termination_proof::text AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&f.pool)
     .await
@@ -243,11 +256,16 @@ async fn reused_pod_name_and_unmatched_container_history_cannot_erase_the_claim(
         Owner::acquire(&f.pool, &f.api, identity("orchestrator-a", "pod-a")).await,
         Err(Error::TerminationUnproven)
     ));
-    let generation: i64 =
-        sqlx::query_scalar("SELECT generation FROM orchestrator_owner WHERE singleton")
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+    let generation: i64 = sqlx::query_scalar!(
+        "
+        SELECT generation
+        FROM orchestrator_owner
+        WHERE singleton
+        "
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(generation, 1);
     f.task.abort();
 }
@@ -259,19 +277,33 @@ async fn lost_ownership_connection_poisons_the_guard_and_never_cleanly_releases_
     let mut owner = Owner::acquire(&f.pool, &f.api, identity("orchestrator-a", "pod-a"))
         .await
         .unwrap();
-    let pid: i32 = sqlx::query_scalar("SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())")
+    let pid: i32 = sqlx::query_scalar!(
+        r#"
+        SELECT pid AS "value!"
+        FROM pg_locks
+        WHERE locktype = 'advisory' AND database = (SELECT oid FROM pg_database WHERE datname = current_database())
+        "#
+    )
         .fetch_one(&f.pool).await.unwrap();
-    sqlx::query("SELECT pg_terminate_backend($1)")
-        .bind(pid)
-        .execute(&f.pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        SELECT pg_terminate_backend($1)
+        ",
+        pid,
+    )
+    .fetch_all(&f.pool)
+    .await
+    .unwrap();
     assert!(owner.check().await.is_err());
     assert!(owner.check().await.is_err());
     assert!(owner.release().await.is_err());
     wait_unlocked(&f.pool).await;
-    let released: bool = sqlx::query_scalar(
-        "SELECT released_at IS NOT NULL FROM orchestrator_owner WHERE singleton",
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
     )
     .fetch_one(&f.pool)
     .await
@@ -303,10 +335,15 @@ async fn invalid_current_platform_identity_never_creates_an_owner_claim() {
             Err(Error::OwnershipMismatch)
         ));
         wait_unlocked(&f.pool).await;
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM orchestrator_owner")
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+        let count: i64 = sqlx::query_scalar!(
+            r#"
+            SELECT count(*) AS "count!"
+            FROM orchestrator_owner
+            "#
+        )
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
         assert_eq!(count, 0);
     }
     f.task.abort();

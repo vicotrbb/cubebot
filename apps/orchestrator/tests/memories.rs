@@ -226,8 +226,21 @@ async fn human_edits_win_over_stale_agent_writes_and_history_is_kept() {
             .is_empty(),
         "a person's removal is not undone verbatim"
     );
-    let history: Vec<(i64, bool, bool)> = sqlx::query_as("SELECT revision,deleted,human_id IS NOT NULL FROM memory_revisions WHERE memory_id=$1 ORDER BY revision")
-        .bind(deadline.id).fetch_all(&pool).await.unwrap();
+    let history: Vec<(i64, bool, bool)> = sqlx::query!(
+        r#"
+        SELECT revision,deleted,human_id IS NOT NULL AS "human!"
+        FROM memory_revisions
+        WHERE memory_id=$1
+        ORDER BY revision
+        "#,
+        deadline.id,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| (row.revision, row.deleted, row.human))
+    .collect();
     assert_eq!(
         history,
         [

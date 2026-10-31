@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE installation\n            SET bootstrapped = true\n            WHERE singleton\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d86ed192c81f3ff0dccac6a8283960745c6d439aa4a18b05ceec3ef860170290"
+}

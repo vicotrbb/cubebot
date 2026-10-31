@@ -35,8 +35,46 @@ const FRAME_INTERVAL: Duration = Duration::from_millis(50);
 const RECHECK: Duration = Duration::from_secs(30);
 /// Bounds one sandbox response: a connection's first frame holds the whole screen.
 const RESPONSE_LIMIT: u64 = 32 << 20;
-const UNAVAILABLE: &str = "the desktop is unavailable";
-const ACCESS_ENDED: &str = "access to this desktop ended";
+
+/// Why a session ends; the Display text is the close reason the page shows.
+#[derive(Debug)]
+enum Closing {
+    InvalidMessage(serde_json::Error),
+    Unavailable(Box<dyn std::error::Error + Send + Sync>),
+    /// The sandbox closed the channel or sent a line without its end.
+    Truncated,
+    // IdentityError has no std::error::Error impl to carry as a source.
+    NotRecorded,
+    AccessEnded,
+    Disconnected(axum::Error),
+}
+
+impl std::fmt::Display for Closing {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidMessage(_) => "invalid desktop message",
+            Self::Unavailable(_) | Self::Truncated => "the desktop is unavailable",
+            Self::NotRecorded => "the desktop session could not be recorded",
+            Self::AccessEnded => "access to this desktop ended",
+            Self::Disconnected(_) => "the viewer disconnected",
+        })
+    }
+}
+
+impl std::error::Error for Closing {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidMessage(error) => Some(error),
+            Self::Unavailable(error) => Some(error.as_ref()),
+            Self::Disconnected(error) => Some(error),
+            Self::Truncated | Self::NotRecorded | Self::AccessEnded => None,
+        }
+    }
+}
+
+fn unavailable(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Closing {
+    Closing::Unavailable(error.into())
+}
 
 #[derive(Clone)]
 struct DesktopApi {
@@ -62,6 +100,7 @@ enum Viewer {
     Input { t: f64, action: Action },
 }
 
+#[tracing::instrument(skip_all, fields(agent = %agent.0))]
 async fn connect(
     State(api): State<DesktopApi>,
     headers: HeaderMap,
@@ -123,6 +162,7 @@ struct Session {
 }
 
 impl Session {
+    #[tracing::instrument(skip_all, fields(agent = %self.agent.0, session = %self.session))]
     async fn run(mut self, mut socket: WebSocket) {
         *self.viewers().entry(self.agent).or_default() += 1;
         // Without an account this never takes control from a person who holds it.
@@ -130,7 +170,7 @@ impl Session {
         if let Err(reason) = self.serve(&mut socket).await {
             let close = CloseFrame {
                 code: 1011,
-                reason: reason.into(),
+                reason: reason.to_string().into(),
             };
             let _ = socket.send(Message::Close(Some(close))).await;
         }
@@ -171,7 +211,7 @@ impl Session {
         }
     }
 
-    async fn serve(&mut self, socket: &mut WebSocket) -> Result<(), &'static str> {
+    async fn serve(&mut self, socket: &mut WebSocket) -> Result<(), Closing> {
         let mut frames = tokio::time::interval(FRAME_INTERVAL);
         frames.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let mut recheck = tokio::time::interval(RECHECK);
@@ -195,8 +235,8 @@ impl Session {
         }
     }
 
-    async fn answer(&mut self, text: &str) -> Result<String, &'static str> {
-        let message = serde_json::from_str(text).map_err(|_| "invalid desktop message")?;
+    async fn answer(&mut self, text: &str) -> Result<String, Closing> {
+        let message = serde_json::from_str(text).map_err(Closing::InvalidMessage)?;
         let (t, line) = match message {
             Viewer::Take { t } => (t, self.take().await?),
             Viewer::HandBack { t } if self.holding => {
@@ -209,12 +249,12 @@ impl Session {
                 (t, self.channel.request(&input).await?)
             }
         };
-        let mut answer: serde_json::Value = serde_json::from_str(&line).map_err(|_| UNAVAILABLE)?;
+        let mut answer: serde_json::Value = serde_json::from_str(&line).map_err(unavailable)?;
         answer["ack"] = json!(t);
         Ok(answer.to_string())
     }
 
-    async fn take(&mut self) -> Result<String, &'static str> {
+    async fn take(&mut self) -> Result<String, Closing> {
         if allowed(
             &self.api.identity,
             &self.actor,
@@ -231,7 +271,7 @@ impl Session {
     }
 
     /// Records the changes the viewer makes to their own control.
-    async fn mode(&mut self, mode: Mode, account: Option<Uuid>) -> Result<String, &'static str> {
+    async fn mode(&mut self, mode: Mode, account: Option<Uuid>) -> Result<String, Closing> {
         let line = self
             .channel
             .request(&HostRequest::Mode { mode, account })
@@ -244,20 +284,20 @@ impl Session {
                 .agents
                 .record_desktop_mode(self.session, mode)
                 .await
-                .map_err(|_| "the desktop session could not be recorded")?;
+                .map_err(|_| Closing::NotRecorded)?;
         }
         Ok(line)
     }
 
-    async fn recheck(&mut self) -> Result<(), &'static str> {
+    async fn recheck(&mut self) -> Result<(), Closing> {
         let identity = &self.api.identity;
         self.actor = identity
             .authenticate(&self.token)
             .await
-            .map_err(|_| ACCESS_ENDED)?;
+            .map_err(|_| Closing::AccessEnded)?;
         allowed(identity, &self.actor, self.agent, Capability::BrowserView)
             .await
-            .map_err(|_| ACCESS_ENDED)?;
+            .map_err(|_| Closing::AccessEnded)?;
         if self.holding {
             allowed(
                 identity,
@@ -266,17 +306,17 @@ impl Session {
                 Capability::BrowserControl,
             )
             .await
-            .map_err(|_| ACCESS_ENDED)?;
+            .map_err(|_| Closing::AccessEnded)?;
         }
         Ok(())
     }
 }
 
-async fn send(socket: &mut WebSocket, text: String) -> Result<(), &'static str> {
+async fn send(socket: &mut WebSocket, text: String) -> Result<(), Closing> {
     socket
         .send(Message::Text(text.into()))
         .await
-        .map_err(|_| "the viewer disconnected")
+        .map_err(Closing::Disconnected)
 }
 
 /// One request line to the sandbox's arbiter and its response line, in order.
@@ -295,20 +335,20 @@ impl Channel {
         }
     }
 
-    async fn request(&mut self, request: &HostRequest) -> Result<String, &'static str> {
-        let mut line = serde_json::to_vec(request).map_err(|_| UNAVAILABLE)?;
+    async fn request(&mut self, request: &HostRequest) -> Result<String, Closing> {
+        let mut line = serde_json::to_vec(request).map_err(unavailable)?;
         line.push(b'\n');
-        self.input.write_all(&line).await.map_err(|_| UNAVAILABLE)?;
-        self.input.flush().await.map_err(|_| UNAVAILABLE)?;
+        self.input.write_all(&line).await.map_err(unavailable)?;
+        self.input.flush().await.map_err(unavailable)?;
         let mut response = Vec::new();
         let mut bounded = (&mut self.output).take(RESPONSE_LIMIT);
         bounded
             .read_until(b'\n', &mut response)
             .await
-            .map_err(|_| UNAVAILABLE)?;
+            .map_err(unavailable)?;
         if response.pop() != Some(b'\n') {
-            return Err(UNAVAILABLE);
+            return Err(Closing::Truncated);
         }
-        String::from_utf8(response).map_err(|_| UNAVAILABLE)
+        String::from_utf8(response).map_err(|error| unavailable(error.utf8_error()))
     }
 }

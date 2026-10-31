@@ -41,7 +41,7 @@ pub struct UpdateAgent {
     pub task_lanes: Option<i16>,
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize)]
 pub struct DefinitionRevision {
     pub revision: i64,
     pub instructions_revision: i64,
@@ -55,6 +55,7 @@ pub struct DefinitionRevision {
 }
 
 impl Agents {
+    #[tracing::instrument(skip_all, fields(agent = %id.0))]
     pub async fn update(
         &self,
         actor: &Actor,
@@ -81,14 +82,42 @@ impl Agents {
         if let Some(receipt) = previous {
             return Ok(receipt);
         }
-        let revision = sqlx::query_scalar("UPDATE agents SET name = $2, instructions_revision = instructions_revision + CASE WHEN instructions <> $3 THEN 1 ELSE 0 END, instructions = $3, idle_policy = $4, idle_delay_seconds = $6, dreaming_model = $7, task_lanes = COALESCE($8, task_lanes), revision = revision + 1 WHERE id = $1 AND revision = $5 AND desired_state <> 'retired' RETURNING revision")
-            .bind(id).bind(&input.name).bind(&input.instructions).bind(input.idle_policy.as_str()).bind(input.expected_revision).bind(input.idle_delay_seconds).bind(&input.dreaming_model).bind(input.task_lanes).fetch_optional(&mut *transaction).await?.ok_or(IdentityError::Conflict)?;
+        let revision = sqlx::query_scalar!(
+            "
+            UPDATE agents
+            SET name = $2,
+                instructions_revision = instructions_revision
+                    + CASE WHEN instructions <> $3 THEN 1 ELSE 0 END,
+                instructions = $3,
+                idle_policy = $4,
+                idle_delay_seconds = $6,
+                dreaming_model = $7,
+                task_lanes = COALESCE($8, task_lanes),
+                revision = revision + 1
+            WHERE id = $1
+              AND revision = $5
+              AND desired_state <> 'retired'
+            RETURNING revision
+            ",
+            id.0,
+            input.name,
+            input.instructions,
+            input.idle_policy.as_str(),
+            input.expected_revision,
+            input.idle_delay_seconds,
+            input.dreaming_model,
+            input.task_lanes,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(IdentityError::Conflict)?;
         snapshot(&mut transaction, actor.id, id).await?;
         command
             .commit(transaction, Receipt { id: id.0, revision })
             .await
     }
 
+    #[tracing::instrument(skip_all, fields(agent = %id.0))]
     pub async fn revisions(
         &self,
         actor: &Actor,
@@ -100,7 +129,35 @@ impl Agents {
         }
         // Recheck access within the history query too, so concurrent revocation cannot expose old text.
         self.get(actor, id).await?;
-        Ok(sqlx::query_as("SELECT r.revision, r.instructions_revision, r.name, r.instructions, r.idle_policy, r.idle_delay_seconds, r.dreaming_model, r.task_lanes, r.actor_id FROM agent_definition_revisions r JOIN human_accounts a ON a.id = $1 AND a.active WHERE r.agent_id = $2 AND r.revision > $3 AND (a.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = a.id AND p.scope_kind = 'agent' AND p.scope_id = r.agent_id AND p.capability = 'agent.manage')) ORDER BY r.revision LIMIT 100")
-            .bind(actor.id).bind(id).bind(after).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as!(
+            DefinitionRevision,
+            r#"
+            SELECT r.revision, r.instructions_revision, r.name, r.instructions,
+                   r.idle_policy AS "idle_policy: IdlePolicy", r.idle_delay_seconds,
+                   r.dreaming_model, r.task_lanes, r.actor_id
+            FROM agent_definition_revisions r
+            JOIN human_accounts a ON a.id = $1 AND a.active
+            WHERE r.agent_id = $2
+              AND r.revision > $3
+              AND (
+                a.role = 'administrator'
+                OR EXISTS(
+                    SELECT 1
+                    FROM effective_human_grants p
+                    WHERE p.actor_id = a.id
+                      AND p.scope_kind = 'agent'
+                      AND p.scope_id = r.agent_id
+                      AND p.capability = 'agent.manage'
+                )
+              )
+            ORDER BY r.revision
+            LIMIT 100
+            "#,
+            actor.id,
+            id.0,
+            after,
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 }

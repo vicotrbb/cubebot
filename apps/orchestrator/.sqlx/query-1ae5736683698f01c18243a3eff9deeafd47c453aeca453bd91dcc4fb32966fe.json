@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                provider AS \"provider!\",\n                model AS \"model!\",\n                context_window AS \"context_window?\",\n                revision AS \"revision!\",\n                access AS \"access!: Access\"\n            FROM provider_connection\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "model!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "context_window?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1ae5736683698f01c18243a3eff9deeafd47c453aeca453bd91dcc4fb32966fe"
+}

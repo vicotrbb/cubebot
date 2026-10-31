@@ -37,7 +37,8 @@ impl Oidc {
         secret: Option<String>,
     ) -> Result<Self, IdentityError> {
         let config = Config::parse(
-            &serde_json::to_string(&config).map_err(|_| IdentityError::InvalidInput)?,
+            &serde_json::to_string(&config)
+                .map_err(|error| IdentityError::Invalid(error.into()))?,
         )?;
         identity.browser_origin = Some(config.origin()?);
         let revision = storage::configure(&identity.pool, &config).await?;
@@ -116,8 +117,16 @@ impl Oidc {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn disable(pool: &sqlx::PgPool) -> Result<(), IdentityError> {
-    sqlx::query("UPDATE identity_oidc_policy SET enabled = false, revision = revision + 1 WHERE singleton AND enabled")
-        .execute(pool).await?;
+    sqlx::query!(
+        "
+        UPDATE identity_oidc_policy
+        SET enabled = false, revision = revision + 1
+        WHERE singleton AND enabled
+        ",
+    )
+    .execute(pool)
+    .await?;
     Ok(())
 }
