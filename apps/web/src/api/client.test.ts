@@ -65,6 +65,8 @@ test('turn snapshots keep sequence order and never undo a finished turn', () => 
     response: null,
     error: null,
     terminal: [],
+    children: [],
+    steering: [],
   })
   const finished = merge(
     [turn('b', 2, 'queued')],
@@ -81,4 +83,7 @@ test('turn snapshots keep sequence order and never undo a finished turn', () => 
   assert.equal(stale[0]?.status, 'complete')
   const late = merge(stale, [{ ...turn('a', 1, 'cancelled') }])
   assert.equal(late[0]?.status, 'cancelled')
+  // A failed child is settled too; an older running snapshot cannot reopen it.
+  const failed = merge([turn('c', 3, 'failed')], [turn('c', 3, 'running')])
+  assert.equal(failed[0]?.status, 'failed')
 })

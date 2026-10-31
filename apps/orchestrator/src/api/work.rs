@@ -25,7 +25,7 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(history, send, retry, cancel, events))]
+#[openapi(paths(history, send, retry, cancel, steer, events))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -43,6 +43,10 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         .route(
             "/api/conversations/{conversation}/messages/{turn}/cancel",
             post(cancel),
+        )
+        .route(
+            "/api/conversations/{conversation}/messages/{turn}/steer",
+            post(steer),
         )
         .layer(DefaultBodyLimit::max(72 * 1024))
         .with_state(Api {
@@ -111,7 +115,8 @@ async fn retry(
     ))
 }
 
-/// The channel delivers the cancellation to the agent running the turn.
+/// Cancels the turn and everything delegated under it; each agent's channel delivers the
+/// cancellation to the turn it is running.
 #[utoipa::path(post, path = "/api/conversations/{conversation}/messages/{turn}/cancel", params(("conversation" = Uuid, Path), ("turn" = Uuid, Path)), responses((status = 204)))]
 async fn cancel(
     State(api): State<Api>,
@@ -121,6 +126,23 @@ async fn cancel(
     let actor = super::identity::actor(&api.identity, &headers).await?;
     api.work.cancel(&actor, conversation, turn).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Queues a correction for this turn, incorporated before its next model request. Retrying
+/// the same `request_id` returns the same instruction.
+#[utoipa::path(post, path = "/api/conversations/{conversation}/messages/{turn}/steer", params(("conversation" = Uuid, Path), ("turn" = Uuid, Path)), request_body = SendMessage, responses((status = 202, body = crate::work::Steering)))]
+async fn steer(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((conversation, turn)): Path<(Uuid, Uuid)>,
+    Json(input): Json<SendMessage>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        [("cache-control", "no-store")],
+        Json(api.work.steer(&actor, conversation, turn, &input).await?),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -214,7 +236,7 @@ impl Follow {
             if self.sent.get(&turn.id) != Some(&json) {
                 frames.push(sse::Event::default().event("turn").data(&json));
             }
-            if matches!(turn.status.as_str(), "complete" | "cancelled") {
+            if matches!(turn.status.as_str(), "complete" | "failed" | "cancelled") {
                 self.sent.remove(&turn.id);
             } else {
                 self.sent.insert(turn.id, json);

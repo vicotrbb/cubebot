@@ -241,6 +241,32 @@ impl MemoryClient {
             .map(Some)
     }
 
+    /// The created child, or the orchestrator's reason for refusing it.
+    pub async fn collaborate(
+        &self,
+        turn: Uuid,
+        request: &runtime::Collaborate,
+    ) -> Result<Result<Uuid, String>, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/turns/...`.
+        let url = self.url.join(&format!("turns/{turn}/messages"));
+        let url = url.map_err(|_| Error::Configuration)?;
+        let response = self.http.post(url).bearer_auth(&self.token).json(request);
+        let response = response.send().await.map_err(|_| Error::Unavailable)?;
+        if response.status() == reqwest::StatusCode::CONFLICT {
+            #[derive(serde::Deserialize)]
+            struct Refused {
+                error: String,
+            }
+            let refused: Result<Refused, _> = transport::decode_conflict(response).await;
+            return Ok(Err(refused.map_or_else(
+                |_| "this turn can no longer send work".into(),
+                |refused| refused.error,
+            )));
+        }
+        let created: runtime::Collaborated = transport::decode(response).await?;
+        Ok(Ok(created.turn))
+    }
+
     pub async fn finish_dream(&self, run: Uuid, end: &runtime::DreamEnd) -> Result<(), Error> {
         let response = self.dream(reqwest::Method::PUT, run, "")?;
         let response = response.json(end).send().await;

@@ -537,7 +537,7 @@
     "/api/conversations/{conversation}/messages/{turn}/cancel": {
       "post": {
         "tags": [],
-        "summary": "The channel delivers the cancellation to the agent running the turn.",
+        "summary": "Cancels the turn and everything delegated under it; each agent's channel delivers the\ncancellation to the turn it is running.",
         "operationId": "cancel",
         "parameters": [
           {
@@ -607,6 +607,55 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Turn"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/messages/{turn}/steer": {
+      "post": {
+        "tags": [],
+        "summary": "Queues a correction for this turn, incorporated before its next model request. Retrying\nthe same `request_id` returns the same instruction.",
+        "operationId": "steer",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Steering"
                 }
               }
             }
@@ -722,6 +771,221 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProviderSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rooms": {
+      "get": {
+        "tags": [],
+        "operationId": "list_rooms",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Room"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "Administrators create rooms; `request_id` makes a retry return the same room.",
+        "operationId": "create_room",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoom"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Room"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rooms/{room}/events": {
+      "get": {
+        "tags": [],
+        "summary": "Follows the room: `message` frames carry a `RoomMessage` snapshot whenever it is new or its\nrouting or deliveries changed. Starts after `after` or `Last-Event-ID`, the last message\nsequence seen; a reconnecting client reloads earlier messages itself.",
+        "operationId": "room_events",
+        "parameters": [
+          {
+            "name": "room",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": ["integer", "null"],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomMessage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rooms/{room}/members": {
+      "put": {
+        "tags": [],
+        "summary": "Replaces the member set; administrators and `room.manage` holders only.",
+        "operationId": "set_members",
+        "parameters": [
+          {
+            "name": "room",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomMembers"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Room"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rooms/{room}/messages": {
+      "get": {
+        "tags": [],
+        "operationId": "room_messages",
+        "parameters": [
+          {
+            "name": "room",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoomMessage"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "`@name` mentions of members deliver to each of them; otherwise the coordinator routes it.",
+        "operationId": "post_room_message",
+        "parameters": [
+          {
+            "name": "room",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomMessage"
                 }
               }
             }
@@ -884,6 +1148,7 @@
           "idle_policy",
           "restart_generation",
           "idle_delay_seconds",
+          "task_lanes",
           "activity"
         ],
         "properties": {
@@ -926,6 +1191,11 @@
           "revision": {
             "type": "integer",
             "format": "int64"
+          },
+          "task_lanes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Delegated tasks that may run beside the main lane (ADR 0005), one to four."
           }
         }
       },
@@ -940,6 +1210,36 @@
         },
         "propertyNames": {
           "type": "string"
+        }
+      },
+      "Child": {
+        "type": "object",
+        "required": ["id", "agent_id", "agent", "status", "awaited"],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "awaited": {
+            "type": "boolean",
+            "description": "The parent yields until this child settles."
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "response": {
+            "type": ["string", "null"]
+          },
+          "status": {
+            "type": "string"
+          }
         }
       },
       "ConfigureProvider": {
@@ -1007,6 +1307,53 @@
           }
         },
         "additionalProperties": false
+      },
+      "CreateRoom": {
+        "type": "object",
+        "required": ["request_id", "name", "agents"],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Delivery": {
+        "type": "object",
+        "required": ["turn", "agent_id", "agent", "status"],
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "response": {
+            "type": ["string", "null"]
+          },
+          "status": {
+            "type": "string"
+          },
+          "turn": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       },
       "DreamRevision": {
         "type": "object",
@@ -1186,6 +1533,19 @@
         },
         "additionalProperties": false
       },
+      "Member": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "Memory": {
         "type": "object",
         "required": ["id", "revision", "content", "edited_by_human"],
@@ -1273,6 +1633,24 @@
         ],
         "description": "A memory write staged by the agent. A revision or removal names the revision it read; a\nnewer one, such as a human edit, wins and the change is dropped."
       },
+      "Origin": {
+        "type": "object",
+        "required": ["kind", "name"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`room`, `delegation` or `message`."
+          },
+          "name": {
+            "type": "string",
+            "description": "The room's name, or the sending agent's."
+          },
+          "parent_turn_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          }
+        }
+      },
       "Outcome": {
         "oneOf": [
           {
@@ -1339,7 +1717,14 @@
       },
       "Progress": {
         "type": "object",
-        "required": ["id", "turn_id", "command", "status", "reobserved"],
+        "required": [
+          "id",
+          "turn_id",
+          "name",
+          "command",
+          "status",
+          "reobserved"
+        ],
         "properties": {
           "command": {
             "type": "string"
@@ -1347,6 +1732,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "The tool's name, such as `bash` or `delegate`."
           },
           "outcome": {
             "oneOf": [
@@ -1492,6 +1881,85 @@
         },
         "additionalProperties": false
       },
+      "Room": {
+        "type": "object",
+        "required": ["id", "name", "members", "manage"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "manage": {
+            "type": "boolean",
+            "description": "The viewer may change the members."
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "RoomMembers": {
+        "type": "object",
+        "description": "The room's whole new member set; putting the same set again changes nothing.",
+        "required": ["agents"],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "RoomMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "sequence",
+          "author",
+          "message",
+          "routing",
+          "deliveries"
+        ],
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "deliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Delivery"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string"
+          },
+          "note": {
+            "type": ["string", "null"],
+            "description": "The coordinator's question, the continued task's agent, or the failure reason."
+          },
+          "routing": {
+            "type": "string",
+            "description": "`routing` until the coordinator settles it as `routed`, `continued`, `clarify`,\n`no_action` or `failed`; mentioned messages are `routed` at once."
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "SendMessage": {
         "type": "object",
         "required": ["request_id", "message"],
@@ -1573,6 +2041,27 @@
           }
         }
       },
+      "Steering": {
+        "type": "object",
+        "required": ["id", "message", "incorporated", "propagated"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "incorporated": {
+            "type": "boolean",
+            "description": "The instruction entered the running context; not proof the agent followed it."
+          },
+          "message": {
+            "type": "string"
+          },
+          "propagated": {
+            "type": "boolean",
+            "description": "Copied from steering of the work that delegated this."
+          }
+        }
+      },
       "Token": {
         "type": "object",
         "required": ["token"],
@@ -1584,8 +2073,23 @@
       },
       "Turn": {
         "type": "object",
-        "required": ["id", "sequence", "message", "status", "terminal"],
+        "required": [
+          "id",
+          "sequence",
+          "message",
+          "status",
+          "terminal",
+          "children",
+          "steering"
+        ],
         "properties": {
+          "children": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Child"
+            },
+            "description": "Work this turn delegated or sent to other agents."
+          },
           "error": {
             "type": ["string", "null"]
           },
@@ -1596,6 +2100,17 @@
           "message": {
             "type": "string"
           },
+          "origin": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Origin",
+                "description": "Where the request came from when a person did not send it here directly."
+              }
+            ]
+          },
           "response": {
             "type": ["string", "null"]
           },
@@ -1605,6 +2120,12 @@
           },
           "status": {
             "type": "string"
+          },
+          "steering": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Steering"
+            }
           },
           "terminal": {
             "type": "array",
@@ -1700,6 +2221,24 @@
           },
           {
             "type": "object",
+            "description": "A steering message entered the context.",
+            "required": ["id", "message", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["steered"]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
             "description": "Memory changes staged during the turn commit with it, or not at all.",
             "required": ["response", "kind"],
             "properties": {
@@ -1768,6 +2307,11 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "task_lanes": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "Concurrent delegated tasks, one to four; `None` keeps the current setting."
           }
         },
         "additionalProperties": false

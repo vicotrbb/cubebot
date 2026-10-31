@@ -138,8 +138,25 @@ impl Connections {
         tx: &mut Transaction<'_, Postgres>,
         agent: crate::agents::AgentId,
     ) -> Result<Inference, IdentityError> {
+        self.connection(tx, Some(agent)).await
+    }
+
+    /// The installation's connection for the orchestrator's own duties, such as room
+    /// coordination, regardless of which agents may use it.
+    pub(crate) async fn coordinator(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+    ) -> Result<Inference, IdentityError> {
+        self.connection(tx, None).await
+    }
+
+    async fn connection(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        agent: Option<crate::agents::AgentId>,
+    ) -> Result<Inference, IdentityError> {
         let (provider, model, encrypted, revision, window): (String, String, Vec<u8>, i64, Option<i64>) =
-            sqlx::query_as("SELECT provider,model,credential,revision,context_window FROM provider_connection WHERE access->>'mode'='all_agents' OR (access->>'mode'='explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))")
+            sqlx::query_as("SELECT provider,model,credential,revision,context_window FROM provider_connection WHERE $1::uuid IS NULL OR access->>'mode'='all_agents' OR (access->>'mode'='explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))")
                 .bind(agent).fetch_optional(&mut **tx)
                 .await?
                 .ok_or(IdentityError::CredentialUnavailable)?;

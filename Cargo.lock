@@ -479,6 +479,7 @@ dependencies = [
  "argon2",
  "axum",
  "cubebot-protocol",
+ "cubebot-providers",
  "futures-util",
  "http-body-util",
  "k8s-openapi",

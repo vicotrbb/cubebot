@@ -103,7 +103,28 @@ impl Controller {
         };
         router.layer(axum::Extension(desktop))
     }
-    pub async fn run(&mut self, mut stop: watch::Receiver<bool>) -> Result<(), Error> {
+    /// Reconciles agents, with room coordination running beside it while the installation's
+    /// provider connection is configured.
+    pub async fn run(&mut self, stop: watch::Receiver<bool>) -> Result<(), Error> {
+        let connections = match &self.mode {
+            Mode::Kubernetes(lifecycle) => lifecycle.runtime.connections.clone(),
+            Mode::Docker(lifecycle) => lifecycle.runtime.connections.clone(),
+            Mode::DatabaseOnly => None,
+        };
+        let coordinator = connections.map(|connections| {
+            tokio::spawn(crate::work::coordinate(
+                self.pool.clone(),
+                connections,
+                stop.clone(),
+            ))
+        });
+        let result = self.reconcile_all(stop).await;
+        if let Some(coordinator) = coordinator {
+            coordinator.abort();
+        }
+        result
+    }
+    async fn reconcile_all(&mut self, mut stop: watch::Receiver<bool>) -> Result<(), Error> {
         let mut cursor = AgentId(Uuid::nil());
         loop {
             if *stop.borrow() {

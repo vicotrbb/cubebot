@@ -101,6 +101,7 @@ export function AgentForm({
                     idle_delay_seconds: Number(data.get('idle_minutes')) * 60,
                     dreaming_model:
                       String(data.get('dreaming_model')).trim() || null,
+                    task_lanes: Number(data.get('task_lanes')),
                   },
                 }),
               )
@@ -142,6 +143,17 @@ export function AgentForm({
                 min={1}
                 max={1440}
                 defaultValue={Math.round(existing.idle_delay_seconds / 60)}
+              />
+            </label>
+            <label>
+              Delegated tasks at once
+              <input
+                name="task_lanes"
+                type="number"
+                required
+                min={1}
+                max={4}
+                defaultValue={existing.task_lanes}
               />
             </label>
             <label>

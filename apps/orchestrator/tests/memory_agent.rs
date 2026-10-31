@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 const EXTRACTION: &str = "Before this turn ends";
 
-enum Step {
+pub(crate) enum Step {
     Reply(Value),
     /// Waits for `release` before replying; never released, it holds the turn open.
     Gated(Value),
@@ -30,24 +30,24 @@ enum Step {
 }
 
 #[derive(Default)]
-struct Model {
+pub(crate) struct Model {
     script: Mutex<(VecDeque<Step>, VecDeque<Value>, Vec<Value>)>,
-    gated: Notify,
-    release: Notify,
+    pub(crate) gated: Notify,
+    pub(crate) release: Notify,
 }
 
 impl Model {
-    fn turn(&self, steps: Vec<Step>, extracted: Value) {
+    pub(crate) fn turn(&self, steps: Vec<Step>, extracted: Value) {
         let mut script = self.script.lock().unwrap();
         script.0.extend(steps);
         script.1.push_back(extracted);
     }
-    fn requests(&self) -> Vec<Value> {
+    pub(crate) fn requests(&self) -> Vec<Value> {
         self.script.lock().unwrap().2.clone()
     }
 }
 
-async fn respond(
+pub(crate) async fn respond(
     State(model): State<Arc<Model>>,
     axum::Json(body): axum::Json<Value>,
 ) -> axum::response::Response {
@@ -88,10 +88,10 @@ async fn respond(
         .into_response()
 }
 
-fn text(text: &str) -> Value {
+pub(crate) fn text(text: &str) -> Value {
     json!({"type":"message","content":[{"type":"output_text","text":text}]})
 }
-fn call(name: &str, arguments: Value) -> Value {
+pub(crate) fn call(name: &str, arguments: Value) -> Value {
     json!({"type":"function_call","name":name,"call_id":Uuid::new_v4().to_string(),"arguments":arguments.to_string()})
 }
 fn remember(content: &str, memory: Option<Uuid>, revision: Option<i64>) -> Value {

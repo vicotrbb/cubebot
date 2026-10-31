@@ -113,7 +113,7 @@ pub(super) async fn snapshot(
     actor: Uuid,
     id: AgentId,
 ) -> Result<(), IdentityError> {
-    sqlx::query("INSERT INTO agent_definition_revisions (agent_id, revision, instructions_revision, name, instructions, idle_policy, idle_delay_seconds, dreaming_model, actor_id) SELECT id, revision, instructions_revision, name, instructions, idle_policy, idle_delay_seconds, dreaming_model, $2 FROM agents WHERE id = $1")
+    sqlx::query("INSERT INTO agent_definition_revisions (agent_id, revision, instructions_revision, name, instructions, idle_policy, idle_delay_seconds, dreaming_model, task_lanes, actor_id) SELECT id, revision, instructions_revision, name, instructions, idle_policy, idle_delay_seconds, dreaming_model, task_lanes, $2 FROM agents WHERE id = $1")
         .bind(id).bind(actor).execute(&mut **transaction).await?;
     Ok(())
 }
