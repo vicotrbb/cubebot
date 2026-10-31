@@ -8,6 +8,8 @@ export type DreamRun = components['schemas']['DreamRun']
 export type Skill = components['schemas']['Skill']
 export type InstalledSkill = components['schemas']['InstalledSkill']
 export type Turn = components['schemas']['Turn']
+export type Room = components['schemas']['Room']
+export type RoomMessage = components['schemas']['RoomMessage']
 export type TurnEvent = components['schemas']['Event']
 
 export class ApiError extends Error {
@@ -71,7 +73,9 @@ export function rejectedInput(error: unknown): boolean {
   )
 }
 const final = (turn: Turn) =>
-  turn.status === 'complete' || turn.status === 'cancelled'
+  turn.status === 'complete' ||
+  turn.status === 'failed' ||
+  turn.status === 'cancelled'
 /** Applies turn snapshots, keeping history in sequence order. */
 export function merge(turns: Turn[], incoming: Turn[]) {
   const byId = new Map(turns.map((turn) => [turn.id, turn]))

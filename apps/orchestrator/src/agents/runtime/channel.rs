@@ -1,5 +1,6 @@
-//! One WebSocket per sandbox: turns, cancellation, drain and revocation go down; turn events
-//! come up. The ledger stays authoritative; the socket is only a delivery path.
+//! One WebSocket per sandbox: turns, cancellation, steering, drain and revocation go down; turn
+//! events come up. Several turns can be active, one per lane; the ledger decides admission and
+//! stays authoritative, the socket is only a delivery path.
 use super::{Error, RuntimeAccess, RuntimeDisposition, RuntimeIdentity};
 use crate::work::Work;
 use axum::extract::ws::{Message, WebSocket};
@@ -9,21 +10,27 @@ use uuid::Uuid;
 
 #[derive(Default)]
 struct Channel {
+    /// The agent accepts turns; it stops at a drain.
     pulling: bool,
     /// The agent heard there is no work since it last received a turn.
     idle: bool,
-    active: Option<Uuid>,
+    active: std::collections::HashSet<Uuid>,
+    /// Active turns already sent `cancel`; they stay active until the agent reports their end.
+    cancelled: std::collections::HashSet<Uuid>,
     drain: Option<Uuid>,
+    /// Steering sent on this connection; a reconnect resends what is still unincorporated.
+    steered: std::collections::HashSet<Uuid>,
 }
 
 impl Channel {
     /// Events reveal the active turn after a reconnect, so a cancel still reaches it.
     fn observe(&mut self, turn: Uuid, live: bool, event: &TurnEvent) {
         let finished = matches!(event, TurnEvent::Done { .. } | TurnEvent::Error { .. });
-        if finished && self.active == Some(turn) {
-            self.active = None;
-        } else if live && !finished {
-            self.active = Some(turn);
+        if finished {
+            self.active.remove(&turn);
+            self.cancelled.remove(&turn);
+        } else if live {
+            self.active.insert(turn);
         }
     }
 }
@@ -60,7 +67,7 @@ impl RuntimeIdentity {
     ) -> Result<Vec<Delivery>, Error> {
         match report {
             Report::Pull => {
-                channel.pulling = true;
+                channel.pulling = channel.drain.is_none();
                 self.poll(token, channel).await
             }
             Report::Event {
@@ -90,21 +97,13 @@ impl RuntimeIdentity {
             && channel.drain != Some(drain.request_id)
         {
             channel.drain = Some(drain.request_id);
+            channel.pulling = false;
             deliveries.push(Delivery::Drain {
                 request_id: drain.request_id,
             });
         }
-        let work = Work::new(self.pool.clone());
-        if let Some(turn) = channel.active
-            && work.cancelled(turn).await?
-        {
-            channel.active = None;
-            deliveries.push(Delivery::Cancel { turn });
-        }
-        if channel.pulling
-            && channel.active.is_none()
-            && matches!(control.disposition, RuntimeDisposition::Available)
-        {
+        deliveries.extend(active(&Work::new(self.pool.clone()), channel).await?);
+        if channel.pulling && matches!(control.disposition, RuntimeDisposition::Available) {
             deliveries.extend(self.offer(token, &control.actor, channel).await?);
         }
         Ok(deliveries)
@@ -124,12 +123,11 @@ impl RuntimeIdentity {
             .await?;
         let delivery = match claimed {
             Some(turn) => {
-                channel.pulling = false;
                 channel.idle = false;
-                channel.active = Some(turn.turn);
+                channel.active.insert(turn.turn);
                 Some(Delivery::Turn(turn))
             }
-            None if !channel.idle => {
+            None if !channel.idle && channel.active.is_empty() => {
                 channel.idle = true;
                 Some(Delivery::Idle {
                     dream_after_seconds: dream_after(&mut tx, actor).await?,
@@ -140,6 +138,27 @@ impl RuntimeIdentity {
         tx.commit().await?;
         Ok(delivery)
     }
+}
+
+/// Cancellations and new steering for the turns the agent is running.
+async fn active(work: &Work, channel: &mut Channel) -> Result<Vec<Delivery>, Error> {
+    let mut deliveries = Vec::new();
+    for turn in channel.active.clone() {
+        if channel.cancelled.contains(&turn) {
+            continue;
+        }
+        if work.cancelled(turn).await? {
+            channel.cancelled.insert(turn);
+            deliveries.push(Delivery::Cancel { turn });
+            continue;
+        }
+        for (id, message) in work.pending_steering(turn).await? {
+            if channel.steered.insert(id) {
+                deliveries.push(Delivery::Steer { turn, id, message });
+            }
+        }
+    }
+    Ok(deliveries)
 }
 
 /// The agent's configured idle delay before it may dream (ADR 0025).

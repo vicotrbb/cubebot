@@ -55,7 +55,7 @@ impl Work {
             .map(|event| event.turn_id)
             .chain(touched.iter().copied())
             .collect();
-        let mut turns = sqlx::query_as("SELECT id,sequence,message,status,response,error FROM chat_turns WHERE conversation_id=$1 AND (status IN ('queued','running','waiting') OR id=ANY($2)) ORDER BY sequence")
+        let mut turns = sqlx::query_as("SELECT id,sequence,message,status,response,error FROM chat_turns WHERE conversation_id=$1 AND (status IN ('queued','running','waiting','delegated') OR id=ANY($2)) ORDER BY sequence")
             .bind(canonical).bind(ids).fetch_all(&mut *tx).await?;
         Self::progress(&mut tx, &mut turns).await?;
         tx.commit().await?;

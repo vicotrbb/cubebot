@@ -42,6 +42,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         idle_policy: IdlePolicy::KeepRunning,
         idle_delay_seconds: 900,
         dreaming_model: Some("dream-model".into()),
+        task_lanes: Some(3),
     };
     let receipt = agents.update(&actor, id, &update).await.unwrap();
     assert_eq!(receipt.revision, 2);
@@ -51,9 +52,10 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
     assert_eq!(
         (
             definition.idle_delay_seconds,
-            definition.dreaming_model.as_deref()
+            definition.dreaming_model.as_deref(),
+            definition.task_lanes
         ),
-        (900, Some("dream-model"))
+        (900, Some("dream-model"), 3)
     );
     let invalid = UpdateAgent {
         request_id: Uuid::new_v4(),
@@ -62,9 +64,20 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         ..update
     };
     assert!(agents.update(&actor, id, &invalid).await.is_err());
+    let too_many_lanes = UpdateAgent {
+        request_id: Uuid::new_v4(),
+        expected_revision: 2,
+        idle_delay_seconds: 900,
+        task_lanes: Some(5),
+        ..invalid
+    };
+    assert!(agents.update(&actor, id, &too_many_lanes).await.is_err());
     let history = agents.revisions(&actor, id, 0).await.unwrap();
     assert_eq!(history.len(), 2);
-    assert_eq!(history[1].idle_delay_seconds, 900);
+    assert_eq!(
+        (history[1].idle_delay_seconds, history[1].task_lanes),
+        (900, 3)
+    );
     assert_eq!(history[0].instructions, "Original");
     let (wake, receipt) = check_wake(&agents, &actor, id).await;
     check_restart_and_retire(&agents, &actor, id, wake, receipt).await;
@@ -208,6 +221,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         idle_policy: IdlePolicy::KeepRunning,
         idle_delay_seconds: 600,
         dreaming_model: None,
+        task_lanes: None,
     };
     let second = UpdateAgent {
         request_id: Uuid::new_v4(),
@@ -217,6 +231,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         idle_policy: first.idle_policy,
         idle_delay_seconds: 600,
         dreaming_model: None,
+        task_lanes: None,
     };
     let (first, second) = tokio::join!(
         agents.update(&admin, id, &first),

@@ -1,15 +1,21 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
 mod access;
+mod collaboration;
+mod coordinator;
 mod events;
 mod retry;
+mod rooms;
 mod runtime;
 pub(crate) mod terminal;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
 };
+pub use collaboration::Steering;
+pub use coordinator::{coordinate, route};
 pub use events::{Event, Page};
 pub use retry::RetryMessage;
+pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -43,6 +49,14 @@ pub struct Turn {
     pub error: Option<String>,
     #[sqlx(skip)]
     pub terminal: Vec<terminal::Progress>,
+    /// Where the request came from when a person did not send it here directly.
+    #[sqlx(skip)]
+    pub origin: Option<terminal::Origin>,
+    /// Work this turn delegated or sent to other agents.
+    #[sqlx(skip)]
+    pub children: Vec<terminal::Child>,
+    #[sqlx(skip)]
+    pub steering: Vec<Steering>,
 }
 
 impl Work {
@@ -126,7 +140,7 @@ impl Work {
     }
 }
 
-async fn wake(
+pub(super) async fn wake(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     agent: AgentId,
 ) -> Result<(), IdentityError> {
@@ -136,7 +150,7 @@ async fn wake(
     Ok(())
 }
 
-fn validate(input: &SendMessage) -> Result<(), IdentityError> {
+pub(super) fn validate(input: &SendMessage) -> Result<(), IdentityError> {
     if input.request_id.is_nil()
         || input.message.trim().is_empty()
         || input.message.len() > 16384

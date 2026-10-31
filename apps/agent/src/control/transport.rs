@@ -6,7 +6,7 @@ pub(super) async fn decode<T: DeserializeOwned>(response: reqwest::Response) -> 
 }
 
 pub(super) async fn decode_bounded<T: DeserializeOwned>(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
     limit: usize,
 ) -> Result<T, Error> {
     if !response.status().is_success() {
@@ -15,6 +15,20 @@ pub(super) async fn decode_bounded<T: DeserializeOwned>(
             _ => Error::Unavailable,
         });
     }
+    body(response, limit).await
+}
+
+/// A refusal's small JSON body.
+pub(super) async fn decode_conflict<T: DeserializeOwned>(
+    response: reqwest::Response,
+) -> Result<T, Error> {
+    body(response, 4 * 1024).await
+}
+
+async fn body<T: DeserializeOwned>(
+    mut response: reqwest::Response,
+    limit: usize,
+) -> Result<T, Error> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unavailable)? {
         if bytes.len() + chunk.len() > limit {

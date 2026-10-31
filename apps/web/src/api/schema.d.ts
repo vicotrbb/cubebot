@@ -166,7 +166,10 @@ export interface paths {
     }
     get?: never
     put?: never
-    /** The channel delivers the cancellation to the agent running the turn. */
+    /**
+     * Cancels the turn and everything delegated under it; each agent's channel delivers the
+     *     cancellation to the turn it is running.
+     */
     post: operations['cancel']
     delete?: never
     options?: never
@@ -184,6 +187,26 @@ export interface paths {
     get?: never
     put?: never
     post: operations['retry']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/conversations/{conversation}/messages/{turn}/steer': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Queues a correction for this turn, incorporated before its next model request. Retrying
+     *     the same `request_id` returns the same instruction.
+     */
+    post: operations['steer']
     delete?: never
     options?: never
     head?: never
@@ -248,6 +271,78 @@ export interface paths {
     get: operations['inspect']
     put?: never
     post: operations['configure']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/rooms': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_rooms']
+    put?: never
+    /** Administrators create rooms; `request_id` makes a retry return the same room. */
+    post: operations['create_room']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/rooms/{room}/events': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Follows the room: `message` frames carry a `RoomMessage` snapshot whenever it is new or its
+     *     routing or deliveries changed. Starts after `after` or `Last-Event-ID`, the last message
+     *     sequence seen; a reconnecting client reloads earlier messages itself.
+     */
+    get: operations['room_events']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/rooms/{room}/members': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Replaces the member set; administrators and `room.manage` holders only. */
+    put: operations['set_members']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/rooms/{room}/messages': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['room_messages']
+    put?: never
+    /** `@name` mentions of members deliver to each of them; otherwise the coordinator routes it. */
+    post: operations['post_room_message']
     delete?: never
     options?: never
     head?: never
@@ -338,11 +433,28 @@ export interface components {
       restart_generation: number
       /** Format: int64 */
       revision: number
+      /**
+       * Format: int32
+       * @description Delegated tasks that may run beside the main lane (ADR 0005), one to four.
+       */
+      task_lanes: number
     }
     /** Format: uuid */
     AgentId: string
     BTreeMap: {
       [key: string]: string
+    }
+    Child: {
+      agent: string
+      /** Format: uuid */
+      agent_id: string
+      /** @description The parent yields until this child settles. */
+      awaited: boolean
+      error?: string | null
+      /** Format: uuid */
+      id: string
+      response?: string | null
+      status: string
     }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
@@ -368,6 +480,22 @@ export interface components {
     }
     CreateMemory: {
       content: string
+    }
+    CreateRoom: {
+      agents: string[]
+      name: string
+      /** Format: uuid */
+      request_id: string
+    }
+    Delivery: {
+      agent: string
+      /** Format: uuid */
+      agent_id: string
+      error?: string | null
+      response?: string | null
+      status: string
+      /** Format: uuid */
+      turn: string
     }
     /** @description A revision the run committed, with the content it replaced. */
     DreamRevision: {
@@ -437,6 +565,11 @@ export interface components {
       login: string
       password: string
     }
+    Member: {
+      /** Format: uuid */
+      id: string
+      name: string
+    }
     Memory: {
       content: string
       edited_by_human: boolean
@@ -482,6 +615,14 @@ export interface components {
           /** @enum {string} */
           op: 'forget'
         }
+    Origin: {
+      /** @description `room`, `delegation` or `message`. */
+      kind: string
+      /** @description The room's name, or the sending agent's. */
+      name: string
+      /** Format: uuid */
+      parent_turn_id?: string | null
+    }
     Outcome:
       | {
           /** Format: int32 */
@@ -510,6 +651,8 @@ export interface components {
       command: string
       /** Format: uuid */
       id: string
+      /** @description The tool's name, such as `bash` or `delegate`. */
+      name: string
       outcome?: null | components['schemas']['Outcome']
       /** @description The agent's first screenshot after a person handed its desktop back. */
       reobserved: boolean
@@ -561,6 +704,34 @@ export interface components {
       expected_revision: number
       files: components['schemas']['BTreeMap']
     }
+    Room: {
+      /** Format: uuid */
+      id: string
+      /** @description The viewer may change the members. */
+      manage: boolean
+      members: components['schemas']['Member'][]
+      name: string
+    }
+    /** @description The room's whole new member set; putting the same set again changes nothing. */
+    RoomMembers: {
+      agents: string[]
+    }
+    RoomMessage: {
+      author: string
+      deliveries: components['schemas']['Delivery'][]
+      /** Format: uuid */
+      id: string
+      message: string
+      /** @description The coordinator's question, the continued task's agent, or the failure reason. */
+      note?: string | null
+      /**
+       * @description `routing` until the coordinator settles it as `routed`, `continued`, `clarify`,
+       *     `no_action` or `failed`; mentioned messages are `routed` at once.
+       */
+      routing: string
+      /** Format: int64 */
+      sequence: number
+    }
     SendMessage: {
       message: string
       /** Format: uuid */
@@ -596,18 +767,31 @@ export interface components {
       /** Format: uuid */
       skill: string
     }
+    Steering: {
+      /** Format: uuid */
+      id: string
+      /** @description The instruction entered the running context; not proof the agent followed it. */
+      incorporated: boolean
+      message: string
+      /** @description Copied from steering of the work that delegated this. */
+      propagated: boolean
+    }
     Token: {
       token: string
     }
     Turn: {
+      /** @description Work this turn delegated or sent to other agents. */
+      children: components['schemas']['Child'][]
       error?: string | null
       /** Format: uuid */
       id: string
       message: string
+      origin?: null | components['schemas']['Origin']
       response?: string | null
       /** Format: int64 */
       sequence: number
       status: string
+      steering: components['schemas']['Steering'][]
       terminal: components['schemas']['Progress'][]
     }
     TurnEvent:
@@ -645,6 +829,13 @@ export interface components {
           text: string
         }
       | {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: 'steered'
+          message: string
+        }
+      | {
           /** @enum {string} */
           kind: 'done'
           memories?: components['schemas']['MemoryChange'][]
@@ -667,6 +858,11 @@ export interface components {
       name: string
       /** Format: uuid */
       request_id: string
+      /**
+       * Format: int32
+       * @description Concurrent delegated tasks, one to four; `None` keeps the current setting.
+       */
+      task_lanes?: number | null
     }
   }
   responses: never
@@ -1047,6 +1243,32 @@ export interface operations {
       }
     }
   }
+  steer: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        conversation: string
+        turn: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendMessage']
+      }
+    }
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Steering']
+        }
+      }
+    }
+  }
   login: {
     parameters: {
       query?: never
@@ -1146,6 +1368,146 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ProviderSummary']
+        }
+      }
+    }
+  }
+  list_rooms: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Room'][]
+        }
+      }
+    }
+  }
+  create_room: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateRoom']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Room']
+        }
+      }
+    }
+  }
+  room_events: {
+    parameters: {
+      query?: {
+        after?: number
+      }
+      header?: {
+        'Last-Event-ID'?: number | null
+      }
+      path: {
+        room: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/event-stream': components['schemas']['RoomMessage']
+        }
+      }
+    }
+  }
+  set_members: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        room: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RoomMembers']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Room']
+        }
+      }
+    }
+  }
+  room_messages: {
+    parameters: {
+      query?: {
+        after?: number
+      }
+      header?: never
+      path: {
+        room: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RoomMessage'][]
+        }
+      }
+    }
+  }
+  post_room_message: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        room: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendMessage']
+      }
+    }
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RoomMessage']
         }
       }
     }

@@ -36,8 +36,16 @@ pub enum Delivery {
         turn: Uuid,
         sequence: u64,
     },
+    /// Cancels the turn; the ledger has already cancelled its delegated descendants.
     Cancel {
         turn: Uuid,
+    },
+    /// A person's correction for the active turn, incorporated before its next model request
+    /// and reported as `TurnEvent::Steered`. Redelivered after a reconnect until reported.
+    Steer {
+        turn: Uuid,
+        id: Uuid,
+        message: String,
     },
     Drain {
         request_id: Uuid,
@@ -94,6 +102,48 @@ pub struct Turn {
     pub history: Vec<Exchange>,
     /// Tool events from earlier runs of this turn.
     pub prior: Vec<TurnEvent>,
+    /// Work this turn delegated, oldest first: settled children with their outcome, and open
+    /// ones with their status only.
+    #[serde(default)]
+    pub delegations: Vec<Delegation>,
+    /// A delegated task in a task lane (ADR 0005): its own context, beside the main lane, and
+    /// no control of the shared desktop.
+    #[serde(default)]
+    pub task: bool,
+}
+
+/// A child's settled outcome. `evidence` holds its last tool events, so a failed child still
+/// shows what it did; it is untrusted program output.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Delegation {
+    pub turn: Uuid,
+    pub agent: String,
+    /// `complete`, `failed` or `cancelled` once settled; otherwise still open.
+    pub status: String,
+    pub response: Option<String>,
+    pub error: Option<String>,
+    pub evidence: Vec<TurnEvent>,
+}
+
+/// `POST /api/runtime/turns/{turn}/messages`: work for another agent sharing a room. `call`
+/// is the tool call's id, so a resend creates nothing new. With `wait` the sending turn yields
+/// when it ends and resumes once every awaited child has settled.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Collaborate {
+    pub call: Uuid,
+    pub agent: String,
+    pub message: String,
+    pub wait: bool,
+    /// Without `wait`: relay the recipient's response back as a new turn once it completes.
+    #[serde(default)]
+    pub expects_reply: bool,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Collaborated {
+    pub turn: Uuid,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -141,6 +191,11 @@ pub enum TurnEvent {
     /// Replaces the earlier context for later model requests; the source history remains.
     Summary {
         text: String,
+    },
+    /// A steering message entered the context.
+    Steered {
+        id: Uuid,
+        message: String,
     },
     /// Memory changes staged during the turn commit with it, or not at all.
     Done {
@@ -282,6 +337,8 @@ mod tests {
             summary: None,
             history: Vec::new(),
             prior: Vec::new(),
+            delegations: Vec::new(),
+            task: false,
         });
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));

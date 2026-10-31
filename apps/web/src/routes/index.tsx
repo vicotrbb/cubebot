@@ -8,12 +8,14 @@ import {
   ok,
   type Account,
   type Agent,
+  type Room as RoomType,
 } from '../api/client'
 import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
 import { Desktop } from '../features/desktop'
 import { Dreams } from '../features/dreams'
 import { Memories } from '../features/memories'
+import { listRooms, NewRoom, Room } from '../features/rooms'
 import { Skills } from '../features/skills'
 
 export const Route = createFileRoute('/')({ component: Home })
@@ -72,6 +74,8 @@ type Screen =
   | { kind: 'desktop' }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
+  | { kind: 'room'; room: RoomType }
+  | { kind: 'new-room' }
 
 function Workspace({
   session,
@@ -81,6 +85,7 @@ function Workspace({
   onSignOut: () => Promise<void>
 }) {
   const [agents, setAgents] = useState<Agent[]>([])
+  const [rooms, setRooms] = useState<RoomType[]>([])
   const [selected, setSelected] = useState<Agent | null>(null)
   const [screen, setScreen] = useState<Screen>({ kind: 'chat' })
   const [error, setError] = useState('')
@@ -99,6 +104,9 @@ function Workspace({
       .then(applyAgents)
       .catch((error) => setError(failure(error)))
       .finally(() => setLoading(false))
+    void listRooms()
+      .then(setRooms)
+      .catch((error) => setError(failure(error)))
   }, [])
   async function saved() {
     await load()
@@ -178,6 +186,38 @@ function Workspace({
           >
             Refresh agents
           </button>
+          <div className="section-title">
+            <h2>Rooms</h2>
+            {session.administrator && (
+              <button
+                className="secondary"
+                onClick={() => setScreen({ kind: 'new-room' })}
+              >
+                New room
+              </button>
+            )}
+          </div>
+          {rooms.length === 0 && <p className="muted">No rooms yet.</p>}
+          <nav aria-label="Rooms">
+            {rooms.map((room) => {
+              const current =
+                screen.kind === 'room' && screen.room.id === room.id
+              return (
+                <button
+                  key={room.id}
+                  className={current ? 'agent-link selected' : 'agent-link'}
+                  aria-current={current ? 'true' : undefined}
+                  onClick={() => {
+                    setScreen({ kind: 'room', room })
+                    setError('')
+                  }}
+                >
+                  {room.name}{' '}
+                  <span className="muted">{room.members.length} agents</span>
+                </button>
+              )
+            })}
+          </nav>
         </aside>
         <div className="main-panel">
           {error && <p role="alert">{error}</p>}
@@ -191,6 +231,32 @@ function Workspace({
           )}
           {screen.kind === 'provider' && (
             <ProviderForm onClose={() => setScreen({ kind: 'chat' })} />
+          )}
+          {screen.kind === 'room' && (
+            <Room
+              key={screen.room.id}
+              room={screen.room}
+              agents={agents}
+              onChanged={(room) => {
+                setRooms((current) =>
+                  current.map((known) => (known.id === room.id ? room : known)),
+                )
+                setScreen({ kind: 'room', room })
+              }}
+            />
+          )}
+          {screen.kind === 'new-room' && (
+            <NewRoom
+              agents={agents}
+              onCreated={(room) => {
+                setRooms((current) => [
+                  ...current.filter((known) => known.id !== room.id),
+                  room,
+                ])
+                setScreen({ kind: 'room', room })
+              }}
+              onCancel={() => setScreen({ kind: 'chat' })}
+            />
           )}
           <AgentScreen
             screen={screen}

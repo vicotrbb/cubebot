@@ -1,4 +1,4 @@
-//! The agent's own loop: one channel to the switchboard and one turn at a time. Events wait in an
+//! The agent's own loop: one channel to the switchboard and the turns it admits, one per lane. Events wait in an
 //! outbox until the ledger acknowledges them, so a reconnect resends rather than loses them.
 //! With no turn, no unacknowledged event and no drain for the idle delay, the agent dreams.
 mod attempts;
@@ -9,6 +9,7 @@ use attempts::Store;
 use cubebot_protocol::runtime::{Delivery, Report, TurnEvent};
 use futures_util::{SinkExt, StreamExt};
 use std::{
+    collections::HashMap,
     os::unix::fs::MetadataExt,
     path::Path,
     sync::{Arc, Mutex},
@@ -59,9 +60,11 @@ enum Next {
     Reconnect,
 }
 struct Active {
-    turn: Uuid,
     cancel: watch::Sender<bool>,
     task: tokio::task::JoinHandle<()>,
+    steering: crate::collaboration::Steering,
+    /// Steering already queued, so a redelivery after reconnect is not applied twice.
+    steered: std::collections::HashSet<Uuid>,
 }
 struct Agent {
     store: Arc<Mutex<Store>>,
@@ -71,7 +74,8 @@ struct Agent {
     bootstrapped: bool,
     tools: Option<Arc<crate::tools::Registry>>,
     memory: Option<MemoryClient>,
-    active: Option<Active>,
+    /// Running turns by id; the switchboard admits at most one per lane.
+    active: HashMap<Uuid, Active>,
     drain: Option<Uuid>,
     /// When to dream, armed by the switchboard's idle notice.
     dream_at: Option<Instant>,
@@ -103,7 +107,7 @@ impl Agent {
             bootstrapped: false,
             tools,
             memory: None,
-            active: None,
+            active: HashMap::new(),
             drain: None,
             dream_at: None,
             dreaming: None,
@@ -160,7 +164,7 @@ impl Agent {
         let Some(client) = self.memory.clone() else {
             return;
         };
-        if dreaming || self.active.is_some() || self.drain.is_some() || !self.outbox.is_empty() {
+        if dreaming || !self.active.is_empty() || self.drain.is_some() || !self.outbox.is_empty() {
             return;
         }
         let (stop, stopped) = watch::channel(false);
@@ -174,18 +178,19 @@ impl Agent {
             TurnEvent::Done { .. } | TurnEvent::Error { .. }
         );
         let message = report(&event.0);
+        let turn = event.0.turn;
         self.outbox.push(event);
         send(channel, &message).await?;
         if finished {
-            self.active = None;
+            self.active.remove(&turn);
             self.idle(channel).await?;
         }
         Ok(())
     }
 
-    /// Without an active turn, reports a requested drain or asks for work.
+    /// With no turn running, reports a requested drain or asks for work.
     async fn idle(&self, channel: &mut Channel) -> Result<(), Error> {
-        if self.active.is_some() {
+        if !self.active.is_empty() {
             return Ok(());
         }
         let report = match self.drain {
@@ -202,28 +207,18 @@ impl Agent {
     ) -> Result<Option<Next>, Error> {
         match delivery {
             Delivery::Turn(work) => {
-                if self.active.is_some() || self.drain.is_some() {
+                if self.active.contains_key(&work.turn) || self.drain.is_some() {
                     return Err(Error::Protocol);
                 }
-                let (cancel, cancelled) = watch::channel(false);
-                let turn = work.turn;
-                let task = tokio::spawn(turn::run(
-                    work,
-                    self.sender.clone(),
-                    self.store.clone(),
-                    self.tools.clone(),
-                    crate::memory::Memories::new(self.memory.clone()),
-                    crate::skills::Skills::new(self.memory.clone()),
-                    cancelled,
-                ));
-                self.active = Some(Active { turn, cancel, task });
+                self.start(work);
             }
             Delivery::Ack { turn, sequence } => self.acknowledge(turn, sequence)?,
             Delivery::Cancel { turn } => {
-                if let Some(active) = self.active.as_ref().filter(|active| active.turn == turn) {
+                if let Some(active) = self.active.get(&turn) {
                     let _ = active.cancel.send(true);
                 }
             }
+            Delivery::Steer { turn, id, message } => self.steer(turn, id, message),
             Delivery::Drain { request_id } => {
                 self.drain = Some(request_id);
                 self.idle(channel).await?;
@@ -231,20 +226,57 @@ impl Agent {
             Delivery::Idle {
                 dream_after_seconds,
             } => {
-                if self.active.is_none() {
+                if self.active.is_empty() {
                     let delay = Duration::from_secs(dream_after_seconds);
                     self.dream_at = Some(Instant::now() + delay);
                 }
             }
             Delivery::Revoked => {
                 // Unreported effects stay uncertain in the ledger; stopping the sandbox ends them.
-                if let Some(active) = self.active.take() {
+                for active in self.active.values() {
                     active.task.abort();
                 }
                 return Ok(Some(Next::Exit));
             }
         }
         Ok(None)
+    }
+
+    fn start(&mut self, work: cubebot_protocol::runtime::Turn) {
+        let (cancel, cancelled) = watch::channel(false);
+        let turn = work.turn;
+        let steering = crate::collaboration::Steering::default();
+        let knowledge = (
+            crate::memory::Memories::new(self.memory.clone()),
+            crate::skills::Skills::new(self.memory.clone()),
+            crate::collaboration::Collaboration::new(self.memory.clone(), turn, steering.clone()),
+        );
+        let task = tokio::spawn(turn::run(
+            work,
+            self.sender.clone(),
+            self.store.clone(),
+            self.tools.clone(),
+            knowledge,
+            cancelled,
+        ));
+        self.active.insert(
+            turn,
+            Active {
+                cancel,
+                task,
+                steering,
+                steered: Default::default(),
+            },
+        );
+    }
+
+    /// Queues steering for the active turn once, however often it is redelivered.
+    fn steer(&mut self, turn: Uuid, id: Uuid, message: String) {
+        if let Some(active) = self.active.get_mut(&turn)
+            && active.steered.insert(id)
+        {
+            active.steering.lock().unwrap().push((id, message));
+        }
     }
 
     fn acknowledge(&mut self, turn: Uuid, sequence: u64) -> Result<(), Error> {

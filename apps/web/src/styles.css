@@ -92,6 +92,13 @@ label {
   font-size: 0.9rem;
   font-weight: 500;
 }
+label:has(> input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+input[type='checkbox'] {
+  width: auto;
+}
 form {
   display: grid;
   gap: 20px;

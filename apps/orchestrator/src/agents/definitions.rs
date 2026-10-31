@@ -27,12 +27,14 @@ pub struct Agent {
     pub idle_delay_seconds: i32,
     /// The dreaming model on the agent's connection; `None` inherits the connection's model.
     pub dreaming_model: Option<String>,
+    /// Delegated tasks that may run beside the main lane (ADR 0005), one to four.
+    pub task_lanes: i16,
     /// `working`, `dreaming` or `idle` while running, otherwise the desired state such as
     /// `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
     pub activity: String,
 }
 
-const COLUMNS: &str = "g.id, g.name, g.instructions, g.revision, g.instructions_revision, g.desired_state, g.idle_policy, g.restart_generation, g.idle_delay_seconds, g.dreaming_model, CASE WHEN g.desired_state <> 'running' THEN g.desired_state WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.conversation_id = g.id AND t.status = 'running') THEN 'working' WHEN EXISTS(SELECT 1 FROM dream_runs d JOIN runtime_session_access s ON s.attempt_id = d.attempt_id AND s.active WHERE d.agent_id = g.id AND d.status = 'running') THEN 'dreaming' ELSE 'idle' END AS activity";
+const COLUMNS: &str = "g.id, g.name, g.instructions, g.revision, g.instructions_revision, g.desired_state, g.idle_policy, g.restart_generation, g.idle_delay_seconds, g.dreaming_model, g.task_lanes, CASE WHEN g.desired_state <> 'running' THEN g.desired_state WHEN EXISTS(SELECT 1 FROM chat_turns t WHERE t.conversation_id = g.id AND t.status = 'running') THEN 'working' WHEN EXISTS(SELECT 1 FROM dream_runs d JOIN runtime_session_access s ON s.attempt_id = d.attempt_id AND s.active WHERE d.agent_id = g.id AND d.status = 'running') THEN 'dreaming' ELSE 'idle' END AS activity";
 
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]

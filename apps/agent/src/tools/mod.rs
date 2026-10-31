@@ -249,6 +249,13 @@ impl Registry {
         matches!(self.sandbox.wait(command, job.stdin).await, Ok(Some(0)))
     }
 
+    /// Whether `name` is the provider's computer-use tool.
+    pub fn computer(&self, name: &str) -> bool {
+        self.definitions
+            .iter()
+            .any(|tool| tool.computer && tool.name == name)
+    }
+
     /// What a stopped call left in its retained output.
     pub fn preview(&self, id: Uuid) -> String {
         self.sandbox.preview(id)

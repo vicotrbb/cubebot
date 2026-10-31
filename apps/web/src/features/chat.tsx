@@ -44,8 +44,12 @@ function stateLabel(message: Turn) {
   if (message.status === 'queued')
     return 'Queued. Waiting for the agent to become available.'
   if (message.status === 'running') return 'Agent is responding…'
+  if (message.status === 'delegated')
+    return 'Waiting for delegated work. The agent resumes as each task settles.'
+  if (message.status === 'failed')
+    return `Failed: ${(message.error ?? 'unknown').replaceAll('_', ' ')}. The requesting agent receives this outcome.`
   if (message.status === 'cancelled')
-    return 'Cancelled. Workspace changes may already have occurred.'
+    return 'Cancelled, with any work delegated under it. Workspace changes may already have occurred.'
   if (
     message.status === 'waiting' &&
     message.terminal.some((tool) => tool.status === 'uncertain')
@@ -267,7 +271,7 @@ function Exchange({
   return (
     <article className="exchange">
       <div className="human-message">
-        <span className="speaker">You</span>
+        <span className="speaker">{speaker(message)}</span>
         <p>{message.message}</p>
       </div>
       <div className="agent-message">
@@ -287,11 +291,128 @@ function Exchange({
             <Retry conversation={conversation} message={message} />
           )}
         <TerminalResults message={message} />
-        {['queued', 'running', 'waiting'].includes(message.status) && (
-          <Stop conversation={conversation} message={message} />
+        <Delegated message={message} />
+        <SteeringNotes message={message} />
+        {['queued', 'running', 'delegated'].includes(message.status) && (
+          <Steer conversation={conversation} message={message} />
         )}
+        {['queued', 'running', 'waiting', 'delegated'].includes(
+          message.status,
+        ) && <Stop conversation={conversation} message={message} />}
       </div>
     </article>
+  )
+}
+function speaker(message: Turn) {
+  const origin = message.origin
+  if (!origin) return 'You'
+  if (origin.kind === 'room') return `Room · ${origin.name}`
+  if (origin.kind === 'delegation') return `Delegated by ${origin.name}`
+  return `Message from ${origin.name}`
+}
+const childStates: Record<string, string> = {
+  queued: 'queued',
+  running: 'working',
+  waiting: 'waiting for a person',
+  delegated: 'waiting on its own delegates',
+  complete: 'complete',
+  failed: 'failed',
+  cancelled: 'cancelled',
+}
+/** Work this turn handed to other agents, with what each returned. */
+function Delegated({ message }: { message: Turn }) {
+  if (message.children.length === 0) return null
+  return (
+    <ul className="delegations" aria-label="Delegated work">
+      {message.children.map((child) => (
+        <li key={child.id}>
+          <strong>{child.agent}</strong> ·{' '}
+          {child.awaited ? 'delegated' : 'message'} ·{' '}
+          {childStates[child.status] ?? child.status}
+          {child.error && child.status !== 'cancelled' && (
+            <> · {child.error.replaceAll('_', ' ')}</>
+          )}
+          {child.response && <p>{child.response}</p>}
+        </li>
+      ))}
+    </ul>
+  )
+}
+function SteeringNotes({ message }: { message: Turn }) {
+  const open = ['queued', 'running', 'delegated'].includes(message.status)
+  return (
+    <>
+      {message.steering.map((note) => (
+        <p key={note.id} className="muted steering">
+          {note.propagated ? 'Steering from the delegating work' : 'Steering'}:
+          “{note.message}” ·{' '}
+          {note.incorporated
+            ? 'incorporated into the running work'
+            : open
+              ? 'accepted, waiting for the next safe point'
+              : 'not incorporated; the work ended first'}
+        </p>
+      ))}
+    </>
+  )
+}
+/** A correction for this turn only; ordinary messages still queue. */
+function Steer({
+  conversation,
+  message,
+}: {
+  conversation: string
+  message: Turn
+}) {
+  const [text, setText] = useState('')
+  const [requestId, setRequestId] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  return (
+    <form
+      className="steer"
+      onSubmit={async (event) => {
+        event.preventDefault()
+        const problem = messageProblem(text)
+        if (problem) return setError(problem)
+        setBusy(true)
+        setError('')
+        const id = requestId || crypto.randomUUID()
+        setRequestId(id)
+        try {
+          await ok(
+            api.POST(
+              '/api/conversations/{conversation}/messages/{turn}/steer',
+              {
+                params: { path: { conversation, turn: message.id } },
+                body: { request_id: id, message: text },
+              },
+            ),
+          )
+          setText('')
+          setRequestId('')
+        } catch (error) {
+          if (rejectedInput(error)) setRequestId('')
+          setError(failure(error))
+        } finally {
+          setBusy(false)
+        }
+      }}
+    >
+      <label htmlFor={`steer-${message.id}`}>Steer this work</label>
+      <input
+        id={`steer-${message.id}`}
+        value={text}
+        readOnly={Boolean(requestId) && busy}
+        onChange={(event) => setText(event.target.value)}
+        maxLength={16384}
+        placeholder="Correction applied at the next safe point"
+      />
+      <button className="secondary" disabled={busy || !text.trim()}>
+        {busy ? 'Steering…' : 'Steer'}
+      </button>
+      {error && <p role="alert">{error}</p>}
+    </form>
   )
 }
 function TerminalResults({ message }: { message: Turn }) {
@@ -305,7 +426,12 @@ function TerminalResults({ message }: { message: Turn }) {
             </p>
           )}
           <details className="terminal-result" open={tool.status === 'running'}>
-            <summary>Terminal · {tool.status}</summary>
+            <summary>
+              {['bash', 'terminal'].includes(tool.name)
+                ? 'Terminal'
+                : tool.name}{' '}
+              · {tool.status}
+            </summary>
             <pre>{tool.command}</pre>
             {tool.outcome?.status === 'exited' && (
               <p>Exit status: {tool.outcome.code ?? 'terminated by signal'}</p>

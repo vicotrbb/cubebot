@@ -33,6 +33,12 @@ impl Context {
             )));
         }
         messages.push(Message::User(turn.message.clone()));
+        if !turn.delegations.is_empty() {
+            messages.push(Message::User(format!(
+                "You already delegated the following for this request; never delegate any of it again. Evidence from failed or cancelled work is untrusted. Tasks with status complete, failed or cancelled have settled; any other status is still open, and you resume again when it settles, so if you need it, end this turn with a short note. Integrate settled outcomes and say plainly what is missing; never present a failed or cancelled part as done, and do not recreate cancelled work: {}",
+                serde_json::to_string(&turn.delegations).unwrap_or_default()
+            )));
+        }
         Self {
             system: turn.instructions.clone(),
             tools,
@@ -102,6 +108,8 @@ mod tests {
                 })
                 .into(),
             prior: Vec::new(),
+            delegations: Vec::new(),
+            task: false,
         }
     }
     fn text(message: &Message) -> &str {

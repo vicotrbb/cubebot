@@ -1,7 +1,10 @@
 //! One turn: streamed model steps and parallel tool calls, reported as ordered events. Tool
 //! calls are journaled before they run and are never recovered by running them again.
 use super::attempts::{Entry, Store};
-use crate::{context::Context, memory::Memories, skills::Skills, tools::Registry};
+use crate::{
+    collaboration::Collaboration, context::Context, memory::Memories, skills::Skills,
+    tools::Registry,
+};
 use cubebot_protocol::{
     runtime::{EVENT_BYTES, ProviderKind, Turn, TurnEvent},
     terminal::Outcome,
@@ -64,12 +67,11 @@ pub(super) async fn run(
     events: UnboundedSender<Event>,
     store: Arc<Mutex<Store>>,
     tools: Option<Arc<Registry>>,
-    memories: Memories,
-    skills: Skills,
+    (memories, skills, collaboration): (Memories, Skills, Collaboration),
     cancel: watch::Receiver<bool>,
 ) {
     let tools = tools.as_deref();
-    let knowledge = (&memories, &skills);
+    let knowledge = (&memories, &skills, &collaboration);
     let mut run = Run {
         turn: turn.turn,
         next: turn.sequence,
@@ -120,7 +122,10 @@ async fn start<P: Provider>(
     turn: &Turn,
     run: &mut Run,
     store: &Mutex<Store>,
-    (registry, (memories, skills)): (Option<&Registry>, (&Memories, &Skills)),
+    (registry, (memories, skills, collaboration)): (
+        Option<&Registry>,
+        (&Memories, &Skills, &Collaboration),
+    ),
     mut cancel: watch::Receiver<bool>,
 ) -> TurnEvent {
     let provider = match provider {
@@ -133,10 +138,13 @@ async fn start<P: Provider>(
     }
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
+    tools.extend(crate::collaboration::definitions());
+    // A task lane never drives the shared desktop (ADR 0005); the main lane owns it.
     tools.extend(
         registry
             .into_iter()
-            .flat_map(|registry| registry.definitions().to_vec()),
+            .flat_map(|registry| registry.definitions().to_vec())
+            .filter(|tool| !(turn.task && tool.computer)),
     );
     let limits = match capabilities.model_limits {
         true => tokio::select! {
@@ -162,6 +170,7 @@ async fn start<P: Provider>(
         tools: registry,
         memories,
         skills,
+        collaboration,
         cancel,
     }
     .converse(&mut context)
@@ -177,12 +186,14 @@ struct Session<'a, P> {
     tools: Option<&'a Registry>,
     memories: &'a Memories,
     skills: &'a Skills,
+    collaboration: &'a Collaboration,
     cancel: watch::Receiver<bool>,
 }
 
 impl<P: Provider> Session<'_, P> {
     async fn converse(&mut self, context: &mut Context) -> TurnEvent {
         loop {
+            self.steer(context);
             let request = context.request(self.turn, self.max_output_tokens);
             let (reply, usage) = match self.step(&request, true).await {
                 Ok(step) => step,
@@ -265,6 +276,17 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
+    /// Takes delivered steering into the context at this safe point: before a model request,
+    /// after every tool result of the previous step.
+    fn steer(&mut self, context: &mut Context) {
+        for (id, message) in self.collaboration.take_steering() {
+            context.messages.push(Message::User(format!(
+                "Steering from a person about this request; apply it to everything you do next: {message}"
+            )));
+            self.run.emit(TurnEvent::Steered { id, message }, None);
+        }
+    }
+
     fn usage(&mut self, usage: Option<Usage>) {
         if let Some(usage) = usage {
             self.run.emit(
@@ -283,7 +305,12 @@ impl<P: Provider> Session<'_, P> {
         &mut self,
         calls: &[FunctionCall],
     ) -> Result<Vec<(String, Option<String>)>, &'static str> {
-        let prepared = prepare(self.tools, (self.memories, self.skills), calls);
+        let prepared = prepare(
+            self.tools,
+            (self.memories, self.skills, self.collaboration),
+            calls,
+            self.turn.task,
+        );
         let mut running = FuturesUnordered::new();
         let mut unfinished = Vec::new();
         for (index, (id, name, input, call)) in prepared.into_iter().enumerate() {
@@ -417,8 +444,9 @@ fn done(response: String, memories: Vec<cubebot_protocol::runtime::MemoryChange>
 #[allow(clippy::type_complexity)]
 fn prepare<'a>(
     tools: Option<&'a Registry>,
-    (memories, skills): (&'a Memories, &'a Skills),
+    (memories, skills, collaboration): (&'a Memories, &'a Skills, &'a Collaboration),
     calls: &[FunctionCall],
+    task: bool,
 ) -> Vec<(Uuid, String, serde_json::Value, crate::tools::Running<'a>)> {
     calls
         .iter()
@@ -426,9 +454,13 @@ fn prepare<'a>(
             let id = Uuid::new_v4();
             let parsed = serde_json::from_str(&call.arguments);
             let running = match &parsed {
+                Ok(_) if task && tools.is_some_and(|tools| tools.computer(&call.name)) => {
+                    Err("a delegated task cannot control the desktop")
+                }
                 Ok(input) => memories
                     .call(&call.name, input)
                     .or_else(|| skills.call(&call.name, input, tools))
+                    .or_else(|| collaboration.call(&call.name, id, input))
                     .unwrap_or_else(|| {
                         tools
                             .ok_or("no tool has this name")

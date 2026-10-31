@@ -152,6 +152,10 @@ docker-desktop:
 docker-browser:
     uv run --project tooling/quality --locked python tests/system/docker_browser.py
 
+# Three real agents use rooms, delegation, messaging, steering, cancellation and lanes through Docker (ADRs 0005, 0014 to 0016, 0071 to 0073); same needs as docker-sandbox.
+docker-rooms:
+    uv run --project tooling/quality --locked python tests/system/docker_rooms.py
+
 # Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
 docker-skills:
     uv run --project tooling/quality --locked python tests/system/docker_skills.py
