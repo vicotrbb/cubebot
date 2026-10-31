@@ -342,6 +342,14 @@ fn request(
     exchanged
 }
 
+/// One request on a stream of its own.
+pub(super) fn ask(call: Uuid, action: Action) -> io::Result<Response> {
+    exchange(
+        &mut BufReader::new(connect()?),
+        &AgentRequest { call, action },
+    )
+}
+
 fn exchange(stream: &mut BufReader<File>, request: &AgentRequest) -> io::Result<Response> {
     let mut line = serde_json::to_vec(request)?;
     line.push(b'\n');

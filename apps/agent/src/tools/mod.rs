@@ -1,6 +1,7 @@
 //! The agent's tools. Model arguments are data; every tool runs as a child process of the agent
 //! under the sandbox's unprivileged tool user, so the kernel, not path checks, bounds what a call
 //! can touch. Full output stays in the workspace and the model sees a head-and-tail preview.
+mod browser;
 mod builtin;
 mod computer;
 mod mcp;
@@ -204,9 +205,11 @@ impl Registry {
         }
         let sandbox = Sandbox::from_environment()?;
         let mut tools = builtin::tools();
-        // The provider's computer-use tool, for models that support it (ADR 0085).
+        // The provider's computer-use tool, for models that support it (ADR 0085), and the
+        // browser tools on the desktop's Chromium (ADRs 0036 and 0037).
         if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() == Ok("1") {
             tools.push(computer::tool());
+            tools.extend(browser::tools());
         }
         tools.extend(mcp::tools(&sandbox).await?);
         Ok(Some(Self::new(sandbox, tools)))

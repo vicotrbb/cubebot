@@ -87,7 +87,14 @@ fn body(request: &Request) -> Value {
                         input.push(json!({"role":"developer","content":note}));
                     }
                 }
-                _ => input
+                // Another tool's image, such as a browser screenshot, follows its text.
+                Some(image) => input.push(
+                    json!({"type":"function_call_output","call_id":call_id,"output":[
+                        {"type":"input_text","text":output},
+                        {"type":"input_image","image_url":format!("data:image/png;base64,{image}")},
+                    ]}),
+                ),
+                None => input
                     .push(json!({"type":"function_call_output","call_id":call_id,"output":output})),
             },
         }

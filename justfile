@@ -148,6 +148,10 @@ docker-dreams:
 docker-desktop:
     uv run --project tooling/quality --locked python tests/system/docker_desktop.py
 
+# The agent's browser tools on real agents through Docker (ADRs 0036, 0037 and 0085); same needs as docker-sandbox.
+docker-browser:
+    uv run --project tooling/quality --locked python tests/system/docker_browser.py
+
 # Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
 docker-skills:
     uv run --project tooling/quality --locked python tests/system/docker_skills.py

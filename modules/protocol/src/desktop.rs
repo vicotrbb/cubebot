@@ -41,6 +41,9 @@ pub enum Button {
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
     Screenshot,
+    /// Changes nothing; the response carries the mode, which the agent's browser tools ask
+    /// before input they send to Chromium directly.
+    Mode,
     Move {
         x: u32,
         y: u32,
@@ -80,9 +83,9 @@ pub enum Action {
 }
 
 impl Action {
-    /// Every action but a screenshot sends input.
+    /// Every action but a screenshot or a mode query sends input.
     pub fn is_input(&self) -> bool {
-        !matches!(self, Self::Screenshot)
+        !matches!(self, Self::Screenshot | Self::Mode)
     }
 }
 
