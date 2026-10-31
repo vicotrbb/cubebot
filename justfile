@@ -75,6 +75,80 @@ db-up:
 db-down:
     docker compose --env-file .env down
 
+# The whole stack in Docker at http://localhost:3000 (CUBEBOT_PORT in .env). On x86_64 Linux with /dev/kvm it
+# also runs agents, building the guest and sandbox image first; CUBEBOT_AGENTS=0 turns that off, =1 requires it.
+up:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f .env ]; then
+        # A random database password; .env stays out of git.
+        sed "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env.example > .env
+        echo "Created .env with a random POSTGRES_PASSWORD."
+    fi
+    set -a; source .env; set +a
+    files=(-f compose.yaml)
+    platform="$(uname -s)/$(uname -m)"
+    if [ "$platform" != Linux/x86_64 ]; then
+        missing="agents need x86_64 Linux, this is $platform"
+    elif [ ! -c /dev/kvm ] || [ ! -c /dev/net/tun ]; then
+        missing="agents need /dev/kvm and /dev/net/tun"
+    else
+        missing=""
+    fi
+    agents="${CUBEBOT_AGENTS:-auto}"
+    if [ "$agents" = 1 ] && [ -n "$missing" ]; then
+        echo "CUBEBOT_AGENTS=1, but $missing." >&2
+        exit 1
+    fi
+    if [ "$agents" = 0 ]; then
+        echo "Agents off (CUBEBOT_AGENTS=0)."
+    elif [ -n "$missing" ]; then
+        echo "Agents off: $missing. The console runs; agents cannot wake."
+    else
+        if [ ! -f target/guest/bzImage ] || [ ! -f target/guest/root.ext4 ]; then
+            echo "Building the guest kernel and root image once (needs make, gcc, flex, bison, bc, libelf-dev)."
+            python3 tooling/guest/build.py
+        fi
+        docker build --tag cubebot-sandbox:local --build-context guest=target/guest --file apps/sandbox/Dockerfile .
+        just dev-ca
+        export CUBEBOT_DEV_CA="$PWD/.cubebot/dev-ca"
+        export CUBEBOT_BRIDGE=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+        export CUBEBOT_DOCKER_GID=$(stat -c %g /var/run/docker.sock)
+        files+=(-f compose.agents.yaml)
+        echo "Agents on: sandboxes reach the orchestrator at https://$CUBEBOT_BRIDGE:8443."
+    fi
+    docker compose "${files[@]}" up -d --build --remove-orphans
+    origin="http://localhost:${CUBEBOT_PORT:-3000}"
+    for _ in $(seq 120); do
+        if curl -fsS "$origin/api/health/live" >/dev/null 2>&1; then
+            echo "Cubebot is up at $origin. First run: create the administrator with \`just admin\`."
+            exit 0
+        fi
+        sleep 1
+    done
+    docker compose "${files[@]}" logs --tail 40 orchestrator proxy >&2
+    echo "Cubebot did not answer at $origin within 2 minutes; the logs above say why." >&2
+    exit 1
+
+# Stops `just up` and the agent sandboxes it started; data stays in Docker volumes (`docker compose down -v` deletes it).
+down:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    agents=$(docker ps -q --filter label=cubebot.dev/agent)
+    [ -z "$agents" ] || docker stop $agents >/dev/null
+    docker compose --env-file .env down
+
+# Creates the first administrator of the `just up` stack; prompts for the password.
+admin login="admin":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -a; source .env; set +a
+    read -rsp "Password for {{ login }}: " password && echo
+    CUBEBOT_BOOTSTRAP_LOGIN="{{ login }}" CUBEBOT_BOOTSTRAP_PASSWORD="$password" \
+        docker compose --env-file .env run --rm --no-deps -e CUBEBOT_BOOTSTRAP_LOGIN -e CUBEBOT_BOOTSTRAP_PASSWORD \
+        --entrypoint cubebot-admin orchestrator bootstrap
+    echo "Sign in at http://localhost:${CUBEBOT_PORT:-3000} as {{ login }}."
+
 # Reuses a running `just db-up` server, else a disposable one; never an application DB.
 integration:
     uv run --project tooling/quality --locked python tests/system/integration.py

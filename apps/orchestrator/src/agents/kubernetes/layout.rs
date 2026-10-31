@@ -1,9 +1,13 @@
 //! Fixed sandbox pod and workspace shape. Network enforcement is a separate qualification gate.
 use super::{Error, client::validate_namespace};
 use cubebot_protocol::network::NetworkPolicy;
-use k8s_openapi::api::core::v1::{PersistentVolumeClaimSpec, PodSpec};
+use k8s_openapi::{
+    api::core::v1::{PersistentVolumeClaimSpec, PodSpec, VolumeResourceRequirements},
+    apimachinery::pkg::api::resource::Quantity,
+};
 use openidconnect::reqwest::Url;
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 pub struct Layout {
     image: String,
@@ -26,7 +30,7 @@ impl Layout {
         if service_account == "default" || network.dns().is_empty() {
             return Err(Error::InvalidConfiguration);
         }
-        let url = Url::parse(origin).map_err(|_| Error::InvalidConfiguration)?;
+        let url = Url::parse(origin).map_err(|error| Error::Configuration(error.into()))?;
         validate_origin(&url)?;
         Ok(Self {
             image: image.into(),
@@ -69,10 +73,13 @@ impl Layout {
         PersistentVolumeClaimSpec {
             access_modes: Some(vec!["ReadWriteOncePod".into()]),
             volume_mode: Some("Filesystem".into()),
-            resources: Some(
-                serde_json::from_value(json!({"requests":{"storage":"10Gi"}}))
-                    .expect("fixed volume resources"),
-            ),
+            resources: Some(VolumeResourceRequirements {
+                requests: Some(BTreeMap::from([(
+                    "storage".into(),
+                    Quantity("10Gi".into()),
+                )])),
+                ..Default::default()
+            }),
             ..Default::default()
         }
     }
@@ -80,50 +87,64 @@ impl Layout {
     /// One `cubebot-sandbox` container per agent (ADR 0084); the agent runs inside it.
     pub fn pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
         validate_namespace(claim_name)?;
-        let mut value = json!({
+        let mut env = Vec::new();
+        if self.terminal {
+            env.extend([
+                json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}),
+                json!({"name":"CUBEBOT_TOOL_USER","value":"10001:10001"}),
+            ]);
+            if self.computer_use {
+                env.push(json!({"name":"CUBEBOT_COMPUTER_ENABLED","value":"1"}));
+            }
+        }
+        let mut mounts = Vec::new();
+        let mut volumes = vec![
+            json!({"name":"workspace","persistentVolumeClaim":{"claimName":claim_name}}),
+            json!({"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}}),
+            json!({"name":"tmp","emptyDir":{"sizeLimit":"1Gi"}}),
+        ];
+        if let Some(name) = &self.control_ca {
+            env.push(
+                json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}),
+            );
+            mounts.push(
+                json!({"name":"control-ca","mountPath":"/run/cubebot/control-ca","readOnly":true}),
+            );
+            volumes.push(json!({"name":"control-ca","configMap":{"name":name,"defaultMode":420,"items":[{"key":"ca.crt","path":"ca.crt"}]}}));
+        }
+        let value = json!({
             "os":{"name":"linux"},"restartPolicy":"Never", "terminationGracePeriodSeconds":30,
             "automountServiceAccountToken":false,"serviceAccountName":self.service_account,
             "shareProcessNamespace":false,
             "enableServiceLinks":false,"dnsPolicy":"None","dnsConfig":{"nameservers":self.network.dns().iter().map(ToString::to_string).collect::<Vec<_>>()},"schedulerName":"default-scheduler",
             "securityContext":{"runAsNonRoot":true,"fsGroup":20000,"fsGroupChangePolicy":"OnRootMismatch","supplementalGroupsPolicy":"Strict","seccompProfile":{"type":"RuntimeDefault"}},
-            "containers":[self.sandbox()],
-            "volumes":[
-                {"name":"workspace","persistentVolumeClaim":{"claimName":claim_name}},
-                {"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}},
-                {"name":"tmp","emptyDir":{"sizeLimit":"1Gi"}}
-            ]
+            "containers":[self.sandbox(env, mounts)],
+            "volumes":volumes
         });
-        let sandbox = &mut value["containers"][0];
-        if self.terminal {
-            sandbox["env"]
-                .as_array_mut()
-                .expect("fixed environment")
-                .extend([
-                    json!({"name":"CUBEBOT_TERMINAL_ENABLED","value":"1"}),
-                    json!({"name":"CUBEBOT_TOOL_USER","value":"10001:10001"}),
-                ]);
-            if self.computer_use {
-                sandbox["env"]
-                    .as_array_mut()
-                    .expect("fixed environment")
-                    .push(json!({"name":"CUBEBOT_COMPUTER_ENABLED","value":"1"}));
-            }
-        }
-        if let Some(name) = &self.control_ca {
-            sandbox["env"].as_array_mut().expect("fixed environment").push(json!({"name":"CUBEBOT_CONTROL_CA_FILE","value":"/run/cubebot/control-ca/ca.crt"}));
-            sandbox["volumeMounts"].as_array_mut().expect("fixed mounts").push(json!({"name":"control-ca","mountPath":"/run/cubebot/control-ca","readOnly":true}));
-            value["volumes"].as_array_mut().expect("fixed volumes").push(json!({"name":"control-ca","configMap":{"name":name,"defaultMode":420,"items":[{"key":"ca.crt","path":"ca.crt"}]}}));
-        }
-        serde_json::from_value(value).map_err(|_| Error::InvalidConfiguration)
+        serde_json::from_value(value).map_err(|error| Error::Configuration(error.into()))
     }
 
-    /// The memory limit holds the guest's default 2 GiB (ADR 0085) and the VMM around it.
-    fn sandbox(&self) -> Value {
+    /// The memory limit holds the guest's default 2 GiB (ADR 0085) and the VMM around it;
+    /// `env` and `mounts` follow the fixed entries.
+    fn sandbox(&self, extra_env: Vec<Value>, extra_mounts: Vec<Value>) -> Value {
+        let mut env = vec![
+            json!({"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin}),
+            json!({"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"}),
+            json!({"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"}),
+            json!({"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"}),
+            json!({"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}),
+        ];
+        env.extend(extra_env);
+        let mut mounts = vec![
+            json!({"name":"workspace","mountPath":"/var/lib/cubebot"}),
+            json!({"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true}),
+            json!({"name":"tmp","mountPath":"/tmp"}),
+        ];
+        mounts.extend(extra_mounts);
         json!({"name":"sandbox","image":self.image,"imagePullPolicy":"IfNotPresent",
             "command":["/usr/local/bin/cubebot-sandbox"],"args":["run"],
             "securityContext":security(),"resources":resources("100m","256Mi","2","3Gi"),
-            "env":[{"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin},{"name":"CUBEBOT_BOOTSTRAP_TOKEN_FILE","value":"/run/cubebot/identity/token"},{"name":"CUBEBOT_JOURNAL_DIRECTORY","value":"/var/lib/cubebot/runtime"},{"name":"CUBEBOT_WORKSPACE_DIRECTORY","value":"/var/lib/cubebot/workspace"},{"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}],
-            "volumeMounts":[{"name":"workspace","mountPath":"/var/lib/cubebot"},{"name":"identity","mountPath":"/run/cubebot/identity","readOnly":true},{"name":"tmp","mountPath":"/tmp"}]})
+            "env":env,"volumeMounts":mounts})
     }
 }
 /// The sandbox creates the guest's tap and its tc redirects in the pod network namespace, which

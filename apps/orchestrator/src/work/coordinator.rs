@@ -60,36 +60,90 @@ pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Err
     };
     let inference = connections.coordinator(&mut tx).await.ok();
     tx.commit().await?;
+    dispatch(pool, &pending, inference).await?;
+    Ok(true)
+}
+
+/// Asks the model about one waiting message and settles the answer.
+#[tracing::instrument(skip_all, fields(message = %pending.id))]
+async fn dispatch(
+    pool: &PgPool,
+    pending: &Pending,
+    inference: Option<crate::connections::Inference>,
+) -> Result<(), Error> {
     let reply = match inference {
         Some(inference) => ask(&inference, &pending.prompt).await,
         None => Err("provider_unavailable"),
     };
     let decision = reply.and_then(|text| decision(&text).ok_or("invalid_coordinator_result"));
-    settle(pool, &pending, decision).await?;
-    Ok(true)
+    settle(pool, pending, decision).await
 }
 
 async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Option<Pending>, Error> {
-    let row: Option<(Uuid, Uuid, String, String, i64)> = sqlx::query_as("SELECT m.id,m.room_id,r.name,m.message,m.sequence FROM room_messages m JOIN rooms r ON r.id=m.room_id WHERE m.routing='routing' ORDER BY m.sequence LIMIT 1")
-        .fetch_optional(&mut **tx).await?;
-    let Some((id, room, name, message, sequence)) = row else {
+    let row = sqlx::query!(
+        "
+        SELECT m.id, m.room_id, r.name, m.message, m.sequence
+        FROM room_messages m
+        JOIN rooms r ON r.id=m.room_id
+        WHERE m.routing='routing'
+        ORDER BY m.sequence
+        LIMIT 1
+        "
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(row) = row else {
         return Ok(None);
     };
+    let (id, room, name, message) = (row.id, row.room_id, row.name, row.message);
     let members = rooms::members(tx, room).await?;
-    let described: Vec<(Uuid, String, String)> = sqlx::query_as("SELECT a.id,a.name,left(a.instructions,300) FROM agents a WHERE a.id=ANY($1) ORDER BY a.name")
-        .bind(members.iter().map(|member| member.id).collect::<Vec<_>>()).fetch_all(&mut **tx).await?;
-    let recent: Vec<(String, String)> = sqlx::query_as("SELECT a.login,left(m.message,500) FROM room_messages m JOIN human_accounts a ON a.id=m.actor_id WHERE m.room_id=$1 AND m.sequence<$2 ORDER BY m.sequence DESC LIMIT 10")
-        .bind(room).bind(sequence).fetch_all(&mut **tx).await?;
-    let open: Vec<String> = sqlx::query_scalar("SELECT format('- task %s: %s, on: %s',t.id,a.name,left(d.message,200)) FROM chat_turns t JOIN agents a ON a.id=t.conversation_id JOIN room_messages d ON d.id=t.room_message_id WHERE d.room_id=$1 AND t.status IN ('queued','running','delegated') ORDER BY t.sequence DESC LIMIT 5")
-        .bind(room).fetch_all(&mut **tx).await?;
+    let described = sqlx::query!(
+        r#"
+        SELECT a.id, a.name, left(a.instructions,300) AS "about!"
+        FROM agents a
+        WHERE a.id=ANY($1)
+        ORDER BY a.name
+        "#,
+        &members.iter().map(|member| member.id).collect::<Vec<_>>(),
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let recent = sqlx::query!(
+        r#"
+        SELECT a.login, left(m.message,500) AS "text!"
+        FROM room_messages m
+        JOIN human_accounts a ON a.id=m.actor_id
+        WHERE m.room_id=$1 AND m.sequence<$2
+        ORDER BY m.sequence DESC
+        LIMIT 10
+        "#,
+        room,
+        row.sequence,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let open = sqlx::query_scalar!(
+        r#"
+        SELECT format('- task %s: %s, on: %s',t.id,a.name,left(d.message,200)) AS "line!"
+        FROM chat_turns t
+        JOIN agents a ON a.id=t.conversation_id
+        JOIN room_messages d ON d.id=t.room_message_id
+        WHERE d.room_id=$1 AND t.status IN ('queued','running','delegated')
+        ORDER BY t.sequence DESC
+        LIMIT 5
+        "#,
+        room,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
     let members_text: Vec<String> = described
         .iter()
-        .map(|(id, name, about)| format!("- id {id}: {name}. {about}"))
+        .map(|agent| format!("- id {}: {}. {}", agent.id, agent.name, agent.about))
         .collect();
     let recent_text: Vec<String> = recent
         .iter()
         .rev()
-        .map(|(author, text)| format!("{author}: {text}"))
+        .map(|recent| format!("{}: {}", recent.login, recent.text))
         .collect();
     let prompt = format!(
         "Room: {name}\n\nMembers:\n{}\n\nOpen tasks:\n{}\n\nEarlier messages, oldest first:\n{}\n\nMessage to route:\n{message}",
@@ -162,7 +216,7 @@ fn configured<P>(
     match std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
         Ok(origin) => loopback(&origin),
         Err(std::env::VarError::NotPresent) => new(),
-        Err(_) => Err(cubebot_providers::Error::Configuration),
+        Err(error) => Err(cubebot_providers::Error::Configuration(Some(error.into()))),
     }
     .map_err(|error| error.code())
 }
@@ -182,25 +236,43 @@ async fn settle(
     decision: Result<Decision, &'static str>,
 ) -> Result<(), Error> {
     let mut tx = pool.begin().await?;
-    let routing: Option<String> =
-        sqlx::query_scalar("SELECT routing FROM room_messages WHERE id=$1 FOR UPDATE")
-            .bind(pending.id)
-            .fetch_optional(&mut *tx)
-            .await?;
+    let routing = sqlx::query_scalar!(
+        "
+        SELECT routing
+        FROM room_messages
+        WHERE id=$1
+        FOR UPDATE
+        ",
+        pending.id,
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
     if routing.as_deref() != Some("routing") {
         return Ok(());
     }
-    let room: Uuid = sqlx::query_scalar("SELECT room_id FROM room_messages WHERE id=$1")
-        .bind(pending.id)
-        .fetch_one(&mut *tx)
-        .await?;
+    let room = sqlx::query_scalar!(
+        "
+        SELECT room_id
+        FROM room_messages
+        WHERE id=$1
+        ",
+        pending.id,
+    )
+    .fetch_one(&mut *tx)
+    .await?;
     let (routing, note) = outcome(&mut tx, pending.id, room, decision).await?;
-    sqlx::query("UPDATE room_messages SET routing=$2,note=$3 WHERE id=$1")
-        .bind(pending.id)
-        .bind(routing)
-        .bind(note)
-        .execute(&mut *tx)
-        .await?;
+    sqlx::query!(
+        "
+        UPDATE room_messages
+        SET routing=$2, note=$3
+        WHERE id=$1
+        ",
+        pending.id,
+        routing,
+        note,
+    )
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(())
 }
@@ -251,10 +323,15 @@ async fn attempt(
     id: Uuid,
     code: &str,
 ) -> Result<(&'static str, Option<String>), Error> {
-    let attempts: i16 = sqlx::query_scalar(
-        "UPDATE room_messages SET attempts=attempts+1 WHERE id=$1 RETURNING attempts",
+    let attempts = sqlx::query_scalar!(
+        "
+        UPDATE room_messages
+        SET attempts=attempts+1
+        WHERE id=$1
+        RETURNING attempts
+        ",
+        id,
     )
-    .bind(id)
     .fetch_one(&mut **tx)
     .await?;
     let routing = if attempts >= ATTEMPTS {

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT format('%s: %s%s',a.login,left(m.message,1000),COALESCE((SELECT string_agg(format(E'\\n  %s replied: %s',g.name,left(t.response,1000)),'' ORDER BY t.sequence) FROM chat_turns t JOIN agents g ON g.id=t.conversation_id WHERE t.room_message_id=m.id AND t.status='complete'),'')) AS \"line!\"\n        FROM room_messages m\n        JOIN human_accounts a ON a.id=m.actor_id\n        JOIN room_messages c ON c.id=$1\n        WHERE m.room_id=c.room_id AND m.sequence<c.sequence\n        ORDER BY m.sequence DESC\n        LIMIT 10\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "line!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f01346907e83365f93147a0ac4ad012f68466e42d921a45d6b26c72ddc177eee"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE human_accounts\n            SET\n                auth_window_started_at = CASE\n                    WHEN auth_window_started_at <= clock_timestamp() - interval '60 seconds'\n                    THEN clock_timestamp()\n                    ELSE auth_window_started_at\n                END,\n                auth_attempts = CASE\n                    WHEN auth_window_started_at <= clock_timestamp() - interval '60 seconds'\n                    THEN 1\n                    ELSE auth_attempts + 1\n                END\n            WHERE id = $1\n                AND active\n                AND (\n                    auth_attempts < 10\n                    OR auth_window_started_at <= clock_timestamp() - interval '60 seconds'\n                )\n            RETURNING id AS \"id!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3b3014e4c2dc3f9b2c113ed6635aa9618ad6ab1bf3ee54027ceeeb6b3a817b9e"
+}

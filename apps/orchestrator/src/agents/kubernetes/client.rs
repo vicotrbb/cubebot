@@ -36,6 +36,7 @@ impl Kubernetes {
         })
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn review_runtime_token(&self, token: &str) -> Result<super::ReviewedPod, Error> {
         if token.is_empty()
             || token.len() > 16384
@@ -65,6 +66,7 @@ impl Kubernetes {
     }
 
     /// Server defaulting/admission preview, never evidence of a physical object.
+    #[tracing::instrument(skip_all)]
     pub async fn prepare(&self, object: &ResourceObject) -> Result<ResourceObject, Error> {
         self.validate_target(object.metadata())?;
         if object.metadata().uid.is_some() || object.metadata().resource_version.is_some() {
@@ -86,12 +88,14 @@ impl Kubernetes {
         Ok(preview)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn create_anchor(&self, anchor: &ConfigMap) -> Result<ConfigMap, Error> {
         self.validate_target(&anchor.metadata)?;
         Ok(self.anchors.create(&PostParams::default(), anchor).await?)
     }
 
     /// A candidate read never grants ownership. The durable registry must verify it.
+    #[tracing::instrument(skip_all)]
     pub async fn fetch_candidate(
         &self,
         expected: &ResourceObject,
@@ -117,6 +121,7 @@ impl Kubernetes {
     }
 
     /// Attaches a command inside the agent's sandbox container.
+    #[tracing::instrument(skip_all, fields(name = %name))]
     pub async fn exec(
         &self,
         name: &str,
@@ -138,11 +143,13 @@ impl Kubernetes {
     }
 
     /// Untrusted platform observation for installation process fencing, never adoption.
+    #[tracing::instrument(skip_all, fields(name = %name))]
     pub(crate) async fn platform_pod(&self, name: &str) -> Result<Option<Pod>, Error> {
         validate_namespace(name)?;
         Ok(self.pods.get_opt(name).await?)
     }
 
+    #[tracing::instrument(skip_all, fields(name = %name))]
     pub async fn fetch_anchor(&self, name: &str) -> Result<Option<ConfigMap>, Error> {
         validate_namespace(name)?;
         Ok(self.anchors.get_opt(name).await?)
@@ -167,11 +174,13 @@ impl Kubernetes {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn create_pod(&self, pod: &Pod) -> Result<Pod, Error> {
         self.validate_target(&pod.metadata)?;
         Ok(self.pods.create(&PostParams::default(), pod).await?)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn create_workspace(
         &self,
         claim: &PersistentVolumeClaim,
@@ -183,6 +192,7 @@ impl Kubernetes {
             .await?)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn observe(&self, recorded: &RecordedPod) -> Result<Option<Pod>, Error> {
         validate_namespace(&recorded.name)?;
         if recorded.namespace != self.namespace {
@@ -196,6 +206,7 @@ impl Kubernetes {
     }
 
     /// The caller must settle/drain assigned work before requesting ordinary termination.
+    #[tracing::instrument(skip_all)]
     pub async fn request_stop(&self, recorded: &RecordedPod) -> Result<(), Error> {
         let pod = self
             .observe(recorded)
@@ -204,6 +215,7 @@ impl Kubernetes {
         self.stop_observed(&pod).await
     }
 
+    #[tracing::instrument(skip_all)]
     pub(super) async fn stop_observed(&self, pod: &Pod) -> Result<(), Error> {
         self.validate_target(&pod.metadata)?;
         if !pod
@@ -222,6 +234,7 @@ impl Kubernetes {
     }
 
     /// Never infer termination from 404 or remove another controller's finalizer.
+    #[tracing::instrument(skip_all)]
     pub async fn finalize_stopped(&self, recorded: &RecordedPod) -> Result<(), Error> {
         let pod = self
             .observe(recorded)
@@ -230,6 +243,7 @@ impl Kubernetes {
         self.finalize_observed(&pod).await
     }
 
+    #[tracing::instrument(skip_all)]
     pub(super) async fn finalize_observed(&self, pod: &Pod) -> Result<(), Error> {
         self.validate_target(&pod.metadata)?;
         if pod.metadata.deletion_timestamp.is_none() || !termination_proven(pod) {

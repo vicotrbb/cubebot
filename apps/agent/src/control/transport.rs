@@ -12,7 +12,7 @@ pub(super) async fn decode_bounded<T: DeserializeOwned>(
     if !response.status().is_success() {
         return Err(match response.status().as_u16() {
             401 | 403 => Error::Rejected,
-            _ => Error::Unavailable,
+            _ => Error::Unavailable(None),
         });
     }
     body(response, limit).await
@@ -30,11 +30,11 @@ async fn body<T: DeserializeOwned>(
     limit: usize,
 ) -> Result<T, Error> {
     let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| Error::Unavailable)? {
+    while let Some(chunk) = response.chunk().await.map_err(super::request_failed)? {
         if bytes.len() + chunk.len() > limit {
-            return Err(Error::Protocol);
+            return Err(Error::Protocol(None));
         }
         bytes.extend_from_slice(&chunk);
     }
-    serde_json::from_slice(&bytes).map_err(|_| Error::Protocol)
+    serde_json::from_slice(&bytes).map_err(Error::protocol)
 }

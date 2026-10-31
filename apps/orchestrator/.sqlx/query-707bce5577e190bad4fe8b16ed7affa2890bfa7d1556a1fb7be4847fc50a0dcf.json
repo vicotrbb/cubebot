@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id AS \"id!\"\n                FROM human_teams\n                WHERE id = $1 AND active\n                FOR SHARE\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "707bce5577e190bad4fe8b16ed7affa2890bfa7d1556a1fb7be4847fc50a0dcf"
+}

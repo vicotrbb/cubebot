@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id, m.revision, m.content, r.turn_id AS source_turn, r.dream_run_id AS source_dream, r.human_id IS NOT NULL AS \"edited_by_human!\"\n            FROM memories m\n            JOIN memory_revisions r ON r.memory_id=m.id AND r.revision=m.revision\n            WHERE m.id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "source_turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "source_dream",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "edited_by_human!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "6020e305b66af108b484034948975a70055164287fcc2e829fb815bccdbc21af"
+}

@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT agent_id AS \"agent!: AgentId\",\n                   attempt_id AS \"attempt!: AttemptId\",\n                   epoch AS \"epoch!\",\n                   version AS \"version!\"\n            FROM runtime_session_access\n            WHERE token_hash = $1\n              AND recovery\n              AND (NOT $2 OR active)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent!: AgentId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "attempt!: AttemptId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "epoch!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "version!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "cd1c4ee454a8377a0267573c32bef43a49dd354b4c82128f64090a236ba89bab"
+}

@@ -315,8 +315,21 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
     let left = as_admin.get(&memories).await.1;
     assert_eq!(left.as_array().unwrap().len(), 1);
     assert_eq!(left[0]["content"], "Prefers metric units");
-    let revisions: Vec<(i64, bool, Option<Uuid>)> = sqlx::query_as("SELECT revision,deleted,human_id FROM memory_revisions WHERE memory_id=$1::uuid ORDER BY revision")
-        .bind(&id).fetch_all(&pool).await.unwrap();
+    let revisions: Vec<(i64, bool, Option<Uuid>)> = sqlx::query!(
+        "
+        SELECT revision,deleted,human_id
+        FROM memory_revisions
+        WHERE memory_id=$1::text::uuid
+        ORDER BY revision
+        ",
+        &id,
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| (row.revision, row.deleted, row.human_id))
+    .collect();
     assert_eq!(
         revisions,
         [

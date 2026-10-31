@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT origin_conversation_id AS \"value!\"\n        FROM chat_turns\n        ORDER BY sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "c3daaaef1c3e9589ff5f6b93a5b8f6caa31d47d71236fb17fa048e335b87d4bb"
+}

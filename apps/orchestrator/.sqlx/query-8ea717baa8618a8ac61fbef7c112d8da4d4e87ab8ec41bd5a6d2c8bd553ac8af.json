@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO identity_commands\n                (actor_id, kind, request_id, input_digest, outcome_id, outcome_revision, input_body, secret_verifier)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Int8",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8ea717baa8618a8ac61fbef7c112d8da4d4e87ab8ec41bd5a6d2c8bd553ac8af"
+}

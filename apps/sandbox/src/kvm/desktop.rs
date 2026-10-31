@@ -186,17 +186,23 @@ impl<'a> Arbiter<'a> {
         for request in requests {
             match request {
                 Request::Guest { port, line } => {
-                    let response = encode(&self.agent(&line));
-                    let delivered = vsock.run(|vsock, queues| {
-                        vsock.respond(port, &response);
-                        vsock.deliver(queues, self.memory)
+                    let delivered = encode(&self.agent(&line)).and_then(|response| {
+                        vsock.run(|vsock, queues| {
+                            vsock.respond(port, &response);
+                            vsock.deliver(queues, self.memory)
+                        })
                     });
                     if let Err(error) = delivered {
                         super::fail(&format!("guest desktop stream: {error}"));
                     }
                 }
                 // A relay that went away no longer wants its response.
-                Request::Host { line, reply } => drop(reply.send(encode(&self.host(&line)))),
+                // An unencodable response drops the reply, which the relay reports as an error.
+                Request::Host { line, reply } => {
+                    if let Ok(response) = encode(&self.host(&line)) {
+                        drop(reply.send(response));
+                    }
+                }
                 Request::Frame { reply } => drop(reply.send(self.snapshot())),
             }
         }
@@ -520,11 +526,12 @@ fn logged(action: &Action) -> Value {
     value
 }
 
-fn encode(response: &Response) -> Vec<u8> {
-    serde_json::to_vec(response).expect("response serializes")
+fn encode(response: &Response) -> io::Result<Vec<u8>> {
+    Ok(serde_json::to_vec(response)?)
 }
 
 /// Relays host channel lines to the arbiter, one connection per thread.
+#[tracing::instrument(name = "desktop_listen", skip_all)]
 pub fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
     // A socket left by an earlier run of this sandbox; the path is this sandbox's own.
     let _ = std::fs::remove_file(path);
@@ -545,6 +552,7 @@ pub fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
 
 /// Serves one connection; whoever took control through it and still holds it when it closes,
 /// such as an orchestrator that went away, hands control back.
+#[tracing::instrument(name = "desktop_connection", skip_all)]
 fn relay(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
     let mut held = None;
     let served = serve_connection(stream, requests, &mut held);
@@ -581,7 +589,7 @@ fn serve_connection(
         }
         let request = serde_json::from_slice(&line).ok();
         let mut response = match request {
-            Some(HostRequest::Frame) => encode(&frame(requests, &mut shown)?),
+            Some(HostRequest::Frame) => encode(&frame(requests, &mut shown)?)?,
             _ => ask(requests, line)?,
         };
         if let Some(HostRequest::Mode { mode, account }) = request {

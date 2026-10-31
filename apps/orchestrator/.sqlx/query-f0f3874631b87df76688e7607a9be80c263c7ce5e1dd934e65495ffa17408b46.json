@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO human_accounts (login, password_hash, role)\n        VALUES ('invalid', 'test-verifier', 'superuser')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f0f3874631b87df76688e7607a9be80c263c7ce5e1dd934e65495ffa17408b46"
+}

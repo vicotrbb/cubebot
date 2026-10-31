@@ -331,10 +331,11 @@ fn request(
     call: Uuid,
     action: Action,
 ) -> io::Result<Response> {
-    if desktop.is_none() {
-        *desktop = Some(BufReader::new(connect()?));
-    }
-    let stream = desktop.as_mut().expect("connected");
+    let stream = match desktop.take() {
+        Some(stream) => stream,
+        None => BufReader::new(connect()?),
+    };
+    let stream = desktop.insert(stream);
     let exchanged = exchange(stream, &AgentRequest { call, action });
     if exchanged.is_err() {
         *desktop = None;
@@ -362,6 +363,7 @@ fn exchange(stream: &mut BufReader<File>, request: &AgentRequest) -> io::Result<
 }
 
 #[cfg(target_os = "linux")]
+#[tracing::instrument(skip_all, fields(port = cubebot_protocol::desktop::PORT))]
 fn connect() -> io::Result<File> {
     use nix::sys::socket::{AddressFamily, SockFlag, SockType, VsockAddr, connect, socket};
     use std::os::fd::AsRawFd;

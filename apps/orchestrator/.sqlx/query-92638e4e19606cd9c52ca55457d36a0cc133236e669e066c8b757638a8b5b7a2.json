@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT previous_termination_proof::text AS \"value!\"\n        FROM orchestrator_owner\n        WHERE singleton\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "92638e4e19606cd9c52ca55457d36a0cc133236e669e066c8b757638a8b5b7a2"
+}

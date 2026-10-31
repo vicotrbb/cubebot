@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT s.name, r.description\n        FROM skill_installations i\n        JOIN skills s ON s.id=i.skill_id\n        JOIN skill_revisions r ON r.skill_id=i.skill_id AND r.revision=i.revision\n        WHERE i.agent_id=$1\n        ORDER BY s.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "description",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "23fcc7be2d615a6b0261c3125f5e735ff8a5ef2957c4f85e62a0902b1ecbf704"
+}

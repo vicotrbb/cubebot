@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT acknowledged_at IS NOT NULL AS \"value!\"\n        FROM agent_runtime_drains\n        WHERE attempt_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e15d1bfb0bd566c7a47304c4ffdb8d959d35cf933067fe65cdd160ebaccf1d30"
+}

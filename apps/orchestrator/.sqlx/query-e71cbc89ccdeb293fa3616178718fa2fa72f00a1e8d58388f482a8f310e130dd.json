@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE chat_turns\n        SET status='cancelled', error='cancelled'\n        WHERE id=$1 AND conversation_id=$2 AND status NOT IN ('complete','failed')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e71cbc89ccdeb293fa3616178718fa2fa72f00a1e8d58388f482a8f310e130dd"
+}

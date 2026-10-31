@@ -25,11 +25,15 @@ async fn runtime_sessions_last_for_the_incarnation_rotate_and_stay_separate_from
         .unwrap();
     assert_eq!(actor.agent, f.agent);
     assert_eq!(actor.attempt, f.attempt);
-    let stored: String =
-        sqlx::query_scalar("SELECT to_jsonb(s)::text FROM agent_runtime_sessions s")
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+    let stored: String = sqlx::query_scalar!(
+        r#"
+        SELECT to_jsonb(s)::text AS "value!"
+        FROM agent_runtime_sessions s
+        "#
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert!(!stored.contains(&first.token));
     assert!(!stored.contains("projected-token"));
     assert!(
@@ -53,8 +57,11 @@ async fn runtime_sessions_last_for_the_incarnation_rotate_and_stay_separate_from
     );
     assert_eq!(second.version, first.version + 1);
     // No clock ends the credential; only the incarnation ending revokes it.
-    sqlx::query(
-        "UPDATE agent_runtime_sessions SET created_at = clock_timestamp() - interval '30 days'",
+    sqlx::query!(
+        "
+        UPDATE agent_runtime_sessions
+        SET created_at = clock_timestamp() - interval '30 days'
+        "
     )
     .execute(&f.pool)
     .await
@@ -131,10 +138,14 @@ async fn lifecycle_revokes_active_access_while_preserving_bounded_recovery_ident
             .await
             .is_ok()
     );
-    sqlx::query(
-        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
+    sqlx::query!(
+        "
+        UPDATE agent_resources
+        SET phase = 'stopped',termination_proof = '{}'
+        WHERE id = $1
+        ",
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .execute(&f.pool)
     .await
     .unwrap();
@@ -173,10 +184,15 @@ async fn wrong_pod_identity_and_specification_cannot_obtain_runtime_credentials(
             .await
             .is_err()
     );
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM agent_runtime_sessions")
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agent_runtime_sessions
+        "#
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(count, 0);
     f.task.abort();
 }
@@ -237,11 +253,18 @@ async fn bootstrap_deadline_does_not_issue_a_session_after_waiting_on_lifecycle_
     use cubebot_orchestrator::agents::kubernetes::Error;
     let f = fixture().await;
     let mut blocker = f.pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM agents WHERE id = $1 FOR UPDATE")
-        .bind(f.agent)
-        .fetch_one(&mut *blocker)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        SELECT id
+        FROM agents
+        WHERE id = $1
+        FOR UPDATE
+        ",
+        f.agent as _,
+    )
+    .fetch_one(&mut *blocker)
+    .await
+    .unwrap();
     let instance = Uuid::new_v4();
     let outcome = tokio::time::timeout(
         std::time::Duration::from_secs(25),
@@ -251,10 +274,15 @@ async fn bootstrap_deadline_does_not_issue_a_session_after_waiting_on_lifecycle_
     .unwrap();
     assert!(matches!(outcome, Err(Error::DeadlineExceeded)));
     blocker.rollback().await.unwrap();
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM agent_runtime_sessions")
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agent_runtime_sessions
+        "#
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(count, 0);
     assert!(f.auth.bootstrap("projected-token", instance).await.is_ok());
     f.task.abort();
@@ -296,10 +324,15 @@ async fn rejected_http_inputs_are_bounded_uncached_and_do_not_echo_input_secrets
             "{\"error\":\"runtime_identity_unavailable\"}"
         );
     }
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM agent_runtime_sessions")
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agent_runtime_sessions
+        "#
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(count, 0);
     task.abort();
     f.task.abort();
@@ -404,10 +437,14 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
         .await
         .unwrap();
     assert!(acknowledged.acknowledged);
-    let original: String = sqlx::query_scalar(
-        "SELECT acknowledged_at::text FROM agent_runtime_drains WHERE attempt_id = $1",
+    let original: String = sqlx::query_scalar!(
+        r#"
+        SELECT acknowledged_at::text AS "value!"
+        FROM agent_runtime_drains
+        WHERE attempt_id = $1
+        "#,
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .fetch_one(&f.pool)
     .await
     .unwrap();
@@ -416,10 +453,14 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
         .acknowledge_drain(&rotated.token, request.request_id)
         .await
         .unwrap();
-    let retained: String = sqlx::query_scalar(
-        "SELECT acknowledged_at::text FROM agent_runtime_drains WHERE attempt_id = $1",
+    let retained: String = sqlx::query_scalar!(
+        r#"
+        SELECT acknowledged_at::text AS "value!"
+        FROM agent_runtime_drains
+        WHERE attempt_id = $1
+        "#,
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .fetch_one(&f.pool)
     .await
     .unwrap();
@@ -433,15 +474,31 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
             .await
             .is_err()
     );
-    let phase: String = sqlx::query_scalar("SELECT phase FROM agent_resources WHERE id = $1")
-        .bind(f.attempt)
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
+    let phase: String = sqlx::query_scalar!(
+        "
+        SELECT phase
+        FROM agent_resources
+        WHERE id = $1
+        ",
+        f.attempt as _,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(phase, "bound");
     // Even an accidentally restored generation cannot reopen a latched incarnation.
-    sqlx::query("UPDATE agents SET restart_generation = (SELECT target_generation FROM agent_resources WHERE id = $1) WHERE id = $2")
-        .bind(f.attempt).bind(f.agent).execute(&f.pool).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE agents
+        SET restart_generation = (SELECT target_generation FROM agent_resources WHERE id = $1)
+        WHERE id = $2
+        ",
+        f.attempt as _,
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     assert!(
         f.auth
             .authenticate(&rotated.token, RuntimeAccess::Active)
@@ -464,11 +521,18 @@ async fn drain_reports_recheck_revocation_after_waiting_for_lifecycle_lock() {
     lifecycle(&f, LifecycleAction::Restart, 2).await;
     let request = f.auth.control(&session.token).await.unwrap().drain.unwrap();
     let mut transaction = f.pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM agents WHERE id = $1 FOR UPDATE")
-        .bind(f.agent)
-        .execute(&mut *transaction)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        SELECT id
+        FROM agents
+        WHERE id = $1
+        FOR UPDATE
+        ",
+        f.agent as _,
+    )
+    .fetch_all(&mut *transaction)
+    .await
+    .unwrap();
     let auth = f.auth.clone();
     let report = tokio::spawn(async move {
         auth.acknowledge_drain(&session.token, request.request_id)
@@ -476,19 +540,27 @@ async fn drain_reports_recheck_revocation_after_waiting_for_lifecycle_lock() {
     });
     // Wait until PostgreSQL proves the report is contending on the held lifecycle lock.
     wait_for_runtime_lock(&f.pool).await;
-    sqlx::query(
-        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
+    sqlx::query!(
+        "
+        UPDATE agent_resources
+        SET phase = 'stopped',termination_proof = '{}'
+        WHERE id = $1
+        ",
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .execute(&mut *transaction)
     .await
     .unwrap();
     transaction.commit().await.unwrap();
     assert!(report.await.unwrap().is_err());
-    let acknowledged: bool = sqlx::query_scalar(
-        "SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1",
+    let acknowledged: bool = sqlx::query_scalar!(
+        r#"
+        SELECT acknowledged_at IS NOT NULL AS "value!"
+        FROM agent_runtime_drains
+        WHERE attempt_id = $1
+        "#,
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .fetch_one(&f.pool)
     .await
     .unwrap();
@@ -498,7 +570,11 @@ async fn drain_reports_recheck_revocation_after_waiting_for_lifecycle_lock() {
 
 async fn wait_for_runtime_lock(pool: &sqlx::PgPool) {
     for _ in 0..100 {
-        let waiting: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'SELECT id FROM agents%')")
+        let waiting: bool = sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND btrim(regexp_replace(query, '\s+', ' ', 'g')) LIKE 'SELECT id FROM agents%') AS "value!"
+            "#
+        )
             .fetch_one(pool).await.unwrap();
         if waiting {
             return;
@@ -534,10 +610,14 @@ async fn drain_is_requested_and_acknowledged_on_the_channel() {
     )
     .await;
     assert_eq!(delivery(&mut channel).await, json!({"type":"revoked"}));
-    let acknowledged: bool = sqlx::query_scalar(
-        "SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1",
+    let acknowledged: bool = sqlx::query_scalar!(
+        r#"
+        SELECT acknowledged_at IS NOT NULL AS "value!"
+        FROM agent_runtime_drains
+        WHERE attempt_id = $1
+        "#,
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .fetch_one(&f.pool)
     .await
     .unwrap();
@@ -576,19 +656,29 @@ async fn actual_native_runtime_acknowledges_a_persisted_drain_and_exits() {
         .expect("build the workspace before integration");
     let status = native_exit(&mut child).await;
     assert!(status.success());
-    let reported: bool = sqlx::query_scalar(
-        "SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1",
+    let reported: bool = sqlx::query_scalar!(
+        r#"
+        SELECT acknowledged_at IS NOT NULL AS "value!"
+        FROM agent_runtime_drains
+        WHERE attempt_id = $1
+        "#,
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .fetch_one(&f.pool)
     .await
     .unwrap();
     assert!(reported);
-    let phase: String = sqlx::query_scalar("SELECT phase FROM agent_resources WHERE id = $1")
-        .bind(f.attempt)
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
+    let phase: String = sqlx::query_scalar!(
+        "
+        SELECT phase
+        FROM agent_resources
+        WHERE id = $1
+        ",
+        f.attempt as _,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(phase, "bound");
     assert!(root.join("tools/state").is_file());
     std::fs::remove_dir_all(root).unwrap();
@@ -849,18 +939,26 @@ async fn native_text(first_failure: bool) {
     let history = work.history(&admin, conversation, 0).await.unwrap();
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].response.as_deref(), Some("Durable native reply"));
-    let kinds: Vec<String> = sqlx::query_scalar(
-        "SELECT payload->>'kind' FROM turn_events WHERE turn_id = $1 ORDER BY sequence",
-    )
-    .bind(history[0].id)
-    .fetch_all(&f.pool)
-    .await
-    .unwrap();
+    let kinds = event_kinds(&f.pool, history[0].id).await;
     // The fixture reports no usage, which is never recorded as zero.
     assert_eq!(kinds, ["text_delta", "done"]);
     server.abort();
     provider.abort();
     f.task.abort();
+}
+async fn event_kinds(pool: &sqlx::PgPool, turn: Uuid) -> Vec<String> {
+    sqlx::query_scalar!(
+        r#"
+        SELECT payload->>'kind' AS "value!"
+        FROM turn_events
+        WHERE turn_id = $1
+        ORDER BY sequence
+        "#,
+        turn,
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
 }
 async fn wait_native_response(
     work: &cubebot_orchestrator::work::Work,
@@ -1230,12 +1328,17 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     assert_eq!(first["api_key"], "controlled-key");
     assert_eq!(first["history"], json!([]));
     let turn = first["turn"].clone();
-    let attempt: Option<Uuid> =
-        sqlx::query_scalar("SELECT attempt_id FROM chat_turns WHERE id = $1")
-            .bind(Uuid::parse_str(turn.as_str().unwrap()).unwrap())
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+    let attempt: Option<Uuid> = sqlx::query_scalar!(
+        "
+        SELECT attempt_id
+        FROM chat_turns
+        WHERE id = $1
+        ",
+        Uuid::parse_str(turn.as_str().unwrap()).unwrap(),
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(attempt, Some(f.attempt.0));
     // A second pull while a turn is active is not another turn.
     report(&mut channel, json!({"type":"pull"})).await;
@@ -1296,12 +1399,17 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     assert_eq!(settled[0].response.as_deref(), Some("Answer"));
     // The run ended without the call's result, so its effects are uncertain.
     assert_eq!(settled[0].terminal[0].status, "uncertain");
-    let delta: Value =
-        sqlx::query_scalar("SELECT payload FROM turn_events WHERE turn_id = $1 AND sequence = 1")
-            .bind(settled[0].id)
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+    let delta: Value = sqlx::query_scalar!(
+        "
+        SELECT payload
+        FROM turn_events
+        WHERE turn_id = $1 AND sequence = 1
+        ",
+        settled[0].id,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(delta["text"], "Ans");
     // An event for a turn this agent does not own closes the channel.
     report(
@@ -1344,10 +1452,14 @@ async fn cancel_and_revocation_are_messages_on_the_channel() {
         work.history(&admin, conversation, 0).await.unwrap()[0].status,
         "cancelled"
     );
-    sqlx::query(
-        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
+    sqlx::query!(
+        "
+        UPDATE agent_resources
+        SET phase = 'stopped',termination_proof = '{}'
+        WHERE id = $1
+        ",
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .execute(&f.pool)
     .await
     .unwrap();
@@ -1521,10 +1633,14 @@ async fn a_lost_sandbox_interrupts_its_running_turn() {
         work.history(&admin, conversation, 0).await.unwrap()[0].status,
         "running"
     );
-    sqlx::query(
-        "UPDATE agent_resources SET phase = 'stopped',termination_proof = '{}' WHERE id = $1",
+    sqlx::query!(
+        "
+        UPDATE agent_resources
+        SET phase = 'stopped',termination_proof = '{}'
+        WHERE id = $1
+        ",
+        f.attempt as _,
     )
-    .bind(f.attempt)
     .execute(&f.pool)
     .await
     .unwrap();

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id AS turn_id,\n                CASE WHEN r.id IS NOT NULL THEN 'room' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS \"kind!\",\n                COALESCE(r.name,a.name) AS \"name!\",\n                t.parent_turn_id\n            FROM chat_turns t\n            LEFT JOIN room_messages m ON m.id=t.room_message_id\n            LEFT JOIN rooms r ON r.id=m.room_id\n            LEFT JOIN chat_turns p ON p.id=t.parent_turn_id\n            LEFT JOIN agents a ON a.id=p.conversation_id\n            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "parent_turn_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "519ba2fbe07b04ce3a20e335765a7016389f30723b97ec8ea97fadfa6084cad0"
+}

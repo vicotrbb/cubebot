@@ -20,6 +20,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{mpsc::UnboundedSender, watch};
+use tracing::Instrument;
 use uuid::Uuid;
 
 /// Model requests per step, counting the first.
@@ -62,6 +63,7 @@ impl Run {
     }
 }
 
+#[tracing::instrument(skip_all, fields(turn = %turn.turn))]
 pub(super) async fn run(
     turn: Turn,
     events: UnboundedSender<Event>,
@@ -113,7 +115,7 @@ pub(super) fn configured<P>(
     match std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
         Ok(origin) => loopback(&origin),
         Err(std::env::VarError::NotPresent) => new(),
-        Err(_) => Err(Error::Configuration),
+        Err(error) => Err(Error::Configuration(Some(error.into()))),
     }
 }
 
@@ -250,29 +252,43 @@ impl<P: Provider> Session<'_, P> {
         request: &Request<'_>,
         stream_text: bool,
     ) -> Result<(Reply, Option<Usage>), Error> {
-        let provider = self.provider;
         let mut attempt = 1;
         loop {
             let mut streamed = false;
-            let mut events = std::pin::pin!(provider.stream(request));
-            let error = loop {
-                match events.next().await {
-                    Some(Ok(ProviderEvent::Text(text))) => {
-                        streamed = true;
-                        if stream_text {
-                            self.run.emit(TurnEvent::TextDelta { text }, None);
-                        }
-                    }
-                    Some(Ok(ProviderEvent::Done { reply, usage })) => return Ok((reply, usage)),
-                    Some(Err(error)) => break error,
-                    None => break Error::Unavailable,
-                }
+            let error = match self.request(request, stream_text, &mut streamed).await {
+                Ok(done) => return Ok(done),
+                Err(error) => error,
             };
             match backoff(&error, attempt) {
                 Some(delay) if !streamed => tokio::time::sleep(delay).await,
                 _ => return Err(error),
             }
             attempt += 1;
+        }
+    }
+
+    /// One model request, streamed; `streamed` records whether any text arrived.
+    #[tracing::instrument(skip_all, fields(provider = ?self.turn.provider, model = request.model))]
+    async fn request(
+        &mut self,
+        request: &Request<'_>,
+        stream_text: bool,
+        streamed: &mut bool,
+    ) -> Result<(Reply, Option<Usage>), Error> {
+        let provider = self.provider;
+        let mut events = std::pin::pin!(provider.stream(request));
+        loop {
+            match events.next().await {
+                Some(Ok(ProviderEvent::Text(text))) => {
+                    *streamed = true;
+                    if stream_text {
+                        self.run.emit(TurnEvent::TextDelta { text }, None);
+                    }
+                }
+                Some(Ok(ProviderEvent::Done { reply, usage })) => return Ok((reply, usage)),
+                Some(Err(error)) => return Err(error),
+                None => return Err(Error::Unavailable),
+            }
         }
     }
 
@@ -314,9 +330,10 @@ impl<P: Provider> Session<'_, P> {
         let mut running = FuturesUnordered::new();
         let mut unfinished = Vec::new();
         for (index, (id, name, input, call)) in prepared.into_iter().enumerate() {
+            let span = tracing::info_span!("tool_call", tool = %name, call = %id);
             self.journal(TurnEvent::ToolCall { id, name, input })?;
             unfinished.push(id);
-            running.push(async move { (index, id, call.await) });
+            running.push(async move { (index, id, call.await) }.instrument(span));
         }
         let mut outputs = vec![(String::new(), None); calls.len()];
         let mut cancel = self.cancel.clone();
@@ -508,7 +525,11 @@ mod tests {
         let hinted = backoff(&Error::Transient(Some(Duration::from_secs(7))), 1).unwrap();
         assert!(hinted >= Duration::from_secs(7) && hinted < Duration::from_secs(8));
         assert!(backoff(&Error::Transient(Some(Duration::from_secs(600))), 1).is_none());
-        for error in [Error::Rejected, Error::Unavailable, Error::InvalidResponse] {
+        for error in [
+            Error::Rejected,
+            Error::Unavailable,
+            Error::InvalidResponse(None),
+        ] {
             assert!(backoff(&error, 1).is_none());
         }
     }

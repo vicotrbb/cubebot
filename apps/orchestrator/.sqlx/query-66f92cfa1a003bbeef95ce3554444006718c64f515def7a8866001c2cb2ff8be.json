@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id AS \"id: AttemptId\"\n            FROM agent_resources\n            WHERE kind = 'pod'\n              AND phase = 'bound'\n              AND namespace = $1\n              AND name = $2\n              AND uid = $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AttemptId",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "66f92cfa1a003bbeef95ce3554444006718c64f515def7a8866001c2cb2ff8be"
+}

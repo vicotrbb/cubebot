@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE human_accounts\n        SET auth_window_started_at = clock_timestamp() - interval '61 seconds'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "a213e440fbf1f9e32dd83642588c73e73ed164b84c9f2154f0ad5f013c11b252"
+}

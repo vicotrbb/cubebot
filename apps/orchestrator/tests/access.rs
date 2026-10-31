@@ -130,11 +130,17 @@ async fn team_access_is_scoped_explainable_and_revoked_without_relogin() {
             .unwrap()
             .administrator
     );
-    let retained: i64 = sqlx::query_scalar("SELECT count(*) FROM access_grants WHERE id = $1")
-        .bind(grant.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let retained: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM access_grants
+        WHERE id = $1
+        "#,
+        grant.id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(retained, 1);
 }
 
@@ -180,11 +186,16 @@ async fn team_commands_replay_after_reconnect_and_reject_changed_input_or_stale_
             .await,
         Err(IdentityError::Conflict)
     ));
-    let count: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM identity_events WHERE kind = 'team.membership'")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM identity_events
+        WHERE kind = 'team.membership'
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 1);
 }
 
@@ -332,10 +343,15 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
             .unwrap()
             .allowed
     );
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM access_grants")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM access_grants
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 2);
 }
 
@@ -392,8 +408,12 @@ async fn team_listing_pages_and_denies_non_administrators() {
     let pool = support::database().await;
     let identity = Identity::new(pool.clone());
     let (admin, member) = people(&identity).await;
-    sqlx::query(
-        "INSERT INTO human_teams (name) SELECT 'Page ' || n FROM generate_series(1, 105) n",
+    sqlx::query!(
+        "
+        INSERT INTO human_teams (name)
+        SELECT 'Page ' || n
+        FROM generate_series(1, 105) n
+        "
     )
     .execute(&pool)
     .await
@@ -437,10 +457,17 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
         .unwrap()
         .sequence;
     let mut blocker = pool.begin().await.unwrap();
-    sqlx::query("SELECT singleton FROM installation WHERE singleton FOR UPDATE")
-        .execute(&mut *blocker)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        SELECT singleton
+        FROM installation
+        WHERE singleton
+        FOR UPDATE
+        "
+    )
+    .fetch_all(&mut *blocker)
+    .await
+    .unwrap();
     let other = identity.clone();
     let actor_id = admin.id;
     let mut first = tokio::spawn(async move {

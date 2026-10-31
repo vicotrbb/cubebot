@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                input_digest AS \"input_digest!\",\n                outcome_id AS \"outcome_id!\",\n                outcome_revision AS \"outcome_revision!\"\n            FROM identity_commands\n            WHERE actor_id = $1 AND kind = $2 AND request_id = $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "input_digest!",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "outcome_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "outcome_revision!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8f8e492f1bb25961e436034aa1c3ad5cc15dd6bc2afa80cf0fbfc6fa13fa2ce3"
+}

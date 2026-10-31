@@ -1,0 +1,155 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT g.id AS \"id: AgentId\",\n                   g.desired_state,\n                   g.revision,\n                   g.restart_generation,\n                   p.id AS \"pod_attempt?: AttemptId\",\n                   p.epoch AS \"pod_epoch?\",\n                   p.target_generation AS \"pod_target_generation?\",\n                   p.phase AS \"resource_phase?: Phase\",\n                   p.kubernetes_phase AS \"kubernetes_phase?\",\n                   p.kubernetes_reason AS \"kubernetes_reason?\",\n                   p.kubernetes_ready AS \"kubernetes_ready?\",\n                   p.deleting AS \"deleting?\",\n                   (to_jsonb(p.observed_at) #>> '{}') AS \"observed_at?\",\n                   extract(epoch FROM (clock_timestamp() - p.observed_at))::float8\n                       AS \"observed_seconds_ago?\",\n                   p.blocked_reason AS \"blocked_reason?\",\n                   p.termination_proof IS NOT NULL AS \"terminal_evidence_retained!\",\n                   d.request_id IS NOT NULL AS \"drain_requested!\",\n                   d.acknowledged_at IS NOT NULL AS \"drain_acknowledged!\",\n                   COALESCE(s.active, false) AS \"runtime_available!\",\n                   COALESCE(s.recovery, false) AS \"recovery_identity_live!\",\n                   w.id AS \"workspace_attempt?: AttemptId\",\n                   w.phase AS \"workspace_resource_phase?: Phase\",\n                   w.blocked_reason AS \"workspace_blocked_reason?\"\n            FROM agents g\n            JOIN human_accounts a ON a.id = $1 AND a.active\n            LEFT JOIN LATERAL (\n                SELECT r.*\n                FROM agent_resources r\n                WHERE r.agent_id = g.id\n                  AND r.kind = 'pod'\n                ORDER BY r.epoch DESC\n                LIMIT 1\n            ) p ON true\n            LEFT JOIN agent_resources w ON w.agent_id = g.id AND w.kind = 'workspace'\n            LEFT JOIN agent_runtime_drains d ON d.attempt_id = p.id\n            LEFT JOIN runtime_session_access s ON s.attempt_id = p.id\n            WHERE g.id = $2\n              AND (\n                a.role = 'administrator'\n                OR EXISTS(\n                    SELECT 1\n                    FROM effective_human_grants e\n                    WHERE e.actor_id = a.id\n                      AND e.scope_kind = 'agent'\n                      AND e.scope_id = g.id\n                      AND e.capability = 'agent.manage'\n                )\n              )\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AgentId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "desired_state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "restart_generation",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "pod_attempt?: AttemptId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "pod_epoch?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "pod_target_generation?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "resource_phase?: Phase",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "kubernetes_phase?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "kubernetes_reason?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "kubernetes_ready?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "deleting?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "observed_at?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "observed_seconds_ago?",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 14,
+        "name": "blocked_reason?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "terminal_evidence_retained!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "drain_requested!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 17,
+        "name": "drain_acknowledged!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 18,
+        "name": "runtime_available!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "recovery_identity_live!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 20,
+        "name": "workspace_attempt?: AttemptId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 21,
+        "name": "workspace_resource_phase?: Phase",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 22,
+        "name": "workspace_blocked_reason?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null,
+      null,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "6126c1ef68a8953cf7af82217a3d0e45ac9de2190ccb54bdc1b98c746a092053"
+}

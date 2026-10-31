@@ -1,30 +1,35 @@
 //! Explicit isolated cluster guard shared by actual-platform fixtures.
 use kube::{Api, Client};
-pub fn required(key: &str) -> String {
-    std::env::var(key).expect("explicit isolated fixture configuration required")
+/// Fixture failures end the run with their cause.
+type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
+pub fn required(key: &str) -> Result<String> {
+    std::env::var(key).map_err(|error| {
+        format!("explicit isolated fixture configuration required: {error:?}").into()
+    })
 }
-pub async fn configuration() -> kube::Config {
-    let source =
-        kube::config::Kubeconfig::read_from(required("CUBEBOT_CLUSTER_KUBECONFIG")).unwrap();
+pub async fn configuration() -> Result<kube::Config> {
+    let source = kube::config::Kubeconfig::read_from(required("CUBEBOT_CLUSTER_KUBECONFIG")?)?;
     let options = kube::config::KubeConfigOptions {
-        context: Some(required("CUBEBOT_CLUSTER_CONTEXT")),
+        context: Some(required("CUBEBOT_CLUSTER_CONTEXT")?),
         ..Default::default()
     };
-    let config = kube::Config::from_custom_kubeconfig(source, &options)
-        .await
-        .unwrap();
+    let config = kube::Config::from_custom_kubeconfig(source, &options).await?;
     assert_eq!(config.cluster_url.host(), Some("127.0.0.1"));
     assert!(!config.accept_invalid_certs);
-    config
+    Ok(config)
 }
-pub async fn verify_namespace(config: &kube::Config, namespace: &str) {
-    let client = Client::try_from(config.clone()).unwrap();
+pub async fn verify_namespace(config: &kube::Config, namespace: &str) -> Result<()> {
+    let client = Client::try_from(config.clone())?;
     let observed = Api::<k8s_openapi::api::core::v1::Namespace>::all(client)
         .get(namespace)
-        .await
-        .unwrap();
+        .await?;
     assert_eq!(
-        observed.metadata.labels.unwrap().get("cubebot.dev/fixture"),
-        Some(&required("CUBEBOT_CLUSTER_FIXTURE"))
+        observed
+            .metadata
+            .labels
+            .ok_or("fixture namespace labels missing")?
+            .get("cubebot.dev/fixture"),
+        Some(&required("CUBEBOT_CLUSTER_FIXTURE")?)
     );
+    Ok(())
 }

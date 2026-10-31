@@ -1,0 +1,31 @@
+# Agents for `just up` on x86_64 Linux with /dev/kvm, merged over compose.yaml. The
+# orchestrator starts each agent's sandbox through the host's Docker daemon, so its access to the
+# Docker socket is root on this host: run it only on a machine you would give Cubebot that.
+services:
+  orchestrator:
+    build:
+      target: agents
+    group_add:
+      - ${CUBEBOT_DOCKER_GID:?set by just up}
+    environment:
+      CUBEBOT_DOCKER_CONFIG: /run/cubebot/docker.json
+    configs:
+      - source: docker
+        target: /run/cubebot/docker.json
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  proxy:
+    ports:
+      - '${CUBEBOT_BRIDGE:?set by just up}:8443:8443'
+    volumes:
+      - ./tooling/local/Caddyfile.agents:/etc/caddy/Caddyfile.agents:ro
+      - ${CUBEBOT_DEV_CA:?set by just up}:/run/dev-ca:ro
+    command:
+      [caddy, run, --config, /etc/caddy/Caddyfile.agents, --adapter, caddyfile]
+
+configs:
+  # Docker reads control_ca_file on the host, since it bind-mounts it into each sandbox.
+  docker:
+    content: |
+      {"image": "cubebot-sandbox:local", "orchestrator_origin": "https://${CUBEBOT_BRIDGE}:8443", "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt", "terminal_enabled": true}

@@ -233,10 +233,31 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     assert_eq!(turn(&work, &admin, lead, second).await.status, "cancelled");
 
     // A failed child settles as failed with its error, and its yielded parent is queued again.
-    let foreign: Uuid = sqlx::query_scalar("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status) VALUES ($1,$2,gen_random_uuid(),'Parent elsewhere','delegated') RETURNING id")
-        .bind(bee).bind(admin.id).fetch_one(&f.pool).await.unwrap();
-    let failing: Uuid = sqlx::query_scalar("INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,awaited) VALUES ($1,$2,gen_random_uuid(),'Delegated to you by agent Bee: fail',$3,true) RETURNING id")
-        .bind(lead).bind(admin.id).bind(foreign).fetch_one(&f.pool).await.unwrap();
+    let foreign: Uuid = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status)
+        VALUES ($1,$2,gen_random_uuid(),'Parent elsewhere','delegated')
+        RETURNING id
+        ",
+        bee,
+        admin.id,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    let failing: Uuid = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,awaited)
+        VALUES ($1,$2,gen_random_uuid(),'Delegated to you by agent Bee: fail',$3,true)
+        RETURNING id
+        ",
+        lead,
+        admin.id,
+        foreign,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     model.turn(vec![Step::Reject], json!([]));
     let failed = reaches(&work, &admin, lead, failing, "failed").await;
     assert_eq!(failed.error.as_deref(), Some("provider_rejected"));
@@ -248,14 +269,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     server.abort();
     provider_task.abort();
     f.task.abort();
-}
-
-async fn insert(pool: &sqlx::PgPool, sql: &str, binds: &[Uuid]) -> Uuid {
-    let mut query = sqlx::query_scalar(sql);
-    for bind in binds {
-        query = query.bind(*bind);
-    }
-    query.fetch_one(pool).await.unwrap()
 }
 
 /// Waits until the model has received `count` requests in all.
@@ -345,23 +358,51 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
     // a task's context is the task, not the main conversation.
     let mut tasks = Vec::new();
     for job in ["one", "two", "three"] {
-        let parent = insert(&f.pool, "INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status) VALUES ($1,$2,gen_random_uuid(),'Parent','delegated') RETURNING id", &[bee, admin.id]).await;
-        let sql = format!(
-            "INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,awaited) VALUES ($1,$2,gen_random_uuid(),'Delegated to you by agent Bee: job {job}',$3,true) RETURNING id"
+        let parent = sqlx::query_scalar!(
+            "
+            INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status)
+            VALUES ($1,$2,gen_random_uuid(),'Parent','delegated')
+            RETURNING id
+            ",
+            bee,
+            admin.id,
+        )
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+        tasks.push(
+            sqlx::query_scalar!(
+                "
+                INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,awaited)
+                VALUES ($1,$2,gen_random_uuid(),'Delegated to you by agent Bee: job ' || $4,$3,true)
+                RETURNING id
+                ",
+                lead,
+                admin.id,
+                parent,
+                job,
+            )
+            .fetch_one(&f.pool)
+            .await
+            .unwrap(),
         );
-        tasks.push(insert(&f.pool, &sql, &[lead, admin.id, parent]).await);
     }
     let before = model.requests().len();
     model.turn(vec![Step::Gated(json!([text("done one")]))], json!([]));
     model.turn(vec![Step::Gated(json!([text("done two")]))], json!([]));
     model.turn(vec![Step::Reply(json!([text("done three")]))], json!([]));
     requested(&model, before + 2).await;
-    let running: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM chat_turns WHERE id=ANY($1) AND status='running'")
-            .bind(&tasks)
-            .fetch_one(&f.pool)
-            .await
-            .unwrap();
+    let running: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM chat_turns
+        WHERE id=ANY($1) AND status='running'
+        "#,
+        &tasks,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(running, 2);
     assert_eq!(turn(&work, &admin, lead, tasks[2]).await.status, "queued");
     let task_request = model.requests()[before].to_string();
@@ -378,16 +419,47 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
 
     // A message that expects a reply is answered back to its sender once, and the relay
     // expects none, so nothing echoes.
-    let sender = insert(&f.pool, "INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status,response,completed_at) VALUES ($1,$2,gen_random_uuid(),'Ping Registry agent','complete','sent',clock_timestamp()) RETURNING id", &[bee, admin.id]).await;
-    let ping = insert(&f.pool, "INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,expects_reply) VALUES ($1,$2,gen_random_uuid(),'Message by agent Bee: ping',$3,true) RETURNING id", &[lead, admin.id, sender]).await;
+    let sender = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status,response,completed_at)
+        VALUES ($1,$2,gen_random_uuid(),'Ping Registry agent','complete','sent',clock_timestamp())
+        RETURNING id
+        ",
+        bee,
+        admin.id,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    let ping = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,expects_reply)
+        VALUES ($1,$2,gen_random_uuid(),'Message by agent Bee: ping',$3,true)
+        RETURNING id
+        ",
+        lead,
+        admin.id,
+        sender,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     model.turn(vec![Step::Reply(json!([text("pong")]))], json!([]));
     reaches(&work, &admin, lead, ping, "complete").await;
-    let relays: Vec<(String, bool)> =
-        sqlx::query_as("SELECT message,expects_reply FROM chat_turns WHERE parent_turn_id=$1")
-            .bind(ping)
-            .fetch_all(&f.pool)
-            .await
-            .unwrap();
+    let relays: Vec<(String, bool)> = sqlx::query!(
+        "
+        SELECT message,expects_reply
+        FROM chat_turns
+        WHERE parent_turn_id=$1
+        ",
+        ping,
+    )
+    .fetch_all(&f.pool)
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| (row.message, row.expects_reply))
+    .collect();
     assert_eq!(
         relays,
         [(

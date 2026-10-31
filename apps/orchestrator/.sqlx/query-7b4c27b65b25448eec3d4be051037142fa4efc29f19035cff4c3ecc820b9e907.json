@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT format('- task %s: %s, on: %s',t.id,a.name,left(d.message,200)) AS \"line!\"\n        FROM chat_turns t\n        JOIN agents a ON a.id=t.conversation_id\n        JOIN room_messages d ON d.id=t.room_message_id\n        WHERE d.room_id=$1 AND t.status IN ('queued','running','delegated')\n        ORDER BY t.sequence DESC\n        LIMIT 5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "line!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7b4c27b65b25448eec3d4be051037142fa4efc29f19035cff4c3ecc820b9e907"
+}

@@ -42,8 +42,12 @@ impl Journal {
         let lock_path = root.join("lock");
         let initialized = fs::symlink_metadata(&lock_path).is_ok();
         let lock = private_file(&lock_path, true)?;
-        lock.try_lock()
-            .map_err(|_| io::Error::other("journal already locked or locking unavailable"))?;
+        lock.try_lock().map_err(|error| {
+            io::Error::other(crate::Caused::new(
+                "journal already locked or locking unavailable",
+                error,
+            ))
+        })?;
         let state = load_state(root, initialized)?;
         let mut journal = Self {
             root: root.into(),

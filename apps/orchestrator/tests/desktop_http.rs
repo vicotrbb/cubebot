@@ -150,13 +150,18 @@ async fn tool_call(pool: &sqlx::PgPool, turn: Uuid, sequence: i64) -> Uuid {
         json!({"kind":"tool_result","id":call,"outcome":{"status":"screenshot","output":"OK","image":"iVBORw0KGgo="}}),
     ];
     for (offset, payload) in events.into_iter().enumerate() {
-        sqlx::query("INSERT INTO turn_events (turn_id,sequence,payload) VALUES ($1,$2,$3)")
-            .bind(turn)
-            .bind(sequence + offset as i64)
-            .bind(payload)
-            .execute(pool)
-            .await
-            .unwrap();
+        sqlx::query!(
+            "
+            INSERT INTO turn_events (turn_id,sequence,payload)
+            VALUES ($1,$2,$3)
+            ",
+            turn,
+            sequence + offset as i64,
+            payload,
+        )
+        .execute(pool)
+        .await
+        .unwrap();
     }
     call
 }
@@ -282,12 +287,19 @@ async fn a_person_watches_takes_control_and_hands_back_with_each_change_recorded
         .collect();
     assert_eq!(marked, [(before, false), (after, true), (later, false)]);
     for _ in 0..50 {
-        let (modes, ended): (Value, bool) = sqlx::query_as("SELECT jsonb_path_query_array(mode_changes,'$[*].mode'),ended_at IS NOT NULL FROM desktop_sessions WHERE agent_id=$1 AND viewer_id=$2")
-            .bind(agent)
-            .bind(member_id)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let (modes, ended): (Value, bool) = sqlx::query!(
+            r#"
+            SELECT jsonb_path_query_array(mode_changes,'$[*].mode') AS "modes!",ended_at IS NOT NULL AS "ended!"
+            FROM desktop_sessions
+            WHERE agent_id=$1 AND viewer_id=$2
+            "#,
+            agent as _,
+            member_id,
+        )
+        .fetch_one(&pool)
+        .await
+        .map(|row| (row.modes, row.ended))
+        .unwrap();
         if ended {
             assert_eq!(modes, json!(["human", "watch"]));
             task.abort();

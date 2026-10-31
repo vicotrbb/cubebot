@@ -15,6 +15,7 @@ use tokio_rustls::{
     },
     server::TlsStream,
 };
+use tracing::Instrument;
 
 /// HTTPS on one TCP listener. Handshakes run concurrently, so a stalled client delays no other.
 pub struct Tls {
@@ -22,6 +23,7 @@ pub struct Tls {
     address: SocketAddr,
 }
 impl Tls {
+    #[tracing::instrument(skip_all)]
     pub fn new(mut listener: TcpListener, chain: &[u8], key: &[u8]) -> io::Result<Self> {
         let chain = CertificateDer::pem_slice_iter(chain)
             .collect::<Result<Vec<_>, _>>()
@@ -38,14 +40,18 @@ impl Tls {
             while !sender.is_closed() {
                 let (stream, peer) = Listener::accept(&mut listener).await;
                 let (acceptor, sender) = (acceptor.clone(), sender.clone());
-                tokio::spawn(async move {
-                    let handshake = acceptor.accept(stream);
-                    if let Ok(Ok(stream)) =
-                        tokio::time::timeout(Duration::from_secs(10), handshake).await
-                    {
-                        let _ = sender.send((stream, peer)).await;
+                let span = tracing::info_span!("tls_handshake", peer = %peer);
+                tokio::spawn(
+                    async move {
+                        let handshake = acceptor.accept(stream);
+                        if let Ok(Ok(stream)) =
+                            tokio::time::timeout(Duration::from_secs(10), handshake).await
+                        {
+                            let _ = sender.send((stream, peer)).await;
+                        }
                     }
-                });
+                    .instrument(span),
+                );
             }
         });
         Ok(Self { incoming, address })

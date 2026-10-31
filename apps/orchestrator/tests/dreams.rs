@@ -111,8 +111,11 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     };
     work.send(&admin, conversation.id, &message).await.unwrap();
     assert_eq!(runtime.start(Uuid::new_v4()).await.0, 409);
-    sqlx::query(
-        "UPDATE chat_turns SET status='complete',response='ok',completed_at=clock_timestamp()",
+    sqlx::query!(
+        "
+        UPDATE chat_turns
+        SET status='complete',response='ok',completed_at=clock_timestamp()
+        "
     )
     .execute(&f.pool)
     .await
@@ -157,10 +160,15 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
         )
         .await
         .unwrap();
-    sqlx::query("UPDATE agents SET dreaming_model='dream-model'")
-        .execute(&f.pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        UPDATE agents
+        SET dreaming_model='dream-model'
+        "
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
     let retry = Uuid::new_v4();
     let (status, dream) = runtime.start(retry).await;
     assert_eq!(
@@ -192,11 +200,17 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     assert_eq!(revised.content, "The deadline is November 22, 2026");
     assert!(runs[1].revisions[1].deleted);
     // Source records stay: the forgotten memory keeps both revisions.
-    let kept: i64 = sqlx::query_scalar("SELECT count(*) FROM memory_revisions WHERE memory_id=$1")
-        .bind(second.id)
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
+    let kept: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM memory_revisions
+        WHERE memory_id=$1
+        "#,
+        second.id,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
     assert_eq!(kept, 2);
     f.task.abort();
 }

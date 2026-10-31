@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agent_resources\n        SET phase = 'stopped',termination_proof = '{}'\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d316f88b58a61949f2758d2e91748e3fbf7584cb5b4ca4801d2e9455f3417440"
+}

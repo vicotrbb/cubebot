@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT revision, restart_generation, desired_state\n        FROM agents\n        WHERE id = $1\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "restart_generation",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "desired_state",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "62b910b42cb93395896ca6b75bbc61b6fa0863d2758831d004c157e31c2004ae"
+}

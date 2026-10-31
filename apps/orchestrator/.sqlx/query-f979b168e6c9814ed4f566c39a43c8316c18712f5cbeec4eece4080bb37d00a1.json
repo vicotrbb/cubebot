@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id, t.message, t.awaited, t.room_message_id\n            FROM chat_turns t\n            JOIN agents a ON a.id=t.conversation_id\n            WHERE t.conversation_id=$1 AND t.status='queued'\n                AND CASE WHEN t.awaited\n                    THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND o.awaited AND o.status IN ('running','waiting'))<a.task_lanes\n                    ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND o.status IN ('running','waiting'))\n                END\n            ORDER BY t.sequence\n            LIMIT 1\n            FOR UPDATE OF t\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "awaited",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "room_message_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f979b168e6c9814ed4f566c39a43c8316c18712f5cbeec4eece4080bb37d00a1"
+}

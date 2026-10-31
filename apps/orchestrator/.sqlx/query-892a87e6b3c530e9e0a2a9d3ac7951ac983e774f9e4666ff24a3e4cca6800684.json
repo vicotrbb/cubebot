@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.id AS \"id: AttemptId\", r.name, r.uid AS \"uid!\"\n            FROM docker_sandbox_tokens t\n            JOIN agent_resources r ON r.id = t.attempt_id\n            WHERE t.token_hash = $1\n              AND r.kind = 'pod'\n              AND r.namespace = 'docker'\n              AND r.phase = 'bound'\n              AND r.kubernetes_phase = 'Running'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AttemptId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "uid!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "892a87e6b3c530e9e0a2a9d3ac7951ac983e774f9e4666ff24a3e4cca6800684"
+}

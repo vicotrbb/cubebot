@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.revision, r.instructions_revision, r.name, r.instructions,\n                   r.idle_policy AS \"idle_policy: IdlePolicy\", r.idle_delay_seconds,\n                   r.dreaming_model, r.task_lanes, r.actor_id\n            FROM agent_definition_revisions r\n            JOIN human_accounts a ON a.id = $1 AND a.active\n            WHERE r.agent_id = $2\n              AND r.revision > $3\n              AND (\n                a.role = 'administrator'\n                OR EXISTS(\n                    SELECT 1\n                    FROM effective_human_grants p\n                    WHERE p.actor_id = a.id\n                      AND p.scope_kind = 'agent'\n                      AND p.scope_id = r.agent_id\n                      AND p.capability = 'agent.manage'\n                )\n              )\n            ORDER BY r.revision\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "instructions_revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "idle_policy: IdlePolicy",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "idle_delay_seconds",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "dreaming_model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "task_lanes",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 8,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b33b992a7497372c2c6152d8cebac2cf719dcf9666819db846bde9b53105aa1e"
+}

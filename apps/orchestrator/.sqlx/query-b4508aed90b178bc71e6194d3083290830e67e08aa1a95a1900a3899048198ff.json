@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT revision,deleted,human_id IS NOT NULL AS \"human!\"\n        FROM memory_revisions\n        WHERE memory_id=$1\n        ORDER BY revision\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "deleted",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "human!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "b4508aed90b178bc71e6194d3083290830e67e08aa1a95a1900a3899048198ff"
+}

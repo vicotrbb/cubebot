@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO agent_runtime_drains (attempt_id)\n            SELECT r.id\n            FROM agent_resources r\n            JOIN agents a ON a.id = r.agent_id\n            WHERE a.id = $1\n              AND r.kind = 'pod'\n              AND r.phase IN ('creating', 'bound')\n              AND (a.desired_state <> 'running' OR a.restart_generation <> r.target_generation)\n            ON CONFLICT (attempt_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "33c204e4032758786c303ca4a68815aae4be408027c7ae4ebb2a5b1762e1c937"
+}

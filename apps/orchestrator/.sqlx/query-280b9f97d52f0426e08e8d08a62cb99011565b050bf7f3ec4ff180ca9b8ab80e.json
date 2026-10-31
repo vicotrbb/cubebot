@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT state_hash AS \"state_hash!\"\n        FROM oidc_flows\n        WHERE state_hash = $1 AND browser_hash = $2\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state_hash!",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "280b9f97d52f0426e08e8d08a62cb99011565b050bf7f3ec4ff180ca9b8ab80e"
+}

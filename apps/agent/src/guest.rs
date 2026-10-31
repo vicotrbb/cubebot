@@ -177,7 +177,7 @@ fn default_route(cmdline: &str) -> io::Result<()> {
         let mut reply = [0; 64];
         let read = recv(socket.as_raw_fd(), &mut reply, MsgFlags::empty())?;
         // The acknowledgement is an NLMSG_ERROR message whose error is zero.
-        let error = i32::from_ne_bytes(reply[16..20].try_into().expect("four bytes"));
+        let error = i32::from_ne_bytes([reply[16], reply[17], reply[18], reply[19]]);
         match (read >= 20, u16::from_ne_bytes([reply[4], reply[5]]), error) {
             (true, 2, 0) => (),
             (true, 2, error) => {
@@ -258,6 +258,7 @@ fn route_request(destination: (Ipv4Addr, u8), gateway: Ipv4Addr, interface: u32)
     message
 }
 
+#[tracing::instrument(skip_all, fields(port = guest::PORT))]
 fn control_channel() -> io::Result<File> {
     let socket = socket(
         AddressFamily::Vsock,
@@ -454,9 +455,12 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
 
 /// One whole line per report, so liveness and the exit status never interleave.
 fn send(channel: &Mutex<File>, report: &Report) -> io::Result<()> {
-    let mut line = serde_json::to_vec(report).expect("report serializes");
+    let mut line = serde_json::to_vec(report)?;
     line.push(b'\n');
-    channel.lock().expect("channel lock").write_all(&line)
+    channel
+        .lock()
+        .map_err(|_| io::Error::other("channel lock poisoned"))?
+        .write_all(&line)
 }
 
 fn report(channel: Arc<Mutex<File>>) {

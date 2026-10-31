@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use super::{Actor, Identity, IdentityError, Receipt, commands::Command, passwords};
 
-#[derive(serde::Serialize, sqlx::FromRow)]
+#[derive(serde::Serialize)]
 pub struct AccountSummary {
     pub id: Uuid,
     pub login: String,
@@ -12,36 +12,67 @@ pub struct AccountSummary {
 }
 
 impl Identity {
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn accounts(
         &self,
         actor: &Actor,
         after: Option<Uuid>,
     ) -> Result<Vec<AccountSummary>, IdentityError> {
         self.require_administrator(actor).await?;
-        Ok(sqlx::query_as("SELECT id, login, role = 'administrator' AS administrator, active, revision FROM human_accounts WHERE $1::uuid IS NULL OR id > $1 ORDER BY id LIMIT 100")
-            .bind(after).fetch_all(&self.pool).await?)
+        Ok(sqlx::query_as!(
+            AccountSummary,
+            r#"
+            SELECT
+                id AS "id!",
+                login AS "login!",
+                role = 'administrator' AS "administrator!",
+                active AS "active!",
+                revision AS "revision!"
+            FROM human_accounts
+            WHERE $1::uuid IS NULL OR id > $1
+            ORDER BY id
+            LIMIT 100
+            "#,
+            after,
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn bootstrap(&self, login: &str, password: &str) -> Result<Uuid, IdentityError> {
         passwords::validate(login, password)?;
         let verifier = passwords::hash(password).await?;
         let mut transaction = self.pool.begin().await?;
-        let bootstrapped: bool =
-            sqlx::query_scalar("SELECT bootstrapped FROM installation WHERE singleton FOR UPDATE")
-                .fetch_one(&mut *transaction)
-                .await?;
+        let bootstrapped = sqlx::query_scalar!(
+            r#"
+            SELECT bootstrapped AS "bootstrapped!"
+            FROM installation
+            WHERE singleton
+            FOR UPDATE
+            "#,
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
         if bootstrapped {
             return Err(IdentityError::Conflict);
         }
         let id = insert_account(&mut transaction, login, &verifier, "administrator").await?;
-        sqlx::query("UPDATE installation SET bootstrapped = true WHERE singleton")
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query!(
+            "
+            UPDATE installation
+            SET bootstrapped = true
+            WHERE singleton
+            ",
+        )
+        .execute(&mut *transaction)
+        .await?;
         audit(&mut transaction, id, id, "bootstrap").await?;
         transaction.commit().await?;
         Ok(id)
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, request = %request_id))]
     pub async fn create_account(
         &self,
         actor: &Actor,
@@ -95,6 +126,7 @@ impl Identity {
         Ok(receipt.id)
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, subject = %subject, request = %request_id))]
     pub async fn suspend(
         &self,
         actor: &Actor,
@@ -111,16 +143,28 @@ impl Identity {
         if actor.id == subject {
             return Err(IdentityError::InvalidInput);
         }
-        let revision: Option<i64> = sqlx::query_scalar(
-            "UPDATE human_accounts SET active = false, revision = revision + 1 WHERE id = $1 AND revision = $2 AND active RETURNING revision",
+        let revision = sqlx::query_scalar!(
+            r#"
+            UPDATE human_accounts
+            SET active = false, revision = revision + 1
+            WHERE id = $1 AND revision = $2 AND active
+            RETURNING revision AS "revision!"
+            "#,
+            subject,
+            expected_revision,
         )
-        .bind(subject).bind(expected_revision)
-        .fetch_optional(&mut *transaction).await?;
+        .fetch_optional(&mut *transaction)
+        .await?;
         let revision = revision.ok_or(IdentityError::Conflict)?;
-        sqlx::query("DELETE FROM human_sessions WHERE account_id = $1")
-            .bind(subject)
-            .execute(&mut *transaction)
-            .await?;
+        sqlx::query!(
+            "
+            DELETE FROM human_sessions
+            WHERE account_id = $1
+            ",
+            subject,
+        )
+        .execute(&mut *transaction)
+        .await?;
         audit(&mut transaction, actor.id, subject, "account_suspended").await?;
         command
             .commit(
@@ -138,10 +182,15 @@ pub(super) async fn lock_administrator(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: Uuid,
 ) -> Result<(), IdentityError> {
-    let allowed: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM human_accounts WHERE id = $1 AND active AND role = 'administrator' FOR UPDATE",
+    let allowed = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id!"
+        FROM human_accounts
+        WHERE id = $1 AND active AND role = 'administrator'
+        FOR UPDATE
+        "#,
+        actor,
     )
-    .bind(actor)
     .fetch_optional(&mut **transaction)
     .await?;
     allowed.ok_or(IdentityError::Forbidden)?;
@@ -154,12 +203,16 @@ pub(super) async fn insert_account(
     verifier: &str,
     role: &str,
 ) -> Result<Uuid, IdentityError> {
-    Ok(sqlx::query_scalar(
-        "INSERT INTO human_accounts (login, password_hash, role) VALUES ($1, $2, $3) RETURNING id",
+    Ok(sqlx::query_scalar!(
+        r#"
+        INSERT INTO human_accounts (login, password_hash, role)
+        VALUES ($1, $2, $3)
+        RETURNING id AS "id!"
+        "#,
+        login,
+        verifier,
+        role,
     )
-    .bind(login)
-    .bind(verifier)
-    .bind(role)
     .fetch_one(&mut **transaction)
     .await?)
 }
@@ -170,11 +223,16 @@ pub(super) async fn audit(
     subject: Uuid,
     action: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("INSERT INTO identity_audit (actor_id, subject_id, action) VALUES ($1, $2, $3)")
-        .bind(actor)
-        .bind(subject)
-        .bind(action)
-        .execute(&mut **transaction)
-        .await?;
+    sqlx::query!(
+        "
+        INSERT INTO identity_audit (actor_id, subject_id, action)
+        VALUES ($1, $2, $3)
+        ",
+        actor,
+        subject,
+        action,
+    )
+    .execute(&mut **transaction)
+    .await?;
     Ok(())
 }

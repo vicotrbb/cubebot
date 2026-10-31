@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO agent_resources\n                (id, agent_id, kind, epoch, target_generation, definition_revision, namespace,\n                 name, manifest, source_manifest, phase, prepared)\n            VALUES ($1, $2, 'pod', $3, $4, $5, 'docker', $6, $7, $7, 'creating', true)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4b1e6498d4597a71b0bd500251f2d1579ad4268671b4e474ade714c7f8dc5e4c"
+}

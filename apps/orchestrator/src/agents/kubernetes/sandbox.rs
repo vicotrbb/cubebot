@@ -6,6 +6,7 @@ use crate::agents::{
 };
 
 impl Sandbox for Reconciler {
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn create(&self, agent: AgentId) -> Result<(), Error> {
         let (revision, _, _) = self.intent(agent).await?;
         match self.prepare_workspace(agent, revision).await? {
@@ -14,6 +15,7 @@ impl Sandbox for Reconciler {
         }
     }
     /// Requires `create`; settles any stale pod before starting a new epoch.
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn start(&self, agent: AgentId) -> Result<(), Error> {
         let (revision, generation, _) = self.intent(agent).await?;
         let verified = match self.settle(agent, generation, true).await? {
@@ -31,6 +33,7 @@ impl Sandbox for Reconciler {
                 .await?,
         )
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn stop(&self, agent: AgentId) -> Result<(), Error> {
         let (_, generation, _) = self.intent(agent).await?;
         match self.settle(agent, generation, false).await? {
@@ -38,6 +41,7 @@ impl Sandbox for Reconciler {
             Err(outcome) => settled(outcome),
         }
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn exec_channel(&self, agent: AgentId, command: &[&str]) -> Result<ExecChannel, Error> {
         let name = self
             .current_name(agent, ResourceKind::Pod)
@@ -45,9 +49,11 @@ impl Sandbox for Reconciler {
             .ok_or(Error::Conflict)?;
         self.api.exec(&name, command).await
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn workspace(&self, agent: AgentId) -> Result<Option<String>, Error> {
         self.current_name(agent, ResourceKind::Workspace).await
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn status(&self, agent: AgentId) -> Result<Status, Error> {
         let Some(attempt) = self.registry.current(agent, ResourceKind::Pod).await? else {
             return Ok(Status::Absent);

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agents\n            SET name = $2,\n                instructions_revision = instructions_revision\n                    + CASE WHEN instructions <> $3 THEN 1 ELSE 0 END,\n                instructions = $3,\n                idle_policy = $4,\n                idle_delay_seconds = $6,\n                dreaming_model = $7,\n                task_lanes = COALESCE($8, task_lanes),\n                revision = revision + 1\n            WHERE id = $1\n              AND revision = $5\n              AND desired_state <> 'retired'\n            RETURNING revision\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int4",
+        "Text",
+        "Int2"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "08d67bd0550a06b85d9db6bb5ec80b080eb47037647018947d38cb5bcd5879a2"
+}

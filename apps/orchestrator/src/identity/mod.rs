@@ -24,15 +24,52 @@ pub struct Identity {
 #[derive(Debug)]
 pub enum IdentityError {
     InvalidInput,
+    /// `InvalidInput` with the error that caused it.
+    Invalid(Source),
     Unauthorized,
+    /// `Unauthorized` with the error that caused it; clients see the same response.
+    Rejected(Source),
     Forbidden,
     Conflict,
     NotFound,
     Database(sqlx::Error),
-    Password,
+    Password(Source),
     Busy,
-    OidcUnavailable,
-    CredentialUnavailable,
+    OidcUnavailable(Source),
+    /// `None` when no usable credential exists rather than one failing to open.
+    CredentialUnavailable(Option<Source>),
+}
+
+pub type Source = Box<dyn std::error::Error + Send + Sync>;
+
+impl std::fmt::Display for IdentityError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::InvalidInput | Self::Invalid(_) => "invalid input",
+            Self::Unauthorized | Self::Rejected(_) => "unauthorized",
+            Self::Forbidden => "forbidden",
+            Self::Conflict => "conflict",
+            Self::NotFound => "not found",
+            Self::Database(_) | Self::Password(_) => "identity unavailable",
+            Self::Busy => "identity busy",
+            Self::OidcUnavailable(_) => "OIDC unavailable",
+            Self::CredentialUnavailable(_) => "credential unavailable",
+        })
+    }
+}
+
+impl std::error::Error for IdentityError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Database(error) => Some(error),
+            Self::Invalid(error)
+            | Self::Rejected(error)
+            | Self::Password(error)
+            | Self::OidcUnavailable(error) => Some(error.as_ref()),
+            Self::CredentialUnavailable(error) => error.as_deref().map(|error| error as _),
+            _ => None,
+        }
+    }
 }
 
 impl From<sqlx::Error> for IdentityError {
@@ -64,10 +101,16 @@ impl Identity {
     }
 
     async fn require_administrator(&self, actor: &Actor) -> Result<(), IdentityError> {
-        let allowed: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id = $1 AND active AND role = 'administrator')",
+        let allowed = sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS(
+                SELECT 1
+                FROM human_accounts
+                WHERE id = $1 AND active AND role = 'administrator'
+            ) AS "allowed!"
+            "#,
+            actor.id,
         )
-        .bind(actor.id)
         .fetch_one(&self.pool)
         .await?;
         if !allowed {

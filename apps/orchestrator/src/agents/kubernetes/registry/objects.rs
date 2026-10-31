@@ -85,7 +85,7 @@ impl ResourceSpec {
             })),
         };
         if serde_json::to_vec(&object)
-            .map_err(|_| Error::InvalidConfiguration)?
+            .map_err(|error| Error::Configuration(error.into()))?
             .len()
             > 262144
         {
@@ -108,7 +108,7 @@ impl ResourceObject {
                 serde_json::from_value(value).map(|claim| Self::Workspace(Box::new(claim)))
             }
         }
-        .map_err(|_| Error::InvalidConfiguration)
+        .map_err(|error| Error::Configuration(error.into()))
     }
 }
 
@@ -132,8 +132,8 @@ pub(super) fn verify(expected: &Attempt, observed: &ResourceObject) -> Result<()
         ),
         _ => return Err(Error::OwnershipMismatch),
     };
-    let planned = planned.map_err(|_| Error::InvalidConfiguration)?;
-    let mut actual = actual.map_err(|_| Error::InvalidConfiguration)?;
+    let planned = planned.map_err(|error| Error::Configuration(error.into()))?;
+    let mut actual = actual.map_err(|error| Error::Configuration(error.into()))?;
     let assigned = match expected.kind {
         ResourceKind::Pod => "nodeName",
         ResourceKind::Workspace => "volumeName",

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET uid = $2,\n                resource_version = $3,\n                phase = 'bound',\n                blocked_reason = CASE WHEN $7 THEN 'runtime_recovery_required' ELSE NULL END,\n                observed_at = transaction_timestamp(),\n                kubernetes_phase = $4,\n                kubernetes_reason = $8,\n                kubernetes_ready = $5,\n                deleting = $6,\n                updated_at = clock_timestamp()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d9d1ea4ebe4d5911489f2e8c305d00ecf6156060883fd8b9f0753f7f50799ea3"
+}

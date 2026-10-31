@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT COALESCE(\n                (SELECT min(e.id)-1 FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND t.status='running'),\n                (SELECT max(e.id) FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1),\n                0\n            ) AS \"cursor!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cursor!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "43765a126140b63e2be74350f0be1103aac211c01ee2eaa8197f7092d4d354bf"
+}

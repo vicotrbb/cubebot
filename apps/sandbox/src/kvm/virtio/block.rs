@@ -40,8 +40,11 @@ impl Block {
         if chain.read_at(memory, 0, &mut header)? < header.len() || writable == 0 {
             return Err(invalid("malformed virtio-blk request"));
         }
-        let kind = u32::from_le_bytes(header[..4].try_into().unwrap());
-        let sector = u64::from_le_bytes(header[8..].try_into().unwrap());
+        let [k0, k1, k2, k3, _, _, _, _, sector @ ..] = header;
+        let (kind, sector) = (
+            u32::from_le_bytes([k0, k1, k2, k3]),
+            u64::from_le_bytes(sector),
+        );
         let status = match kind {
             0 => self.input(chain, memory, sector, writable - 1)?,
             1 => self.output(chain, memory, sector)?,

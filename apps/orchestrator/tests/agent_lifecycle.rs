@@ -81,11 +81,17 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
     assert_eq!(history[0].instructions, "Original");
     let (wake, receipt) = check_wake(&agents, &actor, id).await;
     check_restart_and_retire(&agents, &actor, id, wake, receipt).await;
-    let retained: String = sqlx::query_scalar("SELECT instructions FROM agents WHERE id = $1")
-        .bind(id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let retained: String = sqlx::query_scalar!(
+        "
+        SELECT instructions
+        FROM agents
+        WHERE id = $1
+        ",
+        id as _,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(retained, "Corrected evidence");
 }
 
@@ -178,8 +184,12 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         .await
         .unwrap();
     let admin = identity.authenticate(&session.token).await.unwrap();
-    let manager_id = sqlx::query_scalar(
-        "INSERT INTO human_accounts (login, role) VALUES ('manager', 'member') RETURNING id",
+    let manager_id = sqlx::query_scalar!(
+        "
+        INSERT INTO human_accounts (login, role)
+        VALUES ('manager', 'member')
+        RETURNING id
+        "
     )
     .fetch_one(&pool)
     .await
@@ -248,14 +258,24 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
     let history = agents.revisions(&admin, id, 0).await.unwrap();
     assert_eq!(history.len(), 2);
     assert_eq!(history[1].instructions, "Keep this text");
-    let receipts: i64 = sqlx::query_scalar("SELECT count(*) FROM agent_commands")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    let events: i64 = sqlx::query_scalar("SELECT count(*) FROM agent_events")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let receipts: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agent_commands
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let events: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agent_events
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!((receipts, events), (2, 2));
     check_revocation_while_waiting(&pool, &identity, &admin, manager, id, grant.id).await;
 }
@@ -270,11 +290,18 @@ async fn check_revocation_while_waiting(
 ) {
     use cubebot_orchestrator::identity::access::{GrantId, RevokeGrant};
     let mut blocker = pool.begin().await.unwrap();
-    sqlx::query("SELECT id FROM agents WHERE id = $1 FOR UPDATE")
-        .bind(id)
-        .execute(&mut *blocker)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        SELECT id
+        FROM agents
+        WHERE id = $1
+        FOR UPDATE
+        ",
+        id as _,
+    )
+    .fetch_all(&mut *blocker)
+    .await
+    .unwrap();
     let agents = Agents::new(pool.clone());
     let pending = tokio::spawn(async move {
         agents
@@ -312,7 +339,11 @@ async fn wait_for_agent_lock(pool: &sqlx::PgPool) {
     use std::time::Duration;
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            let waiting:bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%FOR UPDATE OF g%')").fetch_one(pool).await.unwrap();
+            let waiting:bool = sqlx::query_scalar!(
+                r#"
+                SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND btrim(regexp_replace(query, '\s+', ' ', 'g')) LIKE '%FOR UPDATE OF g%') AS "value!"
+                "#
+            ).fetch_one(pool).await.unwrap();
             if waiting { break; }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }

@@ -3,6 +3,7 @@
 use super::{Device, Slot, queue::Queue};
 use crate::kvm::memory::GuestMemory;
 use std::{
+    convert::Infallible,
     fs::File,
     io::{self, Read, Write},
     sync::{Arc, Condvar},
@@ -116,13 +117,15 @@ pub fn receive(
     slot: &Slot<Net>,
     receivable: &Condvar,
     memory: &GuestMemory,
-) -> io::Result<()> {
+) -> io::Result<Infallible> {
     let mut frame = vec![0; FRAME_LIMIT];
     loop {
         let len = tap.read(&mut frame)?;
         let mut transport = slot.lock();
         while !transport.run(|net, queues| net.receive(queues, memory, &frame[..len]))? {
-            transport = receivable.wait(transport).expect("device lock");
+            transport = receivable
+                .wait(transport)
+                .map_err(|_| io::Error::other("device lock poisoned"))?;
         }
         drop(transport);
         slot.irq.raise()?;

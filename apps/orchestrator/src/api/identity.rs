@@ -189,17 +189,17 @@ struct ErrorBody {
 impl IntoResponse for IdentityError {
     fn into_response(self) -> Response {
         let (status, error) = match self {
-            Self::InvalidInput => (StatusCode::BAD_REQUEST, "invalid_input"),
-            Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            Self::InvalidInput | Self::Invalid(_) => (StatusCode::BAD_REQUEST, "invalid_input"),
+            Self::Unauthorized | Self::Rejected(_) => (StatusCode::UNAUTHORIZED, "unauthorized"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::Conflict => (StatusCode::CONFLICT, "conflict"),
             Self::Busy => (StatusCode::TOO_MANY_REQUESTS, "identity_busy"),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
-            Self::CredentialUnavailable => {
+            Self::CredentialUnavailable(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "credential_unavailable")
             }
-            Self::OidcUnavailable => (StatusCode::SERVICE_UNAVAILABLE, "oidc_unavailable"),
-            Self::Database(_) | Self::Password => {
+            Self::OidcUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "oidc_unavailable"),
+            Self::Database(_) | Self::Password(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "identity_unavailable")
             }
         };

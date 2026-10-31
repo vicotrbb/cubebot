@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agent_runtime_drains\n        SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1\n        WHERE attempt_id = (SELECT id FROM agent_resources WHERE agent_id = $1 AND epoch = 2)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "12736c63aea76d0190b710bf2cddcfea0bb3afe7dcb1ca99ac4812d02deb4a47"
+}

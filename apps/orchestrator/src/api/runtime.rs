@@ -246,7 +246,7 @@ impl From<Error> for Failure {
             Error::Unauthorized => StatusCode::UNAUTHORIZED,
             Error::Conflict => StatusCode::CONFLICT,
             Error::Busy => StatusCode::TOO_MANY_REQUESTS,
-            Error::InvalidConfiguration => StatusCode::BAD_REQUEST,
+            Error::InvalidConfiguration | Error::Configuration(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::SERVICE_UNAVAILABLE,
         })
     }

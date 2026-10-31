@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO turn_steering (turn_id, actor_id, request_id, message)\n        SELECT $2, actor_id, id, message\n        FROM room_messages\n        WHERE id=$1\n        ON CONFLICT DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "554daf6b012c93eea501089940b57097797d58fdaa6b934087665c0b8c3cc877"
+}

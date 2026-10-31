@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO agent_runtime_drains (attempt_id)\n        VALUES ($1)\n        ON CONFLICT (attempt_id) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "70be96d7e90326fc4c45c71842131ed6d13c97be34bb4099369341f544a49e59"
+}

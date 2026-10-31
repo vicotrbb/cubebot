@@ -15,7 +15,7 @@ pub struct Config {
 }
 impl Config {
     pub fn new(origin: &str, token_file: PathBuf) -> Result<Self, Error> {
-        let origin = reqwest::Url::parse(origin).map_err(|_| Error::Configuration)?;
+        let origin = reqwest::Url::parse(origin).map_err(Error::configuration)?;
         let loopback = origin.host_str().is_some_and(|host| {
             host.trim_matches(['[', ']'])
                 .parse::<std::net::IpAddr>()
@@ -30,7 +30,7 @@ impl Config {
             || origin.query().is_some()
             || origin.fragment().is_some()
         {
-            return Err(Error::Configuration);
+            return Err(Error::Configuration(None));
         }
         Ok(Self {
             origin,
@@ -42,24 +42,23 @@ impl Config {
     }
     pub fn with_root_certificate(mut self, pem: &[u8]) -> Result<Self, Error> {
         if pem.len() > 65536 {
-            return Err(Error::Configuration);
+            return Err(Error::Configuration(None));
         }
         self.root_certificates =
-            reqwest::Certificate::from_pem_bundle(pem).map_err(|_| Error::Configuration)?;
+            reqwest::Certificate::from_pem_bundle(pem).map_err(Error::configuration)?;
         if self.root_certificates.is_empty() {
-            return Err(Error::Configuration);
+            return Err(Error::Configuration(None));
         }
         self.root_pem = pem.to_vec();
         Ok(self)
     }
     pub fn from_environment() -> Result<Self, Error> {
-        let origin =
-            std::env::var("CUBEBOT_ORCHESTRATOR_ORIGIN").map_err(|_| Error::Configuration)?;
+        let origin = std::env::var("CUBEBOT_ORCHESTRATOR_ORIGIN").map_err(Error::configuration)?;
         let config = match std::env::var("CUBEBOT_BOOTSTRAP_TOKEN") {
             Ok(token) => Self::new(&origin, PathBuf::new())?.with_token(token)?,
             Err(_) => {
-                let path =
-                    std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE").ok_or(Error::Configuration)?;
+                let path = std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE")
+                    .ok_or(Error::Configuration(None))?;
                 Self::new(&origin, path.into())?
             }
         };
@@ -68,10 +67,10 @@ impl Config {
         };
         let mut pem = Vec::new();
         std::fs::File::open(ca)
-            .map_err(|_| Error::Configuration)?
+            .map_err(Error::configuration)?
             .take(65537)
             .read_to_end(&mut pem)
-            .map_err(|_| Error::Configuration)?;
+            .map_err(Error::configuration)?;
         config.with_root_certificate(&pem)
     }
     pub fn with_token(mut self, token: String) -> Result<Self, Error> {
@@ -90,12 +89,12 @@ pub(super) fn projected_token(path: &Path) -> Result<String, Error> {
     // Kubernetes rotates a projected token through symlinks; reopen the bounded file each time.
     let mut bytes = Vec::new();
     std::fs::File::open(path)
-        .map_err(|_| Error::Credential)?
+        .map_err(Error::credential)?
         .take(16385)
         .read_to_end(&mut bytes)
-        .map_err(|_| Error::Credential)?;
+        .map_err(Error::credential)?;
     valid_token(&bytes)?;
-    String::from_utf8(bytes).map_err(|_| Error::Credential)
+    String::from_utf8(bytes).map_err(|error| Error::credential(error.utf8_error()))
 }
 fn valid_token(bytes: &[u8]) -> Result<(), Error> {
     if bytes.is_empty()
@@ -104,7 +103,7 @@ fn valid_token(bytes: &[u8]) -> Result<(), Error> {
             .iter()
             .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
     {
-        return Err(Error::Credential);
+        return Err(Error::Credential(None));
     }
     Ok(())
 }

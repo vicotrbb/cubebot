@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE invitations\n        SET expires_at = clock_timestamp() + interval '100 milliseconds'\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e38373c09ade6fc686e6b37af104b694e8c57648023f989471bc9e8a3a798b30"
+}

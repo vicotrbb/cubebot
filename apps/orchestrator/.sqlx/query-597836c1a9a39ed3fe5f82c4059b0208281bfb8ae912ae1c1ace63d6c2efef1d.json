@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT turn_id, id, message, incorporated_at IS NOT NULL AS \"incorporated!\", source_steering_id IS NOT NULL AS \"propagated!\"\n            FROM turn_steering\n            WHERE turn_id=ANY($1)\n            ORDER BY created_at, id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "incorporated!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "propagated!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "597836c1a9a39ed3fe5f82c4059b0208281bfb8ae912ae1c1ace63d6c2efef1d"
+}

@@ -33,7 +33,8 @@ pub struct DockerConfig {
 const CONTROL_CA: &str = "/run/cubebot/control-ca/ca.crt";
 impl DockerConfig {
     pub fn parse(input: &str) -> Result<Self, Error> {
-        let config: Self = serde_json::from_str(input).map_err(|_| Error::InvalidConfiguration)?;
+        let config: Self =
+            serde_json::from_str(input).map_err(|error| Error::Configuration(error.into()))?;
         // Values become docker arguments; a leading '-' would be read as a flag.
         let argument = |value: &str| {
             !value.is_empty()
@@ -44,7 +45,7 @@ impl DockerConfig {
                     .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
         };
         let origin = openidconnect::reqwest::Url::parse(&config.orchestrator_origin)
-            .map_err(|_| Error::InvalidConfiguration)?;
+            .map_err(|error| Error::Configuration(error.into()))?;
         // The guest is on the container's own network, where the host's loopback is unreachable;
         // host networking would redirect the host's interface to the guest.
         if !argument(&config.image)
@@ -67,7 +68,7 @@ impl DockerConfig {
         let mut input = String::new();
         std::fs::File::open(path)
             .and_then(|file| file.take(65537).read_to_string(&mut input))
-            .map_err(|_| Error::InvalidConfiguration)?;
+            .map_err(|error| Error::Configuration(error.into()))?;
         if input.len() > 65536 {
             return Err(Error::InvalidConfiguration);
         }
@@ -87,7 +88,6 @@ pub struct Docker {
     config: DockerConfig,
     program: String,
 }
-#[derive(sqlx::FromRow)]
 struct Attempt {
     id: AttemptId,
     name: String,
@@ -111,6 +111,7 @@ impl Docker {
         self.docker_with(args, &[]).await
     }
     /// `env` reaches the CLI's environment only, so `--env NAME` passes a value off its argv.
+    #[tracing::instrument(skip_all, fields(command = args.first().copied().unwrap_or_default(), action = args.get(1).copied().unwrap_or_default()))]
     async fn docker_with(&self, args: &[&str], env: &[(&str, &str)]) -> Result<String, Error> {
         let output = Command::new(&self.program)
             .args(args)
@@ -133,7 +134,7 @@ impl Docker {
         {
             Ok(state) => serde_json::from_str(&state)
                 .map(Some)
-                .map_err(|_| Error::InvalidConfiguration),
+                .map_err(|error| Error::Configuration(error.into())),
             Err(Error::Sandbox(error)) if error.to_string().contains("No such container") => {
                 Ok(None)
             }
@@ -141,26 +142,69 @@ impl Docker {
         }
     }
     async fn current(&self, agent: AgentId) -> Result<Option<Attempt>, Error> {
-        Ok(sqlx::query_as("SELECT id,name,target_generation,phase FROM agent_resources WHERE agent_id = $1 AND kind = 'pod' AND namespace = 'docker' AND phase <> 'stopped'")
-            .bind(agent).fetch_optional(&self.pool).await?)
+        Ok(sqlx::query_as!(
+            Attempt,
+            r#"
+            SELECT id AS "id: AttemptId", name, target_generation, phase
+            FROM agent_resources
+            WHERE agent_id = $1
+              AND kind = 'pod'
+              AND namespace = 'docker'
+              AND phase <> 'stopped'
+            "#,
+            agent.0,
+        )
+        .fetch_optional(&self.pool)
+        .await?)
     }
     async fn intent(&self, agent: AgentId) -> Result<(i64, i64), Error> {
-        sqlx::query_as("SELECT revision,restart_generation FROM agents WHERE id = $1")
-            .bind(agent)
-            .fetch_optional(&self.pool)
-            .await?
-            .ok_or(Error::Conflict)
+        sqlx::query!(
+            "
+            SELECT revision, restart_generation
+            FROM agents
+            WHERE id = $1
+            ",
+            agent.0,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .map(|row| (row.revision, row.restart_generation))
+        .ok_or(Error::Conflict)
     }
     async fn record(&self, agent: AgentId) -> Result<Attempt, Error> {
         let (revision, generation) = self.intent(agent).await?;
-        let epoch: i64 = sqlx::query_scalar("SELECT COALESCE(MAX(epoch),0) + 1 FROM agent_resources WHERE agent_id = $1 AND kind = 'pod'")
-            .bind(agent).fetch_one(&self.pool).await?;
+        let epoch = sqlx::query_scalar!(
+            r#"
+            SELECT COALESCE(MAX(epoch), 0) + 1 AS "epoch!"
+            FROM agent_resources
+            WHERE agent_id = $1
+              AND kind = 'pod'
+            "#,
+            agent.0,
+        )
+        .fetch_one(&self.pool)
+        .await?;
         let name = format!("cubebot-agent-{}-{epoch}", agent.0);
         let manifest =
             json!({"apiVersion":"v1","kind":"Pod","metadata":{"name":name,"namespace":"docker"}});
         let id = AttemptId(Uuid::new_v4());
-        sqlx::query("INSERT INTO agent_resources (id,agent_id,kind,epoch,target_generation,definition_revision,namespace,name,manifest,source_manifest,phase,prepared) VALUES ($1,$2,'pod',$3,$4,$5,'docker',$6,$7,$7,'creating',true)")
-            .bind(id).bind(agent).bind(epoch).bind(generation).bind(revision).bind(&name).bind(&manifest).execute(&self.pool).await?;
+        sqlx::query!(
+            "
+            INSERT INTO agent_resources
+                (id, agent_id, kind, epoch, target_generation, definition_revision, namespace,
+                 name, manifest, source_manifest, phase, prepared)
+            VALUES ($1, $2, 'pod', $3, $4, $5, 'docker', $6, $7, $7, 'creating', true)
+            ",
+            id.0,
+            agent.0,
+            epoch,
+            generation,
+            revision,
+            name,
+            manifest,
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(Attempt {
             id,
             name,
@@ -172,15 +216,38 @@ impl Docker {
     async fn bind(&self, agent: AgentId, attempt: &Attempt) -> Result<(), Error> {
         if self.inspect(&attempt.name).await?.is_none() {
             let token = sandbox_token();
-            sqlx::query("INSERT INTO docker_sandbox_tokens (attempt_id,token_hash) VALUES ($1,$2) ON CONFLICT (attempt_id) DO UPDATE SET token_hash = EXCLUDED.token_hash")
-                .bind(attempt.id).bind(sandbox_digest(&token)?).execute(&self.pool).await?;
+            sqlx::query!(
+                "
+                INSERT INTO docker_sandbox_tokens (attempt_id, token_hash)
+                VALUES ($1, $2)
+                ON CONFLICT (attempt_id) DO UPDATE
+                SET token_hash = EXCLUDED.token_hash
+                ",
+                attempt.id.0,
+                sandbox_digest(&token)?,
+            )
+            .execute(&self.pool)
+            .await?;
             self.create_container(agent, &attempt.name, &token).await?;
         }
         let uid = self
             .docker(&["container", "inspect", "--format", "{{.Id}}", &attempt.name])
             .await?;
-        sqlx::query("UPDATE agent_resources SET uid = $2,resource_version = '1',phase = 'bound',updated_at = clock_timestamp() WHERE id = $1 AND phase = 'creating'")
-            .bind(attempt.id).bind(uid).execute(&self.pool).await?;
+        sqlx::query!(
+            "
+            UPDATE agent_resources
+            SET uid = $2,
+                resource_version = '1',
+                phase = 'bound',
+                updated_at = clock_timestamp()
+            WHERE id = $1
+              AND phase = 'creating'
+            ",
+            attempt.id.0,
+            uid,
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
     async fn create_container(&self, agent: AgentId, name: &str, token: &str) -> Result<(), Error> {
@@ -261,18 +328,44 @@ impl Docker {
             .map(drop)
     }
     async fn observe(&self, attempt: &Attempt, state: Option<&Value>) -> Result<(), Error> {
-        sqlx::query("UPDATE agent_resources SET kubernetes_phase = $2,observed_at = clock_timestamp() WHERE id = $1")
-            .bind(attempt.id).bind(phase(state)).execute(&self.pool).await?;
+        sqlx::query!(
+            "
+            UPDATE agent_resources
+            SET kubernetes_phase = $2,
+                observed_at = clock_timestamp()
+            WHERE id = $1
+            ",
+            attempt.id.0,
+            phase(state),
+        )
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
     /// Stops an attempt and retains its final state. A running agent is drained first, as on
     /// Kubernetes; a container that already exited needs no acknowledgement.
     async fn retire(&self, attempt: &Attempt, mut state: Option<Value>) -> Result<(), Error> {
         if running(state.as_ref()) {
-            sqlx::query("INSERT INTO agent_runtime_drains (attempt_id) VALUES ($1) ON CONFLICT (attempt_id) DO NOTHING")
-                .bind(attempt.id).execute(&self.pool).await?;
-            let acknowledged: bool = sqlx::query_scalar("SELECT acknowledged_at IS NOT NULL FROM agent_runtime_drains WHERE attempt_id = $1")
-                .bind(attempt.id).fetch_one(&self.pool).await?;
+            sqlx::query!(
+                "
+                INSERT INTO agent_runtime_drains (attempt_id)
+                VALUES ($1)
+                ON CONFLICT (attempt_id) DO NOTHING
+                ",
+                attempt.id.0,
+            )
+            .execute(&self.pool)
+            .await?;
+            let acknowledged = sqlx::query_scalar!(
+                r#"
+                SELECT acknowledged_at IS NOT NULL AS "acknowledged!"
+                FROM agent_runtime_drains
+                WHERE attempt_id = $1
+                "#,
+                attempt.id.0,
+            )
+            .fetch_one(&self.pool)
+            .await?;
             if !acknowledged {
                 return self.observe(attempt, state.as_ref()).await;
             }
@@ -284,8 +377,22 @@ impl Docker {
         }
         // A removed container cannot still be running; Docker only removes running ones by force.
         let proof = state.clone().unwrap_or_else(|| json!({"Status":"removed"}));
-        sqlx::query("UPDATE agent_resources SET phase = 'stopped',termination_proof = $2,kubernetes_phase = $3,observed_at = clock_timestamp(),updated_at = clock_timestamp() WHERE id = $1")
-            .bind(attempt.id).bind(&proof).bind(phase(state.as_ref())).execute(&self.pool).await?;
+        sqlx::query!(
+            "
+            UPDATE agent_resources
+            SET phase = 'stopped',
+                termination_proof = $2,
+                kubernetes_phase = $3,
+                observed_at = clock_timestamp(),
+                updated_at = clock_timestamp()
+            WHERE id = $1
+            ",
+            attempt.id.0,
+            proof,
+            phase(state.as_ref()),
+        )
+        .execute(&self.pool)
+        .await?;
         if state.is_some() {
             self.docker(&["container", "rm", &attempt.name]).await?;
         }
@@ -317,12 +424,14 @@ fn phase(state: Option<&Value>) -> &'static str {
 }
 
 impl Sandbox for Docker {
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn create(&self, agent: AgentId) -> Result<(), Error> {
         let label = format!("cubebot.dev/agent={}", agent.0);
         self.docker(&["volume", "create", "--label", &label, &volume(agent)])
             .await
             .map(drop)
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn start(&self, agent: AgentId) -> Result<(), Error> {
         let attempt = match self.current(agent).await? {
             Some(attempt) => attempt,
@@ -348,6 +457,7 @@ impl Sandbox for Docker {
         let state = self.inspect(&attempt.name).await?;
         self.observe(&attempt, state.as_ref()).await
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn stop(&self, agent: AgentId) -> Result<(), Error> {
         let Some(attempt) = self.current(agent).await? else {
             return Ok(());
@@ -358,6 +468,7 @@ impl Sandbox for Docker {
         let state = self.inspect(&attempt.name).await?;
         self.retire(&attempt, state).await
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn exec_channel(&self, agent: AgentId, command: &[&str]) -> Result<ExecChannel, Error> {
         let attempt = self.current(agent).await?.ok_or(Error::Conflict)?;
         let mut session = Command::new(&self.program)
@@ -377,6 +488,7 @@ impl Sandbox for Docker {
             _session: Box::new(session),
         })
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn workspace(&self, agent: AgentId) -> Result<Option<String>, Error> {
         let filter = format!("name=^{}$", volume(agent));
         let found = self
@@ -384,6 +496,7 @@ impl Sandbox for Docker {
             .await?;
         Ok((!found.is_empty()).then_some(found))
     }
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn status(&self, agent: AgentId) -> Result<Status, Error> {
         let Some(attempt) = self.current(agent).await? else {
             return Ok(Status::Absent);

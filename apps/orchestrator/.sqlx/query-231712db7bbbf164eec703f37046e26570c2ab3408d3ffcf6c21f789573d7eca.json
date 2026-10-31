@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE chat_turns\n        SET seen=true\n        WHERE parent_turn_id=$1 AND awaited AND status IN ('complete','failed','cancelled')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "231712db7bbbf164eec703f37046e26570c2ab3408d3ffcf6c21f789573d7eca"
+}

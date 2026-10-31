@@ -112,6 +112,7 @@ pub struct AccessExplanation {
 }
 
 impl Identity {
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, request = %input.request_id))]
     pub async fn grant(
         &self,
         actor: &Actor,
@@ -125,14 +126,26 @@ impl Identity {
         input.capability.validate(input.scope)?;
         let (account_id, team_id) = validate_recipient(&mut transaction, input.recipient).await?;
         let (kind, scope_id) = input.scope.parts();
-        let id = sqlx::query_scalar("INSERT INTO access_grants (account_id, team_id, scope_kind, scope_id, capability) VALUES ($1, $2, $3, $4, $5) RETURNING id")
-            .bind(account_id).bind(team_id).bind(kind).bind(scope_id).bind(input.capability.name())
-            .fetch_one(&mut *transaction).await?;
+        let id = sqlx::query_scalar!(
+            r#"
+            INSERT INTO access_grants (account_id, team_id, scope_kind, scope_id, capability)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id AS "id!"
+            "#,
+            account_id,
+            team_id.map(|team| team.0),
+            kind,
+            scope_id,
+            input.capability.name(),
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
         command
             .commit(transaction, Receipt { id, revision: 1 })
             .await
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, request = %input.request_id, grant = %input.id.0))]
     pub async fn revoke_grant(
         &self,
         actor: &Actor,
@@ -143,8 +156,18 @@ impl Identity {
         if let Some(receipt) = receipt {
             return Ok(receipt);
         }
-        let revision: Option<i64> = sqlx::query_scalar("UPDATE access_grants SET revoked_at = clock_timestamp(), revision = revision + 1 WHERE id = $1 AND revoked_at IS NULL AND revision = $2 RETURNING revision")
-            .bind(input.id).bind(input.expected_revision).fetch_optional(&mut *transaction).await?;
+        let revision = sqlx::query_scalar!(
+            r#"
+            UPDATE access_grants
+            SET revoked_at = clock_timestamp(), revision = revision + 1
+            WHERE id = $1 AND revoked_at IS NULL AND revision = $2
+            RETURNING revision AS "revision!"
+            "#,
+            input.id.0,
+            input.expected_revision,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?;
         let revision = revision.ok_or(IdentityError::Conflict)?;
         command
             .commit(
@@ -157,6 +180,7 @@ impl Identity {
             .await
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn explain_access(
         &self,
         actor: &Actor,
@@ -165,15 +189,40 @@ impl Identity {
     ) -> Result<AccessExplanation, IdentityError> {
         capability.validate(scope)?;
         let (kind, scope_id) = scope.parts();
-        let rows: Vec<(bool, Option<GrantId>, Option<TeamId>)> = sqlx::query_as(
-            "SELECT a.role = 'administrator', g.id, g.team_id FROM human_accounts a LEFT JOIN effective_human_grants g ON g.actor_id = a.id AND g.scope_kind = $2 AND g.scope_id = $3 AND g.capability = $4 WHERE a.id = $1 AND a.active ORDER BY g.id",
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                a.role = 'administrator' AS "administrator!",
+                g.id AS "id?: GrantId",
+                g.team_id AS "team_id?: TeamId"
+            FROM human_accounts a
+            LEFT JOIN effective_human_grants g
+                ON g.actor_id = a.id
+                AND g.scope_kind = $2
+                AND g.scope_id = $3
+                AND g.capability = $4
+            WHERE a.id = $1 AND a.active
+            ORDER BY g.id
+            "#,
+            actor.id,
+            kind,
+            scope_id,
+            capability.name(),
         )
-        .bind(actor.id).bind(kind).bind(scope_id).bind(capability.name())
-        .fetch_all(&self.pool).await?;
-        let administrator = rows.first().ok_or(IdentityError::Unauthorized)?.0;
+        .fetch_all(&self.pool)
+        .await?;
+        let administrator = rows
+            .first()
+            .ok_or(IdentityError::Unauthorized)?
+            .administrator;
         let grants = rows
             .into_iter()
-            .filter_map(|(_, id, team_id)| id.map(|id| AccessSource { id, team_id }))
+            .filter_map(|row| {
+                row.id.map(|id| AccessSource {
+                    id,
+                    team_id: row.team_id,
+                })
+            })
             .collect::<Vec<_>>();
         Ok(AccessExplanation {
             allowed: administrator || !grants.is_empty(),
@@ -201,20 +250,31 @@ async fn validate_recipient(
 ) -> Result<(Option<Uuid>, Option<TeamId>), IdentityError> {
     let (exists, account, team) = match recipient {
         Recipient::User { id } => {
-            let exists: Option<Uuid> = sqlx::query_scalar(
-                "SELECT id FROM human_accounts WHERE id = $1 AND active FOR SHARE",
+            let exists = sqlx::query_scalar!(
+                r#"
+                SELECT id AS "id!"
+                FROM human_accounts
+                WHERE id = $1 AND active
+                FOR SHARE
+                "#,
+                id,
             )
-            .bind(id)
             .fetch_optional(&mut **transaction)
             .await?;
             (exists.is_some(), Some(id), None)
         }
         Recipient::Team { id } => {
-            let exists: Option<Uuid> =
-                sqlx::query_scalar("SELECT id FROM human_teams WHERE id = $1 AND active FOR SHARE")
-                    .bind(id)
-                    .fetch_optional(&mut **transaction)
-                    .await?;
+            let exists = sqlx::query_scalar!(
+                r#"
+                SELECT id AS "id!"
+                FROM human_teams
+                WHERE id = $1 AND active
+                FOR SHARE
+                "#,
+                id.0,
+            )
+            .fetch_optional(&mut **transaction)
+            .await?;
             (exists.is_some(), None, Some(id))
         }
     };

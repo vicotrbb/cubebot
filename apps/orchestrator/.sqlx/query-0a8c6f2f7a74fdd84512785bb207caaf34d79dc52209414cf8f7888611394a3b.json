@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agents\n        SET restart_generation = (SELECT target_generation FROM agent_resources WHERE id = $1)\n        WHERE id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a8c6f2f7a74fdd84512785bb207caaf34d79dc52209414cf8f7888611394a3b"
+}

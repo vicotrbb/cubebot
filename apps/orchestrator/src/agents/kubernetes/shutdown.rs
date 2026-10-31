@@ -85,8 +85,19 @@ impl Reconciler {
     }
 
     async fn wait_or_stop(&self, attempt: &Attempt, pod: &Pod) -> Result<ReconcileResult, Error> {
-        let acknowledged: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM agent_runtime_drains WHERE attempt_id = $1 AND acknowledged_at IS NOT NULL)")
-            .bind(attempt.id).fetch_one(&self.pool).await?;
+        let acknowledged = sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS (
+                SELECT 1
+                FROM agent_runtime_drains
+                WHERE attempt_id = $1
+                  AND acknowledged_at IS NOT NULL
+            ) AS "acknowledged!"
+            "#,
+            attempt.id.0,
+        )
+        .fetch_one(&self.pool)
+        .await?;
         self.registry
             .block(attempt.id, Phase::Bound, "drain_required")
             .await?;

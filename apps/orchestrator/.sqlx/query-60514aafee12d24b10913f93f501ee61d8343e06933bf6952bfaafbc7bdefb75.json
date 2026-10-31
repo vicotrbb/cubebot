@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT payload->>'kind' AS \"value!\"\n        FROM turn_events\n        WHERE turn_id = $1\n        ORDER BY sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "60514aafee12d24b10913f93f501ee61d8343e06933bf6952bfaafbc7bdefb75"
+}

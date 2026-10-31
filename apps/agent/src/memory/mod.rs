@@ -41,7 +41,11 @@ struct Forget {
 
 pub fn definitions() -> Vec<cubebot_providers::Tool> {
     let tool = |name: &str, description: &str, properties: Value| {
-        let required: Vec<String> = properties.as_object().unwrap().keys().cloned().collect();
+        let required: Vec<String> = properties
+            .as_object()
+            .into_iter()
+            .flat_map(|object| object.keys().cloned())
+            .collect();
         cubebot_providers::Tool {
             name: name.into(),
             description: description.into(),

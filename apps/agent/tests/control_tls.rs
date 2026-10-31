@@ -74,11 +74,11 @@ async fn selected_ca_preserves_certificate_and_hostname_verification() {
     assert!(exchange(true, "localhost").await.is_ok());
     assert!(matches!(
         exchange(false, "localhost").await,
-        Err(Error::Unavailable)
+        Err(Error::Unavailable(_))
     ));
     assert!(matches!(
         exchange(true, "127.0.0.1").await,
-        Err(Error::Unavailable)
+        Err(Error::Unavailable(_))
     ));
 }
 

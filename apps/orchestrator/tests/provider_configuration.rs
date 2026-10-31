@@ -53,10 +53,15 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         connections.inspect(&member).await,
         Err(IdentityError::Forbidden)
     ));
-    let encrypted: Vec<u8> = sqlx::query_scalar("SELECT credential FROM provider_connection")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let encrypted: Vec<u8> = sqlx::query_scalar!(
+        "
+        SELECT credential
+        FROM provider_connection
+        "
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert!(
         !encrypted
             .windows(input.api_key.len())

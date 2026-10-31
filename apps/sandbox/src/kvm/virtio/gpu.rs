@@ -185,7 +185,7 @@ impl Gpu {
             .chunks(16)
             .map(|entry| {
                 (
-                    u64::from_le_bytes(entry[..8].try_into().unwrap()),
+                    u64::from(word(entry, 0)) | u64::from(word(entry, 4)) << 32,
                     word(entry, 8),
                 )
             })
@@ -207,7 +207,7 @@ impl Gpu {
     fn transfer(&mut self, memory: &GuestMemory, request: &[u8]) -> io::Result<u32> {
         let (area, offset) = (
             rect(request),
-            u64::from_le_bytes(request[40..48].try_into().unwrap()),
+            u64::from(word(request, 40)) | u64::from(word(request, 44)) << 32,
         );
         let Some(resource) = self.resources.get_mut(&word(request, 48)) else {
             return Ok(ERR_INVALID_RESOURCE_ID);
@@ -327,7 +327,7 @@ impl Device for Gpu {
 }
 
 fn word(bytes: &[u8], at: usize) -> u32 {
-    u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
+    u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
 }
 
 /// The rect every 2D command with one carries right after the header.

@@ -18,5 +18,62 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # `just up` runs everything below; `just db-up` only PostgreSQL.
+  credential-key:
+    image: postgres:18-bookworm
+    user: '0:0'
+    # The orchestrator's key for stored provider credentials, made once and kept in its volume.
+    command:
+      - sh
+      - -euc
+      - umask 077; [ -s /state/credential.key ] || head -c 32 /dev/urandom > /state/credential.key; chown 65532:65532 /state/credential.key
+    volumes:
+      - orchestrator-state:/state
+    network_mode: none
+
+  orchestrator:
+    image: cubebot-orchestrator:local
+    build:
+      context: .
+      dockerfile: apps/orchestrator/Dockerfile
+      target: runtime
+    environment:
+      CUBEBOT_DATABASE_URL: postgres://cubebot:${POSTGRES_PASSWORD}@postgres:5432/cubebot
+      CUBEBOT_BIND_ADDR: 0.0.0.0:8080
+      CUBEBOT_CREDENTIAL_KEY_FILE: /state/credential.key
+      CUBEBOT_PUBLIC_ORIGIN: http://localhost:${CUBEBOT_PORT:-3000}
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - orchestrator-state:/state:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      credential-key:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    image: cubebot-web:local
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  proxy:
+    image: caddy:2.10.2-alpine
+    ports:
+      - '127.0.0.1:${CUBEBOT_PORT:-3000}:3000'
+    volumes:
+      - ./tooling/local/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - orchestrator
+      - web
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  orchestrator-state:

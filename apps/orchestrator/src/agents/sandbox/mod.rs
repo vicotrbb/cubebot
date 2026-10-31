@@ -72,22 +72,30 @@ impl Desktop {
         }
     }
 
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn open(&self, agent: AgentId) -> Result<ExecChannel, Error> {
         (self.open)(agent).await
     }
 }
 
 /// Converges one agent's sandbox to its recorded lifecycle intent.
+#[tracing::instrument(skip_all, fields(agent = %agent.0))]
 pub async fn drive<S: Sandbox + Sync>(
     sandbox: &S,
     pool: &PgPool,
     agent: AgentId,
 ) -> Result<(), Error> {
-    let state: String = sqlx::query_scalar("SELECT desired_state FROM agents WHERE id = $1")
-        .bind(agent)
-        .fetch_optional(pool)
-        .await?
-        .ok_or(Error::Conflict)?;
+    let state = sqlx::query_scalar!(
+        "
+        SELECT desired_state
+        FROM agents
+        WHERE id = $1
+        ",
+        agent.0,
+    )
+    .fetch_optional(pool)
+    .await?
+    .ok_or(Error::Conflict)?;
     if state != "running" {
         return sandbox.stop(agent).await;
     }

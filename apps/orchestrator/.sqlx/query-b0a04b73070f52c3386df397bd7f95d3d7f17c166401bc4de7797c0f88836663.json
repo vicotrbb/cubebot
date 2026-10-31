@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO human_accounts (login, password_hash, role)\n        VALUES ('persistent-user', 'test-verifier', 'member')\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b0a04b73070f52c3386df397bd7f95d3d7f17c166401bc4de7797c0f88836663"
+}

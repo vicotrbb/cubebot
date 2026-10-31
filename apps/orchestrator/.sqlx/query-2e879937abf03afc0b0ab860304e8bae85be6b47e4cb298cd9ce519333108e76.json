@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id AS \"id: AgentId\"\n                FROM agents\n                WHERE id > $1\n                ORDER BY id\n                LIMIT 32\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AgentId",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2e879937abf03afc0b0ab860304e8bae85be6b47e4cb298cd9ce519333108e76"
+}

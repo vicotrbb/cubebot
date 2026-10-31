@@ -56,8 +56,14 @@ async fn definitions_are_durable_scoped_and_creation_replays() {
     let definition = agents.get(&actor, AgentId(receipt.id)).await.unwrap();
     assert_eq!(definition.name, "Researcher");
     assert_eq!(definition.desired_state, "sleeping");
-    sqlx::query("INSERT INTO agents (id, name, instructions, created_by) SELECT ('00000000-0000-0000-0000-' || lpad(to_hex(n), 12, '0'))::uuid, 'Hidden', 'Private instructions', $1 FROM generate_series(1, 110) n")
-        .bind(admin.id).execute(&pool).await.unwrap();
+    sqlx::query!(
+        "
+        INSERT INTO agents (id, name, instructions, created_by)
+        SELECT ('00000000-0000-0000-0000-' || lpad(to_hex(n), 12, '0'))::uuid, 'Hidden', 'Private instructions', $1
+        FROM generate_series(1, 110) n
+        ",
+        admin.id,
+    ).execute(&pool).await.unwrap();
     assert_eq!(agents.list(&actor, None).await.unwrap().len(), 1);
     assert!(
         agents
@@ -136,30 +142,52 @@ async fn creation_is_atomic_under_retries_and_rechecks_current_role() {
         agents.create(&actor, &changed).await,
         Err(IdentityError::Conflict)
     ));
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM agents")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agents
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 1);
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM agent_events")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let count: i64 = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "count!"
+        FROM agent_events
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(count, 1);
-    sqlx::query("UPDATE human_accounts SET role = 'member' WHERE id = $1")
-        .bind(actor.id)
-        .execute(&pool)
-        .await
-        .unwrap();
+    sqlx::query!(
+        "
+        UPDATE human_accounts
+        SET role = 'member'
+        WHERE id = $1
+        ",
+        actor.id,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     assert!(matches!(
         agents.create(&actor, &changed).await,
         Err(IdentityError::Forbidden)
     ));
     assert!(agents.list(&actor, None).await.unwrap().is_empty());
-    let stored: String = sqlx::query_scalar("SELECT name FROM agents WHERE id = $1")
-        .bind(receipt.id)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let stored: String = sqlx::query_scalar!(
+        "
+        SELECT name
+        FROM agents
+        WHERE id = $1
+        ",
+        receipt.id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     assert_eq!(stored, "Durable agent");
 }

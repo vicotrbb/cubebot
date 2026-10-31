@@ -2,6 +2,7 @@
 //! time. The issued credential lasts for this sandbox incarnation.
 mod config;
 mod transport;
+use crate::Source;
 pub use config::Config;
 use cubebot_protocol::runtime::{self, RuntimeSession};
 use std::{sync::Arc, time::Duration};
@@ -13,28 +14,64 @@ use uuid::Uuid;
 
 pub type Channel = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
 
+/// Each failure keeps its cause, when it has one, for `source()`; Display never shows it.
 #[derive(Debug)]
 pub enum Error {
-    Configuration,
-    Credential,
-    Unavailable,
+    Configuration(Option<Source>),
+    Credential(Option<Source>),
+    Unavailable(Option<Source>),
     Rejected,
-    Protocol,
-    Journal,
+    Protocol(Option<Source>),
+    Journal(Option<Source>),
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::Configuration => "invalid runtime configuration",
-            Self::Credential => "projected runtime credential unavailable",
-            Self::Unavailable => "runtime control unavailable",
+            Self::Configuration(_) => "invalid runtime configuration",
+            Self::Credential(_) => "projected runtime credential unavailable",
+            Self::Unavailable(_) => "runtime control unavailable",
             Self::Rejected => "runtime identity rejected",
-            Self::Protocol => "invalid runtime control response",
-            Self::Journal => "runtime journal requires recovery",
+            Self::Protocol(_) => "invalid runtime control response",
+            Self::Journal(_) => "runtime journal requires recovery",
         })
     }
 }
-impl std::error::Error for Error {}
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Configuration(source)
+            | Self::Credential(source)
+            | Self::Unavailable(source)
+            | Self::Protocol(source)
+            | Self::Journal(source) => source
+                .as_deref()
+                .map(|source| source as &(dyn std::error::Error + 'static)),
+            Self::Rejected => None,
+        }
+    }
+}
+impl Error {
+    pub(crate) fn configuration(source: impl Into<Source>) -> Self {
+        Self::Configuration(Some(source.into()))
+    }
+    pub(crate) fn credential(source: impl Into<Source>) -> Self {
+        Self::Credential(Some(source.into()))
+    }
+    pub(crate) fn unavailable(source: impl Into<Source>) -> Self {
+        Self::Unavailable(Some(source.into()))
+    }
+    pub(crate) fn protocol(source: impl Into<Source>) -> Self {
+        Self::Protocol(Some(source.into()))
+    }
+    pub(crate) fn journal(source: impl Into<Source>) -> Self {
+        Self::Journal(Some(source.into()))
+    }
+}
+
+/// A request to the orchestrator that failed, without its URL, which can carry a search query.
+fn request_failed(error: reqwest::Error) -> Error {
+    Error::unavailable(error.without_url())
+}
 
 pub struct RuntimeClient {
     config: Config,
@@ -54,7 +91,7 @@ impl RuntimeClient {
         for certificate in &config.root_certificates {
             builder = builder.add_root_certificate(certificate.clone());
         }
-        let http = builder.build().map_err(|_| Error::Configuration)?;
+        let http = builder.build().map_err(Error::configuration)?;
         Ok(Self {
             config,
             http,
@@ -62,6 +99,7 @@ impl RuntimeClient {
             token: None,
         })
     }
+    #[tracing::instrument(skip_all, fields(instance = %self.instance))]
     pub async fn bootstrap(&mut self) -> Result<(), Error> {
         let token = self.config.bootstrap_token()?;
         let response = self
@@ -70,7 +108,7 @@ impl RuntimeClient {
                 self.config
                     .origin
                     .join("api/runtime/bootstrap")
-                    .map_err(|_| Error::Configuration)?,
+                    .map_err(Error::configuration)?,
             )
             .json(&runtime::Bootstrap {
                 token,
@@ -78,31 +116,32 @@ impl RuntimeClient {
             })
             .send()
             .await
-            .map_err(|_| Error::Unavailable)?;
+            .map_err(request_failed)?;
         let issued: RuntimeSession = transport::decode(response).await?;
         validate_session(&issued)?;
         self.token = Some(issued.token);
         Ok(())
     }
+    #[tracing::instrument(skip_all, fields(instance = %self.instance))]
     pub async fn connect(&self) -> Result<Channel, Error> {
-        let token = self.token.as_deref().ok_or(Error::Credential)?;
+        let token = self.token.as_deref().ok_or(Error::Credential(None))?;
         let mut url = self
             .config
             .origin
             .join("api/runtime/channel")
-            .map_err(|_| Error::Configuration)?;
+            .map_err(Error::configuration)?;
         let tls = url.scheme() == "https";
         url.set_scheme(if tls { "wss" } else { "ws" })
-            .map_err(|_| Error::Configuration)?;
+            .map_err(|()| Error::Configuration(None))?;
         let mut request = url
             .as_str()
             .into_client_request()
-            .map_err(|_| Error::Configuration)?;
+            .map_err(Error::configuration)?;
         request.headers_mut().insert(
             header::AUTHORIZATION,
             format!("Bearer {token}")
                 .parse()
-                .map_err(|_| Error::Credential)?,
+                .map_err(Error::credential)?,
         );
         let connector = if tls {
             Connector::Rustls(Arc::new(self.tls()?))
@@ -123,14 +162,14 @@ impl RuntimeClient {
             ),
         )
         .await
-        .map_err(|_| Error::Unavailable)?
+        .map_err(Error::unavailable)?
         .map_err(|error| match error {
             tokio_tungstenite::tungstenite::Error::Http(response)
                 if matches!(response.status().as_u16(), 401 | 403) =>
             {
                 Error::Rejected
             }
-            _ => Error::Unavailable,
+            error => Error::unavailable(error),
         })?;
         Ok(channel)
     }
@@ -149,14 +188,14 @@ impl RuntimeClient {
         };
         for certificate in CertificateDer::pem_slice_iter(&self.config.root_pem) {
             roots
-                .add(certificate.map_err(|_| Error::Configuration)?)
-                .map_err(|_| Error::Configuration)?;
+                .add(certificate.map_err(Error::configuration)?)
+                .map_err(Error::configuration)?;
         }
         Ok(rustls::ClientConfig::builder_with_provider(Arc::new(
             rustls::crypto::ring::default_provider(),
         ))
         .with_safe_default_protocol_versions()
-        .map_err(|_| Error::Configuration)?
+        .map_err(Error::configuration)?
         .with_root_certificates(roots)
         .with_no_client_auth())
     }
@@ -168,6 +207,7 @@ pub struct MemoryClient {
     token: String,
 }
 impl MemoryClient {
+    #[tracing::instrument(skip_all)]
     pub async fn search(&self, query: &str) -> Result<Vec<runtime::Memory>, Error> {
         let response = self
             .http
@@ -176,15 +216,16 @@ impl MemoryClient {
             .bearer_auth(&self.token)
             .send()
             .await
-            .map_err(|_| Error::Unavailable)?;
+            .map_err(request_failed)?;
         // Ten results of at most 4 KiB each, JSON-escaped.
         transport::decode_bounded(response, 256 * 1024).await
     }
 
     /// `None` when the orchestrator does not admit the run.
+    #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn start_dream(&self, run: Uuid) -> Result<Option<runtime::Dream>, Error> {
         let response = self.dream(reqwest::Method::POST, run, "")?.send().await;
-        let response = response.map_err(|_| Error::Unavailable)?;
+        let response = response.map_err(request_failed)?;
         if response.status() == reqwest::StatusCode::CONFLICT {
             return Ok(None);
         }
@@ -195,6 +236,7 @@ impl MemoryClient {
     }
 
     /// `false` once the run has ended, so the change was not committed.
+    #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn commit_dream(
         &self,
         run: Uuid,
@@ -202,14 +244,15 @@ impl MemoryClient {
     ) -> Result<bool, Error> {
         let response = self.dream(reqwest::Method::POST, run, "/changes")?;
         let response = response.json(change).send().await;
-        match response.map_err(|_| Error::Unavailable)?.status().as_u16() {
+        match response.map_err(request_failed)?.status().as_u16() {
             204 => Ok(true),
             409 => Ok(false),
-            _ => Err(Error::Unavailable),
+            _ => Err(Error::Unavailable(None)),
         }
     }
 
     /// `false` once the run has ended, so the skill was not published.
+    #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn commit_dream_skill(
         &self,
         run: Uuid,
@@ -217,21 +260,22 @@ impl MemoryClient {
     ) -> Result<bool, Error> {
         let response = self.dream(reqwest::Method::POST, run, "/skills")?;
         let response = response.json(change).send().await;
-        match response.map_err(|_| Error::Unavailable)?.status().as_u16() {
+        match response.map_err(request_failed)?.status().as_u16() {
             // A package the library refuses is dropped like a stale one; the run goes on.
             204 | 400 => Ok(true),
             409 => Ok(false),
-            _ => Err(Error::Unavailable),
+            _ => Err(Error::Unavailable(None)),
         }
     }
 
     /// This agent's installed revision of a skill; `None` when it is not installed.
+    #[tracing::instrument(skip_all, fields(skill = name))]
     pub async fn skill(&self, name: &str) -> Result<Option<runtime::SkillPackage>, Error> {
         // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/skills/{name}`.
         let url = self.url.join(&format!("skills/{name}"));
-        let url = url.map_err(|_| Error::Configuration)?;
+        let url = url.map_err(Error::configuration)?;
         let response = self.http.get(url).bearer_auth(&self.token).send().await;
-        let response = response.map_err(|_| Error::Unavailable)?;
+        let response = response.map_err(request_failed)?;
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
@@ -242,6 +286,7 @@ impl MemoryClient {
     }
 
     /// The created child, or the orchestrator's reason for refusing it.
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn collaborate(
         &self,
         turn: Uuid,
@@ -249,9 +294,9 @@ impl MemoryClient {
     ) -> Result<Result<Uuid, String>, Error> {
         // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/turns/...`.
         let url = self.url.join(&format!("turns/{turn}/messages"));
-        let url = url.map_err(|_| Error::Configuration)?;
+        let url = url.map_err(Error::configuration)?;
         let response = self.http.post(url).bearer_auth(&self.token).json(request);
-        let response = response.send().await.map_err(|_| Error::Unavailable)?;
+        let response = response.send().await.map_err(request_failed)?;
         if response.status() == reqwest::StatusCode::CONFLICT {
             #[derive(serde::Deserialize)]
             struct Refused {
@@ -267,12 +312,13 @@ impl MemoryClient {
         Ok(Ok(created.turn))
     }
 
+    #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn finish_dream(&self, run: Uuid, end: &runtime::DreamEnd) -> Result<(), Error> {
         let response = self.dream(reqwest::Method::PUT, run, "")?;
         let response = response.json(end).send().await;
-        match response.map_err(|_| Error::Unavailable)?.status().as_u16() {
+        match response.map_err(request_failed)?.status().as_u16() {
             204 | 409 => Ok(()),
-            _ => Err(Error::Unavailable),
+            _ => Err(Error::Unavailable(None)),
         }
     }
 
@@ -284,7 +330,7 @@ impl MemoryClient {
     ) -> Result<reqwest::RequestBuilder, Error> {
         // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/dreams/{run}`.
         let url = self.url.join(&format!("dreams/{run}{suffix}"));
-        let url = url.map_err(|_| Error::Configuration)?;
+        let url = url.map_err(Error::configuration)?;
         Ok(self.http.request(method, url).bearer_auth(&self.token))
     }
 }
@@ -293,7 +339,7 @@ fn validate_session(issued: &RuntimeSession) -> Result<(), Error> {
     let secret = issued
         .token
         .strip_prefix("cb_runtime_")
-        .ok_or(Error::Protocol)?;
+        .ok_or(Error::Protocol(None))?;
     if secret.len() != 64
         || !secret.bytes().all(|byte| byte.is_ascii_hexdigit())
         || issued.agent.is_nil()
@@ -301,7 +347,7 @@ fn validate_session(issued: &RuntimeSession) -> Result<(), Error> {
         || issued.epoch < 1
         || issued.version < 1
     {
-        return Err(Error::Protocol);
+        return Err(Error::Protocol(None));
     }
     Ok(())
 }

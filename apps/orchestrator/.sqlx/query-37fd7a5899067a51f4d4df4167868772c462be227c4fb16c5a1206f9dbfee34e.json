@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT role = 'administrator' AS \"administrator!\"\n        FROM human_accounts\n        WHERE id = $1 AND active\n        FOR SHARE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "administrator!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "37fd7a5899067a51f4d4df4167868772c462be227c4fb16c5a1206f9dbfee34e"
+}

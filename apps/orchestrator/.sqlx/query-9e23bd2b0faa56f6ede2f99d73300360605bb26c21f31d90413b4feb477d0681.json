@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id AS \"id!\",\n                login AS \"login!\",\n                revision AS \"revision!\",\n                EXTRACT(EPOCH FROM expires_at)::bigint AS \"expires_at_unix!\",\n                CASE\n                    WHEN revoked_by IS NOT NULL THEN 'revoked'\n                    WHEN accepted_by IS NOT NULL THEN 'accepted'\n                    WHEN expires_at <= clock_timestamp() THEN 'expired'\n                    ELSE 'pending'\n                END AS \"status!\"\n            FROM invitations\n            WHERE $1::uuid IS NULL OR id > $1\n            ORDER BY id\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "login!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "expires_at_unix!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "9e23bd2b0faa56f6ede2f99d73300360605bb26c21f31d90413b4feb477d0681"
+}
