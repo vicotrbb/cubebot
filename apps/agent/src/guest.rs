@@ -49,8 +49,13 @@ const WORKSPACE: &str = "/var/lib/cubebot/workspace";
 const PRIVATE: &str = "/run/cubebot";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const REPORT_INTERVAL: Duration = Duration::from_secs(5);
-const CHROMIUM: [&str; 9] = [
+const CHROMIUM: [&str; 12] = [
     "--no-sandbox",
+    // The agent's browser tools (`tools/browser.rs`); DevTools listens on loopback only.
+    "--remote-debugging-port=9222",
+    // Task sessions open windows that may sit behind others and still need to paint.
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
     "--test-type",
     "--no-first-run",
     "--no-default-browser-check",

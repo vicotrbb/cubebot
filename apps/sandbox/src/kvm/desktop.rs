@@ -296,7 +296,7 @@ impl<'a> Arbiter<'a> {
         if result.is_ok()
             && !matches!(
                 action,
-                Action::Screenshot | Action::Type { .. } | Action::Key { .. }
+                Action::Screenshot | Action::Mode | Action::Type { .. } | Action::Key { .. }
             )
         {
             self.pointer_by = by;
@@ -316,6 +316,7 @@ impl<'a> Arbiter<'a> {
     fn perform(&mut self, action: &Action) -> Result<Option<String>, String> {
         let pointer = match action {
             Action::Screenshot => return Ok(Some(self.screenshot())),
+            Action::Mode => return Ok(None),
             Action::Type { text } => return self.keys(typed(text)?),
             Action::Key { keys } => return self.keys(combination(keys)?),
             Action::Move { x, y } => (&Vec::new(), self.moved([*x, *y])?),
@@ -694,6 +695,8 @@ mod tests {
             (refused.mode, refused.error.as_deref()),
             (Mode::Human, Some(PERSON_HAS_CONTROL))
         );
+        let asked = arbiter.agent(&line(json!({"call":call,"action":{"action":"mode"}})));
+        assert_eq!((asked.mode, asked.error), (Mode::Human, None));
         let screenshot = json!({"call":call,"action":{"action":"screenshot"}});
         let png = arbiter.agent(&line(screenshot)).png.unwrap();
         assert!(png.starts_with("iVBORw0KGgo"), "a base64 PNG");
