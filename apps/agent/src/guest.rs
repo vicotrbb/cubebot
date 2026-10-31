@@ -385,8 +385,9 @@ fn desktop(environment: &[(String, String)]) {
 }
 
 /// Xorg on the virtio-gpu display with the virtio keyboard (event0) and tablet (event1), which
-/// the kernel probes in the sandbox's device order, then openbox, xterm and Chromium, all as the
-/// tool user. With no udev or logind in the guest, Xorg opens the devices and its VT itself.
+/// the kernel probes in the sandbox's device order, then openbox, the wallpaper, xterm and
+/// Chromium, all as the tool user. With no udev or logind in the guest, Xorg opens the devices
+/// and its VT itself.
 fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
     let devices = [
         "/dev/dri/card0",
@@ -446,6 +447,9 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
         std::thread::sleep(Duration::from_millis(100));
     }
     client("/usr/bin/openbox").spawn()?;
+    client("/usr/bin/xwallpaper")
+        .args(["--zoom", "/usr/share/cubebot/wallpaper.jpg"])
+        .spawn()?;
     client("/usr/bin/xterm").spawn()?;
     // The VM bounds Chromium, and the guest kernel has no user namespaces for its own sandbox.
     client("/usr/bin/chromium").args(CHROMIUM).spawn()?;
