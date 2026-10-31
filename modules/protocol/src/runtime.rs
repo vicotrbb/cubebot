@@ -56,6 +56,8 @@ pub enum Delivery {
     Idle {
         dream_after_seconds: u64,
     },
+    /// The agent's wallpaper was set or reset; fetch `/api/runtime/wallpaper` and redraw it.
+    WallpaperChanged,
 }
 
 /// Largest encoded turn event the ledger accepts. Responses are not otherwise bounded.

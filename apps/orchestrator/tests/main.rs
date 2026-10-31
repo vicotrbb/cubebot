@@ -41,3 +41,4 @@ mod rooms;
 mod runtime_identity;
 mod runtime_token_review;
 mod skills;
+mod wallpaper;

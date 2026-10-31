@@ -448,7 +448,7 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
     }
     client("/usr/bin/openbox").spawn()?;
     client("/usr/bin/xwallpaper")
-        .args(["--zoom", "/usr/share/cubebot/wallpaper.jpg"])
+        .args(["--zoom", crate::tools::WALLPAPER])
         .spawn()?;
     client("/usr/bin/xterm").spawn()?;
     // The VM bounds Chromium, and the guest kernel has no user namespaces for its own sandbox.
