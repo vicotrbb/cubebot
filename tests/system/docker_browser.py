@@ -231,9 +231,10 @@ def form(world):
         for call in calls(row, tool)
     }
     reads = {call["id"] for call in calls(row, "browser_read")}
-    assert inputs <= checked and not reads & checked, (inputs, checked)
+    # Every call asks, so a login handoff (ADR 0039) can refuse reads too.
+    assert inputs | reads <= checked, (inputs, reads, checked)
     print("PASS form: navigate, read, type and click in session main submitted")
-    print(f"     name={NAME!r}; every input call asked the arbiter, reads did not")
+    print(f"     name={NAME!r}; every call asked the arbiter first")
 
 
 def visible(world):

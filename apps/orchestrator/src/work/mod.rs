@@ -3,6 +3,7 @@ mod access;
 mod collaboration;
 mod coordinator;
 mod events;
+mod handoffs;
 mod retry;
 mod rooms;
 mod runtime;
@@ -14,6 +15,7 @@ use crate::{
 pub use collaboration::Steering;
 pub use coordinator::{coordinate, route};
 pub use events::{Event, Page};
+pub use handoffs::{DeclineLogin, LoginHandoff};
 pub use retry::RetryMessage;
 pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage};
 use serde::{Deserialize, Serialize};

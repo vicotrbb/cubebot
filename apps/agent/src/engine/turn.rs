@@ -140,7 +140,8 @@ async fn start<P: Provider>(
     }
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
-    tools.extend(crate::collaboration::definitions());
+    let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
+    tools.extend(crate::collaboration::definitions(desktop));
     // A task lane never drives the shared desktop (ADR 0005); the main lane owns it.
     tools.extend(
         registry
@@ -471,7 +472,11 @@ fn prepare<'a>(
             let id = Uuid::new_v4();
             let parsed = serde_json::from_str(&call.arguments);
             let running = match &parsed {
-                Ok(_) if task && tools.is_some_and(|tools| tools.computer(&call.name)) => {
+                Ok(_)
+                    if task
+                        && (call.name == "request_login"
+                            || tools.is_some_and(|tools| tools.computer(&call.name))) =>
+                {
                     Err("a delegated task cannot control the desktop")
                 }
                 Ok(input) => memories
@@ -514,6 +519,34 @@ fn failed(code: &str) -> TurnEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_task_lane_cannot_ask_for_a_login() {
+        let knowledge = (
+            Memories::new(None),
+            Skills::new(None),
+            Collaboration::new(None, Uuid::nil(), Default::default()),
+        );
+        let call = FunctionCall {
+            call_id: "call".into(),
+            name: "request_login".into(),
+            arguments: r#"{"site":"github.com","reason":"read"}"#.into(),
+        };
+        let prepared = prepare(
+            None,
+            (&knowledge.0, &knowledge.1, &knowledge.2),
+            &[call],
+            true,
+        );
+        let (_, _, _, running) = prepared.into_iter().next().unwrap();
+        let Outcome::Exited { output, .. } = running.await else {
+            panic!("a refusal is an exited outcome");
+        };
+        assert_eq!(
+            output,
+            "The call was not run: a delegated task cannot control the desktop."
+        );
+    }
 
     #[test]
     fn backoff_honours_retry_after_and_stays_bounded() {

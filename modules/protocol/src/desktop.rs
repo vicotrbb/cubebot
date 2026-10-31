@@ -13,6 +13,10 @@ pub const PERSON_HAS_CONTROL: &str = "a person has control";
 /// The refusal of agent input after a person handed control back, until the agent takes a
 /// screenshot: what it last saw may no longer be on the screen (ADR 0039).
 pub const REOBSERVE: &str = "a person had control; take a screenshot before further input";
+/// The refusal of every agent request, screenshots included, while a person holds control to
+/// complete a login the agent asked for (ADR 0039).
+pub const LOGIN_PENDING: &str =
+    "a person is logging in for you; wait for the message that the login handoff finished";
 /// Changed screen regions travel as square tiles of this many pixels per side.
 pub const TILE: u32 = 64;
 
@@ -114,6 +118,10 @@ pub enum HostRequest {
         mode: Mode,
         #[serde(default)]
         account: Option<Uuid>,
+        /// With `human`: the person takes control for a pending login handoff, and the agent's
+        /// screenshots and mode queries are refused too until control changes again.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        handoff: bool,
     },
 }
 
@@ -181,7 +189,8 @@ mod tests {
             mode,
             HostRequest::Mode {
                 mode: Mode::Human,
-                account: Some(_)
+                account: Some(_),
+                handoff: false,
             }
         ));
         let refused = Response {

@@ -438,3 +438,27 @@ button.agent-link.selected {
   color: var(--muted);
   font-size: 0.875rem;
 }
+.login-handoff {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-left: 3px solid var(--person);
+  border-radius: 8px;
+  background: #2b2519;
+}
+.login-handoff p {
+  margin: 0;
+}
+.login-handoff .actions {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.login-handoff input {
+  flex: 1 1 16rem;
+  width: auto;
+}

@@ -12,7 +12,7 @@ import {
 } from '../api/client'
 import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
-import { Desktop } from '../features/desktop'
+import { Desktop, LoginBanner } from '../features/desktop'
 import { Dreams } from '../features/dreams'
 import { Memories } from '../features/memories'
 import { listRooms, NewRoom, Room } from '../features/rooms'
@@ -71,7 +71,7 @@ type Screen =
   | { kind: 'memories' }
   | { kind: 'dreams' }
   | { kind: 'skills' }
-  | { kind: 'desktop' }
+  | { kind: 'desktop'; take?: boolean }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
   | { kind: 'room'; room: RoomType }
@@ -310,6 +310,7 @@ function AgentScreen({
           key={selected.id}
           agent={selected}
           accountId={session.id}
+          take={Boolean(screen.take)}
           onClose={() => setScreen({ kind: 'chat' })}
         />
       )}
@@ -324,6 +325,7 @@ function AgentScreen({
             onDreams={() => setScreen({ kind: 'dreams' })}
             onSkills={() => setScreen({ kind: 'skills' })}
             onDesktop={() => setScreen({ kind: 'desktop' })}
+            onTakeLogin={() => setScreen({ kind: 'desktop', take: true })}
           />
         ) : (
           <div className="empty">
@@ -351,6 +353,7 @@ function AgentChat({
   onDreams,
   onSkills,
   onDesktop,
+  onTakeLogin,
 }: {
   selected: Agent
   session: Account
@@ -359,6 +362,7 @@ function AgentChat({
   onDreams: () => void
   onSkills: () => void
   onDesktop: () => void
+  onTakeLogin: () => void
 }) {
   return (
     <>
@@ -388,6 +392,7 @@ function AgentChat({
           </button>
         </div>
       </header>
+      <LoginBanner agent={selected} onTake={onTakeLogin} />
       <Chat id={selected.id} accountId={session.id} />
     </>
   )

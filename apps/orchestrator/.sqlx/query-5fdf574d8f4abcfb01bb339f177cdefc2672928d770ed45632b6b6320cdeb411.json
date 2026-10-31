@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id\n            FROM chat_turns\n            WHERE id=$1 AND conversation_id=$2 AND status='running' AND attempt_id=$3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5fdf574d8f4abcfb01bb339f177cdefc2672928d770ed45632b6b6320cdeb411"
+}

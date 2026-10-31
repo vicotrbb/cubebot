@@ -121,6 +121,40 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/login': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The agent's pending login handoff; 204 when none is pending. */
+    get: operations['pending_login']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/login/decline': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Declines the pending login handoff and tells the agent why; 404 when none is pending. */
+    post: operations['decline_login']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/conversations/{conversation}/events': {
     parameters: {
       query?: never
@@ -487,6 +521,10 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    DeclineLogin: {
+      /** @description Returned to the agent; empty when the person gave none. */
+      reason: string
+    }
     Delivery: {
       agent: string
       /** Format: uuid */
@@ -564,6 +602,13 @@ export interface components {
     Login: {
       login: string
       password: string
+    }
+    LoginHandoff: {
+      /** Format: uuid */
+      id: string
+      /** @description The agent's words: untrusted text to show, never markup. */
+      reason: string
+      site: string
     }
     Member: {
       /** Format: uuid */
@@ -1121,6 +1166,62 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Receipt']
         }
+      }
+    }
+  }
+  pending_login: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['LoginHandoff']
+        }
+      }
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  decline_login: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DeclineLogin']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

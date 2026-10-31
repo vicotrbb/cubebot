@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE login_handoffs\n            SET taken_by=$2, taken_at=clock_timestamp()\n            WHERE agent_id=$1 AND status='pending'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc3c1441d3d2dfeae7bf8fed99b19f05a8a7419adbdc587bf4ed509d30b189b9"
+}

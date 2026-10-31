@@ -2,6 +2,9 @@
 //! sandbox's host channel. Frames go to the page as the sandbox encoded them; the orchestrator
 //! never decodes or keeps them. Watching takes `browser.view` and taking control
 //! `browser.control`, and the session rechecks the viewer's credential and access while it runs.
+//! A pending login handoff (ADR 0039) is shown with `browser.view` and declined with
+//! `browser.control`; taking control while it is pending takes it for the handoff, and handing
+//! control back completes it.
 use crate::{
     agents::{
         AgentId, Agents,
@@ -11,16 +14,17 @@ use crate::{
         Actor, Identity, IdentityError,
         access::{Capability, Scope},
     },
+    work::{DeclineLogin, LoginHandoff, Work},
 };
 use axum::{
-    Extension, Router,
+    Extension, Json, Router,
     extract::{
         Path, State,
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
     },
-    http::HeaderMap,
-    response::Response,
-    routing::get,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+    routing::{get, post},
 };
 use cubebot_protocol::desktop::{self, Action, HostRequest, LINE_LIMIT, Mode};
 use serde::Deserialize;
@@ -80,15 +84,64 @@ fn unavailable(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Cl
 struct DesktopApi {
     identity: Identity,
     agents: Agents,
+    work: Work,
 }
+
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(pending_login, decline_login))]
+pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/agents/{id}/desktop", get(connect))
+        .route("/api/agents/{id}/login", get(pending_login))
+        .route("/api/agents/{id}/login/decline", post(decline_login))
         .with_state(DesktopApi {
             identity,
-            agents: Agents::new(pool),
+            agents: Agents::new(pool.clone()),
+            work: Work::new(pool),
         })
+}
+
+/// The agent's pending login handoff; 204 when none is pending.
+#[utoipa::path(get, path = "/api/agents/{id}/login", params(("id" = Uuid, Path)), responses((status = 200, body = LoginHandoff), (status = 204)))]
+async fn pending_login(
+    State(api): State<DesktopApi>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+) -> Result<Response, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    allowed(&api.identity, &actor, agent, Capability::BrowserView).await?;
+    let pending = api.work.pending_login(agent).await?;
+    Ok(match pending {
+        Some(handoff) => ([("cache-control", "no-store")], Json(handoff)).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    })
+}
+
+/// Declines the pending login handoff and tells the agent why; 404 when none is pending.
+#[utoipa::path(post, path = "/api/agents/{id}/login/decline", params(("id" = Uuid, Path)), request_body = DeclineLogin, responses((status = 204), (status = 404)))]
+async fn decline_login(
+    State(api): State<DesktopApi>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+    Json(input): Json<DeclineLogin>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    allowed(&api.identity, &actor, agent, Capability::BrowserControl).await?;
+    let reason = input.reason.trim();
+    if reason.len() > 2048 || reason.contains('\0') {
+        return Err(IdentityError::InvalidInput);
+    }
+    let reason = if reason.is_empty() {
+        "no reason given"
+    } else {
+        reason
+    };
+    match api.work.settle_login(agent, actor.id, Some(reason)).await? {
+        true => Ok(StatusCode::NO_CONTENT),
+        false => Err(IdentityError::NotFound),
+    }
 }
 
 /// From the page. `t` comes back as `ack` on the answer, so the page times the round trip.
@@ -166,7 +219,7 @@ impl Session {
     async fn run(mut self, mut socket: WebSocket) {
         *self.viewers().entry(self.agent).or_default() += 1;
         // Without an account this never takes control from a person who holds it.
-        let _ = self.mode(Mode::Watch, None).await;
+        let _ = self.mode(Mode::Watch, None, false).await;
         if let Err(reason) = self.serve(&mut socket).await {
             let close = CloseFrame {
                 code: 1011,
@@ -203,8 +256,9 @@ impl Session {
             Mode::Watch
         };
         let account = self.holding.then_some(self.actor.id);
+        // A lost connection is not a hand-back, so a login handoff stays pending.
         if account.is_some() || remaining == 0 {
-            let _ = self.mode(mode, account).await;
+            let _ = self.mode(mode, account, false).await;
         }
         if let Err(error) = self.api.agents.end_desktop(self.session).await {
             tracing::warn!(?error, session = %self.session, "desktop session end not recorded");
@@ -239,9 +293,7 @@ impl Session {
         let message = serde_json::from_str(text).map_err(Closing::InvalidMessage)?;
         let (t, line) = match message {
             Viewer::Take { t } => (t, self.take().await?),
-            Viewer::HandBack { t } if self.holding => {
-                (t, self.mode(Mode::Watch, Some(self.actor.id)).await?)
-            }
+            Viewer::HandBack { t } if self.holding => (t, self.hand_back().await?),
             Viewer::HandBack { t } => (t, json!({"error":"you do not have control"}).to_string()),
             Viewer::Input { t, action } => {
                 let account = self.actor.id;
@@ -267,15 +319,45 @@ impl Session {
             let refusal = "you do not have permission to control this desktop";
             return Ok(json!({ "error": refusal }).to_string());
         }
-        self.mode(Mode::Human, Some(self.actor.id)).await
+        let work = self.api.work.clone();
+        let handoff = work.pending_login(self.agent).await.ok().flatten();
+        let line = self
+            .mode(Mode::Human, Some(self.actor.id), handoff.is_some())
+            .await?;
+        if self.holding && handoff.is_some() {
+            work.take_login(self.agent, self.actor.id)
+                .await
+                .map_err(|_| Closing::NotRecorded)?;
+        }
+        Ok(line)
+    }
+
+    /// Hands control back and completes a pending login handoff, which tells the agent.
+    async fn hand_back(&mut self) -> Result<String, Closing> {
+        let line = self.mode(Mode::Watch, Some(self.actor.id), false).await?;
+        if !self.holding {
+            self.api
+                .work
+                .settle_login(self.agent, self.actor.id, None)
+                .await
+                .map_err(|_| Closing::NotRecorded)?;
+        }
+        Ok(line)
     }
 
     /// Records the changes the viewer makes to their own control.
-    async fn mode(&mut self, mode: Mode, account: Option<Uuid>) -> Result<String, Closing> {
-        let line = self
-            .channel
-            .request(&HostRequest::Mode { mode, account })
-            .await?;
+    async fn mode(
+        &mut self,
+        mode: Mode,
+        account: Option<Uuid>,
+        handoff: bool,
+    ) -> Result<String, Closing> {
+        let request = HostRequest::Mode {
+            mode,
+            account,
+            handoff,
+        };
+        let line = self.channel.request(&request).await?;
         let changed = serde_json::from_str::<desktop::Response>(&line)
             .is_ok_and(|response| response.error.is_none());
         if changed && account.is_some() {

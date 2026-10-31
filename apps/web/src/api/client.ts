@@ -11,6 +11,7 @@ export type Turn = components['schemas']['Turn']
 export type Room = components['schemas']['Room']
 export type RoomMessage = components['schemas']['RoomMessage']
 export type TurnEvent = components['schemas']['Event']
+export type LoginHandoff = components['schemas']['LoginHandoff']
 
 export class ApiError extends Error {
   constructor(public status: number) {

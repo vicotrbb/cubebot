@@ -12,7 +12,7 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Collaborate, Collaborated, Dream, DreamEnd, Memory, MemoryChange, REPORT_BYTES,
-    RuntimeActor, RuntimeSession, SkillChange, SkillPackage,
+    RequestLogin, RuntimeActor, RuntimeSession, SkillChange, SkillPackage,
 };
 use uuid::Uuid;
 
@@ -30,6 +30,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/skills/{name}", get(skill))
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
+        .route("/api/runtime/turns/{turn}/logins", post(request_login))
         // A package of at most 64 KiB, JSON-escaped.
         .route(
             "/api/runtime/dreams/{run}/skills",
@@ -207,6 +208,28 @@ async fn collaborate(
         .map_err(Failure::from)?;
     Ok(match created {
         Ok(turn) => Json(Collaborated { turn }).into_response(),
+        Err(reason) => (
+            StatusCode::CONFLICT,
+            Json(serde_json::json!({"error": reason})),
+        )
+            .into_response(),
+    })
+}
+/// Asks a person to log in for the agent's running turn; a refusal is 409 with the reason the
+/// model reads.
+async fn request_login(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(turn): Path<Uuid>,
+    Json(input): Json<RequestLogin>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let recorded = crate::work::Work::new(identity.pool.clone())
+        .request_login(&actor, turn, &input)
+        .await
+        .map_err(Failure::from)?;
+    Ok(match recorded {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(reason) => (
             StatusCode::CONFLICT,
             Json(serde_json::json!({"error": reason})),

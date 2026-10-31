@@ -305,24 +305,53 @@ impl MemoryClient {
         turn: Uuid,
         request: &runtime::Collaborate,
     ) -> Result<Result<Uuid, String>, Error> {
-        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/turns/...`.
-        let url = self.url.join(&format!("turns/{turn}/messages"));
-        let url = url.map_err(Error::configuration)?;
-        let response = self.http.post(url).bearer_auth(&self.token).json(request);
-        let response = response.send().await.map_err(request_failed)?;
-        if response.status() == reqwest::StatusCode::CONFLICT {
-            #[derive(serde::Deserialize)]
-            struct Refused {
-                error: String,
+        match self.post_for_turn(turn, "messages", request).await? {
+            Ok(response) => {
+                let created: runtime::Collaborated = transport::decode(response).await?;
+                Ok(Ok(created.turn))
             }
-            let refused: Result<Refused, _> = transport::decode_conflict(response).await;
-            return Ok(Err(refused.map_or_else(
-                |_| "this turn can no longer send work".into(),
-                |refused| refused.error,
-            )));
+            Err(reason) => Ok(Err(reason)),
         }
-        let created: runtime::Collaborated = transport::decode(response).await?;
-        Ok(Ok(created.turn))
+    }
+
+    /// Records the login handoff, or returns the orchestrator's reason for refusing it.
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
+    pub async fn request_login(
+        &self,
+        turn: Uuid,
+        request: &runtime::RequestLogin,
+    ) -> Result<Result<(), String>, Error> {
+        match self.post_for_turn(turn, "logins", request).await? {
+            Ok(response) if response.status().is_success() => Ok(Ok(())),
+            Ok(_) => Err(Error::Unavailable(None)),
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
+    /// The response to a request from the running turn, or the reason of a 409 refusal.
+    async fn post_for_turn(
+        &self,
+        turn: Uuid,
+        path: &str,
+        body: &impl serde::Serialize,
+    ) -> Result<Result<reqwest::Response, String>, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/turns/...`.
+        let url = self.url.join(&format!("turns/{turn}/{path}"));
+        let url = url.map_err(Error::configuration)?;
+        let response = self.http.post(url).bearer_auth(&self.token).json(body);
+        let response = response.send().await.map_err(request_failed)?;
+        if response.status() != reqwest::StatusCode::CONFLICT {
+            return Ok(Ok(response));
+        }
+        #[derive(serde::Deserialize)]
+        struct Refused {
+            error: String,
+        }
+        let refused: Result<Refused, _> = transport::decode_conflict(response).await;
+        Ok(Err(refused.map_or_else(
+            |_| "this turn can no longer make this request".into(),
+            |refused| refused.error,
+        )))
     }
 
     #[tracing::instrument(skip_all, fields(run = %run))]
