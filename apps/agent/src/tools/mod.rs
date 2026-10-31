@@ -23,6 +23,8 @@ use uuid::Uuid;
 const HEAD: u64 = 8 * 1024;
 const TAIL: u64 = 8 * 1024;
 const OUTPUT: &str = ".cubebot-tool-output";
+/// The guest image's default desktop wallpaper.
+pub const WALLPAPER: &str = "/usr/share/cubebot/wallpaper.jpg";
 
 /// A started call. Dropping it stops the call and its process group.
 pub type Running<'a> = Pin<Box<dyn Future<Output = Outcome> + Send + 'a>>;
@@ -248,6 +250,30 @@ impl Registry {
             .stdout(Stdio::null())
             .stderr(Stdio::null());
         matches!(self.sandbox.wait(command, job.stdin).await, Ok(Some(0)))
+    }
+
+    /// Draws `image` on the desktop as the tool user, or the default with `None`. True when
+    /// there is no desktop to draw on.
+    pub async fn wallpaper(&self, image: Option<Vec<u8>>) -> bool {
+        if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() != Ok("1") {
+            return true;
+        }
+        // shortcut: waits for Xorg, then 2 s so guest init's default is drawn first; signal
+        // desktop readiness to the agent if a slow guest still draws over a set wallpaper.
+        const DRAW: &str = r#"f=$(mktemp) && cat > "$f" || exit 1
+for _ in $(seq 30); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 1; done
+sleep 2
+xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
+        let default = if image.is_some() { "" } else { WALLPAPER };
+        let mut command = self.sandbox.command("/bin/sh");
+        command
+            .args(["-c", DRAW, "wallpaper", default])
+            .env("DISPLAY", ":0")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let image = image.unwrap_or_default();
+        matches!(self.sandbox.wait(command, Some(image)).await, Ok(Some(0)))
     }
 
     /// Whether `name` is the provider's computer-use tool.

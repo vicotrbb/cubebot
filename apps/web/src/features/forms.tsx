@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api, failure, ok, type Agent } from '../api/client'
+import { api, ApiError, failure, ok, type Agent } from '../api/client'
 
 export function SignIn({ onSignedIn }: { onSignedIn: () => Promise<void> }) {
   const [error, setError] = useState('')
@@ -75,6 +75,28 @@ export function AgentForm({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [requestId] = useState(() => crypto.randomUUID())
+  const [notice, setNotice] = useState('')
+  // A JPEG or PNG of at most 4 MiB, or `null` to reset to the default.
+  async function wallpaper(id: string, file: File | null) {
+    setError('')
+    setNotice('')
+    if (file && file.size > 4 * 1024 * 1024)
+      return setError('Choose an image of at most 4 MiB.')
+    setBusy(true)
+    try {
+      const response = await fetch(`/api/agents/${id}/wallpaper`, {
+        method: file ? 'PUT' : 'DELETE',
+        body: file,
+        credentials: 'same-origin',
+      })
+      if (!response.ok) throw new ApiError(response.status)
+      setNotice(file ? 'Wallpaper set.' : 'Wallpaper reset to the default.')
+    } catch (error) {
+      setError(failure(error))
+    } finally {
+      setBusy(false)
+    }
+  }
   return (
     <section className="settings">
       <h2>{existing ? 'Edit agent' : 'Create an agent'}</h2>
@@ -165,9 +187,31 @@ export function AgentForm({
                 defaultValue={existing.dreaming_model ?? ''}
               />
             </label>
+            <label>
+              Desktop wallpaper (JPEG or PNG, up to 4 MiB)
+              <input
+                type="file"
+                accept="image/jpeg,image/png"
+                disabled={busy}
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0]
+                  event.currentTarget.value = ''
+                  if (file) void wallpaper(existing.id, file)
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void wallpaper(existing.id, null)}
+            >
+              Reset wallpaper
+            </button>
           </>
         )}
         {error && <p role="alert">{error}</p>}
+        {notice && <p role="status">{notice}</p>}
         <div className="actions">
           <button disabled={busy}>{busy ? 'Saving…' : 'Save agent'}</button>
           <button type="button" className="secondary" onClick={onCancel}>

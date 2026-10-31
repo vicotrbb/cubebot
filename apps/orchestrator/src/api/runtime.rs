@@ -28,6 +28,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         )
         .route("/api/runtime/dreams/{run}/changes", post(commit_dream))
         .route("/api/runtime/skills/{name}", get(skill))
+        .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
         // A package of at most 64 KiB, JSON-escaped.
         .route(
@@ -177,6 +178,19 @@ async fn skill(
         .pop()
         .map(Json)
         .ok_or(Failure(StatusCode::NOT_FOUND))
+}
+/// The authenticated agent's wallpaper; 404 when it uses the default.
+async fn wallpaper(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let image = crate::agents::wallpaper(&identity.pool, actor.agent)
+        .await
+        .map_err(unavailable)?
+        .ok_or(Failure(StatusCode::NOT_FOUND))?;
+    let content_type = crate::agents::content_type(&image).unwrap_or("application/octet-stream");
+    Ok(([(header::CONTENT_TYPE, content_type)], image).into_response())
 }
 /// Sends work from the agent's running turn to an agent sharing a room with it; a refusal is
 /// 409 with the reason the model reads.

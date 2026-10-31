@@ -1,6 +1,6 @@
-//! One WebSocket per sandbox: turns, cancellation, steering, drain and revocation go down; turn
-//! events come up. Several turns can be active, one per lane; the ledger decides admission and
-//! stays authoritative, the socket is only a delivery path.
+//! One WebSocket per sandbox: turns, cancellation, steering, drain, revocation and wallpaper
+//! changes go down; turn events come up. Several turns can be active, one per lane; the ledger
+//! decides admission and stays authoritative, the socket is only a delivery path.
 use super::{Error, RuntimeAccess, RuntimeDisposition, RuntimeIdentity};
 use crate::work::Work;
 use axum::extract::ws::{Message, WebSocket};
@@ -20,6 +20,8 @@ struct Channel {
     drain: Option<Uuid>,
     /// Steering sent on this connection; a reconnect resends what is still unincorporated.
     steered: std::collections::HashSet<Uuid>,
+    /// The wallpaper revision this connection last saw; the agent fetches it when it connects.
+    wallpaper: Option<i64>,
 }
 
 impl Channel {
@@ -104,6 +106,14 @@ impl RuntimeIdentity {
                 request_id: drain.request_id,
             });
         }
+        let wallpaper = wallpaper_revision(&self.pool, &control.actor).await?;
+        if channel
+            .wallpaper
+            .replace(wallpaper)
+            .is_some_and(|seen| seen != wallpaper)
+        {
+            deliveries.push(Delivery::WallpaperChanged);
+        }
         deliveries.extend(active(&Work::new(self.pool.clone()), channel).await?);
         if channel.pulling && matches!(control.disposition, RuntimeDisposition::Available) {
             deliveries.extend(self.offer(token, &control.actor, channel).await?);
@@ -179,6 +189,18 @@ async fn dream_after(
     .fetch_one(&mut **tx)
     .await?;
     Ok(seconds.unsigned_abs().into())
+}
+
+async fn wallpaper_revision(
+    pool: &sqlx::PgPool,
+    actor: &super::RuntimeActor,
+) -> Result<i64, Error> {
+    Ok(sqlx::query_scalar!(
+        "SELECT wallpaper_revision FROM agents WHERE id = $1",
+        actor.agent.0,
+    )
+    .fetch_one(pool)
+    .await?)
 }
 
 /// Sends deliveries in order; false closes the channel.

@@ -4,10 +4,11 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    body::Bytes,
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::Deserialize;
 
@@ -29,6 +30,12 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         .route("/api/agents/{id}/definition", post(update))
         .route("/api/agents/{id}/lifecycle", post(lifecycle))
         .route("/api/agents/{id}/revisions", get(revisions))
+        .route(
+            "/api/agents/{id}/wallpaper",
+            put(set_wallpaper)
+                .delete(reset_wallpaper)
+                .layer(DefaultBodyLimit::max(crate::agents::WALLPAPER_BYTES)),
+        )
         .with_state(AgentApi {
             identity,
             agents: Agents::new(pool),
@@ -138,4 +145,26 @@ async fn status(
         [("cache-control", "no-store")],
         Json(api.agents.status(&actor, id).await?),
     ))
+}
+
+/// The raw JPEG or PNG; the image type comes from its bytes, never a header.
+async fn set_wallpaper(
+    State(api): State<AgentApi>,
+    headers: HeaderMap,
+    Path(id): Path<AgentId>,
+    image: Bytes,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.agents.set_wallpaper(&actor, id, Some(&image)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn reset_wallpaper(
+    State(api): State<AgentApi>,
+    headers: HeaderMap,
+    Path(id): Path<AgentId>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.agents.set_wallpaper(&actor, id, None).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

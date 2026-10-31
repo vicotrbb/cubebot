@@ -85,6 +85,8 @@ struct Agent {
     /// When to dream, armed by the switchboard's idle notice.
     dream_at: Option<Instant>,
     dreaming: Option<(watch::Sender<bool>, tokio::task::JoinHandle<()>)>,
+    /// The wallpaper being fetched and drawn; a newer change replaces it.
+    wallpaper: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Agent {
@@ -117,6 +119,7 @@ impl Agent {
             drain: None,
             dream_at: None,
             dreaming: None,
+            wallpaper: None,
         })
     }
 
@@ -127,6 +130,8 @@ impl Agent {
             self.memory = client.memory();
         }
         let mut channel = client.connect().await?;
+        // Changes while disconnected are not delivered, so each connection starts with a fetch.
+        self.redraw();
         for (entry, _) in &self.outbox {
             send(&mut channel, &report(entry)).await?;
         }
@@ -140,8 +145,8 @@ impl Agent {
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
                         _ => return Ok(Next::Reconnect),
                     };
-                    self.wake();
                     let delivery = serde_json::from_str(&text).map_err(Error::protocol)?;
+                    self.wake(&delivery);
                     if let Some(next) = self.deliver(&mut channel, delivery).await? {
                         return Ok(next);
                     }
@@ -152,8 +157,12 @@ impl Agent {
         }
     }
 
-    /// Any channel message disarms the idle timer and makes a running dream yield.
-    fn wake(&mut self) {
+    /// Any channel message disarms the idle timer and makes a running dream yield, except a
+    /// wallpaper change, which is not work.
+    fn wake(&mut self, delivery: &Delivery) {
+        if matches!(delivery, Delivery::WallpaperChanged) {
+            return;
+        }
         self.dream_at = None;
         if let Some((stop, _)) = &self.dreaming {
             let _ = stop.send(true);
@@ -231,12 +240,8 @@ impl Agent {
             }
             Delivery::Idle {
                 dream_after_seconds,
-            } => {
-                if self.active.is_empty() {
-                    let delay = Duration::from_secs(dream_after_seconds);
-                    self.dream_at = Some(Instant::now() + delay);
-                }
-            }
+            } => self.rest(dream_after_seconds),
+            Delivery::WallpaperChanged => self.redraw(),
             Delivery::Revoked => {
                 // Unreported effects stay uncertain in the ledger; stopping the sandbox ends them.
                 for active in self.active.values() {
@@ -246,6 +251,34 @@ impl Agent {
             }
         }
         Ok(None)
+    }
+
+    /// Arms the dream timer when no lane is running.
+    fn rest(&mut self, dream_after_seconds: u64) {
+        if self.active.is_empty() {
+            let delay = Duration::from_secs(dream_after_seconds);
+            self.dream_at = Some(Instant::now() + delay);
+        }
+    }
+
+    /// Fetches and draws the wallpaper in the background, replacing a draw still running.
+    fn redraw(&mut self) {
+        let (Some(client), Some(tools)) = (self.memory.clone(), self.tools.clone()) else {
+            return;
+        };
+        if let Some(previous) = self.wallpaper.take() {
+            previous.abort();
+        }
+        self.wallpaper = Some(tokio::spawn(async move {
+            match client.wallpaper().await {
+                Ok(image) => {
+                    if !tools.wallpaper(image).await {
+                        eprintln!("Wallpaper not drawn");
+                    }
+                }
+                Err(error) => eprintln!("Wallpaper unavailable: {error}"),
+            }
+        }));
     }
 
     fn start(&mut self, work: cubebot_protocol::runtime::Turn) {

@@ -285,6 +285,19 @@ impl MemoryClient {
             .map(Some)
     }
 
+    /// This agent's wallpaper image; `None` when it uses the default.
+    #[tracing::instrument(skip_all)]
+    pub async fn wallpaper(&self) -> Result<Option<Vec<u8>>, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/wallpaper`.
+        let url = self.url.join("wallpaper").map_err(Error::configuration)?;
+        let response = self.http.get(url).bearer_auth(&self.token).send().await;
+        let response = response.map_err(request_failed)?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        transport::bytes(response, 4 * 1024 * 1024).await.map(Some)
+    }
+
     /// The created child, or the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn collaborate(
