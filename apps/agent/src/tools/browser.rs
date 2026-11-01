@@ -1,5 +1,6 @@
-//! Browser tools (ADRs 0036 and 0037) on the desktop's Chromium, which guest init starts with its
-//! profile on the workspace disk, driven through Chromium's DevTools protocol on loopback. The
+//! Browser tools (ADRs 0036 and 0037) on the desktop's Chromium, which this module starts as its
+//! own user with its profile on the workspace disk, driven through Chromium's DevTools protocol on
+//! a pipe only the agent holds, so a tool command reaches neither. The
 //! `main` session is a page in the profile's own context; any other session name is a task
 //! session with a browser context of its own, whose cookies end when it closes. Calls address a
 //! session's page directly, so one session never moves another's page or takes its input. Input
@@ -10,11 +11,13 @@ use cubebot_protocol::{
     desktop::{Action, Mode, PERSON_HAS_CONTROL},
     terminal::Outcome,
 };
-use futures_util::{SinkExt, StreamExt, stream::SplitSink};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
     fmt::Write,
+    os::unix::fs::{DirBuilderExt, PermissionsExt},
+    path::Path,
+    process::Stdio,
     sync::{
         Arc, Mutex as Blocking,
         atomic::{AtomicU64, Ordering},
@@ -22,14 +25,36 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    net::TcpStream,
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    process::{Child, ChildStdin, Command},
     sync::{Mutex, oneshot},
 };
-use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, tungstenite::Message};
 use uuid::Uuid;
 
-/// Guest init starts Chromium with `--remote-debugging-port=9222`, which listens on loopback.
-const ENDPOINT: &str = "http://127.0.0.1:9222/json/version";
+/// The browser's own user and profile, apart from the tool user's (10001) workspace.
+const USER: u32 = 10002;
+const PROFILE: &str = "/var/lib/cubebot/browser";
+const CHROMIUM: [&str; 12] = [
+    "--no-sandbox",
+    // DevTools reads commands on fd 3 and writes replies on fd 4, each ending with a NUL.
+    "--remote-debugging-pipe",
+    // Task sessions open windows that may sit behind others and still need to paint.
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--test-type",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-gpu",
+    "--start-maximized",
+    "--password-store=basic",
+    "--user-data-dir=/var/lib/cubebot/browser",
+    "about:blank",
+];
+/// Moves the shell's standard input and output onto the descriptors --remote-debugging-pipe
+/// uses, then runs its arguments.
+const PIPE: &str = r#"exec "$0" "$@" 3<&0 4>&1 </dev/null >/dev/null"#;
+/// Bounds one DevTools message, so the browser cannot exhaust the agent's memory.
+const MESSAGE: u64 = 64 * 1024 * 1024;
 const MAIN: &str = "main";
 /// Bounds each DevTools reply, so a hung page fails the call rather than the turn.
 const REPLY: Duration = Duration::from_secs(30);
@@ -55,6 +80,13 @@ struct BrowserTool {
 
 pub(super) fn tools() -> Vec<Box<dyn Tool>> {
     let browser = Arc::new(Browser::default());
+    // The desktop shows Chromium from boot, for the computer tool as much as these.
+    let starting = browser.clone();
+    tokio::spawn(async move {
+        if let Err(error) = starting.state.lock().await.cdp().await {
+            eprintln!("{error}");
+        }
+    });
     let text = json!({"type":"string"});
     let session = json!({"type":"string","description":"main, or a task name for a separate session with its own page and cookies"});
     let node = json!({"type":"integer","description":"An element number from browser_read"});
@@ -141,6 +173,22 @@ struct State {
     pages: HashMap<String, Page>,
 }
 
+impl State {
+    /// The connection, starting Chromium again when it is gone. Its pages' handles belong to
+    /// the connection that ended, so every session ends with it.
+    async fn cdp(&mut self) -> Result<Arc<Cdp>, String> {
+        if let Some(cdp) = self.cdp.clone().filter(|cdp| cdp.alive()) {
+            return Ok(cdp);
+        }
+        self.pages.clear();
+        // Dropping the last handle kills the old browser, which holds the profile's lock.
+        self.cdp = None;
+        let cdp = Arc::new(Cdp::launch().await?);
+        self.cdp = Some(cdp.clone());
+        Ok(cdp)
+    }
+}
+
 impl Browser {
     async fn run(&self, call: Uuid, kind: Kind, input: &Value) -> Result<Outcome, String> {
         let name = input["session"].as_str().unwrap_or(MAIN);
@@ -170,19 +218,10 @@ impl Browser {
     }
 
     /// The named session's page, opened only by a navigation so a closed or lost session is
-    /// never silently replaced. A closed connection ends every session, since its pages'
-    /// handles belong to that connection.
+    /// never silently replaced.
     async fn page(&self, name: &str, open: bool) -> Result<(Arc<Cdp>, Page), String> {
         let mut state = self.state.lock().await;
-        let cdp = match state.cdp.clone().filter(|cdp| cdp.alive()) {
-            Some(cdp) => cdp,
-            None => {
-                state.pages.clear();
-                let cdp = Arc::new(Cdp::connect().await?);
-                state.cdp = Some(cdp.clone());
-                cdp
-            }
-        };
+        let cdp = state.cdp().await?;
         if let Some(page) = state.pages.get(name) {
             return Ok((cdp, page.clone()));
         }
@@ -409,43 +448,63 @@ fn field(result: &Value, name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("The browser's reply had no {name}."))
 }
 
-type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 type Waiting = Arc<Blocking<HashMap<u64, oneshot::Sender<Value>>>>;
 
-/// One DevTools connection to the browser; page commands travel on it with their session id.
+/// The DevTools pipe to the browser, which dies with it; page commands travel on it with their
+/// session id.
 struct Cdp {
-    sink: Mutex<SplitSink<Socket, Message>>,
+    input: Mutex<ChildStdin>,
     waiting: Waiting,
     next: AtomicU64,
     reader: tokio::task::JoinHandle<()>,
+    _browser: Child,
 }
 
 impl Cdp {
-    async fn connect() -> Result<Self, String> {
-        let unreached =
-            |error: &dyn std::fmt::Display| format!("The browser was not reached: {error}");
-        let version: Value = reqwest::get(ENDPOINT)
-            .await
-            .map_err(|error| unreached(&error))?
-            .json()
-            .await
-            .map_err(|error| unreached(&error))?;
-        let url = version["webSocketDebuggerUrl"]
-            .as_str()
-            .ok_or("The browser named no DevTools endpoint.")?;
-        let (socket, _) = tokio_tungstenite::connect_async(url)
-            .await
-            .map_err(|error| unreached(&error))?;
-        let (sink, mut stream) = socket.split();
+    /// Starts Chromium on the desktop as [`USER`], once Xorg is up.
+    async fn launch() -> Result<Self, String> {
+        let failed = |error: &dyn std::fmt::Display| format!("The browser did not start: {error}");
+        display().await.map_err(|error| failed(&error))?;
+        profile().map_err(|error| failed(&error))?;
+        let mut browser = Command::new("/bin/sh")
+            .args(["-c", PIPE, "/usr/bin/chromium"])
+            .args(CHROMIUM)
+            .env_clear()
+            .envs([
+                ("HOME", PROFILE),
+                ("PATH", "/usr/bin:/bin"),
+                ("DISPLAY", ":0"),
+                ("LANG", "C.UTF-8"),
+            ])
+            .current_dir(PROFILE)
+            .uid(USER)
+            .gid(USER)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|error| failed(&error))?;
+        let (Some(input), Some(output)) = (browser.stdin.take(), browser.stdout.take()) else {
+            return Err(failed(&"no DevTools pipe"));
+        };
         let waiting = Waiting::default();
         let replies = waiting.clone();
         // Replies go to their waiting command; events carry no id and are not used.
         let reader = tokio::spawn(async move {
-            while let Some(Ok(message)) = stream.next().await {
-                let Message::Text(text) = message else {
-                    continue;
-                };
-                let Ok(reply) = serde_json::from_str::<Value>(&text) else {
+            let mut output = BufReader::new(output);
+            let mut message = Vec::new();
+            loop {
+                message.clear();
+                let read = (&mut output)
+                    .take(MESSAGE)
+                    .read_until(0, &mut message)
+                    .await;
+                // The end of the pipe, or a message over the bound, ends the connection.
+                if read.is_err() || message.pop() != Some(0) {
+                    break;
+                }
+                let Ok(reply) = serde_json::from_slice::<Value>(&message) else {
                     continue;
                 };
                 let waiter = reply["id"]
@@ -458,10 +517,11 @@ impl Cdp {
             lock(&replies).clear();
         });
         Ok(Self {
-            sink: Mutex::new(sink),
+            input: Mutex::new(input),
             waiting,
             next: AtomicU64::new(1),
             reader,
+            _browser: browser,
         })
     }
 
@@ -482,12 +542,9 @@ impl Cdp {
         }
         let (sender, reply) = oneshot::channel();
         lock(&self.waiting).insert(id, sender);
-        let sent = self
-            .sink
-            .lock()
-            .await
-            .send(Message::Text(command.to_string().into()))
-            .await;
+        let mut message = command.to_string().into_bytes();
+        message.push(0);
+        let sent = self.input.lock().await.write_all(&message).await;
         if let Err(error) = sent {
             lock(&self.waiting).remove(&id);
             return Err(format!("The browser was not reached: {error}"));
@@ -511,6 +568,28 @@ impl Cdp {
             None => Ok(reply["result"].take()),
         }
     }
+}
+
+/// Waits up to 30 s for guest init's desktop, so openbox manages Chromium's window.
+async fn display() -> std::io::Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while !Path::new(super::DESKTOP_READY).exists() {
+        if Instant::now() > deadline {
+            return Err(std::io::Error::other("the desktop did not start"));
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    Ok(())
+}
+
+/// The profile directory, which only the browser user can enter.
+fn profile() -> std::io::Result<()> {
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(PROFILE)?;
+    std::os::unix::fs::chown(PROFILE, Some(USER), Some(USER))?;
+    std::fs::set_permissions(PROFILE, std::fs::Permissions::from_mode(0o700))
 }
 
 fn lock(waiting: &Waiting) -> std::sync::MutexGuard<'_, HashMap<u64, oneshot::Sender<Value>>> {
@@ -565,6 +644,28 @@ mod tests {
             shown,
             "[1] RootWebArea \"Sign in\"\n  [12] textbox \"Email\" = \"a@b.c\"\n  [14] button \"Next\"\n    StaticText \"Next\"\n"
         );
+    }
+
+    #[tokio::test]
+    async fn the_pipe_reaches_descriptors_three_and_four() {
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", PIPE, "/bin/sh", "-c", "cat <&3 >&4; echo stray"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut input = child.stdin.take().unwrap();
+        input.write_all(b"{}\0").await.unwrap();
+        drop(input);
+        let mut output = Vec::new();
+        child
+            .stdout
+            .take()
+            .unwrap()
+            .read_to_end(&mut output)
+            .await
+            .unwrap();
+        assert_eq!(output, b"{}\0");
     }
 
     #[test]

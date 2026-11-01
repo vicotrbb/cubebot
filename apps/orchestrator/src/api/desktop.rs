@@ -434,3 +434,17 @@ impl Channel {
         String::from_utf8(response).map_err(|error| unavailable(error.utf8_error()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn an_answer_echoes_the_exact_time_its_viewer_sent() {
+        let sent = 914_176_390.731_898_1;
+        let Ok(super::Viewer::Take { t }) =
+            serde_json::from_str(&format!(r#"{{"kind":"take","t":{sent}}}"#))
+        else {
+            panic!("a take parses");
+        };
+        assert_eq!(serde_json::json!(t).as_f64(), Some(sent));
+    }
+}

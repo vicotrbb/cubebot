@@ -22,7 +22,9 @@ import threading
 import time
 import traceback
 import urllib.parse
+import urllib.request
 import uuid
+import zlib
 from pathlib import Path
 
 from cluster_chat_setup import wait_for
@@ -32,6 +34,7 @@ from docker_desktop import (
     container,
     grant,
     host_frame,
+    key,
     logs,
     person,
     psql,
@@ -49,6 +52,7 @@ INSTRUCTIONS = (
     "in order, never retry a refused call, and reply with the last tool's output."
 )
 RED = (0xCC, 0x33, 0x33)
+MAGENTA = (0xFF, 0x00, 0xFF)
 
 
 class Site:
@@ -144,7 +148,7 @@ def ready(api, identity):
     wait_for(
         "the guest desktop", lambda: "Guest desktop started" in logs(identity), 180
     )
-    # Chromium opens its DevTools port a while after the desktop starts.
+    # The agent starts Chromium a while after the desktop starts.
     wait_for(
         "Chromium to paint", lambda: len(set(screen(host_frame(identity)))) > 8, 120
     )
@@ -256,10 +260,10 @@ def visible(world):
     print("     and a viewer's frame through the orchestrator shows the same page")
 
 
-def share(pixels):
-    """How much of an RGB screen is the red page."""
-    red = sum(tuple(pixels[at : at + 3]) == RED for at in range(0, len(pixels), 3))
-    return red / (len(pixels) // 3)
+def share(pixels, colour=RED):
+    """How much of an RGB screen is one colour, the red page by default."""
+    found = sum(tuple(pixels[at : at + 3]) == colour for at in range(0, len(pixels), 3))
+    return found / (len(pixels) // 3)
 
 
 def failures(world):
@@ -425,13 +429,88 @@ def persistence(world):
     row = chat(
         api,
         surfer,
-        "Use the bash tool to run exactly: "
-        "ls /var/lib/cubebot/workspace/.config/chromium/Default/Cookies",
+        "Use the bash tool to run exactly: ls /var/lib/cubebot/browser/Default/Cookies",
     )
     listed = [call for call in row["terminal"] if call["command"].startswith("ls ")]
-    assert listed and listed[0]["outcome"].get("code") == 0, row["terminal"]
+    assert listed and listed[0]["outcome"].get("code") not in (0, None), row["terminal"]
+    assert "Permission denied" in listed[0]["outcome"]["output"], listed
     print("PASS persistence: a main-session cookie survived a restart of the sandbox,")
-    print("     from the profile on the workspace disk")
+    print(
+        "     from the profile on the workspace disk, which the tool user cannot read"
+    )
+
+
+def solid_png(colour, size=64):
+    def chunk(kind, data):
+        crc = zlib.crc32(kind + data).to_bytes(4, "big")
+        return len(data).to_bytes(4, "big") + kind + data + crc
+
+    header = size.to_bytes(4, "big") * 2 + bytes([8, 2, 0, 0, 0])
+    rows = (b"\x00" + bytes(colour) * size) * size
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
+
+
+def set_wallpaper(api, identity, image):
+    request = urllib.request.Request(
+        f"{api.base}/api/agents/{identity}/wallpaper",
+        data=image,
+        headers={"Authorization": f"Bearer {api.token}"},
+        method="PUT",
+    )
+    with urllib.request.urlopen(request, timeout=10, context=api.context) as response:
+        assert response.status == 204, response.status
+
+
+def uncovered(world, identity):
+    """A person takes the desktop, closes Chromium's window and returns the screen."""
+    desk = world["controller"].desktop(world["address"], world["ca"], identity)
+    desk.frame()
+    assert desk.ask({"kind": "take"})["mode"] == "human"
+    middle = {"action": "click", "at": [640, 400], "button": "left", "count": 1}
+    assert "error" not in desk.ask({"kind": "input", "action": middle})
+    key(desk, "ctrl", "shift", "w")
+    return desk
+
+
+def wallpaper(world):
+    """The desktop shows the default wallpaper, then the configured one, live and
+    after a restart, and Chromium comes back for the next browser call."""
+    api, surfer, site = world["api"], world["surfer"], world["site"]
+
+    def colours():
+        pixels = screen(host_frame(surfer))
+        return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)})
+
+    def magenta():
+        return share(screen(host_frame(surfer)), MAGENTA)
+
+    desk = uncovered(world, surfer)
+    wait_for("the default wallpaper", lambda: colours() > 4096, 30)
+    set_wallpaper(api, surfer, solid_png(MAGENTA))
+    wait_for("the configured wallpaper", lambda: magenta() > 0.95, 60)
+    assert desk.ask({"kind": "hand_back"})["mode"] == "watch"
+    desk.close()
+    old = container(surfer)
+    lifecycle(api, surfer, "restart")
+    wait_for("a new sandbox", lambda: container(surfer) not in (None, old), 300)
+    ready(api, surfer)
+    desk = uncovered(world, surfer)
+    wait_for("the configured wallpaper after a restart", lambda: magenta() > 0.95, 30)
+    # The configured wallpaper stays: guest init's default never draws over it.
+    time.sleep(10)
+    assert magenta() > 0.95, magenta()
+    assert desk.ask({"kind": "hand_back"})["mode"] == "watch"
+    desk.close()
+    back = f"back-{MARKER}"
+    chat(api, surfer, f"In browser session main, browser_navigate to {site.url(back)}.")
+    site.saw(back)
+    print("PASS wallpaper: the default, then the configured one live and after a")
+    print("     restart; after Chromium's window closed, a navigation reached the site")
 
 
 def scenarios(world, postgres):
@@ -442,6 +521,7 @@ def scenarios(world, postgres):
     sessions(world)
     control(world)
     persistence(world)
+    wallpaper(world)
 
 
 def setup(admin, base, ca, password):
