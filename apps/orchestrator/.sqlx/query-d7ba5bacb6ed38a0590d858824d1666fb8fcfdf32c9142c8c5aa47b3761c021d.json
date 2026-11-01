@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE routines\n            SET next_at=to_timestamp($2)\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d7ba5bacb6ed38a0590d858824d1666fb8fcfdf32c9142c8c5aa47b3761c021d"
+}

@@ -25,9 +25,9 @@ pub struct Progress {
 pub struct Origin {
     #[serde(skip)]
     pub turn_id: Uuid,
-    /// `room`, `delegation` or `message`.
+    /// `room`, `routine`, `delegation` or `message`.
     pub kind: String,
-    /// The room's name, or the sending agent's.
+    /// The room's or routine's name, or the sending agent's.
     pub name: String,
     pub parent_turn_id: Option<Uuid>,
 }
@@ -109,15 +109,16 @@ impl Work {
             Origin,
             r#"
             SELECT t.id AS turn_id,
-                CASE WHEN r.id IS NOT NULL THEN 'room' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
-                COALESCE(r.name,a.name) AS "name!",
+                CASE WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
+                COALESCE(r.name,u.name,CASE WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
                 t.parent_turn_id
             FROM chat_turns t
             LEFT JOIN room_messages m ON m.id=t.room_message_id
             LEFT JOIN rooms r ON r.id=m.room_id
+            LEFT JOIN routines u ON u.id=t.routine_id
             LEFT JOIN chat_turns p ON p.id=t.parent_turn_id
             LEFT JOIN agents a ON a.id=p.conversation_id
-            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL)
+            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL)
             "#,
             ids,
         )

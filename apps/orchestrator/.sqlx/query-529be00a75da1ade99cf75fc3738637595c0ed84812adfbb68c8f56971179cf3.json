@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id AS turn, origin AS \"origin!\", status, error,\n                (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            FROM chat_turns\n            WHERE routine_id=$1 AND conversation_id=$2\n            ORDER BY sequence DESC\n            LIMIT 50\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "origin!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "529be00a75da1ade99cf75fc3738637595c0ed84812adfbb68c8f56971179cf3"
+}

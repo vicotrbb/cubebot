@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE routines SET next_at=clock_timestamp() - interval '1 day' WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c345bd87ff939c7f7650c55b6cbc19308c736c5e4f1937a001f259de9c044e8"
+}

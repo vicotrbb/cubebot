@@ -110,6 +110,8 @@ mod tests {
             prior: Vec::new(),
             delegations: Vec::new(),
             task: false,
+            command: None,
+            command_only: false,
         }
     }
     fn text(message: &Message) -> &str {

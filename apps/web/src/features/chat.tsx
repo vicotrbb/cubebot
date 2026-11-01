@@ -307,6 +307,7 @@ function speaker(message: Turn) {
   const origin = message.origin
   if (!origin) return 'You'
   if (origin.kind === 'room') return `Room · ${origin.name}`
+  if (origin.kind === 'routine') return `Routine · ${origin.name}`
   if (origin.kind === 'delegation') return `Delegated by ${origin.name}`
   return `Message from ${origin.name}`
 }

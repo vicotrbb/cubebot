@@ -6,6 +6,7 @@ mod events;
 mod handoffs;
 mod retry;
 mod rooms;
+pub mod routines;
 mod runtime;
 pub(crate) mod terminal;
 use crate::{

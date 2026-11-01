@@ -71,6 +71,73 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/routines': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_routines']
+    put?: never
+    /** With `webhook`, the response carries the secret; it is never shown again. */
+    post: operations['create_routine']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/routines/{routine}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['update_routine']
+    post?: never
+    /** Cancels the routine's queued turns; its history stays in the conversation. */
+    delete: operations['delete_routine']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/routines/{routine}/runs': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['routine_occurrences']
+    put?: never
+    post: operations['run_routine']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/routines/{routine}/secret': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Makes or replaces the webhook secret, shown only in this response. */
+    post: operations['rotate_routine_secret']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{agent}/skills': {
     parameters: {
       query?: never
@@ -698,6 +765,18 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    CreateRoutine: {
+      /** Format: uuid */
+      request_id: string
+      routine: components['schemas']['SaveRoutine']
+      /** @description Makes a webhook secret, returned once. */
+      webhook?: boolean
+    }
+    CreatedRoutine: {
+      routine: components['schemas']['Routine']
+      /** @description The webhook's bearer secret, only in the response that made it. */
+      secret?: string | null
+    }
     DeclineLogin: {
       /** @description Returned to the agent; empty when the person gave none. */
       reason: string
@@ -889,10 +968,20 @@ export interface components {
           /** @enum {string} */
           op: 'forget'
         }
+    /** @description One occurrence that made a turn: its origin and the turn's outcome so far. */
+    Occurrence: {
+      created_at: string
+      error?: string | null
+      /** @description `person`, `agent`, `schedule` or `webhook`. */
+      origin: string
+      status: string
+      /** Format: uuid */
+      turn: string
+    }
     Origin: {
-      /** @description `room`, `delegation` or `message`. */
+      /** @description `room`, `routine`, `delegation` or `message`. */
       kind: string
-      /** @description The room's name, or the sending agent's. */
+      /** @description The room's or routine's name, or the sending agent's. */
       name: string
       /** Format: uuid */
       parent_turn_id?: string | null
@@ -964,6 +1053,11 @@ export interface components {
     PublishSkill: {
       files: components['schemas']['BTreeMap']
     }
+    /** @description A run's turn, or `None` when it coalesced into a pending one. */
+    Ran: {
+      /** Format: uuid */
+      turn?: string | null
+    }
     Receipt: {
       /** Format: uuid */
       id: string
@@ -1011,6 +1105,40 @@ export interface components {
       routing: string
       /** Format: int64 */
       sequence: number
+    }
+    Routine: {
+      coalesce: boolean
+      command?: string | null
+      enabled: boolean
+      /** Format: uuid */
+      id: string
+      last_run_at?: string | null
+      /** @description `person` or `agent`: an agent changes only the routines it manages. */
+      managed_by: string
+      name: string
+      next_at?: string | null
+      prompt?: string | null
+      /** Format: int64 */
+      revision: number
+      schedule?: string | null
+      /** @description A webhook secret is set; it is shown only when made. */
+      webhook: boolean
+    }
+    RunRoutine: {
+      /** Format: uuid */
+      request_id: string
+    }
+    /** @description What a routine does and when. At least one of `prompt` and `command`. */
+    SaveRoutine: {
+      /** @description At most one pending turn while one is queued or running. */
+      coalesce: boolean
+      command?: string | null
+      /** @description A disabled routine runs only by hand. */
+      enabled: boolean
+      name: string
+      prompt?: string | null
+      /** @description Five-field cron in UTC; `null` runs only by hand or webhook. */
+      schedule?: string | null
     }
     SaveVaultItem: {
       access?: null | components['schemas']['ProviderAccess']
@@ -1163,6 +1291,11 @@ export interface components {
        */
       task_lanes?: number | null
     }
+    UpdateRoutine: {
+      /** Format: int64 */
+      expected_revision: number
+      routine: components['schemas']['SaveRoutine']
+    }
     /** @enum {string} */
     VaultField: 'username' | 'secret'
     /** @enum {string} */
@@ -1181,6 +1314,9 @@ export interface components {
       name: string
       site?: string | null
       username?: string | null
+    }
+    WebhookSecret: {
+      secret: string
     }
   }
   responses: never
@@ -1349,6 +1485,168 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  list_routines: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Routine'][]
+        }
+      }
+    }
+  }
+  create_routine: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateRoutine']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CreatedRoutine']
+        }
+      }
+    }
+  }
+  update_routine: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateRoutine']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Routine']
+        }
+      }
+    }
+  }
+  delete_routine: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  routine_occurrences: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Occurrence'][]
+        }
+      }
+    }
+  }
+  run_routine: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RunRoutine']
+      }
+    }
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Ran']
+        }
+      }
+    }
+  }
+  rotate_routine_secret: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WebhookSecret']
+        }
       }
     }
   }

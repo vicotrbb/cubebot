@@ -1,6 +1,6 @@
 # ADR 0046: Scheduled and event-triggered work
 
-Status: Accepted
+Status: Accepted; open details settled by [ADR 0087](0087-routines.md)
 
 Date: 2026-10-23
 

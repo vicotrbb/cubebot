@@ -33,7 +33,7 @@ impl Work {
         // A waiting turn holds its lane until it is retried or cancelled.
         let pending = sqlx::query!(
             "
-            SELECT t.id, t.message, t.awaited, t.room_message_id
+            SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -58,12 +58,12 @@ impl Work {
             pending.awaited,
             pending.room_message_id,
         );
+        let (command, command_only) = (pending.command, pending.command_only);
         if !sender_allowed(tx, turn).await? {
             wait(tx, turn, "sender_access_revoked").await?;
             return Ok(None);
         }
-        let Some(inference) = provider(tx, connections, actor).await else {
-            wait(tx, turn, "provider_unavailable").await?;
+        let Some(inference) = inference(tx, connections, actor, turn, command_only).await? else {
             return Ok(None);
         };
         sqlx::query!(
@@ -95,6 +95,8 @@ impl Work {
             prior,
             delegations,
             task,
+            command,
+            command_only,
         }))
     }
 
@@ -409,7 +411,8 @@ async fn sender_allowed(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
 ) -> Result<bool, Error> {
-    // Agent-originated work carries its root person's authority, checked when it was sent.
+    // Agent-originated work, including the agent's own routines, carries its root person's
+    // authority, checked when it was sent.
     Ok(sqlx::query_scalar!(
         r#"
         SELECT EXISTS(
@@ -417,7 +420,7 @@ async fn sender_allowed(
             FROM chat_turns t
             JOIN human_accounts a ON a.id=t.actor_id AND a.active
             WHERE t.id=$1
-                AND (t.parent_turn_id IS NOT NULL OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id)))))
+                AND (t.parent_turn_id IS NOT NULL OR EXISTS(SELECT 1 FROM routines r WHERE r.id=t.routine_id AND r.managed_by='agent') OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id)))))
         ) AS "allowed!"
         "#,
         turn,
@@ -462,6 +465,30 @@ async fn history(
     .fetch_all(&mut **tx)
     .await?;
     Ok((summary.map(|summary| summary.text), history))
+}
+
+/// The provider for the turn, or `None` once it waits for one. A routine's command alone needs
+/// no model (ADR 0087).
+async fn inference(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    connections: Option<&Connections>,
+    actor: &RuntimeActor,
+    turn: Uuid,
+    command_only: bool,
+) -> Result<Option<crate::connections::Inference>, Error> {
+    match provider(tx, connections, actor).await {
+        Some(inference) => Ok(Some(inference)),
+        None if command_only => Ok(Some(crate::connections::Inference {
+            provider: cubebot_protocol::runtime::ProviderKind::Anthropic,
+            model: String::new(),
+            api_key: String::new(),
+            context_window: None,
+        })),
+        None => {
+            wait(tx, turn, "provider_unavailable").await?;
+            Ok(None)
+        }
+    }
 }
 
 async fn provider(

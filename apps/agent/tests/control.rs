@@ -443,6 +443,86 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
 }
 
 #[tokio::test]
+async fn a_routine_command_runs_before_the_model_and_alone_needs_no_model() {
+    let answer = responses(
+        json!([{"type":"message","content":[{"type":"output_text","text":"Seen"}]}]),
+        json!({"input_tokens":9,"output_tokens":1}),
+    );
+    let mut fake = fake(vec![
+        answer.clone(),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"[]"}]}]),
+            json!({"input_tokens":9,"output_tokens":1}),
+        ),
+    ])
+    .await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    // Without a prompt the command's result is the answer and no provider is asked.
+    let only = Uuid::new_v4();
+    let mut delivery = turn(only, 1, "Routine disk (schedule) runs its command");
+    delivery["command"] = json!("printf routine-ran");
+    delivery["command_only"] = json!(true);
+    delivery["provider"] = json!("anthropic");
+    delivery["model"] = json!("");
+    delivery["api_key"] = json!("");
+    fake.deliver(delivery);
+    let call = fake.event(1).await;
+    assert_eq!(
+        (&call["kind"], &call["name"], &call["input"]),
+        (
+            &json!("tool_call"),
+            &json!("bash"),
+            &json!({"command":"printf routine-ran"})
+        )
+    );
+    assert_eq!(fake.event(2).await["outcome"]["code"], 0);
+    let done = fake.event(3).await;
+    let response = done["response"].as_str().unwrap();
+    assert!(
+        response.starts_with("Exit status 0.\n\nroutine-ran"),
+        "{done}"
+    );
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.ack(only, 1..=3);
+    // A request would have taken the first scripted reply.
+    assert_eq!(
+        fake.provider.lock().unwrap()[0],
+        answer,
+        "no provider request"
+    );
+
+    // With a prompt the model reads the result after the request.
+    let prompted = Uuid::new_v4();
+    let mut delivery = turn(prompted, 1, "Routine disk (person):\n\nSummarize");
+    delivery["command"] = json!("printf prompted-ran");
+    fake.deliver(delivery);
+    assert_eq!(fake.event(1).await["kind"], "tool_call");
+    assert_eq!(fake.event(2).await["kind"], "tool_result");
+    assert_eq!(fake.event(3).await["kind"], "text_delta");
+    assert_eq!(fake.event(4).await["kind"], "usage");
+    assert_eq!(fake.event(5).await["kind"], "usage");
+    assert_eq!(fake.event(6).await["response"], "Seen");
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let request = fake.provider.lock().unwrap()[0].clone();
+    let asked = request["input"].as_array().unwrap().last().unwrap()["content"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        asked.starts_with(
+            "Routine disk (person):\n\nSummarize\n\nThe routine's command already ran"
+        ),
+        "{asked}"
+    );
+    assert!(asked.contains("prompted-ran"), "{asked}");
+    fake.ack(prompted, 1..=6);
+    fake.drain(&mut child).await;
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
 async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_eighty_percent() {
     let mut fake = fake(vec![
         json!({"status":429,"retry_after":"0"}),

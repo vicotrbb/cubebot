@@ -146,6 +146,14 @@ ADRs 0059 and 0060. `CUBEBOT_STORAGE_DIRECTORY`, an absolute path on a volume on
 - Agents: `GET /api/runtime/files` (`parent`, `shared`), `POST /api/runtime/files`, `GET /api/runtime/files/{file}/content` and `POST /api/runtime/files/{file}/shares` (one share), behind the tools `files_list`, `files_put` (a workspace file read as the tool user, the call id as `request_id`), `files_get` (written as the tool user, replacing the file only once complete) and `files_share`.
 - The console's Files page lists your files and what is shared with you, uploads by picking or dropping files, downloads, renames, moves by dragging onto a folder or breadcrumb, deletes, and edits shares.
 
+### Routines
+
+ADR 0087. `routines` holds each agent's routines; every run is a `chat_turns` row with `routine_id`, `origin` (`person`, `agent`, `schedule`, `webhook`) and the routine's `command` copied in, and `routine_hooks` keeps a day of webhook deliveries for replay and the rate window.
+
+- People: with `conversation.read` on the agent, `GET /api/agents/{agent}/routines` and `GET .../routines/{routine}/runs` (the latest 50 runs); with `conversation.send`, `POST /api/agents/{agent}/routines` (`request_id`, `webhook`, `routine`; the response's `secret` is the only time it is shown), `PUT .../routines/{routine}` (`expected_revision`, `routine`; 409 when stale; makes the routine the person's), `DELETE` (cancels its queued and waiting turns), `POST .../secret` (a new secret) and `POST .../runs` (`request_id`; `turn` is null when it coalesced).
+- Webhook: `POST /api/hooks/{routine}` with `Authorization: Bearer <secret>`, an optional `Idempotency-Key` of at most 255 bytes and a UTF-8 body of at most 8 KiB: 202 `{"turn":...}`, 200 with the first answer for a repeated key, 401 for a wrong secret, 409 for a disabled routine or retired agent, 413 for a larger body and 429 past 60 a minute.
+- Agents: `POST /api/runtime/turns/{turn}/routines` (`call`, `tool`, `input`) behind `routine_create`, `routine_list`, `routine_update`, `routine_delete` and `routine_run`; a refusal is 409 with the reason the model reads. The turn delivery's `command` runs as a journaled `bash` call before the model; with `command_only` its result is the answer.
+
 ### Explicit lifecycle controller configuration
 
 Set `CUBEBOT_CONTROLLER_CONFIG` to a local JSON file and configure `CUBEBOT_DATABASE_URL`. Supply `CUBEBOT_POD_NAMESPACE`, `CUBEBOT_POD_NAME` and `CUBEBOT_POD_UID` from the orchestrator Pod's Downward API metadata. The observed Pod must have one regular container named `orchestrator`, RestartAlways, a dedicated service account and no ephemeral containers. The ownership proof covers that container; init containers must not run independent orchestrator instances.

@@ -40,6 +40,7 @@ mod provider_configuration;
 mod reconciliation;
 mod resource_registry;
 mod rooms;
+mod routines;
 mod runtime_identity;
 mod runtime_token_review;
 mod skills;

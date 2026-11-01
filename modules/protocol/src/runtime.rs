@@ -30,7 +30,7 @@ pub struct RuntimeActor {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Delivery {
-    Turn(Turn),
+    Turn(Box<Turn>),
     /// The event is durable in the ledger.
     Ack {
         turn: Uuid,
@@ -112,6 +112,12 @@ pub struct Turn {
     /// no control of the shared desktop.
     #[serde(default)]
     pub task: bool,
+    /// A routine's shell command (ADR 0087), run once as the tool user before the model.
+    #[serde(default)]
+    pub command: Option<String>,
+    /// The routine has no prompt: the turn answers with the command's result, without a model.
+    #[serde(default)]
+    pub command_only: bool,
 }
 
 /// A child's settled outcome. `evidence` holds its last tool events, so a failed child still
@@ -126,6 +132,22 @@ pub struct Delegation {
     pub response: Option<String>,
     pub error: Option<String>,
     pub evidence: Vec<TurnEvent>,
+}
+
+/// `POST /api/runtime/turns/{turn}/routines`: one routine tool call (ADR 0087), which the
+/// orchestrator validates and answers with the text the model reads. `call` is the tool call's
+/// id, so a resent create or run makes nothing new.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineCall {
+    pub call: Uuid,
+    pub tool: String,
+    pub input: serde_json::Value,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoutineAnswer {
+    pub output: String,
 }
 
 /// `POST /api/runtime/turns/{turn}/messages`: work for another agent sharing a room. `call`
@@ -447,7 +469,7 @@ mod tests {
             serde_json::from_str::<Report>(&text).unwrap(),
             Report::Event { sequence: 3, .. }
         ));
-        let turn = Delivery::Turn(Turn {
+        let turn = Delivery::Turn(Box::new(Turn {
             turn: Uuid::nil(),
             sequence: 1,
             message: "hi".into(),
@@ -461,12 +483,14 @@ mod tests {
             prior: Vec::new(),
             delegations: Vec::new(),
             task: false,
-        });
+            command: None,
+            command_only: false,
+        }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));
         assert!(matches!(
             serde_json::from_str::<Delivery>(&text).unwrap(),
-            Delivery::Turn(Turn { sequence: 1, .. })
+            Delivery::Turn(turn) if turn.sequence == 1
         ));
         assert_eq!(ProviderKind::parse("openai"), Some(ProviderKind::Openai));
         assert_eq!(ProviderKind::parse("gemini"), None);

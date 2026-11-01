@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO routines (agent_id, name, prompt, command, schedule, coalesce, enabled, next_at, created_by, managed_by, request_id)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Bool",
+        "Float8",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a6ebc72be08bcff9349e3fc1fdcb050c985b5f9a1166a77adf1eabb0877e1467"
+}
