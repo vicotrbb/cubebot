@@ -14,6 +14,7 @@ import { AgentForm, ProviderForm, SignIn } from '../features/forms'
 import { Chat } from '../features/chat'
 import { Desktop, LoginBanner } from '../features/desktop'
 import { Dreams } from '../features/dreams'
+import { Files } from '../features/files'
 import { Memories } from '../features/memories'
 import { listRooms, NewRoom, Room } from '../features/rooms'
 import { Skills } from '../features/skills'
@@ -76,6 +77,7 @@ type Screen =
   | { kind: 'desktop'; take?: boolean }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
+  | { kind: 'files' }
   | { kind: 'room'; room: RoomType }
   | { kind: 'new-room' }
 
@@ -121,6 +123,12 @@ function Workspace({
           cubebot
         </a>
         <nav aria-label="Account">
+          <button
+            className="secondary"
+            onClick={() => setScreen({ kind: 'files' })}
+          >
+            Files
+          </button>
           {session.administrator && (
             <button
               className="secondary"
@@ -231,9 +239,7 @@ function Workspace({
               onCancel={() => setScreen({ kind: 'chat' })}
             />
           )}
-          {screen.kind === 'provider' && (
-            <ProviderForm onClose={() => setScreen({ kind: 'chat' })} />
-          )}
+          <InstallationScreen screen={screen} setScreen={setScreen} />
           {screen.kind === 'room' && (
             <Room
               key={screen.room.id}
@@ -270,6 +276,20 @@ function Workspace({
       </div>
     </main>
   )
+}
+
+/** The screens about the whole installation rather than one agent. */
+function InstallationScreen({
+  screen,
+  setScreen,
+}: {
+  screen: Screen
+  setScreen: (screen: Screen) => void
+}) {
+  const close = () => setScreen({ kind: 'chat' })
+  if (screen.kind === 'provider') return <ProviderForm onClose={close} />
+  if (screen.kind === 'files') return <Files onClose={close} />
+  return null
 }
 
 /** The screens about the selected agent, or the empty state without one. */

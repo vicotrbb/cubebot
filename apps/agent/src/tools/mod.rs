@@ -254,6 +254,31 @@ impl Registry {
         matches!(self.sandbox.wait(command, job.stdin).await, Ok(Some(0)))
     }
 
+    /// A workspace file as the tool user reads it, on the child's standard output; its exit
+    /// status says whether it was read whole.
+    pub fn reader(&self, path: &str) -> io::Result<tokio::process::Child> {
+        let mut command = self.sandbox.command("cat");
+        command
+            .args(["--", path])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        command.spawn()
+    }
+
+    /// Writes its standard input to a workspace file as the tool user, creating parent
+    /// directories, and replaces the file only once the input has ended. Kill it to abandon.
+    pub fn writer(&self, path: &str) -> io::Result<tokio::process::Child> {
+        const REPLACE: &str = r#"mkdir -p -- "$(dirname -- "$1")" && cat > "$1.cubebot-part" && mv -f -- "$1.cubebot-part" "$1""#;
+        let mut command = self.sandbox.command("/bin/sh");
+        command
+            .args(["-c", REPLACE, "tool", path])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        command.spawn()
+    }
+
     /// Draws `image` on the desktop as the tool user, or the default with `None`. True when
     /// there is no desktop to draw on.
     pub async fn wallpaper(&self, image: Option<Vec<u8>>) -> bool {

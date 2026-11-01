@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO files (id, parent_id, owner_account_id, owner_agent_id, name, blob_id,\n                content_type, request_id)\n            VALUES ($1, $2, $3, $4, $5, $1, $6, $7)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d0b416f4ed0844d47be5e859acfb20d391797e2c047ccee641e76cfc05141d2d"
+}

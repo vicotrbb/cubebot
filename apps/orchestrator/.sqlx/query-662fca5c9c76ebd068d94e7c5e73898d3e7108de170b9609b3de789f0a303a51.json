@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                DELETE FROM file_shares\n                WHERE file_id=$1\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "662fca5c9c76ebd068d94e7c5e73898d3e7108de170b9609b3de789f0a303a51"
+}

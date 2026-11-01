@@ -3,6 +3,7 @@ use crate::agents::{
     kubernetes::Error,
     runtime::{RuntimeAccess, RuntimeIdentity},
 };
+use crate::storage::Principal;
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, Query, State, ws::WebSocketUpgrade},
@@ -11,9 +12,9 @@ use axum::{
     routing::{get, post},
 };
 use cubebot_protocol::runtime::{
-    Bootstrap, Collaborate, Collaborated, Dream, DreamEnd, Memory, MemoryChange, REPORT_BYTES,
-    RequestLogin, RuntimeActor, RuntimeSession, SkillChange, SkillPackage, VaultFill, VaultItem,
-    VaultPut,
+    Bootstrap, Collaborate, Collaborated, Dream, DreamEnd, FileShare, Memory, MemoryChange,
+    REPORT_BYTES, RequestLogin, RuntimeActor, RuntimeSession, SkillChange, SkillPackage, VaultFill,
+    VaultItem, VaultPut,
 };
 use uuid::Uuid;
 
@@ -34,6 +35,9 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
         .route("/api/runtime/vault", get(vault).post(vault_put))
         .route("/api/runtime/vault/fills", post(vault_fill))
+        .route("/api/runtime/files", get(files).post(upload_file))
+        .route("/api/runtime/files/{file}/content", get(file_content))
+        .route("/api/runtime/files/{file}/shares", post(share_file))
         // A package of at most 64 KiB, JSON-escaped.
         .route(
             "/api/runtime/dreams/{run}/skills",
@@ -307,6 +311,79 @@ async fn vault_fill(
             Ok(refused("the desktop is unavailable"))
         }
     }
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FilesQuery {
+    parent: Option<Uuid>,
+    #[serde(default)]
+    shared: bool,
+}
+type Storage = Option<axum::Extension<crate::storage::Storage>>;
+/// The agent's own top level or a folder it may read, or with `shared` what is shared with it.
+async fn files(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    storage: Storage,
+    Query(query): Query<FilesQuery>,
+) -> Result<Response, Failure> {
+    let who = Principal::Agent(active(&identity, &headers).await?.agent);
+    let listed = match super::files::configured(storage) {
+        Ok(storage) if query.shared => storage.shared(who).await,
+        Ok(storage) => storage.list(who, query.parent).await,
+        Err(error) => Err(error),
+    };
+    Ok(listed.map_or_else(super::files::refused, |entries| {
+        Json(entries).into_response()
+    }))
+}
+/// Streams the body into a file, as `POST /api/files` does for people.
+async fn upload_file(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    storage: Storage,
+    Query(query): Query<super::files::UploadQuery>,
+    body: axum::body::Body,
+) -> Result<Response, Failure> {
+    let who = Principal::Agent(active(&identity, &headers).await?.agent);
+    let stored = match super::files::configured(storage) {
+        Ok(storage) => super::files::store(&storage, who, query, &headers, body).await,
+        Err(error) => Err(error),
+    };
+    Ok(stored.unwrap_or_else(super::files::refused))
+}
+async fn file_content(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    storage: Storage,
+    Path(file): Path<Uuid>,
+) -> Result<Response, Failure> {
+    let who = Principal::Agent(active(&identity, &headers).await?.agent);
+    let opened = match super::files::configured(storage) {
+        Ok(storage) => storage.open(who, file).await,
+        Err(error) => Err(error),
+    };
+    Ok(match opened {
+        Ok((entry, bytes, transfer)) => {
+            super::files::download(entry, bytes, transfer, &headers).await
+        }
+        Err(error) => super::files::refused(error),
+    })
+}
+/// Adds or changes one share of a file the agent manages; a refusal names the reason.
+async fn share_file(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    storage: Storage,
+    Path(file): Path<Uuid>,
+    Json(share): Json<FileShare>,
+) -> Result<Response, Failure> {
+    let who = Principal::Agent(active(&identity, &headers).await?.agent);
+    let shared = match super::files::configured(storage) {
+        Ok(storage) => storage.share(who, file, &[share], false).await,
+        Err(error) => Err(error),
+    };
+    Ok(shared.map_or_else(super::files::refused, |shares| Json(shares).into_response()))
 }
 async fn finish_dream(
     State(identity): State<RuntimeIdentity>,

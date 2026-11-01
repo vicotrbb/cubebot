@@ -42,9 +42,12 @@ services:
       CUBEBOT_BIND_ADDR: 0.0.0.0:8080
       CUBEBOT_CREDENTIAL_KEY_FILE: /state/credential.key
       CUBEBOT_PUBLIC_ORIGIN: http://localhost:${CUBEBOT_PORT:-3000}
+      CUBEBOT_STORAGE_DIRECTORY: /var/lib/cubebot/files
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - orchestrator-state:/state:ro
+      # Shared files (ADR 0059): only this one orchestrator mounts it.
+      - shared-files:/var/lib/cubebot/files
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,3 +80,4 @@ services:
 volumes:
   postgres-data:
   orchestrator-state:
+  shared-files:

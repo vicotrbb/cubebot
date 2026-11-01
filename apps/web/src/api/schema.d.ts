@@ -284,6 +284,113 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/files': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Your top level, or a folder you may read. */
+    get: operations['list_files']
+    put?: never
+    /**
+     * The body is the file's bytes and its content type the file's; 507 when the installation's
+     *     quota is used up, 409 when the name is taken in the folder.
+     */
+    post: operations['upload_file']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/files/folders': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['create_folder']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/files/shared': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Files and folders shared with you or your teams. */
+    get: operations['shared_files']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/files/{file}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Deletes a file, or a folder and everything under it. */
+    delete: operations['delete_file']
+    options?: never
+    head?: never
+    /** Renames and moves within the owner's folders. */
+    patch: operations['place_file']
+    trace?: never
+  }
+  '/api/files/{file}/content': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The file's bytes as an attachment; one `Range` of bytes gives 206. */
+    get: operations['file_content']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/files/{file}/shares': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The file's own shares; inherited ones are on the folders above it. */
+    get: operations['file_shares']
+    /** Replaces the file's own shares. */
+    put: operations['replace_file_shares']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/login': {
     parameters: {
       query?: never
@@ -652,6 +759,55 @@ export interface components {
       /** Format: uuid */
       turn_id: string
     }
+    /**
+     * @description `write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.
+     * @enum {string}
+     */
+    FileAccess: 'read' | 'write' | 'manage'
+    /**
+     * @description A shared file or folder (ADRs 0059 and 0060), as the console and `/api/runtime/files` list
+     *     it. Uploads stream the raw bytes in the request body.
+     */
+    FileEntry: {
+      /** @description What the caller may do with it. */
+      access: components['schemas']['FileAccess']
+      content_type?: string | null
+      /** @description A folder has no size, digest or content type. */
+      folder: boolean
+      /** Format: uuid */
+      id: string
+      name: string
+      /**
+       * Format: uuid
+       * @description The agent that owns it, when an agent does.
+       */
+      owner_agent?: string | null
+      /**
+       * Format: uuid
+       * @description The person who owns it, when a person does.
+       */
+      owner_user?: string | null
+      /**
+       * Format: uuid
+       * @description The folder holding it; its owner's top level when absent.
+       */
+      parent?: string | null
+      /** @description Lowercase hex of the stored bytes' SHA-256, computed by the orchestrator. */
+      sha256?: string | null
+      /** Format: int64 */
+      size?: number | null
+      updated_at: string
+    }
+    /**
+     * @description A share of a file, and for a folder everything under it, with a person by login, a team or an
+     *     agent by name. `POST /api/runtime/files/{id}/shares` adds or changes one; a refusal is 400
+     *     with the reason the model reads.
+     */
+    FileShare: {
+      kind: components['schemas']['ShareKind']
+      name: string
+      permission: components['schemas']['SharePermission']
+    }
     FillVaultItem: {
       field: components['schemas']['VaultField']
     }
@@ -765,6 +921,12 @@ export interface components {
           /** @enum {string} */
           status: 'uncertain'
         }
+    /** @description A new folder, or where a file goes: `parent` null or absent is the owner's top level. */
+    Placement: {
+      name: string
+      /** Format: uuid */
+      parent?: string | null
+    }
     Progress: {
       command: string
       /** Format: uuid */
@@ -870,6 +1032,10 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    /** @enum {string} */
+    ShareKind: 'user' | 'team' | 'agent'
+    /** @enum {string} */
+    SharePermission: 'read' | 'write'
     /** @description A library entry at its current revision. */
     Skill: {
       description: string
@@ -1524,6 +1690,230 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Steering']
+        }
+      }
+    }
+  }
+  list_files: {
+    parameters: {
+      query?: {
+        /** @description The folder; your own top level when absent. */
+        parent?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileEntry'][]
+        }
+      }
+    }
+  }
+  upload_file: {
+    parameters: {
+      query: {
+        /** @description The folder; your own top level when absent. */
+        parent?: string
+        name: string
+        /** @description Your id for this upload: a retry with it returns the file the first attempt made. */
+        request_id: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/octet-stream': number[]
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileEntry']
+        }
+      }
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileEntry']
+        }
+      }
+    }
+  }
+  create_folder: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Placement']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileEntry']
+        }
+      }
+    }
+  }
+  shared_files: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileEntry'][]
+        }
+      }
+    }
+  }
+  delete_file: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        file: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  place_file: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        file: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Placement']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileEntry']
+        }
+      }
+    }
+  }
+  file_content: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        file: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/octet-stream': number[]
+        }
+      }
+      206: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      416: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  file_shares: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        file: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileShare'][]
+        }
+      }
+    }
+  }
+  replace_file_shares: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        file: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FileShare'][]
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['FileShare'][]
         }
       }
     }

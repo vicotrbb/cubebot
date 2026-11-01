@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE chain AS (\n                SELECT id, parent_id FROM files WHERE id = $2\n                UNION ALL\n                SELECT f.id, f.parent_id FROM files f JOIN chain c ON f.id = c.parent_id\n            )\n            UPDATE files\n            SET parent_id=$2, name=$3, updated_at=clock_timestamp()\n            WHERE id=$1 AND NOT EXISTS (SELECT 1 FROM chain WHERE id = $1)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3b91e8db2a5556a274fc4b96bdb8b5d1753de026eb0e9f3bb7c8b52aad38fe7"
+}

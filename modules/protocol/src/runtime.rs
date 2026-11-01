@@ -204,6 +204,64 @@ pub struct VaultPut {
     pub username: Option<String>,
     pub secret: String,
 }
+/// A shared file or folder (ADRs 0059 and 0060), as the console and `/api/runtime/files` list
+/// it. Uploads stream the raw bytes in the request body.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct FileEntry {
+    pub id: Uuid,
+    /// The folder holding it; its owner's top level when absent.
+    pub parent: Option<Uuid>,
+    pub name: String,
+    /// A folder has no size, digest or content type.
+    pub folder: bool,
+    pub size: Option<i64>,
+    pub content_type: Option<String>,
+    /// Lowercase hex of the stored bytes' SHA-256, computed by the orchestrator.
+    pub sha256: Option<String>,
+    /// The person who owns it, when a person does.
+    pub owner_user: Option<Uuid>,
+    /// The agent that owns it, when an agent does.
+    pub owner_agent: Option<Uuid>,
+    /// What the caller may do with it.
+    pub access: FileAccess,
+    pub updated_at: String,
+}
+/// `write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum FileAccess {
+    Read,
+    Write,
+    Manage,
+}
+/// A share of a file, and for a folder everything under it, with a person by login, a team or an
+/// agent by name. `POST /api/runtime/files/{id}/shares` adds or changes one; a refusal is 400
+/// with the reason the model reads.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct FileShare {
+    pub kind: ShareKind,
+    pub name: String,
+    pub permission: SharePermission,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ShareKind {
+    User,
+    Team,
+    Agent,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum SharePermission {
+    Read,
+    Write,
+}
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Collaborated {

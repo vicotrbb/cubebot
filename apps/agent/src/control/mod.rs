@@ -207,6 +207,30 @@ fn accepted(response: Result<reqwest::Response, String>) -> Result<Result<(), St
         Err(reason) => Ok(Err(reason)),
     }
 }
+/// A successful response, or the reason the orchestrator gave for refusing the request.
+async fn refused(
+    request: reqwest::RequestBuilder,
+) -> Result<Result<reqwest::Response, String>, Error> {
+    let response = request.send().await.map_err(request_failed)?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok(Ok(response));
+    }
+    // A full installation quota is a refusal, not an unknown outcome.
+    let full = status == reqwest::StatusCode::INSUFFICIENT_STORAGE;
+    if !(status.is_client_error() || full) || status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(Error::Unavailable(None));
+    }
+    #[derive(serde::Deserialize)]
+    struct Refused {
+        error: String,
+    }
+    let refused: Result<Refused, _> = transport::decode_conflict(response).await;
+    Ok(Err(refused.map_or_else(
+        |_| status.to_string(),
+        |refused| refused.error,
+    )))
+}
 #[derive(Clone)]
 pub struct MemoryClient {
     http: reqwest::Client,
@@ -358,7 +382,85 @@ impl MemoryClient {
         accepted(self.post("vault", request).await?)
     }
 
-    /// The response to a request from the running turn, or the reason of a 409 refusal.
+    /// Shared files at the agent's own top level, in a folder, or shared with it (ADR 0060).
+    #[tracing::instrument(skip_all)]
+    pub async fn files(
+        &self,
+        parent: Option<Uuid>,
+        shared: bool,
+    ) -> Result<Result<Vec<runtime::FileEntry>, String>, Error> {
+        let mut query = vec![("shared", shared.to_string())];
+        query.extend(parent.map(|parent| ("parent", parent.to_string())));
+        let request = self
+            .files_request(reqwest::Method::GET, "files")?
+            .query(&query);
+        match refused(request).await? {
+            Ok(response) => Ok(Ok(
+                transport::decode_bounded(response, 4 * 1024 * 1024).await?
+            )),
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
+    /// Streams `body` into a new shared file; `request` makes a resent upload return the file
+    /// the first one made. A body that ends in an error is never stored.
+    #[tracing::instrument(skip_all, fields(request = %request))]
+    pub async fn put_file(
+        &self,
+        parent: Option<Uuid>,
+        name: &str,
+        request: Uuid,
+        body: reqwest::Body,
+    ) -> Result<Result<runtime::FileEntry, String>, Error> {
+        let mut query = vec![
+            ("name", name.to_owned()),
+            ("request_id", request.to_string()),
+        ];
+        query.extend(parent.map(|parent| ("parent", parent.to_string())));
+        let request = self.files_request(reqwest::Method::POST, "files")?;
+        match refused(request.query(&query).body(body)).await? {
+            Ok(response) => Ok(Ok(transport::decode_bounded(response, 64 * 1024).await?)),
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
+    /// A shared file's bytes, to read with [`reqwest::Response::chunk`].
+    #[tracing::instrument(skip_all, fields(file = %file))]
+    pub async fn file_content(
+        &self,
+        file: Uuid,
+    ) -> Result<Result<reqwest::Response, String>, Error> {
+        let path = format!("files/{file}/content");
+        refused(self.files_request(reqwest::Method::GET, &path)?).await
+    }
+
+    /// Adds or changes one share of a file the agent manages.
+    #[tracing::instrument(skip_all, fields(file = %file))]
+    pub async fn share_file(
+        &self,
+        file: Uuid,
+        share: &runtime::FileShare,
+    ) -> Result<Result<(), String>, Error> {
+        let path = format!("files/{file}/shares");
+        let request = self
+            .files_request(reqwest::Method::POST, &path)?
+            .json(share);
+        Ok(refused(request).await?.map(drop))
+    }
+
+    /// A transfer may outlast the client's short default timeout.
+    fn files_request(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+    ) -> Result<reqwest::RequestBuilder, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/{path}`.
+        let url = self.url.join(path).map_err(Error::configuration)?;
+        let request = self.http.request(method, url).bearer_auth(&self.token);
+        Ok(request.timeout(Duration::from_secs(30 * 60)))
+    }
+
+    /// The response to a runtime request, or the reason of a 409 refusal.
     async fn post_for_turn(
         &self,
         turn: Uuid,

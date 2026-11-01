@@ -465,3 +465,20 @@ button.agent-link.selected {
 .login-handoff form {
   flex: 1 1 100%;
 }
+.file-drop {
+  border: 1px dashed transparent;
+  border-radius: 8px;
+}
+.file-drop.dragging {
+  border-color: var(--accent);
+}
+dialog {
+  color: inherit;
+  background: #101919;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-width: min(640px, calc(100vw - 32px));
+}
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}

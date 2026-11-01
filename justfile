@@ -238,6 +238,10 @@ docker-vault:
 docker-rooms:
     uv run --project tooling/quality --locked python tests/system/docker_rooms.py
 
+# Shared files on two real agents through Docker, from every scope and person's side (ADRs 0059 and 0060); docker-desktop's needs.
+docker-files:
+    uv run --project tooling/quality --locked python tests/system/docker_files.py
+
 # Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
 docker-skills:
     uv run --project tooling/quality --locked python tests/system/docker_skills.py

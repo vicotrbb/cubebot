@@ -11,6 +11,8 @@ FROM debian:bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /src/target/release/cubebot-orchestrator /src/target/release/cubebot-admin /usr/local/bin/
+# A fresh named volume mounted here takes this owner, so the orchestrator can write shared files.
+RUN install -d -o 65532 -g 65532 /var/lib/cubebot/files
 USER 65532:65532
 ENV CUBEBOT_BIND_ADDR=0.0.0.0:8080
 EXPOSE 8080

@@ -4,6 +4,7 @@ pub mod collaboration;
 pub mod context;
 pub mod control;
 pub mod engine;
+pub mod files;
 #[cfg(target_os = "linux")]
 pub mod guest;
 pub mod memory;

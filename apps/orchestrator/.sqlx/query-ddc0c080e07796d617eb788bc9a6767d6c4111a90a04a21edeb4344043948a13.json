@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE tree AS (\n                SELECT id FROM files WHERE id = $1\n                UNION ALL\n                SELECT f.id FROM files f JOIN tree t ON f.parent_id = t.id\n            ), gone AS (\n                DELETE FROM files WHERE id IN (SELECT id FROM tree) RETURNING blob_id\n            )\n            DELETE FROM blobs WHERE id IN (SELECT blob_id FROM gone)\n            RETURNING id, size\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "size",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ddc0c080e07796d617eb788bc9a6767d6c4111a90a04a21edeb4344043948a13"
+}

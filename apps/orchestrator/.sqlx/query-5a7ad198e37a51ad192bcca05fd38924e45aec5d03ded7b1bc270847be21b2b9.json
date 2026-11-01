@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT s.permission, a.login AS \"login?\", t.name AS \"team?\", g.name AS \"agent?\"\n            FROM file_shares s\n            LEFT JOIN human_accounts a ON a.id = s.account_id\n            LEFT JOIN human_teams t ON t.id = s.team_id\n            LEFT JOIN agents g ON g.id = s.agent_id\n            WHERE s.file_id = $1\n            ORDER BY a.login, t.name, g.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "permission",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "login?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "team?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5a7ad198e37a51ad192bcca05fd38924e45aec5d03ded7b1bc270847be21b2b9"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                SELECT id\n                FROM agents\n                WHERE name=$1 AND desired_state <> 'retired'\n                ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "089842bd6d1f5bae5c94b500018585ebc0ff05d3d5a424a96b22e8bc72b1b91d"
+}

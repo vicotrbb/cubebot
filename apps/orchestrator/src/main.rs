@@ -140,10 +140,11 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                 Err(std::env::VarError::NotPresent) => None,
                 Err(_) => return Err("invalid CUBEBOT_PUBLIC_ORIGIN".into()),
             };
+            let storage = shared_files(&pool).await?;
             let controller = configured_controller(&pool).await?;
             let router =
                 match cubebot_orchestrator::api::configured_router(pool, origin, config).await {
-                    Ok(router) => controller.routes(router),
+                    Ok(router) => with_storage(controller.routes(router), storage),
                     Err(_) => {
                         controller
                             .release()
@@ -163,6 +164,30 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             Ok((cubebot_orchestrator::api::router(), None))
         }
         Err(_) => Err("invalid CUBEBOT_DATABASE_URL".into()),
+    }
+}
+
+/// Reconciles the shared-file volume before anything is served.
+async fn shared_files(
+    pool: &sqlx::PgPool,
+) -> Result<Option<cubebot_orchestrator::storage::Storage>, Box<dyn Error + Send + Sync>> {
+    let storage = cubebot_orchestrator::storage::Storage::environment(pool.clone()).await;
+    storage.map_err(|source| {
+        Box::new(Failure {
+            message: "shared-file storage unavailable or reconciliation failed",
+            source,
+        }) as _
+    })
+}
+
+/// Without a volume, files routes answer that storage is unavailable.
+fn with_storage(
+    router: axum::Router,
+    storage: Option<cubebot_orchestrator::storage::Storage>,
+) -> axum::Router {
+    match storage {
+        Some(storage) => router.layer(axum::Extension(storage)),
+        None => router,
     }
 }
 
