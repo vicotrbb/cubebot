@@ -11,7 +11,7 @@ use axum::{
         IntoResponse,
         sse::{self, KeepAlive, Sse},
     },
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use futures_util::{StreamExt, stream};
 use serde::Deserialize;
@@ -25,7 +25,7 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(history, send, retry, cancel, steer, events))]
+#[openapi(paths(history, send, retry, cancel, steer, events, read))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -36,6 +36,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
             get(history).post(send),
         )
         .route("/api/conversations/{conversation}/events", get(events))
+        .route("/api/conversations/{conversation}/read", put(read))
         .route(
             "/api/conversations/{conversation}/messages/{turn}/retry",
             post(retry),
@@ -142,6 +143,26 @@ async fn steer(
         StatusCode::ACCEPTED,
         [("cache-control", "no-store")],
         Json(api.work.steer(&actor, conversation, turn, &input).await?),
+    ))
+}
+
+/// Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
+/// with the cursor as stored.
+#[utoipa::path(put, path = "/api/conversations/{conversation}/read", params(("conversation" = Uuid, Path)), request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
+async fn read(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(conversation): Path<Uuid>,
+    Json(input): Json<crate::work::ReadCursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(
+            api.work
+                .read_conversation(&actor, conversation, input.sequence)
+                .await?,
+        ),
     ))
 }
 

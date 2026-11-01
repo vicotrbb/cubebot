@@ -6,7 +6,7 @@ use super::{
 use crate::identity::{Actor, IdentityError};
 use serde::Serialize;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct AgentStatus {
     pub id: AgentId,
     pub desired_state: String,

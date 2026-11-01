@@ -1,6 +1,7 @@
 //! Optional installation OIDC. Provider credentials never become agent credentials.
 
 mod bindings;
+pub use bindings::Binding;
 mod config;
 mod http;
 mod provider;

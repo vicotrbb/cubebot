@@ -1,0 +1,21 @@
+import { createContext, useContext } from 'react'
+import type { Turn } from '../../api/client'
+import type { AgentSummary, Session } from '../../api/types'
+
+export type AgentScreen = {
+  agent: AgentSummary
+  session: Session
+  turns: Turn[]
+  streaming: Record<string, string>
+  addTurn: (turn: Turn) => void
+}
+
+const Context = createContext<AgentScreen | null>(null)
+export const AgentProvider = Context.Provider
+
+/** The selected agent and its conversation, shared with the right panel's routes. */
+export function useAgentScreen() {
+  const value = useContext(Context)
+  if (!value) throw new Error('useAgentScreen outside an agent route')
+  return value
+}

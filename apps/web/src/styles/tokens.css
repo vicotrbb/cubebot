@@ -1,0 +1,145 @@
+/* The desk world (DESIGN.md) in a product register: one warm ground, one paint. */
+@font-face {
+  font-family: 'Rubik';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/fonts/rubik-latin.woff2') format('woff2');
+}
+
+@property --rx {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: -18deg;
+}
+@property --ry {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 28deg;
+}
+
+:root {
+  color-scheme: light;
+  /* Paint */
+  --orange: #f26a1b;
+  --orange-top: #ff8a3d;
+  --orange-deep: #c9530f;
+  --orange-base: #a6420a;
+  --orange-wash: #fde9dc;
+  --sage: #9bb7a4;
+  --sage-top: #b4cbbb;
+  --sage-deep: #6f8f7a;
+  --sage-base: #587865;
+  --wood: #e9cfa5;
+  --wood-top: #f2dfbf;
+  --wood-deep: #d4b380;
+  --wood-base: #b8955d;
+  --paper: #fffdf9;
+  --paper-top: #ffffff;
+  --paper-deep: #e8e1d4;
+  --paper-base: #d2c9b8;
+  --sky: #8db9d6;
+  --sky-top: #a9cde3;
+  --sky-deep: #5f90b0;
+  --sky-base: #4a7591;
+  --rose: #e5a0b4;
+  --rose-top: #f0bccb;
+  --rose-deep: #c2708a;
+  --rose-base: #a0586f;
+  --lemon: #f0cf5a;
+  --lemon-top: #f7df86;
+  --lemon-deep: #c9a62f;
+  --lemon-base: #a4861f;
+  --plum: #9a86b8;
+  --plum-top: #b6a6cd;
+  --plum-deep: #6f5d8f;
+  --plum-base: #574872;
+  /* Ground and ink */
+  --ground: #f6efe4;
+  --sidebar: #efe3d1;
+  --surface: #fffdf9;
+  --raised: #ffffff;
+  --inset: #f3ebdf;
+  --ink: #2b2420;
+  --ink-soft: #5e5249;
+  --ink-faint: #776a5f;
+  --on-paint: #2b2420;
+  --line: rgb(43 36 32 / 0.12);
+  --line-strong: rgb(43 36 32 / 0.22);
+  --shadow: 43 36 32;
+  --danger: #c23b22;
+  --danger-wash: #fbe4df;
+  --success: #6f8f7a;
+  --warn: #c9530f;
+  --code-bg: #f3ebdf;
+  --sleep: var(--sage);
+  /* Type (fixed rem scale) */
+  --font: 'Rubik', system-ui, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --t-xs: 0.75rem;
+  --t-sm: 0.8125rem;
+  --t-md: 0.9375rem;
+  --t-lg: 1.0625rem;
+  --t-xl: 1.25rem;
+  --t-2xl: 1.5rem;
+  --t-3xl: 2rem;
+  /* Shape and depth */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 10px;
+  --r-xl: 14px;
+  --lift: 0 8px 18px -6px rgb(var(--shadow) / 0.35);
+  --lift-hover: 0 12px 22px -6px rgb(var(--shadow) / 0.38);
+  --float: 0 18px 44px -14px rgb(var(--shadow) / 0.45);
+  --settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --quick: 160ms;
+  /* Layout */
+  --sidebar-w: 260px;
+  --rail-w: 56px;
+  --panel-w: 380px;
+  --header-h: 56px;
+  --bottombar-h: 60px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ground: #201a16;
+    --sidebar: #120e0b;
+    --surface: #26201b;
+    --raised: #2b2420;
+    --inset: #1f1a16;
+    --ink: #f3ece2;
+    --ink-soft: #cfc3b6;
+    --ink-faint: #a3968b;
+    --line: rgb(255 240 225 / 0.1);
+    --line-strong: rgb(255 240 225 / 0.2);
+    --shadow: 0 0 0;
+    --orange-wash: #3a2416;
+    --danger: #e86a52;
+    --danger-wash: #3b1f19;
+    --success: #8fb09c;
+    --code-bg: #1a1512;
+    --sleep: #7f9a88;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ground: #201a16;
+  --sidebar: #120e0b;
+  --surface: #26201b;
+  --raised: #2b2420;
+  --inset: #1f1a16;
+  --ink: #f3ece2;
+  --ink-soft: #cfc3b6;
+  --ink-faint: #a3968b;
+  --line: rgb(255 240 225 / 0.1);
+  --line-strong: rgb(255 240 225 / 0.2);
+  --shadow: 0 0 0;
+  --orange-wash: #3a2416;
+  --danger: #e86a52;
+  --danger-wash: #3b1f19;
+  --success: #8fb09c;
+  --code-bg: #1a1512;
+  --sleep: #7f9a88;
+}

@@ -43,6 +43,7 @@ services:
       CUBEBOT_CREDENTIAL_KEY_FILE: /state/credential.key
       CUBEBOT_PUBLIC_ORIGIN: http://localhost:${CUBEBOT_PORT:-3000}
       CUBEBOT_STORAGE_DIRECTORY: /var/lib/cubebot/files
+      CUBEBOT_INSTALLATION_NAME: ${CUBEBOT_INSTALLATION_NAME:-Cubebot}
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - orchestrator-state:/state:ro

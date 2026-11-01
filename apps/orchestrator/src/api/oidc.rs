@@ -11,6 +11,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(start, link))]
+pub(super) struct Doc;
+
 pub(super) fn router(oidc: Oidc) -> Router {
     Router::new()
         .route("/api/identity/oidc/start", post(start))
@@ -19,7 +23,7 @@ pub(super) fn router(oidc: Oidc) -> Router {
         .with_state(oidc)
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 struct Authorization {
     authorization_url: String,
 }
@@ -74,10 +78,14 @@ fn started(oidc: &Oidc, flow: Started) -> Result<axum::response::Response, Ident
     Ok(response)
 }
 
+/// Starts a sign-in; the browser follows `authorization_url`.
+#[utoipa::path(post, path = "/api/identity/oidc/start", responses((status = 200, body = Authorization)))]
 async fn start(State(oidc): State<Oidc>) -> Result<impl IntoResponse, IdentityError> {
     started(&oidc, oidc.start(None).await?)
 }
 
+/// Starts linking the signed-in account to the identity provider.
+#[utoipa::path(post, path = "/api/identity/oidc/link", responses((status = 200, body = Authorization)))]
 async fn link(
     State(oidc): State<Oidc>,
     headers: HeaderMap,

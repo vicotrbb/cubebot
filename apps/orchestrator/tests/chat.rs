@@ -27,6 +27,7 @@ async fn accepted_messages_survive_reconnect_and_concurrent_retries_are_unique()
                 request_id: Uuid::new_v4(),
                 name: "Writer".into(),
                 instructions: "Be brief".into(),
+                avatar: None,
             },
         )
         .await
@@ -92,6 +93,7 @@ async fn ordinary_members_cannot_read_or_send_to_another_conversation() {
                 request_id: Uuid::new_v4(),
                 name: "Writer".into(),
                 instructions: "Be brief".into(),
+                avatar: None,
             },
         )
         .await
@@ -138,6 +140,7 @@ async fn every_agent_has_exactly_one_conversation_even_before_it_is_opened() {
                 request_id: Uuid::new_v4(),
                 name: "Single stream".into(),
                 instructions: "Continue this context".into(),
+                avatar: None,
             },
         )
         .await

@@ -1,0 +1,37 @@
+.file-drop {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  border-radius: var(--r-lg);
+  transition: box-shadow var(--quick);
+}
+.file-drop.dragging {
+  box-shadow: inset 0 0 0 3px var(--orange);
+  background: var(--orange-wash);
+}
+.crumbs {
+  font-size: var(--t-sm);
+  font-weight: 600;
+}
+.crumbs .link-btn {
+  text-decoration: none;
+}
+.crumbs [aria-current='page'] {
+  color: var(--ink-faint);
+  cursor: default;
+}
+.files__row {
+  display: grid;
+  gap: 4px;
+}
+.files__row[draggable='true'] {
+  cursor: grab;
+}
+.files__meta {
+  gap: 12px;
+}
+.share-row .input {
+  width: auto;
+  min-height: 34px;
+  flex: 1;
+}

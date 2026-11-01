@@ -1,4 +1,4 @@
-// The console's Desktop tab in real Chromium against the built web server behind Caddy.
+// The console's Desktop route in real Chromium against the built web server behind Caddy.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -24,9 +24,15 @@ try {
     .getByLabel('Password', { exact: true })
     .fill(process.env.CUBEBOT_CONSOLE_PASSWORD)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.getByRole('button', { name: /^Desk\b/ }).click()
-  await page.getByRole('button', { name: 'Desktop', exact: true }).click()
-  await page.getByRole('button', { name: 'Watch', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Agents' })
+    .getByRole('link', { name: /^Desk\b/ })
+    .click()
+  await page.getByRole('link', { name: 'Desktop', exact: true }).click()
+  // The desktop route watches as soon as it opens; there is no Watch click.
+  await page
+    .getByRole('button', { name: 'Stop watching', exact: true })
+    .waitFor()
   await page.getByText('Watching the agent').waitFor()
   const canvas = page.locator('.desktop-screen canvas')
   // The guest's screen is painted: the canvas is no longer uniformly blank.
@@ -66,7 +72,7 @@ try {
   await page.getByRole('button', { name: 'Hand back', exact: true }).click()
   await page.getByText('Watching the agent').waitFor()
   await page
-    .getByRole('button', { name: 'Back to conversation', exact: true })
+    .getByRole('link', { name: 'Back to conversation', exact: true })
     .click()
   await page.locator('.desktop-marker').first().waitFor()
   await page.screenshot({

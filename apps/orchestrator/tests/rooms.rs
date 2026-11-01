@@ -18,6 +18,7 @@ async fn agent(pool: &sqlx::PgPool, admin: &Actor, name: &str) -> Uuid {
                 request_id: Uuid::new_v4(),
                 name: name.into(),
                 instructions: format!("You are {name}."),
+                avatar: None,
             },
         )
         .await

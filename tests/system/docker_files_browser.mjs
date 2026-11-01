@@ -28,14 +28,17 @@ async function signIn(browser, login, password) {
   await page.getByLabel('Login', { exact: true }).fill(login)
   await page.getByLabel('Password', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.getByRole('button', { name: 'Files', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Library' })
+    .getByRole('link', { name: 'Files', exact: true })
+    .click()
   await page.getByRole('heading', { name: 'Files' }).waitFor()
   return page
 }
 
 const views = (page) => page.getByRole('navigation', { name: 'File views' })
 const row = (page, name) =>
-  page.locator('li.memory').filter({ hasText: name }).first()
+  page.locator('li.files__row').filter({ hasText: name }).first()
 
 async function download(page, name) {
   const [file] = await Promise.all([
@@ -71,7 +74,7 @@ try {
   await zone.dispatchEvent('drop', { dataTransfer: transfer })
   await row(page, `dropped-${marker}.bin`).waitFor()
 
-  await page.getByPlaceholder('Folder name').fill(folder)
+  await page.getByPlaceholder('New folder name').fill(folder)
   await page.getByRole('button', { name: 'Create folder', exact: true }).click()
   await row(page, `${folder}/`).waitFor()
 

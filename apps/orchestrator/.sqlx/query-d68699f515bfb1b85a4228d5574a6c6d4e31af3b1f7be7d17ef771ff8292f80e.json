@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO login_handoffs (agent_id, turn_id, call_id, site, reason)\n        VALUES ($1, $2, gen_random_uuid(), 'github.com', 'Read your notifications')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d68699f515bfb1b85a4228d5574a6c6d4e31af3b1f7be7d17ef771ff8292f80e"
+}

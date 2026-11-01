@@ -9,50 +9,740 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as AppIndexRouteImport } from './routes/_app.index'
+import { Route as AppActivityRouteImport } from './routes/_app.activity'
+import { Route as AppFilesRouteImport } from './routes/_app.files'
+import { Route as AppPlatformRouteImport } from './routes/_app.platform'
+import { Route as AppYouRouteImport } from './routes/_app.you'
+import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agentId'
+import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
+import { Route as AppPlatformAuditRouteImport } from './routes/_app.platform.audit'
+import { Route as AppPlatformHealthRouteImport } from './routes/_app.platform.health'
+import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
+import { Route as AppPlatformProvidersRouteImport } from './routes/_app.platform.providers'
+import { Route as AppPlatformSignInRouteImport } from './routes/_app.platform.sign-in'
+import { Route as AppPlatformTeamsRouteImport } from './routes/_app.platform.teams'
+import { Route as AppPlatformVaultRouteImport } from './routes/_app.platform.vault'
+import { Route as AppRoomsRoomIdRouteImport } from './routes/_app.rooms.$roomId'
+import { Route as AppRoomsNewRouteImport } from './routes/_app.rooms.new'
+import { Route as AppSkillsIndexRouteImport } from './routes/_app.skills.index'
+import { Route as AppSkillsSkillIdRouteImport } from './routes/_app.skills.$skillId'
+import { Route as AppAgentsAgentIdAboutRouteImport } from './routes/_app.agents.$agentId.about'
+import { Route as AppAgentsAgentIdAccessRouteImport } from './routes/_app.agents.$agentId.access'
+import { Route as AppAgentsAgentIdDreamsRouteImport } from './routes/_app.agents.$agentId.dreams'
+import { Route as AppAgentsAgentIdFilesRouteImport } from './routes/_app.agents.$agentId.files'
+import { Route as AppAgentsAgentIdMemoriesRouteImport } from './routes/_app.agents.$agentId.memories'
+import { Route as AppAgentsAgentIdRoutinesRouteImport } from './routes/_app.agents.$agentId.routines'
+import { Route as AppAgentsAgentIdSkillsRouteImport } from './routes/_app.agents.$agentId.skills'
+import { Route as AppAgentsAgentIdStatusRouteImport } from './routes/_app.agents.$agentId.status'
+import { Route as AppAgentsAgentIdVaultRouteImport } from './routes/_app.agents.$agentId.vault'
+import { Route as AppAgentsAgentIdDesktopRouteImport } from './routes/_app.agents_.$agentId_.desktop'
+import { Route as AppRoomsRoomIdMembersRouteImport } from './routes/_app.rooms.$roomId.members'
+import { Route as AppAgentsAgentIdThreadTurnIdRouteImport } from './routes/_app.agents.$agentId.thread.$turnId'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppActivityRoute = AppActivityRouteImport.update({
+  id: '/activity',
+  path: '/activity',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppFilesRoute = AppFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPlatformRoute = AppPlatformRouteImport.update({
+  id: '/platform',
+  path: '/platform',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppYouRoute = AppYouRouteImport.update({
+  id: '/you',
+  path: '/you',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgentsAgentIdRoute = AppAgentsAgentIdRouteImport.update({
+  id: '/agents/$agentId',
+  path: '/agents/$agentId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgentsNewRoute = AppAgentsNewRouteImport.update({
+  id: '/agents/new',
+  path: '/agents/new',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPlatformAuditRoute = AppPlatformAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformHealthRoute = AppPlatformHealthRouteImport.update({
+  id: '/health',
+  path: '/health',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformPeopleRoute = AppPlatformPeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformProvidersRoute = AppPlatformProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformSignInRoute = AppPlatformSignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformTeamsRoute = AppPlatformTeamsRouteImport.update({
+  id: '/teams',
+  path: '/teams',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformVaultRoute = AppPlatformVaultRouteImport.update({
+  id: '/vault',
+  path: '/vault',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppRoomsRoomIdRoute = AppRoomsRoomIdRouteImport.update({
+  id: '/rooms/$roomId',
+  path: '/rooms/$roomId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRoomsNewRoute = AppRoomsNewRouteImport.update({
+  id: '/rooms/new',
+  path: '/rooms/new',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSkillsIndexRoute = AppSkillsIndexRouteImport.update({
+  id: '/skills/',
+  path: '/skills/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSkillsSkillIdRoute = AppSkillsSkillIdRouteImport.update({
+  id: '/skills/$skillId',
+  path: '/skills/$skillId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgentsAgentIdAboutRoute = AppAgentsAgentIdAboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdAccessRoute = AppAgentsAgentIdAccessRouteImport.update({
+  id: '/access',
+  path: '/access',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdDreamsRoute = AppAgentsAgentIdDreamsRouteImport.update({
+  id: '/dreams',
+  path: '/dreams',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdFilesRoute = AppAgentsAgentIdFilesRouteImport.update({
+  id: '/files',
+  path: '/files',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdMemoriesRoute =
+  AppAgentsAgentIdMemoriesRouteImport.update({
+    id: '/memories',
+    path: '/memories',
+    getParentRoute: () => AppAgentsAgentIdRoute,
+  } as any)
+const AppAgentsAgentIdRoutinesRoute =
+  AppAgentsAgentIdRoutinesRouteImport.update({
+    id: '/routines',
+    path: '/routines',
+    getParentRoute: () => AppAgentsAgentIdRoute,
+  } as any)
+const AppAgentsAgentIdSkillsRoute = AppAgentsAgentIdSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdStatusRoute = AppAgentsAgentIdStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdVaultRoute = AppAgentsAgentIdVaultRouteImport.update({
+  id: '/vault',
+  path: '/vault',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdDesktopRoute = AppAgentsAgentIdDesktopRouteImport.update({
+  id: '/agents_/$agentId_/desktop',
+  path: '/agents/$agentId/desktop',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRoomsRoomIdMembersRoute = AppRoomsRoomIdMembersRouteImport.update({
+  id: '/members',
+  path: '/members',
+  getParentRoute: () => AppRoomsRoomIdRoute,
+} as any)
+const AppAgentsAgentIdThreadTurnIdRoute =
+  AppAgentsAgentIdThreadTurnIdRouteImport.update({
+    id: '/thread/$turnId',
+    path: '/thread/$turnId',
+    getParentRoute: () => AppAgentsAgentIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AppIndexRoute
+  '/sign-in': typeof SignInRoute
+  '/activity': typeof AppActivityRoute
+  '/files': typeof AppFilesRoute
+  '/platform': typeof AppPlatformRouteWithChildren
+  '/you': typeof AppYouRoute
+  '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
+  '/agents/new': typeof AppAgentsNewRoute
+  '/platform/audit': typeof AppPlatformAuditRoute
+  '/platform/health': typeof AppPlatformHealthRoute
+  '/platform/people': typeof AppPlatformPeopleRoute
+  '/platform/providers': typeof AppPlatformProvidersRoute
+  '/platform/sign-in': typeof AppPlatformSignInRoute
+  '/platform/teams': typeof AppPlatformTeamsRoute
+  '/platform/vault': typeof AppPlatformVaultRoute
+  '/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
+  '/rooms/new': typeof AppRoomsNewRoute
+  '/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/skills/': typeof AppSkillsIndexRoute
+  '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
+  '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
+  '/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
+  '/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
+  '/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
+  '/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
+  '/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
+  '/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
+  '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
+  '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
+  '/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/sign-in': typeof SignInRoute
+  '/activity': typeof AppActivityRoute
+  '/files': typeof AppFilesRoute
+  '/platform': typeof AppPlatformRouteWithChildren
+  '/you': typeof AppYouRoute
+  '/': typeof AppIndexRoute
+  '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
+  '/agents/new': typeof AppAgentsNewRoute
+  '/platform/audit': typeof AppPlatformAuditRoute
+  '/platform/health': typeof AppPlatformHealthRoute
+  '/platform/people': typeof AppPlatformPeopleRoute
+  '/platform/providers': typeof AppPlatformProvidersRoute
+  '/platform/sign-in': typeof AppPlatformSignInRoute
+  '/platform/teams': typeof AppPlatformTeamsRoute
+  '/platform/vault': typeof AppPlatformVaultRoute
+  '/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
+  '/rooms/new': typeof AppRoomsNewRoute
+  '/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/skills': typeof AppSkillsIndexRoute
+  '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
+  '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
+  '/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
+  '/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
+  '/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
+  '/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
+  '/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
+  '/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
+  '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
+  '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
+  '/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/sign-in': typeof SignInRoute
+  '/_app/activity': typeof AppActivityRoute
+  '/_app/files': typeof AppFilesRoute
+  '/_app/platform': typeof AppPlatformRouteWithChildren
+  '/_app/you': typeof AppYouRoute
+  '/_app/': typeof AppIndexRoute
+  '/_app/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
+  '/_app/agents/new': typeof AppAgentsNewRoute
+  '/_app/platform/audit': typeof AppPlatformAuditRoute
+  '/_app/platform/health': typeof AppPlatformHealthRoute
+  '/_app/platform/people': typeof AppPlatformPeopleRoute
+  '/_app/platform/providers': typeof AppPlatformProvidersRoute
+  '/_app/platform/sign-in': typeof AppPlatformSignInRoute
+  '/_app/platform/teams': typeof AppPlatformTeamsRoute
+  '/_app/platform/vault': typeof AppPlatformVaultRoute
+  '/_app/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
+  '/_app/rooms/new': typeof AppRoomsNewRoute
+  '/_app/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/_app/skills/': typeof AppSkillsIndexRoute
+  '/_app/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
+  '/_app/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/_app/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
+  '/_app/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
+  '/_app/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
+  '/_app/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
+  '/_app/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
+  '/_app/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
+  '/_app/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
+  '/_app/agents_/$agentId_/desktop': typeof AppAgentsAgentIdDesktopRoute
+  '/_app/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
+  '/_app/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/sign-in'
+    | '/activity'
+    | '/files'
+    | '/platform'
+    | '/you'
+    | '/agents/$agentId'
+    | '/agents/new'
+    | '/platform/audit'
+    | '/platform/health'
+    | '/platform/people'
+    | '/platform/providers'
+    | '/platform/sign-in'
+    | '/platform/teams'
+    | '/platform/vault'
+    | '/rooms/$roomId'
+    | '/rooms/new'
+    | '/skills/$skillId'
+    | '/skills/'
+    | '/agents/$agentId/about'
+    | '/agents/$agentId/access'
+    | '/agents/$agentId/dreams'
+    | '/agents/$agentId/files'
+    | '/agents/$agentId/memories'
+    | '/agents/$agentId/routines'
+    | '/agents/$agentId/skills'
+    | '/agents/$agentId/status'
+    | '/agents/$agentId/vault'
+    | '/agents/$agentId/desktop'
+    | '/rooms/$roomId/members'
+    | '/agents/$agentId/thread/$turnId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/sign-in'
+    | '/activity'
+    | '/files'
+    | '/platform'
+    | '/you'
+    | '/'
+    | '/agents/$agentId'
+    | '/agents/new'
+    | '/platform/audit'
+    | '/platform/health'
+    | '/platform/people'
+    | '/platform/providers'
+    | '/platform/sign-in'
+    | '/platform/teams'
+    | '/platform/vault'
+    | '/rooms/$roomId'
+    | '/rooms/new'
+    | '/skills/$skillId'
+    | '/skills'
+    | '/agents/$agentId/about'
+    | '/agents/$agentId/access'
+    | '/agents/$agentId/dreams'
+    | '/agents/$agentId/files'
+    | '/agents/$agentId/memories'
+    | '/agents/$agentId/routines'
+    | '/agents/$agentId/skills'
+    | '/agents/$agentId/status'
+    | '/agents/$agentId/vault'
+    | '/agents/$agentId/desktop'
+    | '/rooms/$roomId/members'
+    | '/agents/$agentId/thread/$turnId'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/sign-in'
+    | '/_app/activity'
+    | '/_app/files'
+    | '/_app/platform'
+    | '/_app/you'
+    | '/_app/'
+    | '/_app/agents/$agentId'
+    | '/_app/agents/new'
+    | '/_app/platform/audit'
+    | '/_app/platform/health'
+    | '/_app/platform/people'
+    | '/_app/platform/providers'
+    | '/_app/platform/sign-in'
+    | '/_app/platform/teams'
+    | '/_app/platform/vault'
+    | '/_app/rooms/$roomId'
+    | '/_app/rooms/new'
+    | '/_app/skills/$skillId'
+    | '/_app/skills/'
+    | '/_app/agents/$agentId/about'
+    | '/_app/agents/$agentId/access'
+    | '/_app/agents/$agentId/dreams'
+    | '/_app/agents/$agentId/files'
+    | '/_app/agents/$agentId/memories'
+    | '/_app/agents/$agentId/routines'
+    | '/_app/agents/$agentId/skills'
+    | '/_app/agents/$agentId/status'
+    | '/_app/agents/$agentId/vault'
+    | '/_app/agents_/$agentId_/desktop'
+    | '/_app/rooms/$roomId/members'
+    | '/_app/agents/$agentId/thread/$turnId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  SignInRoute: typeof SignInRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/activity': {
+      id: '/_app/activity'
+      path: '/activity'
+      fullPath: '/activity'
+      preLoaderRoute: typeof AppActivityRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/files': {
+      id: '/_app/files'
+      path: '/files'
+      fullPath: '/files'
+      preLoaderRoute: typeof AppFilesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/platform': {
+      id: '/_app/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof AppPlatformRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/you': {
+      id: '/_app/you'
+      path: '/you'
+      fullPath: '/you'
+      preLoaderRoute: typeof AppYouRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agents/$agentId': {
+      id: '/_app/agents/$agentId'
+      path: '/agents/$agentId'
+      fullPath: '/agents/$agentId'
+      preLoaderRoute: typeof AppAgentsAgentIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agents/new': {
+      id: '/_app/agents/new'
+      path: '/agents/new'
+      fullPath: '/agents/new'
+      preLoaderRoute: typeof AppAgentsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/platform/audit': {
+      id: '/_app/platform/audit'
+      path: '/audit'
+      fullPath: '/platform/audit'
+      preLoaderRoute: typeof AppPlatformAuditRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/health': {
+      id: '/_app/platform/health'
+      path: '/health'
+      fullPath: '/platform/health'
+      preLoaderRoute: typeof AppPlatformHealthRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/people': {
+      id: '/_app/platform/people'
+      path: '/people'
+      fullPath: '/platform/people'
+      preLoaderRoute: typeof AppPlatformPeopleRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/providers': {
+      id: '/_app/platform/providers'
+      path: '/providers'
+      fullPath: '/platform/providers'
+      preLoaderRoute: typeof AppPlatformProvidersRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/sign-in': {
+      id: '/_app/platform/sign-in'
+      path: '/sign-in'
+      fullPath: '/platform/sign-in'
+      preLoaderRoute: typeof AppPlatformSignInRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/teams': {
+      id: '/_app/platform/teams'
+      path: '/teams'
+      fullPath: '/platform/teams'
+      preLoaderRoute: typeof AppPlatformTeamsRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/vault': {
+      id: '/_app/platform/vault'
+      path: '/vault'
+      fullPath: '/platform/vault'
+      preLoaderRoute: typeof AppPlatformVaultRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/rooms/$roomId': {
+      id: '/_app/rooms/$roomId'
+      path: '/rooms/$roomId'
+      fullPath: '/rooms/$roomId'
+      preLoaderRoute: typeof AppRoomsRoomIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/rooms/new': {
+      id: '/_app/rooms/new'
+      path: '/rooms/new'
+      fullPath: '/rooms/new'
+      preLoaderRoute: typeof AppRoomsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/skills/': {
+      id: '/_app/skills/'
+      path: '/skills'
+      fullPath: '/skills/'
+      preLoaderRoute: typeof AppSkillsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/skills/$skillId': {
+      id: '/_app/skills/$skillId'
+      path: '/skills/$skillId'
+      fullPath: '/skills/$skillId'
+      preLoaderRoute: typeof AppSkillsSkillIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/agents/$agentId/about': {
+      id: '/_app/agents/$agentId/about'
+      path: '/about'
+      fullPath: '/agents/$agentId/about'
+      preLoaderRoute: typeof AppAgentsAgentIdAboutRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/access': {
+      id: '/_app/agents/$agentId/access'
+      path: '/access'
+      fullPath: '/agents/$agentId/access'
+      preLoaderRoute: typeof AppAgentsAgentIdAccessRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/dreams': {
+      id: '/_app/agents/$agentId/dreams'
+      path: '/dreams'
+      fullPath: '/agents/$agentId/dreams'
+      preLoaderRoute: typeof AppAgentsAgentIdDreamsRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/files': {
+      id: '/_app/agents/$agentId/files'
+      path: '/files'
+      fullPath: '/agents/$agentId/files'
+      preLoaderRoute: typeof AppAgentsAgentIdFilesRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/memories': {
+      id: '/_app/agents/$agentId/memories'
+      path: '/memories'
+      fullPath: '/agents/$agentId/memories'
+      preLoaderRoute: typeof AppAgentsAgentIdMemoriesRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/routines': {
+      id: '/_app/agents/$agentId/routines'
+      path: '/routines'
+      fullPath: '/agents/$agentId/routines'
+      preLoaderRoute: typeof AppAgentsAgentIdRoutinesRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/skills': {
+      id: '/_app/agents/$agentId/skills'
+      path: '/skills'
+      fullPath: '/agents/$agentId/skills'
+      preLoaderRoute: typeof AppAgentsAgentIdSkillsRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/status': {
+      id: '/_app/agents/$agentId/status'
+      path: '/status'
+      fullPath: '/agents/$agentId/status'
+      preLoaderRoute: typeof AppAgentsAgentIdStatusRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/vault': {
+      id: '/_app/agents/$agentId/vault'
+      path: '/vault'
+      fullPath: '/agents/$agentId/vault'
+      preLoaderRoute: typeof AppAgentsAgentIdVaultRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents_/$agentId_/desktop': {
+      id: '/_app/agents_/$agentId_/desktop'
+      path: '/agents/$agentId/desktop'
+      fullPath: '/agents/$agentId/desktop'
+      preLoaderRoute: typeof AppAgentsAgentIdDesktopRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/rooms/$roomId/members': {
+      id: '/_app/rooms/$roomId/members'
+      path: '/members'
+      fullPath: '/rooms/$roomId/members'
+      preLoaderRoute: typeof AppRoomsRoomIdMembersRouteImport
+      parentRoute: typeof AppRoomsRoomIdRoute
+    }
+    '/_app/agents/$agentId/thread/$turnId': {
+      id: '/_app/agents/$agentId/thread/$turnId'
+      path: '/thread/$turnId'
+      fullPath: '/agents/$agentId/thread/$turnId'
+      preLoaderRoute: typeof AppAgentsAgentIdThreadTurnIdRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
     }
   }
 }
 
+interface AppPlatformRouteChildren {
+  AppPlatformAuditRoute: typeof AppPlatformAuditRoute
+  AppPlatformHealthRoute: typeof AppPlatformHealthRoute
+  AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
+  AppPlatformProvidersRoute: typeof AppPlatformProvidersRoute
+  AppPlatformSignInRoute: typeof AppPlatformSignInRoute
+  AppPlatformTeamsRoute: typeof AppPlatformTeamsRoute
+  AppPlatformVaultRoute: typeof AppPlatformVaultRoute
+}
+
+const AppPlatformRouteChildren: AppPlatformRouteChildren = {
+  AppPlatformAuditRoute: AppPlatformAuditRoute,
+  AppPlatformHealthRoute: AppPlatformHealthRoute,
+  AppPlatformPeopleRoute: AppPlatformPeopleRoute,
+  AppPlatformProvidersRoute: AppPlatformProvidersRoute,
+  AppPlatformSignInRoute: AppPlatformSignInRoute,
+  AppPlatformTeamsRoute: AppPlatformTeamsRoute,
+  AppPlatformVaultRoute: AppPlatformVaultRoute,
+}
+
+const AppPlatformRouteWithChildren = AppPlatformRoute._addFileChildren(
+  AppPlatformRouteChildren,
+)
+
+interface AppAgentsAgentIdRouteChildren {
+  AppAgentsAgentIdAboutRoute: typeof AppAgentsAgentIdAboutRoute
+  AppAgentsAgentIdAccessRoute: typeof AppAgentsAgentIdAccessRoute
+  AppAgentsAgentIdDreamsRoute: typeof AppAgentsAgentIdDreamsRoute
+  AppAgentsAgentIdFilesRoute: typeof AppAgentsAgentIdFilesRoute
+  AppAgentsAgentIdMemoriesRoute: typeof AppAgentsAgentIdMemoriesRoute
+  AppAgentsAgentIdRoutinesRoute: typeof AppAgentsAgentIdRoutinesRoute
+  AppAgentsAgentIdSkillsRoute: typeof AppAgentsAgentIdSkillsRoute
+  AppAgentsAgentIdStatusRoute: typeof AppAgentsAgentIdStatusRoute
+  AppAgentsAgentIdVaultRoute: typeof AppAgentsAgentIdVaultRoute
+  AppAgentsAgentIdThreadTurnIdRoute: typeof AppAgentsAgentIdThreadTurnIdRoute
+}
+
+const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
+  AppAgentsAgentIdAboutRoute: AppAgentsAgentIdAboutRoute,
+  AppAgentsAgentIdAccessRoute: AppAgentsAgentIdAccessRoute,
+  AppAgentsAgentIdDreamsRoute: AppAgentsAgentIdDreamsRoute,
+  AppAgentsAgentIdFilesRoute: AppAgentsAgentIdFilesRoute,
+  AppAgentsAgentIdMemoriesRoute: AppAgentsAgentIdMemoriesRoute,
+  AppAgentsAgentIdRoutinesRoute: AppAgentsAgentIdRoutinesRoute,
+  AppAgentsAgentIdSkillsRoute: AppAgentsAgentIdSkillsRoute,
+  AppAgentsAgentIdStatusRoute: AppAgentsAgentIdStatusRoute,
+  AppAgentsAgentIdVaultRoute: AppAgentsAgentIdVaultRoute,
+  AppAgentsAgentIdThreadTurnIdRoute: AppAgentsAgentIdThreadTurnIdRoute,
+}
+
+const AppAgentsAgentIdRouteWithChildren =
+  AppAgentsAgentIdRoute._addFileChildren(AppAgentsAgentIdRouteChildren)
+
+interface AppRoomsRoomIdRouteChildren {
+  AppRoomsRoomIdMembersRoute: typeof AppRoomsRoomIdMembersRoute
+}
+
+const AppRoomsRoomIdRouteChildren: AppRoomsRoomIdRouteChildren = {
+  AppRoomsRoomIdMembersRoute: AppRoomsRoomIdMembersRoute,
+}
+
+const AppRoomsRoomIdRouteWithChildren = AppRoomsRoomIdRoute._addFileChildren(
+  AppRoomsRoomIdRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppActivityRoute: typeof AppActivityRoute
+  AppFilesRoute: typeof AppFilesRoute
+  AppPlatformRoute: typeof AppPlatformRouteWithChildren
+  AppYouRoute: typeof AppYouRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppAgentsAgentIdRoute: typeof AppAgentsAgentIdRouteWithChildren
+  AppAgentsNewRoute: typeof AppAgentsNewRoute
+  AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRouteWithChildren
+  AppRoomsNewRoute: typeof AppRoomsNewRoute
+  AppSkillsSkillIdRoute: typeof AppSkillsSkillIdRoute
+  AppSkillsIndexRoute: typeof AppSkillsIndexRoute
+  AppAgentsAgentIdDesktopRoute: typeof AppAgentsAgentIdDesktopRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppActivityRoute: AppActivityRoute,
+  AppFilesRoute: AppFilesRoute,
+  AppPlatformRoute: AppPlatformRouteWithChildren,
+  AppYouRoute: AppYouRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppAgentsAgentIdRoute: AppAgentsAgentIdRouteWithChildren,
+  AppAgentsNewRoute: AppAgentsNewRoute,
+  AppRoomsRoomIdRoute: AppRoomsRoomIdRouteWithChildren,
+  AppRoomsNewRoute: AppRoomsNewRoute,
+  AppSkillsSkillIdRoute: AppSkillsSkillIdRoute,
+  AppSkillsIndexRoute: AppSkillsIndexRoute,
+  AppAgentsAgentIdDesktopRoute: AppAgentsAgentIdDesktopRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  SignInRoute: SignInRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

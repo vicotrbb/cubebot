@@ -1,6 +1,6 @@
 // The login handoff banner (ADR 0039) in real Chromium against the built console behind
 // Caddy. CUBEBOT_LOGIN_STEP is `take` (take control from the chat's banner and hand back
-// on the Desktop tab) or `decline` (decline from the chat's banner with a reason).
+// on the Desktop route) or `decline` (decline from the chat's banner with a reason).
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -27,7 +27,10 @@ try {
     .getByLabel('Password', { exact: true })
     .fill(process.env.CUBEBOT_CONSOLE_PASSWORD)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.getByRole('button', { name: /^Keeper\b/ }).click()
+  await page
+    .getByRole('navigation', { name: 'Agents' })
+    .getByRole('link', { name: /^Keeper\b/ })
+    .click()
   const banner = page.getByRole('region', { name: 'Login request' })
   await banner
     .getByText(`Keeper asks you to log in on ${site}.`)
@@ -36,6 +39,7 @@ try {
   await page.screenshot({ path: join(evidence, `login-${step}-chat.png`) })
 
   if (step === 'take') {
+    // Take control moves to the Desktop route, where the banner shows again.
     await banner
       .getByRole('button', { name: 'Take control', exact: true })
       .click()
@@ -46,7 +50,7 @@ try {
     await page.getByText('Watching the agent').waitFor()
     await banner.waitFor({ state: 'detached', timeout: 15000 })
     await page
-      .getByRole('button', { name: 'Back to conversation', exact: true })
+      .getByRole('link', { name: 'Back to conversation', exact: true })
       .click()
     await page
       .getByText(`Login completed on ${site}, take a screenshot.`)

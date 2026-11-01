@@ -10,6 +10,10 @@ use uuid::Uuid;
 
 use crate::identity::{Identity, IdentityError, Receipt};
 
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(list, invite, accept, revoke))]
+pub(super) struct Doc;
+
 pub fn router(identity: Identity) -> Router {
     Router::new()
         .route("/api/identity/invitations", get(list).post(invite))
@@ -18,13 +22,15 @@ pub fn router(identity: Identity) -> Router {
         .with_state(identity)
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct Invite {
     request_id: Uuid,
     login: String,
 }
 
+/// The token is in the first response only.
+#[utoipa::path(post, path = "/api/identity/invitations", request_body = Invite, responses((status = 201, body = crate::identity::Invitation)))]
 async fn invite(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -41,7 +47,7 @@ async fn invite(
     ))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct Accept {
     request_id: Uuid,
@@ -49,6 +55,8 @@ struct Accept {
     password: String,
 }
 
+/// Creates the invited account; responds with its id.
+#[utoipa::path(post, path = "/api/identity/invitations/accept", request_body = Accept, responses((status = 201, body = Uuid)))]
 async fn accept(
     State(identity): State<Identity>,
     Json(input): Json<Accept>,
@@ -59,7 +67,7 @@ async fn accept(
     Ok((StatusCode::CREATED, Json(id)))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct Revoke {
     request_id: Uuid,
@@ -67,6 +75,7 @@ struct Revoke {
     id: Uuid,
 }
 
+#[utoipa::path(post, path = "/api/identity/invitations/revoke", request_body = Revoke, responses((status = 200, body = Receipt)))]
 async fn revoke(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -85,6 +94,7 @@ struct Cursor {
     after: Option<Uuid>,
 }
 
+#[utoipa::path(get, path = "/api/identity/invitations", params(("after" = Option<Uuid>, Query)), responses((status = 200, body = Vec<crate::identity::InvitationSummary>)))]
 async fn list(
     State(identity): State<Identity>,
     headers: HeaderMap,

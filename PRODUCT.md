@@ -42,7 +42,7 @@ Terminology: agent, orchestrator, runtime, sandbox, room, lane, dreaming, skill,
 
 ## Brand Commitments
 
-Name: Cubebot. Logo/icon: a literal cube with two eyes, cozy and warm with personality, rendered with real 3D depth (user reference: a rounded lilac square with two black scribbled eyes; ours should feel more three-dimensional and characterful). Core color: orange, on a light, cozy ground. The site should carry animation and 3D presence. Inspiration for page ambition and structure: openbot.run. Tone from the manifesto: plain, confident, engineering-honest, warm rather than hype. The current `apps/web` palette and tokens are explicitly not binding. Decisions made for the site are intended to carry into the future console.
+Name: Cubebot. Logo/icon: a literal cube with two eyes, cozy and warm with personality, rendered with real 3D depth (user reference: a rounded lilac square with two black scribbled eyes; ours should feel more three-dimensional and characterful). Core color: orange, on a light, cozy ground. The site should carry animation and 3D presence. Inspiration for page ambition and structure: openbot.run. Tone from the manifesto: plain, confident, engineering-honest, warm rather than hype. The current `apps/web` palette and tokens are explicitly not binding. Decisions made for the site are intended to carry into the future console. Console (decided 2026-11-01): the product console follows Slack's interface grammar played straight, at Slack's craft level, with Linear as the bar for management screens; it inherits the desk world in an Operate register with a dark theme, and the cube avatar is the only illustration. See docs/design/console.md.
 
 ## Evidence on Hand
 

@@ -3,19 +3,21 @@ use uuid::Uuid;
 
 use super::{Actor, Identity, IdentityError, Receipt, commands::Command};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, sqlx::Type)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, sqlx::Type, utoipa::ToSchema,
+)]
 #[serde(transparent)]
 #[sqlx(transparent)]
 pub struct TeamId(pub Uuid);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreateTeam {
     pub request_id: Uuid,
     pub name: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MembershipChange {
     pub request_id: Uuid,
@@ -25,7 +27,7 @@ pub struct MembershipChange {
     pub present: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct Team {
     pub id: TeamId,
     pub name: String,
@@ -33,7 +35,7 @@ pub struct Team {
     pub active: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DeleteTeam {
     pub request_id: Uuid,

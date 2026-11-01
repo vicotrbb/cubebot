@@ -6,7 +6,7 @@ use super::{
     sessions::digest,
 };
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Invitation {
     pub id: Uuid,
     /// Revealed only on issuance. A retried command returns its durable ID.
@@ -14,7 +14,7 @@ pub struct Invitation {
     pub revision: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct InvitationSummary {
     pub id: Uuid,
     pub login: String,

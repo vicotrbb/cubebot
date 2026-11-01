@@ -29,6 +29,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
                 request_id: Uuid::new_v4(),
                 name: "Researcher".into(),
                 instructions: "Original".into(),
+                avatar: None,
             },
         )
         .await
@@ -43,6 +44,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         idle_delay_seconds: 900,
         dreaming_model: Some("dream-model".into()),
         task_lanes: Some(3),
+        avatar: None,
     };
     let receipt = agents.update(&actor, id, &update).await.unwrap();
     assert_eq!(receipt.revision, 2);
@@ -206,6 +208,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
                 request_id: Uuid::new_v4(),
                 name: "Original".into(),
                 instructions: "Keep this text".into(),
+                avatar: None,
             },
         )
         .await
@@ -232,6 +235,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         idle_delay_seconds: 600,
         dreaming_model: None,
         task_lanes: None,
+        avatar: None,
     };
     let second = UpdateAgent {
         request_id: Uuid::new_v4(),
@@ -242,6 +246,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         idle_delay_seconds: 600,
         dreaming_model: None,
         task_lanes: None,
+        avatar: None,
     };
     let (first, second) = tokio::join!(
         agents.update(&admin, id, &first),

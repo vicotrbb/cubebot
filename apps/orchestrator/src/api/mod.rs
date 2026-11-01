@@ -3,12 +3,14 @@
 //! Database-enabled mode exposes the initial authenticated identity endpoints.
 
 mod access;
+mod activity;
 mod agents;
 mod browser;
 mod connections;
 mod desktop;
 mod files;
 mod identity;
+mod installation;
 mod invitations;
 mod memories;
 mod oidc;
@@ -21,6 +23,11 @@ mod work;
 
 use axum::{Json, Router, routing::get};
 use cubebot_protocol::{Liveness, LivenessStatus};
+pub use installation::Installation;
+
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(liveness, readiness))]
+struct HealthDoc;
 
 pub fn router() -> Router {
     Router::new().route("/api/health/live", get(liveness))
@@ -45,6 +52,8 @@ async fn request_span(
     next.run(request).instrument(span).await
 }
 
+/// Process liveness only.
+#[utoipa::path(get, path = "/api/health/live", responses((status = 200, body = Liveness)))]
 async fn liveness() -> Json<Liveness> {
     Json(Liveness {
         status: LivenessStatus::Alive,
@@ -55,6 +64,12 @@ async fn liveness() -> Json<Liveness> {
 pub fn openapi() -> String {
     use utoipa::OpenApi;
     let mut doc = identity::Doc::openapi();
+    doc.merge(HealthDoc::openapi());
+    doc.merge(invitations::Doc::openapi());
+    doc.merge(access::Doc::openapi());
+    doc.merge(oidc::Doc::openapi());
+    doc.merge(installation::Doc::openapi());
+    doc.merge(activity::Doc::openapi());
     doc.merge(agents::Doc::openapi());
     doc.merge(connections::Doc::openapi());
     doc.merge(work::Doc::openapi());
@@ -76,6 +91,8 @@ pub fn database_router(pool: sqlx::PgPool) -> Router {
 fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
+        .merge(installation::router(pool.clone(), identity.clone()))
+        .merge(activity::router(pool.clone(), identity.clone()))
         .merge(desktop::router(pool.clone(), identity.clone()))
         .merge(work::router(pool.clone(), identity.clone()))
         .merge(rooms::router(pool.clone(), identity.clone()))
@@ -136,6 +153,8 @@ pub async fn configured_router_with_credentials(
     )))
 }
 
+/// The configured database answers; 503 otherwise.
+#[utoipa::path(get, path = "/api/health/ready", responses((status = 200), (status = 503)))]
 async fn readiness(
     axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,
 ) -> axum::http::StatusCode {

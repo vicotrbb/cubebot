@@ -1,0 +1,149 @@
+.agent-screen {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.agent-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--header-h);
+  padding: 8px 16px 8px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.agent-head__title {
+  flex: 1;
+  min-width: 0;
+}
+.agent-head__title h1 {
+  font-size: var(--t-xl);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-head__title p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-head__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.agent-split > .conversation {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel {
+  width: var(--panel-w);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--ground);
+}
+.panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.panel__tabs {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  padding: 0;
+  gap: 0;
+}
+.panel__tabs > * {
+  padding: 5px 8px;
+}
+.panel__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+.panel__body h2 {
+  font-size: var(--t-lg);
+}
+.panel__body h3 {
+  font-size: var(--t-md);
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+.panel__body .form {
+  max-width: none;
+}
+.panel__section {
+  display: grid;
+  gap: 10px;
+}
+.panel__lead {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+
+/* Thread (delegated work) */
+.thread__root {
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--raised);
+  border: 1px solid var(--line);
+}
+.thread__child {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.thread__child:last-child {
+  border-bottom: 0;
+}
+.thread__child .title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.thread__child p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .panel {
+    width: 340px;
+  }
+}
+@media (max-width: 820px) {
+  .agent-head {
+    padding: 6px 10px;
+  }
+  .agent-head__word {
+    display: none;
+  }
+  .agent-screen[data-panel='true'] .conversation,
+  .agent-screen[data-panel='true'] .login-handoff {
+    display: none;
+  }
+  .panel {
+    width: 100%;
+    border-left: 0;
+  }
+  .panel__tabs {
+    overflow: auto;
+  }
+}

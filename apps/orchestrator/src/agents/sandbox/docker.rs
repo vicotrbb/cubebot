@@ -95,6 +95,12 @@ struct Attempt {
     phase: String,
 }
 impl Docker {
+    pub fn terminal_enabled(&self) -> bool {
+        self.config.terminal_enabled
+    }
+    pub fn computer_use_enabled(&self) -> bool {
+        self.config.computer_use_enabled
+    }
     pub fn new(pool: PgPool, config: DockerConfig) -> Self {
         Self {
             pool,

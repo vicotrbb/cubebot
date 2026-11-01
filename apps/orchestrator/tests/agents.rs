@@ -33,6 +33,7 @@ async fn definitions_are_durable_scoped_and_creation_replays() {
         request_id: Uuid::new_v4(),
         name: "Researcher".into(),
         instructions: "Inspect evidence".into(),
+        avatar: None,
     };
     assert!(matches!(
         agents.create(&actor, &input).await,
@@ -129,6 +130,7 @@ async fn creation_is_atomic_under_retries_and_rechecks_current_role() {
         request_id: Uuid::new_v4(),
         name: "Durable agent".into(),
         instructions: "Keep this configuration".into(),
+        avatar: None,
     };
     let (first, second) =
         tokio::join!(agents.create(&actor, &input), agents.create(&actor, &input));

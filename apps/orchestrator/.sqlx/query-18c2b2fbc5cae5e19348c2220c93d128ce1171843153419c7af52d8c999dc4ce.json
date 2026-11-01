@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE turn_events SET created_at = created_at - interval '121 seconds' WHERE turn_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "18c2b2fbc5cae5e19348c2220c93d128ce1171843153419c7af52d8c999dc4ce"
+}

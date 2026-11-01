@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH skill AS (INSERT INTO skills (name) VALUES ('release-notes') RETURNING id)\n        INSERT INTO skill_revisions (skill_id, revision, description, files, dream_run_id)\n        SELECT id, 1, 'How Ada writes release notes', '{\"SKILL.md\":\"Release notes\"}', $1 FROM skill\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cdbe7a3f5ac79c84b1d4fd5a6e855e685dee3e8a0eac7b0d766308ade80c9131"
+}

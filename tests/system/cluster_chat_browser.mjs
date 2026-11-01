@@ -30,8 +30,9 @@ try {
     .getByLabel('Password', { exact: true })
     .fill(process.env.CUBEBOT_BROWSER_PASSWORD)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  const agents = page.getByRole('navigation', { name: 'Agents' })
   if (process.env.CUBEBOT_BROWSER_WAITING === '1') {
-    await page.getByRole('button', { name: 'Provider unreachable' }).click()
+    await agents.getByRole('link', { name: 'Provider unreachable' }).click()
     await page.getByText(/Waiting: provider unavailable/).waitFor()
     await page
       .getByRole('button', { name: 'Retry response', exact: true })
@@ -42,35 +43,30 @@ try {
     })
     console.log('PASS browser exposes provider uncertainty and explicit retry')
   } else {
-    await page.getByRole('button', { name: 'Live qualification' }).click()
+    await agents.getByRole('link', { name: 'Live qualification' }).click()
     const input =
       'What word did I ask you to remember? Reply with that word only.'
-    await page.getByLabel('Message', { exact: true }).fill(input)
+    await page.getByRole('textbox', { name: 'Send message' }).fill(input)
     await page
       .getByRole('button', { name: 'Send message', exact: true })
       .click()
+    // Both turns settled: the streamed draft is gone and the response is final.
     await page.waitForFunction(
-      () => {
-        const replies = [
-          ...globalThis.document.querySelectorAll('.agent-message p'),
-        ]
-        return (
-          replies.length === 2 &&
-          replies.every((reply) => !reply.hasAttribute('role'))
-        )
-      },
+      () =>
+        globalThis.document.querySelectorAll(
+          'article.exchange[data-status="complete"]',
+        ).length === 2,
       null,
       { timeout: 100000 },
     )
-    const replies = await page.locator('.agent-message p').allTextContents()
+    const reply = '.agent-message p.msg__text'
+    const replies = await page.locator(reply).allTextContents()
+    assert.equal(replies.length, 2)
     assert.match(replies[1], /cedar/i)
     await page.reload()
-    await page.getByRole('button', { name: 'Live qualification' }).click()
+    await agents.getByRole('link', { name: 'Live qualification' }).click()
     await page.locator('.exchange').nth(1).waitFor()
-    assert.deepEqual(
-      await page.locator('.agent-message p').allTextContents(),
-      replies,
-    )
+    assert.deepEqual(await page.locator(reply).allTextContents(), replies)
     const cookies = await page.context().cookies()
     const session = cookies.find((cookie) => cookie.name.startsWith('__Host-'))
     assert(session?.secure && session.httpOnly && session.sameSite === 'Lax')
