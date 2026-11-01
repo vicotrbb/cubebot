@@ -123,6 +123,21 @@ pub enum HostRequest {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         handoff: bool,
     },
+    /// Types a vault item's field (ADR 0086) for `account`, who must hold control, or for the
+    /// agent's `vault_fill` when `None`, which is refused like the agent's own input. Only `item`
+    /// and the text's length are logged.
+    Fill {
+        item: Uuid,
+        text: String,
+        #[serde(default)]
+        account: Option<Uuid>,
+    },
+}
+
+/// Whether the arbiter types every character of `text`: printable ASCII and spaces on a US
+/// layout. A vault refuses to save what it could not fill.
+pub fn typable(text: &str) -> bool {
+    text.chars().all(|c| c == ' ' || c.is_ascii_graphic())
 }
 
 /// The mode after the request, and its refusal or screenshot.

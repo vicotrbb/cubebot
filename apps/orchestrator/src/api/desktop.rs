@@ -401,6 +401,26 @@ async fn send(socket: &mut WebSocket, text: String) -> Result<(), Closing> {
         .map_err(Closing::Disconnected)
 }
 
+/// Types a vault item's text on the agent's desktop (ADR 0086) over a host channel of its own,
+/// for `account` or, when `None`, for the agent. The inner error is the arbiter's refusal.
+pub(super) async fn fill(
+    desktop: &Desktop,
+    agent: AgentId,
+    item: Uuid,
+    text: String,
+    account: Option<Uuid>,
+) -> Result<Result<(), String>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut channel = Channel::new(desktop.open(agent).await?);
+    let request = HostRequest::Fill {
+        item,
+        text,
+        account,
+    };
+    let line = channel.request(&request).await?;
+    let response: desktop::Response = serde_json::from_str(&line)?;
+    Ok(response.error.map_or(Ok(()), Err))
+}
+
 /// One request line to the sandbox's arbiter and its response line, in order.
 struct Channel {
     input: Box<dyn AsyncWrite + Send + Unpin>,

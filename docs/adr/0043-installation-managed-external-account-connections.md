@@ -1,6 +1,6 @@
 # ADR 0043: Installation-managed external account connections
 
-Status: Accepted
+Status: Accepted; amended by [0086](0086-vault-filled-by-the-desktop-arbiter.md), which lets an agent hold website logins of its own
 
 Date: 2026-10-23
 

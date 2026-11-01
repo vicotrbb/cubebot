@@ -12,7 +12,8 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Collaborate, Collaborated, Dream, DreamEnd, Memory, MemoryChange, REPORT_BYTES,
-    RequestLogin, RuntimeActor, RuntimeSession, SkillChange, SkillPackage,
+    RequestLogin, RuntimeActor, RuntimeSession, SkillChange, SkillPackage, VaultFill, VaultItem,
+    VaultPut,
 };
 use uuid::Uuid;
 
@@ -31,6 +32,8 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
+        .route("/api/runtime/vault", get(vault).post(vault_put))
+        .route("/api/runtime/vault/fills", post(vault_fill))
         // A package of at most 64 KiB, JSON-escaped.
         .route(
             "/api/runtime/dreams/{run}/skills",
@@ -236,6 +239,74 @@ async fn request_login(
         )
             .into_response(),
     })
+}
+fn vault_of(identity: &RuntimeIdentity) -> Result<&crate::connections::Connections, Failure> {
+    identity
+        .connections
+        .as_ref()
+        .ok_or(Failure(StatusCode::SERVICE_UNAVAILABLE))
+}
+fn vault_unavailable(error: crate::identity::IdentityError) -> Failure {
+    tracing::warn!(?error, "runtime vault request failed");
+    Failure(StatusCode::SERVICE_UNAVAILABLE)
+}
+fn refused(reason: &str) -> Response {
+    (
+        StatusCode::CONFLICT,
+        Json(serde_json::json!({"error": reason})),
+    )
+        .into_response()
+}
+/// The vault items the agent may fill (ADR 0086), without their secrets.
+async fn vault(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<VaultItem>>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let items = vault_of(&identity)?.runtime_vault(actor.agent).await;
+    Ok(Json(items.map_err(vault_unavailable)?))
+}
+/// Saves an item in the agent's own scope; a refusal is 409 with the reason the model reads.
+async fn vault_put(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Json(input): Json<VaultPut>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let saved = vault_of(&identity)?.vault_put(actor.agent, &input).await;
+    Ok(match saved.map_err(vault_unavailable)? {
+        Ok(_) => StatusCode::NO_CONTENT.into_response(),
+        Err(reason) => refused(reason),
+    })
+}
+/// Has the arbiter type a field of an item the agent may fill at its desktop's focus; a refusal
+/// is 409 with the reason the model reads. The text never comes back.
+#[tracing::instrument(skip_all, fields(item = %input.item))]
+async fn vault_fill(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    desktop: Option<axum::Extension<crate::agents::sandbox::Desktop>>,
+    Json(input): Json<VaultFill>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let text = vault_of(&identity)?
+        .vault_fill_text(actor.agent, input.item, input.field)
+        .await
+        .map_err(vault_unavailable)?;
+    let Some(text) = text else {
+        return Ok(refused("no vault item with this id is available to you"));
+    };
+    let Some(axum::Extension(desktop)) = desktop else {
+        return Ok(refused("the desktop is unavailable"));
+    };
+    match super::desktop::fill(&desktop, actor.agent, input.item, text, None).await {
+        Ok(Ok(())) => Ok(StatusCode::NO_CONTENT.into_response()),
+        Ok(Err(reason)) => Ok(refused(&reason)),
+        Err(error) => {
+            tracing::warn!(?error, "vault fill did not reach the desktop");
+            Ok(refused("the desktop is unavailable"))
+        }
+    }
 }
 async fn finish_dream(
     State(identity): State<RuntimeIdentity>,

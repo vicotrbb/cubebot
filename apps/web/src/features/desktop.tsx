@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { type Agent, type LoginHandoff, api, failure, ok } from '../api/client'
+import { FillPicker, ItemForm } from './vault'
 
 /** The guest screen (ADR 0085); frames and input use its pixels. */
 const WIDTH = 1280
@@ -164,6 +165,7 @@ export function Desktop({
         </div>
       </header>
       <LoginBanner agent={agent} holding={holding} onTake={takeControl} />
+      <FillPicker agent={agent} holding={holding} />
       {error && <p role="alert">{error}</p>}
       <div className="desktop-screen">
         <canvas
@@ -198,6 +200,7 @@ export function LoginBanner({
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [saving, setSaving] = useState(false)
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET('/api/agents/{id}/login', {
       params: { path: { id: agent.id } },
@@ -241,10 +244,25 @@ export function LoginBanner({
         {handoff.reason}
       </p>
       {holding ? (
-        <p className="muted">
-          Log in on the desktop, then hand back control to let the agent
-          continue.
-        </p>
+        <>
+          <p className="muted">
+            Log in on the desktop, then hand back control to let the agent
+            continue. To let the agent log in itself next time, save the login
+            to its vault; Save and fill types the password where the cursor is.
+          </p>
+          {saving ? (
+            <ItemForm
+              agent={agent}
+              site={handoff.site}
+              fill
+              onDone={() => setSaving(false)}
+            />
+          ) : (
+            <button className="secondary" onClick={() => setSaving(true)}>
+              Save login
+            </button>
+          )}
+        </>
       ) : (
         <div className="actions">
           <button onClick={onTake}>Take control</button>

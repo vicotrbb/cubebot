@@ -217,17 +217,25 @@ impl<'a> Arbiter<'a> {
             return self.invalid(json!({"source":"agent"}));
         };
         let source = json!({"source":"agent","call":request.call});
-        let refusal = match request.action.is_input() {
-            _ if self.handoff => Some(LOGIN_PENDING),
-            true if self.mode == Mode::Human => Some(PERSON_HAS_CONTROL),
-            true if self.stale => Some(REOBSERVE),
-            _ => None,
-        };
+        let refusal = self.agent_refusal(request.action.is_input());
         let response = self.act(None, source, &request.action, refusal);
         if response.png.is_some() {
             self.stale = false;
         }
         response
+    }
+
+    fn agent_refusal(&self, input: bool) -> Option<&'static str> {
+        match input {
+            _ if self.handoff => Some(LOGIN_PENDING),
+            true if self.mode == Mode::Human => Some(PERSON_HAS_CONTROL),
+            true if self.stale => Some(REOBSERVE),
+            _ => None,
+        }
+    }
+
+    fn holds(&self, account: Uuid) -> bool {
+        self.mode == Mode::Human && self.holder == Some(account)
     }
 
     pub fn host(&mut self, line: &[u8]) -> Response {
@@ -238,8 +246,7 @@ impl<'a> Arbiter<'a> {
                 handoff,
             }) => self.switch(mode, account, handoff),
             Ok(HostRequest::Input { account, action }) => {
-                let holds = self.mode == Mode::Human && self.holder == Some(account);
-                let refusal = action.is_input() && !holds;
+                let refusal = action.is_input() && !self.holds(account);
                 let source = json!({"source":"person","account":account});
                 self.act(
                     Some(account),
@@ -247,6 +254,23 @@ impl<'a> Arbiter<'a> {
                     &action,
                     refusal.then_some(NO_CONTROL),
                 )
+            }
+            Ok(HostRequest::Fill {
+                item,
+                text,
+                account,
+            }) => {
+                let (source, refusal) = match account {
+                    Some(account) => (
+                        json!({"source":"person","account":account,"item":item}),
+                        (!self.holds(account)).then_some(NO_CONTROL),
+                    ),
+                    None => (
+                        json!({"source":"agent","item":item}),
+                        self.agent_refusal(true),
+                    ),
+                };
+                self.act(account, source, &Action::Type { text }, refusal)
             }
             Ok(HostRequest::Frame) | Err(_) => self.invalid(json!({"source":"host"})),
         }
@@ -781,6 +805,45 @@ mod tests {
         assert!(arbiter.agent(&line(screenshot)).png.is_some());
         assert_eq!(arbiter.agent(&line(click)).error, None);
         assert_eq!(arbiter.pointer_by, None);
+    }
+
+    #[test]
+    fn a_fill_types_for_the_holder_or_the_agent_under_their_input_rules() {
+        let devices = desktop();
+        let mut arbiter = Arbiter::new(
+            &devices.gpu,
+            &devices.keyboard,
+            &devices.tablet,
+            &devices.memory,
+        );
+        let (item, person) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let fill = |account: Option<Uuid>| {
+            line(json!({"fill":{"item":item,"text":"hunter2 X","account":account}}))
+        };
+        assert_eq!(arbiter.host(&fill(None)).error, None);
+        assert_eq!(
+            arbiter.host(&fill(Some(person))).error.as_deref(),
+            Some(NO_CONTROL)
+        );
+        let take = json!({"mode":{"mode":"human","account":person,"handoff":true}});
+        assert_eq!(arbiter.host(&line(take)).error, None);
+        assert_eq!(arbiter.host(&fill(Some(person))).error, None);
+        assert_eq!(
+            arbiter.host(&fill(None)).error.as_deref(),
+            Some(LOGIN_PENDING)
+        );
+        let untypable = json!({"fill":{"item":item,"text":"é","account":person}});
+        assert!(
+            arbiter
+                .host(&line(untypable))
+                .error
+                .unwrap()
+                .contains("cannot type")
+        );
+        for c in (0..128u8).map(char::from) {
+            let typable = cubebot_protocol::desktop::typable(&c.to_string());
+            assert!(!typable || character(c).is_some(), "{c:?} is typable");
+        }
     }
 
     #[test]

@@ -477,6 +477,84 @@
         }
       }
     },
+    "/api/agents/{id}/vault": {
+      "get": {
+        "tags": [],
+        "summary": "The items the agent may fill: its own, then the installation's it has access to.",
+        "operationId": "agent_vault",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VaultSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/vault/{item}/fill": {
+      "post": {
+        "tags": [],
+        "summary": "Types the field at the desktop's focus for the caller, who must hold control; a refusal is\n409 with the arbiter's reason.",
+        "operationId": "fill_vault_item",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FillVaultItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation}/events": {
       "get": {
         "tags": [],
@@ -1188,6 +1266,113 @@
           }
         }
       }
+    },
+    "/api/vault": {
+      "get": {
+        "tags": [],
+        "summary": "Installation items, for administrators.",
+        "operationId": "list_vault",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VaultSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_vault_item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveVaultItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vault/{item}": {
+      "put": {
+        "tags": [],
+        "operationId": "update_vault_item",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveVaultItem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultSummary"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "delete_vault_item",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1553,6 +1738,16 @@
             "format": "uuid"
           }
         }
+      },
+      "FillVaultItem": {
+        "type": "object",
+        "required": ["field"],
+        "properties": {
+          "field": {
+            "$ref": "#/components/schemas/VaultField"
+          }
+        },
+        "additionalProperties": false
       },
       "IdlePolicy": {
         "type": "string",
@@ -2057,6 +2252,45 @@
           }
         }
       },
+      "SaveVaultItem": {
+        "type": "object",
+        "required": ["kind", "name"],
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess",
+                "description": "Installation items only: all agents when absent on create, unchanged on update."
+              }
+            ]
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "On create, the agent whose own item this is; an installation item when absent. An update\nkeeps the item's scope."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/VaultKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "type": ["string", "null"],
+            "description": "Required on create; an update without it keeps the current secret."
+          },
+          "site": {
+            "type": ["string", "null"]
+          },
+          "username": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
+      },
       "SendMessage": {
         "type": "object",
         "required": ["request_id", "message"],
@@ -2412,6 +2646,47 @@
           }
         },
         "additionalProperties": false
+      },
+      "VaultField": {
+        "type": "string",
+        "enum": ["username", "secret"]
+      },
+      "VaultKind": {
+        "type": "string",
+        "enum": ["login", "secret"]
+      },
+      "VaultSummary": {
+        "type": "object",
+        "required": ["id", "kind", "name", "access"],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/ProviderAccess"
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The agent whose own item this is; an installation item when absent."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/VaultKind"
+          },
+          "last_used_at": {
+            "type": ["string", "null"]
+          },
+          "name": {
+            "type": "string"
+          },
+          "site": {
+            "type": ["string", "null"]
+          },
+          "username": {
+            "type": ["string", "null"]
+          }
+        }
       }
     }
   }

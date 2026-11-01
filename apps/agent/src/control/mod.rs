@@ -200,6 +200,13 @@ impl RuntimeClient {
         .with_no_client_auth())
     }
 }
+fn accepted(response: Result<reqwest::Response, String>) -> Result<Result<(), String>, Error> {
+    match response {
+        Ok(response) if response.status().is_success() => Ok(Ok(())),
+        Ok(_) => Err(Error::Unavailable(None)),
+        Err(reason) => Ok(Err(reason)),
+    }
+}
 #[derive(Clone)]
 pub struct MemoryClient {
     http: reqwest::Client,
@@ -321,11 +328,34 @@ impl MemoryClient {
         turn: Uuid,
         request: &runtime::RequestLogin,
     ) -> Result<Result<(), String>, Error> {
-        match self.post_for_turn(turn, "logins", request).await? {
-            Ok(response) if response.status().is_success() => Ok(Ok(())),
-            Ok(_) => Err(Error::Unavailable(None)),
-            Err(reason) => Ok(Err(reason)),
-        }
+        accepted(self.post_for_turn(turn, "logins", request).await?)
+    }
+
+    /// The vault items this agent may fill, without their secrets (ADR 0086).
+    #[tracing::instrument(skip_all)]
+    pub async fn vault(&self) -> Result<Vec<runtime::VaultItem>, Error> {
+        let url = self.url.join("vault").map_err(Error::configuration)?;
+        let response = self.http.get(url).bearer_auth(&self.token).send().await;
+        let response = response.map_err(request_failed)?;
+        transport::decode_bounded(response, 1024 * 1024).await
+    }
+
+    /// Has the arbiter type the field, or returns the reason it was refused.
+    #[tracing::instrument(skip_all)]
+    pub async fn vault_fill(
+        &self,
+        request: &runtime::VaultFill,
+    ) -> Result<Result<(), String>, Error> {
+        accepted(self.post("vault/fills", request).await?)
+    }
+
+    /// Saves the agent's own item, or returns the reason it was refused. Never log `request`.
+    #[tracing::instrument(skip_all)]
+    pub async fn vault_put(
+        &self,
+        request: &runtime::VaultPut,
+    ) -> Result<Result<(), String>, Error> {
+        accepted(self.post("vault", request).await?)
     }
 
     /// The response to a request from the running turn, or the reason of a 409 refusal.
@@ -335,8 +365,17 @@ impl MemoryClient {
         path: &str,
         body: &impl serde::Serialize,
     ) -> Result<Result<reqwest::Response, String>, Error> {
-        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/turns/...`.
-        let url = self.url.join(&format!("turns/{turn}/{path}"));
+        self.post(&format!("turns/{turn}/{path}"), body).await
+    }
+
+    /// The response to a runtime request, or the reason of a 409 refusal.
+    async fn post(
+        &self,
+        path: &str,
+        body: &impl serde::Serialize,
+    ) -> Result<Result<reqwest::Response, String>, Error> {
+        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/{path}`.
+        let url = self.url.join(path);
         let url = url.map_err(Error::configuration)?;
         let response = self.http.post(url).bearer_auth(&self.token).json(body);
         let response = response.send().await.map_err(request_failed)?;

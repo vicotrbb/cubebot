@@ -28,6 +28,6 @@ Consequences: Agents can perform authenticated browser tasks without unnecessary
 
 Account administration: [ADR 0043](0043-installation-managed-external-account-connections.md) makes reusable external account connections installation-managed. Browser-assisted login does not itself grant authority to register or share a new connection.
 
-Open details: Account grant schema; secret storage; supported authentication-state formats; update ownership and versioning; reauthentication; persistence and deletion; account-level concurrency; revocation propagation; and credential isolation from arbitrary tool programs.
+Open details: Account grant schema; secret storage (settled for typed logins by [ADR 0086](0086-vault-filled-by-the-desktop-arbiter.md)); supported authentication-state formats; update ownership and versioning; reauthentication; persistence and deletion; account-level concurrency; revocation propagation; and credential isolation from arbitrary tool programs.
 
 Validation scenarios: A task reuses an authorized account while keeping separate pages; an unrelated account is not inherited; a task with insufficient grants is denied reuse; expired or non-reusable state requests intervention; account identity is visible without exposing secrets; concurrent sessions do not write one live profile; and revocation prevents new unauthorized reuse.

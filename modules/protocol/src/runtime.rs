@@ -152,6 +152,58 @@ pub struct RequestLogin {
     pub site: String,
     pub reason: String,
 }
+/// A vault item (ADR 0086) from `GET /api/runtime/vault`: never its secret.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct VaultItem {
+    pub id: Uuid,
+    pub kind: VaultKind,
+    pub name: String,
+    #[serde(default)]
+    pub site: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    /// The agent's own item; otherwise the installation's.
+    pub own: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum VaultKind {
+    /// A site, a username and its password as the secret.
+    Login,
+    Secret,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum VaultField {
+    Username,
+    /// A login's password or a secret's value.
+    Secret,
+}
+/// `POST /api/runtime/vault/fills`: types the field into the agent's desktop at its focus. A
+/// refusal is 409 with the reason the model reads.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VaultFill {
+    pub item: Uuid,
+    pub field: VaultField,
+}
+/// `POST /api/runtime/vault`: saves an item in the agent's own scope, replacing
+/// its secret when one by that name exists. A refusal is 409 with the reason the model reads.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VaultPut {
+    pub kind: VaultKind,
+    pub name: String,
+    #[serde(default)]
+    pub site: Option<String>,
+    #[serde(default)]
+    pub username: Option<String>,
+    pub secret: String,
+}
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Collaborated {
