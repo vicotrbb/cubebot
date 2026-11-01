@@ -29,6 +29,17 @@ pub struct Room {
     pub members: Vec<Member>,
     /// The viewer may change the members.
     pub manage: bool,
+    /// The newest message's sequence, 0 without messages.
+    pub last_sequence: i64,
+    /// The viewer's read cursor, 0 until set.
+    pub read_sequence: i64,
+}
+
+/// A room's newest message, for the installation stream.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct RoomSequence {
+    pub id: Uuid,
+    pub last_sequence: i64,
 }
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
@@ -158,6 +169,27 @@ impl Work {
         }
         tx.commit().await?;
         Ok(rooms)
+    }
+
+    /// Every visible room's newest message, in one query.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
+    pub async fn room_sequences(&self, actor: &Actor) -> Result<Vec<RoomSequence>, IdentityError> {
+        Ok(sqlx::query_as!(
+            RoomSequence,
+            r#"
+            SELECT r.id, COALESCE(max(m.sequence),0) AS "last_sequence!"
+            FROM rooms r
+            JOIN human_accounts a ON a.id=$1 AND a.active
+            LEFT JOIN room_messages m ON m.room_id=r.id
+            WHERE a.role='administrator'
+                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read')
+            GROUP BY r.id
+            ORDER BY r.id
+            "#,
+            actor.id,
+        )
+        .fetch_all(&self.pool)
+        .await?)
     }
 
     /// Administrators and `room.manage` holders replace the member set. Removed members keep
@@ -402,12 +434,15 @@ async fn room(
     id: Uuid,
 ) -> Result<Room, IdentityError> {
     let row = sqlx::query!(
-        "
-        SELECT id, name
-        FROM rooms
-        WHERE id=$1
-        ",
+        r#"
+        SELECT r.id, r.name,
+            COALESCE((SELECT max(m.sequence) FROM room_messages m WHERE m.room_id=r.id),0) AS "last_sequence!",
+            COALESCE((SELECT c.sequence FROM read_cursors c WHERE c.account_id=$2 AND c.scope_kind='room' AND c.scope_id=r.id),0) AS "read_sequence!"
+        FROM rooms r
+        WHERE r.id=$1
+        "#,
         id,
+        actor.id,
     )
     .fetch_one(&mut **tx)
     .await?;
@@ -416,6 +451,8 @@ async fn room(
         name: row.name,
         members: members(tx, id).await?,
         manage: allowed(tx, actor, id, "room.manage").await?,
+        last_sequence: row.last_sequence,
+        read_sequence: row.read_sequence,
     })
 }
 

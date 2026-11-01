@@ -1,0 +1,326 @@
+/* The agent's face: a painted block with eyes, carrying its mood. */
+.cube {
+  --size: 36px;
+  --rx: -18deg;
+  --ry: 28deg;
+  --face: var(--orange);
+  --face-top: var(--orange-top);
+  --face-side: var(--orange-deep);
+  --face-base: var(--orange-base);
+  --look-x: 0px;
+  --look-y: 0px;
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  perspective: calc(var(--size) * 9);
+  flex: none;
+  transition: translate 0.3s var(--settle);
+}
+.cube--sage {
+  --face: var(--sage);
+  --face-top: var(--sage-top);
+  --face-side: var(--sage-deep);
+  --face-base: var(--sage-base);
+}
+.cube--paper {
+  --face: var(--paper);
+  --face-top: var(--paper-top);
+  --face-side: var(--paper-deep);
+  --face-base: var(--paper-base);
+}
+.cube--wood {
+  --face: var(--wood);
+  --face-top: var(--wood-top);
+  --face-side: var(--wood-deep);
+  --face-base: var(--wood-base);
+}
+.cube--sky {
+  --face: var(--sky);
+  --face-top: var(--sky-top);
+  --face-side: var(--sky-deep);
+  --face-base: var(--sky-base);
+}
+.cube--rose {
+  --face: var(--rose);
+  --face-top: var(--rose-top);
+  --face-side: var(--rose-deep);
+  --face-base: var(--rose-base);
+}
+.cube--lemon {
+  --face: var(--lemon);
+  --face-top: var(--lemon-top);
+  --face-side: var(--lemon-deep);
+  --face-base: var(--lemon-base);
+}
+.cube--plum {
+  --face: var(--plum);
+  --face-top: var(--plum-top);
+  --face-side: var(--plum-deep);
+  --face-base: var(--plum-base);
+}
+
+.cube__body {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--rx)) rotateY(var(--ry));
+  transition:
+    --rx 0.45s var(--settle),
+    --ry 0.45s var(--settle);
+}
+.cube--dreaming .cube__body {
+  animation: cube-drift 6s ease-in-out infinite;
+}
+.cube--working .cube__body {
+  animation: cube-nod 2.4s ease-in-out infinite;
+}
+
+.cube__face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(
+    165deg,
+    color-mix(in oklab, var(--face), white 7%),
+    var(--face) 45%,
+    color-mix(in oklab, var(--face), black 7%)
+  );
+  backface-visibility: hidden;
+  overflow: visible;
+}
+.cube__face--front {
+  transform: translateZ(calc(var(--size) / 2));
+}
+.cube__face--back {
+  transform: rotateY(180deg) translateZ(calc(var(--size) / 2));
+}
+.cube__face--right,
+.cube__face--left {
+  background: linear-gradient(
+    180deg,
+    var(--face-side),
+    color-mix(in oklab, var(--face-side), black 12%)
+  );
+}
+.cube__face--right {
+  transform: rotateY(90deg) translateZ(calc(var(--size) / 2));
+}
+.cube__face--left {
+  transform: rotateY(-90deg) translateZ(calc(var(--size) / 2));
+}
+.cube__face--top {
+  background: linear-gradient(
+    150deg,
+    color-mix(in oklab, var(--face-top), white 14%),
+    var(--face-top) 60%
+  );
+  transform: rotateX(90deg) translateZ(calc(var(--size) / 2));
+}
+.cube__face--bottom {
+  background: var(--face-base);
+  transform: rotateX(-90deg) translateZ(calc(var(--size) / 2));
+}
+/* A screen's light on the face while the agent uses its desktop. */
+.cube--desktop .cube__face--front::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse at 50% 70%,
+    rgb(220 240 255 / 0.45),
+    transparent 65%
+  );
+  animation: cube-glow 2.2s ease-in-out infinite;
+}
+
+.cube__eyes {
+  position: absolute;
+  left: 22%;
+  top: 36%;
+  display: flex;
+  gap: calc(var(--size) * 0.1);
+  width: 56%;
+  height: 30%;
+  transform: translate(var(--look-x), var(--look-y));
+  transition: transform 0.25s ease-out;
+  animation: cube-glance 9s ease-in-out var(--delay, 0s) infinite;
+}
+.cube--working .cube__eyes {
+  --look-y: calc(var(--size) * 0.06);
+  animation: none;
+}
+.cube--waiting .cube__eyes {
+  --look-y: calc(var(--size) * -0.04);
+  animation: none;
+}
+.cube--desktop .cube__eyes {
+  --look-y: calc(var(--size) * 0.05);
+  --look-x: calc(var(--size) * -0.03);
+  animation: none;
+}
+.cube--follow .cube__eyes {
+  animation: none;
+}
+.cube__eye {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  color: var(--ink);
+  transform-origin: 50% 55%;
+  animation: cube-blink 5.4s ease-in-out var(--delay, 0s) infinite;
+}
+.cube--working .cube__eye {
+  animation-duration: 3.2s;
+}
+.cube--waiting .cube__eye {
+  transform: scale(1.12);
+  animation: none;
+}
+.cube--dreaming .cube__eye,
+.cube--sleeping .cube__eye {
+  animation: none;
+}
+.cube__eye svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* Half-lids while dreaming. */
+.cube__eye--lid::after {
+  content: '';
+  position: absolute;
+  left: -4%;
+  right: -4%;
+  top: -2%;
+  height: 52%;
+  background: var(--face);
+  border-radius: 0 0 50% 50% / 0 0 40% 40%;
+}
+.cube__blush {
+  position: absolute;
+  width: 22%;
+  height: 10%;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.22);
+  top: 70%;
+}
+.cube__blush--l {
+  left: 10%;
+}
+.cube__blush--r {
+  right: 10%;
+}
+.cube__wear {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.cube__zz {
+  position: absolute;
+  left: 78%;
+  top: -10%;
+  font-weight: 900;
+  font-size: calc(var(--size) * 0.3);
+  line-height: 1;
+  color: var(--ink-soft);
+  pointer-events: none;
+}
+.cube__zz i {
+  position: absolute;
+  font-style: normal;
+  opacity: 0;
+  animation: cube-zz 3.9s ease-out var(--delay, 0s) infinite;
+}
+.cube__zz i:nth-child(2) {
+  --delay: 1.3s;
+  font-size: 0.85em;
+}
+.cube__zz i:nth-child(3) {
+  --delay: 2.6s;
+  font-size: 0.7em;
+}
+
+@keyframes cube-blink {
+  0%,
+  96%,
+  100% {
+    transform: scaleY(1);
+  }
+  98% {
+    transform: scaleY(0.08);
+  }
+}
+@keyframes cube-glance {
+  0%,
+  38%,
+  100% {
+    translate: 0 0;
+  }
+  44%,
+  58% {
+    translate: calc(var(--size) * -0.045) calc(var(--size) * 0.015);
+  }
+  64%,
+  80% {
+    translate: calc(var(--size) * 0.045) 0;
+  }
+}
+@keyframes cube-zz {
+  0% {
+    opacity: 0;
+    translate: 0 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    translate: calc(var(--size) * 0.25) calc(var(--size) * -0.45);
+  }
+}
+@keyframes cube-drift {
+  0%,
+  100% {
+    transform: rotateX(var(--rx)) rotateY(var(--ry)) translateY(0);
+  }
+  50% {
+    transform: rotateX(calc(var(--rx) - 4deg)) rotateY(calc(var(--ry) + 6deg))
+      translateY(calc(var(--size) * -0.06));
+  }
+}
+@keyframes cube-nod {
+  0%,
+  100% {
+    transform: rotateX(var(--rx)) rotateY(var(--ry));
+  }
+  50% {
+    transform: rotateX(calc(var(--rx) - 3deg)) rotateY(var(--ry));
+  }
+}
+@keyframes cube-glow {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cube__eyes,
+  .cube__eye,
+  .cube__body,
+  .cube__zz i,
+  .cube--desktop .cube__face--front::after {
+    animation: none !important;
+  }
+  .cube__zz i:first-child {
+    opacity: 1;
+  }
+}

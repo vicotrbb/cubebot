@@ -25,6 +25,7 @@ pub async fn setup() -> (sqlx::PgPool, Registry, AgentId) {
                 request_id: Uuid::new_v4(),
                 name: "Registry agent".into(),
                 instructions: "Preserve identity".into(),
+                avatar: None,
             },
         )
         .await

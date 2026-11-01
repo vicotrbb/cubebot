@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO read_cursors (account_id, scope_kind, scope_id, sequence)\n        VALUES ($1, $2, $3, $4)\n        ON CONFLICT (account_id, scope_kind, scope_id)\n        DO UPDATE SET sequence = GREATEST(read_cursors.sequence, EXCLUDED.sequence)\n        RETURNING sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "69c1634d6b43c49c45ff8ca55e9e20c417ffcd0e510d605483e4cae1823bebf3"
+}

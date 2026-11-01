@@ -111,6 +111,7 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
         request_id: Uuid::new_v4(),
         name: name.into(),
         instructions: String::new(),
+        avatar: None,
     };
     let writer = agents.create(&admin, &create("Writer")).await.unwrap().id;
     let other = agents.create(&admin, &create("Other")).await.unwrap().id;

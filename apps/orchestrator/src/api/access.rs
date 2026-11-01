@@ -14,6 +14,20 @@ use crate::identity::{
     teams::{CreateTeam, DeleteTeam, MembershipChange, TeamId},
 };
 
+#[derive(utoipa::OpenApi)]
+#[openapi(paths(
+    teams,
+    create_team,
+    membership,
+    delete_team,
+    grant,
+    revoke,
+    explain,
+    receipt,
+    events
+))]
+pub(super) struct Doc;
+
 pub fn router(identity: Identity) -> Router {
     Router::new()
         .route("/api/identity/teams", get(teams).post(create_team))
@@ -33,6 +47,7 @@ struct TeamCursor {
     after: Option<TeamId>,
 }
 
+#[utoipa::path(get, path = "/api/identity/teams", params(("after" = Option<Uuid>, Query)), responses((status = 200, body = Vec<crate::identity::teams::Team>)))]
 async fn teams(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -42,6 +57,7 @@ async fn teams(
     Ok(no_store(identity.teams(&actor, cursor.after).await?))
 }
 
+#[utoipa::path(post, path = "/api/identity/teams", request_body = CreateTeam, responses((status = 201, body = Receipt)))]
 async fn create_team(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -54,6 +70,7 @@ async fn create_team(
     ))
 }
 
+#[utoipa::path(post, path = "/api/identity/teams/membership", request_body = MembershipChange, responses((status = 200, body = Receipt)))]
 async fn membership(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -63,6 +80,7 @@ async fn membership(
     Ok(no_store(identity.change_membership(&actor, &input).await?))
 }
 
+#[utoipa::path(post, path = "/api/identity/teams/delete", request_body = DeleteTeam, responses((status = 200, body = Receipt)))]
 async fn delete_team(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -72,6 +90,7 @@ async fn delete_team(
     Ok(no_store(identity.delete_team(&actor, &input).await?))
 }
 
+#[utoipa::path(post, path = "/api/identity/access/grants", request_body = GrantRequest, responses((status = 201, body = Receipt)))]
 async fn grant(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -84,6 +103,7 @@ async fn grant(
     ))
 }
 
+#[utoipa::path(post, path = "/api/identity/access/revoke", request_body = RevokeGrant, responses((status = 200, body = Receipt)))]
 async fn revoke(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -93,13 +113,15 @@ async fn revoke(
     Ok(no_store(identity.revoke_grant(&actor, &input).await?))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 struct Explain {
     scope: Scope,
     capability: Capability,
 }
 
+/// The caller's own access on a scope, with the grants that give it.
+#[utoipa::path(post, path = "/api/identity/access/explain", request_body = Explain, responses((status = 200, body = AccessExplanation)))]
 async fn explain(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -112,6 +134,7 @@ async fn explain(
     Ok(no_store(explanation))
 }
 
+#[utoipa::path(get, path = "/api/identity/commands/{kind}/{request_id}", params(("kind" = String, Path), ("request_id" = Uuid, Path)), responses((status = 200, body = Receipt)))]
 async fn receipt(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -129,6 +152,7 @@ struct EventCursor {
     after: i64,
 }
 
+#[utoipa::path(get, path = "/api/identity/access/events", params(("after" = Option<i64>, Query)), responses((status = 200, body = Vec<crate::identity::IdentityEvent>)))]
 async fn events(
     State(identity): State<Identity>,
     headers: HeaderMap,

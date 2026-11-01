@@ -190,6 +190,7 @@ async fn a_person_watches_takes_control_and_hands_back_with_each_change_recorded
         request_id: Uuid::new_v4(),
         name: "Desk".into(),
         instructions: String::new(),
+        avatar: None,
     };
     let agent = Agents::new(pool.clone())
         .create(&admin, &create)

@@ -37,7 +37,7 @@ lint: complexity
     uv run --project tooling/quality --locked ruff check --config tooling/quality/pyproject.toml tooling tests
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
 

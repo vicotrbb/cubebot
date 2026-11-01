@@ -34,28 +34,33 @@ try {
   // The room shows earlier routing and replies, then a new mention streams its reply in
   // without a reload.
   const rooms = page.getByRole('navigation', { name: 'Rooms' })
-  await rooms.getByRole('button', { name: /^Launch\b/ }).click()
+  await rooms.getByRole('link', { name: /^Launch\b/ }).click()
   await page.getByText(`ROUTE-${marker}`).first().waitFor()
   await shot(page, 'room')
   await page
-    .getByLabel('Message the room', { exact: true })
+    .getByRole('textbox', { name: 'Message the room' })
     .fill(`@Analyst reply with only the word BROWSER-${marker}`)
-  await page.getByRole('button', { name: 'Send', exact: true }).click()
+  // The send button carries the composer's label as its accessible name.
+  await page
+    .getByRole('button', { name: 'Message the room', exact: true })
+    .click()
   await page
     .locator('.agent-message', { hasText: `BROWSER-${marker}` })
-    .filter({ hasText: 'Analyst · replied' })
+    .filter({ hasText: /Analyst\s*· replied/ })
     .waitFor({ timeout: 300_000 })
   await shot(page, 'room-streamed')
-  await page.getByRole('button', { name: 'Edit members', exact: true }).click()
+  await page.getByRole('link', { name: 'Edit members', exact: true }).click()
   for (const name of ['Lead', 'Analyst', 'Scribe'])
     assert.ok(await page.getByRole('checkbox', { name }).isChecked(), name)
   await shot(page, 'room-members')
-  await page.getByRole('button', { name: 'Close members', exact: true }).click()
+  await page.getByRole('link', { name: 'Close members', exact: true }).click()
 
-  // Lead's conversation lists the work it handed off and the steering it received.
+  // Lead's conversation lists the work it handed off (in its thread panel) and the
+  // steering it received.
   const agents = page.getByRole('navigation', { name: 'Agents' })
-  await agents.getByRole('button', { name: /^Lead\b/ }).click()
-  await page.getByRole('list', { name: 'Delegated work' }).first().waitFor()
+  await agents.getByRole('link', { name: /^Lead\b/ }).click()
+  await page.getByRole('button', { name: 'Delegated work' }).first().click()
+  await page.getByRole('list', { name: 'Delegated work' }).waitFor()
   await page.getByText(`KIWI-${marker}`).first().waitFor()
   await page
     .getByText(/^Steering/)
@@ -65,19 +70,25 @@ try {
   await shot(page, 'lead-chat')
 
   // Analyst's conversation shows where each request came from.
-  await agents.getByRole('button', { name: /^Analyst\b/ }).click()
+  await agents.getByRole('link', { name: /^Analyst\b/ }).click()
   await page.getByText('Delegated by Lead').first().waitFor()
   await page.getByText('Room · Launch').first().waitFor()
   await page.getByText('Steering from the delegating work').first().waitFor()
   await shot(page, 'analyst-chat')
-  await page.getByRole('button', { name: 'Edit agent', exact: true }).click()
+  await page.getByRole('link', { name: 'Details', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Agent details' })
+    .getByRole('link', { name: 'About', exact: true })
+    .click()
   const lanes = page.getByLabel('Delegated tasks at once')
   assert.equal(await lanes.inputValue(), '2')
   await shot(page, 'analyst-edit')
 
-  // At phone width the room still fits without horizontal scrolling.
+  // At phone width the room still fits without horizontal scrolling. The sidebar is the
+  // Home page there, so open it from the console root.
   await page.setViewportSize({ width: 390, height: 844 })
-  await rooms.getByRole('button', { name: /^Launch\b/ }).click()
+  await page.goto(process.env.CUBEBOT_CONSOLE)
+  await rooms.getByRole('link', { name: /^Launch\b/ }).click()
   await page.getByText(`BROWSER-${marker}`).first().waitFor()
   const overflow = await page.evaluate(
     () =>

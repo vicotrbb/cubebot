@@ -2,7 +2,7 @@ use uuid::Uuid;
 
 use super::{Actor, Identity, IdentityError, Receipt, commands::Command, passwords};
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct AccountSummary {
     pub id: Uuid,
     pub login: String,
@@ -12,6 +12,22 @@ pub struct AccountSummary {
 }
 
 impl Identity {
+    /// The caller's own login.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
+    pub async fn account_login(&self, actor: &Actor) -> Result<String, IdentityError> {
+        sqlx::query_scalar!(
+            "
+            SELECT login
+            FROM human_accounts
+            WHERE id = $1 AND active
+            ",
+            actor.id,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(IdentityError::Unauthorized)
+    }
+
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn accounts(
         &self,

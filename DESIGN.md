@@ -1,6 +1,6 @@
 ---
 name: Cubebot
-description: Painted wooden blocks on a warm desk. A 3D orange cube with eyes is the agent; the product is explained by stacking more blocks.
+description: Painted wooden blocks on a warm desk. A 3D orange cube with eyes is the agent; the site explains the product by stacking more blocks, and the console is the same desk cleared for work.
 colors:
   desk: '#f6efe4'
   desk-deep: '#efe3d1'
@@ -18,6 +18,60 @@ colors:
   sage-deep: '#6f8f7a'
   paper: '#fffdf9'
   paper-deep: '#e8e1d4'
+  # Console (apps/web): the desk world in its Operate register. Light values
+  # from src/styles/tokens.css :root; -dark variants from its dark theme block.
+  console-ground: '#f6efe4'
+  console-sidebar: '#efe3d1'
+  console-surface: '#fffdf9'
+  console-raised: '#ffffff'
+  console-inset: '#f3ebdf'
+  console-ink-faint: '#776a5f'
+  console-line: 'rgb(43 36 32 / 0.12)'
+  console-line-strong: 'rgb(43 36 32 / 0.22)'
+  console-orange-wash: '#fde9dc'
+  console-danger: '#c23b22'
+  console-danger-wash: '#fbe4df'
+  console-success: '#6f8f7a'
+  console-sleep: '#9bb7a4'
+  console-code-bg: '#f3ebdf'
+  console-ground-dark: '#201a16'
+  console-sidebar-dark: '#120e0b'
+  console-surface-dark: '#26201b'
+  console-raised-dark: '#2b2420'
+  console-inset-dark: '#1f1a16'
+  console-ink-dark: '#f3ece2'
+  console-ink-soft-dark: '#cfc3b6'
+  console-ink-faint-dark: '#a3968b'
+  console-line-dark: 'rgb(255 240 225 / 0.1)'
+  console-line-strong-dark: 'rgb(255 240 225 / 0.2)'
+  console-orange-wash-dark: '#3a2416'
+  console-danger-dark: '#e86a52'
+  console-danger-wash-dark: '#3b1f19'
+  console-success-dark: '#8fb09c'
+  console-code-bg-dark: '#1a1512'
+  console-sleep-dark: '#7f9a88'
+  # Avatar paints beyond the site's four (each a top / face / deep / base block triad)
+  sage-base: '#587865'
+  paper-top: '#ffffff'
+  paper-base: '#d2c9b8'
+  wood-top: '#f2dfbf'
+  wood-base: '#b8955d'
+  sky: '#8db9d6'
+  sky-top: '#a9cde3'
+  sky-deep: '#5f90b0'
+  sky-base: '#4a7591'
+  rose: '#e5a0b4'
+  rose-top: '#f0bccb'
+  rose-deep: '#c2708a'
+  rose-base: '#a0586f'
+  lemon: '#f0cf5a'
+  lemon-top: '#f7df86'
+  lemon-deep: '#c9a62f'
+  lemon-base: '#a4861f'
+  plum: '#9a86b8'
+  plum-top: '#b6a6cd'
+  plum-deep: '#6f5d8f'
+  plum-base: '#574872'
 typography:
   display:
     fontFamily: 'Rubik, system-ui, sans-serif'
@@ -61,11 +115,59 @@ typography:
     fontWeight: 700
     lineHeight: 1.25
     letterSpacing: '-0.005em'
+  # Console: fixed rem scale (--t-xs … --t-3xl in tokens.css), no fluid type
+  console-h1:
+    fontFamily: 'Rubik, system-ui, sans-serif'
+    fontSize: '1.5rem'
+    fontWeight: 800
+    lineHeight: 1.15
+    letterSpacing: '-0.015em'
+  console-h2:
+    fontFamily: 'Rubik, system-ui, sans-serif'
+    fontSize: '1.25rem'
+    fontWeight: 800
+    lineHeight: 1.15
+    letterSpacing: '-0.015em'
+  console-h3:
+    fontFamily: 'Rubik, system-ui, sans-serif'
+    fontSize: '1.0625rem'
+    fontWeight: 800
+    lineHeight: 1.15
+    letterSpacing: '-0.015em'
+  console-body:
+    fontFamily: 'Rubik, system-ui, sans-serif'
+    fontSize: '0.9375rem'
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: 'normal'
+  console-label:
+    fontFamily: 'Rubik, system-ui, sans-serif'
+    fontSize: '0.8125rem'
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: 'normal'
+  console-micro:
+    fontFamily: 'Rubik, system-ui, sans-serif'
+    fontSize: '0.75rem'
+    fontWeight: 700
+    lineHeight: 1.4
+    letterSpacing: 'normal'
+  console-mono:
+    fontFamily: 'ui-monospace, SF Mono, Menlo, Consolas, monospace'
+    fontSize: '0.875em'
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: 'normal'
 rounded:
   focus: '6px'
   chip: '8px'
   block: '10px'
   face: '0'
+  console-sm: '6px'
+  console-md: '8px'
+  console-lg: '10px'
+  console-xl: '14px'
+  console-pill: '999px'
 spacing:
   chip-gap: '10px'
   item-gap: '30px'
@@ -75,6 +177,14 @@ spacing:
   section: 'clamp(56px, 9vw, 120px)'
   measure: '62ch'
   container: '1180px'
+  console-sidebar-w: '260px'
+  console-panel-w: '380px'
+  console-header-h: '56px'
+  console-bottombar-h: '60px'
+  console-page-pad: '20px'
+  console-control-gap: '10px'
+  console-form-gap: '16px'
+  console-measure: '78ch'
 components:
   button-block:
     backgroundColor: '{colors.orange}'
@@ -136,6 +246,166 @@ components:
     textColor: '{colors.ink}'
     typography: '{typography.label}'
     padding: '6px 2px'
+  # Console controls (src/styles/controls.css, shell.css, chat.css, desktop.css, agent.css)
+  console-button:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '7px 14px 9px'
+    height: '36px'
+  console-button-primary:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '7px 14px 9px'
+    height: '36px'
+  console-button-danger:
+    backgroundColor: '{colors.console-danger-wash}'
+    textColor: '{colors.console-danger}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '7px 14px 9px'
+    height: '36px'
+  console-button-ghost:
+    textColor: '{colors.ink}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '7px 14px 9px'
+    height: '36px'
+  console-button-sm:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-micro}'
+    rounded: '{rounded.console-md}'
+    padding: '4px 10px 6px'
+    height: '30px'
+  console-button-icon:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.console-md}'
+    padding: '0'
+    size: '36px'
+  console-input:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-body}'
+    rounded: '{rounded.console-md}'
+    padding: '8px 12px'
+    height: '38px'
+  console-chip:
+    backgroundColor: '{colors.console-inset}'
+    textColor: '{colors.ink-soft}'
+    typography: '{typography.console-micro}'
+    rounded: '{rounded.console-sm}'
+    padding: '2px 9px 3px'
+  console-chip-paint:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-micro}'
+    rounded: '{rounded.console-sm}'
+    padding: '2px 9px 3px'
+  console-chip-sage:
+    backgroundColor: '{colors.sage}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-micro}'
+    rounded: '{rounded.console-sm}'
+    padding: '2px 9px 3px'
+  console-chip-wood:
+    backgroundColor: '{colors.wood}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-micro}'
+    rounded: '{rounded.console-sm}'
+    padding: '2px 9px 3px'
+  console-chip-danger:
+    backgroundColor: '{colors.console-danger-wash}'
+    textColor: '{colors.console-danger}'
+    typography: '{typography.console-micro}'
+    rounded: '{rounded.console-sm}'
+    padding: '2px 9px 3px'
+  console-sidebar-row:
+    textColor: '{colors.ink}'
+    typography: '{typography.console-body}'
+    rounded: '{rounded.console-md}'
+    padding: '4px 8px'
+    height: '34px'
+  console-sidebar-row-current:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-body}'
+    rounded: '{rounded.console-md}'
+    padding: '4px 8px'
+    height: '34px'
+  console-badge:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-micro}'
+    rounded: '10px'
+    padding: '0 6px'
+    height: '20px'
+  console-tabs:
+    backgroundColor: '{colors.console-inset}'
+    rounded: '{rounded.console-md}'
+    padding: '3px'
+  console-tab:
+    textColor: '{colors.ink-soft}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-sm}'
+    padding: '5px 12px'
+  console-tab-selected:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-sm}'
+    padding: '5px 12px'
+  console-panel:
+    backgroundColor: '{colors.console-ground}'
+    padding: '16px'
+    width: '{spacing.console-panel-w}'
+  console-work-card:
+    backgroundColor: '{colors.console-inset}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '6px 10px'
+  console-thread-line:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '4px 10px 4px 6px'
+  console-composer:
+    backgroundColor: '{colors.console-raised}'
+    textColor: '{colors.ink}'
+    typography: '{typography.console-body}'
+    rounded: '{rounded.console-lg}'
+    padding: '12px 14px 6px'
+  console-pip:
+    backgroundColor: '{colors.console-raised}'
+    rounded: '{rounded.console-lg}'
+    width: '320px'
+  console-dialog:
+    backgroundColor: '{colors.console-surface}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.console-xl}'
+    padding: '20px 22px 22px'
+    width: 'min(520px, calc(100vw - 32px))'
+  console-menu:
+    backgroundColor: '{colors.console-raised}'
+    rounded: '{rounded.console-lg}'
+    padding: '6px'
+    width: '200px'
+  console-bottombar:
+    backgroundColor: '{colors.console-sidebar}'
+    textColor: '{colors.console-ink-faint}'
+    typography: '{typography.console-micro}'
+    height: '{spacing.console-bottombar-h}'
+  console-notice:
+    backgroundColor: '{colors.console-inset}'
+    typography: '{typography.console-label}'
+    rounded: '{rounded.console-md}'
+    padding: '10px 12px'
 ---
 
 # Design System: Cubebot
@@ -328,3 +598,227 @@ Selection is orange with paper text; focus is a 3px orange outline offset 3px wi
 - **Don't** use zero-blur offset shadows or black/cool shadows; shadows are warm ink, blurred.
 - **Don't** add a second typeface, light display weights, or uppercase tracking.
 - **Don't** give eyes to a block that is not an agent, or open eyes to one that is sleeping.
+
+<!-- console:start — the console (apps/web) register of the same world. Tokens prefixed `console-` in the frontmatter are normative here; everything above this line is the landing site and stays as written. -->
+
+## Console
+
+The same desk world in its Operate register (`apps/web`, the Slack-grammar console: sidebar, one conversation, contextual right panel, threads for delegated work). Nothing here replaces the site rules; where the console narrows them (no scenery, fixed type scale, 3px edges) it says so.
+
+### Overview
+
+**Creative North Star: "The Desk, Cleared for Work"**
+
+The console is the desk with the shelves, mugs and plants put away. What remains is the paper the conversation is written on, a deeper warm sidebar to the left, and the painted blocks: one cube with eyes per agent, carrying its mood. Orange is still the one paint and now does the console's pointing: the selected row, the primary action, the unread mark, the focus ring. Depth is tonal (sidebar, ground, surface, raised) with the same warm blurred shadow for the few things that float. Rubik runs at a fixed seven-step rem scale with no fluid sizes; headings keep the heavy stamp (800, −0.015em) but stop at 1.5rem.
+
+A dark theme, "desk at night", replaces the paper tones with warm near-black inks and keeps orange, the paints and the cube unchanged; sage dims one step for sleeping.
+
+**Key Characteristics:**
+
+- Four warm planes, flat: sidebar (deepest) → ground → surface (the conversation) → raised (controls, fields, cards); the shadow colour is warm ink in light and black at night
+- One accent: orange marks selection, primary actions, unread badges and focus; nothing else is saturated except block paints and status dots
+- Block buttons keep their painted edge, shrunk to 3px and drawn as an inset; the sidebar's selected row is flat orange with no edge
+- Fixed rem type scale 0.75 → 1.5rem; headings 800 / −0.015em / 1.15, never above 1.5rem
+- The cube is the only illustration; its mood (idle, working, dreaming, sleeping, desktop, waiting, retired) comes from activity and is never stored
+- Lucide icons at one stroke, 14–22px, in Ink Faint
+
+### Colors
+
+The site palette plus a plane system and a small set of status tints. Light values are the `console-*` tokens; dark values are the `console-*-dark` tokens.
+
+#### Primary
+
+- **Painted Orange** (`orange`): selected sidebar row and palette hit (flat fill, `on-paint` ink text), primary button face with an `orange-deep` edge, unread badge, the `::selection` background, the 3px focus outline, the working status dot and its pulse, the composer and field focus ring (`rgb(242 106 27 / 0.25)`, composer 0.2), the focused composer and field border, the thread line's hover border, the checked avatar-builder option border, the desktop-control outline and the agent's desktop pointer tag. **Orange Deep** is the phone bottom bar's current item, the running-state text, spinner and warning marks and the login-handoff icon (`--warn` is declared as the same value and unused). **Orange Wash** (`console-orange-wash`): selected table row, the paint notice, the login-handoff banner (with a `rgb(242 106 27 / 0.35)` border) and the sidebar `row__flag` (text Orange Base).
+
+#### Secondary
+
+- **Sage** (`sage`, `console-sleep`): the sleeping status dot and the sleeping cube paint. **Sage Deep** doubles as `console-success` (idle dot, "ok" work marks, your own desktop pointer, thread-line faces). In the dark theme `console-sleep-dark` and `console-success-dark` lift one step so they stay visible on ink.
+
+#### Tertiary
+
+- **Danger** (`console-danger`, a warm brick red): `role="alert"` text, failed and waiting state text, the danger button and chip (text on `console-danger-wash`), the danger notice, danger menu items and the "danger" work mark. Dark variants `console-danger-dark` / `console-danger-wash-dark`.
+- **Avatar paints**: eight block triads an agent may be painted in: `orange`, `sage`, `paper`, `wood` (from the site, with the `*-top` / `*-base` faces the site hard-coded now tokenised) plus `sky`, `rose`, `lemon`, `plum`. Each has `-top` (lit top face), `-deep` (sides) and `-base` (underside). Paints are the agent's identity, not UI color: the only paint that leaks into chrome is `plum` (dreaming dot) and `plum-deep` (another person's desktop pointer). A retired agent is repainted `wood` with no eyes.
+
+#### Neutral
+
+- **Ground** (`console-ground`, the site's Desk): the body, the agent detail panel and the platform editor card.
+- **Sidebar** (`console-sidebar`, the site's Desk Deep): the sidebar and the phone bottom bar.
+- **Surface** (`console-surface`, the site's Paper): the conversation column and dialogs.
+- **Raised** (`console-raised`): buttons, fields, the composer, menus, the floating preview, the selected tab, the thread line and root, work-card icon wells.
+- **Inset** (`console-inset`): chips, the tabs tray, notices, work cards, the desktop stage, `kbd`, the avatar preview and `console-code-bg` for `pre`.
+- **Ink** (`ink`), **Ink Soft** (`ink-soft`), **Ink Faint** (`console-ink-faint`): text, secondary text and captions, icons / table heads / placeholders / bottom-bar labels.
+- **Line** (`console-line`, warm ink at 0.12) for every 1px divider and border; **Line Strong** (0.22) for field and composer borders and the steering rule. Hover washes are the warm shadow color at 0.03–0.07.
+
+#### Named Rules
+
+**The Sidebar Is the Deepest Plane Rule.** In both themes the planes order sidebar → ground → surface → raised, darkest to lightest, and the conversation sits on the lightest large plane. The dark theme is this order in warm near-black: `#120e0b` → `#201a16` → `#26201b` → `#2b2420`. No plane may be lighter than the one that floats on it.
+
+**The One Accent Rule.** Orange is the only accent: selection, primary action, unread, focus. Status dots and chips use the world's paints (sage, wood, plum, danger) and are never used to point.
+
+**The Desk at Night Rule.** Dark mode (`prefers-color-scheme: dark` unless `data-theme="light"`, or `data-theme="dark"`) swaps only the planes, inks, lines, washes and status tints. Orange, the paints and the cube's lighting are unchanged; the shadow base becomes black (`--shadow: 0 0 0`) and button edges become `rgb(0 0 0 / 0.35)`.
+
+### Typography
+
+**Display / Body Font:** Rubik (same self-hosted variable file as the site)
+**Mono Font:** `ui-monospace, 'SF Mono', Menlo, Consolas, monospace` at 0.875em, only for commands, `pre` and `kbd`
+
+**Character:** The same stamped face at desk-tool sizes. Weight carries hierarchy: 800 for headings, names and wordmark; 700 for chips, badges, section heads and work-card titles; 600 for buttons, labels, tabs and sidebar section heads; 400 for reading.
+
+#### Hierarchy
+
+Six fixed steps in use, `--t-xs` 0.75rem, `--t-sm` 0.8125rem, `--t-md` 0.9375rem, `--t-lg` 1.0625rem, `--t-xl` 1.25rem, `--t-2xl` 1.5rem (a seventh, `--t-3xl` 2rem, is declared and unused). No `clamp()`, no viewport units.
+
+- **H1** (`console-h1`, 800, 1.5rem, 1.15, −0.015em): page and agent heads use 1.25rem (`t-xl`) in practice; 1.5rem is the base h1.
+- **H2** (`console-h2`, 800, 1.25rem): section heads; 1.0625rem inside the panel and platform editor.
+- **H3** (`console-h3`, 800, 1.0625rem): form groups; 0.9375rem in Ink Soft inside the panel.
+- **Body** (`console-body`, 400, 0.9375rem, 1.5): messages (max 78ch), rows, fields, checks.
+- **Label** (`console-label`, 600, 0.8125rem): buttons, field labels (Ink Soft), tabs, tables, work summaries, menu items (500), thread line, notices, panel leads.
+- **Micro** (`console-micro`, 700, 0.75rem): chips, badges, bottom-bar labels (600), hints (400, Ink Faint), small buttons (600), the desktop pointer tag.
+- **Author** (800, inherits body size, −0.01em): message author names; sidebar wordmark is 800 at 1.0625rem / −0.015em.
+
+#### Named Rules
+
+**The Fixed Scale Rule.** Console type never scales with the viewport. Pick one of the seven steps.
+
+**The Bold Name Rule.** An agent is found by its face and its bold name: author names and the wordmark are 800; an unread row goes to 700. Nothing else in a row is bold.
+
+### Layout
+
+A full-height two-column grid: 260px sidebar (`console-sidebar-w`) and a flexible main column; the main column is a flex column so the transcript scrolls and the composer stays at the bottom. Header rows (sidebar head, page head, agent head) are 56px with a 1px Line below. The agent screen splits conversation | 380px panel (`console-panel-w`), the panel narrowing to 340px under 1100px. Page bodies pad 20px (16px on phones), narrow pages cap at 72ch, forms at 62ch, messages and work cards at 78ch. The platform screens are `minmax(0,1fr) 360px` with a sticky editor card, collapsing to one column under 1000px.
+
+Rhythm: 10px between actions and chips, 12px between form columns, 16px between form fields and panel sections, 6px inside a message body, 4px between exchanges, 34px sidebar rows, 2px between segmented tabs.
+
+Phones (≤ 820px): the sidebar becomes its own page, a fixed 60px bottom bar (`console-bottombar-h`, plus the safe-area inset) with four items takes over navigation, the panel goes full width and hides the conversation behind it, the agent head's word hides, transcript and composer pad 12px. The avatar builder stacks under 420px.
+
+### Elevation & Depth
+
+Tonal first, shadow second. Four flat planes do most of the work (see the Sidebar Is the Deepest Plane Rule); borders are 1px Line. Three warm shadows remain, all blurred, and the block edge is now an inset. In the dark theme the shadow base is pure black at the same alphas.
+
+#### Shadow Vocabulary
+
+- **Block edge** (`box-shadow: inset 0 -3px 0 var(--edge), 0 1px 0 rgb(43 36 32 / 0.08)`): resting button; the edge is `paper-deep` (default), `orange-deep` (primary), `danger` (danger) or transparent (ghost). Chips carry `inset 0 -2px 0 *-deep`; the badge too. Pressed: `inset 0 -1px 0`.
+- **Button hover** (`0 6px 14px -6px rgb(43 36 32 / 0.35)`): with a 1px lift.
+- **Lift** (`--lift`, `--lift-hover`): the site's button shadows are declared in tokens.css but no console rule uses them; the console button uses the edge and hover shadows above.
+- **Float** (`--float: 0 18px 44px -14px rgb(43 36 32 / 0.45)`): anything that leaves the desk: dialogs, menus, the floating preview and its pills, the desktop screen.
+- **Tab select** (`0 1px 2px rgb(43 36 32 / 0.15)`): the selected segmented tab's raised face.
+- **Focus ring** (`0 0 0 3px rgb(242 106 27 / 0.25)`; composer 0.2): fields and the composer on focus, with the border turning orange. Everything else uses the global `3px solid orange` outline, offset 2px, radius 6px.
+- **Dialog backdrop** (`rgb(43 36 32 / 0.4)` with `blur(2px)`).
+
+#### Named Rules
+
+**The Inset Edge Rule.** The block's bottom edge is drawn as an inset shadow (3px rest, 1px pressed) so a control's box never grows. Buttons lift 1px on hover and sink 1px when pressed, over 160ms on the settle ease.
+
+**The Flat Selection Rule.** The selected sidebar row and the selected palette hit are flat orange fills with no edge and no shadow: selection is paint on the desk, not a block to press.
+
+### Shapes
+
+Radii step 6 / 8 / 10 / 14px (`console-sm` … `console-xl`): 6px for chips, tabs, section heads, menu items, the account initial and the focus ring; 8px for buttons, fields, rows, messages, work cards, thread lines, tables' `pre`, the desktop screen and notices; 10px for the composer, menus, the floating preview, the login banner, the platform editor and avatar preview; 14px for dialogs. Two rounder exceptions: the unread badge (10px on a 20px height) and the preview pills (`999px`), the console's only pill; status dots and the pointer tag's dot are 8px circles. Borders are 1px Line everywhere except fields (Line Strong) and the login banner (orange at 0.35). The cube keeps square faces.
+
+### Components
+
+#### Buttons
+
+Block buttons, shrunk to tool size.
+
+- **Shape:** 8px radius, 36px tall, padding 7px 14px 9px, 600 at 0.8125rem, 8px gap to an 18px lucide icon
+- **Default (`console-button`):** Raised face, Paper Deep inset edge
+- **Primary (`console-button-primary`):** Orange face, Orange Deep edge, `on-paint` ink text; one per surface (Send, Save, Create)
+- **Danger (`console-button-danger`):** Danger Wash face, Danger edge and text (Cancel while a turn runs, Retire)
+- **Ghost (`console-button-ghost`):** no face, no edge; hover is a 6% warm wash with no lift
+- **Small (`console-button-sm`):** 30px, 4px 10px 6px, 0.75rem, 16px icon. **Icon (`console-button-icon`):** 36px / 30px square, no padding.
+- **States:** hover lifts 1px with the button-hover shadow; active sinks 1px and the edge drops to 1px; disabled is 55% opacity with no lift.
+- **Link button (`.link-btn`):** plain text with the site's 2px orange underline (offset 0.18em); "Steer this work", "Thread #n".
+
+#### Chips
+
+- **Style (`console-chip`):** 6px radius, 2px 9px 3px, 700 at 0.75rem, Inset face, Ink Soft text, 12px icon
+- **Tones:** `console-chip-paint` (orange face, 2px Orange Deep edge), `console-chip-sage`, `console-chip-wood` (same edge in their deep tone, ink text fixed to `#2b2420` so it holds on dark), `console-chip-danger` (wash face, danger text, no edge)
+- **Status dot:** 8px circle: Ink Faint at rest, orange pulsing (1.6s, ring to 5px) while working, plum dreaming, Success idle, Sleep sleeping, Wood Deep retired
+
+#### Inputs / Fields
+
+- **Style (`console-input`):** Raised face, 1px Line Strong border, 8px radius, 38px min height, 8px 12px, body size at 400; textareas 96px min and vertically resizable; labels 600 Ink Soft with an optional 400 Ink Faint hint on the right; checkboxes 18px with orange `accent-color`
+- **Focus:** border orange plus the focus ring
+- **Notices:** 8px radius, 10px 12px, Inset; danger (wash + danger text) and paint (Orange Wash) variants
+
+#### Tables and lists
+
+- **Table:** 0.8125rem; 600 Ink Faint heads, 8px 12px; cells 9px 12px, 1px Line under every row; row hover a 3% wash; selected row Orange Wash; numeric columns right-aligned tabular
+- **List:** 10px rows divided by Line, 600 titles; **key/value** grids at 0.8125rem with 600 Ink Faint terms
+
+#### Tabs
+
+A segmented control (`console-tabs`): Inset tray, 8px radius, 3px padding, 2px gaps; each tab 5px 12px, 6px radius, 600 Ink Soft; the current tab is a Raised face with ink text and the tab-select shadow. Inside the panel head the tray goes transparent and tabs tighten to 5px 8px.
+
+#### Panel
+
+The contextual right panel (`console-panel`): 380px, Ground plane, 1px Line on its left, a head with the tabs and a close control, a 16px body in 16px-gapped sections with 1.0625rem h2 and Ink Soft 0.9375rem h3. On phones it is the whole screen. Forms inside it drop the 62ch cap.
+
+#### Work cards and the thread line
+
+- **Work card (`console-work-card`):** a `details` block in Inset with a 1px Line border and 8px radius, max 78ch. The summary row (6px 10px, 0.8125rem) holds a 22px Raised icon well (6px radius, 14px icon), a 700 capitalised title, the command in mono Ink Soft that ellipsises, and a 16px mark: Success ok, Orange Deep warn or spinning (1.2s), Danger fail. The body (0 10px 10px) stacks `pre` output on Code Bg with a Line border.
+- **Thread line (`console-thread-line`):** "3 tasks · 2 done" as a Raised 8px pill-shaped button with a Line border, 600 at 0.8125rem, with 20px Sage Deep initials overlapping by 6px and ringed 2px in Raised; hover turns the border orange.
+- **Thread root:** Raised, Line border, 8px, 10px 12px; children 10px rows divided by Line. **Steering** replies hang off a 1px Line Strong left rule, 10px in.
+
+#### Messages
+
+Grouped as exchanges (4px gaps, 6px vertical padding): a 36px-column grid with the cube (36px) or a 32px Wood Deep initial square for people, 10px to a body that stacks head, text (pre-wrap, 78ch) and an actions row; hover washes the message 3.5%. Head: 800 author, Ink Soft time, state text in Orange Deep while running and Danger when failed or waiting. Relayed room messages lead with a `#` well and a Room chip.
+
+#### Composer
+
+`console-composer`: a Raised 10px box with a Line Strong border; a borderless textarea (12px 14px 6px, 44–240px tall) over a bar (4px 8px 8px 10px) holding the queue note (ellipsised, wraps on phones) and the primary Send; while a turn runs the danger Cancel appears in the message actions. Focus-within turns the border orange with the 0.2 ring. Read-only composers lose the box and gain a top Line.
+
+#### Navigation
+
+- **Sidebar:** `console-sidebar` plane with a Line on its right; 56px head with the 800 wordmark, search and add icon buttons; a scrolling body padded 8px with collapsible sections (700 Ink Soft 0.8125rem heads with a 14px chevron that turns −90° when collapsed); rows 34px / 8px radius at body size with an 18px Ink Faint icon or the agent's cube, a 6% wash on hover, the flat orange current fill (icons, badges and flags go `on-paint` / Paper), 700 label when unread, an orange unread badge (20px, 800 at 0.75rem, 2px Orange Deep edge) or a Line-tinted count, and an Orange Wash flag for room notes; a Line-topped account row with a 26px Ink initial square and a details-based menu.
+- **Menus:** Raised 10px lists with a Line border and the Float shadow, 6px padding, 8px 10px items at 500 / 0.8125rem with 16px Ink Faint icons and a 7% hover wash; danger items in Danger.
+- **Command palette:** a 560px dialog 12vh from the top, a 1.0625rem borderless input over a 6px-padded hit list; the selected hit is flat orange.
+- **Phone bottom bar (`console-bottombar`):** fixed, Sidebar plane, Line on top, four equal items (22px icon over a 600 / 0.75rem label) in Ink Faint; the current item is Orange Deep, not a fill; badges ride 6px right of centre.
+
+#### Dialogs
+
+`console-dialog`: Surface plane, 14px radius, Float shadow, `min(520px, 100vw − 32px)`, a 20px 22px 22px body in 16px-gapped sections with a space-between head; backdrop is warm ink at 0.4 blurred 2px.
+
+#### Cube (console moods)
+
+The site's cube (same six-face build, lighting gradients, rest pose `rotateX(-18deg) rotateY(28deg)`, perspective 9×), defaulting to 36px, painted in one of the eight paints with one of four eye shapes (round, wide, sleepy, dot) and an optional accessory (cap, glasses, bow, antenna) drawn in ink and paper so it reads on any paint. Its mood is derived from the agent's activity (`moodOf`) and never stored:
+
+- **Idle:** open eyes, blush, blink every 5.4s, glance left then right every 9s (offset per block by `--delay`)
+- **Working:** body nods 3° over 2.4s, eyes look down 6% of the block and blink faster (3.2s), no glance
+- **Dreaming:** body drifts (−4° pitch, +6° yaw, 6% rise over 6s), eyes half-lidded with a paint-coloured lid, no blink
+- **Sleeping:** closed smile-stroke eyes, no blush, three Ink Soft z's (30% of the block, 900) drifting up-right over 3.9s, 1.3s apart
+- **Desktop:** a cool screen glow (`rgb(220 240 255 / 0.45)` radial from 50% 70%) breathes on the front face over 2.2s; eyes look down-left
+- **Waiting (login handoff):** eyes 12% larger, looking up, no blink or glance
+- **Retired:** repainted Wood, no eyes, no accessory
+
+A `follow` block (the agent head) turns toward the pointer (±16° yaw, ±10° pitch, eased 12% per frame) and its eyes glance up to 7px × 5px. Under `prefers-reduced-motion` the body, eyes, z's and glow stop (`animation: none`), the first z stays visible, the pointer follow is never attached, and base.css collapses every transition and animation to 0.001ms.
+
+#### Floating preview
+
+`console-pip`: a fixed 320px Raised window (10px radius, Line border, Float shadow) with a grab-handle head (6px 6px 6px 10px, 700 name at 0.8125rem, controls) over a 16:10 black screen that zooms in on click. When collapsed it becomes `pip-pill`s stacked top-left: `999px` Raised pills with the same border and shadow. The full desktop page uses an Inset stage with a 16:10 black `desktop-screen` (8px radius, Float shadow); while you are controlling it the canvas carries an inset 3px orange outline and a crosshair. Pointer tags are 0.75rem / 700 labels with an 8px dot: orange for the agent, Sage Deep for you, Plum Deep for another person. The login handoff banner is an Orange Wash 10px box with an Orange Deep 20px icon.
+
+#### Avatar builder
+
+A 120px Inset preview (10px) beside rows of 32px Raised options (8px radius, 2px transparent border, `inset 0 -2px 0` 12% warm edge); the checked option gets an orange border; paint swatches are 18px blocks with a 3px darker inset edge.
+
+### Do's and Don'ts
+
+#### Do:
+
+- **Do** place the conversation on Surface, management on Ground, chrome on Sidebar, and controls on Raised; depth is the plane, not a shadow.
+- **Do** keep orange to selection, the one primary action per surface, unread marks and focus; use the sidebar's flat orange fill for "you are here" and the inset-edge block for "press me".
+- **Do** set every size from the seven-step rem scale and the 6 / 8 / 10 / 14px radii.
+- **Do** show an agent as its cube and bold name wherever it appears (sidebar, head, messages, thread faces) and let the cube's mood come from activity.
+- **Do** use Float for anything that leaves the desk (menus, dialogs, the preview) and warm blurred shadows only; in the dark theme the base is black at the same alphas.
+- **Do** honour reduced motion: static cube, first z shown, no pointer follow, no pulses.
+
+#### Don't:
+
+- **Don't** bring the site's scenery into the console: no shelves, mugs, plants, slabs or painted-block scenes; the cube is the only illustration.
+- **Don't** put a kicker or eyebrow above a heading; the section heads in the sidebar and panel are headings, not eyebrows.
+- **Don't** add a second accent: status dots and chips are the world's paints and never point; a non-orange filled control is a mistake.
+- **Don't** use fluid type, a heading above 1.5rem, uppercase tracking or a second typeface; mono is for commands and output only.
+- **Don't** give the selected sidebar row an edge or a shadow, or give a block button a zero-blur drop.
+- **Don't** make any plane lighter than the plane that floats on it; the sidebar is always the deepest.
+
+<!-- console:end -->

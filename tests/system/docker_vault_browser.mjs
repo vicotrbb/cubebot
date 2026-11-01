@@ -1,7 +1,7 @@
 // The vault (ADR 0086) in real Chromium against the built console behind Caddy: during a
 // login handoff the administrator takes control from the chat's banner, saves the login
 // to Keeper's vault with Save and fill, sees the fill picker and hands back, then finds
-// the items on the Vault page with no secret anywhere on it.
+// the items on the Vault tab with no secret anywhere on it.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -29,11 +29,15 @@ try {
     .getByLabel('Password', { exact: true })
     .fill(process.env.CUBEBOT_CONSOLE_PASSWORD)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.getByRole('button', { name: /^Keeper\b/ }).click()
+  await page
+    .getByRole('navigation', { name: 'Agents' })
+    .getByRole('link', { name: /^Keeper\b/ })
+    .click()
   const banner = page.getByRole('region', { name: 'Login request' })
   await banner
     .getByText(`Keeper asks you to log in on ${site}.`)
     .waitFor({ timeout: 15000 })
+  // Take control moves to the Desktop route, where the banner shows again.
   await banner
     .getByRole('button', { name: 'Take control', exact: true })
     .click()
@@ -49,7 +53,8 @@ try {
     site,
   )
   await banner.getByLabel('Username', { exact: true }).fill('ada')
-  await banner.getByLabel('Password', { exact: true }).fill(secret)
+  // The label carries a hint ("Never shown again"), so no exact match.
+  await banner.getByLabel('Password').fill(secret)
   await page.screenshot({ path: join(evidence, 'vault-save-login.png') })
   await banner
     .getByRole('button', { name: 'Save and fill', exact: true })
@@ -71,10 +76,14 @@ try {
   assert.equal(await picker.count(), 0)
 
   await page
-    .getByRole('button', { name: 'Back to conversation', exact: true })
+    .getByRole('link', { name: 'Back to conversation', exact: true })
     .click()
-  await page.getByRole('button', { name: 'Vault', exact: true }).click()
-  await page.getByRole('heading', { name: 'Keeper: vault' }).waitFor()
+  await page.getByRole('link', { name: 'Details', exact: true }).click()
+  await page
+    .getByRole('navigation', { name: 'Agent details' })
+    .getByRole('link', { name: 'Vault', exact: true })
+    .click()
+  await page.getByRole('heading', { name: 'Vault', exact: true }).waitFor()
   for (const name of ['Shared', 'Keeper only', 'Own', 'Generated', site])
     await page.getByText(name, { exact: true }).first().waitFor()
   await page.getByRole('heading', { name: 'Installation items' }).waitFor()

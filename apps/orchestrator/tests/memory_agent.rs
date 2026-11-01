@@ -198,6 +198,7 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
                 request_id: Uuid::new_v4(),
                 name: "Other".into(),
                 instructions: String::new(),
+                avatar: None,
             },
         )
         .await

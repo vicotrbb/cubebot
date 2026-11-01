@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO agents (name, instructions, created_by, avatar)\n            VALUES ($1, $2, $3, COALESCE($4, '{\"paint\":\"orange\",\"eyes\":\"round\",\"accessory\":\"none\"}'::jsonb))\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "38f63b082832e885d525ab13019dea77725875aa2061db1117d4733eac62478f"
+}

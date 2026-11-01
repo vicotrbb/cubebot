@@ -1,7 +1,9 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
 mod access;
+mod activity;
 mod collaboration;
 mod coordinator;
+mod cursors;
 mod events;
 mod handoffs;
 mod retry;
@@ -13,12 +15,14 @@ use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
 };
+pub use activity::ActivityItem;
 pub use collaboration::Steering;
 pub use coordinator::{coordinate, route};
+pub use cursors::ReadCursor;
 pub use events::{Event, Page};
 pub use handoffs::{DeclineLogin, LoginHandoff};
 pub use retry::RetryMessage;
-pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage};
+pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage, RoomSequence};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;

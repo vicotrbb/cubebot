@@ -15,6 +15,7 @@ mod agents;
 mod authentication_limits;
 mod chat;
 mod collaboration;
+mod console;
 mod controller_config;
 mod credential_encryption;
 mod desktop_http;

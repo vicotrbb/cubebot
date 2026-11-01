@@ -6,6 +6,7 @@ use crate::{
         runtime::RuntimeIdentity,
         sandbox::{Desktop, Docker, DockerConfig, drive},
     },
+    api::Installation,
     operations::ownership::{Owner, PodIdentity},
 };
 use sqlx::PgPool;
@@ -95,13 +96,31 @@ impl Controller {
     /// The console's routes beside the runtime's, with desktop sessions reaching this
     /// controller's sandboxes, if it has any.
     pub fn routes(&self, console: axum::Router) -> axum::Router {
-        let router = console.merge(self.runtime_router());
+        let router = console
+            .merge(self.runtime_router())
+            .layer(axum::Extension(self.installation()));
         let desktop = match &self.mode {
             Mode::Kubernetes(lifecycle) => Desktop::new(lifecycle.sandbox.clone()),
             Mode::Docker(lifecycle) => Desktop::new(lifecycle.sandbox.clone()),
             Mode::DatabaseOnly => return router,
         };
         router.layer(axum::Extension(desktop))
+    }
+    /// What the console may know about this controller (docs/design/console.md).
+    pub fn installation(&self) -> Installation {
+        match &self.mode {
+            Mode::Kubernetes(lifecycle) => Installation {
+                controller: "kubernetes",
+                terminal_enabled: lifecycle.sandbox.layout.terminal(),
+                computer_use_enabled: lifecycle.sandbox.layout.computer_use(),
+            },
+            Mode::Docker(lifecycle) => Installation {
+                controller: "docker",
+                terminal_enabled: lifecycle.sandbox.terminal_enabled(),
+                computer_use_enabled: lifecycle.sandbox.computer_use_enabled(),
+            },
+            Mode::DatabaseOnly => Installation::default(),
+        }
     }
     /// Reconciles agents, with routine schedules running beside it, and room coordination while
     /// the installation's provider connection is configured.

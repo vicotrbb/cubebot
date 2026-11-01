@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO turn_events (turn_id, sequence, payload)\n        VALUES ($1, 1, '{\"kind\":\"tool_call\",\"id\":\"c1\",\"name\":\"browser_click\",\"input\":{}}')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dfb0a24fb8271dcb77442eff7537bb7fa90b0d4ba0a67040966a0cb6c56ebade"
+}

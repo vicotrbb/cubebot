@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+  '/api/activity': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** What needs the caller, newest first, at most 100 items. */
+    get: operations['activity']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents': {
     parameters: {
       query?: never
@@ -172,6 +189,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The summary everyone with a capability on the agent sees; `instructions` needs `agent_manage`. */
+    get: operations['read']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/definition': {
     parameters: {
       query?: never
@@ -182,6 +216,22 @@ export interface paths {
     get?: never
     put?: never
     post: operations['update']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/lifecycle': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['lifecycle']
     delete?: never
     options?: never
     head?: never
@@ -222,6 +272,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/revisions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['revisions']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/status': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['status']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/vault': {
     parameters: {
       query?: never
@@ -254,6 +336,24 @@ export interface paths {
      */
     post: operations['fill_vault_item']
     delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/wallpaper': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The agent's wallpaper for everyone who may see the agent; 404 while it uses the default. */
+    get: operations['get_wallpaper']
+    /** The raw JPEG or PNG; the image type comes from its bytes, never a header. */
+    put: operations['set_wallpaper']
+    post?: never
+    delete: operations['reset_wallpaper']
     options?: never
     head?: never
     patch?: never
@@ -345,6 +445,48 @@ export interface paths {
      *     the same `request_id` returns the same instruction.
      */
     post: operations['steer']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/conversations/{conversation}/read': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
+     *     with the cursor as stored.
+     */
+    put: operations['read']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/events': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary
+     *     whenever its activity, desktop, pending login or last turn changed, and every visible
+     *     agent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest
+     *     message changed. Polled once a second.
+     */
+    get: operations['events']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -458,6 +600,187 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/health/live': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Process liveness only. */
+    get: operations['liveness']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/health/ready': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The configured database answers; 503 otherwise. */
+    get: operations['readiness']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/access/events': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['events']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/access/explain': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** The caller's own access on a scope, with the grants that give it. */
+    post: operations['explain']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/access/grants': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['grant']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/access/revoke': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['revoke']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/accounts': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['accounts']
+    put?: never
+    post: operations['create_account']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/commands/{kind}/{request_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['receipt']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/invitations': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list']
+    put?: never
+    /** The token is in the first response only. */
+    post: operations['invite']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/invitations/accept': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Creates the invited account; responds with its id. */
+    post: operations['accept']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/invitations/revoke': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['revoke']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/login': {
     parameters: {
       query?: never
@@ -498,6 +821,169 @@ export interface paths {
       cookie?: never
     }
     get: operations['me']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/preferences': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['preferences']
+    /** Replaces the whole document; the last write wins. */
+    put: operations['set_preferences']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/oidc/bindings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['oidc_bindings']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/oidc/link': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Starts linking the signed-in account to the identity provider. */
+    post: operations['link']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/oidc/revoke': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['revoke_oidc']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/oidc/start': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Starts a sign-in; the browser follows `authorization_url`. */
+    post: operations['start']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/suspend': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['suspend']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/teams': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['teams']
+    put?: never
+    post: operations['create_team']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/teams/delete': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['delete_team']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/teams/membership': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['membership']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/installation': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['installation']
     put?: never
     post?: never
     delete?: never
@@ -594,6 +1080,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/rooms/{room}/read': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
+     *     with the cursor as stored.
+     */
+    put: operations['read']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/skills': {
     parameters: {
       query?: never
@@ -682,18 +1188,75 @@ export interface paths {
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    Accept: {
+      password: string
+      /** Format: uuid */
+      request_id: string
+      token: string
+    }
+    AccessExplanation: {
+      administrator: boolean
+      allowed: boolean
+      grants: components['schemas']['AccessSource'][]
+    }
+    AccessSource: {
+      id: components['schemas']['GrantId']
+      team_id?: null | components['schemas']['TeamId']
+    }
+    /** @enum {string} */
+    Accessory: 'none' | 'cap' | 'glasses' | 'bow' | 'antenna'
     Account: {
       administrator: boolean
       /** Format: uuid */
       id: string
+      login: string
+      /** @description A display name; accounts have none yet. */
+      name?: string | null
     }
+    AccountSummary: {
+      active: boolean
+      administrator: boolean
+      /** Format: uuid */
+      id: string
+      login: string
+      /** Format: int64 */
+      revision: number
+    }
+    ActivityItem: {
+      /** Format: uuid */
+      agent?: string | null
+      /** @description RFC 3339. */
+      at: string
+      /**
+       * @description `login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending` or
+       *     `dream_published_skill`.
+       */
+      kind: string
+      /** Format: uuid */
+      room?: string | null
+      text: string
+      /** Format: uuid */
+      turn?: string | null
+    }
+    /**
+     * @description What the caller may know about an agent: everyone holding any capability on it sees it,
+     *     with their own capabilities; administrators see every agent with every capability.
+     */
     Agent: {
       /**
        * @description `working`, `dreaming` or `idle` while running, otherwise the desired state such as
        *     `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
        */
       activity: string
+      avatar: components['schemas']['Avatar']
+      /**
+       * @description The caller's capabilities on this agent and its conversation as grant names, such as
+       *     `conversation_send`.
+       */
+      capabilities: string[]
       desired_state: string
+      /** @description A running turn called a desktop tool in the last 120 seconds. */
+      desktop_active: boolean
       /** @description The dreaming model on the agent's connection; `None` inherits the connection's model. */
       dreaming_model?: string | null
       id: components['schemas']['AgentId']
@@ -703,10 +1266,23 @@ export interface components {
        */
       idle_delay_seconds: number
       idle_policy: components['schemas']['IdlePolicy']
-      instructions: string
+      /** @description `None` without `agent_manage`. */
+      instructions?: string | null
       /** Format: int64 */
       instructions_revision: number
+      /**
+       * Format: int64
+       * @description The highest turn sequence in the agent's conversation, 0 without turns.
+       */
+      last_sequence: number
       name: string
+      /** @description The agent is waiting for a person to log in on a site (ADR 0039). */
+      pending_login: boolean
+      /**
+       * Format: int64
+       * @description The caller's read cursor in that conversation, 0 until set.
+       */
+      read_sequence: number
       /** Format: int64 */
       restart_generation: number
       /** Format: int64 */
@@ -719,9 +1295,74 @@ export interface components {
     }
     /** Format: uuid */
     AgentId: string
+    AgentStatus: {
+      blocked_reason?: string | null
+      deleting?: boolean | null
+      desired_state: string
+      drain_acknowledged: boolean
+      drain_requested: boolean
+      id: components['schemas']['AgentId']
+      kubernetes_phase?: string | null
+      kubernetes_ready?: boolean | null
+      kubernetes_reason?: string | null
+      observed_at?: string | null
+      /** Format: double */
+      observed_seconds_ago?: number | null
+      pod_attempt?: null | components['schemas']['AttemptId']
+      /** Format: int64 */
+      pod_epoch?: number | null
+      /** Format: int64 */
+      pod_target_generation?: number | null
+      recovery_identity_live: boolean
+      resource_phase?: null | components['schemas']['Phase']
+      /** Format: int64 */
+      restart_generation: number
+      /** Format: int64 */
+      revision: number
+      /** @description Identity admission eligibility only, never authority to execute a turn. */
+      runtime_available: boolean
+      terminal_evidence_retained: boolean
+      workspace_attempt?: null | components['schemas']['AttemptId']
+      workspace_blocked_reason?: string | null
+      workspace_resource_phase?: null | components['schemas']['Phase']
+    }
+    /** Format: uuid */
+    AttemptId: string
+    Authorization: {
+      authorization_url: string
+    }
+    /** @description The agent's cube (docs/design/console.md); mood is derived from activity, never stored. */
+    Avatar: {
+      accessory: components['schemas']['Accessory']
+      eyes: components['schemas']['Eyes']
+      paint: components['schemas']['Paint']
+    }
     BTreeMap: {
       [key: string]: string
     }
+    Binding: {
+      /** Format: uuid */
+      account_id: string
+      active: boolean
+      /** Format: uuid */
+      id: string
+      issuer: string
+      /** Format: int64 */
+      revision: number
+      subject: string
+    }
+    /** @enum {string} */
+    Capability:
+      | 'agent_manage'
+      | 'conversation_read'
+      | 'conversation_send'
+      | 'memory_read'
+      | 'memory_edit'
+      | 'workspace_read'
+      | 'workspace_write'
+      | 'browser_view'
+      | 'browser_control'
+      | 'room_manage'
     Child: {
       agent: string
       /** Format: uuid */
@@ -750,7 +1391,15 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    CreateAccount: {
+      administrator?: boolean
+      login: string
+      password: string
+      /** Format: uuid */
+      request_id: string
+    }
     CreateAgent: {
+      avatar?: null | components['schemas']['Avatar']
       instructions: string
       name: string
       /** Format: uuid */
@@ -772,6 +1421,11 @@ export interface components {
       /** @description Makes a webhook secret, returned once. */
       webhook?: boolean
     }
+    CreateTeam: {
+      name: string
+      /** Format: uuid */
+      request_id: string
+    }
     CreatedRoutine: {
       routine: components['schemas']['Routine']
       /** @description The webhook's bearer secret, only in the response that made it. */
@@ -780,6 +1434,29 @@ export interface components {
     DeclineLogin: {
       /** @description Returned to the agent; empty when the person gave none. */
       reason: string
+    }
+    DefinitionRevision: {
+      /** Format: uuid */
+      actor_id: string
+      dreaming_model?: string | null
+      /** Format: int32 */
+      idle_delay_seconds: number
+      idle_policy: components['schemas']['IdlePolicy']
+      instructions: string
+      /** Format: int64 */
+      instructions_revision: number
+      name: string
+      /** Format: int64 */
+      revision: number
+      /** Format: int32 */
+      task_lanes: number
+    }
+    DeleteTeam: {
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      request_id: string
+      team: components['schemas']['TeamId']
     }
     Delivery: {
       agent: string
@@ -838,6 +1515,19 @@ export interface components {
       /** Format: uuid */
       turn_id: string
     }
+    Explain: {
+      capability: components['schemas']['Capability']
+      scope: components['schemas']['Scope']
+    }
+    /** @enum {string} */
+    Eyes: 'round' | 'wide' | 'sleepy' | 'dot'
+    Favorite: {
+      /** Format: uuid */
+      id: string
+      kind: components['schemas']['FavoriteKind']
+    }
+    /** @enum {string} */
+    FavoriteKind: 'agent' | 'room'
     /**
      * @description `write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.
      * @enum {string}
@@ -890,11 +1580,48 @@ export interface components {
     FillVaultItem: {
       field: components['schemas']['VaultField']
     }
+    /** Format: uuid */
+    GrantId: string
+    GrantRequest: {
+      capability: components['schemas']['Capability']
+      recipient: components['schemas']['Recipient']
+      /** Format: uuid */
+      request_id: string
+      scope: components['schemas']['Scope']
+    }
+    IdentityEvent: {
+      /** Format: uuid */
+      actor_id: string
+      /** @description The non-secret request body. */
+      input: Record<string, never>
+      kind: string
+      /** Format: uuid */
+      request_id: string
+      /** Format: uuid */
+      resource_id: string
+      /** Format: int64 */
+      revision: number
+      /** Format: int64 */
+      sequence: number
+    }
     /** @enum {string} */
     IdlePolicy: 'sleep' | 'keep_running'
+    /**
+     * Format: binary
+     * @description The raw bytes of a JPEG or PNG; a schema only, the handlers take `Bytes`.
+     */
+    Image: string
     InstallSkill: {
       /** Format: int64 */
       revision: number
+    }
+    InstallationSummary: {
+      computer_use_enabled: boolean
+      /** @description `kubernetes`, `docker` or `database_only`. */
+      controller: string
+      /** @description `CUBEBOT_INSTALLATION_NAME`, or "Cubebot". */
+      name: string
+      terminal_enabled: boolean
     }
     /** @description An agent's installation, with the library's current revision to show available updates. */
     InstalledSkill: {
@@ -907,6 +1634,44 @@ export interface components {
       /** Format: uuid */
       skill: string
     }
+    Invitation: {
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      revision: number
+      /** @description Revealed only on issuance. A retried command returns its durable ID. */
+      token?: string | null
+    }
+    InvitationSummary: {
+      /** Format: int64 */
+      expires_at_unix: number
+      /** Format: uuid */
+      id: string
+      login: string
+      /** Format: int64 */
+      revision: number
+      status: string
+    }
+    Invite: {
+      login: string
+      /** Format: uuid */
+      request_id: string
+    }
+    /** @enum {string} */
+    LifecycleAction: 'wake' | 'sleep' | 'restart' | 'retire'
+    LifecycleCommand: {
+      action: components['schemas']['LifecycleAction']
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      request_id: string
+    }
+    /** @description Process liveness only; this does not attest to dependency or agent readiness. */
+    Liveness: {
+      status: components['schemas']['LivenessStatus']
+    }
+    /** @enum {string} */
+    LivenessStatus: 'alive'
     Login: {
       login: string
       password: string
@@ -922,6 +1687,16 @@ export interface components {
       /** Format: uuid */
       id: string
       name: string
+    }
+    MembershipChange: {
+      /** Format: uuid */
+      account_id: string
+      /** Format: int64 */
+      expected_revision: number
+      present: boolean
+      /** Format: uuid */
+      request_id: string
+      team: components['schemas']['TeamId']
     }
     Memory: {
       content: string
@@ -1010,11 +1785,22 @@ export interface components {
           /** @enum {string} */
           status: 'uncertain'
         }
+    /** @enum {string} */
+    Paint:
+      'orange' | 'sage' | 'paper' | 'wood' | 'sky' | 'rose' | 'lemon' | 'plum'
+    /** @enum {string} */
+    Phase: 'planned' | 'creating' | 'bound' | 'stopped'
     /** @description A new folder, or where a file goes: `parent` null or absent is the owner's top level. */
     Placement: {
       name: string
       /** Format: uuid */
       parent?: string | null
+    }
+    Preferences: {
+      /** @description Sidebar sections the person collapsed. */
+      collapsed?: string[]
+      favorites?: components['schemas']['Favorite'][]
+      theme?: components['schemas']['Theme']
     }
     Progress: {
       command: string
@@ -1058,12 +1844,28 @@ export interface components {
       /** Format: uuid */
       turn?: string | null
     }
+    ReadCursor: {
+      /** Format: int64 */
+      sequence: number
+    }
     Receipt: {
       /** Format: uuid */
       id: string
       /** Format: int64 */
       revision: number
     }
+    Recipient:
+      | {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: 'user'
+        }
+      | {
+          id: components['schemas']['TeamId']
+          /** @enum {string} */
+          kind: 'team'
+        }
     RetryMessage: {
       /** Format: uuid */
       request_id: string
@@ -1078,13 +1880,46 @@ export interface components {
       expected_revision: number
       files: components['schemas']['BTreeMap']
     }
+    Revoke: {
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      request_id: string
+    }
+    RevokeGrant: {
+      /** Format: int64 */
+      expected_revision: number
+      id: components['schemas']['GrantId']
+      /** Format: uuid */
+      request_id: string
+    }
+    RevokeOidc: {
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      request_id: string
+    }
     Room: {
       /** Format: uuid */
       id: string
+      /**
+       * Format: int64
+       * @description The newest message's sequence, 0 without messages.
+       */
+      last_sequence: number
       /** @description The viewer may change the members. */
       manage: boolean
       members: components['schemas']['Member'][]
       name: string
+      /**
+       * Format: int64
+       * @description The viewer's read cursor, 0 until set.
+       */
+      read_sequence: number
     }
     /** @description The room's whole new member set; putting the same set again changes nothing. */
     RoomMembers: {
@@ -1155,6 +1990,25 @@ export interface components {
       site?: string | null
       username?: string | null
     }
+    Scope:
+      | {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: 'agent'
+        }
+      | {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: 'room'
+        }
+      | {
+          /** Format: uuid */
+          id: string
+          /** @enum {string} */
+          kind: 'conversation'
+        }
     SendMessage: {
       message: string
       /** Format: uuid */
@@ -1203,6 +2057,25 @@ export interface components {
       /** @description Copied from steering of the work that delegated this. */
       propagated: boolean
     }
+    Subject: {
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      request_id: string
+    }
+    Team: {
+      active: boolean
+      id: components['schemas']['TeamId']
+      name: string
+      /** Format: int64 */
+      revision: number
+    }
+    /** Format: uuid */
+    TeamId: string
+    /** @enum {string} */
+    Theme: 'system' | 'light' | 'dark'
     Token: {
       token: string
     }
@@ -1274,6 +2147,7 @@ export interface components {
           kind: 'error'
         }
     UpdateAgent: {
+      avatar?: null | components['schemas']['Avatar']
       /** @description `None` dreams with the connection's model. */
       dreaming_model?: string | null
       /** Format: int64 */
@@ -1327,6 +2201,25 @@ export interface components {
 }
 export type $defs = Record<string, never>
 export interface operations {
+  activity: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ActivityItem'][]
+        }
+      }
+    }
+  }
   list: {
     parameters: {
       query?: {
@@ -1715,6 +2608,27 @@ export interface operations {
       }
     }
   }
+  read: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Agent']
+        }
+      }
+    }
+  }
   update: {
     parameters: {
       query?: never
@@ -1731,6 +2645,31 @@ export interface operations {
     }
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  lifecycle: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['LifecycleCommand']
+      }
+    }
+    responses: {
+      202: {
         headers: {
           [name: string]: unknown
         }
@@ -1796,6 +2735,50 @@ export interface operations {
       }
     }
   }
+  revisions: {
+    parameters: {
+      query?: {
+        after?: number
+      }
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DefinitionRevision'][]
+        }
+      }
+    }
+  }
+  status: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentStatus']
+        }
+      }
+    }
+  }
   agent_vault: {
     parameters: {
       query?: never
@@ -1840,6 +2823,77 @@ export interface operations {
         content?: never
       }
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  get_wallpaper: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'image/jpeg': components['schemas']['Image']
+          'image/png': components['schemas']['Image']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  set_wallpaper: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'image/jpeg': components['schemas']['Image']
+        'image/png': components['schemas']['Image']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  reset_wallpaper: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
         headers: {
           [name: string]: unknown
         }
@@ -1988,6 +3042,50 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Steering']
+        }
+      }
+    }
+  }
+  read: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        conversation: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReadCursor']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReadCursor']
+        }
+      }
+    }
+  }
+  events: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/event-stream': components['schemas']['Agent']
         }
       }
     }
@@ -2216,6 +3314,294 @@ export interface operations {
       }
     }
   }
+  liveness: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Liveness']
+        }
+      }
+    }
+  }
+  readiness: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  events: {
+    parameters: {
+      query?: {
+        after?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['IdentityEvent'][]
+        }
+      }
+    }
+  }
+  explain: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Explain']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AccessExplanation']
+        }
+      }
+    }
+  }
+  grant: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GrantRequest']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  revoke: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RevokeGrant']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  accounts: {
+    parameters: {
+      query?: {
+        after?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AccountSummary'][]
+        }
+      }
+    }
+  }
+  create_account: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateAccount']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Account']
+        }
+      }
+    }
+  }
+  receipt: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        kind: string
+        request_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  list: {
+    parameters: {
+      query?: {
+        after?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InvitationSummary'][]
+        }
+      }
+    }
+  }
+  invite: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Invite']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Invitation']
+        }
+      }
+    }
+  }
+  accept: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Accept']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/plain': string
+        }
+      }
+    }
+  }
+  revoke: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Revoke']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
   login: {
     parameters: {
       query?: never
@@ -2273,6 +3659,262 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Account']
+        }
+      }
+    }
+  }
+  preferences: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Preferences']
+        }
+      }
+    }
+  }
+  set_preferences: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Preferences']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Preferences']
+        }
+      }
+    }
+  }
+  oidc_bindings: {
+    parameters: {
+      query?: {
+        after?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Binding'][]
+        }
+      }
+    }
+  }
+  link: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Authorization']
+        }
+      }
+    }
+  }
+  revoke_oidc: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RevokeOidc']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  start: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Authorization']
+        }
+      }
+    }
+  }
+  suspend: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Subject']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  teams: {
+    parameters: {
+      query?: {
+        after?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team'][]
+        }
+      }
+    }
+  }
+  create_team: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateTeam']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  delete_team: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DeleteTeam']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  membership: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MembershipChange']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  installation: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['InstallationSummary']
         }
       }
     }
@@ -2455,6 +4097,31 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['RoomMessage']
+        }
+      }
+    }
+  }
+  read: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        room: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReadCursor']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReadCursor']
         }
       }
     }

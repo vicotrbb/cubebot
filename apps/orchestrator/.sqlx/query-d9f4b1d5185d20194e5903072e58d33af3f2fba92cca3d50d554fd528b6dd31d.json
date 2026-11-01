@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT document AS \"document: sqlx::types::Json<Preferences>\"\n            FROM account_preferences\n            WHERE account_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document: sqlx::types::Json<Preferences>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d9f4b1d5185d20194e5903072e58d33af3f2fba92cca3d50d554fd528b6dd31d"
+}

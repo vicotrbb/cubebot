@@ -27,7 +27,7 @@ pub struct Reconciler {
     pub(super) registry: Registry,
     pub(super) api: Kubernetes,
     namespace: String,
-    layout: Layout,
+    pub(super) layout: Layout,
 }
 impl Reconciler {
     pub fn new(

@@ -152,7 +152,7 @@ impl Command {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct IdentityEvent {
     pub sequence: i64,
     pub actor_id: Uuid,
@@ -160,6 +160,8 @@ pub struct IdentityEvent {
     pub request_id: Uuid,
     pub resource_id: Uuid,
     pub revision: i64,
+    /// The non-secret request body.
+    #[schema(value_type = Object)]
     pub input: sqlx::types::Json<serde_json::Value>,
 }
 

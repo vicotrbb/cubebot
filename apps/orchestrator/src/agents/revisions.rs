@@ -39,9 +39,12 @@ pub struct UpdateAgent {
     /// Concurrent delegated tasks, one to four; `None` keeps the current setting.
     #[serde(default)]
     pub task_lanes: Option<i16>,
+    /// `None` keeps the current cube; not part of the revision history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar: Option<super::Avatar>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct DefinitionRevision {
     pub revision: i64,
     pub instructions_revision: i64,
@@ -66,6 +69,7 @@ impl Agents {
             request_id: input.request_id,
             name: input.name.clone(),
             instructions: input.instructions.clone(),
+            avatar: None,
         })?;
         if !(60..=86400).contains(&input.idle_delay_seconds)
             || input
@@ -93,6 +97,7 @@ impl Agents {
                 idle_delay_seconds = $6,
                 dreaming_model = $7,
                 task_lanes = COALESCE($8, task_lanes),
+                avatar = COALESCE($9, avatar),
                 revision = revision + 1
             WHERE id = $1
               AND revision = $5
@@ -107,6 +112,7 @@ impl Agents {
             input.idle_delay_seconds,
             input.dreaming_model,
             input.task_lanes,
+            input.avatar.map(sqlx::types::Json) as Option<sqlx::types::Json<super::Avatar>>,
         )
         .fetch_optional(&mut *transaction)
         .await?

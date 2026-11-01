@@ -43,6 +43,12 @@ impl Layout {
         })
     }
 
+    pub fn terminal(&self) -> bool {
+        self.terminal
+    }
+    pub fn computer_use(&self) -> bool {
+        self.computer_use
+    }
     pub fn with_terminal(mut self, enabled: bool) -> Self {
         self.terminal = enabled;
         self

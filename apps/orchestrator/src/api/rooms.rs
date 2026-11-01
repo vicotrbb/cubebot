@@ -30,7 +30,8 @@ struct Api {
     set_members,
     room_messages,
     post_room_message,
-    room_events
+    room_events,
+    read
 ))]
 pub(super) struct Doc;
 
@@ -39,6 +40,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         .route("/api/rooms", get(list_rooms).post(create_room))
         .route("/api/rooms/{room}/members", put(set_members))
         .route("/api/rooms/{room}/events", get(room_events))
+        .route("/api/rooms/{room}/read", put(read))
         .route(
             "/api/rooms/{room}/messages",
             get(room_messages).post(post_room_message),
@@ -89,6 +91,22 @@ async fn set_members(
     Ok((
         [("cache-control", "no-store")],
         Json(api.work.set_room_members(&actor, room, &input).await?),
+    ))
+}
+
+/// Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
+/// with the cursor as stored.
+#[utoipa::path(put, path = "/api/rooms/{room}/read", params(("room" = Uuid, Path)), request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
+async fn read(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(room): Path<Uuid>,
+    Json(input): Json<crate::work::ReadCursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.work.read_room(&actor, room, input.sequence).await?),
     ))
 }
 

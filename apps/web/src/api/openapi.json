@@ -9,6 +9,28 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/activity": {
+      "get": {
+        "tags": [],
+        "summary": "What needs the caller, newest first, at most 100 items.",
+        "operationId": "activity",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActivityItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "tags": [],
@@ -643,6 +665,36 @@
         }
       }
     },
+    "/api/agents/{id}": {
+      "get": {
+        "tags": [],
+        "summary": "The summary everyone with a capability on the agent sees; `instructions` needs `agent_manage`.",
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{id}/definition": {
       "post": {
         "tags": [],
@@ -670,6 +722,45 @@
         },
         "responses": {
           "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/lifecycle": {
+      "post": {
+        "tags": [],
+        "operationId": "lifecycle",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleCommand"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
             "description": "",
             "content": {
               "application/json": {
@@ -751,6 +842,76 @@
         }
       }
     },
+    "/api/agents/{id}/revisions": {
+      "get": {
+        "tags": [],
+        "operationId": "revisions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DefinitionRevision"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/status": {
+      "get": {
+        "tags": [],
+        "operationId": "status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{id}/vault": {
       "get": {
         "tags": [],
@@ -824,6 +985,100 @@
             "description": ""
           },
           "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/wallpaper": {
+      "get": {
+        "tags": [],
+        "summary": "The agent's wallpaper for everyone who may see the agent; 404 while it uses the default.",
+        "operationId": "get_wallpaper",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "$ref": "#/components/schemas/Image"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "$ref": "#/components/schemas/Image"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "The raw JPEG or PNG; the image type comes from its bytes, never a header.",
+        "operationId": "set_wallpaper",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "image/jpeg": {
+              "schema": {
+                "$ref": "#/components/schemas/Image"
+              }
+            },
+            "image/png": {
+              "schema": {
+                "$ref": "#/components/schemas/Image"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "reset_wallpaper",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
             "description": ""
           }
         }
@@ -1077,6 +1332,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Steering"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/read": {
+      "put": {
+        "tags": [],
+        "summary": "Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds\nwith the cursor as stored.",
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadCursor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadCursor"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "tags": [],
+        "summary": "Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary\nwhenever its activity, desktop, pending login or last turn changed, and every visible\nagent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest\nmessage changed. Polled once a second.",
+        "operationId": "events",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agent"
                 }
               }
             }
@@ -1419,6 +1733,369 @@
         }
       }
     },
+    "/api/health/live": {
+      "get": {
+        "tags": [],
+        "summary": "Process liveness only.",
+        "operationId": "liveness",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Liveness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "tags": [],
+        "summary": "The configured database answers; 503 otherwise.",
+        "operationId": "readiness",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "503": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/access/events": {
+      "get": {
+        "tags": [],
+        "operationId": "events",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IdentityEvent"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/access/explain": {
+      "post": {
+        "tags": [],
+        "summary": "The caller's own access on a scope, with the grants that give it.",
+        "operationId": "explain",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Explain"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessExplanation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/access/grants": {
+      "post": {
+        "tags": [],
+        "operationId": "grant",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/access/revoke": {
+      "post": {
+        "tags": [],
+        "operationId": "revoke",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/accounts": {
+      "get": {
+        "tags": [],
+        "operationId": "accounts",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccount"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/commands/{kind}/{request_id}": {
+      "get": {
+        "tags": [],
+        "operationId": "receipt",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/invitations": {
+      "get": {
+        "tags": [],
+        "operationId": "list",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InvitationSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "The token is in the first response only.",
+        "operationId": "invite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Invite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Invitation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/invitations/accept": {
+      "post": {
+        "tags": [],
+        "summary": "Creates the invited account; responds with its id.",
+        "operationId": "accept",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Accept"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/invitations/revoke": {
+      "post": {
+        "tags": [],
+        "operationId": "revoke",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Revoke"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/identity/login": {
       "post": {
         "tags": [],
@@ -1476,6 +2153,309 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/me/preferences": {
+      "get": {
+        "tags": [],
+        "operationId": "preferences",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Replaces the whole document; the last write wins.",
+        "operationId": "set_preferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Preferences"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/oidc/bindings": {
+      "get": {
+        "tags": [],
+        "operationId": "oidc_bindings",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Binding"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/oidc/link": {
+      "post": {
+        "tags": [],
+        "summary": "Starts linking the signed-in account to the identity provider.",
+        "operationId": "link",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Authorization"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/oidc/revoke": {
+      "post": {
+        "tags": [],
+        "operationId": "revoke_oidc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeOidc"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/oidc/start": {
+      "post": {
+        "tags": [],
+        "summary": "Starts a sign-in; the browser follows `authorization_url`.",
+        "operationId": "start",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Authorization"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/suspend": {
+      "post": {
+        "tags": [],
+        "operationId": "suspend",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Subject"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/teams": {
+      "get": {
+        "tags": [],
+        "operationId": "teams",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Team"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTeam"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/teams/delete": {
+      "post": {
+        "tags": [],
+        "operationId": "delete_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteTeam"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/teams/membership": {
+      "post": {
+        "tags": [],
+        "operationId": "membership",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/installation": {
+      "get": {
+        "tags": [],
+        "operationId": "installation",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstallationSummary"
                 }
               }
             }
@@ -1749,6 +2729,46 @@
         }
       }
     },
+    "/api/rooms/{room}/read": {
+      "put": {
+        "tags": [],
+        "summary": "Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds\nwith the cursor as stored.",
+        "operationId": "read",
+        "parameters": [
+          {
+            "name": "room",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadCursor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadCursor"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/skills": {
       "get": {
         "tags": [],
@@ -1986,9 +3006,67 @@
   },
   "components": {
     "schemas": {
+      "Accept": {
+        "type": "object",
+        "required": ["request_id", "token", "password"],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AccessExplanation": {
+        "type": "object",
+        "required": ["allowed", "administrator", "grants"],
+        "properties": {
+          "administrator": {
+            "type": "boolean"
+          },
+          "allowed": {
+            "type": "boolean"
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessSource"
+            }
+          }
+        }
+      },
+      "AccessSource": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GrantId"
+          },
+          "team_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TeamId"
+              }
+            ]
+          }
+        }
+      },
+      "Accessory": {
+        "type": "string",
+        "enum": ["none", "cap", "glasses", "bow", "antenna"]
+      },
       "Account": {
         "type": "object",
-        "required": ["id", "administrator"],
+        "required": ["id", "login", "administrator"],
         "properties": {
           "administrator": {
             "type": "boolean"
@@ -1996,15 +3074,74 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "login": {
+            "type": "string"
+          },
+          "name": {
+            "type": ["string", "null"],
+            "description": "A display name; accounts have none yet."
+          }
+        }
+      },
+      "AccountSummary": {
+        "type": "object",
+        "required": ["id", "login", "administrator", "active", "revision"],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "administrator": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "login": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ActivityItem": {
+        "type": "object",
+        "required": ["kind", "at", "text"],
+        "properties": {
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending` or\n`dream_published_skill`."
+          },
+          "room": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          },
+          "turn": {
+            "type": ["string", "null"],
+            "format": "uuid"
           }
         }
       },
       "Agent": {
         "type": "object",
+        "description": "What the caller may know about an agent: everyone holding any capability on it sees it,\nwith their own capabilities; administrators see every agent with every capability.",
         "required": [
           "id",
           "name",
-          "instructions",
           "revision",
           "instructions_revision",
           "desired_state",
@@ -2012,15 +3149,35 @@
           "restart_generation",
           "idle_delay_seconds",
           "task_lanes",
-          "activity"
+          "activity",
+          "capabilities",
+          "avatar",
+          "desktop_active",
+          "pending_login",
+          "last_sequence",
+          "read_sequence"
         ],
         "properties": {
           "activity": {
             "type": "string",
             "description": "`working`, `dreaming` or `idle` while running, otherwise the desired state such as\n`sleeping`. Dreaming needs a run whose sandbox still holds its credential."
           },
+          "avatar": {
+            "$ref": "#/components/schemas/Avatar"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The caller's capabilities on this agent and its conversation as grant names, such as\n`conversation_send`."
+          },
           "desired_state": {
             "type": "string"
+          },
+          "desktop_active": {
+            "type": "boolean",
+            "description": "A running turn called a desktop tool in the last 120 seconds."
           },
           "dreaming_model": {
             "type": ["string", "null"],
@@ -2038,14 +3195,29 @@
             "$ref": "#/components/schemas/IdlePolicy"
           },
           "instructions": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "`None` without `agent_manage`."
           },
           "instructions_revision": {
             "type": "integer",
             "format": "int64"
           },
+          "last_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The highest turn sequence in the agent's conversation, 0 without turns."
+          },
           "name": {
             "type": "string"
+          },
+          "pending_login": {
+            "type": "boolean",
+            "description": "The agent is waiting for a person to log in on a site (ADR 0039)."
+          },
+          "read_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The caller's read cursor in that conversation, 0 until set."
           },
           "restart_generation": {
             "type": "integer",
@@ -2066,6 +3238,155 @@
         "type": "string",
         "format": "uuid"
       },
+      "AgentStatus": {
+        "type": "object",
+        "required": [
+          "id",
+          "desired_state",
+          "revision",
+          "restart_generation",
+          "terminal_evidence_retained",
+          "drain_requested",
+          "drain_acknowledged",
+          "runtime_available",
+          "recovery_identity_live"
+        ],
+        "properties": {
+          "blocked_reason": {
+            "type": ["string", "null"]
+          },
+          "deleting": {
+            "type": ["boolean", "null"]
+          },
+          "desired_state": {
+            "type": "string"
+          },
+          "drain_acknowledged": {
+            "type": "boolean"
+          },
+          "drain_requested": {
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/AgentId"
+          },
+          "kubernetes_phase": {
+            "type": ["string", "null"]
+          },
+          "kubernetes_ready": {
+            "type": ["boolean", "null"]
+          },
+          "kubernetes_reason": {
+            "type": ["string", "null"]
+          },
+          "observed_at": {
+            "type": ["string", "null"]
+          },
+          "observed_seconds_ago": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
+          "pod_attempt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AttemptId"
+              }
+            ]
+          },
+          "pod_epoch": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "pod_target_generation": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "recovery_identity_live": {
+            "type": "boolean"
+          },
+          "resource_phase": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Phase"
+              }
+            ]
+          },
+          "restart_generation": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "runtime_available": {
+            "type": "boolean",
+            "description": "Identity admission eligibility only, never authority to execute a turn."
+          },
+          "terminal_evidence_retained": {
+            "type": "boolean"
+          },
+          "workspace_attempt": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AttemptId"
+              }
+            ]
+          },
+          "workspace_blocked_reason": {
+            "type": ["string", "null"]
+          },
+          "workspace_resource_phase": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Phase"
+              }
+            ]
+          }
+        }
+      },
+      "AttemptId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "Authorization": {
+        "type": "object",
+        "required": ["authorization_url"],
+        "properties": {
+          "authorization_url": {
+            "type": "string"
+          }
+        }
+      },
+      "Avatar": {
+        "type": "object",
+        "description": "The agent's cube (docs/design/console.md); mood is derived from activity, never stored.",
+        "required": ["paint", "eyes", "accessory"],
+        "properties": {
+          "accessory": {
+            "$ref": "#/components/schemas/Accessory"
+          },
+          "eyes": {
+            "$ref": "#/components/schemas/Eyes"
+          },
+          "paint": {
+            "$ref": "#/components/schemas/Paint"
+          }
+        },
+        "additionalProperties": false
+      },
       "BTreeMap": {
         "type": "object",
         "additionalProperties": {
@@ -2074,6 +3395,55 @@
         "propertyNames": {
           "type": "string"
         }
+      },
+      "Binding": {
+        "type": "object",
+        "required": [
+          "id",
+          "account_id",
+          "issuer",
+          "subject",
+          "active",
+          "revision"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "subject": {
+            "type": "string"
+          }
+        }
+      },
+      "Capability": {
+        "type": "string",
+        "enum": [
+          "agent_manage",
+          "conversation_read",
+          "conversation_send",
+          "memory_read",
+          "memory_edit",
+          "workspace_read",
+          "workspace_write",
+          "browser_view",
+          "browser_control",
+          "room_manage"
+        ]
       },
       "Child": {
         "type": "object",
@@ -2144,10 +3514,41 @@
         },
         "additionalProperties": false
       },
+      "CreateAccount": {
+        "type": "object",
+        "required": ["request_id", "login", "password"],
+        "properties": {
+          "administrator": {
+            "type": "boolean"
+          },
+          "login": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateAgent": {
         "type": "object",
         "required": ["request_id", "name", "instructions"],
         "properties": {
+          "avatar": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Avatar",
+                "description": "Left out, the agent gets the default cube. Absent from the command digest when `None`,\nso receipts recorded before avatars still replay."
+              }
+            ]
+          },
           "instructions": {
             "type": "string"
           },
@@ -2210,6 +3611,20 @@
         },
         "additionalProperties": false
       },
+      "CreateTeam": {
+        "type": "object",
+        "required": ["request_id", "name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreatedRoutine": {
         "type": "object",
         "required": ["routine"],
@@ -2230,6 +3645,71 @@
           "reason": {
             "type": "string",
             "description": "Returned to the agent; empty when the person gave none."
+          }
+        },
+        "additionalProperties": false
+      },
+      "DefinitionRevision": {
+        "type": "object",
+        "required": [
+          "revision",
+          "instructions_revision",
+          "name",
+          "instructions",
+          "idle_policy",
+          "idle_delay_seconds",
+          "task_lanes",
+          "actor_id"
+        ],
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dreaming_model": {
+            "type": ["string", "null"]
+          },
+          "idle_delay_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "idle_policy": {
+            "$ref": "#/components/schemas/IdlePolicy"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "instructions_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "task_lanes": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "DeleteTeam": {
+        "type": "object",
+        "required": ["request_id", "team", "expected_revision"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "team": {
+            "$ref": "#/components/schemas/TeamId"
           }
         },
         "additionalProperties": false
@@ -2379,6 +3859,41 @@
           }
         }
       },
+      "Explain": {
+        "type": "object",
+        "required": ["scope", "capability"],
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Eyes": {
+        "type": "string",
+        "enum": ["round", "wide", "sleepy", "dot"]
+      },
+      "Favorite": {
+        "type": "object",
+        "required": ["kind", "id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FavoriteKind"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FavoriteKind": {
+        "type": "string",
+        "enum": ["agent", "room"]
+      },
       "FileAccess": {
         "type": "string",
         "description": "`write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.",
@@ -2462,9 +3977,79 @@
         },
         "additionalProperties": false
       },
+      "GrantId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "GrantRequest": {
+        "type": "object",
+        "required": ["request_id", "recipient", "scope", "capability"],
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/Capability"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/Recipient"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          }
+        },
+        "additionalProperties": false
+      },
+      "IdentityEvent": {
+        "type": "object",
+        "required": [
+          "sequence",
+          "actor_id",
+          "kind",
+          "request_id",
+          "resource_id",
+          "revision",
+          "input"
+        ],
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "input": {
+            "type": "object",
+            "description": "The non-secret request body."
+          },
+          "kind": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "resource_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "IdlePolicy": {
         "type": "string",
         "enum": ["sleep", "keep_running"]
+      },
+      "Image": {
+        "type": "string",
+        "format": "binary",
+        "description": "The raw bytes of a JPEG or PNG; a schema only, the handlers take `Bytes`."
       },
       "InstallSkill": {
         "type": "object",
@@ -2476,6 +4061,31 @@
           }
         },
         "additionalProperties": false
+      },
+      "InstallationSummary": {
+        "type": "object",
+        "required": [
+          "name",
+          "terminal_enabled",
+          "computer_use_enabled",
+          "controller"
+        ],
+        "properties": {
+          "computer_use_enabled": {
+            "type": "boolean"
+          },
+          "controller": {
+            "type": "string",
+            "description": "`kubernetes`, `docker` or `database_only`."
+          },
+          "name": {
+            "type": "string",
+            "description": "`CUBEBOT_INSTALLATION_NAME`, or \"Cubebot\"."
+          },
+          "terminal_enabled": {
+            "type": "boolean"
+          }
+        }
       },
       "InstalledSkill": {
         "type": "object",
@@ -2507,6 +4117,98 @@
             "format": "uuid"
           }
         }
+      },
+      "Invitation": {
+        "type": "object",
+        "required": ["id", "revision"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "token": {
+            "type": ["string", "null"],
+            "description": "Revealed only on issuance. A retried command returns its durable ID."
+          }
+        }
+      },
+      "InvitationSummary": {
+        "type": "object",
+        "required": ["id", "login", "revision", "status", "expires_at_unix"],
+        "properties": {
+          "expires_at_unix": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "login": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "Invite": {
+        "type": "object",
+        "required": ["request_id", "login"],
+        "properties": {
+          "login": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LifecycleAction": {
+        "type": "string",
+        "enum": ["wake", "sleep", "restart", "retire"]
+      },
+      "LifecycleCommand": {
+        "type": "object",
+        "required": ["request_id", "expected_revision", "action"],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/LifecycleAction"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Liveness": {
+        "type": "object",
+        "description": "Process liveness only; this does not attest to dependency or agent readiness.",
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/LivenessStatus"
+          }
+        }
+      },
+      "LivenessStatus": {
+        "type": "string",
+        "enum": ["alive"]
       },
       "Login": {
         "type": "object",
@@ -2550,6 +4252,37 @@
             "type": "string"
           }
         }
+      },
+      "MembershipChange": {
+        "type": "object",
+        "required": [
+          "request_id",
+          "team",
+          "account_id",
+          "expected_revision",
+          "present"
+        ],
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "present": {
+            "type": "boolean"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "team": {
+            "$ref": "#/components/schemas/TeamId"
+          }
+        },
+        "additionalProperties": false
       },
       "Memory": {
         "type": "object",
@@ -2744,6 +4477,23 @@
           }
         ]
       },
+      "Paint": {
+        "type": "string",
+        "enum": [
+          "orange",
+          "sage",
+          "paper",
+          "wood",
+          "sky",
+          "rose",
+          "lemon",
+          "plum"
+        ]
+      },
+      "Phase": {
+        "type": "string",
+        "enum": ["planned", "creating", "bound", "stopped"]
+      },
       "Placement": {
         "type": "object",
         "description": "A new folder, or where a file goes: `parent` null or absent is the owner's top level.",
@@ -2755,6 +4505,28 @@
           "parent": {
             "type": ["string", "null"],
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Preferences": {
+        "type": "object",
+        "properties": {
+          "collapsed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Sidebar sections the person collapsed."
+          },
+          "favorites": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Favorite"
+            }
+          },
+          "theme": {
+            "$ref": "#/components/schemas/Theme"
           }
         },
         "additionalProperties": false
@@ -2882,6 +4654,17 @@
           }
         }
       },
+      "ReadCursor": {
+        "type": "object",
+        "required": ["sequence"],
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "Receipt": {
         "type": "object",
         "required": ["id", "revision"],
@@ -2895,6 +4678,37 @@
             "format": "int64"
           }
         }
+      },
+      "Recipient": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["user"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {
+                "$ref": "#/components/schemas/TeamId"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["team"]
+              }
+            }
+          }
+        ]
       },
       "RetryMessage": {
         "type": "object",
@@ -2935,13 +4749,81 @@
         },
         "additionalProperties": false
       },
+      "Revoke": {
+        "type": "object",
+        "required": ["request_id", "expected_revision", "id"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeGrant": {
+        "type": "object",
+        "required": ["request_id", "id", "expected_revision"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "$ref": "#/components/schemas/GrantId"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RevokeOidc": {
+        "type": "object",
+        "required": ["id", "expected_revision", "request_id"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "Room": {
         "type": "object",
-        "required": ["id", "name", "members", "manage"],
+        "required": [
+          "id",
+          "name",
+          "members",
+          "manage",
+          "last_sequence",
+          "read_sequence"
+        ],
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "last_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The newest message's sequence, 0 without messages."
           },
           "manage": {
             "type": "boolean",
@@ -2955,6 +4837,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "read_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The viewer's read cursor, 0 until set."
           }
         }
       },
@@ -3147,6 +5034,52 @@
         },
         "additionalProperties": false
       },
+      "Scope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["agent"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["room"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["id", "kind"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["conversation"]
+              }
+            }
+          }
+        ]
+      },
       "SendMessage": {
         "type": "object",
         "required": ["request_id", "message"],
@@ -3256,6 +5189,52 @@
             "description": "Copied from steering of the work that delegated this."
           }
         }
+      },
+      "Subject": {
+        "type": "object",
+        "required": ["request_id", "expected_revision", "id"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Team": {
+        "type": "object",
+        "required": ["id", "name", "revision", "active"],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/TeamId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TeamId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "Theme": {
+        "type": "string",
+        "enum": ["system", "light", "dark"]
       },
       "Token": {
         "type": "object",
@@ -3478,6 +5457,17 @@
           "idle_delay_seconds"
         ],
         "properties": {
+          "avatar": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Avatar",
+                "description": "`None` keeps the current cube; not part of the revision history."
+              }
+            ]
+          },
           "dreaming_model": {
             "type": ["string", "null"],
             "description": "`None` dreams with the connection's model."

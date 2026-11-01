@@ -2,7 +2,7 @@ use super::{AgentId, Agents, commands::Command};
 use crate::identity::{Actor, IdentityError, Receipt};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LifecycleAction {
     Wake,
@@ -24,7 +24,7 @@ impl LifecycleAction {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LifecycleCommand {
     pub request_id: uuid::Uuid,

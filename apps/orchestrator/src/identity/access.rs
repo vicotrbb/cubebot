@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use super::{Actor, Identity, IdentityError, Receipt, commands::Command, teams::TeamId};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Scope {
     Agent { id: Uuid },
@@ -23,7 +23,7 @@ impl Scope {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Capability {
     AgentManage,
@@ -69,14 +69,14 @@ impl Capability {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Recipient {
     User { id: Uuid },
     Team { id: TeamId },
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GrantRequest {
     pub request_id: Uuid,
@@ -85,12 +85,14 @@ pub struct GrantRequest {
     pub capability: Capability,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
+)]
 #[serde(transparent)]
 #[sqlx(transparent)]
 pub struct GrantId(pub Uuid);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RevokeGrant {
     pub request_id: Uuid,
@@ -98,13 +100,13 @@ pub struct RevokeGrant {
     pub expected_revision: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct AccessSource {
     pub id: GrantId,
     pub team_id: Option<TeamId>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct AccessExplanation {
     pub allowed: bool,
     pub administrator: bool,

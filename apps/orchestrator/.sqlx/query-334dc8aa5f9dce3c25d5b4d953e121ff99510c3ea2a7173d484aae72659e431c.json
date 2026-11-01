@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO agent_resources (id, agent_id, kind, epoch, target_generation, definition_revision, namespace, name, manifest, source_manifest)\n        VALUES (gen_random_uuid(), $1, 'pod', 0, 0, 1, 'test', 'ada-0', '{}', '{}')\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "334dc8aa5f9dce3c25d5b4d953e121ff99510c3ea2a7173d484aae72659e431c"
+}

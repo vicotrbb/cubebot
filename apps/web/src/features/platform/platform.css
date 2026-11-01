@@ -1,0 +1,36 @@
+.platform {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: start;
+}
+.platform__editor {
+  position: sticky;
+  top: 0;
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  background: var(--ground);
+  border: 1px solid var(--line);
+}
+.platform__editor h2 {
+  font-size: var(--t-lg);
+}
+.platform__editor .form {
+  max-width: none;
+}
+.platform__lead {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  margin-bottom: 12px;
+  max-width: 70ch;
+}
+@media (max-width: 1000px) {
+  .platform {
+    grid-template-columns: 1fr;
+  }
+  .platform__editor {
+    position: static;
+  }
+}

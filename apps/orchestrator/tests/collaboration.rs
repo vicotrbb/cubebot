@@ -49,6 +49,7 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
                 request_id: Uuid::new_v4(),
                 name: "Bee".into(),
                 instructions: "Counts rows".into(),
+                avatar: None,
             },
         )
         .await
@@ -297,6 +298,7 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
                 request_id: Uuid::new_v4(),
                 name: "Bee".into(),
                 instructions: "Reads logs".into(),
+                avatar: None,
             },
         )
         .await

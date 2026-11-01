@@ -50,6 +50,19 @@ impl Agents {
     }
 }
 
+impl Agents {
+    /// The wallpaper for anyone who may see the agent.
+    #[tracing::instrument(skip_all, fields(agent = %id.0))]
+    pub async fn wallpaper(
+        &self,
+        actor: &Actor,
+        id: AgentId,
+    ) -> Result<Option<Vec<u8>>, IdentityError> {
+        self.get(actor, id).await?;
+        Ok(wallpaper(&self.pool, id).await?)
+    }
+}
+
 /// The agent's own wallpaper, if one is set.
 pub async fn wallpaper(
     pool: &sqlx::PgPool,

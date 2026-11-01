@@ -17,3 +17,4 @@ __pycache__/
 .tools/
 .astro/
 .cubebot/
+apps/web/.impeccable/review/

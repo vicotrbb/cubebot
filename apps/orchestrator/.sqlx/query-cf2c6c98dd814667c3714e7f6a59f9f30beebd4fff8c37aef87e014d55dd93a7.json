@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO dream_runs (id, agent_id, attempt_id, model, status, ended_at, outcome)\n        VALUES (gen_random_uuid(), $1, $2, 'dream-model', 'finished', clock_timestamp(), 'completed')\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cf2c6c98dd814667c3714e7f6a59f9f30beebd4fff8c37aef87e014d55dd93a7"
+}

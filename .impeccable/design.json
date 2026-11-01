@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-26T00:00:00Z",
+  "generatedAt": "2026-11-01T00:00:00Z",
   "title": "Design System: Cubebot",
   "extensions": {
     "colorMeta": {
@@ -243,10 +243,484 @@
           "#ded7cf",
           "#f3efe9"
         ]
+      },
+      "console-ground": {
+        "role": "neutral",
+        "displayName": "Console Ground",
+        "canonical": "oklch(95.5% 0.016 79)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#272520",
+          "#46413b",
+          "#666057",
+          "#888178",
+          "#a9a49c",
+          "#ccc9c4",
+          "#efeeed"
+        ]
+      },
+      "console-sidebar": {
+        "role": "neutral",
+        "displayName": "Console Sidebar",
+        "canonical": "oklch(92.1% 0.027 78)",
+        "tonalRamp": [
+          "#0d0b08",
+          "#29241d",
+          "#484136",
+          "#6a6050",
+          "#8c8170",
+          "#ada496",
+          "#cec8c0",
+          "#f0eeec"
+        ]
+      },
+      "console-surface": {
+        "role": "neutral",
+        "displayName": "Console Surface",
+        "canonical": "oklch(99.4% 0.006 85)",
+        "tonalRamp": [
+          "#0b0b0a",
+          "#262523",
+          "#43423f",
+          "#63615e",
+          "#84827e",
+          "#a6a5a2",
+          "#cac9c7",
+          "#efeeee"
+        ]
+      },
+      "console-raised": {
+        "role": "neutral",
+        "displayName": "Console Raised",
+        "canonical": "oklch(100.0% 0.000 90)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "console-inset": {
+        "role": "neutral",
+        "displayName": "Console Inset",
+        "canonical": "oklch(94.3% 0.018 78)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#282520",
+          "#46413a",
+          "#676056",
+          "#888176",
+          "#aaa49b",
+          "#ccc9c3",
+          "#efeeec"
+        ]
+      },
+      "console-ink-faint": {
+        "role": "neutral",
+        "displayName": "Ink Faint",
+        "canonical": "oklch(53.3% 0.024 63)",
+        "tonalRamp": [
+          "#0d0b08",
+          "#2a241f",
+          "#494038",
+          "#6b5f54",
+          "#8d8074",
+          "#aea399",
+          "#cfc8c2",
+          "#f0eeec"
+        ]
+      },
+      "console-orange-wash": {
+        "role": "primary",
+        "displayName": "Orange Wash",
+        "canonical": "oklch(94.7% 0.028 55)",
+        "tonalRamp": [
+          "#0e0a08",
+          "#2b231e",
+          "#4b3f37",
+          "#6e5d52",
+          "#907e73",
+          "#b1a298",
+          "#d0c7c1",
+          "#f1eeec"
+        ]
+      },
+      "console-danger": {
+        "role": "tertiary",
+        "displayName": "Brick Danger",
+        "canonical": "oklch(54.8% 0.176 33)",
+        "tonalRamp": [
+          "#1c0200",
+          "#480b02",
+          "#791907",
+          "#ae290e",
+          "#d74f36",
+          "#ef816b",
+          "#fab6a7",
+          "#ffe9e4"
+        ]
+      },
+      "console-danger-wash": {
+        "role": "tertiary",
+        "displayName": "Danger Wash",
+        "canonical": "oklch(93.6% 0.026 32)",
+        "tonalRamp": [
+          "#0e0a09",
+          "#2b2321",
+          "#4c3e3b",
+          "#6f5c58",
+          "#917d79",
+          "#b2a19d",
+          "#d1c6c4",
+          "#f1eeed"
+        ]
+      },
+      "console-success": {
+        "role": "secondary",
+        "displayName": "Success (Sage Deep)",
+        "canonical": "oklch(61.9% 0.048 156)",
+        "tonalRamp": [
+          "#070d09",
+          "#1b2920",
+          "#32483a",
+          "#4b6a56",
+          "#6b8b76",
+          "#93ad9b",
+          "#becec3",
+          "#ebf0ec"
+        ]
+      },
+      "console-sleep": {
+        "role": "secondary",
+        "displayName": "Sleep (Sage)",
+        "canonical": "oklch(75.3% 0.041 156)",
+        "tonalRamp": [
+          "#070d09",
+          "#1d2821",
+          "#35473b",
+          "#4f6858",
+          "#6f8a78",
+          "#96ab9c",
+          "#c0cdc4",
+          "#ebf0ed"
+        ]
+      },
+      "console-code-bg": {
+        "role": "neutral",
+        "displayName": "Code Ground",
+        "canonical": "oklch(94.3% 0.018 78)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#282520",
+          "#46413a",
+          "#676056",
+          "#888176",
+          "#aaa49b",
+          "#ccc9c3",
+          "#efeeec"
+        ]
+      },
+      "console-ground-dark": {
+        "role": "neutral",
+        "displayName": "Night Ground",
+        "canonical": "oklch(22.3% 0.012 56)",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#282422",
+          "#46413d",
+          "#67605b",
+          "#88817b",
+          "#aaa49f",
+          "#ccc8c6",
+          "#efeeed"
+        ]
+      },
+      "console-sidebar-dark": {
+        "role": "neutral",
+        "displayName": "Night Sidebar (deepest plane)",
+        "canonical": "oklch(16.8% 0.009 59)",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#272423",
+          "#45413e",
+          "#65605c",
+          "#87817d",
+          "#a9a4a1",
+          "#cbc8c6",
+          "#efeeed"
+        ]
+      },
+      "console-surface-dark": {
+        "role": "neutral",
+        "displayName": "Night Surface",
+        "canonical": "oklch(24.9% 0.013 62)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#282422",
+          "#46413d",
+          "#67605a",
+          "#88817b",
+          "#aaa49f",
+          "#ccc8c5",
+          "#efeeed"
+        ]
+      },
+      "console-raised-dark": {
+        "role": "neutral",
+        "displayName": "Night Raised",
+        "canonical": "oklch(26.7% 0.013 52)",
+        "tonalRamp": [
+          "#0d0b0a",
+          "#282422",
+          "#46413d",
+          "#675f5b",
+          "#89807b",
+          "#aba39f",
+          "#ccc8c6",
+          "#efeeed"
+        ]
+      },
+      "console-inset-dark": {
+        "role": "neutral",
+        "displayName": "Night Inset",
+        "canonical": "oklch(22.2% 0.011 61)",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#272422",
+          "#45413e",
+          "#66605b",
+          "#87817c",
+          "#a9a4a0",
+          "#ccc8c6",
+          "#efeeed"
+        ]
+      },
+      "console-ink-dark": {
+        "role": "neutral",
+        "displayName": "Night Ink",
+        "canonical": "oklch(94.6% 0.015 77)",
+        "tonalRamp": [
+          "#0c0b09",
+          "#272521",
+          "#46413b",
+          "#666058",
+          "#888178",
+          "#a9a49d",
+          "#ccc9c4",
+          "#efeeed"
+        ]
+      },
+      "console-ink-soft-dark": {
+        "role": "neutral",
+        "displayName": "Night Ink Soft",
+        "canonical": "oklch(82.3% 0.022 70)",
+        "tonalRamp": [
+          "#0d0b08",
+          "#29241f",
+          "#484138",
+          "#6a5f54",
+          "#8b8074",
+          "#ada399",
+          "#cec8c2",
+          "#f0eeec"
+        ]
+      },
+      "console-ink-faint-dark": {
+        "role": "neutral",
+        "displayName": "Night Ink Faint",
+        "canonical": "oklch(68.1% 0.022 63)",
+        "tonalRamp": [
+          "#0d0b08",
+          "#29241f",
+          "#494039",
+          "#6b5f55",
+          "#8c8075",
+          "#ada39a",
+          "#cec8c2",
+          "#f0eeec"
+        ]
+      },
+      "console-orange-wash-dark": {
+        "role": "primary",
+        "displayName": "Night Orange Wash",
+        "canonical": "oklch(28.4% 0.041 53)",
+        "tonalRamp": [
+          "#0f0a07",
+          "#2e221b",
+          "#503e33",
+          "#745b4c",
+          "#977c6c",
+          "#b6a092",
+          "#d4c6be",
+          "#f2edeb"
+        ]
+      },
+      "console-danger-dark": {
+        "role": "tertiary",
+        "displayName": "Night Danger",
+        "canonical": "oklch(67.3% 0.162 32)",
+        "tonalRamp": [
+          "#1b0301",
+          "#460f06",
+          "#751f10",
+          "#a9311c",
+          "#d1553e",
+          "#ea8570",
+          "#f6b8aa",
+          "#fee9e5"
+        ]
+      },
+      "console-danger-wash-dark": {
+        "role": "tertiary",
+        "displayName": "Night Danger Wash",
+        "canonical": "oklch(27.5% 0.045 33)",
+        "tonalRamp": [
+          "#100908",
+          "#30211e",
+          "#533b36",
+          "#795851",
+          "#9c7971",
+          "#bb9d97",
+          "#d7c5c0",
+          "#f3edec"
+        ]
+      },
+      "console-success-dark": {
+        "role": "secondary",
+        "displayName": "Night Success",
+        "canonical": "oklch(72.7% 0.046 158)",
+        "tonalRamp": [
+          "#070d09",
+          "#1b2921",
+          "#32483b",
+          "#4b6958",
+          "#6b8b78",
+          "#92ac9d",
+          "#becec4",
+          "#ebf0ed"
+        ]
+      },
+      "console-code-bg-dark": {
+        "role": "neutral",
+        "displayName": "Night Code Ground",
+        "canonical": "oklch(20.1% 0.010 53)",
+        "tonalRamp": [
+          "#0c0b0a",
+          "#272423",
+          "#45413e",
+          "#66605c",
+          "#87817d",
+          "#a9a4a0",
+          "#ccc8c6",
+          "#efeeed"
+        ]
+      },
+      "console-sleep-dark": {
+        "role": "secondary",
+        "displayName": "Night Sleep",
+        "canonical": "oklch(66.0% 0.040 156)",
+        "tonalRamp": [
+          "#070d09",
+          "#1d2821",
+          "#35473b",
+          "#4f6858",
+          "#6f8a78",
+          "#96ab9d",
+          "#c0cdc4",
+          "#ebf0ed"
+        ]
+      },
+      "sky": {
+        "role": "tertiary",
+        "displayName": "Sky paint",
+        "canonical": "oklch(76.4% 0.063 238)",
+        "tonalRamp": [
+          "#040c12",
+          "#152733",
+          "#284658",
+          "#3e6780",
+          "#5e88a4",
+          "#88aac1",
+          "#b8ccda",
+          "#e9eff4"
+        ]
+      },
+      "rose": {
+        "role": "tertiary",
+        "displayName": "Rose paint",
+        "canonical": "oklch(77.8% 0.086 0)",
+        "tonalRamp": [
+          "#14070b",
+          "#371b24",
+          "#5e3340",
+          "#884c5f",
+          "#ad6c80",
+          "#ca94a3",
+          "#e1bfc8",
+          "#f6ebee"
+        ]
+      },
+      "lemon": {
+        "role": "tertiary",
+        "displayName": "Lemon paint",
+        "canonical": "oklch(86.1% 0.139 93)",
+        "tonalRamp": [
+          "#110a00",
+          "#312300",
+          "#553f00",
+          "#7c5d00",
+          "#9f7f00",
+          "#bca34c",
+          "#d7c999",
+          "#f3efe0"
+        ]
+      },
+      "plum": {
+        "role": "tertiary",
+        "displayName": "Plum paint",
+        "canonical": "oklch(65.6% 0.076 303)",
+        "tonalRamp": [
+          "#0d0913",
+          "#292035",
+          "#483a5b",
+          "#6a5785",
+          "#8b77a8",
+          "#ac9cc5",
+          "#cdc4dd",
+          "#f0edf5"
+        ]
+      },
+      "console-line": {
+        "role": "neutral",
+        "displayName": "Console Line",
+        "canonical": "rgb(43 36 32 / 0.12)",
+        "tonalRamp": []
+      },
+      "console-line-strong": {
+        "role": "neutral",
+        "displayName": "Console Line Strong",
+        "canonical": "rgb(43 36 32 / 0.22)",
+        "tonalRamp": []
+      },
+      "console-line-dark": {
+        "role": "neutral",
+        "displayName": "Console Line Dark",
+        "canonical": "rgb(255 240 225 / 0.1)",
+        "tonalRamp": []
+      },
+      "console-line-strong-dark": {
+        "role": "neutral",
+        "displayName": "Console Line Strong Dark",
+        "canonical": "rgb(255 240 225 / 0.2)",
+        "tonalRamp": []
       }
     },
     "cubeFaceBases": {
-      "note": "Hard-coded in global.css per tone, not :root tokens.",
+      "note": "Hard-coded in global.css per tone, not :root tokens. The console tokenises all four faces per paint (see the *-top/-deep/-base colors) and adds sky, rose, lemon, plum.",
       "orange": {
         "top": "#ff8a3d",
         "side": "#c9530f",
@@ -266,6 +740,26 @@
         "top": "#f2dfbf",
         "side": "#d4b380",
         "base": "#b8955d"
+      },
+      "sky": {
+        "top": "#a9cde3",
+        "side": "#5f90b0",
+        "base": "#4a7591"
+      },
+      "rose": {
+        "top": "#f0bccb",
+        "side": "#c2708a",
+        "base": "#a0586f"
+      },
+      "lemon": {
+        "top": "#f7df86",
+        "side": "#c9a62f",
+        "base": "#a4861f"
+      },
+      "plum": {
+        "top": "#b6a6cd",
+        "side": "#6f5d8f",
+        "base": "#574872"
       }
     },
     "typographyMeta": {
@@ -296,6 +790,34 @@
       "stamp": {
         "displayName": "Stamp",
         "purpose": "Chip text and the rotated outline stamp."
+      },
+      "console-h1": {
+        "displayName": "Console H1",
+        "purpose": "Base h1 (1.5rem); page and agent heads use t-xl 1.25rem."
+      },
+      "console-h2": {
+        "displayName": "Console H2",
+        "purpose": "Section heads; 1.0625rem inside the panel."
+      },
+      "console-h3": {
+        "displayName": "Console H3",
+        "purpose": "Form groups."
+      },
+      "console-body": {
+        "displayName": "Console Body",
+        "purpose": "Messages (78ch), rows, fields."
+      },
+      "console-label": {
+        "displayName": "Console Label",
+        "purpose": "Buttons, field labels, tabs, tables, work summaries."
+      },
+      "console-micro": {
+        "displayName": "Console Micro",
+        "purpose": "Chips, badges, bottom-bar labels, hints."
+      },
+      "console-mono": {
+        "displayName": "Console Mono",
+        "purpose": "Commands, pre output, kbd only."
       }
     },
     "shadows": [
@@ -333,6 +855,41 @@
         "name": "divider",
         "value": "2px solid rgb(43 36 32 / 0.1)",
         "purpose": "Status rows and footer top border."
+      },
+      {
+        "name": "console-edge",
+        "value": "inset 0 -3px 0 var(--edge), 0 1px 0 rgb(var(--shadow) / 0.08)",
+        "purpose": "Resting console block button; edge is paper-deep / orange-deep / danger by variant, 1px when pressed."
+      },
+      {
+        "name": "console-chip-edge",
+        "value": "inset 0 -2px 0 <tone>-deep",
+        "purpose": "Paint, sage and wood chips and the unread badge."
+      },
+      {
+        "name": "console-button-hover",
+        "value": "0 6px 14px -6px rgb(var(--shadow) / 0.35)",
+        "purpose": "Button raised 1px on hover."
+      },
+      {
+        "name": "float",
+        "value": "0 18px 44px -14px rgb(var(--shadow) / 0.45)",
+        "purpose": "Dialogs, menus, floating preview and pills, desktop screen."
+      },
+      {
+        "name": "console-tab-select",
+        "value": "0 1px 2px rgb(var(--shadow) / 0.15)",
+        "purpose": "Selected segmented tab."
+      },
+      {
+        "name": "console-focus-ring",
+        "value": "0 0 0 3px rgb(242 106 27 / 0.25)",
+        "purpose": "Fields on focus (composer 0.2) with an orange border."
+      },
+      {
+        "name": "console-shadow-dark",
+        "value": "--shadow: 0 0 0; .btn --edge: rgb(0 0 0 / 0.35)",
+        "purpose": "Dark theme: shadow base goes black, button edges go translucent black."
       }
     ],
     "motion": [
@@ -370,6 +927,51 @@
         "name": "reduced-motion",
         "value": "no reveal, no blink, no bob, no follow, scroll-behavior auto",
         "purpose": "prefers-reduced-motion: static poses."
+      },
+      {
+        "name": "quick",
+        "value": "160ms",
+        "purpose": "Console control transitions (transform, box-shadow, background, border) on the settle ease."
+      },
+      {
+        "name": "cube-nod",
+        "value": "rotateX −3deg over 2.4s ease-in-out infinite; eyes look down 6%, blink 3.2s",
+        "purpose": "Working mood."
+      },
+      {
+        "name": "cube-drift",
+        "value": "−4deg pitch, +6deg yaw, −6% rise over 6s ease-in-out infinite; half-lid eyes, no blink",
+        "purpose": "Dreaming mood."
+      },
+      {
+        "name": "cube-glow",
+        "value": "front-face radial rgb(220 240 255 / 0.45) opacity 0.7–1 over 2.2s",
+        "purpose": "Desktop mood."
+      },
+      {
+        "name": "cube-zz",
+        "value": "three z’s drift 25% right, 45% up over 3.9s ease-out, 1.3s apart",
+        "purpose": "Sleeping mood."
+      },
+      {
+        "name": "dot-pulse",
+        "value": "ring 0 → 5px rgb(242 106 27 / 0.45 → 0) over 1.6s",
+        "purpose": "Working status dot."
+      },
+      {
+        "name": "spin",
+        "value": "360deg over 1.2s linear",
+        "purpose": "Running work-card mark."
+      },
+      {
+        "name": "shimmer",
+        "value": "background-position 200% over 1.4s linear",
+        "purpose": "Skeleton rows."
+      },
+      {
+        "name": "console-reduced-motion",
+        "value": "all animation and transition durations 0.001ms; cube body, eyes, z’s and glow animation none; first z visible; pointer follow never attached",
+        "purpose": "prefers-reduced-motion in the console."
       }
     ],
     "breakpoints": [
@@ -380,6 +982,22 @@
       {
         "name": "compact",
         "value": "560px"
+      },
+      {
+        "name": "console-phone",
+        "value": "820px"
+      },
+      {
+        "name": "console-panel-narrow",
+        "value": "1100px"
+      },
+      {
+        "name": "console-platform-stack",
+        "value": "1000px"
+      },
+      {
+        "name": "console-avatar-stack",
+        "value": "420px"
       }
     ]
   },
@@ -447,6 +1065,78 @@
       "description": "The short wooden shelf blocks rest on: grained top surface over a darker front edge, blurred warm drop.",
       "html": "<div class=\"ds-slab\"></div>",
       "css": ".ds-slab { position: relative; height: 34px; margin-bottom: 14px; } .ds-slab::before, .ds-slab::after { content: ''; position: absolute; left: 0; right: 0; } .ds-slab::before { top: 0; height: 20px; border-radius: 8px 8px 2px 2px; background: repeating-linear-gradient(93deg, transparent 0 22px, rgb(201 162 107 / 0.22) 22px 23px, transparent 23px 51px, rgb(201 162 107 / 0.12) 51px 54px), linear-gradient(180deg, #f3deba, #e6c99c); box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.5); } .ds-slab::after { top: 20px; height: 14px; border-radius: 0 0 6px 6px; background: linear-gradient(180deg, #d4b380, #c9a26b); box-shadow: 0 12px 24px -12px rgb(43 36 32 / 0.45); }"
+    },
+    {
+      "name": "Console Primary Button",
+      "kind": "button",
+      "refersTo": "console-button-primary",
+      "description": "The one primary action per surface (Send, Save): an orange block with a 3px inset edge.",
+      "html": "<button class=\"ds-cbtn ds-cbtn--primary\">Send</button>",
+      "css": ".ds-cbtn{--face:var(--raised,#fff);--edge:var(--paper-deep,#e8e1d4);display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:36px;padding:7px 14px 9px;border:0;border-radius:8px;background:var(--face);color:var(--ink,#2b2420);font:600 0.8125rem/1.2 Rubik,system-ui,sans-serif;cursor:pointer;box-shadow:inset 0 -3px 0 var(--edge),0 1px 0 rgb(43 36 32/0.08);transition:transform 160ms cubic-bezier(.16,1,.3,1),box-shadow 160ms cubic-bezier(.16,1,.3,1),background 160ms}.ds-cbtn:hover{transform:translateY(-1px);box-shadow:inset 0 -3px 0 var(--edge),0 6px 14px -6px rgb(43 36 32/0.35)}.ds-cbtn:active{transform:translateY(1px);box-shadow:inset 0 -1px 0 var(--edge)}.ds-cbtn:focus-visible{outline:3px solid var(--orange,#f26a1b);outline-offset:2px}.ds-cbtn--primary{--face:var(--orange,#f26a1b);--edge:var(--orange-deep,#c9530f);color:#2b2420}"
+    },
+    {
+      "name": "Console Button",
+      "kind": "button",
+      "refersTo": "console-button",
+      "description": "Default and danger block buttons; ghost drops face and edge.",
+      "html": "<button class=\"ds-cbtn\">Details</button> <button class=\"ds-cbtn ds-cbtn--danger\">Cancel</button> <button class=\"ds-cbtn ds-cbtn--ghost\">Close</button>",
+      "css": ".ds-cbtn{--face:var(--raised,#fff);--edge:var(--paper-deep,#e8e1d4);display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:7px 14px 9px;border:0;border-radius:8px;background:var(--face);color:var(--ink,#2b2420);font:600 0.8125rem/1.2 Rubik,system-ui,sans-serif;cursor:pointer;box-shadow:inset 0 -3px 0 var(--edge),0 1px 0 rgb(43 36 32/0.08);transition:transform 160ms cubic-bezier(.16,1,.3,1),box-shadow 160ms cubic-bezier(.16,1,.3,1)}.ds-cbtn:hover{transform:translateY(-1px);box-shadow:inset 0 -3px 0 var(--edge),0 6px 14px -6px rgb(43 36 32/0.35)}.ds-cbtn:active{transform:translateY(1px);box-shadow:inset 0 -1px 0 var(--edge)}.ds-cbtn:focus-visible{outline:3px solid var(--orange,#f26a1b);outline-offset:2px}.ds-cbtn--danger{--face:var(--danger-wash,#fbe4df);--edge:var(--danger,#c23b22);color:var(--danger,#c23b22)}.ds-cbtn--ghost{--edge:transparent;background:transparent;box-shadow:none}.ds-cbtn--ghost:hover{background:rgb(43 36 32/0.06);box-shadow:none;transform:none}"
+    },
+    {
+      "name": "Console Field",
+      "kind": "input",
+      "refersTo": "console-input",
+      "description": "Raised field with a Line Strong border; focus turns the border orange with a 3px orange ring.",
+      "html": "<label class=\"ds-cfield\"><span>Name <span class=\"ds-cfield__hint\">Shown in the sidebar</span></span><input class=\"ds-cinput\" placeholder=\"Keeper\"></label>",
+      "css": ".ds-cfield{display:grid;gap:6px;font:600 0.8125rem/1.5 Rubik,system-ui,sans-serif;color:var(--ink-soft,#5e5249)}.ds-cfield>span:first-child{display:flex;justify-content:space-between;gap:8px}.ds-cfield__hint{font-weight:400;font-size:0.75rem;color:var(--ink-faint,#776a5f)}.ds-cinput{width:100%;min-height:38px;padding:8px 12px;border:1px solid var(--line-strong,rgb(43 36 32/0.22));border-radius:8px;background:var(--raised,#fff);color:var(--ink,#2b2420);font:400 0.9375rem/1.5 Rubik,system-ui,sans-serif;transition:border-color 160ms,box-shadow 160ms}.ds-cinput::placeholder{color:var(--ink-faint,#776a5f)}.ds-cinput:focus{outline:none;border-color:var(--orange,#f26a1b);box-shadow:0 0 0 3px rgb(242 106 27/0.25)}"
+    },
+    {
+      "name": "Console Chips",
+      "kind": "chip",
+      "refersTo": "console-chip",
+      "description": "Small 6px chips: inset default, paint/sage/wood with a 2px deep edge, danger on wash.",
+      "html": "<span class=\"ds-cchip\">Room · launch</span> <span class=\"ds-cchip ds-cchip--paint\">Running</span> <span class=\"ds-cchip ds-cchip--sage\">Sleeping</span> <span class=\"ds-cchip ds-cchip--wood\">Planned</span> <span class=\"ds-cchip ds-cchip--danger\">Failed</span>",
+      "css": ".ds-cchip{display:inline-flex;align-items:center;gap:6px;padding:2px 9px 3px;border-radius:6px;background:var(--inset,#f3ebdf);color:var(--ink-soft,#5e5249);font:700 0.75rem/1.4 Rubik,system-ui,sans-serif;white-space:nowrap}.ds-cchip--paint{background:var(--orange,#f26a1b);color:#2b2420;box-shadow:inset 0 -2px 0 var(--orange-deep,#c9530f)}.ds-cchip--sage{background:var(--sage,#9bb7a4);color:#2b2420;box-shadow:inset 0 -2px 0 var(--sage-deep,#6f8f7a)}.ds-cchip--wood{background:var(--wood,#e9cfa5);color:#2b2420;box-shadow:inset 0 -2px 0 var(--wood-deep,#d4b380)}.ds-cchip--danger{background:var(--danger-wash,#fbe4df);color:var(--danger,#c23b22)}"
+    },
+    {
+      "name": "Sidebar Rows",
+      "kind": "nav",
+      "refersTo": "console-sidebar-row",
+      "description": "Sidebar rows on the deepest plane: hover wash, flat orange current fill with no edge, 700 label when unread, orange badge.",
+      "html": "<nav class=\"ds-csb\"><button class=\"ds-csb__head\">Agents</button><a class=\"ds-crow\" href=\"#\"><span class=\"ds-crow__cube\"></span><span class=\"ds-crow__label\">Scribe</span></a><a class=\"ds-crow ds-crow--unread\" href=\"#\"><span class=\"ds-crow__cube\"></span><span class=\"ds-crow__label\">Courier</span><span class=\"ds-cbadge\">3</span></a><a class=\"ds-crow\" aria-current=\"page\" href=\"#\"><span class=\"ds-crow__cube\"></span><span class=\"ds-crow__label\">Keeper</span></a></nav>",
+      "css": ".ds-csb{display:grid;gap:2px;padding:8px;background:var(--sidebar,#efe3d1);width:260px;font-family:Rubik,system-ui,sans-serif}.ds-csb__head{appearance:none;border:0;background:none;text-align:left;padding:6px 8px;border-radius:6px;font:700 0.8125rem/1.5 Rubik,system-ui,sans-serif;color:var(--ink-soft,#5e5249);cursor:pointer}.ds-crow{display:flex;align-items:center;gap:10px;min-height:34px;padding:4px 8px;border-radius:8px;color:var(--ink,#2b2420);text-decoration:none;font-size:0.9375rem;transition:background 160ms}.ds-crow:hover{background:rgb(43 36 32/0.06)}.ds-crow[aria-current=page]{background:var(--orange,#f26a1b);color:#2b2420}.ds-crow:focus-visible{outline:3px solid var(--orange,#f26a1b);outline-offset:2px}.ds-crow__cube{width:18px;height:18px;border-radius:3px;background:linear-gradient(165deg,#ff8a3d,#f26a1b 45%,#c9530f);flex:none}.ds-crow__label{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-crow--unread .ds-crow__label{font-weight:700}.ds-cbadge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--orange,#f26a1b);color:#2b2420;font-size:0.75rem;font-weight:800;display:grid;place-items:center;box-shadow:inset 0 -2px 0 var(--orange-deep,#c9530f)}"
+    },
+    {
+      "name": "Segmented Tabs",
+      "kind": "nav",
+      "refersTo": "console-tabs",
+      "description": "Inset tray; the current tab is a raised face with a 1px shadow.",
+      "html": "<div class=\"ds-ctabs\" role=\"tablist\"><button role=\"tab\" aria-selected=\"true\">About</button><button role=\"tab\">Status</button><button role=\"tab\">Routines</button><button role=\"tab\">Access</button></div>",
+      "css": ".ds-ctabs{display:flex;gap:2px;padding:3px;border-radius:8px;background:var(--inset,#f3ebdf);width:max-content}.ds-ctabs>button{appearance:none;border:0;background:none;padding:5px 12px;border-radius:6px;font:600 0.8125rem/1.5 Rubik,system-ui,sans-serif;color:var(--ink-soft,#5e5249);cursor:pointer;white-space:nowrap}.ds-ctabs>button:hover{color:var(--ink,#2b2420)}.ds-ctabs>button:focus-visible{outline:3px solid var(--orange,#f26a1b);outline-offset:2px}.ds-ctabs>[aria-selected=true]{background:var(--raised,#fff);color:var(--ink,#2b2420);box-shadow:0 1px 2px rgb(43 36 32/0.15)}"
+    },
+    {
+      "name": "Work Card",
+      "kind": "card",
+      "refersTo": "console-work-card",
+      "description": "A tool run in the transcript: inset details block with icon well, capitalised title, mono command and a status mark.",
+      "html": "<details class=\"ds-cwork\"><summary class=\"ds-cwork__summary\"><span class=\"ds-cwork__icon\"><svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"4 17 10 11 4 5\"/><line x1=\"12\" y1=\"19\" x2=\"20\" y2=\"19\"/></svg></span><span class=\"ds-cwork__title\">Shell</span><span class=\"ds-cwork__cmd\">git log --since=1.week --name-only</span><span class=\"ds-cwork__ok\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"20 6 9 17 4 12\"/></svg></span></summary><div class=\"ds-cwork__body\"><pre class=\"ds-cwork__pre\">launch/brief.md\nlaunch/checklist.md</pre></div></details>",
+      "css": ".ds-cwork{border:1px solid var(--line,rgb(43 36 32/0.12));border-radius:8px;background:var(--inset,#f3ebdf);max-width:78ch;overflow:hidden;font-family:Rubik,system-ui,sans-serif}.ds-cwork__summary{display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer;list-style:none;font-size:0.8125rem}.ds-cwork__summary::-webkit-details-marker{display:none}.ds-cwork__icon{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;background:var(--raised,#fff);color:var(--ink-soft,#5e5249);flex:none}.ds-cwork__title{font-weight:700;text-transform:capitalize}.ds-cwork__cmd{flex:1;min-width:0;font:0.75rem ui-monospace,SF Mono,Menlo,Consolas,monospace;color:var(--ink-soft,#5e5249);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-cwork__ok{color:var(--success,#6f8f7a);display:flex}.ds-cwork__body{padding:0 10px 10px}.ds-cwork__pre{margin:0;padding:10px 12px;border-radius:8px;background:var(--code-bg,#f3ebdf);border:1px solid var(--line,rgb(43 36 32/0.12));font:0.75rem/1.5 ui-monospace,SF Mono,Menlo,Consolas,monospace;white-space:pre-wrap}"
+    },
+    {
+      "name": "Thread Line",
+      "kind": "custom",
+      "refersTo": "console-thread-line",
+      "description": "\"3 tasks · 2 done\": the delegated-work summary under an agent message; hover turns the border orange.",
+      "html": "<button class=\"ds-cthread\"><span class=\"ds-cthread__faces\"><i>S</i><i>C</i></span>3 tasks · 2 done</button>",
+      "css": ".ds-cthread{appearance:none;display:inline-flex;align-items:center;gap:8px;padding:4px 10px 4px 6px;border:1px solid var(--line,rgb(43 36 32/0.12));border-radius:8px;background:var(--raised,#fff);color:var(--ink,#2b2420);font:600 0.8125rem/1.5 Rubik,system-ui,sans-serif;cursor:pointer;transition:border-color 160ms}.ds-cthread:hover{border-color:var(--orange,#f26a1b)}.ds-cthread:focus-visible{outline:3px solid var(--orange,#f26a1b);outline-offset:2px}.ds-cthread__faces{display:flex}.ds-cthread__faces i{width:20px;height:20px;margin-right:-6px;border-radius:6px;border:2px solid var(--raised,#fff);background:var(--sage-deep,#6f8f7a);color:#fffdf9;font:800 0.75rem/16px Rubik,system-ui,sans-serif;font-style:normal;display:grid;place-items:center}"
+    },
+    {
+      "name": "Composer",
+      "kind": "input",
+      "refersTo": "console-composer",
+      "description": "The conversation’s primary surface: raised 10px box, borderless textarea, bar with queue note and Send; focus-within turns the border orange.",
+      "html": "<div class=\"ds-ccomp\"><textarea class=\"ds-ccomp__input\" rows=\"1\" placeholder=\"Message Keeper\"></textarea><div class=\"ds-ccomp__bar\"><span class=\"ds-ccomp__note\">Your message queues; waiting for the agent’s runtime.</span><button class=\"ds-ccomp__send\">Send</button></div></div>",
+      "css": ".ds-ccomp{border:1px solid var(--line-strong,rgb(43 36 32/0.22));border-radius:10px;background:var(--raised,#fff);font-family:Rubik,system-ui,sans-serif;transition:border-color 160ms,box-shadow 160ms}.ds-ccomp:focus-within{border-color:var(--orange,#f26a1b);box-shadow:0 0 0 3px rgb(242 106 27/0.2)}.ds-ccomp__input{display:block;width:100%;border:0;background:transparent;color:var(--ink,#2b2420);font:400 0.9375rem/1.5 Rubik,system-ui,sans-serif;padding:12px 14px 6px;resize:none;min-height:44px;box-sizing:border-box}.ds-ccomp__input:focus{outline:none}.ds-ccomp__input::placeholder{color:var(--ink-faint,#776a5f)}.ds-ccomp__bar{display:flex;align-items:center;gap:8px;padding:4px 8px 8px 10px}.ds-ccomp__note{flex:1;min-width:0;font-size:0.8125rem;color:var(--ink-faint,#776a5f);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ds-ccomp__send{display:inline-flex;align-items:center;min-height:30px;padding:4px 10px 6px;border:0;border-radius:8px;background:var(--orange,#f26a1b);color:#2b2420;font:600 0.75rem/1.2 Rubik,system-ui,sans-serif;cursor:pointer;box-shadow:inset 0 -3px 0 var(--orange-deep,#c9530f),0 1px 0 rgb(43 36 32/0.08)}.ds-ccomp__send:hover{transform:translateY(-1px);box-shadow:inset 0 -3px 0 var(--orange-deep,#c9530f),0 6px 14px -6px rgb(43 36 32/0.35)}.ds-ccomp__send:active{transform:translateY(1px);box-shadow:inset 0 -1px 0 var(--orange-deep,#c9530f)}"
     }
   ],
   "narrative": {
@@ -494,15 +1184,56 @@
         "name": "The Bottom Edge Rule",
         "body": "A pressable or status-bearing block always shows its darker bottom edge in the same tone family (*-deep). Pressing shrinks the edge from 4px to 2px and moves the block down 2px.",
         "section": "elevation"
+      },
+      {
+        "name": "The Sidebar Is the Deepest Plane Rule",
+        "body": "In both themes the planes order sidebar → ground → surface → raised, darkest to lightest, and the conversation sits on the lightest large plane. The dark theme is this order in warm near-black: `#120e0b` → `#201a16` → `#26201b` → `#2b2420`. No plane may be lighter than the one that floats on it.",
+        "section": "console-colors"
+      },
+      {
+        "name": "The One Accent Rule",
+        "body": "Orange is the only accent: selection, primary action, unread, focus. Status dots and chips use the world's paints (sage, wood, plum, danger) and are never used to point.",
+        "section": "console-colors"
+      },
+      {
+        "name": "The Desk at Night Rule",
+        "body": "Dark mode (`prefers-color-scheme: dark` unless `data-theme=\"light\"`, or `data-theme=\"dark\"`) swaps only the planes, inks, lines, washes and status tints. Orange, the paints and the cube's lighting are unchanged; the shadow base becomes black (`--shadow: 0 0 0`) and button edges become `rgb(0 0 0 / 0.35)`.",
+        "section": "console-colors"
+      },
+      {
+        "name": "The Fixed Scale Rule",
+        "body": "Console type never scales with the viewport. Pick one of the seven steps.",
+        "section": "console-typography"
+      },
+      {
+        "name": "The Bold Name Rule",
+        "body": "An agent is found by its face and its bold name: author names and the wordmark are 800; an unread row goes to 700. Nothing else in a row is bold.",
+        "section": "console-typography"
+      },
+      {
+        "name": "The Inset Edge Rule",
+        "body": "The block's bottom edge is drawn as an inset shadow (3px rest, 1px pressed) so a control's box never grows. Buttons lift 1px on hover and sink 1px when pressed, over 160ms on the settle ease.",
+        "section": "console-elevation"
+      },
+      {
+        "name": "The Flat Selection Rule",
+        "body": "The selected sidebar row and the selected palette hit are flat orange fills with no edge and no shadow: selection is paint on the desk, not a block to press.",
+        "section": "console-elevation"
       }
     ],
     "dos": [
-      "Do build every interactive or status element as a block: tone face, *-deep bottom edge, 8\u201310px radius, ink text.",
+      "Do build every interactive or status element as a block: tone face, *-deep bottom edge, 8–10px radius, ink text.",
       "Do show state through material: orange painted, half-painted, raw wood, paper, sage. Implemented, in progress, and planned must be distinguishable without reading.",
       "Do keep orange the only saturated color and sage the only cool one.",
       "Do rest blocks on wood shelves or trays with a blurred contact shadow when they sit on the desk.",
       "Do use one settle easing and land things once; give reduced-motion users a static pose.",
-      "Do set headings in Rubik 800\u2013900 with negative tracking and cap reading copy at 62ch."
+      "Do set headings in Rubik 800–900 with negative tracking and cap reading copy at 62ch.",
+      "Console: Do place the conversation on Surface, management on Ground, chrome on Sidebar, and controls on Raised; depth is the plane, not a shadow.",
+      "Console: Do keep orange to selection, the one primary action per surface, unread marks and focus; use the sidebar's flat orange fill for \"you are here\" and the inset-edge block for \"press me\".",
+      "Console: Do set every size from the seven-step rem scale and the 6 / 8 / 10 / 14px radii.",
+      "Console: Do show an agent as its cube and bold name wherever it appears (sidebar, head, messages, thread faces) and let the cube's mood come from activity.",
+      "Console: Do use Float for anything that leaves the desk (menus, dialogs, the preview) and warm blurred shadows only; in the dark theme the base is black at the same alphas.",
+      "Console: Do honour reduced motion: static cube, first z shown, no pointer follow, no pulses."
     ],
     "donts": [
       "Don't use cards or bordered panels as page structure; sections are flat regions of the desk, alternating Desk and Desk Deep.",
@@ -510,7 +1241,14 @@
       "Don't use gradient text, orange headings, or a dark hero.",
       "Don't use zero-blur offset shadows or black/cool shadows; shadows are warm ink, blurred.",
       "Don't add a second typeface, light display weights, or uppercase tracking.",
-      "Don't give eyes to a block that is not an agent, or open eyes to one that is sleeping."
-    ]
+      "Don't give eyes to a block that is not an agent, or open eyes to one that is sleeping.",
+      "Console: Don't bring the site's scenery into the console: no shelves, mugs, plants, slabs or painted-block scenes; the cube is the only illustration.",
+      "Console: Don't put a kicker or eyebrow above a heading; the section heads in the sidebar and panel are headings, not eyebrows.",
+      "Console: Don't add a second accent: status dots and chips are the world's paints and never point; a non-orange filled control is a mistake.",
+      "Console: Don't use fluid type, a heading above 1.5rem, uppercase tracking or a second typeface; mono is for commands and output only.",
+      "Console: Don't give the selected sidebar row an edge or a shadow, or give a block button a zero-blur drop.",
+      "Console: Don't make any plane lighter than the plane that floats on it; the sidebar is always the deepest."
+    ],
+    "consoleNorthStar": "The Desk, Cleared for Work"
   }
 }

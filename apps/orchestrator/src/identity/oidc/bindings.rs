@@ -5,7 +5,7 @@ use crate::identity::{
 use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct Binding {
     pub id: Uuid,
     pub account_id: Uuid,
