@@ -474,7 +474,7 @@ fn prepare<'a>(
             let running = match &parsed {
                 Ok(_)
                     if task
-                        && (call.name == "request_login"
+                        && (crate::collaboration::drives_desktop(&call.name)
                             || tools.is_some_and(|tools| tools.computer(&call.name))) =>
                 {
                     Err("a delegated task cannot control the desktop")
@@ -499,6 +499,7 @@ fn prepare<'a>(
                 })
             });
             let input = parsed.unwrap_or_else(|_| call.arguments.clone().into());
+            let input = crate::collaboration::redacted(&call.name, input);
             (id, call.name.clone(), input, running)
         })
         .collect()

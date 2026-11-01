@@ -458,7 +458,10 @@ button.agent-link.selected {
   flex-wrap: wrap;
   align-items: center;
 }
-.login-handoff input {
+.login-handoff .actions input {
   flex: 1 1 16rem;
   width: auto;
+}
+.login-handoff form {
+  flex: 1 1 100%;
 }

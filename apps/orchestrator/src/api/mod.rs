@@ -14,6 +14,7 @@ mod oidc;
 mod rooms;
 mod runtime;
 mod skills;
+mod vault;
 mod work;
 
 use axum::{Json, Router, routing::get};
@@ -59,6 +60,7 @@ pub fn openapi() -> String {
     doc.merge(rooms::Doc::openapi());
     doc.merge(memories::Doc::openapi());
     doc.merge(skills::Doc::openapi());
+    doc.merge(vault::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
 
@@ -117,10 +119,10 @@ pub async fn configured_router_with_credentials(
         identity_router(pool.clone(), identity.clone())
     };
     if let Some(credentials) = credentials {
-        routes = routes.merge(connections::router(
-            identity.clone(),
-            crate::connections::Connections::new(pool, credentials),
-        ));
+        let connections = crate::connections::Connections::new(pool, credentials);
+        routes = routes
+            .merge(connections::router(identity.clone(), connections.clone()))
+            .merge(vault::router(identity.clone(), connections));
     }
     Ok(routes.layer(axum::middleware::from_fn_with_state(
         identity,

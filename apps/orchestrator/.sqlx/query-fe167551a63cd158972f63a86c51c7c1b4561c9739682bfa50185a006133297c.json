@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT e.payload::text AS \"payload!\"\n        FROM turn_events e\n        JOIN chat_turns t ON t.id = e.turn_id\n        WHERE t.conversation_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "payload!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fe167551a63cd158972f63a86c51c7c1b4561c9739682bfa50185a006133297c"
+}

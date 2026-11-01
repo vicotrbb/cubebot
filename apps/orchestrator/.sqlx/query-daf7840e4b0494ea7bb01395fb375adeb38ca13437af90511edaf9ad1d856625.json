@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE vault_items\n            SET kind=$2, name=$3, site=$4, username=$5,\n                ciphertext=COALESCE($6, ciphertext),\n                access=CASE WHEN agent_id IS NULL THEN COALESCE($7, access) ELSE access END,\n                updated_at=clock_timestamp()\n            WHERE id=$1 AND ($7::jsonb IS NULL OR agent_id IS NULL)\n            RETURNING id, agent_id, kind, name, site, username, access AS \"access!: Access\",\n                (to_jsonb(last_used_at) #>> '{}') AS last_used_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "site",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_used_at",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "daf7840e4b0494ea7bb01395fb375adeb38ca13437af90511edaf9ad1d856625"
+}

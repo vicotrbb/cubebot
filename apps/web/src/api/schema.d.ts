@@ -155,6 +155,43 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/vault': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The items the agent may fill: its own, then the installation's it has access to. */
+    get: operations['agent_vault']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/vault/{item}/fill': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Types the field at the desktop's focus for the caller, who must hold control; a refusal is
+     *     409 with the arbiter's reason.
+     */
+    post: operations['fill_vault_item']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/conversations/{conversation}/events': {
     parameters: {
       query?: never
@@ -434,6 +471,39 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/vault': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Installation items, for administrators. */
+    get: operations['list_vault']
+    put?: never
+    post: operations['create_vault_item']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/vault/{item}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['update_vault_item']
+    post?: never
+    delete: operations['delete_vault_item']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -581,6 +651,9 @@ export interface components {
       payload: components['schemas']['TurnEvent']
       /** Format: uuid */
       turn_id: string
+    }
+    FillVaultItem: {
+      field: components['schemas']['VaultField']
     }
     /** @enum {string} */
     IdlePolicy: 'sleep' | 'keep_running'
@@ -777,6 +850,21 @@ export interface components {
       /** Format: int64 */
       sequence: number
     }
+    SaveVaultItem: {
+      access?: null | components['schemas']['ProviderAccess']
+      /**
+       * Format: uuid
+       * @description On create, the agent whose own item this is; an installation item when absent. An update
+       *     keeps the item's scope.
+       */
+      agent?: string | null
+      kind: components['schemas']['VaultKind']
+      name: string
+      /** @description Required on create; an update without it keeps the current secret. */
+      secret?: string | null
+      site?: string | null
+      username?: string | null
+    }
     SendMessage: {
       message: string
       /** Format: uuid */
@@ -908,6 +996,25 @@ export interface components {
        * @description Concurrent delegated tasks, one to four; `None` keeps the current setting.
        */
       task_lanes?: number | null
+    }
+    /** @enum {string} */
+    VaultField: 'username' | 'secret'
+    /** @enum {string} */
+    VaultKind: 'login' | 'secret'
+    VaultSummary: {
+      access: components['schemas']['ProviderAccess']
+      /**
+       * Format: uuid
+       * @description The agent whose own item this is; an installation item when absent.
+       */
+      agent?: string | null
+      /** Format: uuid */
+      id: string
+      kind: components['schemas']['VaultKind']
+      last_used_at?: string | null
+      name: string
+      site?: string | null
+      username?: string | null
     }
   }
   responses: never
@@ -1218,6 +1325,57 @@ export interface operations {
         content?: never
       }
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  agent_vault: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VaultSummary'][]
+        }
+      }
+    }
+  }
+  fill_vault_item: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        item: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FillVaultItem']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
         headers: {
           [name: string]: unknown
         }
@@ -1699,6 +1857,92 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SkillRevision']
         }
+      }
+    }
+  }
+  list_vault: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VaultSummary'][]
+        }
+      }
+    }
+  }
+  create_vault_item: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveVaultItem']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VaultSummary']
+        }
+      }
+    }
+  }
+  update_vault_item: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveVaultItem']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VaultSummary']
+        }
+      }
+    }
+  }
+  delete_vault_item: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        item: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO vault_items (id, agent_id, kind, name, site, username, ciphertext)\n            VALUES ($1, $2, $3, $4, $5, $6, $7)\n            ON CONFLICT (id) DO UPDATE SET\n                kind=EXCLUDED.kind, site=EXCLUDED.site, username=EXCLUDED.username,\n                ciphertext=EXCLUDED.ciphertext, updated_at=clock_timestamp()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6e7849e8bd53db31ad9ca0b9bebc9faeb1e28ab9a723fcaf35982f165c8b30fb"
+}

@@ -3,6 +3,10 @@
 //! `send_message` request is not waited for, and its reply can be relayed back. Steering from a person enters the context before
 //! the next model request, never in the middle of a tool call. `request_login` (ADR 0039) asks a
 //! person to log in through the desktop; their hand-back or refusal arrives as a new message.
+//! The vault tools (ADR 0086) are in [`vault`].
+mod vault;
+pub use vault::redacted;
+
 use crate::{control::MemoryClient, tools::Running};
 use cubebot_protocol::{
     runtime::{Collaborate, RequestLogin},
@@ -38,7 +42,13 @@ struct Login {
     reason: String,
 }
 
-/// `desktop` offers `request_login`, which only a lane that controls the desktop can use.
+/// Tools that drive the desktop, which a delegated task never uses.
+pub fn drives_desktop(name: &str) -> bool {
+    matches!(name, "request_login" | "vault_fill")
+}
+
+/// `desktop` offers `request_login` and `vault_fill`, which only a lane that controls the
+/// desktop can use.
 pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     let tool = |name: &str, description: &str, reply: bool| {
         let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":"Self-contained instructions or information; the recipient sees nothing else of this conversation."}});
@@ -78,6 +88,7 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
         ),
     ];
     tools.extend(desktop.then_some(login));
+    tools.extend(vault::definitions(desktop));
     tools
 }
 
@@ -102,7 +113,7 @@ impl Collaboration {
             "delegate" => true,
             "send_message" => false,
             "request_login" => return Some(self.login(id, input)),
-            _ => return None,
+            _ => return self.vault(name, input),
         };
         let parsed = Send::deserialize(input)
             .ok()

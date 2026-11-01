@@ -50,7 +50,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0040](0040-native-core-tools-and-mcp-integrations.md) | Native core tools with MCP integrations | Accepted |
 | [0041](0041-local-and-remote-mcp-servers.md) | Local and remote MCP server support | Accepted |
 | [0042](0042-administrator-managed-integration-configuration.md) | Administrator-managed integration configuration | Accepted |
-| [0043](0043-installation-managed-external-account-connections.md) | Installation-managed external account connections | Accepted |
+| [0043](0043-installation-managed-external-account-connections.md) | Installation-managed external account connections | Accepted; amended by 0086 |
 | [0044](0044-tool-allowlists-and-resource-restrictions.md) | Tool allowlists with supported resource restrictions | Accepted |
 | [0045](0045-explicit-tool-search-and-on-demand-discovery.md) | Explicit tool search with on-demand discovery | Accepted |
 | [0046](0046-scheduled-and-event-triggered-work.md) | Scheduled and event-triggered work | Accepted |
@@ -93,6 +93,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0083](0083-agent-centric-execution-in-a-sandbox-boundary.md) | Agent-centric execution in a sandbox boundary | Accepted; sandbox mechanism amended by 0084 |
 | [0084](0084-in-house-vmm-as-the-agent-sandbox.md) | In-house VMM as the agent sandbox | Accepted |
 | [0085](0085-desktop-as-a-vmm-device.md) | Desktop as a VMM device | Accepted |
+| [0086](0086-vault-filled-by-the-desktop-arbiter.md) | A vault the desktop arbiter fills | Accepted |
 
 Discussion will follow dependencies and adapt to answers: installation and trust; primary workflows and operating targets; agent identity and execution; conversations, rooms, tasks, and delegation; persistence and recovery; memory and context; provider and tool integration; console and mobile access; operations and validation.
 

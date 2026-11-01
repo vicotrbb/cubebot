@@ -1,6 +1,8 @@
-//! Installation-managed inference configuration and encrypted credential storage.
+//! Installation-managed inference configuration, encrypted credential storage and the vault.
 mod credentials;
+mod vault;
 pub use credentials::{CredentialError, Credentials};
+pub use vault::{SaveVaultItem, VaultSummary};
 
 use crate::identity::{Actor, IdentityError};
 use cubebot_protocol::runtime::ProviderKind;

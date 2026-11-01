@@ -230,6 +230,10 @@ docker-browser:
 docker-login:
     uv run --project tooling/quality --locked python tests/system/docker_login.py
 
+# The vault on two real agents through Docker, from every scope and person's side (ADR 0086); docker-desktop's needs.
+docker-vault:
+    uv run --project tooling/quality --locked python tests/system/docker_vault.py
+
 # Three real agents use rooms, delegation, messaging, steering, cancellation and lanes through Docker (ADRs 0005, 0014 to 0016, 0071 to 0073); same needs as docker-sandbox.
 docker-rooms:
     uv run --project tooling/quality --locked python tests/system/docker_rooms.py
