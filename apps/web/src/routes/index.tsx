@@ -17,6 +17,7 @@ import { Dreams } from '../features/dreams'
 import { Files } from '../features/files'
 import { Memories } from '../features/memories'
 import { listRooms, NewRoom, Room } from '../features/rooms'
+import { Routines } from '../features/routines'
 import { Skills } from '../features/skills'
 import { Vault } from '../features/vault'
 
@@ -74,6 +75,7 @@ type Screen =
   | { kind: 'dreams' }
   | { kind: 'skills' }
   | { kind: 'vault' }
+  | { kind: 'routines' }
   | { kind: 'desktop'; take?: boolean }
   | { kind: 'agent'; existing: Agent | null }
   | { kind: 'provider' }
@@ -327,6 +329,13 @@ function AgentScreen({
           onClose={() => setScreen({ kind: 'chat' })}
         />
       )}
+      {screen.kind === 'routines' && selected && (
+        <Routines
+          key={selected.id}
+          agent={selected}
+          onClose={() => setScreen({ kind: 'chat' })}
+        />
+      )}
       {screen.kind === 'vault' && selected && (
         <Vault
           key={selected.id}
@@ -355,6 +364,7 @@ function AgentScreen({
             onDreams={() => setScreen({ kind: 'dreams' })}
             onSkills={() => setScreen({ kind: 'skills' })}
             onVault={() => setScreen({ kind: 'vault' })}
+            onRoutines={() => setScreen({ kind: 'routines' })}
             onDesktop={() => setScreen({ kind: 'desktop' })}
             onTakeLogin={() => setScreen({ kind: 'desktop', take: true })}
           />
@@ -384,6 +394,7 @@ function AgentChat({
   onDreams,
   onSkills,
   onVault,
+  onRoutines,
   onDesktop,
   onTakeLogin,
 }: {
@@ -394,6 +405,7 @@ function AgentChat({
   onDreams: () => void
   onSkills: () => void
   onVault: () => void
+  onRoutines: () => void
   onDesktop: () => void
   onTakeLogin: () => void
 }) {
@@ -419,6 +431,9 @@ function AgentChat({
           </button>
           <button className="secondary" onClick={onVault}>
             Vault
+          </button>
+          <button className="secondary" onClick={onRoutines}>
+            Routines
           </button>
           <button className="secondary" onClick={onDesktop}>
             Desktop

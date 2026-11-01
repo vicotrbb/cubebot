@@ -265,6 +265,280 @@
         }
       }
     },
+    "/api/agents/{agent}/routines": {
+      "get": {
+        "tags": [],
+        "operationId": "list_routines",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Routine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "With `webhook`, the response carries the secret; it is never shown again.",
+        "operationId": "create_routine",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoutine"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedRoutine"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/routines/{routine}": {
+      "put": {
+        "tags": [],
+        "operationId": "update_routine",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoutine"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Routine"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Cancels the routine's queued turns; its history stays in the conversation.",
+        "operationId": "delete_routine",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/routines/{routine}/runs": {
+      "get": {
+        "tags": [],
+        "operationId": "routine_occurrences",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Occurrence"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "run_routine",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRoutine"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ran"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/routines/{routine}/secret": {
+      "post": {
+        "tags": [],
+        "summary": "Makes or replaces the webhook secret, shown only in this response.",
+        "operationId": "rotate_routine_secret",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSecret"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{agent}/skills": {
       "get": {
         "tags": [],
@@ -1918,6 +2192,37 @@
         },
         "additionalProperties": false
       },
+      "CreateRoutine": {
+        "type": "object",
+        "required": ["request_id", "routine"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "routine": {
+            "$ref": "#/components/schemas/SaveRoutine"
+          },
+          "webhook": {
+            "type": "boolean",
+            "description": "Makes a webhook secret, returned once."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatedRoutine": {
+        "type": "object",
+        "required": ["routine"],
+        "properties": {
+          "routine": {
+            "$ref": "#/components/schemas/Routine"
+          },
+          "secret": {
+            "type": ["string", "null"],
+            "description": "The webhook's bearer secret, only in the response that made it."
+          }
+        }
+      },
       "DeclineLogin": {
         "type": "object",
         "required": ["reason"],
@@ -2333,17 +2638,41 @@
         ],
         "description": "A memory write staged by the agent. A revision or removal names the revision it read; a\nnewer one, such as a human edit, wins and the change is dropped."
       },
+      "Occurrence": {
+        "type": "object",
+        "description": "One occurrence that made a turn: its origin and the turn's outcome so far.",
+        "required": ["turn", "origin", "status", "created_at"],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "origin": {
+            "type": "string",
+            "description": "`person`, `agent`, `schedule` or `webhook`."
+          },
+          "status": {
+            "type": "string"
+          },
+          "turn": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "Origin": {
         "type": "object",
         "required": ["kind", "name"],
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`room`, `delegation` or `message`."
+            "description": "`room`, `routine`, `delegation` or `message`."
           },
           "name": {
             "type": "string",
-            "description": "The room's name, or the sending agent's."
+            "description": "The room's or routine's name, or the sending agent's."
           },
           "parent_turn_id": {
             "type": ["string", "null"],
@@ -2543,6 +2872,16 @@
         },
         "additionalProperties": false
       },
+      "Ran": {
+        "type": "object",
+        "description": "A run's turn, or `None` when it coalesced into a pending one.",
+        "properties": {
+          "turn": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          }
+        }
+      },
       "Receipt": {
         "type": "object",
         "required": ["id", "revision"],
@@ -2674,6 +3013,100 @@
             "format": "int64"
           }
         }
+      },
+      "Routine": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "coalesce",
+          "enabled",
+          "webhook",
+          "managed_by",
+          "revision"
+        ],
+        "properties": {
+          "coalesce": {
+            "type": "boolean"
+          },
+          "command": {
+            "type": ["string", "null"]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_run_at": {
+            "type": ["string", "null"]
+          },
+          "managed_by": {
+            "type": "string",
+            "description": "`person` or `agent`: an agent changes only the routines it manages."
+          },
+          "name": {
+            "type": "string"
+          },
+          "next_at": {
+            "type": ["string", "null"]
+          },
+          "prompt": {
+            "type": ["string", "null"]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "schedule": {
+            "type": ["string", "null"]
+          },
+          "webhook": {
+            "type": "boolean",
+            "description": "A webhook secret is set; it is shown only when made."
+          }
+        }
+      },
+      "RunRoutine": {
+        "type": "object",
+        "required": ["request_id"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveRoutine": {
+        "type": "object",
+        "description": "What a routine does and when. At least one of `prompt` and `command`.",
+        "required": ["name", "coalesce", "enabled"],
+        "properties": {
+          "coalesce": {
+            "type": "boolean",
+            "description": "At most one pending turn while one is queued or running."
+          },
+          "command": {
+            "type": ["string", "null"]
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "A disabled routine runs only by hand."
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": ["string", "null"]
+          },
+          "schedule": {
+            "type": ["string", "null"],
+            "description": "Five-field cron in UTC; `null` runs only by hand or webhook."
+          }
+        },
+        "additionalProperties": false
       },
       "SaveVaultItem": {
         "type": "object",
@@ -3078,6 +3511,20 @@
         },
         "additionalProperties": false
       },
+      "UpdateRoutine": {
+        "type": "object",
+        "required": ["expected_revision", "routine"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "routine": {
+            "$ref": "#/components/schemas/SaveRoutine"
+          }
+        },
+        "additionalProperties": false
+      },
       "VaultField": {
         "type": "string",
         "enum": ["username", "secret"]
@@ -3116,6 +3563,15 @@
           },
           "username": {
             "type": ["string", "null"]
+          }
+        }
+      },
+      "WebhookSecret": {
+        "type": "object",
+        "required": ["secret"],
+        "properties": {
+          "secret": {
+            "type": "string"
           }
         }
       }

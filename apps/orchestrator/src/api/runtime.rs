@@ -13,8 +13,8 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Collaborate, Collaborated, Dream, DreamEnd, FileShare, Memory, MemoryChange,
-    REPORT_BYTES, RequestLogin, RuntimeActor, RuntimeSession, SkillChange, SkillPackage, VaultFill,
-    VaultItem, VaultPut,
+    REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeActor, RuntimeSession,
+    SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
 };
 use uuid::Uuid;
 
@@ -33,6 +33,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
+        .route("/api/runtime/turns/{turn}/routines", post(routine))
         .route("/api/runtime/vault", get(vault).post(vault_put))
         .route("/api/runtime/vault/fills", post(vault_fill))
         .route("/api/runtime/files", get(files).post(upload_file))
@@ -242,6 +243,27 @@ async fn request_login(
             Json(serde_json::json!({"error": reason})),
         )
             .into_response(),
+    })
+}
+/// One routine tool call (ADR 0087) for the agent's running turn; a refusal is 409 with the
+/// reason the model reads.
+async fn routine(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(turn): Path<Uuid>,
+    Json(input): Json<RoutineCall>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let answer = crate::work::Work::new(identity.pool.clone())
+        .routine_tool(&actor, turn, &input)
+        .await
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime routine request failed");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })?;
+    Ok(match answer {
+        Ok(output) => Json(RoutineAnswer { output }).into_response(),
+        Err(reason) => refused(&reason),
     })
 }
 fn vault_of(identity: &RuntimeIdentity) -> Result<&crate::connections::Connections, Failure> {

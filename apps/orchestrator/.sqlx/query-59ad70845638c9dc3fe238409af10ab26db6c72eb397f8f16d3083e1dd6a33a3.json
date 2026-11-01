@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE chat_turns\n        SET status='cancelled'\n        WHERE routine_id=$1 AND status IN ('queued','waiting')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "59ad70845638c9dc3fe238409af10ab26db6c72eb397f8f16d3083e1dd6a33a3"
+}

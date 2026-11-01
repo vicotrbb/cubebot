@@ -137,7 +137,7 @@ impl RuntimeIdentity {
             Some(turn) => {
                 channel.idle = false;
                 channel.active.insert(turn.turn);
-                Some(Delivery::Turn(turn))
+                Some(Delivery::Turn(Box::new(turn)))
             }
             None if !channel.idle && channel.active.is_empty() => {
                 channel.idle = true;

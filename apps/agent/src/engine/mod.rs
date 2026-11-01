@@ -225,7 +225,7 @@ impl Agent {
                 if self.active.contains_key(&work.turn) || self.drain.is_some() {
                     return Err(Error::Protocol(None));
                 }
-                self.start(work);
+                self.start(*work);
             }
             Delivery::Ack { turn, sequence } => self.acknowledge(turn, sequence)?,
             Delivery::Cancel { turn } => {

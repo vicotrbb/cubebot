@@ -53,9 +53,9 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0043](0043-installation-managed-external-account-connections.md) | Installation-managed external account connections | Accepted; amended by 0086 |
 | [0044](0044-tool-allowlists-and-resource-restrictions.md) | Tool allowlists with supported resource restrictions | Accepted |
 | [0045](0045-explicit-tool-search-and-on-demand-discovery.md) | Explicit tool search with on-demand discovery | Accepted |
-| [0046](0046-scheduled-and-event-triggered-work.md) | Scheduled and event-triggered work | Accepted |
-| [0047](0047-autonomous-trigger-management.md) | Trigger management within ordinary agent autonomy | Accepted |
-| [0048](0048-per-trigger-occurrence-handling.md) | Configurable occurrence handling per trigger | Accepted |
+| [0046](0046-scheduled-and-event-triggered-work.md) | Scheduled and event-triggered work | Accepted; settled by 0087 |
+| [0047](0047-autonomous-trigger-management.md) | Trigger management within ordinary agent autonomy | Accepted; settled by 0087 |
+| [0048](0048-per-trigger-occurrence-handling.md) | Configurable occurrence handling per trigger | Accepted; settled by 0087 |
 | [0049](0049-platform-wide-human-authentication.md) | Platform-wide built-in accounts and optional OpenID Connect | Accepted |
 | [0050](0050-invitations-and-optional-oidc-admission.md) | Invitations and optional OpenID Connect admission | Accepted |
 | [0051](0051-built-in-roles-and-scoped-resource-grants.md) | Built-in roles with scoped resource grants | Accepted |
@@ -94,6 +94,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0084](0084-in-house-vmm-as-the-agent-sandbox.md) | In-house VMM as the agent sandbox | Accepted |
 | [0085](0085-desktop-as-a-vmm-device.md) | Desktop as a VMM device | Accepted |
 | [0086](0086-vault-filled-by-the-desktop-arbiter.md) | A vault the desktop arbiter fills | Accepted |
+| [0087](0087-routines.md) | Routines | Accepted |
 
 Discussion will follow dependencies and adapt to answers: installation and trust; primary workflows and operating targets; agent identity and execution; conversations, rooms, tasks, and delegation; persistence and recovery; memory and context; provider and tool integration; console and mobile access; operations and validation.
 

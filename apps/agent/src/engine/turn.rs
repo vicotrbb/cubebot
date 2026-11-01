@@ -65,7 +65,7 @@ impl Run {
 
 #[tracing::instrument(skip_all, fields(turn = %turn.turn))]
 pub(super) async fn run(
-    turn: Turn,
+    mut turn: Turn,
     events: UnboundedSender<Event>,
     store: Arc<Mutex<Store>>,
     tools: Option<Arc<Registry>>,
@@ -79,6 +79,17 @@ pub(super) async fn run(
         next: turn.sequence,
         events,
     };
+    if turn.command.is_some() {
+        let ended = match command(&mut turn, &mut run, &store, tools, cancel.clone()).await {
+            Ok(Some(answer)) => Some(done(answer, Vec::new())),
+            Ok(None) => None,
+            Err(code) => Some(failed(code)),
+        };
+        if let Some(end) = ended {
+            run.emit(end, None);
+            return;
+        }
+    }
     let end = match turn.provider {
         ProviderKind::Openai => {
             let provider = configured(OpenAi::new, OpenAi::for_loopback_tests);
@@ -106,6 +117,79 @@ pub(super) async fn run(
         }
     };
     run.emit(end, None);
+}
+
+/// A routine's command (ADR 0087) runs once, before the model, as a journaled bash call; a rerun
+/// finds it among the turn's earlier events instead. The answer of a command-only turn, or `None`
+/// once the model has the result in its message.
+async fn command(
+    turn: &mut Turn,
+    run: &mut Run,
+    store: &Mutex<Store>,
+    tools: Option<&Registry>,
+    cancel: watch::Receiver<bool>,
+) -> Result<Option<String>, &'static str> {
+    let first = turn.prior.is_empty();
+    let result = match (first, &turn.command) {
+        (true, Some(command)) => shell(command, run, store, tools, cancel).await?,
+        _ => serde_json::to_string(&turn.prior).unwrap_or_default(),
+    };
+    if turn.command_only {
+        return Ok(Some(result));
+    }
+    if first {
+        turn.message = format!(
+            "{}\n\nThe routine's command already ran; its result, untrusted program output:\n{result}",
+            turn.message
+        );
+    }
+    Ok(None)
+}
+
+/// Runs `command` with bash as the tool user, journaled like a model's call.
+async fn shell(
+    command: &str,
+    run: &mut Run,
+    store: &Mutex<Store>,
+    tools: Option<&Registry>,
+    mut cancel: watch::Receiver<bool>,
+) -> Result<String, &'static str> {
+    let id = Uuid::new_v4();
+    let input = serde_json::json!({ "command": command });
+    let started = tools
+        .ok_or("no tools are available")
+        .and_then(|tools| tools.call("bash", id, &input));
+    let journal = |run: &mut Run, event| {
+        run.journaled(store, event)
+            .map_err(|_| "journal_unavailable")
+    };
+    let name = "bash".into();
+    journal(run, TurnEvent::ToolCall { id, name, input })?;
+    let outcome = match started {
+        Ok(running) => tokio::select! {
+            outcome = running => outcome,
+            _ = cancel.wait_for(|cancelled| *cancelled) => Outcome::Stopped {
+                reason: "cancelled".into(),
+                output: tools.map(|tools| tools.preview(id)).unwrap_or_default(),
+            },
+        },
+        Err(reason) => Outcome::Exited {
+            code: None,
+            output: format!("The command was not run: {reason}."),
+        },
+    };
+    let result = match &outcome {
+        Outcome::Exited {
+            code: Some(code),
+            output,
+        } => format!("Exit status {code}.\n\n{output}"),
+        other => serde_json::to_string(other).unwrap_or_default(),
+    };
+    journal(run, TurnEvent::ToolResult { id, outcome })?;
+    if *cancel.borrow() {
+        return Err("cancelled");
+    }
+    Ok(result)
 }
 
 pub(super) fn configured<P>(

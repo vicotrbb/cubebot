@@ -10,6 +10,7 @@ pub use commands::{IdentityEvent, Receipt};
 mod invitations;
 pub use invitations::{Invitation, InvitationSummary};
 mod passwords;
+pub(crate) use passwords::token;
 mod sessions;
 
 use sqlx::PgPool;

@@ -13,6 +13,8 @@ export type RoomMessage = components['schemas']['RoomMessage']
 export type TurnEvent = components['schemas']['Event']
 export type LoginHandoff = components['schemas']['LoginHandoff']
 export type VaultItem = components['schemas']['VaultSummary']
+export type Routine = components['schemas']['Routine']
+export type Occurrence = components['schemas']['Occurrence']
 
 export class ApiError extends Error {
   constructor(public status: number) {

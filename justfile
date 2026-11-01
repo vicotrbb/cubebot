@@ -242,6 +242,10 @@ docker-rooms:
 docker-files:
     uv run --project tooling/quality --locked python tests/system/docker_files.py
 
+# Routines on two real agents through Docker, from every scope and person's side (ADR 0087); docker-desktop's needs.
+docker-routines:
+    uv run --project tooling/quality --locked python tests/system/docker_routines.py
+
 # Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
 docker-skills:
     uv run --project tooling/quality --locked python tests/system/docker_skills.py

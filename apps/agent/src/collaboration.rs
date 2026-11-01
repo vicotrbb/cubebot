@@ -3,7 +3,8 @@
 //! `send_message` request is not waited for, and its reply can be relayed back. Steering from a person enters the context before
 //! the next model request, never in the middle of a tool call. `request_login` (ADR 0039) asks a
 //! person to log in through the desktop; their hand-back or refusal arrives as a new message.
-//! The vault tools (ADR 0086) are in [`vault`].
+//! The vault tools (ADR 0086) are in [`vault`], the routine tools (ADR 0087) in [`routines`].
+mod routines;
 mod vault;
 pub use vault::redacted;
 
@@ -89,6 +90,7 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     ];
     tools.extend(desktop.then_some(login));
     tools.extend(vault::definitions(desktop));
+    tools.extend(routines::definitions());
     tools
 }
 
@@ -113,7 +115,11 @@ impl Collaboration {
             "delegate" => true,
             "send_message" => false,
             "request_login" => return Some(self.login(id, input)),
-            _ => return self.vault(name, input),
+            _ => {
+                return self
+                    .vault(name, input)
+                    .or_else(|| self.routine(name, id, input));
+            }
         };
         let parsed = Send::deserialize(input)
             .ok()

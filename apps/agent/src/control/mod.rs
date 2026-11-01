@@ -355,6 +355,23 @@ impl MemoryClient {
         accepted(self.post_for_turn(turn, "logins", request).await?)
     }
 
+    /// The answer to one routine tool call (ADR 0087), or the orchestrator's reason for refusing it.
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
+    pub async fn routine(
+        &self,
+        turn: Uuid,
+        call: &runtime::RoutineCall,
+    ) -> Result<Result<String, String>, Error> {
+        match self.post_for_turn(turn, "routines", call).await? {
+            Ok(response) => {
+                let answer: runtime::RoutineAnswer =
+                    transport::decode_bounded(response, 1024 * 1024).await?;
+                Ok(Ok(answer.output))
+            }
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
     /// The vault items this agent may fill, without their secrets (ADR 0086).
     #[tracing::instrument(skip_all)]
     pub async fn vault(&self) -> Result<Vec<runtime::VaultItem>, Error> {

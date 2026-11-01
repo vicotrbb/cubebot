@@ -103,8 +103,8 @@ impl Controller {
         };
         router.layer(axum::Extension(desktop))
     }
-    /// Reconciles agents, with room coordination running beside it while the installation's
-    /// provider connection is configured.
+    /// Reconciles agents, with routine schedules running beside it, and room coordination while
+    /// the installation's provider connection is configured.
     pub async fn run(&mut self, stop: watch::Receiver<bool>) -> Result<(), Error> {
         let connections = match &self.mode {
             Mode::Kubernetes(lifecycle) => lifecycle.runtime.connections.clone(),
@@ -118,10 +118,15 @@ impl Controller {
                 stop.clone(),
             ))
         });
+        let routines = tokio::spawn(crate::work::routines::schedule(
+            self.pool.clone(),
+            stop.clone(),
+        ));
         let result = self.reconcile_all(stop).await;
         if let Some(coordinator) = coordinator {
             coordinator.abort();
         }
+        routines.abort();
         result
     }
     async fn reconcile_all(&mut self, mut stop: watch::Receiver<bool>) -> Result<(), Error> {

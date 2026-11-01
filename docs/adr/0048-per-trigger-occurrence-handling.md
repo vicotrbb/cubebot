@@ -1,6 +1,6 @@
 # ADR 0048: Configurable occurrence handling per trigger
 
-Status: Accepted
+Status: Accepted; open details settled by [ADR 0087](0087-routines.md)
 
 Date: 2026-10-23
 

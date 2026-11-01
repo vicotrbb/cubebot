@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT next_at > clock_timestamp() AND next_at <= clock_timestamp() + interval '5 minutes' AS \"ahead!\" FROM routines WHERE id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ahead!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b3ca0b07f9c3778d56718f04069ff3c68e21e845f50227fe747764fdace7b199"
+}
