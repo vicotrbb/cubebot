@@ -154,7 +154,7 @@ def run_guest(directory: Path, workspace: Path, requests: queue.Queue, computer:
         end(sandbox)
 
 
-def drawn(directory: Path, console: "Console"):
+def drawn(directory: Path, console: Console):
     """Returns why the desktop never showed the wallpaper, or None."""
     deadline = time.monotonic() + DEADLINE
     if not until(lambda: b"Guest desktop started" in console.output, deadline):
@@ -165,8 +165,8 @@ def drawn(directory: Path, console: "Console"):
 
     shown = False
 
-    # Chromium starts maximized over the wallpaper, so close it until the wallpaper shows.
-    # Xorg's root, xterm and Chromium have a few hundred colors; the photograph thousands.
+    # No agent starts Chromium here; ctrl+w stays in case a window covers the wallpaper.
+    # Xorg's root and Chromium have a few hundred colors; the photograph thousands.
     def wallpaper() -> bool:
         nonlocal shown
         shown = shown or colors(ask(control, screenshot)) > 4096

@@ -49,6 +49,14 @@ COMPUTER_TASK = (
     "https://example.com, then reply with the title on that page's browser tab "
     "exactly as it appears."
 )
+# As the tool user: the browser's profile, the old DevTools port, and the file
+# descriptors of each process of the browser user (10002), which hold its DevTools pipe.
+BROWSER_PROBE = (
+    "ls /var/lib/cubebot/browser; echo profile=$?; "
+    "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9222' 2>/dev/null; echo devtools=$?; "
+    "n=0; for p in /proc/[0-9]*; do grep -qs '^Uid:\\s10002\\s' $p/status || continue; "
+    "n=$((n+1)); ls $p/fd >/dev/null 2>&1 && echo pipe=$p; done; echo browser=$n"
+)
 
 
 def operator(f, name, instructions=INSTRUCTIONS):
@@ -440,8 +448,8 @@ def computer_use(f, evidence):
     assert screenshots, results
     for screenshot in screenshots:
         assert base64.b64decode(screenshot["image"])[:8] == b"\x89PNG\r\n\x1a\n"
+    # Chromium starts focused on its address bar, so the model may type without a click.
     clicks = [call for call in calls if "click" in json.dumps(call["input"])]
-    assert clicks, calls
     typed = [call for call in calls if "example.com" in json.dumps(call["input"])]
     assert typed, calls
     done = f.sql(
@@ -480,6 +488,16 @@ def computer_use(f, evidence):
     )
     assert host["mode"] == "agent", host
     assert base64.b64decode(host["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    probe = send(
+        f, identity, f"Use the bash tool to run exactly, then stop: {BROWSER_PROBE}"
+    )
+    outcome(f, identity, probe, timeout=300)
+    seen = called(f, probe, "echo browser=", finished=True)
+    assert seen, tools(f, probe)
+    output = seen["outcome"]["output"]
+    assert "Permission denied" in output and "profile=2" in output, output
+    assert "devtools=1" in output and "pipe=" not in output, output
+    assert "browser=0" not in output, output
     evidence["computer_use"] = {
         "turn": turn["id"],
         "model": model,
@@ -488,10 +506,12 @@ def computer_use(f, evidence):
         "screenshots": len(screenshots),
         "clicks": len(clicks),
         "response": done,
+        "browser_probe": output,
     }
     print(
         "PASS the model opens Chromium and navigates; the ledger holds its "
-        "screenshots and clicks",
+        "screenshots and clicks; a tool command reads neither the browser's profile "
+        "nor its DevTools",
         flush=True,
     )
 

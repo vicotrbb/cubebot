@@ -17,16 +17,19 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # kernel runs `cubebot-agent guest` as init, which mounts the workspace disk on /var/lib/cubebot.
 FROM debian:bookworm-slim
 # CUBEBOT_TOOL_USER is 10001:10001; guest init creates and chowns its home on the workspace disk.
-# The desktop (ADR 0085): Xorg's modesetting driver on virtio-gpu, evdev input, openbox, xterm
-# and Chromium, which guest init starts as the tool user when computer use is on; xwallpaper
-# draws wallpaper.jpg on the root window.
+# The desktop (ADR 0085): Xorg's modesetting driver on virtio-gpu, evdev input and openbox, which
+# guest init starts as the tool user when computer use is on; xwallpaper draws wallpaper.jpg on
+# the root window. The agent starts Chromium as the browser user, 10002, whose profile in
+# /var/lib/cubebot/browser the tool user cannot read.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
         git curl python3 build-essential ripgrep jq openssh-client \
-        xserver-xorg-core xserver-xorg-input-evdev openbox xterm xwallpaper chromium \
+        xserver-xorg-core xserver-xorg-input-evdev openbox xwallpaper chromium \
         xfonts-base fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -m 0755 /var/lib/cubebot \
-    && groupadd -g 10001 tool && useradd -u 10001 -g 10001 -M -d /var/lib/cubebot/workspace -s /bin/bash tool
+    && groupadd -g 10001 tool && useradd -u 10001 -g 10001 -M -d /var/lib/cubebot/workspace -s /bin/bash tool \
+    && groupadd -g 10002 browser \
+    && useradd -u 10002 -g 10002 -M -d /var/lib/cubebot/browser -s /usr/sbin/nologin browser
 COPY apps/agent/xorg.conf /etc/X11/xorg.conf
 COPY apps/agent/wallpaper.jpg /usr/share/cubebot/wallpaper.jpg
 # A person who logs in for the agent (ADR 0039) must not leave the password in the profile on the

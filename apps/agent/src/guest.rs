@@ -49,23 +49,6 @@ const WORKSPACE: &str = "/var/lib/cubebot/workspace";
 const PRIVATE: &str = "/run/cubebot";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const REPORT_INTERVAL: Duration = Duration::from_secs(5);
-const CHROMIUM: [&str; 12] = [
-    "--no-sandbox",
-    // The agent's browser tools (`tools/browser.rs`); DevTools listens on loopback only.
-    "--remote-debugging-port=9222",
-    // Task sessions open windows that may sit behind others and still need to paint.
-    "--disable-backgrounding-occluded-windows",
-    "--disable-renderer-backgrounding",
-    "--test-type",
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-gpu",
-    "--start-maximized",
-    "--password-store=basic",
-    "--user-data-dir=/var/lib/cubebot/workspace/.config/chromium",
-    "about:blank",
-];
-
 pub fn init() -> ExitCode {
     if let Err(error) = boot() {
         eprintln!("Guest init failed: {error}");
@@ -385,9 +368,9 @@ fn desktop(environment: &[(String, String)]) {
 }
 
 /// Xorg on the virtio-gpu display with the virtio keyboard (event0) and tablet (event1), which
-/// the kernel probes in the sandbox's device order, then openbox, the wallpaper, xterm and
-/// Chromium, all as the tool user. With no udev or logind in the guest, Xorg opens the devices
-/// and its VT itself.
+/// the kernel probes in the sandbox's device order, then openbox and the wallpaper, all as the
+/// tool user. The agent's browser module starts Chromium as a user of its own. With no udev or
+/// logind in the guest, Xorg opens the devices and its VT itself.
 fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
     let devices = [
         "/dev/dri/card0",
@@ -447,12 +430,16 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
         std::thread::sleep(Duration::from_millis(100));
     }
     client("/usr/bin/openbox").spawn()?;
-    client("/usr/bin/xwallpaper")
+    // The default stays when the orchestrator is unreachable; the agent draws its own after it.
+    let drawn = client("/usr/bin/xwallpaper")
         .args(["--zoom", crate::tools::WALLPAPER])
-        .spawn()?;
-    client("/usr/bin/xterm").spawn()?;
-    // The VM bounds Chromium, and the guest kernel has no user namespaces for its own sandbox.
-    client("/usr/bin/chromium").args(CHROMIUM).spawn()?;
+        .status();
+    match drawn {
+        // PID 1's reaper may collect it first, which also means it has exited.
+        Err(error) if error.raw_os_error() != Some(Errno::ECHILD as i32) => return Err(error),
+        _ => (),
+    }
+    File::create(crate::tools::DESKTOP_READY)?;
     eprintln!("Guest desktop started");
     Ok(())
 }

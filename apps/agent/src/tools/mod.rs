@@ -25,6 +25,8 @@ const TAIL: u64 = 8 * 1024;
 const OUTPUT: &str = ".cubebot-tool-output";
 /// The guest image's default desktop wallpaper.
 pub const WALLPAPER: &str = "/usr/share/cubebot/wallpaper.jpg";
+/// Guest init creates this once it has drawn the default, in `/run`, which only root writes.
+pub const DESKTOP_READY: &str = "/run/cubebot-desktop";
 
 /// A started call. Dropping it stops the call and its process group.
 pub type Running<'a> = Pin<Box<dyn Future<Output = Outcome> + Send + 'a>>;
@@ -258,16 +260,14 @@ impl Registry {
         if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() != Ok("1") {
             return true;
         }
-        // shortcut: waits for Xorg, then 2 s so guest init's default is drawn first; signal
-        // desktop readiness to the agent if a slow guest still draws over a set wallpaper.
+        // Waits for guest init's default, so it never draws over this one.
         const DRAW: &str = r#"f=$(mktemp) && cat > "$f" || exit 1
-for _ in $(seq 30); do [ -S /tmp/.X11-unix/X0 ] && break; sleep 1; done
-sleep 2
+for _ in $(seq 60); do [ -e "$2" ] && break; sleep 0.5; done
 xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
         let default = if image.is_some() { "" } else { WALLPAPER };
         let mut command = self.sandbox.command("/bin/sh");
         command
-            .args(["-c", DRAW, "wallpaper", default])
+            .args(["-c", DRAW, "wallpaper", default, DESKTOP_READY])
             .env("DISPLAY", ":0")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
