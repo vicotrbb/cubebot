@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE chain AS (\n                SELECT id, parent_id FROM files WHERE id = $1\n                UNION ALL\n                SELECT f.id, f.parent_id FROM files f JOIN chain c ON f.id = c.parent_id\n            )\n            SELECT EXISTS (SELECT 1 FROM chain) AS \"exists!\", GREATEST(\n                (SELECT 3 FROM files WHERE id = $1\n                    AND (owner_account_id = $2 OR owner_agent_id = $3)),\n                (SELECT MAX(CASE g.capability WHEN 'workspace.write' THEN 3 ELSE 1 END)\n                    FROM files f JOIN effective_human_grants g ON g.scope_kind = 'agent'\n                        AND g.scope_id = f.owner_agent_id AND g.actor_id = $2\n                        AND g.capability IN ('workspace.read', 'workspace.write')\n                    WHERE f.id = $1),\n                (SELECT 1 FROM human_accounts\n                    WHERE id = $2 AND active AND role = 'administrator'),\n                (SELECT MAX(CASE s.permission WHEN 'write' THEN 2 ELSE 1 END)\n                    FROM chain c JOIN file_shares s ON s.file_id = c.id\n                    WHERE s.account_id = $2 OR s.agent_id = $3 OR s.team_id IN (\n                        SELECT m.team_id FROM human_team_members m\n                        JOIN human_teams t ON t.id = m.team_id AND t.active\n                        WHERE m.account_id = $2))\n            ) AS level\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "level",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "7b10874b24c323a26f82b26689d337f383b5b63299d417dd04eb940d03f50564"
+}

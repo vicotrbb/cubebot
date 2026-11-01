@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT DISTINCT s.file_id\n            FROM file_shares s JOIN files f ON f.id = s.file_id\n            WHERE (s.account_id = $1 OR s.agent_id = $2 OR s.team_id IN (\n                    SELECT m.team_id FROM human_team_members m\n                    JOIN human_teams t ON t.id = m.team_id AND t.active\n                    WHERE m.account_id = $1))\n                AND (f.owner_account_id = $1) IS NOT TRUE AND (f.owner_agent_id = $2) IS NOT TRUE\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "file_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "82ee6b3121274a7706a1e84158e28cf413469c31df275c0604a277cb63195c08"
+}

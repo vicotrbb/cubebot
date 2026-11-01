@@ -9,6 +9,7 @@ use crate::{
 use cubebot_protocol::{runtime::SkillPackage, terminal::Outcome};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 /// Workspace directory packages are written to, one directory per skill revision.
 const SKILLS: &str = ".cubebot-skills";
@@ -38,15 +39,17 @@ impl Skills {
         Self { client }
     }
 
-    /// `None` when `name` is not a skill tool.
+    /// `None` when `name` is neither a skill tool nor a shared files tool, which also moves
+    /// orchestrator content through the workspace (see [`crate::files`]).
     pub fn call<'a>(
         &'a self,
         name: &str,
+        id: Uuid,
         input: &Value,
         tools: Option<&'a Registry>,
     ) -> Option<Result<Running<'a>, &'static str>> {
         if name != "load_skill" {
-            return None;
+            return crate::files::call(self.client.as_ref(), name, id, input, tools);
         }
         let load = Load::deserialize(input)
             .ok()
@@ -126,17 +129,22 @@ mod tests {
     #[tokio::test]
     async fn loading_refuses_bad_names_and_reports_unavailable_without_a_client() {
         let skills = Skills::new(None);
-        assert!(skills.call("bash", &json!({}), None).is_none());
+        assert!(skills.call("bash", Uuid::nil(), &json!({}), None).is_none());
         for name in ["../memories", "Disk", "a--b", ""] {
             assert!(
                 skills
-                    .call("load_skill", &json!({"name":name}), None)
+                    .call("load_skill", Uuid::nil(), &json!({"name":name}), None)
                     .unwrap()
                     .is_err()
             );
         }
         let Outcome::Exited { code: None, output } = skills
-            .call("load_skill", &json!({"name":"disk-triage"}), None)
+            .call(
+                "load_skill",
+                Uuid::nil(),
+                &json!({"name":"disk-triage"}),
+                None,
+            )
             .unwrap()
             .unwrap()
             .await

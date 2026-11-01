@@ -810,6 +810,341 @@
         }
       }
     },
+    "/api/files": {
+      "get": {
+        "tags": [],
+        "summary": "Your top level, or a folder you may read.",
+        "operationId": "list_files",
+        "parameters": [
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "The folder; your own top level when absent.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "The body is the file's bytes and its content type the file's; 507 when the installation's\nquota is used up, 409 when the name is taken in the folder.",
+        "operationId": "upload_file",
+        "parameters": [
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "The folder; your own top level when absent.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "description": "Your id for this upload: a retry with it returns the file the first attempt made.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileEntry"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/folders": {
+      "post": {
+        "tags": [],
+        "operationId": "create_folder",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Placement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/shared": {
+      "get": {
+        "tags": [],
+        "summary": "Files and folders shared with you or your teams.",
+        "operationId": "shared_files",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file}": {
+      "delete": {
+        "tags": [],
+        "summary": "Deletes a file, or a folder and everything under it.",
+        "operationId": "delete_file",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [],
+        "summary": "Renames and moves within the owner's folders.",
+        "operationId": "place_file",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Placement"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileEntry"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{file}/content": {
+      "get": {
+        "tags": [],
+        "summary": "The file's bytes as an attachment; one `Range` of bytes gives 206.",
+        "operationId": "file_content",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "206": {
+            "description": ""
+          },
+          "416": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/files/{file}/shares": {
+      "get": {
+        "tags": [],
+        "summary": "The file's own shares; inherited ones are on the folders above it.",
+        "operationId": "file_shares",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileShare"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Replaces the file's own shares.",
+        "operationId": "replace_file_shares",
+        "parameters": [
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FileShare"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileShare"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/identity/login": {
       "post": {
         "tags": [],
@@ -1739,6 +2074,79 @@
           }
         }
       },
+      "FileAccess": {
+        "type": "string",
+        "description": "`write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.",
+        "enum": ["read", "write", "manage"]
+      },
+      "FileEntry": {
+        "type": "object",
+        "description": "A shared file or folder (ADRs 0059 and 0060), as the console and `/api/runtime/files` list\nit. Uploads stream the raw bytes in the request body.",
+        "required": ["id", "name", "folder", "access", "updated_at"],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/FileAccess",
+            "description": "What the caller may do with it."
+          },
+          "content_type": {
+            "type": ["string", "null"]
+          },
+          "folder": {
+            "type": "boolean",
+            "description": "A folder has no size, digest or content type."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner_agent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The agent that owns it, when an agent does."
+          },
+          "owner_user": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The person who owns it, when a person does."
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The folder holding it; its owner's top level when absent."
+          },
+          "sha256": {
+            "type": ["string", "null"],
+            "description": "Lowercase hex of the stored bytes' SHA-256, computed by the orchestrator."
+          },
+          "size": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "FileShare": {
+        "type": "object",
+        "description": "A share of a file, and for a folder everything under it, with a person by login, a team or an\nagent by name. `POST /api/runtime/files/{id}/shares` adds or changes one; a refusal is 400\nwith the reason the model reads.",
+        "required": ["kind", "name", "permission"],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ShareKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "permission": {
+            "$ref": "#/components/schemas/SharePermission"
+          }
+        },
+        "additionalProperties": false
+      },
       "FillVaultItem": {
         "type": "object",
         "required": ["field"],
@@ -2006,6 +2414,21 @@
             }
           }
         ]
+      },
+      "Placement": {
+        "type": "object",
+        "description": "A new folder, or where a file goes: `parent` null or absent is the owner's top level.",
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
       },
       "Progress": {
         "type": "object",
@@ -2304,6 +2727,14 @@
           }
         },
         "additionalProperties": false
+      },
+      "ShareKind": {
+        "type": "string",
+        "enum": ["user", "team", "agent"]
+      },
+      "SharePermission": {
+        "type": "string",
+        "enum": ["read", "write"]
       },
       "Skill": {
         "type": "object",

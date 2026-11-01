@@ -7,6 +7,7 @@ mod agents;
 mod browser;
 mod connections;
 mod desktop;
+mod files;
 mod identity;
 mod invitations;
 mod memories;
@@ -61,6 +62,7 @@ pub fn openapi() -> String {
     doc.merge(memories::Doc::openapi());
     doc.merge(skills::Doc::openapi());
     doc.merge(vault::Doc::openapi());
+    doc.merge(files::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
 
@@ -77,6 +79,7 @@ fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> R
         .merge(rooms::router(pool.clone(), identity.clone()))
         .merge(memories::router(pool.clone(), identity.clone()))
         .merge(skills::router(pool.clone(), identity.clone()))
+        .merge(files::router(identity.clone()))
         .merge(identity::router(identity.clone()))
         .merge(invitations::router(identity.clone()))
         .merge(access::router(identity))

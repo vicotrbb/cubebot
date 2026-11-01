@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO file_shares (file_id, account_id, team_id, agent_id, permission)\n                VALUES ($1, $2, $3, $4, $5)\n                ON CONFLICT (file_id, account_id, team_id, agent_id)\n                DO UPDATE SET permission = EXCLUDED.permission\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a5575f1cec47d6e8cc30916066b2003100fbc884b4450f473a3396921f1b3fd6"
+}

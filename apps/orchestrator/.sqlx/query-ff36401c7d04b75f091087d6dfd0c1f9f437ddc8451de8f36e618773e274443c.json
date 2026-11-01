@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT f.id, f.parent_id, f.name, f.blob_id, f.content_type,\n                b.size AS \"size?\", b.sha256 AS \"sha256?\", f.owner_account_id, f.owner_agent_id,\n                (to_jsonb(f.updated_at) #>> '{}') AS \"updated_at!\"\n            FROM files f LEFT JOIN blobs b ON b.id = f.blob_id\n            WHERE f.id = ANY($1)\n            ORDER BY f.blob_id IS NOT NULL, f.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "parent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "blob_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "content_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "size?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "sha256?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 7,
+        "name": "owner_account_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "owner_agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "updated_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "ff36401c7d04b75f091087d6dfd0c1f9f437ddc8451de8f36e618773e274443c"
+}

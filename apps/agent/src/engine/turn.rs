@@ -140,6 +140,7 @@ async fn start<P: Provider>(
     }
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
+    tools.extend(crate::files::definitions(registry.is_some()));
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
     tools.extend(crate::collaboration::definitions(desktop));
     // A task lane never drives the shared desktop (ADR 0005); the main lane owns it.
@@ -481,7 +482,7 @@ fn prepare<'a>(
                 }
                 Ok(input) => memories
                     .call(&call.name, input)
-                    .or_else(|| skills.call(&call.name, input, tools))
+                    .or_else(|| skills.call(&call.name, id, input, tools))
                     .or_else(|| collaboration.call(&call.name, id, input))
                     .unwrap_or_else(|| {
                         tools
