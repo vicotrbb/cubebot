@@ -60,6 +60,16 @@ api:
 check: format-check lint test build
     bun run typecheck
 
+# Compares a release's digests.json with what its tag resolves to in GHCR; needs Docker and jq.
+release-check file="digests.json":
+    tag=$(jq -er .tag "{{ file }}"); \
+    for image in cubebot-orchestrator cubebot-web cubebot-agent cubebot-sandbox; do \
+        want=$(jq -er --arg image "$image" '.images[$image]' "{{ file }}"); \
+        have=$(docker buildx imagetools inspect "ghcr.io/vicotrbb/$image:$tag" --format '{{{{json .Manifest}}' | jq -er .digest); \
+        [ "$want" = "$have" ] || { echo "$image:$tag is $have in GHCR, $want in {{ file }}" >&2; exit 1; }; \
+        echo "$image:$tag $have"; \
+    done
+
 # Starts temporary local processes, checks HTTP behavior, and stops them.
 smoke:
     uv run --project tooling/quality --locked python tests/system/smoke.py
