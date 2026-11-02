@@ -1,0 +1,87 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  # A dry run: pushes the images under the given tag and creates a draft release, so no git tag is made.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Image and release tag, e.g. v0.0.0-dryrun.1
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  # Native runners per architecture; Rust under QEMU emulation takes hours.
+  images:
+    strategy:
+      matrix:
+        image: [orchestrator, web, agent]
+        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Log in to GHCR
+        run: docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<< "$GITHUB_TOKEN"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      # shortcut: per-architecture tags stay in the registry beside the manifest; push by digest if they clutter.
+      - run: docker build --push -f "apps/$IMAGE/Dockerfile" -t "ghcr.io/vicotrbb/cubebot-$IMAGE:$TAG-${{ matrix.arch }}" .
+        env:
+          IMAGE: ${{ matrix.image }}
+
+  sandbox:
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/guest.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+
+  release:
+    needs: [images, sandbox]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+        with:
+          just-version: '1.55.1'
+      - name: Log in to GHCR
+        run: docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<< "$GITHUB_TOKEN"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Join the architectures into one manifest per image
+        run: |
+          for image in orchestrator web agent; do
+            ref="ghcr.io/vicotrbb/cubebot-$image:$TAG"
+            docker buildx imagetools create -t "$ref" "$ref-amd64" "$ref-arm64"
+          done
+      - name: Write digests.json
+        run: |
+          for image in orchestrator web agent sandbox; do
+            docker buildx imagetools inspect "ghcr.io/vicotrbb/cubebot-$image:$TAG" --format '{{json .Manifest}}' \
+              | jq --arg image "cubebot-$image" '{($image): .digest}'
+          done | jq -s --arg tag "$TAG" '{tag: $tag, images: add}' > digests.json
+          cat digests.json
+      - run: just release-check digests.json
+      - name: Create the GitHub release
+        run: gh release create "$TAG" digests.json --target "$GITHUB_SHA" --title "$TAG" --generate-notes ${{ github.event_name == 'workflow_dispatch' && '--draft' || '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}

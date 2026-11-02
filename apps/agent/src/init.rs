@@ -28,6 +28,9 @@ pub(crate) const PRIVATE: &str = "/run/cubebot";
 /// The outer display's cookie (ADR 0085), for the arbiter and Xephyr.
 const OUTER_AUTHORITY: &str = "/run/cubebot/display";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+/// Written by openbox's startup command once it manages windows; a window mapped before then
+/// can be dropped, so the desktop is not ready until it exists.
+const OPENBOX_STARTED: &str = "/tmp/.cubebot-openbox-started";
 
 /// Prepares storage, starts the desktop and then the agent with `environment` and init's own
 /// paths, which win over any duplicate; returns the agent's pid.
@@ -139,13 +142,25 @@ fn xauthority(display: &str, cookie: &[u8]) -> Vec<u8> {
     file
 }
 
+/// Starts openbox and returns once it manages windows.
+fn openbox(command: &mut Command) -> io::Result<()> {
+    // A container's writable root keeps /tmp across restarts.
+    match std::fs::remove_file(OPENBOX_STARTED) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => return Err(error),
+        _ => (),
+    }
+    command
+        .args(["--startup", &format!("touch {OPENBOX_STARTED}")])
+        .spawn()?;
+    appears(Path::new(OPENBOX_STARTED), "openbox")
+}
+
+/// Waits for `path`, a server's socket or openbox's startup marker.
 fn appears(path: &Path, server: &str) -> io::Result<()> {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while !path.exists() {
         if std::time::Instant::now() > deadline {
-            return Err(io::Error::other(format!(
-                "{server} did not open its socket"
-            )));
+            return Err(io::Error::other(format!("{server} did not start")));
         }
         std::thread::sleep(Duration::from_millis(50));
     }
@@ -190,7 +205,7 @@ fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()
             .stderr(Stdio::null());
         command
     };
-    client("/usr/bin/openbox").spawn()?;
+    openbox(&mut client("/usr/bin/openbox"))?;
     // The default stays when the orchestrator is unreachable; the agent draws its own after it.
     // Once it is drawn Xephyr is serving, so its window is on :0 for the arbiter to focus.
     let drawn = client("/usr/bin/xwallpaper")

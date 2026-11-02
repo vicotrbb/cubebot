@@ -5,8 +5,21 @@ import { usePreferences, useSession } from '../app/queries'
 import { applyTheme } from '../app/theme'
 import { Shell } from '../features/shell/Shell'
 
-// The shell is personal and lives behind a session cookie, so it renders in the browser.
-export const Route = createFileRoute('/_app')({ ssr: false, component: App })
+// The shell is personal and lives behind a session cookie, so it renders in the browser; the
+// server sends the pending component in its place.
+export const Route = createFileRoute('/_app')({
+  ssr: false,
+  pendingComponent: Opening,
+  component: App,
+})
+
+function Opening() {
+  return (
+    <main className="shell-loading" role="status">
+      Opening Cubebot…
+    </main>
+  )
+}
 
 function App() {
   const session = useSession()
@@ -15,12 +28,7 @@ function App() {
   useEffect(() => {
     if (preferences.data) applyTheme(preferences.data.theme)
   }, [preferences.data])
-  if (session.isPending)
-    return (
-      <main className="shell-loading" role="status">
-        Opening Cubebot…
-      </main>
-    )
+  if (session.isPending) return <Opening />
   if (session.isError)
     return (
       <main className="shell-loading" role="alert">
