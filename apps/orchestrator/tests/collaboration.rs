@@ -234,6 +234,7 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     assert_eq!(turn(&work, &admin, lead, second).await.status, "cancelled");
 
     // A failed child settles as failed with its error, and its yielded parent is queued again.
+    model.turn(vec![Step::Reject], json!([]));
     let foreign: Uuid = sqlx::query_scalar!(
         "
         INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status)
@@ -259,7 +260,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     .fetch_one(&f.pool)
     .await
     .unwrap();
-    model.turn(vec![Step::Reject], json!([]));
     let failed = reaches(&work, &admin, lead, failing, "failed").await;
     assert_eq!(failed.error.as_deref(), Some("provider_rejected"));
     let queued = turn(&work, &admin, bee, foreign).await;
@@ -357,7 +357,12 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
     );
 
     // Three delegated tasks for an agent with two task lanes: two run at once, the third waits;
-    // a task's context is the task, not the main conversation.
+    // a task's context is the task, not the main conversation. The replies are scripted first:
+    // the agent claims a task as soon as its row exists.
+    let before = model.requests().len();
+    model.turn(vec![Step::Gated(json!([text("done one")]))], json!([]));
+    model.turn(vec![Step::Gated(json!([text("done two")]))], json!([]));
+    model.turn(vec![Step::Reply(json!([text("done three")]))], json!([]));
     let mut tasks = Vec::new();
     for job in ["one", "two", "three"] {
         let parent = sqlx::query_scalar!(
@@ -389,10 +394,6 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
             .unwrap(),
         );
     }
-    let before = model.requests().len();
-    model.turn(vec![Step::Gated(json!([text("done one")]))], json!([]));
-    model.turn(vec![Step::Gated(json!([text("done two")]))], json!([]));
-    model.turn(vec![Step::Reply(json!([text("done three")]))], json!([]));
     requested(&model, before + 2).await;
     let running: i64 = sqlx::query_scalar!(
         r#"
@@ -421,6 +422,7 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
 
     // A message that expects a reply is answered back to its sender once, and the relay
     // expects none, so nothing echoes.
+    model.turn(vec![Step::Reply(json!([text("pong")]))], json!([]));
     let sender = sqlx::query_scalar!(
         "
         INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,status,response,completed_at)
@@ -446,7 +448,6 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
     .fetch_one(&f.pool)
     .await
     .unwrap();
-    model.turn(vec![Step::Reply(json!([text("pong")]))], json!([]));
     reaches(&work, &admin, lead, ping, "complete").await;
     let relays: Vec<(String, bool)> = sqlx::query!(
         "
