@@ -10,12 +10,13 @@ The second boot must reopen the journal lock file the first one created, and run
 computer use on: a person takes control and closes the maximized Chromium until the host
 channel's screenshot shows the wallpaper. Before both,
 the sandbox must refuse to start in the host's own network namespace. A third boot
-replaces the agent with guest_desktop.py as init (ADR 0085): through the host
-channel (`cubebot-sandbox desktop`), a screenshot must be the pattern it drew through a
-DRM dumb buffer, a person's key must be refused until that person takes control and then
-reach its evdev stream, and the guest's own key request must then be refused as agent
-input. The stand-in only records the bootstrap request, so this is not agent
-qualification.
+runs guest_desktop.py as init around the real one (ADR 0085): as the tool user it must
+find the outer display, the arbiter's socket and the host channel out of reach and no
+XTEST on its own display; through the host channel (`cubebot-sandbox desktop`) a
+screenshot must show the wallpaper, a person's key must be refused until that person
+takes control and then reach a window on the tool user's display, and the agent's key
+request on the arbiter's socket must then be refused as agent input. The stand-in only
+records the bootstrap request, so this is not agent qualification.
 """
 
 import base64
@@ -35,8 +36,6 @@ import time
 import zlib
 from pathlib import Path
 
-import guest_desktop
-
 ROOT = Path(__file__).resolve().parents[2]
 GUEST = ROOT / "target/guest"
 NAMESPACE = "cubebot-guest-test"
@@ -45,6 +44,9 @@ PORT = 8443
 TOKEN = "cb_guest_acceptance"
 LOCK = "/runtime/tools/lock"
 INIT = "/usr/local/bin/cubebot-agent"
+REAL_INIT = "/usr/local/bin/cubebot-agent-real"
+# The X key code of the A key: its evdev code 30 plus 8.
+KEY_A = 38
 DEADLINE = 60.0
 SHUTDOWN = 20.0
 # Set either to boot a guest of that size instead of the sandbox's 2 vCPUs and 2 GiB.
@@ -166,10 +168,9 @@ def drawn(directory: Path, console: Console):
     shown = False
 
     # No agent starts Chromium here; ctrl+w stays in case a window covers the wallpaper.
-    # Xorg's root and Chromium have a few hundred colors; the photograph thousands.
     def wallpaper() -> bool:
         nonlocal shown
-        shown = shown or colors(ask(control, screenshot)) > 4096
+        shown = shown or photograph(ask(control, screenshot))
         if not shown:
             ask(control, close)
         return shown
@@ -185,30 +186,39 @@ def drawn(directory: Path, console: Console):
         control.wait()
 
 
-def colors(screen: dict) -> int:
+def photograph(screen: dict) -> bool:
+    """Whether the screen shows the wallpaper: X's root, openbox and Chromium have a few
+    hundred colors, the photograph thousands."""
     pixels = rgb(screen.get("png", ""))
-    return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)})
+    return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)}) > 4096
 
 
 def desktop(directory: Path, workspace: Path):
-    """Boots a root image copy with guest_desktop.py as init; returns why it failed."""
+    """Boots a root image copy with guest_desktop.py around the real init; returns why
+    it failed."""
     root = directory / "desktop.ext4"
     subprocess.run(["cp", "--reflink=auto", GUEST / "root.ext4", root], check=True)
     script = Path(__file__).with_name("guest_desktop.py")
     commands = directory / "desktop.debugfs"
-    commands.write_text(f"rm {INIT}\nwrite {script} {INIT}\nsif {INIT} mode 0100755\n")
+    commands.write_text(
+        f"ln {INIT} {REAL_INIT}\nunlink {INIT}\n"
+        f"write {script} {INIT}\nsif {INIT} mode 0100755\n"
+    )
     subprocess.run(
         ["debugfs", "-w", "-f", commands, root], check=True, capture_output=True
     )
-    sandbox = launch(environment(directory, workspace) | {"CUBEBOT_GUEST_ROOT": root})
+    variables = environment(directory, workspace) | COMPUTER
+    sandbox = launch(variables | {"CUBEBOT_GUEST_ROOT": root})
     try:
         console = Console(sandbox.stdout)
         deadline = time.monotonic() + DEADLINE
-        if not until(lambda: b"Guest desktop drawn" in console.output, deadline):
-            return "the guest did not draw through DRM"
+        if not until(lambda: b"Guest desktop ready" in console.output, deadline):
+            return "the guest desktop did not start"
+        if b"Guest isolation passed" not in console.output:
+            return "the tool user reached what it must not (see Guest isolation above)"
         screen = host(directory, {"input": person({"action": "screenshot"})})
-        if rgb(screen.get("png", "")) != expected_rgb():
-            return "the host channel's screenshot is not the pattern the guest drew"
+        if not photograph(screen):
+            return "the host channel's screenshot does not show the wallpaper"
         key = {"input": person({"action": "key", "keys": ["a"]})}
         if host(directory, key).get("error") != "this person does not have control":
             return "a person's key was not refused before they took control"
@@ -218,8 +228,11 @@ def desktop(directory: Path, workspace: Path):
             ask(control, {"mode": {"mode": "human", "account": PERSON}})
             if ask(control, key).get("error"):
                 return "the person holding control could not type"
-            if not until(lambda: b"Guest key 30 pressed" in console.output, deadline):
-                return "the A key the person typed did not reach the guest's evdev"
+            typed = f"Guest key {KEY_A} pressed".encode()
+            if not until(lambda: typed in console.output, deadline):
+                return (
+                    "the A key the person typed did not reach the tool user's display"
+                )
             if not until(lambda: b"Guest agent answer" in console.output, deadline):
                 return "the guest's agent key request got no answer"
         finally:
@@ -285,13 +298,6 @@ def rgb(encoded: str) -> bytes:
         pixels += line
         previous = line
     return bytes(pixels)
-
-
-def expected_rgb() -> bytes:
-    bgrx = guest_desktop.pattern()
-    rgb = bytearray(len(bgrx) // 4 * 3)
-    rgb[0::3], rgb[1::3], rgb[2::3] = bgrx[2::4], bgrx[1::4], bgrx[0::4]
-    return bytes(rgb)
 
 
 def launch(variables: dict) -> subprocess.Popen:

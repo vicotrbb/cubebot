@@ -293,7 +293,7 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
         let mut command = self.sandbox.command("/bin/sh");
         command
             .args(["-c", DRAW, "wallpaper", default, DESKTOP_READY])
-            .env("DISPLAY", ":0")
+            .env("DISPLAY", ":1")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null());

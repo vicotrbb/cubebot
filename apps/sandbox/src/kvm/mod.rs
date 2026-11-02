@@ -1,10 +1,10 @@
 //! The sandbox: one VM with one memory region and a thread per vCPU booting a Linux guest from a
 //! read-only root disk, with the agent's guest init as init (ADR 0084). Its devices are a 16550 serial
 //! console relayed to stdout and virtio-mmio disks for the root and workspace, a network device on
-//! a tap, vsock for the control channel, and the desktop's screen, keyboard and tablet (ADR 0085).
+//! a tap, and vsock for the control channel and the desktop's host channel (ADR 0085).
 #![allow(unsafe_code, reason = "KVM ioctls and guest memory (ADR 0084)")]
 mod boot;
-mod desktop;
+mod bridge;
 mod memory;
 mod network;
 mod serial;
@@ -29,7 +29,7 @@ use std::{
     process::Command,
     sync::{Arc, Mutex, mpsc},
 };
-use virtio::{Mmio, Slot, block::Block, gpu::Gpu, input::Input, net::Net, vsock::Vsock};
+use virtio::{Mmio, Slot, block::Block, net::Net, vsock::Vsock};
 
 // shortcut: fixed workspace size, make it configurable when an agent needs more.
 const WORKSPACE_SIZE: u64 = 8 << 30;
@@ -44,9 +44,9 @@ const SERIAL_IRQ: u32 = 4;
 /// Device windows sit above guest RAM, which the E820 map ends at the guest memory size.
 const MMIO: u64 = 0xd000_0000;
 const _: () = assert!((*MEMORY_MIB.1.end() as u64) << 20 <= MMIO);
-/// Root disk, workspace disk, network, vsock, screen, keyboard, tablet: free ISA interrupts once
-/// COM1 has IRQ 4. Linux names the disks vda and vdb in this order.
-const IRQS: [u32; 7] = [5, 6, 9, 10, 11, 12, 7];
+/// Root disk, workspace disk, network, vsock: free ISA interrupts once COM1 has IRQ 4. Linux
+/// names the disks vda and vdb in this order.
+const IRQS: [u32; 4] = [5, 6, 9, 10];
 /// The guest owns its storage paths; it mounts the workspace disk itself.
 const GUEST_OWNED: [&str; 2] = ["CUBEBOT_JOURNAL_DIRECTORY", "CUBEBOT_WORKSPACE_DIRECTORY"];
 const FILE_LIMIT: u64 = 64 << 10;
@@ -72,10 +72,7 @@ pub fn run() -> io::Result<u8> {
         net,
         tap,
         vsock,
-        gpu,
-        keyboard,
-        tablet,
-        desktop,
+        spares,
         environment,
         cmdline,
     } = devices(vm.as_raw_fd())?;
@@ -93,10 +90,11 @@ pub fn run() -> io::Result<u8> {
     std::thread::spawn(move || refresh(environment, &refreshed, memory));
     let stopped = vsock.clone();
     std::thread::spawn(move || stop(termination, &stopped, memory));
-    let arbiter = vsock.clone();
-    std::thread::spawn(move || {
-        desktop::Arbiter::new(&gpu, &keyboard, &tablet, memory).serve(desktop, &arbiter);
-    });
+    let socket = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")
+        .map_or_else(|| PathBuf::from(bridge::SOCKET), PathBuf::from);
+    bridge::listen(&socket, vsock.clone(), spares, memory).map_err(|error| {
+        io::Error::other(format!("desktop socket {}: {error}", socket.display()))
+    })?;
     // The guest ends when any vCPU stops, such as the one that triple-faults on reboot.
     let (ended, end) = mpsc::channel();
     let serial = Arc::new(Mutex::new(serial::Serial::default()));
@@ -135,16 +133,13 @@ fn open_vm() -> io::Result<(File, OwnedFd)> {
 }
 
 struct Devices {
-    bus: [Arc<dyn Mmio>; 7],
+    bus: [Arc<dyn Mmio>; 4],
     net: Arc<Slot<Net>>,
     /// The tap's receive side, read by its own thread.
     tap: File,
     vsock: Arc<Slot<Vsock>>,
-    gpu: Arc<Slot<Gpu>>,
-    keyboard: Arc<Slot<Input>>,
-    tablet: Arc<Slot<Input>>,
-    /// Requests for the screen arbiter, from the guest's desktop streams and the host channel.
-    desktop: mpsc::Receiver<desktop::Request>,
+    /// The guest ports of the arbiter's host channel streams, for the bridge.
+    spares: mpsc::Receiver<u32>,
     /// The environment the guest receives first.
     environment: Vec<(String, String)>,
     /// The kernel command line, which declares the devices and the guest's network.
@@ -164,25 +159,13 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
     };
     let net = Net::new(network.tap.try_clone()?, network.mac, network.mtu);
     let net = Arc::new(Slot::new(net, irq(2)));
-    let (requests, desktop) = mpsc::channel();
-    let socket = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")
-        .map_or_else(|| PathBuf::from(desktop::SOCKET), PathBuf::from);
-    desktop::listen(&socket, requests.clone()).map_err(|error| {
-        io::Error::other(format!("desktop socket {}: {error}", socket.display()))
-    })?;
-    let vsock = Arc::new(Slot::new(Vsock::new(encoded, requests), irq(3)));
-    let gpu = Arc::new(Slot::new(Gpu::default(), irq(4)));
-    let keyboard = Arc::new(Slot::new(Input::keyboard(), irq(5)));
-    let tablet = Input::tablet(virtio::gpu::WIDTH, virtio::gpu::HEIGHT);
-    let tablet = Arc::new(Slot::new(tablet, irq(6)));
-    let bus: [Arc<dyn Mmio>; 7] = [
+    let (offered, spares) = mpsc::channel();
+    let vsock = Arc::new(Slot::new(Vsock::new(encoded, offered), irq(3)));
+    let bus: [Arc<dyn Mmio>; 4] = [
         Arc::new(Slot::new(Block::new(root, true)?, irq(0))),
         Arc::new(Slot::new(Block::new(workspace, false)?, irq(1))),
         net.clone(),
         vsock.clone(),
-        gpu.clone(),
-        keyboard.clone(),
-        tablet.clone(),
     ];
     let devices: String = (0..bus.len())
         .map(|index| {
@@ -198,10 +181,7 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
         net,
         tap: network.tap,
         vsock,
-        gpu,
-        keyboard,
-        tablet,
-        desktop,
+        spares,
         environment,
         cmdline: format!("{CMDLINE} {}{devices} -- guest", network.cmdline),
     })

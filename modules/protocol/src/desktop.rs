@@ -1,11 +1,13 @@
-//! The desktop arbiter's requests (ADR 0085). The guest agent opens streams to `HOST_CID:PORT`
-//! and sends one [`AgentRequest`] JSON line per request; the sandbox host channel carries
-//! [`HostRequest`] lines from the orchestrator. Each request gets one [`Response`] line. The
-//! arbiter tags every request with its source from the stream it arrived on, never from its body.
+//! The desktop arbiter's requests (ADR 0085). The agent's tools send one [`AgentRequest`] JSON
+//! line per request on the arbiter's Unix socket; the host channel carries [`HostRequest`] lines
+//! from the orchestrator. Each request gets one [`Response`] line. The arbiter tags every request
+//! with its source from the stream it arrived on, never from its body.
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-pub const PORT: u32 = 1025;
+/// In a `kvm` guest the arbiter opens host channel streams to `HOST_CID:HOST_PORT` from a
+/// reserved source port, and the sandbox pairs each with a host channel connection.
+pub const HOST_PORT: u32 = 1026;
 /// Bounds each request line, such as the text of one `type`.
 pub const LINE_LIMIT: usize = 64 << 10;
 /// The refusal of agent input while a person holds control.

@@ -28,6 +28,7 @@ webpki-roots = "1"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "alloc"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+x11rb = { version = "0.14", features = ["xtest"] }
 
 [dev-dependencies]
 axum = { workspace = true, features = ["ws"] }

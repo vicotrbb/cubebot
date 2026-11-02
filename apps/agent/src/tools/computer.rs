@@ -1,5 +1,5 @@
 //! The computer tool (ADR 0085): the provider's own computer-use tool, served by the sandbox's
-//! screen arbiter over the guest's desktop port. Anthropic toolset calls arrive as
+//! screen arbiter over its Unix socket. Anthropic toolset calls arrive as
 //! `{"action": member, ...input}` and OpenAI calls as `{"actions": [...]}`; each becomes arbiter
 //! requests tagged with the call's id. An OpenAI call always answers with a screenshot.
 use super::{Running, Sandbox, Tool};
@@ -9,8 +9,8 @@ use cubebot_protocol::{
 };
 use serde_json::Value;
 use std::{
-    fs::File,
     io::{self, BufRead, BufReader, Write},
+    os::unix::net::UnixStream,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -26,7 +26,7 @@ const WHEEL_PIXELS: i64 = 100;
 pub(super) struct Computer {
     definition: cubebot_providers::Tool,
     /// One stream to the arbiter, opened on first use and reopened after a failure.
-    desktop: Arc<Mutex<Option<BufReader<File>>>>,
+    desktop: Arc<Mutex<Option<BufReader<UnixStream>>>>,
 }
 
 pub(super) fn tool() -> Box<dyn Tool> {
@@ -276,7 +276,7 @@ fn seconds(value: &Value) -> Duration {
 }
 
 /// Runs the steps until the arbiter refuses one, then takes the screenshot the call answers with.
-fn run(desktop: &Mutex<Option<BufReader<File>>>, call: Uuid, plan: Plan) -> Outcome {
+fn run(desktop: &Mutex<Option<BufReader<UnixStream>>>, call: Uuid, plan: Plan) -> Outcome {
     let mut desktop = desktop
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -327,7 +327,7 @@ fn unreachable_desktop(error: &io::Error) -> Outcome {
 
 /// One request and its response line; a broken stream is dropped so the next call reconnects.
 fn request(
-    desktop: &mut Option<BufReader<File>>,
+    desktop: &mut Option<BufReader<UnixStream>>,
     call: Uuid,
     action: Action,
 ) -> io::Result<Response> {
@@ -351,7 +351,7 @@ pub(super) fn ask(call: Uuid, action: Action) -> io::Result<Response> {
     )
 }
 
-fn exchange(stream: &mut BufReader<File>, request: &AgentRequest) -> io::Result<Response> {
+fn exchange(stream: &mut BufReader<UnixStream>, request: &AgentRequest) -> io::Result<Response> {
     let mut line = serde_json::to_vec(request)?;
     line.push(b'\n');
     stream.get_mut().write_all(&line)?;
@@ -362,28 +362,9 @@ fn exchange(stream: &mut BufReader<File>, request: &AgentRequest) -> io::Result<
     Ok(serde_json::from_slice(&response)?)
 }
 
-#[cfg(target_os = "linux")]
-#[tracing::instrument(skip_all, fields(port = cubebot_protocol::desktop::PORT))]
-fn connect() -> io::Result<File> {
-    use nix::sys::socket::{AddressFamily, SockFlag, SockType, VsockAddr, connect, socket};
-    use std::os::fd::AsRawFd;
-    let socket = socket(
-        AddressFamily::Vsock,
-        SockType::Stream,
-        SockFlag::SOCK_CLOEXEC,
-        None,
-    )?;
-    let host = cubebot_protocol::guest::HOST_CID;
-    connect(
-        socket.as_raw_fd(),
-        &VsockAddr::new(host, cubebot_protocol::desktop::PORT),
-    )?;
-    Ok(File::from(socket))
-}
-
-#[cfg(not(target_os = "linux"))]
-fn connect() -> io::Result<File> {
-    Err(io::Error::other("the desktop needs the sandbox's guest"))
+#[tracing::instrument(skip_all)]
+fn connect() -> io::Result<UnixStream> {
+    UnixStream::connect(crate::desktop::SOCKET)
 }
 
 #[cfg(test)]

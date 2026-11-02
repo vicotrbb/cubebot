@@ -1,13 +1,15 @@
-//! The screen arbiter (ADR 0085): the only reader of the screen and the only writer of the
-//! keyboard and tablet. It serves the guest agent's desktop streams and the host channel, a Unix
-//! socket that `cubebot-sandbox desktop` relays for the orchestrator, one request at a time. It
-//! holds the mode, refuses agent input while a person holds control and until the agent looks
-//! again after they hand it back, refuses every agent request while a person holds control for a
-//! login handoff (ADR 0039), and logs every request with its source: the agent and its tool
-//! call, or the person's account. Each host channel connection gets frames of the tiles that
-//! changed since its last one, encoded on its own relay thread.
-use super::virtio::{Slot, gpu::Gpu, input::Input, vsock::Vsock};
-use crate::kvm::memory::GuestMemory;
+//! The screen arbiter (ADR 0085): a root process in the sandbox and the only client of the outer
+//! display, so the only reader of the screen and the only writer of input. It serves the agent's
+//! tools on a Unix socket only root can open, and the host channel over streams it holds open to
+//! the sandbox's vsock host port, which the sandbox pairs with the connections
+//! `cubebot-sandbox desktop` relays for the orchestrator; one request at a time. It holds the mode,
+//! refuses agent input while a person holds control and until the agent looks again after they
+//! hand it back, refuses every agent request while a person holds control for a login handoff
+//! (ADR 0039), and logs every request with its source: the agent and its tool call, or the
+//! person's account. Each host channel connection gets frames of the tiles that changed since its
+//! last one, encoded on its own relay thread. Its device edges are [`Screen`] and [`Input`].
+mod png;
+pub mod x11;
 use cubebot_protocol::desktop::{
     Action, AgentRequest, Button, HostRequest, LINE_LIMIT, LOGIN_PENDING, Mode, PERSON_HAS_CONTROL,
     Pointer, REOBSERVE, Response, TILE, Tile,
@@ -24,9 +26,10 @@ use std::{
 };
 use uuid::Uuid;
 
-/// The host channel's socket; `CUBEBOT_GUEST_DESKTOP_SOCKET` moves it, such as for several
-/// sandboxes sharing one host's /tmp.
-pub const SOCKET: &str = "/tmp/cubebot-desktop.sock";
+/// The agent's socket, in `/run`, which only root writes.
+pub const SOCKET: &str = "/run/cubebot-desktop.sock";
+pub const WIDTH: u32 = 1280;
+pub const HEIGHT: u32 = 800;
 const NO_CONTROL: &str = "this person does not have control";
 const OTHER_HAS_CONTROL: &str = "another person has control";
 const SHIFT: u16 = 42;
@@ -35,13 +38,6 @@ const MAX_CLICKS: u8 = 3;
 const MAX_PATH: usize = 100;
 const MAX_WHEEL: i32 = 50;
 const MAX_KEYS: usize = 8;
-/// Input events per delivery, one shifted character, and the pause that lets the guest read one
-/// delivery before the next, near xdotool's default 12 ms per key. A slower reader, such as Xorg
-/// opening a popup, still drops a burst; the guest has no flow control back to the host.
-/// shortcut: a long `type` holds the arbiter, and so every viewer's frames, for about 10 ms per
-/// character; queue input apart from frames if that shows.
-const BATCH: usize = 8;
-const BATCH_PAUSE: std::time::Duration = std::time::Duration::from_millis(10);
 /// US layout rows: unshifted and shifted characters from the first key code.
 const ROWS: [(&str, &str, u16); 4] = [
     ("1234567890-=", "!@#$%^&*()_+", 2),
@@ -126,16 +122,28 @@ const KEYS: [(&str, u16); 73] = [
     ("menu", 139),
 ];
 
+/// The screen: BGRX rows of [`WIDTH`] by [`HEIGHT`] pixels as last presented.
+pub trait Screen: Send {
+    fn capture(&mut self) -> io::Result<Vec<u8>>;
+}
+
+/// The keyboard and pointer, taking evdev events in order.
+pub trait Input: Send {
+    fn send(&mut self, events: &[Event]) -> io::Result<()>;
+}
+
 /// One request and where its response goes.
 pub enum Request {
-    /// From the guest agent's stream on `port`.
-    Guest { port: u32, line: Vec<u8> },
+    Agent {
+        line: Vec<u8>,
+        reply: Sender<Vec<u8>>,
+    },
     Host {
         line: Vec<u8>,
         reply: Sender<Vec<u8>>,
     },
     /// The screen for a host channel frame.
-    Frame { reply: Sender<Snapshot> },
+    Frame { reply: Sender<io::Result<Snapshot>> },
 }
 
 pub struct Snapshot {
@@ -146,14 +154,12 @@ pub struct Snapshot {
 }
 
 /// An evdev (type, code, value) event.
-type Event = (u16, u16, u32);
+pub type Event = (u16, u16, u32);
 
-pub struct Arbiter<'a> {
-    pub gpu: &'a Slot<Gpu>,
-    pub keyboard: &'a Slot<Input>,
-    pub tablet: &'a Slot<Input>,
-    pub memory: &'a GuestMemory,
-    pub mode: Mode,
+pub struct Arbiter<S, I> {
+    screen: S,
+    input: I,
+    mode: Mode,
     holder: Option<Uuid>,
     pointer: [u32; 2],
     /// Who last moved the pointer: a person, or the agent when `None`.
@@ -164,18 +170,11 @@ pub struct Arbiter<'a> {
     handoff: bool,
 }
 
-impl<'a> Arbiter<'a> {
-    pub fn new(
-        gpu: &'a Slot<Gpu>,
-        keyboard: &'a Slot<Input>,
-        tablet: &'a Slot<Input>,
-        memory: &'a GuestMemory,
-    ) -> Self {
+impl<S: Screen, I: Input> Arbiter<S, I> {
+    pub fn new(screen: S, input: I) -> Self {
         Self {
-            gpu,
-            keyboard,
-            tablet,
-            memory,
+            screen,
+            input,
             mode: Mode::Agent,
             holder: None,
             pointer: [0, 0],
@@ -185,23 +184,17 @@ impl<'a> Arbiter<'a> {
         }
     }
 
-    /// Serves requests in arrival order for the life of the VM.
-    pub fn serve(mut self, requests: Receiver<Request>, vsock: &Slot<Vsock>) {
+    /// Serves requests in arrival order for the life of the sandbox.
+    pub fn serve(mut self, requests: Receiver<Request>) {
         for request in requests {
             match request {
-                Request::Guest { port, line } => {
-                    let delivered = encode(&self.agent(&line)).and_then(|response| {
-                        vsock.run(|vsock, queues| {
-                            vsock.respond(port, &response);
-                            vsock.deliver(queues, self.memory)
-                        })
-                    });
-                    if let Err(error) = delivered {
-                        super::fail(&format!("guest desktop stream: {error}"));
+                // A connection that went away no longer wants its response.
+                // An unencodable response drops the reply, which the relay reports as an error.
+                Request::Agent { line, reply } => {
+                    if let Ok(response) = encode(&self.agent(&line)) {
+                        drop(reply.send(response));
                     }
                 }
-                // A relay that went away no longer wants its response.
-                // An unencodable response drops the reply, which the relay reports as an error.
                 Request::Host { line, reply } => {
                     if let Ok(response) = encode(&self.host(&line)) {
                         drop(reply.send(response));
@@ -290,15 +283,15 @@ impl<'a> Arbiter<'a> {
         }
     }
 
-    fn snapshot(&self) -> Snapshot {
-        Snapshot {
+    fn snapshot(&mut self) -> io::Result<Snapshot> {
+        Ok(Snapshot {
             mode: self.mode,
             pointer: Pointer {
                 at: self.pointer,
                 account: self.pointer_by,
             },
-            screen: self.gpu.lock().device.screen.clone(),
-        }
+            screen: self.screen.capture()?,
+        })
     }
 
     /// `human` hands control to `account`; any other mode takes it back. Only the person
@@ -355,7 +348,7 @@ impl<'a> Arbiter<'a> {
     /// Sends the action's input, or returns the screen for a screenshot.
     fn perform(&mut self, action: &Action) -> Result<Option<String>, String> {
         let pointer = match action {
-            Action::Screenshot => return Ok(Some(self.screenshot())),
+            Action::Screenshot => return self.screenshot().map(Some),
             Action::Mode => return Ok(None),
             Action::Type { text } => return self.keys(typed(text)?),
             Action::Key { keys } => return self.keys(combination(keys)?),
@@ -377,36 +370,40 @@ impl<'a> Arbiter<'a> {
         self.pointer(pointer.0, pointer.1)
     }
 
-    fn screenshot(&self) -> String {
-        let screen = self.gpu.lock().device.screen.clone();
-        let png = crate::png::encode(
-            super::virtio::gpu::WIDTH,
-            super::virtio::gpu::HEIGHT,
-            &screen,
-        );
-        crate::png::base64(&png)
+    fn screenshot(&mut self) -> Result<String, String> {
+        let screen = self
+            .screen
+            .capture()
+            .map_err(|error| format!("screen: {error}"))?;
+        Ok(png::base64(&png::encode(WIDTH, HEIGHT, &screen)))
     }
 
-    fn keys(&self, events: Vec<Event>) -> Result<Option<String>, String> {
-        send(self.keyboard, &events, self.memory)?;
+    fn keys(&mut self, events: Vec<Event>) -> Result<Option<String>, String> {
+        self.send(&events)?;
         Ok(None)
     }
 
     /// Pointer events with `hold` keys pressed around them.
-    fn pointer(&self, hold: &[String], events: Vec<Event>) -> Result<Option<String>, String> {
+    fn pointer(&mut self, hold: &[String], events: Vec<Event>) -> Result<Option<String>, String> {
         let codes = hold
             .iter()
             .map(|name| key(name))
             .collect::<Result<Vec<_>, _>>()?;
-        let (press, release) = held(&codes);
-        send(self.keyboard, &press, self.memory)?;
-        send(self.tablet, &events, self.memory)?;
-        send(self.keyboard, &release, self.memory)?;
+        let (mut press, release) = held(&codes);
+        press.extend(events);
+        press.extend(release);
+        self.send(&press)?;
         Ok(None)
     }
 
+    fn send(&mut self, events: &[Event]) -> Result<(), String> {
+        self.input
+            .send(events)
+            .map_err(|error| format!("input: {error}"))
+    }
+
     fn moved(&mut self, [x, y]: [u32; 2]) -> Result<Vec<Event>, String> {
-        let (width, height) = (super::virtio::gpu::WIDTH, super::virtio::gpu::HEIGHT);
+        let (width, height) = (WIDTH, HEIGHT);
         if x >= width || y >= height {
             return Err(format!("({x}, {y}) is outside the {width}x{height} screen"));
         }
@@ -465,20 +462,6 @@ impl<'a> Arbiter<'a> {
         events.extend((0..right.abs()).flat_map(|_| [(2, 6, across), (0, 0, 0)]));
         Ok(events)
     }
-}
-
-/// Sends events in batches the guest can take: its evdev clients buffer 64 events, and one
-/// that overflows drops everything queued, so a burst such as a typed URL would vanish.
-fn send(device: &Slot<Input>, events: &[Event], memory: &GuestMemory) -> Result<(), String> {
-    for (at, batch) in events.chunks(BATCH).enumerate() {
-        if at > 0 {
-            std::thread::sleep(BATCH_PAUSE);
-        }
-        device
-            .run(|input, queues| input.send(batch, queues, memory))
-            .map_err(|error| format!("input device: {error}"))?;
-    }
-    Ok(())
 }
 
 fn pressed(code: u16) -> [Event; 4] {
@@ -564,10 +547,20 @@ fn encode(response: &Response) -> io::Result<Vec<u8>> {
     Ok(serde_json::to_vec(response)?)
 }
 
-/// Relays host channel lines to the arbiter, one connection per thread.
+/// Starts the arbiter on its own thread with the agent's socket and, in a guest, the host
+/// channel's streams.
+pub fn start<S: Screen + 'static, I: Input + 'static>(screen: S, input: I) -> io::Result<()> {
+    let (requests, received) = mpsc::channel();
+    listen(Path::new(SOCKET), requests.clone())?;
+    std::thread::spawn(move || dial(&requests));
+    std::thread::spawn(move || Arbiter::new(screen, input).serve(received));
+    Ok(())
+}
+
+/// Serves the agent's tools on `path`, which only root can open, one connection per thread.
 #[tracing::instrument(name = "desktop_listen", skip_all)]
-pub fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
-    // A socket left by an earlier run of this sandbox; the path is this sandbox's own.
+fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
+    // A socket left by an earlier run; the path is this sandbox's own.
     let _ = std::fs::remove_file(path);
     let listener = UnixListener::bind(path)?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
@@ -575,8 +568,8 @@ pub fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
         for stream in listener.incoming().flatten() {
             let requests = requests.clone();
             std::thread::spawn(move || {
-                if let Err(error) = relay(stream, &requests) {
-                    eprintln!("Desktop host channel closed: {error}");
+                if let Err(error) = serve_agent(stream, &requests) {
+                    eprintln!("Desktop agent connection closed: {error}");
                 }
             });
         }
@@ -584,12 +577,104 @@ pub fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
     Ok(())
 }
 
-/// Serves one connection; whoever took control through it and still holds it when it closes,
-/// such as an orchestrator that went away, hands control back.
+fn serve_agent(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut writer = stream;
+    while let Some(line) = read_line(&mut reader)? {
+        let (reply, response) = mpsc::channel();
+        requests
+            .send(Request::Agent { line, reply })
+            .map_err(io::Error::other)?;
+        let mut response = response.recv().map_err(io::Error::other)?;
+        response.push(b'\n');
+        writer.write_all(&response)?;
+    }
+    Ok(())
+}
+
+/// One request line without its newline, or `None` at the end of the stream.
+fn read_line(reader: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
+    let mut line = Vec::new();
+    let limit = LINE_LIMIT as u64 + 1;
+    if reader.by_ref().take(limit).read_until(b'\n', &mut line)? == 0 {
+        return Ok(None);
+    }
+    if line.pop() != Some(b'\n') {
+        return Err(io::Error::other("request line too long or unterminated"));
+    }
+    Ok(Some(line))
+}
+
+/// Keeps one unused stream open to the sandbox's host port, so each host channel connection the
+/// sandbox accepts has a stream to pair with: the next is dialed once the last has its first
+/// request, or has ended. The sandbox admits only reserved source ports, which take root.
+fn dial(requests: &Sender<Request>) {
+    let (paired, next) = mpsc::channel();
+    loop {
+        match host_stream() {
+            Ok(stream) => {
+                let (requests, paired) = (requests.clone(), paired.clone());
+                std::thread::spawn(move || {
+                    let mut reader = BufReader::new(&stream);
+                    let first = reader.fill_buf().map(|buffer| !buffer.is_empty());
+                    let _ = paired.send(());
+                    if let Ok(true) = first
+                        && let Err(error) = relay(reader, &stream, &requests)
+                    {
+                        eprintln!("Desktop host channel closed: {error}");
+                    }
+                });
+                let _ = next.recv();
+            }
+            Err(error) => {
+                eprintln!("Desktop host channel unavailable: {error}");
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[tracing::instrument(skip_all, fields(port = cubebot_protocol::desktop::HOST_PORT))]
+fn host_stream() -> io::Result<std::fs::File> {
+    use nix::sys::socket::{AddressFamily, SockFlag, SockType, VsockAddr, bind, connect, socket};
+    use std::os::fd::AsRawFd;
+    let socket = socket(
+        AddressFamily::Vsock,
+        SockType::Stream,
+        SockFlag::SOCK_CLOEXEC,
+        None,
+    )?;
+    // The highest free port at or below 1023, the kernel's last reserved vsock port.
+    let mut bound = Err(nix::errno::Errno::EADDRINUSE);
+    for port in (512..1024).rev() {
+        bound = bind(socket.as_raw_fd(), &VsockAddr::new(u32::MAX, port));
+        if bound != Err(nix::errno::Errno::EADDRINUSE) {
+            break;
+        }
+    }
+    bound?;
+    let host = VsockAddr::new(
+        cubebot_protocol::guest::HOST_CID,
+        cubebot_protocol::desktop::HOST_PORT,
+    );
+    connect(socket.as_raw_fd(), &host)?;
+    Ok(std::fs::File::from(socket))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn host_stream() -> io::Result<std::fs::File> {
+    Err(io::Error::other(
+        "the host channel needs the sandbox's guest",
+    ))
+}
+
+/// Serves one host channel connection; whoever took control through it and still holds it when
+/// it closes, such as an orchestrator that went away, hands control back.
 #[tracing::instrument(name = "desktop_connection", skip_all)]
-fn relay(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
+fn relay(reader: impl BufRead, writer: impl Write, requests: &Sender<Request>) -> io::Result<()> {
     let mut held = None;
-    let served = serve_connection(stream, requests, &mut held);
+    let served = serve_connection(reader, writer, requests, &mut held);
     if let Some(account) = held {
         let line = serde_json::to_vec(&HostRequest::Mode {
             mode: Mode::Watch,
@@ -605,23 +690,14 @@ fn relay(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
 }
 
 fn serve_connection(
-    stream: UnixStream,
+    mut reader: impl BufRead,
+    mut writer: impl Write,
     requests: &Sender<Request>,
     held: &mut Option<Uuid>,
 ) -> io::Result<()> {
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut writer = stream;
     // The screen as this connection's last frame showed it.
     let mut shown = Vec::new();
-    loop {
-        let mut line = Vec::new();
-        let limit = LINE_LIMIT as u64 + 1;
-        if reader.by_ref().take(limit).read_until(b'\n', &mut line)? == 0 {
-            return Ok(());
-        }
-        if line.pop() != Some(b'\n') {
-            return Err(io::Error::other("request line too long or unterminated"));
-        }
+    while let Some(line) = read_line(&mut reader)? {
         let request = serde_json::from_slice(&line).ok();
         let mut response = match request {
             Some(HostRequest::Frame) => encode(&frame(requests, &mut shown)?)?,
@@ -634,6 +710,7 @@ fn serve_connection(
         response.push(b'\n');
         writer.write_all(&response)?;
     }
+    Ok(())
 }
 
 fn ask(requests: &Sender<Request>, line: Vec<u8>) -> io::Result<Vec<u8>> {
@@ -649,7 +726,7 @@ fn frame(requests: &Sender<Request>, shown: &mut Vec<u8>) -> io::Result<Response
     requests
         .send(Request::Frame { reply })
         .map_err(io::Error::other)?;
-    let snapshot = snapshot.recv().map_err(io::Error::other)?;
+    let snapshot = snapshot.recv().map_err(io::Error::other)??;
     Ok(Response {
         mode: snapshot.mode,
         tiles: tiles(&snapshot.screen, shown),
@@ -661,7 +738,7 @@ fn frame(requests: &Sender<Request>, shown: &mut Vec<u8>) -> io::Result<Response
 /// The tiles of `screen` that differ from `shown`, every tile when `shown` is not a screen of
 /// the same size, as PNGs; `screen` becomes what is shown.
 fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
-    let (width, height) = (super::virtio::gpu::WIDTH, super::virtio::gpu::HEIGHT);
+    let (width, height) = (WIDTH, HEIGHT);
     let stride = width as usize * 4;
     let fresh = shown.len() != screen.len();
     let mut changed = Vec::new();
@@ -676,7 +753,7 @@ fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
                 continue;
             }
             let pixels: Vec<u8> = rows.flat_map(|row| screen[row].iter().copied()).collect();
-            let png = crate::png::base64(&crate::png::encode(w, h, &pixels));
+            let png = png::base64(&png::encode(w, h, &pixels));
             changed.push(Tile { x, y, png });
         }
     }
@@ -689,22 +766,27 @@ fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
 mod tests {
     use super::*;
 
-    struct Desktop {
-        memory: GuestMemory,
-        gpu: Slot<Gpu>,
-        keyboard: Slot<Input>,
-        tablet: Slot<Input>,
+    /// A black screen, and input that keeps what it was sent.
+    #[derive(Default)]
+    struct Fake {
+        sent: Vec<Event>,
     }
 
-    /// Devices whose interrupts go nowhere: the arbiter never raises one without a guest buffer.
-    fn desktop() -> Desktop {
-        let irq = crate::kvm::Irq { vm: -1, line: 0 };
-        Desktop {
-            memory: GuestMemory::map(1 << 16).unwrap(),
-            gpu: Slot::new(Gpu::default(), irq),
-            keyboard: Slot::new(Input::keyboard(), irq),
-            tablet: Slot::new(Input::tablet(1280, 800), irq),
+    impl Screen for Fake {
+        fn capture(&mut self) -> io::Result<Vec<u8>> {
+            Ok(vec![0; WIDTH as usize * HEIGHT as usize * 4])
         }
+    }
+
+    impl Input for Fake {
+        fn send(&mut self, events: &[Event]) -> io::Result<()> {
+            self.sent.extend_from_slice(events);
+            Ok(())
+        }
+    }
+
+    fn arbiter() -> Arbiter<Fake, Fake> {
+        Arbiter::new(Fake::default(), Fake::default())
     }
 
     fn line(value: Value) -> Vec<u8> {
@@ -713,13 +795,7 @@ mod tests {
 
     #[test]
     fn agent_input_is_refused_while_a_person_holds_control() {
-        let devices = desktop();
-        let mut arbiter = Arbiter::new(
-            &devices.gpu,
-            &devices.keyboard,
-            &devices.tablet,
-            &devices.memory,
-        );
+        let mut arbiter = arbiter();
         let call = Uuid::from_u128(1);
         let person = Uuid::from_u128(2);
         let click =
@@ -761,13 +837,7 @@ mod tests {
 
     #[test]
     fn control_is_exclusive_and_the_agent_looks_again_after_it_returns() {
-        let devices = desktop();
-        let mut arbiter = Arbiter::new(
-            &devices.gpu,
-            &devices.keyboard,
-            &devices.tablet,
-            &devices.memory,
-        );
+        let mut arbiter = arbiter();
         let (call, person) = (Uuid::from_u128(1), Uuid::from_u128(2));
         let typing = json!({"input":{"account":person,"action":{"action":"type","text":"hi"}}});
         let take = json!({"mode":{"mode":"human","account":person}});
@@ -809,13 +879,7 @@ mod tests {
 
     #[test]
     fn a_fill_types_for_the_holder_or_the_agent_under_their_input_rules() {
-        let devices = desktop();
-        let mut arbiter = Arbiter::new(
-            &devices.gpu,
-            &devices.keyboard,
-            &devices.tablet,
-            &devices.memory,
-        );
+        let mut arbiter = arbiter();
         let (item, person) = (Uuid::from_u128(1), Uuid::from_u128(2));
         let fill = |account: Option<Uuid>| {
             line(json!({"fill":{"item":item,"text":"hunter2 X","account":account}}))
@@ -848,13 +912,7 @@ mod tests {
 
     #[test]
     fn a_login_handoff_refuses_every_agent_request_until_control_returns() {
-        let devices = desktop();
-        let mut arbiter = Arbiter::new(
-            &devices.gpu,
-            &devices.keyboard,
-            &devices.tablet,
-            &devices.memory,
-        );
+        let mut arbiter = arbiter();
         let (call, person) = (Uuid::from_u128(1), Uuid::from_u128(2));
         let take = json!({"mode":{"mode":"human","account":person,"handoff":true}});
         assert_eq!(arbiter.host(&line(take)).error, None);
@@ -877,10 +935,7 @@ mod tests {
 
     #[test]
     fn frames_carry_only_changed_tiles() {
-        let (width, height) = (
-            super::super::virtio::gpu::WIDTH,
-            super::super::virtio::gpu::HEIGHT,
-        );
+        let (width, height) = (WIDTH, HEIGHT);
         let mut screen = vec![0; width as usize * height as usize * 4];
         let mut shown = Vec::new();
         let all = tiles(&screen, &mut shown);
@@ -901,14 +956,16 @@ mod tests {
     }
 
     #[test]
+    fn agent_input_reaches_the_input_device() {
+        let mut arbiter = arbiter();
+        let typing = json!({"call":Uuid::from_u128(1),"action":{"action":"type","text":"A"}});
+        assert_eq!(arbiter.agent(&line(typing)).error, None);
+        assert_eq!(arbiter.input.sent, typed("A").unwrap());
+    }
+
+    #[test]
     fn actions_become_evdev_events() {
-        let devices = desktop();
-        let mut arbiter = Arbiter::new(
-            &devices.gpu,
-            &devices.keyboard,
-            &devices.tablet,
-            &devices.memory,
-        );
+        let mut arbiter = arbiter();
         assert_eq!(
             arbiter.perform(&Action::Type { text: "A b".into() }),
             Ok(None)

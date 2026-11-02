@@ -461,7 +461,7 @@ struct Cdp {
 }
 
 impl Cdp {
-    /// Starts Chromium on the desktop as [`USER`], once Xorg is up.
+    /// Starts Chromium on the desktop as [`USER`], once the desktop is up.
     async fn launch() -> Result<Self, String> {
         let failed = |error: &dyn std::fmt::Display| format!("The browser did not start: {error}");
         display().await.map_err(|error| failed(&error))?;
@@ -473,7 +473,7 @@ impl Cdp {
             .envs([
                 ("HOME", PROFILE),
                 ("PATH", "/usr/bin:/bin"),
-                ("DISPLAY", ":0"),
+                ("DISPLAY", ":1"),
                 ("LANG", "C.UTF-8"),
             ])
             .current_dir(PROFILE)

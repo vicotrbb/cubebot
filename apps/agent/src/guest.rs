@@ -2,7 +2,7 @@
 //! disk, receives the agent's environment over the control channel ([`cubebot_protocol::guest`]),
 //! runs the agent as its child while reaping orphaned tool processes, rewrites received files the
 //! host refreshes, and reports liveness and then the agent's exit status to the host. With
-//! computer use on it starts the desktop (ADR 0085) as the tool user. When the
+//! computer use on it starts the desktop and its arbiter (ADR 0085). When the
 //! agent exits it syncs the disks and reboots, which ends the VM; the host ending its side of the
 //! channel stops the agent first.
 use cubebot_protocol::{
@@ -47,6 +47,8 @@ const JOURNAL: &str = "/var/lib/cubebot/runtime";
 const WORKSPACE: &str = "/var/lib/cubebot/workspace";
 /// Files received from the host, readable only by the agent.
 const PRIVATE: &str = "/run/cubebot";
+/// The outer display's cookie (ADR 0085), for the arbiter and Xephyr.
+const OUTER_AUTHORITY: &str = "/run/cubebot/display";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const REPORT_INTERVAL: Duration = Duration::from_secs(5);
 pub fn init() -> ExitCode {
@@ -344,8 +346,10 @@ fn storage(tool_user: Option<&str>) -> io::Result<()> {
     Ok(())
 }
 
-/// Starts the desktop when computer use is on and a tool user is configured. A desktop that
-/// fails to start leaves the agent running without a screen.
+/// Starts the desktop when computer use is on and a tool user is configured. The outer display
+/// is up and closed to every other user before this returns, so before the agent runs any tool;
+/// the rest starts on its own thread. A desktop that fails to start leaves the agent running
+/// without a screen.
 fn desktop(environment: &[(String, String)]) {
     let setting = |wanted: &str| {
         environment
@@ -360,29 +364,89 @@ fn desktop(environment: &[(String, String)]) {
     let (Some("1"), Some((uid, gid))) = (setting("CUBEBOT_COMPUTER_ENABLED"), user) else {
         return;
     };
-    std::thread::spawn(move || {
-        if let Err(error) = start_desktop(uid, gid) {
-            eprintln!("Guest desktop failed: {error}");
-        }
-    });
+    match outer_display() {
+        Ok(cookie) => drop(std::thread::spawn(move || {
+            if let Err(error) = start_desktop(uid, gid, &cookie) {
+                eprintln!("Guest desktop failed: {error}");
+            }
+        })),
+        Err(error) => eprintln!("Guest desktop failed: {error}"),
+    }
 }
 
-/// Xorg on the virtio-gpu display with the virtio keyboard (event0) and tablet (event1), which
-/// the kernel probes in the sandbox's device order, then openbox and the wallpaper, all as the
-/// tool user. The agent's browser module starts Chromium as a user of its own. With no udev or
-/// logind in the guest, Xorg opens the devices and its VT itself.
-fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
-    let devices = [
-        "/dev/dri/card0",
-        "/dev/input/event0",
-        "/dev/input/event1",
-        "/dev/tty0",
-        "/dev/tty1",
-    ];
-    for device in devices {
-        std::os::unix::fs::chown(device, Some(uid), Some(gid))
-            .map_err(|error| io::Error::other(format!("{device}: {error}")))?;
+/// Xvfb on :0 as root, reachable only through its path socket, which becomes root's alone once
+/// it exists, and only with a cookie only root can read; returns the cookie.
+fn outer_display() -> io::Result<[u8; 16]> {
+    let mut cookie = [0; 16];
+    File::open("/dev/urandom")?.read_exact(&mut cookie)?;
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(OUTER_AUTHORITY)?
+        .write_all(&xauthority("0", &cookie))?;
+    Command::new("/usr/bin/Xvfb")
+        .args([
+            ":0",
+            "-screen",
+            "0",
+            "1280x800x24",
+            "-auth",
+            OUTER_AUTHORITY,
+        ])
+        .args(["-nolisten", "tcp", "-nolisten", "local", "-noreset"])
+        .env_clear()
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .spawn()?;
+    appears(Path::new("/tmp/.X11-unix/X0"), "Xvfb")?;
+    std::fs::set_permissions("/tmp/.X11-unix/X0", std::fs::Permissions::from_mode(0o700))?;
+    Ok(cookie)
+}
+
+/// An Xauthority file with one MIT-MAGIC-COOKIE-1 entry for `display` at any address.
+fn xauthority(display: &str, cookie: &[u8]) -> Vec<u8> {
+    let mut file = 0xffffu16.to_be_bytes().to_vec();
+    for field in [&b""[..], display.as_bytes(), b"MIT-MAGIC-COOKIE-1", cookie] {
+        file.extend_from_slice(&(field.len() as u16).to_be_bytes());
+        file.extend_from_slice(field);
     }
+    file
+}
+
+fn appears(path: &Path, server: &str) -> io::Result<()> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    while !path.exists() {
+        if std::time::Instant::now() > deadline {
+            return Err(io::Error::other(format!(
+                "{server} did not open its socket"
+            )));
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Ok(())
+}
+
+/// Xephyr on :1 as root, a window filling :0 at (0, 0) and without XTEST, as the tool user's
+/// display; then openbox and the wallpaper on it as the tool user, and the arbiter on :0. The
+/// agent's browser module starts Chromium as a user of its own.
+fn start_desktop(uid: u32, gid: u32, cookie: &[u8]) -> io::Result<()> {
+    Command::new("/usr/bin/Xephyr")
+        .args([
+            ":1",
+            "-screen",
+            "1280x800",
+            "-extension",
+            "XTEST",
+            "-no-host-grab",
+        ])
+        .args(["-nolisten", "tcp", "-nolisten", "local", "-noreset"])
+        .env_clear()
+        .envs([("DISPLAY", ":0"), ("XAUTHORITY", OUTER_AUTHORITY)])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .spawn()?;
+    appears(Path::new("/tmp/.X11-unix/X1"), "Xephyr")?;
     let client = |program: &str| {
         let mut command = Command::new(program);
         command
@@ -390,7 +454,7 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
             .envs([
                 ("HOME", WORKSPACE),
                 ("PATH", PATH),
-                ("DISPLAY", ":0"),
+                ("DISPLAY", ":1"),
                 ("LANG", "C.UTF-8"),
             ])
             .current_dir(WORKSPACE)
@@ -401,36 +465,9 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
             .stderr(Stdio::null());
         command
     };
-    // VT ioctls need tty1 as the caller's controlling terminal, which `setsid -c` makes it and
-    // `-keeptty` keeps. Xorg's errors reach the console; its log is in ~/.local/share/xorg.
-    let terminal = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open("/dev/tty1")?;
-    client("/usr/bin/setsid")
-        .args([
-            "-c",
-            "/usr/lib/xorg/Xorg",
-            ":0",
-            "vt1",
-            "-keeptty",
-            "-nolisten",
-            "tcp",
-            "-noreset",
-        ])
-        .stdin(terminal)
-        .stderr(Stdio::inherit())
-        .spawn()?;
-    let display = Path::new("/tmp/.X11-unix/X0");
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
-    while !display.exists() {
-        if std::time::Instant::now() > deadline {
-            return Err(io::Error::other("Xorg did not open display :0"));
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
     client("/usr/bin/openbox").spawn()?;
     // The default stays when the orchestrator is unreachable; the agent draws its own after it.
+    // Once it is drawn Xephyr is serving, so its window is on :0 for the arbiter to focus.
     let drawn = client("/usr/bin/xwallpaper")
         .args(["--zoom", crate::tools::WALLPAPER])
         .status();
@@ -439,6 +476,9 @@ fn start_desktop(uid: u32, gid: u32) -> io::Result<()> {
         Err(error) if error.raw_os_error() != Some(Errno::ECHILD as i32) => return Err(error),
         _ => (),
     }
+    let input = crate::desktop::x11::connect(0, cookie)?;
+    input.focus()?;
+    crate::desktop::start(crate::desktop::x11::connect(0, cookie)?, input)?;
     File::create(crate::tools::DESKTOP_READY)?;
     eprintln!("Guest desktop started");
     Ok(())
