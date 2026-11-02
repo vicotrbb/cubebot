@@ -1,0 +1,123 @@
+# Shared files (ADR 0059); kept on uninstall like the database volume.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: shared-files
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOncePod]
+  {{- with .Values.storage.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.size }}
+---
+# One active orchestrator (ADR 0011): never two pods, even during a rollout.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestrator
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: orchestrator
+  template:
+    metadata:
+      labels:
+        app: orchestrator
+        {{- include "cubebot.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: orchestrator
+      securityContext:
+        fsGroup: 65532
+      initContainers:
+        # The key leaves the Secret volume for a tmpfs only this user can read.
+        - name: private-key
+          image: {{ include "cubebot.image" (list $ "orchestrator") }}
+          command: [/bin/sh, -c, umask 077; cp /source/key /private/key]
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+          volumeMounts:
+            - name: source-key
+              mountPath: /source
+              readOnly: true
+            - name: credentials
+              mountPath: /private
+      containers:
+        - name: orchestrator
+          image: {{ include "cubebot.image" (list $ "orchestrator") }}
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+          ports:
+            - containerPort: 8080
+          env:
+            - name: CUBEBOT_BIND_ADDR
+              value: 0.0.0.0:8080
+            - name: CUBEBOT_PUBLIC_ORIGIN
+              value: {{ required "publicOrigin is required" .Values.publicOrigin | quote }}
+            - name: CUBEBOT_CONTROLLER_CONFIG
+              value: /etc/controller/config.json
+            - name: CUBEBOT_CREDENTIAL_KEY_FILE
+              value: /etc/credentials/key
+            - name: CUBEBOT_STORAGE_DIRECTORY
+              value: /var/lib/cubebot/files
+            - name: CUBEBOT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "cubebot.databaseSecret" . }}
+                  key: database_url
+            - name: CUBEBOT_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: CUBEBOT_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CUBEBOT_POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+          volumeMounts:
+            - name: controller
+              mountPath: /etc/controller
+              readOnly: true
+            - name: credentials
+              mountPath: /etc/credentials
+              readOnly: true
+            - name: shared-files
+              mountPath: /var/lib/cubebot/files
+      volumes:
+        - name: controller
+          configMap:
+            name: controller
+        - name: credentials
+          emptyDir:
+            medium: Memory
+        - name: source-key
+          secret:
+            secretName: credentials
+            defaultMode: 0440
+        - name: shared-files
+          persistentVolumeClaim:
+            claimName: shared-files
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: orchestrator
+  ports:
+    - port: 8080

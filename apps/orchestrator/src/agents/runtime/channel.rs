@@ -6,7 +6,14 @@ use crate::work::Work;
 use axum::extract::ws::{Message, WebSocket};
 use cubebot_protocol::runtime::{Delivery, Report, TurnEvent};
 use std::time::Duration;
+use tokio::time::Instant;
 use uuid::Uuid;
+
+/// A connection cut behind a proxy stays open on this side until TCP gives up, and turns offered
+/// on it would be claimed onto a dead path; so the channel pings, and closes after this much
+/// silence. The agent's WebSocket library answers pings while it reads.
+const PING: Duration = Duration::from_secs(5);
+const SILENCE: Duration = Duration::from_secs(15);
 
 #[derive(Default)]
 struct Channel {
@@ -45,17 +52,28 @@ impl RuntimeIdentity {
         // shortcut: each connection polls the ledger every second; use LISTEN/NOTIFY if
         // measured delivery latency or database load requires it.
         let mut tick = tokio::time::interval(Duration::from_secs(1));
+        let mut ping = tokio::time::interval(PING);
+        let mut heard = Instant::now();
         loop {
             let deliveries = tokio::select! {
-                incoming = socket.recv() => match incoming {
-                    Some(Ok(Message::Text(text))) => match serde_json::from_str(&text) {
-                        Ok(report) => self.receive(&token, &mut channel, report).await,
-                        Err(error) => Err(Error::Configuration(error.into())),
-                    },
-                    Some(Ok(Message::Ping(_) | Message::Pong(_))) => Ok(Vec::new()),
-                    _ => return,
+                incoming = socket.recv() => {
+                    heard = Instant::now();
+                    match incoming {
+                        Some(Ok(Message::Text(text))) => match serde_json::from_str(&text) {
+                            Ok(report) => self.receive(&token, &mut channel, report).await,
+                            Err(error) => Err(Error::Configuration(error.into())),
+                        },
+                        Some(Ok(Message::Ping(_) | Message::Pong(_))) => Ok(Vec::new()),
+                        _ => return,
+                    }
                 },
                 _ = tick.tick() => self.poll(&token, &mut channel).await,
+                _ = ping.tick() => {
+                    if !keepalive(&mut socket, heard).await {
+                        return;
+                    }
+                    Ok(Vec::new())
+                },
             };
             if !deliver(&mut socket, deliveries).await {
                 return;
@@ -201,6 +219,15 @@ async fn wallpaper_revision(
     )
     .fetch_one(pool)
     .await?)
+}
+
+/// Pings the agent; false closes a channel silent for longer than [`SILENCE`].
+async fn keepalive(socket: &mut WebSocket, heard: Instant) -> bool {
+    if heard.elapsed() > SILENCE {
+        tracing::warn!("runtime channel unresponsive; closing it");
+        return false;
+    }
+    socket.send(Message::Ping(Default::default())).await.is_ok()
 }
 
 /// Sends deliveries in order; false closes the channel.

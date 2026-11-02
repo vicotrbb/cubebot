@@ -39,7 +39,12 @@ function SignIn() {
                   },
                 }),
               )
-              await client.invalidateQueries({ queryKey: keys.session })
+              // 'all': the shell's session query is inactive here, and navigating on its
+              // cached null would send the browser straight back to sign-in.
+              await client.invalidateQueries({
+                queryKey: keys.session,
+                refetchType: 'all',
+              })
               await navigate({ to: '/' })
             } catch (error) {
               setError(failure(error))

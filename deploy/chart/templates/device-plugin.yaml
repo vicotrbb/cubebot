@@ -1,0 +1,44 @@
+{{- if eq .Values.sandbox.runtime "kvm" }}
+# Hands /dev/kvm and /dev/net/tun to sandbox pods under the KubeVirt resource names the
+# orchestrator requests.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: device-plugin
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: device-plugin
+  template:
+    metadata:
+      labels:
+        app: device-plugin
+        {{- include "cubebot.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: plugin
+          image: {{ include "cubebot.image" (list $ "devicePlugin") }}
+          args:
+            - --domain
+            - devices.kubevirt.io
+            {{- range list (list "kvm" "/dev/kvm") (list "tun" "/dev/net/tun") }}
+            - --device
+            - {{ dict "name" (index . 0) "groups" (list (dict "count" 8 "paths" (list (dict "path" (index . 1))))) | toJson | quote }}
+            {{- end }}
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: plugins
+              mountPath: /var/lib/kubelet/device-plugins
+            - name: dev
+              mountPath: /dev
+      volumes:
+        - name: plugins
+          hostPath:
+            path: /var/lib/kubelet/device-plugins
+        - name: dev
+          hostPath:
+            path: /dev
+{{- end }}

@@ -20,3 +20,5 @@ apps/web/src/routeTree.gen.ts
 apps/orchestrator/.sqlx/
 .astro/
 *.astro
+# Helm templates are Go templates, not YAML; `just chart` lints them.
+/deploy/chart/templates/

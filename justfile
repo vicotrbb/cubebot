@@ -56,8 +56,15 @@ api:
     bun run --cwd apps/web api
     bun run prettier --log-level warn --write apps/web/src/api/openapi.json apps/web/src/api/schema.d.ts
 
+# Lints the chart and renders each runtime and database mode with deploy/chart/ci/values.yaml.
+chart:
+    helm lint --strict deploy/chart --values deploy/chart/ci/values.yaml
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.runtime=kvm,controlCA=pem > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set externalDatabase.existingSecret=database > /dev/null
+
 # Building first generates the route tree on a fresh checkout.
-check: format-check lint test build
+check: format-check lint test build chart
     bun run typecheck
 
 # Compares a release's digests.json with what its tag resolves to in GHCR; needs Docker and jq.

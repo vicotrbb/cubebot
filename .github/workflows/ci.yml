@@ -31,6 +31,11 @@ jobs:
           just-version: '1.55.1'
       - name: Install Rust toolchain from repository pin
         run: rustup show active-toolchain
+      - name: Install verified Helm v4.2.2
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/helm.tgz" https://get.helm.sh/helm-v4.2.2-linux-amd64.tar.gz
+          echo "9adafecab4d406853bba163a70e9f104f47dbbf65ce24b7653bae7e36150bcb6  $RUNNER_TEMP/helm.tgz" | sha256sum --check
+          sudo tar -xzf "$RUNNER_TEMP/helm.tgz" -C /usr/local/bin --strip-components=1 linux-amd64/helm
       - run: just bootstrap
       - run: just check
       - run: just smoke

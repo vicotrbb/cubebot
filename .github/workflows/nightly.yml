@@ -33,6 +33,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Install verified Helm v4.2.2
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/helm.tgz" https://get.helm.sh/helm-v4.2.2-linux-amd64.tar.gz
+          echo "9adafecab4d406853bba163a70e9f104f47dbbf65ce24b7653bae7e36150bcb6  $RUNNER_TEMP/helm.tgz" | sha256sum --check
+          sudo tar -xzf "$RUNNER_TEMP/helm.tgz" -C /usr/local/bin --strip-components=1 linux-amd64/helm
       - name: Install verified kind v0.33.0
         run: |
           mkdir -p .tools

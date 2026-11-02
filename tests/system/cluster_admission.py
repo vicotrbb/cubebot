@@ -60,6 +60,7 @@ def namespaces(
         ("cubebot-admission", "privileged"),
         ("cubebot-admission-baseline", "baseline"),
     ),
+    runtime_account=True,
 ):
     for name, policy in profiles:
         namespace = {
@@ -75,9 +76,15 @@ def namespaces(
             },
         }
         kubectl(config, "create", "-f", "-", input=json.dumps(namespace))
-        kubectl(
-            config, "create", "serviceaccount", "cubebot-runtime", "--namespace", name
-        )
+        if runtime_account:
+            kubectl(
+                config,
+                "create",
+                "serviceaccount",
+                "cubebot-runtime",
+                "--namespace",
+                name,
+            )
 
 
 def verify_database(_, env):
