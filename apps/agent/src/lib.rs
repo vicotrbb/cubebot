@@ -3,6 +3,7 @@
 pub mod collaboration;
 pub mod context;
 pub mod control;
+pub mod desktop;
 pub mod engine;
 pub mod files;
 #[cfg(target_os = "linux")]

@@ -1,8 +1,6 @@
 //! One agent sandbox (ADR 0084): a KVM guest, the only way Cubebot runs an agent.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod kvm;
-#[cfg(any(test, all(target_os = "linux", target_arch = "x86_64")))]
-mod png;
 use std::{
     io::{self, Read, Write},
     os::unix::net::UnixStream,
@@ -43,8 +41,8 @@ fn run() -> io::Result<u8> {
     Err(io::Error::other("the sandbox needs x86_64 Linux"))
 }
 
-/// The host channel (ADR 0085): relays desktop request lines on stdin to the running sandbox's
-/// arbiter and its responses to stdout. The orchestrator runs it inside the sandbox container,
+/// The host channel (ADR 0085): relays desktop request lines on stdin to the running sandbox,
+/// which passes them to the guest's arbiter, and its responses to stdout. The orchestrator runs it inside the sandbox container,
 /// so reaching it takes the platform's exec authorization for that container.
 fn desktop() -> io::Result<()> {
     let path = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")

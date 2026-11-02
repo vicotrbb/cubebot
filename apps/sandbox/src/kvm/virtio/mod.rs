@@ -1,8 +1,6 @@
 //! Virtio over MMIO (virtio 1.2 §4.2, version 2 registers). A [`Transport`] holds the registers
 //! and virtqueues of one [`Device`]; devices only see their queues and guest memory.
 pub mod block;
-pub mod gpu;
-pub mod input;
 pub mod net;
 pub mod queue;
 pub mod vsock;
