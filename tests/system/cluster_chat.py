@@ -1,8 +1,9 @@
 """Repeatable real cluster text-chat qualification, with evidence outside the repo.
 
 Supply CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
-Needs x86_64 Linux with /dev/kvm and the kernel build tools of tooling/guest: the
-sandbox image always carries the guest, and every agent runs in a KVM guest.
+Installs deploy/chart with Helm. CUBEBOT_SANDBOX_RUNTIME picks the sandbox runtime:
+kvm (the default where /dev/kvm exists) needs x86_64 Linux and the kernel build tools
+of tooling/guest; container runs the agent image on any Docker host.
 Images are built from this checkout. An explicitly supplied disposable, caller-owned
 CUBEBOT_QUALIFICATION_BUILDER can reuse its cache; otherwise a new builder is removed.
 Only a fresh owned kind cluster is used; finally removes it even on failure.
@@ -18,7 +19,15 @@ from pathlib import Path
 
 import cluster_admission as admission
 import cluster_startup as startup
-from cluster_chat_setup import NAMESPACE, Fixture, available, forward, setup, wait_for
+from cluster_chat_setup import (
+    NAMESPACE,
+    RUNTIME,
+    Fixture,
+    available,
+    forward,
+    setup,
+    wait_for,
+)
 
 
 def evidence_directory(value):
@@ -37,10 +46,16 @@ def diagnostics(f):
             f.save(f"{resource}.json", json.loads(f.k("get", resource, "-o", "json")))
         except Exception as error:
             print(f"Diagnostic {resource} unavailable: {error}", file=sys.stderr)
-    for name in ("orchestrator", "gateway"):
+    # The flow SIGKILLs the orchestrator, so its previous container's log matters too.
+    for name, previous in (
+        ("orchestrator", False),
+        ("orchestrator", True),
+        ("web", False),
+    ):
         try:
-            result = f.k("logs", name, "--tail=200")
-            (f.artifacts / f"{name}.log").write_text(result)
+            flags = ["--previous"] if previous else []
+            result = f.k("logs", f"deploy/{name}", "--tail=200", *flags)
+            (f.artifacts / f"{name}{'-previous' * previous}.log").write_text(result)
         except Exception as error:
             print(f"Diagnostic {name} unavailable: {error}", file=sys.stderr)
 
@@ -68,13 +83,14 @@ def workflow(
     artifacts,
     images,
     qualify=None,
-    **controller,
+    **sandbox,
 ):
     if qualify is None:
         from cluster_chat_flow import qualify
 
-    # The sandbox runs as root with NET_ADMIN (ADR 0084), which only privileged admits.
-    admission.namespaces(config, fixture, ((NAMESPACE, "privileged"),))
+    # A kvm sandbox runs as root with NET_ADMIN (ADR 0084): only privileged admits it.
+    policy = "privileged" if RUNTIME == "kvm" else "baseline"
+    admission.namespaces(config, fixture, ((NAMESPACE, policy),), runtime_account=False)
     references = startup.load_images(name, images)
     f = Fixture(config, name, artifacts, references)
     f.save("images.json", references)
@@ -93,8 +109,7 @@ def workflow(
     process = None
     try:
         startup.install_csi(config, artifacts)
-        startup.install_devices(config, name)
-        setup(f, dns, **controller)
+        setup(f, dns, **sandbox)
         process = forward(f)
         wait_for("verified HTTPS API", lambda: available(f))
         f.token = f.request(
@@ -133,14 +148,15 @@ def main(prefix="cubebot-chat-", **options):
                 "--driver",
                 "docker-container",
             )
-        with (artifacts / "build-guest.log").open("w") as log:
-            subprocess.run(
-                [sys.executable, "tooling/guest/build.py"],
-                stdout=log,
-                stderr=log,
-                check=True,
-                timeout=3600,
-            )
+        if RUNTIME == "kvm":
+            with (artifacts / "build-guest.log").open("w") as log:
+                subprocess.run(
+                    [sys.executable, "tooling/guest/build.py"],
+                    stdout=log,
+                    stderr=log,
+                    check=True,
+                    timeout=3600,
+                )
         images = build_images(builder, name, artifacts, baseline)
         if admission.fingerprint() != baseline:
             raise RuntimeError("source changed during image build; repeat")
@@ -157,9 +173,13 @@ def main(prefix="cubebot-chat-", **options):
     print("Owned qualification and cluster cleanup completed", flush=True)
 
 
+# The kvm runtime runs the VMM's image, the container runtime the agent image itself.
+ROLES = ("sandbox" if RUNTIME == "kvm" else "agent", "orchestrator", "web")
+
+
 def build_images(builder, name, artifacts, source):
     images = {}
-    for role in ("sandbox", "orchestrator", "web"):
+    for role in ROLES:
         image = f"{name}-{role}"
         args = [
             "docker",
@@ -189,7 +209,7 @@ def build_images(builder, name, artifacts, source):
 
 def cleanup_images(name, builder):
     failures = []
-    for role in ("sandbox", "orchestrator", "web"):
+    for role in ROLES:
         try:
             admission.run("docker", "image", "rm", f"{name}-{role}")
         except RuntimeError as error:

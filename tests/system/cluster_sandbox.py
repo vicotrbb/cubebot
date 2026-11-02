@@ -4,8 +4,7 @@ Needs x86_64 Linux with /dev/kvm, the kernel build tools of tooling/guest, the
 cluster-chat prerequisites (Docker, the pinned kind, kubectl, OpenSSL), a fresh
 CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
 
-The fixture installs the egress and ingress NetworkPolicy an installation must provide
-for sandboxes. A real model chooses
+The chart installs the sandboxes' egress and ingress NetworkPolicy. A real model chooses
 when to run the commands it is given inside each guest; every assertion reads the
 ledger's tool calls and results, Kubernetes or the node, never the model's reply.
 Evidence goes to cluster-sandbox.json in the qualification directory.
@@ -30,7 +29,7 @@ from cluster_chat_flow import (
     send,
     signal,
 )
-from cluster_chat_setup import NAMESPACE, available, wait_for
+from cluster_chat_setup import CONTROL_PORT, NAMESPACE, available, wait_for
 
 INSTRUCTIONS = (
     "You operate a test sandbox. Run each command you are given with one bash tool "
@@ -134,67 +133,6 @@ def address(f, kind, name, namespace=None):
     return item["spec"]["clusterIP"] if kind == "service" else item["status"]["podIP"]
 
 
-def install(f):
-    """The sandbox NetworkPolicy an installation provides."""
-    f.k("create", "-f", "-", input=json.dumps(policy(f, f"{f.name}-control-plane")))
-
-
-def policy(f, name):
-    """Sandboxes accept nothing and reach only DNS, the gateway and the outside."""
-    status = json.loads(admission.kubectl(f.config, "get", "node", name, "-o", "json"))
-    nodes = [
-        f"{item['address']}/32"
-        for item in status["status"]["addresses"]
-        if item["type"] == "InternalIP" and ":" not in item["address"]
-    ]
-    pods = [cidr for cidr in status["spec"]["podCIDRs"] if ":" not in cidr]
-    return {
-        "apiVersion": "networking.k8s.io/v1",
-        "kind": "NetworkPolicy",
-        "metadata": {"name": "sandboxes"},
-        "spec": {
-            "podSelector": {
-                "matchExpressions": [{"key": "cubebot.dev/agent", "operator": "Exists"}]
-            },
-            "policyTypes": ["Ingress", "Egress"],
-            "ingress": [],
-            "egress": [
-                {
-                    "to": [
-                        {
-                            "namespaceSelector": {
-                                "matchLabels": {
-                                    "kubernetes.io/metadata.name": "kube-system"
-                                }
-                            },
-                            "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
-                        }
-                    ],
-                    "ports": [
-                        {"protocol": "UDP", "port": 53},
-                        {"protocol": "TCP", "port": 53},
-                    ],
-                },
-                {
-                    "to": [{"podSelector": {"matchLabels": {"app": "gateway"}}}],
-                    "ports": [{"protocol": "TCP", "port": 443}],
-                },
-                {
-                    "to": [
-                        {
-                            "ipBlock": {
-                                "cidr": "0.0.0.0/0",
-                                # kind's IPv4 service range, then pods and the node.
-                                "except": ["10.96.0.0/12", *pods, *nodes],
-                            }
-                        }
-                    ]
-                },
-            ],
-        },
-    }
-
-
 def probes(targets):
     """One bash command; each line says whether a TCP connection opened in 5s."""
     pairs = " ".join(f"{name}={target}" for name, target in targets.items())
@@ -238,9 +176,9 @@ def vm(f, current, evidence):
 
 
 def isolation(f, identity, other, evidence):
-    database = address(f, "pod", "postgres")
+    database = address(f, "pod", "postgres-0")
     targets = {
-        "gateway": f"{address(f, 'pod', 'gateway')}/443",
+        "gateway": f"{f.controller()}/{CONTROL_PORT}",
         "sandbox": f"{other['status']['podIP']}/22",
         "database": f"{database}/5432",
         "database_service": f"{address(f, 'service', 'postgres')}/5432",
@@ -261,7 +199,7 @@ def isolation(f, identity, other, evidence):
     control = reach(
         f.k(
             "exec",
-            "gateway",
+            "postgres-0",
             "--",
             "bash",
             "-c",
@@ -292,7 +230,7 @@ def orchestrator_restart(f, identity, current, evidence):
     )
     # The model may split the line into several calls; each check holds either way.
     wait_for("command started", lambda: called(f, turn, "sleep 30", finished=False))
-    controller = json.loads(f.k("get", "pod", "orchestrator", "-o", "json"))
+    controller = f.platform("orchestrator")
     signal(f, controller, "SIGKILL")
     wait_for("orchestrator recovery", lambda: available(f))
     outcome(f, identity, turn, timeout=240)
@@ -321,7 +259,7 @@ def revocation(f, evidence):
         "SELECT attempt_id FROM chat_turns WHERE id='{}'".format(turn["id"])
     )
     revoked = f.k(
-        "exec", "orchestrator", "--", "cubebot-admin", "revoke-runtime", identity
+        "exec", "deploy/orchestrator", "--", "cubebot-admin", "revoke-runtime", identity
     )
     assert revoked == "Revoked agent credentials: 1", revoked
     access = f.sql(
@@ -425,9 +363,11 @@ def computer_use(f, evidence):
     wait_for(
         "the orchestrator's mounted configuration",
         lambda: "computer_use_enabled"
-        in f.k("exec", "orchestrator", "--", "cat", "/etc/controller/config.json"),
+        in f.k(
+            "exec", "deploy/orchestrator", "--", "cat", "/etc/controller/config.json"
+        ),
     )
-    signal(f, json.loads(f.k("get", "pod", "orchestrator", "-o", "json")), "SIGKILL")
+    signal(f, f.platform("orchestrator"), "SIGKILL")
     wait_for("orchestrator recovery", lambda: available(f))
     model = os.environ.get("CUBEBOT_COMPUTER_MODEL", COMPUTER_MODEL)
     configure(
@@ -532,7 +472,6 @@ def ledger(f, turn):
 
 
 def qualify(f):
-    install(f)
     configure(f, Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip())
     evidence = {"cluster": f.name, "source": admission.fingerprint()}
     first, current = operator(f, "Sandbox one")
@@ -549,4 +488,4 @@ def qualify(f):
 
 
 if __name__ == "__main__":
-    chat.main("cubebot-sandbox-", qualify=qualify, terminal_enabled=True)
+    chat.main("cubebot-sandbox-", qualify=qualify, terminalEnabled=True)

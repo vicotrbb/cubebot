@@ -1,0 +1,41 @@
+{{- $policy := .Values.sandbox.networkPolicy }}
+{{- $controller := $policy.ingressController }}
+{{- if not $controller.podSelector }}
+{{- fail "sandbox.networkPolicy.ingressController.podSelector is required" }}
+{{- end }}
+# Sandboxes accept nothing and reach only DNS, the ingress controller and the outside (ADR 0075).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sandboxes
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: cubebot.dev/agent
+        operator: Exists
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector: {{- toYaml $controller.namespaceSelector | nindent 12 }}
+          podSelector: {{- toYaml $controller.podSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ $controller.port }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: {{- toYaml $policy.blockedRanges | nindent 14 }}

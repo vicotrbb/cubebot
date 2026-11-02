@@ -11,7 +11,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import cluster_admission as admission
-from cluster_chat_setup import NAMESPACE, available, wait_for
+from cluster_chat_setup import CONTROL_PORT, NAMESPACE, RUNTIME, available, wait_for
 
 
 def command(**values):
@@ -137,22 +137,36 @@ def retry(f, identity, turn):
 
 @contextmanager
 def partition(f, current, provider=False):
-    """Actual node packet drops, without changing the compiled workload spec."""
-    gateway = json.loads(f.k("get", "pod", "gateway", "-o", "json"))["status"]["podIP"]
+    """Actual node packet drops, without changing the compiled workload spec.
+
+    A control partition cuts both directions and returns once the orchestrator must
+    have closed a channel open through it, so no turn can be offered on that channel.
+    """
+    gateway = f.controller()
     source = current["status"]["podIP"]
-    rule = ["-s", source, "-p", "tcp", "--dport", "443"]
-    rule += ["!", "-d", gateway] if provider else ["-d", gateway]
-    rule += ["-j", "DROP"]
+    if provider:
+        rules = [["-s", source, "-p", "tcp", "--dport", "443", "!", "-d", gateway]]
+    else:
+        port = str(CONTROL_PORT)
+        rules = [
+            ["-s", source, "-d", gateway, "-p", "tcp", "--dport", port],
+            ["-s", gateway, "-d", source, "-p", "tcp", "--sport", port],
+        ]
     prefix = ["docker", "exec", f"{f.name}-control-plane", "iptables"]
-    admission.run(*prefix, "-I", "FORWARD", "1", *rule)
+    for rule in rules:
+        admission.run(*prefix, "-I", "FORWARD", "1", *rule, "-j", "DROP")
     try:
+        if not provider:
+            # The orchestrator closes a channel silent for 15 s at its next 5 s ping.
+            time.sleep(25)
         yield
     finally:
         counters = admission.run(*prefix, "-L", "FORWARD", "-nvx")
         (
             f.artifacts / f"partition-{current['metadata']['name']}-{provider}.txt"
         ).write_text(counters)
-        admission.run(*prefix, "-D", "FORWARD", *rule)
+        for rule in rules:
+            admission.run(*prefix, "-D", "FORWARD", *rule, "-j", "DROP")
 
 
 def live_chat(f):
@@ -218,7 +232,7 @@ def exclusive_storage(f, current):
         [
             {
                 "name": "contender",
-                "image": f.images["sandbox"],
+                "image": f.images.get("sandbox") or f.images["agent"],
                 "command": ["/usr/bin/true"],
                 "volumeMounts": [{"name": "workspace", "mountPath": "/workspace"}],
             }
@@ -260,7 +274,7 @@ def in_flight_control_crash(f):
     identity = agent(f, "Outbox during control crash")
     lifecycle(f, identity, "wake")
     current = running(f, identity)
-    controller = json.loads(f.k("get", "pod", "orchestrator", "-o", "json"))
+    controller = f.platform("orchestrator")
     stopped = False
     try:
         with partition(f, current, provider=True):
@@ -290,7 +304,7 @@ def in_flight_control_crash(f):
 
 def orchestrator_crash(f, identity):
     before = f.sql("SELECT generation FROM orchestrator_owner")
-    current = json.loads(f.k("get", "pod", "orchestrator", "-o", "json"))
+    current = f.platform("orchestrator")
     signal(f, current, "SIGKILL")
     wait_for("orchestrator recovery", lambda: available(f))
     wait_for(
@@ -515,8 +529,10 @@ def protected_credentials(f, key, current):
             "stat",
             "-c",
             "%u",
-            # The journal lives inside the guest's workspace disk.
-            "/var/lib/cubebot/workspace.ext4",
+            # In kvm the journal lives inside the guest's workspace disk.
+            "/var/lib/cubebot/workspace.ext4"
+            if RUNTIME == "kvm"
+            else "/var/lib/cubebot/runtime",
         )
         == "0"
     )

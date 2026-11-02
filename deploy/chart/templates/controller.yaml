@@ -1,0 +1,37 @@
+{{- $runtime := dict "kind" .Values.sandbox.runtime }}
+{{- $image := "" }}
+{{- if eq .Values.sandbox.runtime "container" }}
+{{- $image = include "cubebot.image" (list $ "agent") }}
+{{- with .Values.sandbox.runtimeClass }}{{ $_ := set $runtime "class" . }}{{ end }}
+{{- else if eq .Values.sandbox.runtime "kvm" }}
+{{- $image = include "cubebot.image" (list $ "sandbox") }}
+{{- else }}
+{{- fail (printf "sandbox.runtime must be container or kvm, got %q" .Values.sandbox.runtime) }}
+{{- end }}
+{{- $config := dict
+  "connection" (dict "kind" "in_cluster")
+  "sandbox_image" $image
+  "runtime_service_account" "cubebot-runtime"
+  "orchestrator_origin" (required "controlOrigin is required" .Values.controlOrigin)
+  "network" (dict "dns" (required "sandbox.dns is required" .Values.sandbox.dns))
+  "runtime" $runtime
+  "terminal_enabled" .Values.sandbox.terminalEnabled
+  "computer_use_enabled" .Values.sandbox.computerUseEnabled }}
+{{- with .Values.controlCA }}{{ $_ := set $config "control_ca_config_map" "control-ca" }}{{ end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: controller
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+data:
+  config.json: {{ toJson $config | quote }}
+{{- with .Values.controlCA }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-ca
+  labels: {{- include "cubebot.labels" $ | nindent 4 }}
+data:
+  ca.crt: {{ . | quote }}
+{{- end }}

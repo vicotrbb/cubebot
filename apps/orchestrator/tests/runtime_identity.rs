@@ -628,6 +628,33 @@ async fn drain_is_requested_and_acknowledged_on_the_channel() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_silent_channel_closes_while_one_answering_pings_stays_open() {
+    use futures_util::StreamExt;
+    use tokio_tungstenite::tungstenite::Message;
+    let f = fixture().await;
+    let session = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, task) = runtime_server(f.auth.clone()).await;
+    let mut silent = open_channel(&origin, &session.token).await;
+    let mut responsive = open_channel(&origin, &session.token).await;
+    // Reading answers pings; past the 15-second silence limit plus a 5-second ping period.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(22);
+    while let Ok(next) = tokio::time::timeout_at(deadline, responsive.next()).await {
+        assert!(
+            matches!(next, Some(Ok(Message::Text(_) | Message::Ping(_)))),
+            "a responsive channel closed: {next:?}"
+        );
+    }
+    assert_eq!(delivery(&mut silent).await, Value::Null);
+    task.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn actual_native_runtime_acknowledges_a_persisted_drain_and_exits() {
     use cubebot_orchestrator::agents::LifecycleAction;
     use std::os::unix::fs::DirBuilderExt;

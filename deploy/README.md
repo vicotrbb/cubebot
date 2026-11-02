@@ -1,6 +1,20 @@
 # Deployment
 
-Installation packaging and Kubernetes configuration belong here as they are implemented. Helm packaging is still pending.
+Installation packaging and Kubernetes configuration belong here as they are implemented.
+
+## Helm chart
+
+`deploy/chart` installs one installation into one namespace (ADR 0075): the orchestrator (one replica, `Recreate`), the web console, bundled PostgreSQL or an external database, the shared-files volume, an Ingress for `/api` and `/`, the sandboxes' NetworkPolicy and, for the `kvm` runtime, the device plugin. `values.yaml` documents every value; images must be pinned by digest, as a release's `digests.json` lists them.
+
+```sh
+kubectl create namespace cubebot
+kubectl label namespace cubebot pod-security.kubernetes.io/enforce=baseline  # privileged for kvm
+helm install cubebot deploy/chart --namespace cubebot --values my-values.yaml
+kubectl -n cubebot exec -it deploy/orchestrator -- sh -c \
+  'read -rs CUBEBOT_BOOTSTRAP_PASSWORD && export CUBEBOT_BOOTSTRAP_PASSWORD && CUBEBOT_BOOTSTRAP_LOGIN=admin cubebot-admin bootstrap'
+```
+
+The chart needs an ingress controller with TLS, and `sandbox.networkPolicy.ingressController` must select its pods: sandboxes reach the orchestrator only through it, at `controlOrigin`. `sandbox.runtime` is `container` by default; `kvm` needs nodes with `/dev/kvm` and a privileged namespace. The credential key, the database password Secret and both volumes outlive `helm uninstall`. `tests/system/cluster_chat_setup.py` installs the chart into kind behind Traefik.
 
 Application image recipes live with their applications:
 
