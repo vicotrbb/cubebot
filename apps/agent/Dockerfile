@@ -13,11 +13,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --locked --release -p cubebot-agent --bin cubebot-agent \
     && install -D target/release/cubebot-agent /out/cubebot-agent
 
-# The kvm guest's read-only root filesystem (ADR 0084). tooling/guest exports it to ext4, and the
-# kernel runs `cubebot-agent guest` as init, which mounts the workspace disk on /var/lib/cubebot.
+# One agent image for both sandbox runtimes (ADR 0084). In `kvm` it is the guest's read-only root
+# filesystem: tooling/guest exports it to ext4, and the kernel runs `cubebot-agent guest` as init,
+# which mounts the workspace disk on /var/lib/cubebot. In `container` launchers run it directly
+# as `cubebot-agent container`, with the workspace volume mounted on /var/lib/cubebot.
 FROM debian:bookworm-slim
-# CUBEBOT_TOOL_USER is 10001:10001; guest init creates and chowns its home on the workspace disk.
-# The desktop (ADR 0085): guest init starts Xvfb, the outer display only the arbiter reaches, and
+# CUBEBOT_TOOL_USER is 10001:10001; init creates and chowns its home on the workspace volume.
+# The desktop (ADR 0085): init starts Xvfb, the outer display only the arbiter reaches, and
 # Xephyr nested on it without XTEST as the tool user's display, when computer use is on; then
 # openbox and xwallpaper, which draws wallpaper.jpg on the root window, as the tool user. The
 # agent starts Chromium as the browser user, 10002, whose profile in /var/lib/cubebot/browser the

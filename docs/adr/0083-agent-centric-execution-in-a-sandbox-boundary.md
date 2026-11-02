@@ -26,7 +26,7 @@ Supersedes:
 - ADR 0031: per-turn, versioned inference grants. Provider material is propagated per sandbox lifetime.
 - ADR 0033: separate runtime and tool containers in one pod and credential separation between them.
 
-Relationship to ADR 0076: as amended by ADR 0084, an agent sandbox is a `cubebot-sandbox` KVM guest, not a RuntimeClass; since 2026-10-29 there is no unisolated development backend. Standard container runtimes remain usable for the orchestrator.
+Relationship to ADR 0076: as amended by ADR 0084 on 2026-11-02, an agent sandbox is the installation's declared runtime: a `cubebot-sandbox` KVM guest, or the agent image as a container under ADR 0076, optionally on a RuntimeClass. Only the KVM guest is a VM-class boundary; a container runtime is reported as one and never as a VM. Standard container runtimes remain usable for the orchestrator.
 
 Consequences: The tool runner, network initializer, kernel egress filter, root supervisor and per-turn grant and lease protocol become removal candidates once the sandbox path is qualified. The installation must provide nodes that expose `/dev/kvm` to the sandbox pod (ADR 0084), which rules out some managed clusters without nested virtualization. Agents hold their provider keys for longer, so rotation and revocation must actually work. A compromised sandbox can spend that agent's provider budget and act as that agent until its credential is revoked. Budget limits (ADR 0067) are checked from ledger usage reports, not enforced per call.
 

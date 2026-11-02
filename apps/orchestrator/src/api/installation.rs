@@ -48,12 +48,14 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
 }
 
 /// The sandbox flags of the active controller; the controller attaches it to the router.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Installation {
     /// `kubernetes`, `docker` or `database_only`.
     pub controller: &'static str,
     pub terminal_enabled: bool,
     pub computer_use_enabled: bool,
+    /// None without a controller that runs agents.
+    pub runtime: Option<crate::agents::sandbox::Runtime>,
 }
 
 impl Default for Installation {
@@ -62,6 +64,7 @@ impl Default for Installation {
             controller: "database_only",
             terminal_enabled: false,
             computer_use_enabled: false,
+            runtime: None,
         }
     }
 }
@@ -74,6 +77,11 @@ struct InstallationSummary {
     computer_use_enabled: bool,
     /// `kubernetes`, `docker` or `database_only`.
     controller: &'static str,
+    /// The declared sandbox runtime: `kvm` (a virtual machine) or `container`; none without a
+    /// controller that runs agents.
+    sandbox_runtime: Option<&'static str>,
+    /// The RuntimeClass or Docker runtime a `container` runtime names.
+    sandbox_runtime_class: Option<String>,
 }
 
 #[utoipa::path(get, path = "/api/installation", responses((status = 200, body = InstallationSummary)))]
@@ -94,6 +102,11 @@ async fn installation(
             terminal_enabled: flags.terminal_enabled,
             computer_use_enabled: flags.computer_use_enabled,
             controller: flags.controller,
+            sandbox_runtime: flags.runtime.as_ref().map(|runtime| runtime.kind()),
+            sandbox_runtime_class: flags
+                .runtime
+                .as_ref()
+                .and_then(|runtime| runtime.class().map(str::to_owned)),
         }),
     ))
 }

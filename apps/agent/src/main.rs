@@ -1,4 +1,4 @@
-//! Agent runtime entry point. It runs inside `cubebot-sandbox` (ADR 0084).
+//! Agent runtime entry point. It runs inside its sandbox: a `kvm` guest or a container (ADR 0084).
 use std::process::ExitCode;
 
 #[tokio::main(flavor = "current_thread")]
@@ -16,6 +16,21 @@ async fn main() -> ExitCode {
     #[cfg(target_os = "linux")]
     if std::env::args().nth(1).as_deref() == Some("guest") && std::env::args().len() == 2 {
         return cubebot_agent::guest::init();
+    }
+    // PID 1 of the container runtime's sandbox, which runs the agent as its child.
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("container") && std::env::args().len() == 2 {
+        return cubebot_agent::container::init();
+    }
+    // The container runtime's host channel, run by the orchestrator through the platform's exec.
+    if std::env::args().nth(1).as_deref() == Some("desktop") && std::env::args().len() == 2 {
+        return match cubebot_agent::desktop::channel() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Desktop host channel failed: {error}");
+                ExitCode::FAILURE
+            }
+        };
     }
     if std::env::args().len() > 1 {
         eprintln!("Unknown runtime arguments");

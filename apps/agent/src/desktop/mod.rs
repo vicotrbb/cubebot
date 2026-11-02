@@ -1,8 +1,9 @@
 //! The screen arbiter (ADR 0085): a root process in the sandbox and the only client of the outer
 //! display, so the only reader of the screen and the only writer of input. It serves the agent's
-//! tools on a Unix socket only root can open, and the host channel over streams it holds open to
-//! the sandbox's vsock host port, which the sandbox pairs with the connections
-//! `cubebot-sandbox desktop` relays for the orchestrator; one request at a time. It holds the mode,
+//! tools on a Unix socket only root can open, and the host channel ([`Host`]): in a `kvm` guest
+//! over streams it holds open to the sandbox's vsock host port, which the sandbox pairs with the
+//! connections `cubebot-sandbox desktop` relays for the orchestrator, and in a container on a
+//! second root-only socket that `cubebot-agent desktop` relays; one request at a time. It holds the mode,
 //! refuses agent input while a person holds control and until the agent looks again after they
 //! hand it back, refuses every agent request while a person holds control for a login handoff
 //! (ADR 0039), and logs every request with its source: the agent and its tool call, or the
@@ -28,6 +29,8 @@ use uuid::Uuid;
 
 /// The agent's socket, in `/run`, which only root writes.
 pub const SOCKET: &str = "/run/cubebot-desktop.sock";
+/// The host channel's socket in a container, which only root opens.
+pub const HOST_SOCKET: &str = "/run/cubebot-host-desktop.sock";
 pub const WIDTH: u32 = 1280;
 pub const HEIGHT: u32 = 800;
 const NO_CONTROL: &str = "this person does not have control";
@@ -549,17 +552,37 @@ fn encode(response: &Response) -> io::Result<Vec<u8>> {
 
 /// Starts the arbiter on its own thread with the agent's socket and, in a guest, the host
 /// channel's streams.
-pub fn start<S: Screen + 'static, I: Input + 'static>(screen: S, input: I) -> io::Result<()> {
+/// Where the host channel reaches the arbiter.
+#[derive(Clone, Copy)]
+pub enum Host {
+    /// The `kvm` sandbox's vsock host port.
+    Vsock,
+    /// [`HOST_SOCKET`], in a container.
+    Socket,
+}
+
+pub fn start<S: Screen + 'static, I: Input + 'static>(
+    screen: S,
+    input: I,
+    host: Host,
+) -> io::Result<()> {
     let (requests, received) = mpsc::channel();
-    listen(Path::new(SOCKET), requests.clone())?;
-    std::thread::spawn(move || dial(&requests));
+    listen(Path::new(SOCKET), requests.clone(), serve_agent)?;
+    match host {
+        Host::Vsock => drop(std::thread::spawn(move || dial(&requests))),
+        Host::Socket => listen(Path::new(HOST_SOCKET), requests, serve_host)?,
+    }
     std::thread::spawn(move || Arbiter::new(screen, input).serve(received));
     Ok(())
 }
 
-/// Serves the agent's tools on `path`, which only root can open, one connection per thread.
+/// Serves `path`, which only root can open, one connection per thread.
 #[tracing::instrument(name = "desktop_listen", skip_all)]
-fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
+fn listen(
+    path: &Path,
+    requests: Sender<Request>,
+    serve: fn(UnixStream, &Sender<Request>) -> io::Result<()>,
+) -> io::Result<()> {
     // A socket left by an earlier run; the path is this sandbox's own.
     let _ = std::fs::remove_file(path);
     let listener = UnixListener::bind(path)?;
@@ -568,13 +591,44 @@ fn listen(path: &Path, requests: Sender<Request>) -> io::Result<()> {
         for stream in listener.incoming().flatten() {
             let requests = requests.clone();
             std::thread::spawn(move || {
-                if let Err(error) = serve_agent(stream, &requests) {
-                    eprintln!("Desktop agent connection closed: {error}");
+                if let Err(error) = serve(stream, &requests) {
+                    eprintln!("Desktop connection closed: {error}");
                 }
             });
         }
     });
     Ok(())
+}
+
+fn serve_host(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {
+    relay(BufReader::new(stream.try_clone()?), &stream, requests)
+}
+
+/// `cubebot-agent desktop`: relays host channel lines on stdin to [`HOST_SOCKET`] and the
+/// arbiter's responses to stdout. Opening the socket takes root in the container, which the
+/// orchestrator reaches through the platform's exec.
+pub fn channel() -> io::Result<()> {
+    let socket = UnixStream::connect(HOST_SOCKET)?;
+    let requests = socket.try_clone()?;
+    std::thread::spawn(move || {
+        let _ = forward(io::stdin().lock(), &requests);
+        // The arbiter answers what it already has, then sees the end.
+        let _ = requests.shutdown(std::net::Shutdown::Write);
+    });
+    forward(&socket, io::stdout().lock())
+}
+
+/// Copies each read on as it arrives, so no response waits for the socket to close.
+fn forward(mut from: impl Read, mut to: impl Write) -> io::Result<()> {
+    let mut buffer = vec![0; 64 << 10];
+    loop {
+        let read = from.read(&mut buffer)?;
+        if read == 0 {
+            return Ok(());
+        }
+        to.write_all(&buffer[..read])?;
+        to.flush()?;
+    }
 }
 
 fn serve_agent(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> {

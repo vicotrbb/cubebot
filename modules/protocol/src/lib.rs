@@ -16,6 +16,10 @@ pub enum LivenessStatus {
     Alive,
 }
 
+/// The exit status of a sandbox that refused a workspace volume laid out by the other runtime:
+/// `workspace.ext4` under `container`, or a directory tree under `kvm`. Launchers report it.
+pub const LAYOUT_MISMATCH: u8 = 78;
+
 pub mod desktop;
 pub mod guest;
 pub mod network;

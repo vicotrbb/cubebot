@@ -12,7 +12,7 @@ use cubebot_orchestrator::{
     agents::{
         AgentId,
         kubernetes::Error,
-        sandbox::{Desktop, ExecChannel, Sandbox, Status},
+        sandbox::{Desktop, ExecChannel, Runtime, Sandbox, Status},
     },
     connections::Credentials,
     identity::Identity,
@@ -80,7 +80,7 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
     let f = fixture().await;
     let (auth, work, admin, agent) = native_chat_setup(&f, "Log in to GitHub").await;
     let arbiter = Recording::default();
-    let desktop = Desktop::new(Arc::new(arbiter.clone()));
+    let desktop = Desktop::new(Arc::new(arbiter.clone()), &Runtime::Kvm {});
     let console = cubebot_orchestrator::api::configured_router_with_credentials(
         f.pool.clone(),
         None,

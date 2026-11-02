@@ -12,7 +12,6 @@ a failed run alive for 15 minutes.
 import http.server
 import json
 import os
-import platform
 import secrets
 import socket
 import subprocess
@@ -40,7 +39,17 @@ from docker_desktop import (
     psql,
     screen,
 )
-from docker_sandbox import ROOT, Api, bridge, build, command, configure, live, remove
+from docker_sandbox import (
+    ROOT,
+    Api,
+    bridge,
+    build,
+    command,
+    configure,
+    live,
+    remove,
+    unsupported,
+)
 from docker_sandbox import sign_in as bootstrap
 from integration import run_database
 
@@ -146,7 +155,7 @@ def ready(api, identity):
     status = f"/api/agents/{identity}/status"
     wait_for("the runtime", lambda: api(status)["runtime_available"], 300)
     wait_for(
-        "the guest desktop", lambda: "Guest desktop started" in logs(identity), 180
+        "the guest desktop", lambda: "Sandbox desktop started" in logs(identity), 180
     )
     # The agent starts Chromium a while after the desktop starts.
     wait_for(
@@ -609,12 +618,8 @@ def qualify(directory: Path):
 
 
 def main():
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        print(f"docker-browser skipped: needs x86_64 Linux, this is {sys.platform}")
-        return 0
-    if not os.environ.get("OPENAI_API_KEY_FILE"):
-        print("docker-browser failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
-        return 1
+    if (refused := unsupported("docker-browser")) is not None:
+        return refused
     build()
     with tempfile.TemporaryDirectory() as directory:
         qualify(Path(directory))

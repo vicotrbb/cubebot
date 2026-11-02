@@ -3,7 +3,7 @@
 //! Each container is a pod attempt in namespace `docker`, so sessions, drains and epochs work as on
 //! Kubernetes. The attempt is recorded before the container is created; the epoch in the container
 //! name makes creation idempotent, so a lost reply is recovered by lookup, never by a second run.
-use super::{ExecChannel, Sandbox, Status};
+use super::{ExecChannel, Runtime, Sandbox, Status};
 use crate::agents::{
     AgentId,
     kubernetes::{AttemptId, Error},
@@ -19,8 +19,10 @@ use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DockerConfig {
+    /// The `cubebot-sandbox` image for `kvm`, the agent image for `container`.
     image: String,
     orchestrator_origin: String,
+    runtime: Runtime,
     #[serde(default)]
     terminal_enabled: bool,
     /// The guest desktop and the agent's computer tool (ADR 0085); needs `terminal_enabled`.
@@ -52,6 +54,7 @@ impl DockerConfig {
             || !argument(&config.orchestrator_origin)
             || origin.scheme() != "https"
             || loopback(&origin)
+            || config.runtime.validate().is_err()
             || config.control_ca_file.as_deref().is_some_and(|path| {
                 // `--mount` is CSV: a comma or quote would end the source and start another option.
                 !argument(path) || !path.starts_with('/') || path.contains([',', '"'])
@@ -100,6 +103,9 @@ impl Docker {
     }
     pub fn computer_use_enabled(&self) -> bool {
         self.config.computer_use_enabled
+    }
+    pub fn runtime(&self) -> &Runtime {
+        &self.config.runtime
     }
     pub fn new(pool: PgPool, config: DockerConfig) -> Self {
         Self {
@@ -273,9 +279,6 @@ impl Docker {
             name,
             "--label",
             &label,
-            "--read-only",
-            "--tmpfs",
-            "/tmp",
             "--cap-drop",
             "ALL",
             "--security-opt",
@@ -300,6 +303,13 @@ impl Docker {
         if let Some(mount) = &ca_mount {
             args.extend(["--mount", mount, "--env", &ca_env]);
         }
+        // The scripted provider of the container check (`just container-check`) listens in the
+        // sandbox's own network, at the loopback origin the agent's test seam accepts.
+        let provider = std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN")
+            .map(|origin| format!("CUBEBOT_TEST_PROVIDER_ORIGIN={origin}"));
+        if let Ok(provider) = &provider {
+            args.extend(["--env", provider]);
+        }
         if self.config.terminal_enabled {
             args.extend([
                 "--env",
@@ -311,22 +321,9 @@ impl Docker {
                 args.extend(["--env", "CUBEBOT_COMPUTER_ENABLED=1"]);
             }
         }
-        // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
-        // group 10001 writes the image's workspace volume.
-        args.extend([
-            "--user",
-            "0:10001",
-            "--cap-add",
-            "NET_ADMIN",
-            "--device",
-            "/dev/kvm",
-            "--device",
-            "/dev/net/tun",
-            "--env",
-            "CUBEBOT_GUEST_WORKSPACE=/var/lib/cubebot/workspace.ext4",
-            self.config.image.as_str(),
-            "run",
-        ]);
+        args.extend(runtime_arguments(&self.config.runtime));
+        args.push(self.config.image.as_str());
+        args.extend(command(&self.config.runtime));
         // shortcut: Docker still keeps the token in the container's config under its data root
         // until the container is removed; deliver it over stdin if that root is not trusted.
         self.docker_with(&args, &[("CUBEBOT_BOOTSTRAP_TOKEN", token)])
@@ -338,11 +335,13 @@ impl Docker {
             "
             UPDATE agent_resources
             SET kubernetes_phase = $2,
+                kubernetes_reason = $3,
                 observed_at = clock_timestamp()
             WHERE id = $1
             ",
             attempt.id.0,
             phase(state),
+            reason(state),
         )
         .execute(&self.pool)
         .await?;
@@ -405,6 +404,56 @@ impl Docker {
         Ok(())
     }
 }
+/// The pod layout's shape in `docker run` flags.
+fn runtime_arguments(runtime: &Runtime) -> Vec<&str> {
+    match runtime {
+        // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
+        // group 10001 writes the image's workspace volume.
+        Runtime::Kvm {} => vec![
+            "--read-only",
+            "--tmpfs",
+            "/tmp",
+            "--user",
+            "0:10001",
+            "--cap-add",
+            "NET_ADMIN",
+            "--device",
+            "/dev/kvm",
+            "--device",
+            "/dev/net/tun",
+            "--env",
+            "CUBEBOT_GUEST_WORKSPACE=/var/lib/cubebot/workspace.ext4",
+        ],
+        // Container init runs the desktop as root and drops to the tool and browser users.
+        Runtime::Container { class } => {
+            let mut args = vec![
+                "--tmpfs",
+                "/tmp:exec",
+                "--shm-size",
+                "1g",
+                "--user",
+                "0:0",
+                "--cap-add",
+                "SETUID",
+                "--cap-add",
+                "SETGID",
+                "--cap-add",
+                "CHOWN",
+            ];
+            if let Some(class) = class {
+                args.extend(["--runtime", class]);
+            }
+            args
+        }
+    }
+}
+/// The sandbox image's command: the VMM, or the agent image's container init.
+fn command(runtime: &Runtime) -> &'static [&'static str] {
+    match runtime {
+        Runtime::Kvm {} => &["run"],
+        Runtime::Container { .. } => &["/usr/local/bin/cubebot-agent", "container"],
+    }
+}
 fn volume(agent: AgentId) -> String {
     format!("cubebot-workspace-{}", agent.0)
 }
@@ -419,6 +468,34 @@ fn running(state: Option<&Value>) -> bool {
         "running" | "paused" | "restarting" | "removing"
     )
 }
+enum Next {
+    Retire,
+    Start,
+    Observe,
+}
+/// What `start` does with the current attempt's container: a stale epoch or an exited agent
+/// is settled first, and the next pass starts a new epoch. A refused volume would refuse every
+/// new attempt too, so it stays, and the agent's status says why, until a restart.
+fn next(stale: bool, state: Option<&Value>) -> Next {
+    match status(state) {
+        _ if stale => Next::Retire,
+        _ if reason(state).is_some() => Next::Observe,
+        "created" => Next::Start,
+        "running" | "paused" | "restarting" => Next::Observe,
+        _ => Next::Retire,
+    }
+}
+/// Why a sandbox exited, when it says.
+fn reason(state: Option<&Value>) -> Option<&'static str> {
+    state
+        .filter(|state| {
+            status(Some(state)) == "exited"
+                && state["ExitCode"] == cubebot_protocol::LAYOUT_MISMATCH
+        })
+        .map(|_| LAYOUT_MISMATCH)
+}
+/// What the agent's status shows for a refused workspace volume.
+pub(crate) const LAYOUT_MISMATCH: &str = "RuntimeLayoutMismatch";
 fn phase(state: Option<&Value>) -> &'static str {
     match status(state) {
         "created" => "Pending",
@@ -448,17 +525,10 @@ impl Sandbox for Docker {
         }
         let state = self.inspect(&attempt.name).await?;
         let (_, generation) = self.intent(agent).await?;
-        // A stale epoch or an exited agent is settled first; the next pass starts a new epoch.
-        if attempt.target_generation != generation
-            || !matches!(
-                status(state.as_ref()),
-                "created" | "running" | "paused" | "restarting"
-            )
-        {
-            return self.retire(&attempt, state).await;
-        }
-        if status(state.as_ref()) == "created" {
-            self.docker(&["container", "start", &attempt.name]).await?;
+        match next(attempt.target_generation != generation, state.as_ref()) {
+            Next::Retire => return self.retire(&attempt, state).await,
+            Next::Start => drop(self.docker(&["container", "start", &attempt.name]).await?),
+            Next::Observe => (),
         }
         let state = self.inspect(&attempt.name).await?;
         self.observe(&attempt, state.as_ref()).await
@@ -524,7 +594,7 @@ mod tests {
 
     #[test]
     fn configuration_rejects_values_docker_would_read_as_flags() {
-        let valid = serde_json::json!({"image":"cubebot-sandbox:dev","orchestrator_origin":"https://cubebot.test"});
+        let valid = serde_json::json!({"image":"cubebot-sandbox:dev","orchestrator_origin":"https://cubebot.test","runtime":{"kind":"kvm"}});
         assert!(DockerConfig::parse(&valid.to_string()).is_ok());
         for (key, value) in [
             ("image", serde_json::json!("--privileged")),
@@ -554,6 +624,79 @@ mod tests {
             input[key] = value;
             assert!(DockerConfig::parse(&input.to_string()).is_err(), "{key}");
         }
+    }
+
+    #[test]
+    fn configuration_requires_a_runtime_and_a_safe_class() {
+        let valid = serde_json::json!({"image":"cubebot-agent:dev","orchestrator_origin":"https://cubebot.test"});
+        assert!(DockerConfig::parse(&valid.to_string()).is_err());
+        for runtime in [
+            json!({"kind":"kvm"}),
+            json!({"kind":"container"}),
+            json!({"kind":"container","class":"runsc"}),
+        ] {
+            let mut input = valid.clone();
+            input["runtime"] = runtime.clone();
+            let config = DockerConfig::parse(&input.to_string()).unwrap();
+            assert_eq!(config.runtime.kind(), runtime["kind"]);
+        }
+        for runtime in [
+            json!({"kind":"kvm","class":"runsc"}),
+            json!({"kind":"container","class":"--privileged"}),
+            json!({"kind":"container","class":"Run SC"}),
+            json!({"kind":"vm"}),
+        ] {
+            let mut input = valid.clone();
+            input["runtime"] = runtime.clone();
+            assert!(
+                DockerConfig::parse(&input.to_string()).is_err(),
+                "{runtime}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_container_runs_the_agent_image_without_devices_or_net_admin() {
+        let kvm = runtime_arguments(&Runtime::Kvm {});
+        assert!(kvm.contains(&"/dev/kvm") && kvm.contains(&"NET_ADMIN"));
+        assert_eq!(command(&Runtime::Kvm {}), ["run"]);
+        let container = Runtime::Container {
+            class: Some("runsc".into()),
+        };
+        let args = runtime_arguments(&container);
+        for absent in ["/dev/kvm", "/dev/net/tun", "NET_ADMIN", "--read-only"] {
+            assert!(!args.contains(&absent), "{absent}");
+        }
+        let added: Vec<_> = args
+            .windows(2)
+            .filter(|pair| pair[0] == "--cap-add")
+            .map(|pair| pair[1])
+            .collect();
+        assert_eq!(added, ["SETUID", "SETGID", "CHOWN"]);
+        assert!(args.windows(2).any(|pair| pair == ["--user", "0:0"]));
+        assert!(args.windows(2).any(|pair| pair == ["--runtime", "runsc"]));
+        assert_eq!(
+            command(&container),
+            ["/usr/local/bin/cubebot-agent", "container"]
+        );
+        let plain = runtime_arguments(&Runtime::Container { class: None });
+        assert!(!plain.contains(&"--runtime"));
+    }
+
+    #[test]
+    fn a_refused_volume_is_its_reason_and_stays_until_a_restart() {
+        let refused = json!({"Status":"exited","ExitCode":78});
+        assert_eq!(reason(Some(&refused)), Some("RuntimeLayoutMismatch"));
+        assert!(matches!(next(false, Some(&refused)), Next::Observe));
+        assert!(matches!(next(true, Some(&refused)), Next::Retire));
+        let failed = json!({"Status":"exited","ExitCode":1});
+        assert!(matches!(next(false, Some(&failed)), Next::Retire));
+        assert_eq!(reason(Some(&json!({"Status":"exited","ExitCode":1}))), None);
+        assert_eq!(
+            reason(Some(&json!({"Status":"running","ExitCode":78}))),
+            None
+        );
+        assert_eq!(reason(None), None);
     }
 
     #[test]

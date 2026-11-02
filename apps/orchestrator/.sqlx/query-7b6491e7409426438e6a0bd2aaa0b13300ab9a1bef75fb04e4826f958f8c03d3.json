@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agent_resources\n            SET kubernetes_phase = $2,\n                kubernetes_reason = $3,\n                observed_at = clock_timestamp()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b6491e7409426438e6a0bd2aaa0b13300ab9a1bef75fb04e4826f958f8c03d3"
+}

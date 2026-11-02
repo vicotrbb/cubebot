@@ -283,6 +283,7 @@ def orchestrator(f, dns, **controller):
         "runtime_service_account": "cubebot-runtime",
         "orchestrator_origin": CONTROL,
         "network": {"dns": [dns]},
+        "runtime": {"kind": "kvm"},
         "control_ca_config_map": "control-ca",
         **controller,
     }

@@ -9,7 +9,7 @@ use crate::{
 };
 use axum::Router;
 use cubebot_orchestrator::{
-    agents::sandbox::Desktop,
+    agents::sandbox::{Desktop, Runtime},
     identity::{
         Actor, Identity,
         access::{Capability, GrantRequest, Recipient, Scope},
@@ -115,7 +115,10 @@ async fn a_person_completes_a_requested_login_and_the_next_turn_sees_it() {
     )
     .await
     .unwrap()
-    .layer(axum::Extension(Desktop::new(Arc::new(StandIn))));
+    .layer(axum::Extension(Desktop::new(
+        Arc::new(StandIn),
+        &Runtime::Container { class: None },
+    )));
     let (console, console_task) = http_server(router).await;
     let mut desktop = open(&console, agent, &session.token, Some(ORIGIN))
         .await

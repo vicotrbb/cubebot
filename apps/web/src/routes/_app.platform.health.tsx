@@ -3,6 +3,7 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { admin } from '../api/admin'
 import { useAgents, useInstallation } from '../app/queries'
 import { Cube, moodOf } from '../components/Cube'
+import { sandboxLabel } from '../features/platform/sandbox'
 import '../features/platform/platform.css'
 
 export const Route = createFileRoute('/_app/platform/health')({
@@ -41,8 +42,10 @@ function Health() {
                 ? 'ready'
                 : 'not ready'}
           </dd>
-          <dt>Runtime</dt>
+          <dt>Controller</dt>
           <dd>{installation.data?.controller.replaceAll('_', ' ')}</dd>
+          <dt>Sandbox</dt>
+          <dd>{installation.data && sandboxLabel(installation.data)}</dd>
           <dt>Terminal tools</dt>
           <dd>{installation.data?.terminal_enabled ? 'on' : 'off'}</dd>
           <dt>Computer use</dt>

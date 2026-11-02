@@ -1,4 +1,4 @@
-//! One agent sandbox (ADR 0084): a KVM guest, the only way Cubebot runs an agent.
+//! One agent sandbox of the `kvm` runtime (ADR 0084): a KVM guest.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod kvm;
 use std::{
@@ -33,6 +33,14 @@ fn main() -> ExitCode {
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn run() -> io::Result<u8> {
+    // A container sandbox's journal sits beside where this one keeps its disk.
+    let workspace = std::env::var_os("CUBEBOT_GUEST_WORKSPACE").map(std::path::PathBuf::from);
+    if workspace.is_some_and(|disk| disk.with_file_name("runtime").exists()) {
+        eprintln!(
+            "The workspace volume holds a container sandbox's files; a kvm guest cannot use it"
+        );
+        return Ok(cubebot_protocol::LAYOUT_MISMATCH);
+    }
     kvm::run()
 }
 

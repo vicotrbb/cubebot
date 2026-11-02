@@ -1,10 +1,13 @@
 """One agent through the Docker sandbox backend, without a cluster.
 
-Needs x86_64 Linux with /dev/kvm, Docker, OpenSSL, the kernel build tools of
-tooling/guest and OPENAI_API_KEY_FILE. The orchestrator serves HTTPS on the docker0
-address with a CA from `just dev-ca`; a disposable PostgreSQL holds its state. A real
-model is asked for one bash tool call; the assertion reads the ledger's tool call and
-result, never the model's reply.
+CUBEBOT_SANDBOX_RUNTIME picks the sandbox runtime for this and every docker_*.py
+suite: `kvm` (the default where /dev/kvm exists) needs x86_64 Linux with /dev/kvm and
+the kernel build tools of tooling/guest; `container` needs only Docker. Both need
+OpenSSL and OPENAI_API_KEY_FILE. The orchestrator serves HTTPS on the docker0
+address, or on Docker Desktop on loopback, which sandboxes reach as
+host.docker.internal, with a CA from `just dev-ca`; a disposable PostgreSQL holds its
+state. A real model is asked for one bash tool call; the assertion reads the ledger's
+tool call and result, never the model's reply.
 
 `docker_sandbox.py agent NAME` instead creates and wakes an agent against a running
 `just docker-orchestrator`, bootstrapping the administrator from
@@ -31,7 +34,12 @@ from integration import read_env_file, run_database
 from smoke import running
 
 ROOT = Path(__file__).resolve().parents[2]
-IMAGE = "cubebot-sandbox:dev"
+RUNTIME = os.environ.get("CUBEBOT_SANDBOX_RUNTIME") or (
+    "kvm" if os.path.exists("/dev/kvm") else "container"
+)
+# The kvm runtime runs the VMM's image, the container runtime the agent image itself.
+IMAGES = {"kvm": "cubebot-sandbox:dev", "container": "cubebot-agent:dev"}
+IMAGE = IMAGES.get(RUNTIME, "")
 MARKER = "docker-sandbox-ok"
 INSTRUCTIONS = (
     "You operate a test sandbox. Run each command you are given with one bash tool "
@@ -70,6 +78,10 @@ def command(**values):
 
 
 def bridge():
+    """The host address sandboxes reach: docker0, or on Docker Desktop the loopback it
+    forwards host.docker.internal to."""
+    if sys.platform == "darwin":
+        return "127.0.0.1"
     output = subprocess.run(
         ["ip", "-4", "-o", "addr", "show", "docker0"],
         capture_output=True,
@@ -130,23 +142,72 @@ def create(name):
     print(agent(api, name))
 
 
-def build():
+def reachable(address):
+    """`address` as a sandbox names it."""
+    if sys.platform == "darwin":
+        return address.replace("127.0.0.1", "host.docker.internal")
+    return address
+
+
+def unsupported(suite):
+    """Prints why `suite` cannot run here in RUNTIME and returns its exit status, or
+    None."""
+    if RUNTIME not in IMAGES:
+        print(
+            f"{suite} failed: CUBEBOT_SANDBOX_RUNTIME is kvm or container",
+            file=sys.stderr,
+        )
+        return 1
+    if RUNTIME == "kvm" and (sys.platform != "linux" or platform.machine() != "x86_64"):
+        print(
+            f"{suite} skipped: kvm needs x86_64 Linux with /dev/kvm, this host is "
+            f"{sys.platform}/{platform.machine()}; "
+            "CUBEBOT_SANDBOX_RUNTIME=container runs here"
+        )
+        return 0
+    if RUNTIME == "kvm" and not os.access("/dev/kvm", os.R_OK | os.W_OK):
+        print(f"{suite} failed: /dev/kvm is not accessible", file=sys.stderr)
+        return 1
+    if not os.environ.get("OPENAI_API_KEY_FILE"):
+        print(f"{suite} failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
+        return 1
+    print(f"{suite}: {RUNTIME} sandboxes")
+    return None
+
+
+def build(runtime=RUNTIME):
     subprocess.run(
         ["cargo", "build", "--locked", "-p", "cubebot-orchestrator"],
         check=True,
         cwd=ROOT,
     )
+    if runtime == "container":
+        subprocess.run(
+            ["docker", "build", "--tag", IMAGES[runtime]]
+            + ["--file", "apps/agent/Dockerfile", "."],
+            check=True,
+            cwd=ROOT,
+        )
+        return
     subprocess.run([sys.executable, ROOT / "tooling/guest/build.py"], check=True)
     subprocess.run(
-        ["docker", "build", "--tag", IMAGE, "--build-context", "guest=target/guest"]
+        ["docker", "build", "--tag", IMAGES[runtime]]
+        + ["--build-context", "guest=target/guest"]
         + ["--file", "apps/sandbox/Dockerfile", "."],
         check=True,
         cwd=ROOT,
     )
 
 
-def configure(directory: Path, address):
-    subprocess.run(["just", "dev-ca", str(directory / "ca")], check=True, cwd=ROOT)
+def configure(directory: Path, address, runtime=RUNTIME):
+    """The orchestrator's environment for Docker sandboxes of `runtime`."""
+    host = address.rsplit(":", 1)[0]
+    names = f"IP:{host}"
+    if reachable(host) != host:
+        names = f"DNS:{reachable(host)},{names}"
+    subprocess.run(
+        ["just", "dev-ca", str(directory / "ca"), names], check=True, cwd=ROOT
+    )
     key = directory / "credential.key"
     key.write_bytes(secrets.token_bytes(32))
     key.chmod(0o600)
@@ -154,8 +215,9 @@ def configure(directory: Path, address):
     config.write_text(
         json.dumps(
             {
-                "image": IMAGE,
-                "orchestrator_origin": f"https://{address}",
+                "image": IMAGES[runtime],
+                "orchestrator_origin": f"https://{reachable(address)}",
+                "runtime": {"kind": runtime},
                 "control_ca_file": str(directory / "ca/ca.crt"),
                 "terminal_enabled": True,
             }
@@ -192,9 +254,9 @@ def tool_calls(postgres, turn):
     return list(calls.values())
 
 
-def bash_turn(api, postgres, identity):
+def bash_turn(api, postgres, identity, marker=MARKER):
     path = f"/api/conversations/{identity}/messages"
-    turn = api(path, command(message=f"Run: echo {MARKER}"), expected=202)["id"]
+    turn = api(path, command(message=f"Run: echo {marker}"), expected=202)["id"]
 
     def complete():
         rows = api(path)
@@ -206,8 +268,8 @@ def bash_turn(api, postgres, identity):
     reply = wait_for("the bash turn", complete, timeout=180)
     calls = tool_calls(postgres, turn)
     assert len(calls) == 1, (calls, reply)
-    assert MARKER in calls[0]["input"].get("command", ""), calls
-    assert MARKER in json.dumps(calls[0]["outcome"]), calls
+    assert marker in calls[0]["input"].get("command", ""), calls
+    assert marker in json.dumps(calls[0]["outcome"]), calls
 
 
 def qualify(directory: Path):
@@ -270,18 +332,8 @@ def remove(identity):
 def main():
     if sys.argv[1:2] == ["agent"] and len(sys.argv) == 3:
         return create(sys.argv[2])
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        print(
-            "docker-sandbox skipped: needs x86_64 Linux with /dev/kvm, "
-            f"this host is {sys.platform}/{platform.machine()}"
-        )
-        return 0
-    if not os.access("/dev/kvm", os.R_OK | os.W_OK):
-        print("docker-sandbox failed: /dev/kvm is not accessible", file=sys.stderr)
-        return 1
-    if not os.environ.get("OPENAI_API_KEY_FILE"):
-        print("docker-sandbox failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
-        return 1
+    if (refused := unsupported("docker-sandbox")) is not None:
+        return refused
     build()
     with tempfile.TemporaryDirectory() as directory:
         qualify(Path(directory))

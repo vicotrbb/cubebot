@@ -2,7 +2,35 @@ use cubebot_orchestrator::agents::kubernetes::ControllerConfig;
 use serde_json::{Value, json};
 fn valid() -> Value {
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    json!({"connection":{"kind":"in_cluster"},"sandbox_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}})
+    json!({"connection":{"kind":"in_cluster"},"sandbox_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]},"runtime":{"kind":"kvm"}})
+}
+#[test]
+fn controller_requires_a_declared_runtime() {
+    let mut input = valid();
+    input.as_object_mut().unwrap().remove("runtime");
+    assert!(ControllerConfig::parse(&input.to_string()).is_err());
+    for runtime in [
+        json!({"kind":"kvm"}),
+        json!({"kind":"container"}),
+        json!({"kind":"container","class":"gvisor"}),
+        json!({"kind":"container","class":"kata.qemu"}),
+    ] {
+        input["runtime"] = runtime;
+        assert!(ControllerConfig::parse(&input.to_string()).is_ok());
+    }
+    for runtime in [
+        json!({"kind":"kvm","class":"gvisor"}),
+        json!({"kind":"container","class":"Gvisor"}),
+        json!({"kind":"container","class":""}),
+        json!({"kind":"process"}),
+        json!("kvm"),
+    ] {
+        input["runtime"] = runtime.clone();
+        assert!(
+            ControllerConfig::parse(&input.to_string()).is_err(),
+            "{runtime}"
+        );
+    }
 }
 #[test]
 fn controller_accepts_only_explicit_valid_ca_config_map_names() {

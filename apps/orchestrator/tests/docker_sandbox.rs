@@ -40,7 +40,7 @@ async fn fixture() -> Fixture {
     std::fs::write(&program, FAKE).unwrap();
     std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
     let config = DockerConfig::parse(
-        r#"{"image":"cubebot-sandbox:test","orchestrator_origin":"https://172.17.0.1:8443","control_ca_file":"/srv/ca.crt"}"#,
+        r#"{"image":"cubebot-sandbox:test","orchestrator_origin":"https://172.17.0.1:8443","control_ca_file":"/srv/ca.crt","runtime":{"kind":"kvm"}}"#,
     )
     .unwrap();
     let docker = Docker::new(pool.clone(), config).with_program(program.to_str().unwrap());
