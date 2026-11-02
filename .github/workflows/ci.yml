@@ -40,8 +40,8 @@ jobs:
       - run: just check
       - run: just smoke
       - run: just integration
-      - name: Validate development database configuration
-        run: docker compose --env-file .env.example config --quiet
+      - name: Validate the development compose configuration
+        run: docker compose -f compose.yaml -f compose.dev.yaml --env-file .env.example config --quiet
 
   guest:
     uses: ./.github/workflows/guest.yml
@@ -61,6 +61,20 @@ jobs:
       - name: Install Rust toolchain from repository pin
         run: rustup show active-toolchain
       - run: just container-check
+
+  # deploy/install.sh from a local registry, as a release installs; container runtime, no key.
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.11.26'
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+        with:
+          just-version: '1.55.1'
+      - run: just install-check
 
   containers:
     runs-on: ubuntu-24.04

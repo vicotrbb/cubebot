@@ -35,6 +35,7 @@ lint: complexity
     cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
     bun run lint
     uv run --project tooling/quality --locked ruff check --config tooling/quality/pyproject.toml tooling tests
+    shellcheck deploy/install.sh deploy/cubebot
 
 test:
     bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts
@@ -77,6 +78,10 @@ release-check file="digests.json":
         echo "$image:$tag $have"; \
     done
 
+# Installs a build of this checkout with deploy/install.sh from a local registry, signs in and wakes one container agent; Docker only.
+install-check:
+    uv run --project tooling/quality --locked python tests/system/install_check.py
+
 # Starts temporary local processes, checks HTTP behavior, and stops them.
 smoke:
     uv run --project tooling/quality --locked python tests/system/smoke.py
@@ -86,14 +91,15 @@ guest-boot:
     uv run --project tooling/quality --locked python tests/system/guest_boot.py
 
 db-up:
-    docker compose --env-file .env up -d --wait postgres
+    docker compose -f compose.yaml -f compose.dev.yaml --env-file .env up -d --wait postgres
 
 # Retains the PostgreSQL volume.
 db-down:
-    docker compose --env-file .env down
+    docker compose -f compose.yaml -f compose.dev.yaml --env-file .env down
 
-# The whole stack in Docker at http://localhost:3000 (CUBEBOT_PORT in .env). On x86_64 Linux with /dev/kvm it
-# also runs agents, building the guest and sandbox image first; CUBEBOT_AGENTS=0 turns that off, =1 requires it.
+# The whole stack in Docker at http://localhost:3000 (CUBEBOT_PORT in .env), built from this checkout and run by
+# deploy/cubebot as an installed release runs. Agents run as KVM guests on x86_64 Linux with /dev/kvm, building the
+# guest first, else as containers; CUBEBOT_RUNTIME=kvm|container|off in .env chooses.
 up:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -103,68 +109,29 @@ up:
         echo "Created .env with a random POSTGRES_PASSWORD."
     fi
     set -a; source .env; set +a
-    files=(-f compose.yaml)
-    platform="$(uname -s)/$(uname -m)"
-    if [ "$platform" != Linux/x86_64 ]; then
-        missing="agents need x86_64 Linux, this is $platform"
-    elif [ ! -c /dev/kvm ] || [ ! -c /dev/net/tun ]; then
-        missing="agents need /dev/kvm and /dev/net/tun"
-    else
-        missing=""
+    if [ -z "${CUBEBOT_RUNTIME:-}" ]; then
+        CUBEBOT_RUNTIME=container
+        [ "$(uname -s)/$(uname -m)" != Linux/x86_64 ] || [ ! -c /dev/kvm ] || [ ! -c /dev/net/tun ] || CUBEBOT_RUNTIME=kvm
     fi
-    agents="${CUBEBOT_AGENTS:-auto}"
-    if [ "$agents" = 1 ] && [ -n "$missing" ]; then
-        echo "CUBEBOT_AGENTS=1, but $missing." >&2
-        exit 1
-    fi
-    if [ "$agents" = 0 ]; then
-        echo "Agents off (CUBEBOT_AGENTS=0)."
-    elif [ -n "$missing" ]; then
-        echo "Agents off: $missing. The console runs; agents cannot wake."
-    else
+    if [ "$CUBEBOT_RUNTIME" = kvm ]; then
         if [ ! -f target/guest/bzImage ] || [ ! -f target/guest/root.ext4 ]; then
             echo "Building the guest kernel and root image once (needs make, gcc, flex, bison, bc, libelf-dev)."
             python3 tooling/guest/build.py
         fi
         docker build --tag cubebot-sandbox:local --build-context guest=target/guest --file apps/sandbox/Dockerfile .
-        just dev-ca
-        export CUBEBOT_DEV_CA="$PWD/.cubebot/dev-ca"
-        export CUBEBOT_BRIDGE=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
-        export CUBEBOT_DOCKER_GID=$(stat -c %g /var/run/docker.sock)
-        files+=(-f compose.agents.yaml)
-        echo "Agents on: sandboxes reach the orchestrator at https://$CUBEBOT_BRIDGE:8443."
+    elif [ "$CUBEBOT_RUNTIME" = container ]; then
+        docker build --tag cubebot-agent:local --file apps/agent/Dockerfile .
     fi
-    docker compose "${files[@]}" up -d --build --remove-orphans
-    origin="http://localhost:${CUBEBOT_PORT:-3000}"
-    for _ in $(seq 120); do
-        if curl -fsS "$origin/api/health/live" >/dev/null 2>&1; then
-            echo "Cubebot is up at $origin. First run: create the administrator with \`just admin\`."
-            exit 0
-        fi
-        sleep 1
-    done
-    docker compose "${files[@]}" logs --tail 40 orchestrator proxy >&2
-    echo "Cubebot did not answer at $origin within 2 minutes; the logs above say why." >&2
-    exit 1
+    CUBEBOT_HOME="$PWD" CUBEBOT_RUNTIME="$CUBEBOT_RUNTIME" CUBEBOT_DEV_CA="$PWD/.cubebot/dev-ca" deploy/cubebot up
+    echo "First run: create the administrator with \`just admin\`."
 
 # Stops `just up` and the agent sandboxes it started; data stays in Docker volumes (`docker compose down -v` deletes it).
 down:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    agents=$(docker ps -q --filter label=cubebot.dev/agent)
-    [ -z "$agents" ] || docker stop $agents >/dev/null
-    docker compose --env-file .env down
+    CUBEBOT_HOME="$PWD" deploy/cubebot down
 
 # Creates the first administrator of the `just up` stack; prompts for the password.
 admin login="admin":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    set -a; source .env; set +a
-    read -rsp "Password for {{ login }}: " password && echo
-    CUBEBOT_BOOTSTRAP_LOGIN="{{ login }}" CUBEBOT_BOOTSTRAP_PASSWORD="$password" \
-        docker compose --env-file .env run --rm --no-deps -e CUBEBOT_BOOTSTRAP_LOGIN -e CUBEBOT_BOOTSTRAP_PASSWORD \
-        --entrypoint cubebot-admin orchestrator bootstrap
-    echo "Sign in at http://localhost:${CUBEBOT_PORT:-3000} as {{ login }}."
+    CUBEBOT_HOME="$PWD" deploy/cubebot admin "{{ login }}"
 
 # Reuses a running `just db-up` server, else a disposable one; never an application DB.
 integration:
@@ -192,21 +159,9 @@ cluster-sandbox:
 dev-ca directory=".cubebot/dev-ca" names="":
     #!/usr/bin/env bash
     set -euo pipefail
-    umask 077
-    mkdir -p "{{ directory }}" && cd "{{ directory }}"
-    [ -f server.crt ] && exit 0
     names="{{ names }}"
     [ -n "$names" ] || names="IP:$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)"
-    key=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes)
-    # Strict verifiers (Python 3.13+, for one) need key usage on both certificates.
-    openssl req -x509 "${key[@]}" -keyout ca.key -out ca.crt -days 825 -subj "/CN=cubebot development control CA" \
-        -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
-    openssl req "${key[@]}" -keyout server.key -out server.csr -subj "/CN=cubebot development control"
-    printf 'subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' "$names" > server.ext
-    openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -extfile server.ext
-    rm server.csr server.ext
-    # Sandbox containers run as root without CAP_DAC_OVERRIDE; the certificate is public.
-    chmod 644 ca.crt
+    deploy/cubebot dev-ca "{{ directory }}" "$names"
 
 # Serves HTTPS on docker0:8443 for Docker sandboxes; needs `just db-up` and the cubebot-sandbox:dev image.
 docker-orchestrator: dev-ca

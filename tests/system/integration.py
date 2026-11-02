@@ -111,7 +111,8 @@ def development_container():
     if not os.path.exists(".env"):
         return None
     result = subprocess.run(
-        ["docker", "compose", "--env-file", ".env", "ps", "--status", "running"]
+        ["docker", "compose", "-f", "compose.yaml", "-f", "compose.dev.yaml"]
+        + ["--env-file", ".env", "ps", "--status", "running"]
         + ["--quiet", "postgres"],
         capture_output=True,
         text=True,
