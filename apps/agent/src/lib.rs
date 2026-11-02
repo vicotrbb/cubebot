@@ -1,6 +1,8 @@
 //! The agent application. The agent runs its own tools inside its sandbox (ADRs 0083, 0084).
 
 pub mod collaboration;
+#[cfg(target_os = "linux")]
+pub mod container;
 pub mod context;
 pub mod control;
 pub mod desktop;
@@ -8,6 +10,8 @@ pub mod engine;
 pub mod files;
 #[cfg(target_os = "linux")]
 pub mod guest;
+#[cfg(target_os = "linux")]
+mod init;
 pub mod memory;
 pub mod skills;
 pub mod tools;

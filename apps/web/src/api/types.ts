@@ -26,6 +26,9 @@ export type Installation = {
   terminal_enabled: boolean
   computer_use_enabled: boolean
   controller: 'kubernetes' | 'docker' | 'database_only'
+  /** Absent from an orchestrator older than the runtime field. */
+  sandbox_runtime?: 'kvm' | 'container' | null
+  sandbox_runtime_class?: string | null
 }
 export type ActivityItem = {
   kind:

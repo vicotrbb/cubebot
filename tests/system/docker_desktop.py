@@ -19,7 +19,6 @@ import base64
 import http.server
 import json
 import os
-import platform
 import secrets
 import socket
 import ssl
@@ -34,7 +33,17 @@ import uuid
 from pathlib import Path
 
 from cluster_chat_setup import wait_for
-from docker_sandbox import ROOT, Api, bridge, build, command, configure, live, remove
+from docker_sandbox import (
+    ROOT,
+    Api,
+    bridge,
+    build,
+    command,
+    configure,
+    live,
+    remove,
+    unsupported,
+)
 from docker_sandbox import sign_in as bootstrap
 from guest_boot import rgb
 from integration import run_database
@@ -669,7 +678,9 @@ def ready(people, desk):
     wait_for(
         "Desk's runtime", lambda: people["admin"].api(status)["runtime_available"], 300
     )
-    wait_for("Desk's guest desktop", lambda: "Guest desktop started" in logs(desk), 120)
+    wait_for(
+        "Desk's guest desktop", lambda: "Sandbox desktop started" in logs(desk), 120
+    )
     # Chromium paints a while after the desktop starts.
     wait_for(
         "Chromium to paint the guest screen",
@@ -801,12 +812,8 @@ def qualify(directory: Path):
 
 
 def main():
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        print(f"docker-desktop skipped: needs x86_64 Linux, this is {sys.platform}")
-        return 0
-    if not os.environ.get("OPENAI_API_KEY_FILE"):
-        print("docker-desktop failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
-        return 1
+    if (refused := unsupported("docker-desktop")) is not None:
+        return refused
     build()
     subprocess.run(
         [

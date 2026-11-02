@@ -159,7 +159,7 @@ def run_guest(directory: Path, workspace: Path, requests: queue.Queue, computer:
 def drawn(directory: Path, console: Console):
     """Returns why the desktop never showed the wallpaper, or None."""
     deadline = time.monotonic() + DEADLINE
-    if not until(lambda: b"Guest desktop started" in console.output, deadline):
+    if not until(lambda: b"Sandbox desktop started" in console.output, deadline):
         return "the guest desktop did not start"
     control = connect(directory)
     screenshot = {"input": person({"action": "screenshot"})}

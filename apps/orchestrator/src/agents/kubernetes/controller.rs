@@ -100,8 +100,13 @@ impl Controller {
             .merge(self.runtime_router())
             .layer(axum::Extension(self.installation()));
         let desktop = match &self.mode {
-            Mode::Kubernetes(lifecycle) => Desktop::new(lifecycle.sandbox.clone()),
-            Mode::Docker(lifecycle) => Desktop::new(lifecycle.sandbox.clone()),
+            Mode::Kubernetes(lifecycle) => Desktop::new(
+                lifecycle.sandbox.clone(),
+                lifecycle.sandbox.layout.runtime(),
+            ),
+            Mode::Docker(lifecycle) => {
+                Desktop::new(lifecycle.sandbox.clone(), lifecycle.sandbox.runtime())
+            }
             Mode::DatabaseOnly => return router,
         };
         router.layer(axum::Extension(desktop))
@@ -113,11 +118,13 @@ impl Controller {
                 controller: "kubernetes",
                 terminal_enabled: lifecycle.sandbox.layout.terminal(),
                 computer_use_enabled: lifecycle.sandbox.layout.computer_use(),
+                runtime: Some(lifecycle.sandbox.layout.runtime().clone()),
             },
             Mode::Docker(lifecycle) => Installation {
                 controller: "docker",
                 terminal_enabled: lifecycle.sandbox.terminal_enabled(),
                 computer_use_enabled: lifecycle.sandbox.computer_use_enabled(),
+                runtime: Some(lifecycle.sandbox.runtime().clone()),
             },
             Mode::DatabaseOnly => Installation::default(),
         }

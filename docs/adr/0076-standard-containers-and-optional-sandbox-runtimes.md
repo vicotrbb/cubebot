@@ -2,7 +2,9 @@
 
 Status: Accepted
 
-Date: 2026-10-24
+Date: 2026-10-24, restored 2026-11-02
+
+Restored 2026-11-02: ADR 0084 had made its KVM guest the only agent sandbox, which set this decision aside for agents. Its 2026-11-02 amendment declares the runtime per installation, and this decision applies as written to the `container` runtime: the agent image on the cluster's standard runtime, or on an administrator's RuntimeClass named in the controller's `runtime.class`. The `kvm` runtime remains the hardware boundary where `/dev/kvm` exists. The user selected this on 2026-11-01.
 
 Decision: Run agent pods on the cluster's standard container runtime by default. Support administrator-approved alternative sandbox runtimes through Kubernetes RuntimeClass selection. Installation policy may require a sandbox for agent execution. If a required or explicitly selected runtime is unavailable, block execution rather than silently falling back. The user selected this policy on 2026-10-24.
 

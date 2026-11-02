@@ -15,7 +15,6 @@ import hashlib
 import http.client
 import json
 import os
-import platform
 import re
 import secrets
 import socket
@@ -34,7 +33,17 @@ from pathlib import Path
 from cluster_chat_setup import wait_for
 from docker_browser import calls, chat
 from docker_desktop import CONSOLE, Person, container, logs, person, psql, surroundings
-from docker_sandbox import ROOT, Api, bridge, build, command, configure, live, remove
+from docker_sandbox import (
+    ROOT,
+    Api,
+    bridge,
+    build,
+    command,
+    configure,
+    live,
+    remove,
+    unsupported,
+)
 from docker_sandbox import sign_in as bootstrap
 from integration import run_database
 
@@ -696,12 +705,8 @@ def qualify(directory: Path):
 
 
 def main():
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        print(f"docker-files skipped: needs x86_64 Linux, this is {sys.platform}")
-        return 0
-    if not os.environ.get("OPENAI_API_KEY_FILE"):
-        print("docker-files failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
-        return 1
+    if (refused := unsupported("docker-files")) is not None:
+        return refused
     build()
     subprocess.run(
         [

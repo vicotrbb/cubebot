@@ -1621,6 +1621,13 @@ export interface components {
       controller: string
       /** @description `CUBEBOT_INSTALLATION_NAME`, or "Cubebot". */
       name: string
+      /**
+       * @description The declared sandbox runtime: `kvm` (a virtual machine) or `container`; none without a
+       *     controller that runs agents.
+       */
+      sandbox_runtime?: string | null
+      /** @description The RuntimeClass or Docker runtime a `container` runtime names. */
+      sandbox_runtime_class?: string | null
       terminal_enabled: boolean
     }
     /** @description An agent's installation, with the library's current revision to show available updates. */

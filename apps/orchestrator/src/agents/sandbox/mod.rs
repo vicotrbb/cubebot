@@ -1,9 +1,12 @@
-//! Where agent sandboxes run (ADR 0084). Every implementation launches `cubebot-sandbox`.
+//! Where agent sandboxes run (ADR 0084). Every implementation launches the installation's declared
+//! [`Runtime`].
 mod docker;
+pub(crate) use docker::LAYOUT_MISMATCH;
 pub use docker::{Docker, DockerConfig};
 
 use super::AgentId;
 use crate::agents::kubernetes::Error;
+use serde::Deserialize;
 use sqlx::PgPool;
 use std::{
     collections::HashMap,
@@ -12,6 +15,63 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
+
+/// The installation's sandbox runtime, set at install for every agent: `kvm`, a guest of
+/// `cubebot-sandbox`, or `container`, the agent image run directly, optionally under a named
+/// RuntimeClass or Docker runtime.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Runtime {
+    /// A struct variant, so a stray `class` is refused like any unknown field.
+    Kvm {},
+    Container {
+        #[serde(default)]
+        class: Option<String>,
+    },
+}
+impl Runtime {
+    /// A class must name a RuntimeClass, so it is a DNS subdomain, which is also a safe argument.
+    pub fn validate(&self) -> Result<(), Error> {
+        match self {
+            Self::Container { class: Some(class) } if !subdomain(class) => {
+                Err(Error::InvalidConfiguration)
+            }
+            _ => Ok(()),
+        }
+    }
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Kvm {} => "kvm",
+            Self::Container { .. } => "container",
+        }
+    }
+    pub fn class(&self) -> Option<&str> {
+        match self {
+            Self::Container { class } => class.as_deref(),
+            Self::Kvm {} => None,
+        }
+    }
+    /// The host channel command (ADR 0085) inside this runtime's sandbox.
+    fn desktop(&self) -> [&'static str; 2] {
+        match self {
+            Self::Kvm {} => ["/usr/local/bin/cubebot-sandbox", "desktop"],
+            Self::Container { .. } => ["/usr/local/bin/cubebot-agent", "desktop"],
+        }
+    }
+}
+
+/// A Kubernetes DNS subdomain name.
+pub(crate) fn subdomain(name: &str) -> bool {
+    name.len() <= 253
+        && name.split('.').all(|part| {
+            !part.is_empty()
+                && !part.starts_with('-')
+                && !part.ends_with('-')
+                && part
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -59,14 +119,12 @@ pub struct Desktop {
 }
 
 impl Desktop {
-    pub fn new<S: Sandbox + Send + Sync + 'static>(sandbox: Arc<S>) -> Self {
+    pub fn new<S: Sandbox + Send + Sync + 'static>(sandbox: Arc<S>, runtime: &Runtime) -> Self {
+        let command = runtime.desktop();
         Self {
             open: Arc::new(move |agent| {
                 let sandbox = sandbox.clone();
-                Box::pin(async move {
-                    let command = ["/usr/local/bin/cubebot-sandbox", "desktop"];
-                    sandbox.exec_channel(agent, &command).await
-                })
+                Box::pin(async move { sandbox.exec_channel(agent, &command).await })
             }),
             viewers: Arc::default(),
         }

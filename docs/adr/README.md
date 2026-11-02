@@ -83,7 +83,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0073](0073-contained-delegation-failures.md) | Contain delegated failures and let the parent adapt | Accepted |
 | [0074](0074-postgresql-owned-agent-definitions.md) | PostgreSQL owns agent definitions and lifecycle intent | Accepted |
 | [0075](0075-single-installation-namespace.md) | One namespace for the entire installation | Accepted |
-| [0076](0076-standard-containers-and-optional-sandbox-runtimes.md) | Standard containers with optional sandbox runtimes | Accepted |
+| [0076](0076-standard-containers-and-optional-sandbox-runtimes.md) | Standard containers with optional sandbox runtimes | Accepted; restored for the `container` runtime by 0084's 2026-11-02 amendment |
 | [0077](0077-coordinated-maintenance-upgrades.md) | Coordinated maintenance upgrades | Accepted |
 | [0078](0078-initial-provider-support.md) | Initial OpenAI, Anthropic, and compatible-endpoint support | Accepted |
 | [0079](0079-explicit-deletion-for-durable-data.md) | Retain durable data until explicitly deleted | Accepted |
@@ -91,7 +91,7 @@ Each ADR records context, alternatives, the selected decision, consequences, and
 | [0081](0081-installation-wide-default-connection-access.md) | Installation-wide connection access by default | Accepted |
 | [0082](0082-one-permanent-conversation-per-agent.md) | One permanent conversation per agent | Accepted |
 | [0083](0083-agent-centric-execution-in-a-sandbox-boundary.md) | Agent-centric execution in a sandbox boundary | Accepted; sandbox mechanism amended by 0084 |
-| [0084](0084-in-house-vmm-as-the-agent-sandbox.md) | In-house VMM as the agent sandbox | Accepted |
+| [0084](0084-in-house-vmm-as-the-agent-sandbox.md) | In-house VMM as the agent sandbox | Accepted; amended 2026-11-02: declared `kvm` and `container` runtimes |
 | [0085](0085-desktop-as-a-vmm-device.md) | Desktop as a VMM device | Accepted |
 | [0086](0086-vault-filled-by-the-desktop-arbiter.md) | A vault the desktop arbiter fills | Accepted |
 | [0087](0087-routines.md) | Routines | Accepted |

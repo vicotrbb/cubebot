@@ -31,13 +31,15 @@ impl<'a> Observation<'a> {
                 "Pending" | "Running" | "Succeeded" | "Failed" | "Unknown"
             )
         });
-        let reason = status
-            .and_then(|status| status.reason.as_deref())
-            .filter(|reason| {
-                !reason.is_empty()
-                    && reason.len() <= 128
-                    && reason.bytes().all(|byte| byte.is_ascii_alphanumeric())
-            });
+        let reason = refused(pod).or_else(|| {
+            status
+                .and_then(|status| status.reason.as_deref())
+                .filter(|reason| {
+                    !reason.is_empty()
+                        && reason.len() <= 128
+                        && reason.bytes().all(|byte| byte.is_ascii_alphanumeric())
+                })
+        });
         let deleting = pod.metadata.deletion_timestamp.is_some();
         let recovery = deleting
             || reason == Some("NodeLost")
@@ -57,6 +59,25 @@ impl<'a> Observation<'a> {
             recovery,
         }
     }
+}
+/// The sandbox refused a workspace volume the other runtime laid out.
+fn refused(pod: &Pod) -> Option<&'static str> {
+    pod.status
+        .as_ref()?
+        .container_statuses
+        .as_deref()?
+        .iter()
+        .any(|container| {
+            container.name == "sandbox"
+                && container
+                    .state
+                    .as_ref()
+                    .and_then(|state| state.terminated.as_ref())
+                    .is_some_and(|ended| {
+                        ended.exit_code == i32::from(cubebot_protocol::LAYOUT_MISMATCH)
+                    })
+        })
+        .then_some(crate::agents::sandbox::LAYOUT_MISMATCH)
 }
 fn application_stopped(pod: &Pod) -> bool {
     pod.status
@@ -94,6 +115,24 @@ mod tests {
         let observed = Observation::pod(&pod);
         assert!(observed.recovery);
         assert!(!observed.ready);
+        assert_eq!(observed.reason, None);
         assert!(!super::super::ownership::termination_proven(&pod));
+    }
+
+    #[test]
+    fn a_refused_workspace_volume_is_the_reason() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "status": {
+                "phase": "Failed",
+                "reason": "Evicted",
+                "containerStatuses": [{
+                    "name": "sandbox", "image": "fixture", "imageID": "fixture",
+                    "ready": false, "restartCount": 0,
+                    "state": {"terminated": {"exitCode": 78}}
+                }]
+            }
+        }))
+        .unwrap();
+        assert_eq!(Observation::pod(&pod).reason, Some("RuntimeLayoutMismatch"));
     }
 }

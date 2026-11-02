@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  # Every sandbox is a KVM guest (ADR 0084): GitHub's x86_64 Ubuntu runners expose /dev/kvm,
+  # The cluster suites run the kvm runtime: GitHub's x86_64 Ubuntu runners expose /dev/kvm,
   # and kind's privileged node hands it to the device plugin.
   cluster:
     runs-on: ubuntu-24.04
@@ -56,3 +56,44 @@ jobs:
         env:
           CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-sandbox
           OPENAI_API_KEY_FILE: ${{ runner.temp }}/openai-key
+
+  # The real-model docker-* suites in the container runtime; the homelab host runs them in
+  # the kvm runtime.
+  docker-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    env:
+      HAS_PROVIDER_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+      CUBEBOT_SANDBOX_RUNTIME: container
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.11.26'
+      - uses: extractions/setup-just@f8a3cce218d9f83db3a2ecd90e41ac3de6cdfd9b # v3
+        with:
+          just-version: '1.55.1'
+      - name: Install Rust toolchain from repository pin
+        run: rustup show active-toolchain
+      - name: Install Playwright's Chromium outside the checkout
+        if: env.HAS_PROVIDER_KEY == 'true'
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/playwright" playwright@1.55.0
+          "$RUNNER_TEMP/playwright/node_modules/.bin/playwright" install --with-deps chromium
+          echo "CUBEBOT_PLAYWRIGHT_MODULE=$RUNNER_TEMP/playwright/node_modules/playwright" >> "$GITHUB_ENV"
+      - name: Write provider key outside the checkout
+        if: env.HAS_PROVIDER_KEY == 'true'
+        run: (umask 077 && printf '%s' "$OPENAI_API_KEY" > "$RUNNER_TEMP/openai-key")
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      - name: Run the docker-* suites
+        if: env.HAS_PROVIDER_KEY == 'true'
+        env:
+          OPENAI_API_KEY_FILE: ${{ runner.temp }}/openai-key
+        run: |
+          for suite in sandbox dreams browser desktop login vault rooms files routines skills; do
+            just "docker-$suite"
+          done

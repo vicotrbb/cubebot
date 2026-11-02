@@ -105,6 +105,10 @@ fn pod_defaults(expected: &mut PodSpec, actual: &PodSpec) {
         &actual.enable_service_links,
         true,
     );
+    // RuntimeClass admission copies the class's overhead into the pod (ADR 0076).
+    if expected.runtime_class_name.is_some() && expected.overhead.is_none() {
+        expected.overhead = actual.overhead.clone();
+    }
     for (expected, actual) in expected.containers.iter_mut().zip(&actual.containers) {
         container_defaults(expected, actual);
     }
@@ -287,6 +291,17 @@ mod tests {
                 "{path}"
             );
         }
+    }
+    #[test]
+    fn a_runtime_class_may_add_only_its_overhead() {
+        let overhead = json!({"cpu":"250m","memory":"160Mi"});
+        let classless = mutate(&pod(), "/spec/overhead", overhead.clone());
+        assert!(verify(&pod(), &classless).is_err());
+        let intent = mutate(&pod(), "/spec/runtimeClassName", json!("gvisor"));
+        let admitted = mutate(&intent, "/spec/overhead", overhead);
+        assert!(verify(&intent, &admitted).is_ok());
+        let other = mutate(&admitted, "/spec/runtimeClassName", json!("kata"));
+        assert!(verify(&intent, &other).is_err());
     }
     #[test]
     fn only_bounded_standard_node_tolerations_are_accepted() {

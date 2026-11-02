@@ -9,7 +9,6 @@ work.
 
 import json
 import os
-import platform
 import secrets
 import socket
 import ssl
@@ -35,6 +34,7 @@ from docker_sandbox import (
     live,
     remove,
     sign_in,
+    unsupported,
 )
 from docker_skills import show, tools
 from integration import run_database
@@ -634,12 +634,8 @@ def qualify(directory: Path):
 
 
 def main():
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        print(f"docker-rooms skipped: needs x86_64 Linux, this is {sys.platform}")
-        return 0
-    if not os.environ.get("OPENAI_API_KEY_FILE"):
-        print("docker-rooms failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
-        return 1
+    if (refused := unsupported("docker-rooms")) is not None:
+        return refused
     build()
     if os.environ.get("CUBEBOT_PLAYWRIGHT_MODULE"):
         web = ["docker", "build", "-q", "-t", "cubebot-web:local"]

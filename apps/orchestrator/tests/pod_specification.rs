@@ -1,4 +1,4 @@
-use cubebot_orchestrator::agents::kubernetes::Layout;
+use cubebot_orchestrator::agents::{kubernetes::Layout, sandbox::Runtime};
 use serde_json::json;
 
 const IMAGE: &str =
@@ -56,6 +56,56 @@ fn sandbox_container_requests_its_kvm_devices_and_only_net_admin() {
     }));
     assert_eq!(sandbox["volumeMounts"][0]["name"], "workspace");
     assert!(sandbox["volumeMounts"][0]["subPath"].is_null());
+}
+
+#[test]
+fn a_container_runtime_runs_the_agent_image_with_baseline_privileges() {
+    let container = Runtime::Container { class: None };
+    let configured = layout()
+        .with_terminal(true)
+        .with_computer_use(true)
+        .with_runtime(container)
+        .unwrap();
+    let spec = serde_json::to_value(configured.pod("workspace").unwrap()).unwrap();
+    assert!(spec["runtimeClassName"].is_null());
+    let sandbox = &spec["containers"][0];
+    assert_eq!(sandbox["command"], json!(["/usr/local/bin/cubebot-agent"]));
+    assert_eq!(sandbox["args"], json!(["container"]));
+    assert_eq!(
+        sandbox["securityContext"],
+        json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID","CHOWN"]}})
+    );
+    let text = sandbox.to_string();
+    for absent in [
+        "devices.kubevirt.io",
+        "NET_ADMIN",
+        "CUBEBOT_GUEST_WORKSPACE",
+    ] {
+        assert!(!text.contains(absent), "{absent}");
+    }
+    assert_eq!(sandbox["volumeMounts"][0]["mountPath"], "/var/lib/cubebot");
+    assert!(sandbox["env"].as_array().unwrap().iter().any(|item| {
+        item["name"] == "CUBEBOT_BOOTSTRAP_TOKEN_FILE"
+            && item["value"] == "/run/cubebot/identity/token"
+    }));
+    assert!(
+        spec["volumes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|volume| volume["name"] == "shm" && volume["emptyDir"]["medium"] == "Memory")
+    );
+    let classed = layout()
+        .with_runtime(Runtime::Container {
+            class: Some("gvisor".into()),
+        })
+        .unwrap();
+    let spec = serde_json::to_value(classed.pod("workspace").unwrap()).unwrap();
+    assert_eq!(spec["runtimeClassName"], "gvisor");
+    let unsafe_class = Runtime::Container {
+        class: Some("../node".into()),
+    };
+    assert!(layout().with_runtime(unsafe_class).is_err());
 }
 
 #[test]

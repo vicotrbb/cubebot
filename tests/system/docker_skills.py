@@ -11,7 +11,6 @@ events, never only the model's words.
 
 import json
 import os
-import platform
 import secrets
 import socket
 import subprocess
@@ -32,6 +31,7 @@ from docker_sandbox import (
     live,
     remove,
     sign_in,
+    unsupported,
 )
 from integration import run_database
 from smoke import running
@@ -395,12 +395,8 @@ def qualify(directory: Path):
 
 
 def main():
-    if sys.platform != "linux" or platform.machine() != "x86_64":
-        print(f"docker-skills skipped: needs x86_64 Linux, this is {sys.platform}")
-        return 0
-    if not os.environ.get("OPENAI_API_KEY_FILE"):
-        print("docker-skills failed: set OPENAI_API_KEY_FILE", file=sys.stderr)
-        return 1
+    if (refused := unsupported("docker-skills")) is not None:
+        return refused
     build()
     with tempfile.TemporaryDirectory() as directory:
         qualify(Path(directory))

@@ -1,6 +1,6 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)), 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)) and 2026-10-30 for the desktop as VMM devices ([ADR 0085](docs/adr/0085-desktop-as-a-vmm-device.md)). Status: intended design grounded in 85 accepted ADRs. The sandbox boots every agent in a KVM guest; [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
+Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)), 2026-10-28 for the in-house VMM sandbox ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)) and 2026-10-30 for the desktop as VMM devices ([ADR 0085](docs/adr/0085-desktop-as-a-vmm-device.md)), and 2026-11-02 for declared sandbox runtimes (ADR 0084 amended, ADR 0076 restored). Status: intended design grounded in 85 accepted ADRs. Each installation runs its agents in one declared runtime, a KVM guest (`kvm`) or the agent image as a container (`container`); [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
 
 The [manifesto](MANIFESTO.md) states the product goal. The [ADR index](docs/adr/README.md) is authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
 
@@ -48,10 +48,10 @@ Accepted deployment constraints:
 - One individual or organization per installation, with installation-owned agents and scoped managers.
 - One namespace for all namespaced installation resources. External PostgreSQL and cluster-scoped infrastructure retain their own placement.
 - One Rust orchestrator process and one active instance, accepting coordination downtime during restart.
-- One pod per running agent with one container, `cubebot-sandbox`, which boots the agent in a KVM guest. The VM is the trust boundary; the agent and its tools share it.
+- One pod per running agent with one container: in the `kvm` runtime `cubebot-sandbox`, which boots the agent in a KVM guest, and in the `container` runtime the agent image itself. The sandbox is the trust boundary; the agent and its tools share it. Only `kvm` contains a kernel exploit from agent-installed software, and the installation declares which it runs.
 - Shared PostgreSQL for structured records; separate persistent workspaces and an orchestrator-owned volume for shared files.
 - A dedicated TanStack Start frontend with Bun and Vite, serving desktop and installable PWA.
-- Standard container runtime for the orchestrator, frontend and sandbox pods; agent sandboxes are KVM guests and need nodes exposing `/dev/kvm`.
+- Standard container runtime for the orchestrator, frontend and sandbox pods; `kvm` sandboxes need nodes exposing `/dev/kvm`, and `container` sandboxes may name an administrator's RuntimeClass ([ADR 0076](docs/adr/0076-standard-containers-and-optional-sandbox-runtimes.md)).
 
 Proposed Kubernetes implementation: deploy the orchestrator with one replica and Recreate rollout behavior, the frontend independently, and bundled PostgreSQL as a single-instance StatefulSet. Manage agent Pods directly from database intent, using separately retained PVCs. An additional Deployment or StatefulSet per agent is unnecessary for the selected initial lifecycle: the orchestrator already owns sleep, wake, retirement, and recovery. A failed node's pod replacement waits for safe reconciliation; it is not a promise of uninterrupted execution during orchestrator downtime.
 
@@ -147,7 +147,7 @@ Viewing is distinct from control. Human takeover obtains exclusive input ownersh
 
 ## Trust and failure containment
 
-The sandbox is the trust boundary ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Each running agent is one `cubebot-sandbox` VM in its own pod ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)); guest traffic leaves through a tap device in the pod network namespace. Anything inside it, including agent-run code, can reach the agent's credentials, so each sandbox holds only that agent's authority: one long-lived agent credential and its eligible provider material. Revocation means revoking the credential or stopping the sandbox; there are no per-turn grants or invocation leases.
+The sandbox is the trust boundary ([ADR 0083](docs/adr/0083-agent-centric-execution-in-a-sandbox-boundary.md)). Each running agent is one sandbox in its own pod ([ADR 0084](docs/adr/0084-in-house-vmm-as-the-agent-sandbox.md)): a `cubebot-sandbox` VM whose guest traffic leaves through a tap device in the pod network namespace, or, in the declared `container` runtime, the agent's container on the pod network itself. Anything inside it, including agent-run code, can reach the agent's credentials, so each sandbox holds only that agent's authority: one long-lived agent credential and its eligible provider material. Revocation means revoking the credential or stopping the sandbox; there are no per-turn grants or invocation leases.
 
 Human sessions, agent credentials and orchestrator authority remain separate classes. Proposed bootstrap uses a projected, audience-bound Kubernetes service-account token; the orchestrator validates it and the pod identity, then issues the agent credential bound to that sandbox incarnation. [Kubernetes projected volumes](https://kubernetes.io/docs/concepts/storage/projected-volumes/).
 

@@ -4082,6 +4082,14 @@
             "type": "string",
             "description": "`CUBEBOT_INSTALLATION_NAME`, or \"Cubebot\"."
           },
+          "sandbox_runtime": {
+            "type": ["string", "null"],
+            "description": "The declared sandbox runtime: `kvm` (a virtual machine) or `container`; none without a\ncontroller that runs agents."
+          },
+          "sandbox_runtime_class": {
+            "type": ["string", "null"],
+            "description": "The RuntimeClass or Docker runtime a `container` runtime names."
+          },
           "terminal_enabled": {
             "type": "boolean"
           }

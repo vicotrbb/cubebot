@@ -12,6 +12,9 @@ pub struct ControllerConfig {
     runtime_service_account: String,
     orchestrator_origin: String,
     network: cubebot_protocol::network::NetworkPolicy,
+    /// Required: `sandbox_image` is the `cubebot-sandbox` image for `kvm`, the agent image for
+    /// `container`.
+    runtime: crate::agents::sandbox::Runtime,
     control_ca_config_map: Option<String>,
     #[serde(default)]
     terminal_enabled: bool,
@@ -69,7 +72,8 @@ impl ControllerConfig {
             self.network.clone(),
         )?
         .with_terminal(self.terminal_enabled)
-        .with_computer_use(self.computer_use_enabled);
+        .with_computer_use(self.computer_use_enabled)
+        .with_runtime(self.runtime.clone())?;
         match &self.control_ca_config_map {
             Some(name) => layout.with_control_ca(name),
             None => Ok(layout),

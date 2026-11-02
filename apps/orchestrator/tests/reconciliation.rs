@@ -1113,7 +1113,7 @@ fn orchestrator_process(
     std::fs::write(&kubeconfig,json!({"apiVersion":"v1","kind":"Config","clusters":[{"name":"controlled","cluster":{"server":api.cluster_url.to_string()}}],"users":[{"name":"controlled","user":{}}],"contexts":[{"name":"controlled","context":{"cluster":"controlled","user":"controlled"}}],"current-context":"controlled"}).to_string()).unwrap();
     let image = "registry.test/agent@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     let configuration = directory.join("controller.json");
-    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"sandbox_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]}}).to_string()).unwrap();
+    std::fs::write(&configuration,json!({"connection":{"kind":"kubeconfig","path":kubeconfig,"context":"controlled"},"sandbox_image":image,"runtime_service_account":"cubebot-runtime","orchestrator_origin":"https://cubebot.test","network":{"dns":["10.96.0.10"]},"runtime":{"kind":"kvm"}}).to_string()).unwrap();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);

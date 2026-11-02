@@ -5,7 +5,7 @@ use cubebot_orchestrator::{
     agents::{
         AgentId, Agents, CreateAgent,
         kubernetes::Error,
-        sandbox::{Desktop, ExecChannel, Sandbox, Status},
+        sandbox::{Desktop, ExecChannel, Runtime, Sandbox, Status},
     },
     identity::{
         Identity,
@@ -37,7 +37,8 @@ impl Sandbox for StandIn {
         Ok(())
     }
     async fn exec_channel(&self, _: AgentId, command: &[&str]) -> Result<ExecChannel, Error> {
-        assert_eq!(command, ["/usr/local/bin/cubebot-sandbox", "desktop"]);
+        // A container runtime's host channel is the agent image's own relay.
+        assert_eq!(command, ["/usr/local/bin/cubebot-agent", "desktop"]);
         let (orchestrator, sandbox) = tokio::io::duplex(1 << 16);
         let (input, output) = tokio::io::split(orchestrator);
         tokio::spawn(arbiter(sandbox));
@@ -205,7 +206,10 @@ async fn a_person_watches_takes_control_and_hands_back_with_each_change_recorded
     )
     .await
     .unwrap()
-    .layer(axum::Extension(Desktop::new(Arc::new(StandIn))));
+    .layer(axum::Extension(Desktop::new(
+        Arc::new(StandIn),
+        &Runtime::Container { class: None },
+    )));
     let (server, task) = http_server(router).await;
 
     assert!(

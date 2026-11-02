@@ -439,7 +439,7 @@ def computer_use(f, evidence):
     name = current["metadata"]["name"]
     wait_for(
         "the guest desktop",
-        lambda: "Guest desktop started" in f.k("logs", name, "-c", "sandbox"),
+        lambda: "Sandbox desktop started" in f.k("logs", name, "-c", "sandbox"),
     )
     turn = send(f, identity, COMPUTER_TASK)
     result = outcome(f, identity, turn, timeout=900)

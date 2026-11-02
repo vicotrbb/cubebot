@@ -28,4 +28,4 @@ configs:
   # Docker reads control_ca_file on the host, since it bind-mounts it into each sandbox.
   docker:
     content: |
-      {"image": "cubebot-sandbox:local", "orchestrator_origin": "https://${CUBEBOT_BRIDGE}:8443", "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt", "terminal_enabled": true}
+      {"image": "cubebot-sandbox:local", "orchestrator_origin": "https://${CUBEBOT_BRIDGE}:8443", "runtime": {"kind": "kvm"}, "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt", "terminal_enabled": true}

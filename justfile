@@ -37,7 +37,7 @@ lint: complexity
     uv run --project tooling/quality --locked ruff check --config tooling/quality/pyproject.toml tooling tests
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
 
@@ -171,20 +171,21 @@ cluster-chat:
 cluster-sandbox:
     uv run --project tooling/quality --locked python tests/system/cluster_sandbox.py
 
-# A self-signed control CA and a certificate for the docker0 address; kept once made, remove the directory to reissue.
-dev-ca directory=".cubebot/dev-ca":
+# A self-signed control CA and a certificate for `names` (default: the docker0 address); kept once made, remove the directory to reissue.
+dev-ca directory=".cubebot/dev-ca" names="":
     #!/usr/bin/env bash
     set -euo pipefail
     umask 077
     mkdir -p "{{ directory }}" && cd "{{ directory }}"
     [ -f server.crt ] && exit 0
-    bridge=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
+    names="{{ names }}"
+    [ -n "$names" ] || names="IP:$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)"
     key=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes)
     # Strict verifiers (Python 3.13+, for one) need key usage on both certificates.
     openssl req -x509 "${key[@]}" -keyout ca.key -out ca.crt -days 825 -subj "/CN=cubebot development control CA" \
         -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
-    openssl req "${key[@]}" -keyout server.key -out server.csr -subj "/CN=$bridge"
-    printf 'subjectAltName=IP:%s\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' "$bridge" > server.ext
+    openssl req "${key[@]}" -keyout server.key -out server.csr -subj "/CN=cubebot development control"
+    printf 'subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' "$names" > server.ext
     openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -extfile server.ext
     rm server.csr server.ext
     # Sandbox containers run as root without CAP_DAC_OVERRIDE; the certificate is public.
@@ -198,7 +199,7 @@ docker-orchestrator: dev-ca
     bridge=$(ip -4 -o addr show docker0 | awk '{print $4}' | cut -d/ -f1)
     state="$PWD/.cubebot"
     [ -f "$state/credential.key" ] || (umask 077 && head -c 32 /dev/urandom > "$state/credential.key")
-    printf '{"image":"cubebot-sandbox:dev","orchestrator_origin":"https://%s:8443","control_ca_file":"%s","terminal_enabled":true}\n' \
+    printf '{"image":"cubebot-sandbox:dev","orchestrator_origin":"https://%s:8443","runtime":{"kind":"kvm"},"control_ca_file":"%s","terminal_enabled":true}\n' \
         "$bridge" "$state/dev-ca/ca.crt" > "$state/docker.json"
     CUBEBOT_DATABASE_URL="postgres://cubebot:$POSTGRES_PASSWORD@127.0.0.1:${POSTGRES_PORT:-5432}/cubebot" \
     CUBEBOT_BIND_ADDR="$bridge:8443" \
@@ -210,10 +211,15 @@ docker-orchestrator: dev-ca
 docker-agent name:
     uv run --project tooling/quality --locked python tests/system/docker_sandbox.py agent "{{ name }}"
 
-# Boots one agent through Docker and runs one bash tool call; x86_64 Linux with /dev/kvm and OPENAI_API_KEY_FILE.
+# One agent in the container runtime against a scripted provider: a bash call, and the desktop through the host channel; Docker only.
+container-check:
+    uv run --project tooling/quality --locked python tests/system/container_check.py
+
+# Boots one agent through Docker and runs one bash tool call; OPENAI_API_KEY_FILE, and for CUBEBOT_SANDBOX_RUNTIME=kvm (the default with /dev/kvm) x86_64 Linux.
 docker-sandbox:
     uv run --project tooling/quality --locked python tests/system/docker_sandbox.py
 
+# The docker-* suites take CUBEBOT_SANDBOX_RUNTIME=kvm|container (default: kvm where /dev/kvm exists).
 # Three real agents dream, yield and fail through Docker (ADR 0025); same needs as docker-sandbox.
 docker-dreams:
     uv run --project tooling/quality --locked python tests/system/docker_dreams.py
