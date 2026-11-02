@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 127.0.0.1 --port 4321",
-    "build": "astro build",
+    "build": "cp ../deploy/install.sh public/install.sh && astro build",
     "preview": "astro preview --host 127.0.0.1 --port 4321"
   },
   "dependencies": {

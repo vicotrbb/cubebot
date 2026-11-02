@@ -1,0 +1,22 @@
+# Agents without CUBEBOT_DOMAIN: sandboxes reach the orchestrator over HTTPS on the Docker bridge (on
+# macOS on loopback, as host.docker.internal), with a development CA their sandboxes trust; the
+# orchestrator itself serves plain HTTP behind this proxy.
+services:
+  proxy:
+    ports:
+      - '${CUBEBOT_CONTROL_ADDRESS:?set by deploy/cubebot}:8443:8443'
+    volumes:
+      - ${CUBEBOT_DEV_CA:?set by deploy/cubebot}:/run/dev-ca:ro
+    configs:
+      - source: control
+        target: /etc/caddy/control
+    command: [caddy, run, --config, /etc/caddy/control, --adapter, caddyfile]
+
+configs:
+  control:
+    content: |
+      import /etc/caddy/Caddyfile
+      https://:8443 {
+      	tls /run/dev-ca/server.crt /run/dev-ca/server.key
+      	reverse_proxy orchestrator:8080
+      }

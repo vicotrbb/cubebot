@@ -1,0 +1,15 @@
+# Local development over compose.yaml: the same services, built from this checkout. `just up` and
+# `just db-up` add it; deploy/cubebot then uses the local sandbox images `just up` builds.
+name: cubebot-dev
+services:
+  orchestrator:
+    image: cubebot-orchestrator:local
+    build:
+      context: .
+      dockerfile: apps/orchestrator/Dockerfile
+
+  web:
+    image: cubebot-web:local
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile

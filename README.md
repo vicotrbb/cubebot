@@ -4,27 +4,40 @@ A Kubernetes-native home for persistent agents, shared rooms, memories, and skil
 
 **Status:** a minimal text-chat MVP runs locally: sign-in, agent management, an encrypted OpenAI connection and one permanent conversation per agent, served by the native Rust runtime. A terminal is implemented but disabled by default. See [STATUS](docs/STATUS.md) for everything not yet qualified.
 
-## Run it locally
+## Install
 
-With Docker (Compose 2.23 or later) and just:
+On Linux or macOS with Docker (Compose 2.23 or later):
 
 ```sh
-just up      # builds and starts everything, then waits until it answers
+curl -fsSL https://raw.githubusercontent.com/vicotrbb/cubebot/main/deploy/install.sh | sh
+```
+
+The installer puts the release's compose files, a `.env` with a random database password, and a `cubebot` command in `~/.cubebot`, pulls the release's images from GHCR, starts them, asks for the administrator's password, and prints the address: <http://localhost:3000> unless `CUBEBOT_PORT` is set. Sign in and add an OpenAI connection in the console. Afterwards:
+
+```sh
+~/.cubebot/cubebot up | down | update [version] | logs [-f] | admin [login]
+```
+
+`down` keeps your data in Docker volumes; `update` moves to the latest release, or the one named. Set these before running the installer to change what it writes to `~/.cubebot/.env`:
+
+- `CUBEBOT_DOMAIN=cubebot.example.com` serves the console on ports 80 and 443 with a public certificate Caddy obtains; the name must already resolve to this host, and sandboxes reach the orchestrator through it. Without it, the console listens on loopback only and sandboxes reach the orchestrator over a local development CA.
+- `CUBEBOT_RUNTIME` is `kvm` by default on x86_64 Linux with `/dev/kvm`, where each agent runs in a KVM guest, and `container` elsewhere, including every Mac, where each agent runs as a plain container (ADR 0084); `off` runs no agents. The console shows which.
+- `CUBEBOT_VERSION` picks a release tag instead of the latest.
+
+Agents are started through the host's Docker socket, which makes the orchestrator root on this machine: install it only where you would give Cubebot that. This is one machine's installation; `deploy/chart` installs on Kubernetes.
+
+## Run from a checkout
+
+```sh
+just up      # builds the images from source, runs them as the installer would, and waits until they answer
 just admin   # once: creates the administrator, prompting for a password
 ```
 
-Open <http://localhost:3000>, sign in, and add an OpenAI connection in the console. `just down` stops everything and keeps your data in Docker volumes; `docker compose down -v` deletes it. The first `just up` writes `.env` with a random database password; set `CUBEBOT_PORT` there to use another port.
-
-What runs depends on the machine:
-
-- **macOS, Windows, or Linux without KVM:** PostgreSQL, the orchestrator and the console. You can sign in, manage agents and connections, and browse, but an agent cannot wake, because every agent runs in a KVM guest that needs x86_64 Linux.
-- **x86_64 Linux with `/dev/kvm`:** the same, plus agents. The first run also builds the guest kernel and root image (`make`, `gcc`, `flex`, `bison`, `bc` and the libelf headers), a sandbox image, and a local control CA. The orchestrator then starts each agent as a Docker container on this host, which needs the Docker socket and is therefore root on this machine. Set `CUBEBOT_AGENTS=0` in `.env` to leave agents off, or `CUBEBOT_AGENTS=1` to fail instead of falling back.
-
-`just up` is for running Cubebot on one machine. It is not a production deployment.
+`just up` adds `compose.dev.yaml`, which builds the same services `compose.yaml` pulls, and runs them with the same `deploy/cubebot` an installation uses; agents use a locally built sandbox (`kvm`, which also builds the guest kernel and root image and needs `make`, `gcc`, `flex`, `bison`, `bc` and the libelf headers) or agent image (`container`). The first run writes `.env` with a random database password; set `CUBEBOT_PORT`, `CUBEBOT_RUNTIME` or `CUBEBOT_DOMAIN` there. `just down` stops everything and keeps your data; `docker compose -f compose.yaml -f compose.dev.yaml down -v` deletes it.
 
 ## Start developing
 
-Use Rust through rustup, Bun **1.4.0**, Node **24.18.0**, uv **0.11.26**, and just **1.55.1**. A C/C++ compiler and linker are needed to build the complexity tool. Rust **1.96.0** and Python **3.14.6** are selected by repository files; Python runs development checks only.
+Use Rust through rustup, Bun **1.4.0**, Node **24.18.0**, uv **0.11.26**, just **1.55.1**, and ShellCheck. A C/C++ compiler and linker are needed to build the complexity tool. Rust **1.96.0** and Python **3.14.6** are selected by repository files; Python runs development checks only.
 
 ```sh
 just bootstrap
@@ -32,7 +45,7 @@ just check
 just smoke
 ```
 
-`bootstrap` installs locked dependencies and pins Mozilla's complexity analyzer into `.tools/`. `check` runs formatting, linting, the complexity gate, tests, builds and TypeScript checking. `smoke` starts the built services, checks them and stops them.
+`bootstrap` installs locked dependencies and pins Mozilla's complexity analyzer into `.tools/`. `check` runs formatting, linting (ShellCheck for the installer), the complexity gate, tests, builds and TypeScript checking. `smoke` starts the built services, checks them and stops them.
 
 For development, use two terminals:
 

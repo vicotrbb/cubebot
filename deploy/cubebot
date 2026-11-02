@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# Runs one Cubebot installation with Docker Compose: the one deploy/install.sh made in ~/.cubebot,
+# or with CUBEBOT_HOME a checkout, where compose.dev.yaml builds it from source (`just up`).
+set -euo pipefail
+
+usage="usage: cubebot up | down | update [version] | logs [compose logs options] | admin [login]"
+home="${CUBEBOT_HOME:-$HOME/.cubebot}"
+
+die() {
+    echo "cubebot: $*" >&2
+    exit 1
+}
+
+# A self-signed control CA and a server certificate for `names`; kept once made, remove the directory to reissue.
+dev_ca() {
+    local directory="$1" names="$2"
+    command -v openssl >/dev/null || die "the development control CA needs openssl"
+    (
+        umask 077
+        mkdir -p "$directory" && cd "$directory"
+        [ -f server.crt ] && exit 0
+        key=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes)
+        # Strict verifiers (Python 3.13+, for one) need key usage on both certificates.
+        openssl req -x509 "${key[@]}" -keyout ca.key -out ca.crt -days 825 -subj "/CN=cubebot development control CA" \
+            -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+        openssl req "${key[@]}" -keyout server.key -out server.csr -subj "/CN=cubebot development control"
+        printf 'subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' "$names" >server.ext
+        openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -extfile server.ext
+        rm server.csr server.ext
+        # Sandbox containers run as root without CAP_DAC_OVERRIDE; the certificate is public.
+        chmod 644 ca.crt
+    ) >/dev/null 2>&1 || die "could not create the development control CA in $directory"
+}
+
+# `just dev-ca` and the docker-* suites share this recipe; it needs no installation.
+if [ "${1:-}" = dev-ca ]; then
+    dev_ca "$2" "$3"
+    exit
+fi
+
+cd "$home"
+[ -f .env ] || die "no $home/.env; run install.sh first"
+set -a
+# shellcheck source=/dev/null
+. ./.env
+set +a
+registry="${CUBEBOT_REGISTRY:-ghcr.io/vicotrbb}"
+files=(-f compose.yaml)
+dev=""
+if [ -f compose.dev.yaml ]; then
+    dev=1
+    files+=(-f compose.dev.yaml)
+fi
+if [ -n "${CUBEBOT_DOMAIN:-}" ]; then
+    origin="https://$CUBEBOT_DOMAIN"
+else
+    origin="http://localhost:${CUBEBOT_PORT:-3000}"
+fi
+
+# Adds the agent overlays and exports what they interpolate.
+agents() {
+    local image=cubebot-agent
+    if [ "$CUBEBOT_RUNTIME" = kvm ]; then
+        [ -c /dev/kvm ] && [ -c /dev/net/tun ] || die "CUBEBOT_RUNTIME=kvm needs /dev/kvm and /dev/net/tun; set container in $home/.env"
+        image=cubebot-sandbox
+    fi
+    if [ -n "$dev" ]; then
+        export CUBEBOT_SANDBOX_IMAGE="$image:local"
+    else
+        export CUBEBOT_SANDBOX_IMAGE="$registry/$image:$CUBEBOT_VERSION"
+    fi
+    # The socket's group as containers see it, which on macOS is inside Docker's VM.
+    CUBEBOT_DOCKER_GID=$(docker run --rm --entrypoint stat -v /var/run/docker.sock:/socket caddy:2.10.2-alpine -c %g /socket)
+    export CUBEBOT_DOCKER_GID
+    files+=(-f compose.agents.yaml)
+    if [ -n "${CUBEBOT_DOMAIN:-}" ]; then
+        export CUBEBOT_CONTROL_ORIGIN="$origin"
+        return
+    fi
+    local host names
+    if [ "$(uname -s)" = Darwin ]; then
+        # Docker Desktop forwards host.docker.internal to the Mac's loopback.
+        CUBEBOT_CONTROL_ADDRESS=127.0.0.1 host=host.docker.internal names=DNS:host.docker.internal
+    else
+        CUBEBOT_CONTROL_ADDRESS=$(docker network inspect bridge --format '{{(index .IPAM.Config 0).Gateway}}')
+        [ -n "$CUBEBOT_CONTROL_ADDRESS" ] || die "Docker's default bridge has no gateway address"
+        host="$CUBEBOT_CONTROL_ADDRESS" names="IP:$CUBEBOT_CONTROL_ADDRESS"
+    fi
+    export CUBEBOT_CONTROL_ADDRESS CUBEBOT_DEV_CA="${CUBEBOT_DEV_CA:-$home/dev-ca}"
+    dev_ca "$CUBEBOT_DEV_CA" "$names"
+    export CUBEBOT_CONTROL_ORIGIN="https://$host:8443"
+    files+=(-f compose.control.yaml)
+}
+
+up() {
+    case "${CUBEBOT_RUNTIME:-}" in
+        off) echo "Agents off (CUBEBOT_RUNTIME=off)." ;;
+        kvm | container) agents ;;
+        *) die "set CUBEBOT_RUNTIME in $home/.env to kvm, container or off" ;;
+    esac
+    [ -z "${CUBEBOT_DOMAIN:-}" ] || files+=(-f compose.domain.yaml)
+    local build=()
+    [ -z "$dev" ] || build=(--build)
+    docker compose "${files[@]}" up -d ${build[@]+"${build[@]}"} --remove-orphans
+    # With a domain, ask this host directly rather than trust DNS or hairpin routing.
+    local resolve=()
+    [ -z "${CUBEBOT_DOMAIN:-}" ] || resolve=(--resolve "$CUBEBOT_DOMAIN:443:127.0.0.1")
+    for _ in $(seq 180); do
+        if curl -fsS ${resolve[@]+"${resolve[@]}"} "$origin/api/health/live" >/dev/null 2>&1; then
+            echo "Cubebot is up at $origin (agents: $CUBEBOT_RUNTIME)."
+            return
+        fi
+        sleep 1
+    done
+    docker compose "${files[@]}" logs --tail 40 orchestrator proxy >&2
+    die "no answer at $origin within 3 minutes; the logs above say why"
+}
+
+down() {
+    local running
+    running=$(docker ps -q --filter label=cubebot.dev/agent)
+    # shellcheck disable=SC2086 # one container ID per word
+    [ -z "$running" ] || docker stop $running >/dev/null
+    docker compose "${files[@]}" down
+}
+
+# Replaces the compose files and this script with `version`'s (default: the latest release), then pulls and starts it.
+update() {
+    [ -z "$dev" ] || die "this is a checkout; update it with git"
+    local version="${1:-}"
+    if [ -z "$version" ]; then
+        version=$(curl -fsSIo /dev/null -w '%{redirect_url}' https://github.com/vicotrbb/cubebot/releases/latest)
+        version="${version##*/}"
+        [ -n "$version" ] || die "could not find the latest release"
+    fi
+    local source="${CUBEBOT_SOURCE:-https://raw.githubusercontent.com/vicotrbb/cubebot/$version}" file
+    for file in compose.yaml compose.domain.yaml compose.agents.yaml compose.control.yaml deploy/cubebot; do
+        curl -fsSL "$source/$file" -o "${file##*/}.new" || die "could not download $source/$file"
+    done
+    for file in compose.yaml compose.domain.yaml compose.agents.yaml compose.control.yaml cubebot; do
+        mv "$file.new" "$file"
+    done
+    chmod 755 cubebot
+    (umask 077 && { grep -v '^CUBEBOT_VERSION=' .env || true; echo "CUBEBOT_VERSION=$version"; } >.env.new && mv .env.new .env)
+    export CUBEBOT_VERSION="$version"
+    docker compose "${files[@]}" pull
+    case "${CUBEBOT_RUNTIME:-}" in
+        kvm) docker pull "$registry/cubebot-sandbox:$version" ;;
+        container) docker pull "$registry/cubebot-agent:$version" ;;
+    esac
+    # The new script may start the installation differently.
+    exec ./cubebot up
+}
+
+admin() {
+    local login="${1:-admin}"
+    if [ -z "${CUBEBOT_BOOTSTRAP_PASSWORD:-}" ]; then
+        # Read from the terminal, since `curl … | sh` makes stdin the script.
+        { exec 3</dev/tty; } 2>/dev/null || die "no terminal to ask for a password; set CUBEBOT_BOOTSTRAP_PASSWORD"
+        printf 'Password for %s: ' "$login" >&2
+        read -rs -u 3 CUBEBOT_BOOTSTRAP_PASSWORD
+        echo >&2
+        exec 3<&-
+    fi
+    CUBEBOT_BOOTSTRAP_LOGIN="$login" CUBEBOT_BOOTSTRAP_PASSWORD="$CUBEBOT_BOOTSTRAP_PASSWORD" \
+        docker compose "${files[@]}" run --rm --no-deps -e CUBEBOT_BOOTSTRAP_LOGIN -e CUBEBOT_BOOTSTRAP_PASSWORD \
+        --entrypoint cubebot-admin orchestrator bootstrap
+    echo "Sign in at $origin as $login."
+}
+
+command="${1:-}"
+[ $# -eq 0 ] || shift
+case "$command" in
+    up) up ;;
+    down) down ;;
+    update) update "$@" ;;
+    logs) docker compose "${files[@]}" logs "$@" ;;
+    admin) admin "$@" ;;
+    *) die "$usage" ;;
+esac

@@ -2,6 +2,12 @@
 
 Installation packaging and Kubernetes configuration belong here as they are implemented.
 
+## Docker Compose
+
+`install.sh` installs one machine's installation into `~/.cubebot` from a release: it checks for Docker Compose 2.23 or later, picks the `kvm` runtime on x86_64 Linux with `/dev/kvm` and `container` elsewhere, downloads the release's `compose*.yaml` and `cubebot`, writes `.env`, pulls, starts, waits for `/api/health/live` and bootstraps the administrator. It never replaces an existing `.env`. `CUBEBOT_REGISTRY` and `CUBEBOT_SOURCE` point it at other images and files; `just install-check` uses them to install this checkout from a local registry. The site build copies it to `site/public/install.sh`.
+
+`cubebot` runs the installation: `compose.yaml` always; `compose.domain.yaml` with `CUBEBOT_DOMAIN`; `compose.agents.yaml` unless `CUBEBOT_RUNTIME=off`, plus, without a domain, `compose.control.yaml`, the HTTPS listener on the Docker bridge (on macOS on loopback, reached as `host.docker.internal`) with a development control CA in `~/.cubebot/dev-ca`. In a checkout `just up` runs the same script with `compose.dev.yaml` added, which builds the orchestrator and web images instead of pulling them.
+
 ## Helm chart
 
 `deploy/chart` installs one installation into one namespace (ADR 0075): the orchestrator (one replica, `Recreate`), the web console, bundled PostgreSQL or an external database, the shared-files volume, an Ingress for `/api` and `/`, the sandboxes' NetworkPolicy and, for the `kvm` runtime, the device plugin. `values.yaml` documents every value; images must be pinned by digest, as a release's `digests.json` lists them.

@@ -1,0 +1,11 @@
+# CUBEBOT_DOMAIN over compose.yaml: Caddy serves the console on ports 80 and 443 with a public
+# certificate it obtains for the domain, which must already resolve to this host.
+services:
+  orchestrator:
+    environment:
+      CUBEBOT_PUBLIC_ORIGIN: https://${CUBEBOT_DOMAIN:?Set CUBEBOT_DOMAIN in .env}
+
+  proxy:
+    ports:
+      - '80:80'
+      - '443:443'
