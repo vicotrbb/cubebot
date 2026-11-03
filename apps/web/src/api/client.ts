@@ -1,7 +1,7 @@
 import createClient, { type Client } from 'openapi-fetch'
 import type { components, paths } from './schema'
 
-export type Agent = components['schemas']['Agent']
+type Agent = components['schemas']['Agent']
 export type Memory = components['schemas']['Memory']
 export type DreamRun = components['schemas']['DreamRun']
 export type Skill = components['schemas']['Skill']

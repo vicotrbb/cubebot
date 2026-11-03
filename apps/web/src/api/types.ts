@@ -5,7 +5,6 @@ export type AgentSummary = Schemas['Agent']
 export type RoomSummary = Schemas['Room']
 export type Preferences = Required<Schemas['Preferences']>
 export type Installation = Schemas['InstallationSummary']
-export type ActivityItem = Schemas['ActivityItem']
 export type Session = Schemas['Account']
 
 export const CAPABILITIES = [
