@@ -6,10 +6,8 @@ mod stdio;
 
 use super::{Job, Running, Sandbox, Tool};
 use cubebot_protocol::terminal::Outcome;
-use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    collections::BTreeMap,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -26,31 +24,8 @@ const CONNECT: Duration = Duration::from_secs(30);
 /// Request ids are unique across every session, so they never need resetting on reconnect.
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Deserialize)]
-#[serde(tag = "transport", rename_all = "snake_case", deny_unknown_fields)]
-enum Config {
-    Stdio {
-        name: String,
-        command: String,
-        #[serde(default)]
-        args: Vec<String>,
-        #[serde(default)]
-        env: BTreeMap<String, String>,
-    },
-    Http {
-        name: String,
-        url: String,
-        #[serde(default)]
-        headers: BTreeMap<String, String>,
-    },
-}
-impl Config {
-    fn name(&self) -> &str {
-        match self {
-            Self::Stdio { name, .. } | Self::Http { name, .. } => name,
-        }
-    }
-}
+/// Servers come from the orchestrator with each turn (docs/adr/agents.md#local-and-remote-mcp-server-support).
+use cubebot_protocol::runtime::McpServer as Config;
 
 /// Why a request has no result.
 pub(super) enum Failure {
@@ -271,14 +246,12 @@ fn text(result: &Value) -> String {
     }
 }
 
-/// Connects every server in `CUBEBOT_MCP_SERVERS`. A server that fails to start is logged and
-/// left out; a malformed configuration stops startup.
-pub(super) async fn tools(sandbox: &Sandbox) -> Result<Vec<Box<dyn Tool>>, &'static str> {
-    let Ok(configured) = std::env::var("CUBEBOT_MCP_SERVERS") else {
-        return Ok(Vec::new());
-    };
-    let configs: Vec<Config> =
-        serde_json::from_str(&configured).map_err(|_| "invalid MCP server configuration")?;
+/// Connects every server, returning the tools of each that connected and whether all did. A
+/// server that fails to start is logged and left out; duplicate or malformed names are refused.
+pub(super) async fn tools(
+    sandbox: &Sandbox,
+    configs: Vec<Config>,
+) -> Result<(Vec<Box<dyn Tool>>, bool), &'static str> {
     let mut names: Vec<&str> = configs.iter().map(Config::name).collect();
     names.sort_unstable();
     names.dedup();
@@ -288,19 +261,20 @@ pub(super) async fn tools(sandbox: &Sandbox) -> Result<Vec<Box<dyn Tool>>, &'sta
     let connected = futures_util::future::join_all(configs.into_iter().map(|config| async move {
         let name = config.name().to_owned();
         match tokio::time::timeout(CONNECT, connect(sandbox, config)).await {
-            Ok(Ok(tools)) => tools,
+            Ok(Ok(tools)) => Some(tools),
             Ok(Err(error)) => {
                 eprintln!("MCP server {name} unavailable: {error}");
-                Vec::new()
+                None
             }
             Err(_) => {
                 eprintln!("MCP server {name} unavailable: initialization timed out");
-                Vec::new()
+                None
             }
         }
     }))
     .await;
-    Ok(connected.into_iter().flatten().collect())
+    let all = connected.iter().all(Option::is_some);
+    Ok((connected.into_iter().flatten().flatten().collect(), all))
 }
 
 fn server_name(name: &str) -> bool {

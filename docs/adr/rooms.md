@@ -12,7 +12,7 @@ A direct mention selects an eligible room member, subject to authorization and s
 
 The coordinator is a module inside the orchestrator using the model/provider adapter; it is one of the orchestrator's own model duties. It has no dedicated agent sandbox, personal memory, terminal, browser, or work tools. Its input includes the request, room instructions, eligible member descriptions, bounded room history or summary, and relevant open tasks.
 
-Its structured result selects one agent, continues an existing task, asks a clarifying question, or indicates no action. Rust code validates the result against current room and task state before recording and scheduling it. Model output cannot grant permissions or directly execute work. Stale or invalid routing results must be reconciled or reported without broadcasting the request to all members.
+Its structured result selects one agent or continues an existing task. Amended 2026-11-03 by the user: a person in a room always gets an answer from the best-placed member, so the coordinator no longer asks clarifying questions itself or settles a message with no action; greetings and chatter go to an owner too, who may ask the question. When the coordinator cannot produce a valid result after its retries, or has no provider connection, the message goes to the room's first member by name rather than failing silently. Rust code validates the result against current room and task state before recording and scheduling it. Model output cannot grant permissions or directly execute work. Stale or invalid routing results must be reconciled or reported without broadcasting the request to all members.
 
 Usage: a request addressed to a researcher enters that researcher's room work through its main lane. An unaddressed request goes to the coordinator, which may choose an engineer as owner. The engineer may delegate analysis to other members and collect their results. Assigned work follows [Agent execution lanes](agents.md#agent-execution-lanes); routing itself does not create another execution lane for the selected agent.
 
@@ -24,7 +24,7 @@ Alternatives considered: mention-only participation would leave unaddressed requ
 
 **Open details.** Coordinator model and credential selection; retry limits and cost budgets; human reply and continuation behavior; detailed delegation contracts; room concurrency; and loop prevention. No heuristic bypass for unmentioned human requests is adopted by this decision.
 
-**Validation scenarios.** One valid mention bypasses LLM routing; unaddressed work selects one owner; clarification and no-action results; unavailable or malformed coordinator output; revoked membership during routing; a busy selected agent queues work; and the owner delegates while remaining responsible for integration.
+**Validation scenarios.** One valid mention bypasses LLM routing; unaddressed work, chatter included, selects one owner; unavailable or malformed coordinator output; revoked membership during routing; a busy selected agent queues work; and the owner delegates while remaining responsible for integration.
 
 ## Independent assignments for multiple room mentions
 

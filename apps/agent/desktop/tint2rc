@@ -1,0 +1,87 @@
+# The desktop's taskbar: launchers for the browser, a terminal, files and a text editor, the
+# open windows, and a clock. Colours are the console's desk palette.
+#-------------------------------------
+# Backgrounds
+# 1: panel
+rounded = 0
+border_width = 0
+background_color = #FFFDF9 94
+border_color = #2B2420 0
+# 2: launcher icon hover and active task
+rounded = 6
+border_width = 0
+background_color = #2B2420 10
+border_color = #2B2420 0
+background_color_hover = #F26A1B 22
+# 3: inactive task
+rounded = 6
+border_width = 0
+background_color = #2B2420 0
+border_color = #2B2420 0
+background_color_hover = #2B2420 8
+
+#-------------------------------------
+# Panel
+panel_items = LTC
+panel_size = 100% 40
+panel_margin = 0 0
+panel_padding = 8 4 8
+panel_background_id = 1
+panel_position = bottom center horizontal
+panel_layer = top
+panel_monitor = all
+wm_menu = 1
+panel_dock = 0
+strut_policy = follow_size
+autohide = 0
+font_shadow = 0
+
+#-------------------------------------
+# Launcher
+launcher_padding = 2 2 6
+launcher_background_id = 0
+launcher_icon_background_id = 2
+launcher_icon_size = 26
+launcher_icon_theme = Adwaita
+launcher_icon_theme_override = 0
+launcher_tooltip = 1
+startup_notifications = 1
+launcher_item_app = /usr/share/applications/chromium.desktop
+launcher_item_app = /usr/share/applications/lxterminal.desktop
+launcher_item_app = /usr/share/applications/pcmanfm.desktop
+launcher_item_app = /usr/share/applications/l3afpad.desktop
+
+#-------------------------------------
+# Taskbar
+taskbar_mode = single_desktop
+taskbar_padding = 6 2 6
+taskbar_background_id = 0
+taskbar_active_background_id = 0
+taskbar_name = 0
+taskbar_distribute_size = 0
+
+task_text = 1
+task_icon = 1
+task_centered = 0
+task_maximum_size = 220 32
+task_padding = 8 4 6
+task_font = DejaVu Sans 9
+task_font_color = #2B2420 80
+task_active_font_color = #2B2420 100
+task_background_id = 3
+task_active_background_id = 2
+task_urgent_background_id = 2
+task_iconified_background_id = 3
+task_tooltip = 1
+mouse_left = toggle_iconify
+mouse_middle = close
+mouse_right = close
+
+#-------------------------------------
+# Clock
+time1_format = %H:%M
+time1_font = DejaVu Sans Bold 10
+clock_font_color = #2B2420 100
+clock_padding = 8 0
+clock_background_id = 0
+clock_tooltip = %A %d %B %Y

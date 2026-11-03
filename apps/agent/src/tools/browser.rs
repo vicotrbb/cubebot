@@ -579,8 +579,11 @@ fn profile() -> std::io::Result<()> {
         .recursive(true)
         .mode(0o700)
         .create(PROFILE)?;
-    std::os::unix::fs::chown(PROFILE, Some(USER), Some(USER))?;
-    std::fs::set_permissions(PROFILE, std::fs::Permissions::from_mode(0o700))
+    // The container runtime grants CHOWN but not FOWNER, so root changes the mode only of a
+    // directory it owns: take it back, set the mode, then hand it to the browser.
+    std::os::unix::fs::chown(PROFILE, Some(0), Some(0))?;
+    std::fs::set_permissions(PROFILE, std::fs::Permissions::from_mode(0o700))?;
+    std::os::unix::fs::chown(PROFILE, Some(USER), Some(USER))
 }
 
 impl Drop for Cdp {

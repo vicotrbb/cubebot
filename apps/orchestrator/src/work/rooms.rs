@@ -54,8 +54,9 @@ pub struct RoomMessage {
     pub sequence: i64,
     pub author: String,
     pub message: String,
-    /// `routing` until the coordinator settles it as `routed`, `continued`, `clarify`,
-    /// `no_action` or `failed`; mentioned messages are `routed` at once.
+    /// `routing` until the coordinator settles it as `routed`, `continued` or `failed`;
+    /// mentioned messages are `routed` at once. Messages from before 2026-11-03 may also be
+    /// `clarify` or `no_action`.
     pub routing: String,
     /// The coordinator's question, the continued task's agent, or the failure reason.
     pub note: Option<String>,

@@ -36,6 +36,11 @@ fn lock(
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// The tool user's search path: its own `~/.local/bin` first, then the system's.
+pub(crate) fn user_path(home: &std::path::Path) -> String {
+    format!("{}/.local/bin:/usr/local/bin:/usr/bin:/bin", home.display())
+}
+
 /// A `uid:gid` tool user, never root.
 pub(crate) fn tool_user(user: &str) -> Option<(u32, u32)> {
     user.split_once(':')
@@ -105,7 +110,8 @@ impl Sandbox {
         command
             .env_clear()
             .env("HOME", &self.workspace)
-            .env("PATH", "/usr/local/bin:/usr/bin:/bin")
+            // Software the tool user installs with pip, npm or by hand lands in ~/.local/bin.
+            .env("PATH", user_path(&self.workspace))
             .env("LANG", "C.UTF-8")
             .current_dir(&self.workspace)
             .uid(self.uid)
@@ -226,7 +232,23 @@ pub struct Registry {
     sandbox: Sandbox,
     tools: Vec<Box<dyn Tool>>,
     definitions: Vec<cubebot_providers::Tool>,
+    /// The MCP servers the last turn named and their tools, swapped whole when that changes.
+    mcp: std::sync::RwLock<Mcp>,
+    /// One reconnection at a time, so concurrent lanes never start a server twice.
+    connecting: tokio::sync::Mutex<()>,
 }
+
+#[derive(Default)]
+struct Mcp {
+    servers: Vec<cubebot_protocol::runtime::McpServer>,
+    tools: Vec<std::sync::Arc<dyn Tool>>,
+    /// When a server last failed to connect; it is tried again after [`MCP_RETRY`].
+    failed: Option<std::time::Instant>,
+}
+
+/// How long a turn goes without retrying an MCP server that failed to connect, so an
+/// unreachable server does not hold up every turn for its connection timeout.
+const MCP_RETRY: std::time::Duration = std::time::Duration::from_secs(300);
 
 impl Registry {
     /// `None` when tools are disabled. An enabled but invalid configuration is an error, never
@@ -243,7 +265,6 @@ impl Registry {
             tools.push(computer::tool());
             tools.extend(browser::tools());
         }
-        tools.extend(mcp::tools(&sandbox).await?);
         Ok(Some(Self::new(sandbox, tools)))
     }
 
@@ -253,19 +274,78 @@ impl Registry {
             sandbox,
             tools,
             definitions,
+            mcp: std::sync::RwLock::default(),
+            connecting: tokio::sync::Mutex::new(()),
         }
     }
 
-    pub fn definitions(&self) -> &[cubebot_providers::Tool] {
-        &self.definitions
+    fn mcp(&self) -> std::sync::RwLockReadGuard<'_, Mcp> {
+        self.mcp
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Connects the MCP servers a turn names when they differ from the connected ones, or
+    /// when one failed and its retry delay has passed. Servers dropped from the list stop.
+    pub async fn connect_mcp(&self, servers: &[cubebot_protocol::runtime::McpServer]) {
+        let _one = self.connecting.lock().await;
+        let current = |mcp: &Mcp| {
+            mcp.servers == servers && mcp.failed.is_none_or(|at| at.elapsed() < MCP_RETRY)
+        };
+        if current(&self.mcp()) {
+            return;
+        }
+        let (tools, all) = mcp::tools(&self.sandbox, servers.to_vec())
+            .await
+            .unwrap_or_else(|error| {
+                eprintln!("MCP servers refused: {error}");
+                (Vec::new(), false)
+            });
+        *self
+            .mcp
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Mcp {
+            servers: servers.to_vec(),
+            tools: tools.into_iter().map(std::sync::Arc::from).collect(),
+            failed: (!all).then(std::time::Instant::now),
+        };
+    }
+
+    /// Built-in tools, then the connected MCP servers' tools.
+    pub fn definitions(&self) -> Vec<cubebot_providers::Tool> {
+        let mcp = self.mcp();
+        let servers = mcp.tools.iter().map(|tool| tool.definition().clone());
+        self.definitions.iter().cloned().chain(servers).collect()
     }
 
     pub fn call(&self, name: &str, id: Uuid, input: &Value) -> Result<Running<'_>, &'static str> {
-        self.tools
+        if let Some(tool) = self
+            .tools
             .iter()
             .find(|tool| tool.definition().name == name)
-            .ok_or("no tool has this name")?
-            .call(&self.sandbox, id, input)
+        {
+            return tool.call(&self.sandbox, id, input);
+        }
+        let tool = self
+            .mcp()
+            .tools
+            .iter()
+            .find(|tool| tool.definition().name == name)
+            .cloned()
+            .ok_or("no tool has this name")?;
+        // Calls start when polled, so validating here runs nothing; the future then owns its
+        // tool, which a reconnection may drop from the registry while the call runs.
+        drop(tool.call(&self.sandbox, id, input)?);
+        let input = input.clone();
+        Ok(Box::pin(async move {
+            match tool.call(&self.sandbox, id, &input) {
+                Ok(running) => running.await,
+                Err(error) => Outcome::Exited {
+                    code: None,
+                    output: error.into(),
+                },
+            }
+        }))
     }
 
     /// Writes a workspace file as the tool user, creating parent directories, so the agent's

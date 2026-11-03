@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, failure, history, ok, type RoomMessage } from '../../api/client'
 import type { RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
+import { followWhileVisible } from '../../app/stream'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Empty, Skeleton } from '../../components/primitives'
 import { Composer } from '../chat/Composer'
@@ -57,38 +58,40 @@ export function Room({
   const pinned = useRef(true)
   const agents = useAgents()
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
-  useEffect(() => {
-    const source = new EventSource(`/api/rooms/${room.id}/events`)
-    // History loads once the stream is following, so nothing falls between the two; a
-    // reconnect reloads it to catch messages that changed while disconnected.
-    source.onopen = () => {
-      setReadError('')
-      history((after) =>
-        ok(
-          api.GET('/api/rooms/{room}/messages', {
-            params: { path: { room: room.id }, query: { after } },
-          }),
-        ),
-      ).then(
-        (loaded) => {
-          setMessages((current) => merge(current, loaded))
-          setLoaded(true)
-        },
-        (error) => setReadError(failure(error)),
-      )
-    }
-    source.onerror = () =>
-      setReadError(
-        source.readyState === EventSource.CLOSED
-          ? 'Live updates stopped. Reload the page to reconnect.'
-          : 'Reconnecting to live updates…',
-      )
-    source.addEventListener('message', (event) => {
-      const message: RoomMessage = JSON.parse(event.data)
-      setMessages((current) => merge(current, [message]))
-    })
-    return () => source.close()
-  }, [room.id])
+  useEffect(
+    () =>
+      followWhileVisible(`/api/rooms/${room.id}/events`, (source) => {
+        // History loads once the stream is following, so nothing falls between the two; a
+        // reconnect reloads it to catch messages that changed while disconnected.
+        source.onopen = () => {
+          setReadError('')
+          history((after) =>
+            ok(
+              api.GET('/api/rooms/{room}/messages', {
+                params: { path: { room: room.id }, query: { after } },
+              }),
+            ),
+          ).then(
+            (loaded) => {
+              setMessages((current) => merge(current, loaded))
+              setLoaded(true)
+            },
+            (error) => setReadError(failure(error)),
+          )
+        }
+        source.onerror = () =>
+          setReadError(
+            source.readyState === EventSource.CLOSED
+              ? 'Live updates stopped. Reload the page to reconnect.'
+              : 'Reconnecting to live updates…',
+          )
+        source.addEventListener('message', (event) => {
+          const message: RoomMessage = JSON.parse(event.data)
+          setMessages((current) => merge(current, [message]))
+        })
+      }),
+    [room.id],
+  )
   const last = messages.at(-1)?.sequence ?? 0
   useEffect(() => {
     if (loaded && last > 0) void markRead('rooms', room.id, last)
@@ -187,7 +190,11 @@ export function Room({
         draftKey={`cubebot:${session.id}:room:${room.id}`}
         label="Message the room"
         placeholder={`Message #${room.name} · @name addresses a member`}
-        note="Each mentioned agent gets its own copy; without a mention one owner is chosen."
+        note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
+        mentionables={room.members.map((member) => ({
+          ...member,
+          avatar: agentOf(member.id)?.avatar ?? null,
+        }))}
         send={async (request_id, message) => {
           const posted = await ok(
             api.POST('/api/rooms/{room}/messages', {

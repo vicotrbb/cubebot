@@ -2,6 +2,7 @@ import { CornerDownLeft, Paperclip } from 'lucide-react'
 import { useRef, useState, type ReactNode } from 'react'
 import { failure, messageProblem, rejectedInput } from '../../api/client'
 import { Alert } from '../../components/primitives'
+import { useMentions, type Mentionable } from './MentionMenu'
 
 function read(key: string) {
   try {
@@ -32,6 +33,7 @@ export function Composer({
   send,
   disabled = false,
   attach,
+  mentionables,
   children,
 }: {
   draftKey: string
@@ -41,6 +43,8 @@ export function Composer({
   send: (requestId: string, text: string) => Promise<void>
   disabled?: boolean
   attach?: () => void
+  /** Offers these names when a word starts with `@`, as Slack does. */
+  mentionables?: Mentionable[]
   children?: ReactNode
 }) {
   const [text, setText] = useState(() => read(draftKey))
@@ -48,6 +52,14 @@ export function Composer({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const area = useRef<HTMLTextAreaElement>(null)
+  function edit(value: string) {
+    setText(value)
+    write(draftKey, value)
+    // A retry must resend the same text; edited text is a new request.
+    setPending('')
+    write(`${draftKey}:request`, '')
+  }
+  const mentions = useMentions(mentionables, area, text, edit, draftKey)
   async function submit() {
     const problem = messageProblem(text)
     if (problem) {
@@ -89,6 +101,7 @@ export function Composer({
     >
       {children}
       <div className="composer__box">
+        {mentions.menu}
         <label htmlFor={`composer-${draftKey}`} className="sr-only">
           {label}
         </label>
@@ -102,16 +115,17 @@ export function Composer({
           rows={1}
           maxLength={16384}
           placeholder={placeholder}
+          {...mentions.comboBox}
           onChange={(event) => {
-            setText(event.target.value)
-            write(draftKey, event.target.value)
-            // A retry must resend the same text; edited text is a new request.
-            setPending('')
-            write(`${draftKey}:request`, '')
+            edit(event.target.value)
+            mentions.track(event.target)
             event.target.style.height = 'auto'
             event.target.style.height = `${Math.min(event.target.scrollHeight, 240)}px`
           }}
+          onSelect={(event) => mentions.track(event.currentTarget)}
+          onBlur={mentions.close}
           onKeyDown={(event) => {
+            if (mentions.steer(event)) return
             if (
               event.key === 'Enter' &&
               !event.shiftKey &&

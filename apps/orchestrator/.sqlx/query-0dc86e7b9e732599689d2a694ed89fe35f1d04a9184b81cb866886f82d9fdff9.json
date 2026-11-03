@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, name, transport, access->>'mode' = 'all_agents' AS \"all_agents!\",\n                (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)) AS \"enabled!\"\n            FROM mcp_servers\n            ORDER BY name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "transport",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "all_agents!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "enabled!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "0dc86e7b9e732599689d2a694ed89fe35f1d04a9184b81cb866886f82d9fdff9"
+}

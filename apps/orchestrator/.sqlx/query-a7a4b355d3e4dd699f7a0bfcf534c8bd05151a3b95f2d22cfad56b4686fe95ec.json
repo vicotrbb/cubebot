@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE mcp_servers\n            SET access=jsonb_build_object('mode', 'explicit_grants', 'agents', (\n                    SELECT coalesce(jsonb_agg(DISTINCT granted), '[]')\n                    FROM jsonb_array_elements(access->'agents' || jsonb_build_array($2::uuid)) granted\n                    WHERE $3 OR granted <> to_jsonb($2::uuid)\n                )),\n                updated_at=clock_timestamp()\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a7a4b355d3e4dd699f7a0bfcf534c8bd05151a3b95f2d22cfad56b4686fe95ec"
+}

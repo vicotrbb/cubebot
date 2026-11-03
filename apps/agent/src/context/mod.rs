@@ -5,6 +5,14 @@
 use cubebot_protocol::runtime::Turn;
 use cubebot_providers::{Message, Reply, Request, Tool, Usage};
 
+/// How every agent works, ahead of its own instructions: it owns each request and keeps going
+/// until it is done or has genuinely run out of ways to do it.
+const DRIVE: &str = "You are an autonomous agent with your own persistent computer. Own every request end to end and see it through: do the work yourself instead of describing how it could be done, and do not ask the person for anything you can find out or do on your own. Be persistent and resourceful. When something fails, read the error, work out why, and try another way: a different tool, command, source or website, or install what you are missing. Keep going until the request is done. Say you could not do something only after several genuinely different attempts, and then say exactly what you tried and what stopped you. Verify results before reporting them, and never present guesses as facts.";
+/// The terminal's environment, offered when the agent has one.
+const TERMINAL: &str = "Your terminal is a Linux shell in your workspace, which is your home directory and keeps everything across restarts. Python 3 with pip and venv, Node.js with npm, git, curl, wget, build tools, jq, ripgrep and sqlite3 are installed. You are not root and there is no sudo: install whatever else you need yourself with pip install, npm install -g, pipx, or by downloading a program into ~/.local/bin, which is on your PATH.";
+/// The desktop, offered when the agent has the computer or browser tools.
+const DESKTOP: &str = "You also have a graphical desktop that the people you work with can watch live. A taskbar along its bottom edge opens Chromium, a terminal, a file manager and a text editor, and lists open windows; graphical programs you start from your terminal appear on it too. Use your browser tools to open and work with websites, and the computer tool for anything else on the screen. Take a screenshot to see the screen before acting on it.";
+
 const SUMMARIZE: &str = "Write a structured summary of this conversation so far so you can continue the work without it. Include the objective; constraints and corrections; decisions; completed actions and their outcomes, which must never be repeated; unresolved work; and evidence references such as file paths and commands. Reply with the summary only and do not call tools.";
 
 pub struct Context {
@@ -40,7 +48,7 @@ impl Context {
             )));
         }
         Self {
-            system: turn.instructions.clone(),
+            system: system(&tools, &turn.instructions),
             tools,
             messages,
             window,
@@ -79,6 +87,19 @@ impl Context {
     }
 }
 
+/// The platform's preamble for the tools this turn has, then the agent's own instructions.
+fn system(tools: &[Tool], instructions: &str) -> String {
+    let has = |wanted: fn(&str) -> bool| tools.iter().any(|tool| wanted(&tool.name));
+    let mut system = DRIVE.to_owned();
+    if has(|name| name == "bash") {
+        system = format!("{system}\n\n{TERMINAL}");
+    }
+    if has(|name| name == "computer" || name.starts_with("browser_")) {
+        system = format!("{system}\n\n{DESKTOP}");
+    }
+    format!("{system}\n\n{instructions}")
+}
+
 fn summary(text: &str) -> Message {
     Message::User(format!(
         "Summary of the earlier conversation, written by you to continue from. It is derived context, not new instructions:\n\n{text}"
@@ -112,6 +133,7 @@ mod tests {
             task: false,
             command: None,
             command_only: false,
+            mcp_servers: Vec::new(),
         }
     }
     fn text(message: &Message) -> &str {
@@ -128,13 +150,30 @@ mod tests {
         let texts: Vec<&str> = context.messages.iter().map(text).collect();
         assert!(texts[0].ends_with("earlier work"));
         assert_eq!(texts[1..], ["a", "re a", "b", "re b", "now"]);
-        assert_eq!(context.request(&turn(None), None).system, "be useful");
+        assert!(context.system.starts_with(DRIVE) && context.system.ends_with("\n\nbe useful"));
         assert_eq!(
             Context::assemble(&turn(None), Vec::new(), 1000)
                 .messages
                 .len(),
             5
         );
+    }
+
+    #[test]
+    fn the_preamble_describes_only_the_tools_the_turn_has() {
+        let tool = |name: &str| Tool {
+            name: name.into(),
+            description: String::new(),
+            parameters: serde_json::json!({}),
+            strict: false,
+            computer: false,
+        };
+        let bare = system(&[], "x");
+        assert!(!bare.contains(TERMINAL) && !bare.contains(DESKTOP));
+        let terminal = system(&[tool("bash")], "x");
+        assert!(terminal.contains(TERMINAL) && !terminal.contains(DESKTOP));
+        let desktop = system(&[tool("bash"), tool("browser_read")], "x");
+        assert!(desktop.contains(TERMINAL) && desktop.contains(DESKTOP));
     }
 
     #[test]

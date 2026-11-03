@@ -1,6 +1,6 @@
 import type { components } from './schema'
 
-type Schemas = components['schemas']
+export type Schemas = components['schemas']
 export type AgentSummary = Schemas['Agent']
 export type RoomSummary = Schemas['Room']
 export type Preferences = Required<Schemas['Preferences']>

@@ -457,7 +457,7 @@ Protocol reference reviewed during design: [MCP tools specification](https://mod
 
 ## Local and remote MCP server support
 
-Accepted 2026-10-23. Amended 2026-10-27: local servers run as subprocesses inside the agent's sandbox, with no separate tool container ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)).
+Accepted 2026-10-23. Amended 2026-10-27: local servers run as subprocesses inside the agent's sandbox, with no separate tool container ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)). Amended 2026-11-03 by the user: servers are installation configuration that administrators manage in the console, not deployment settings; each is available to every agent by default or to agents granted it, under [Installation-wide connection access by default](identity.md#installation-wide-connection-access-by-default), and an agent's Connections tab switches a limited server for that agent. Environment and header values are stored encrypted and delivered with each turn.
 
 **Decision.** Support both remote MCP endpoints using Streamable HTTP and local MCP server subprocesses using stdio. The user selected both modes on 2026-10-23. Both feed the same tool-execution contract and follow the same authorization, resource accounting, and outcome-recording rules.
 

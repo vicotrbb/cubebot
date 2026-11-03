@@ -272,6 +272,43 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/mcp-servers': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Every server with whether this agent may use it; needs `agent.manage` on the agent. */
+    get: operations['agent_mcp_servers']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/mcp-servers/{server}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Grants or withdraws the agent's use of a server with explicit grants, for administrators;
+     *     409 for a server every agent may use, whose access is changed on the server.
+     */
+    put: operations['grant_mcp_server']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/revisions': {
     parameters: {
       query?: never
@@ -1009,6 +1046,40 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/mcp-servers': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_mcp_servers']
+    put?: never
+    /** 409 when another server has the name. */
+    post: operations['create_mcp_server']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/mcp-servers/{server}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** 409 when another server has the name. */
+    put: operations['update_mcp_server']
+    post?: never
+    delete: operations['delete_mcp_server']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/provider': {
     parameters: {
       query?: never
@@ -1333,6 +1404,17 @@ export interface components {
     }
     /** Format: uuid */
     AgentId: string
+    /** @description A server as one agent's Connections tab shows it. */
+    AgentMcpServer: {
+      /** @description Every agent may use it; access is changed on the server, not per agent. */
+      all_agents: boolean
+      /** @description This agent may use it. */
+      enabled: boolean
+      /** Format: uuid */
+      id: string
+      name: string
+      transport: components['schemas']['McpTransport']
+    }
     AgentStatus: {
       blocked_reason?: string | null
       deleting?: boolean | null
@@ -1734,6 +1816,24 @@ export interface components {
       reason: string
       site: string
     }
+    McpGrant: {
+      /** @description Whether the agent may use the server. */
+      enabled: boolean
+    }
+    McpServerSummary: {
+      access: components['schemas']['ProviderAccess']
+      args: string[]
+      command?: string | null
+      /** Format: uuid */
+      id: string
+      name: string
+      /** @description The environment variable or header names; their values are never returned. */
+      secret_names: string[]
+      transport: components['schemas']['McpTransport']
+      url?: string | null
+    }
+    /** @enum {string} */
+    McpTransport: 'stdio' | 'http'
     Member: {
       /** Format: uuid */
       id: string
@@ -1993,8 +2093,9 @@ export interface components {
       /** @description The coordinator's question, the continued task's agent, or the failure reason. */
       note?: string | null
       /**
-       * @description `routing` until the coordinator settles it as `routed`, `continued`, `clarify`,
-       *     `no_action` or `failed`; mentioned messages are `routed` at once.
+       * @description `routing` until the coordinator settles it as `routed`, `continued` or `failed`;
+       *     mentioned messages are `routed` at once. Messages from before 2026-11-03 may also be
+       *     `clarify` or `no_action`.
        */
       routing: string
       /** Format: int64 */
@@ -2021,6 +2122,26 @@ export interface components {
     RunRoutine: {
       /** Format: uuid */
       request_id: string
+    }
+    SaveMcpServer: {
+      access?: null | components['schemas']['ProviderAccess']
+      /** @description Stdio only. */
+      args?: string[]
+      /** @description Stdio only: the program, found on the tool user's PATH. */
+      command?: string | null
+      /** @description Letters, digits or hyphens, at most 32; the server's tools are offered as `<name>__<tool>`. */
+      name: string
+      /**
+       * @description Environment variables (stdio) or request headers (HTTP), stored encrypted. Required on
+       *     create, where it may be empty; an update without it keeps the current ones, unless the
+       *     transport changes.
+       */
+      secrets?: {
+        [key: string]: string
+      } | null
+      transport: components['schemas']['McpTransport']
+      /** @description HTTP only: an `https://` or `http://` endpoint. */
+      url?: string | null
     }
     /** @description What a routine does and when. At least one of `prompt` and `command`. */
     SaveRoutine: {
@@ -2790,6 +2911,57 @@ export interface operations {
         content?: never
       }
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  agent_mcp_servers: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentMcpServer'][]
+        }
+      }
+    }
+  }
+  grant_mcp_server: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        server: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['McpGrant']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
         headers: {
           [name: string]: unknown
         }
@@ -4026,6 +4198,104 @@ export interface operations {
         content: {
           'application/json': components['schemas']['InstallationSummary']
         }
+      }
+    }
+  }
+  list_mcp_servers: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['McpServerSummary'][]
+        }
+      }
+    }
+  }
+  create_mcp_server: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveMcpServer']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['McpServerSummary']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  update_mcp_server: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        server: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveMcpServer']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['McpServerSummary']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  delete_mcp_server: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        server: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

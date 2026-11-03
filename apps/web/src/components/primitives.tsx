@@ -215,3 +215,30 @@ export function when(value: string | null | undefined) {
   if (sameDay) return time
   return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${time}`
 }
+
+/** An on/off control that applies at once, named by `label` for assistive technology. */
+export function Switch({
+  checked,
+  label,
+  disabled = false,
+  onChange,
+}: {
+  checked: boolean
+  label: string
+  disabled?: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      className="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+    >
+      <span className="switch__thumb" aria-hidden="true" />
+    </button>
+  )
+}

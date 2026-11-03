@@ -1256,7 +1256,7 @@ async fn wait_native_waiting(
     panic!("native provider failure did not enter durable waiting");
 }
 
-type Socket =
+pub(crate) type Socket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 async fn try_channel(
     origin: &str,
@@ -1273,10 +1273,10 @@ async fn try_channel(
         .await
         .map(|(socket, _)| socket)
 }
-async fn open_channel(origin: &str, token: &str) -> Socket {
+pub(crate) async fn open_channel(origin: &str, token: &str) -> Socket {
     try_channel(origin, token).await.unwrap()
 }
-async fn report(channel: &mut Socket, value: Value) {
+pub(crate) async fn report(channel: &mut Socket, value: Value) {
     use futures_util::SinkExt;
     channel
         .send(tokio_tungstenite::tungstenite::Message::Text(
@@ -1286,7 +1286,7 @@ async fn report(channel: &mut Socket, value: Value) {
         .unwrap();
 }
 /// The next delivery, or `null` once the orchestrator closes the channel.
-async fn delivery(channel: &mut Socket) -> Value {
+pub(crate) async fn delivery(channel: &mut Socket) -> Value {
     use futures_util::StreamExt;
     use tokio_tungstenite::tungstenite::Message;
     loop {

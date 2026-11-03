@@ -6,6 +6,7 @@ import {
   useNavigate,
 } from '@tanstack/react-router'
 import { ChevronLeft, Monitor, PanelRight, X } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import {
   can,
   type AgentSummary,
@@ -39,6 +40,11 @@ const TABS: { to: string; label: string; needs: Capability }[] = [
     needs: 'conversation_read',
   },
   { to: '/agents/$agentId/vault', label: 'Vault', needs: 'browser_view' },
+  {
+    to: '/agents/$agentId/connections',
+    label: 'Connections',
+    needs: 'agent_manage',
+  },
   { to: '/agents/$agentId/files', label: 'Files', needs: 'workspace_read' },
   { to: '/agents/$agentId/access', label: 'Access', needs: 'agent_manage' },
   { to: '/agents/$agentId/status', label: 'Status', needs: 'agent_manage' },
@@ -132,18 +138,11 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
           {panelOpen && (
             <aside className="panel" aria-label="Details">
               <div className="panel__head">
-                <nav className="tabs panel__tabs" aria-label="Agent details">
-                  {tabs.map((tab) => (
-                    <Link
-                      key={tab.to}
-                      to={tab.to}
-                      params={{ agentId: agent.id }}
-                      activeProps={{ 'aria-current': 'page' }}
-                    >
-                      {tab.label}
-                    </Link>
-                  ))}
-                </nav>
+                <PanelTabs
+                  agentId={agent.id}
+                  tabs={tabs}
+                  current={children[0]?.pathname}
+                />
                 <Link
                   to="/agents/$agentId"
                   params={{ agentId: agent.id }}
@@ -227,5 +226,37 @@ function AgentHeader({
         )}
       </div>
     </header>
+  )
+}
+
+/** The panel's tabs. The row scrolls in a narrow panel, so the open tab is kept in view. */
+function PanelTabs({
+  agentId,
+  tabs,
+  current,
+}: {
+  agentId: string
+  tabs: typeof TABS
+  current: string | undefined
+}) {
+  const nav = useRef<HTMLElement>(null)
+  useEffect(() => {
+    nav.current
+      ?.querySelector('[aria-current="page"]')
+      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [current])
+  return (
+    <nav ref={nav} className="tabs panel__tabs" aria-label="Agent details">
+      {tabs.map((tab) => (
+        <Link
+          key={tab.to}
+          to={tab.to}
+          params={{ agentId }}
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          {tab.label}
+        </Link>
+      ))}
+    </nav>
   )
 }

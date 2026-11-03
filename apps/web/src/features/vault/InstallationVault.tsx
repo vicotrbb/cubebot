@@ -302,14 +302,17 @@ function KindChoice({
   )
 }
 
-function AccessChoice({
+/** All agents, or the agents ticked below, for a connection shared across the installation. */
+export function AccessChoice({
   access,
   agents,
   onChange,
+  legend = 'Who may fill it',
 }: {
   access: Access
   agents: AgentSummary[]
   onChange: (access: Access) => void
+  legend?: string
 }) {
   const chosen = access.mode === 'explicit_grants' ? access.agents : []
   const toggle = (id: string, on: boolean) =>
@@ -319,7 +322,7 @@ function AccessChoice({
     })
   return (
     <fieldset className="vault-access">
-      <legend>Who may fill it</legend>
+      <legend>{legend}</legend>
       <label className="check">
         <input
           type="radio"

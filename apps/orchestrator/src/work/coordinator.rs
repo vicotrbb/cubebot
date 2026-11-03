@@ -1,6 +1,7 @@
 //! The tool-free room coordinator (docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator). It takes one unaddressed room message, asks the
-//! installation's model to pick one owner, ask a question or do nothing, and validates the answer
-//! against current membership before any turn exists. The model call happens outside any
+//! installation's model to pick the member best placed to answer it or the open task it adds to,
+//! and validates the answer against current membership before any turn exists. A person always
+//! gets an answer: when no valid result comes, the room's first member takes the message. The model call happens outside any
 //! transaction; the message stays `routing` until a valid result commits.
 use super::rooms;
 use crate::{
@@ -19,15 +20,13 @@ use uuid::Uuid;
 /// Failed coordinator calls before the message is reported as failed.
 const ATTEMPTS: i16 = 3;
 
-const SYSTEM: &str = "You route one message in a team chat room to the single agent best placed to own it. You have no tools and do no work yourself. Reply with JSON only, one of: {\"action\":\"assign\",\"agent\":\"<member id>\"}, {\"action\":\"continue\",\"task\":\"<open task id>\"} when the message corrects or adds to that open task, {\"action\":\"clarify\",\"question\":\"<one short question for the sender>\"} or {\"action\":\"none\"} when the message needs no agent, such as thanks or chatter.";
+const SYSTEM: &str = "You route one message in a team chat room to the single agent best placed to answer it. You have no tools and do no work yourself. Every message gets an owner, greetings and small talk included: pick the member whose description fits best, or the one the conversation was already with. Reply with JSON only, one of: {\"action\":\"assign\",\"agent\":\"<member id>\"} or {\"action\":\"continue\",\"task\":\"<open task id>\"} when the message corrects or adds to that open task.";
 
 #[derive(Debug, PartialEq, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 enum Decision {
     Assign { agent: Uuid },
     Continue { task: Uuid },
-    Clarify { question: String },
-    None,
 }
 
 struct Pending {
@@ -281,12 +280,10 @@ async fn outcome(
         Ok(Decision::Continue { task }) => {
             match super::collaboration::continue_task(tx, id, task).await? {
                 Some(agent) => ("continued", Some(agent)),
-                None => attempt(tx, id, "coordinator_chose_no_open_task").await?,
+                None => attempt(tx, id, room, "coordinator_chose_no_open_task").await?,
             }
         }
-        Ok(Decision::Clarify { question }) => ("clarify", Some(bounded(&question))),
-        Ok(Decision::None) => ("no_action", None),
-        Err(code) => attempt(tx, id, code).await?,
+        Err(code) => attempt(tx, id, room, code).await?,
     })
 }
 
@@ -300,7 +297,7 @@ async fn assign(
 ) -> Result<(&'static str, Option<String>), Error> {
     let current = rooms::members(tx, room).await?;
     if !current.iter().any(|member| member.id == agent) {
-        return attempt(tx, id, "coordinator_chose_no_member").await;
+        return attempt(tx, id, room, "coordinator_chose_no_member").await;
     }
     // Members are not retired, so waking the agent cannot conflict here.
     rooms::deliver(tx, id, agent)
@@ -309,10 +306,12 @@ async fn assign(
     Ok(("routed", None))
 }
 
-/// Stays routing for another try until the attempts are spent.
+/// Stays routing for another try until the attempts are spent; then the room's first member
+/// answers, so the sender is never left without a reply. A room without members fails.
 async fn attempt(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     id: Uuid,
+    room: Uuid,
     code: &str,
 ) -> Result<(&'static str, Option<String>), Error> {
     let attempts = sqlx::query_scalar!(
@@ -326,20 +325,20 @@ async fn attempt(
     )
     .fetch_one(&mut **tx)
     .await?;
-    let routing = if attempts >= ATTEMPTS {
-        "failed"
-    } else {
-        "routing"
-    };
-    Ok((routing, Some(code.into())))
-}
-
-fn bounded(text: &str) -> String {
-    let mut end = text.len().min(4096);
-    while !text.is_char_boundary(end) {
-        end -= 1;
+    if attempts < ATTEMPTS {
+        return Ok(("routing", Some(code.into())));
     }
-    text[..end].replace('\0', "")
+    let Some(first) = rooms::members(tx, room).await?.into_iter().next() else {
+        return Ok(("failed", Some(code.into())));
+    };
+    tracing::warn!(
+        code,
+        "room coordinator gave no valid owner; the first member answers"
+    );
+    rooms::deliver(tx, id, first.id)
+        .await
+        .map_err(|_| Error::Conflict)?;
+    Ok(("routed", None))
 }
 
 #[cfg(test)]
@@ -347,7 +346,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn coordinator_replies_parse_only_into_the_three_results() {
+    fn coordinator_replies_parse_only_into_an_owner_or_an_open_task() {
         let id = Uuid::new_v4();
         assert_eq!(
             decision(&format!(
@@ -356,13 +355,6 @@ mod tests {
             Some(Decision::Assign { agent: id })
         );
         assert_eq!(
-            decision(r#"{"action":"clarify","question":"Which region?"}"#),
-            Some(Decision::Clarify {
-                question: "Which region?".into()
-            })
-        );
-        assert_eq!(decision(r#"{"action":"none"}"#), Some(Decision::None));
-        assert_eq!(
             decision(&format!(r#"{{"action":"continue","task":"{id}"}}"#)),
             Some(Decision::Continue { task: id })
         );
@@ -370,9 +362,11 @@ mod tests {
             "Ada should do it",
             r#"{"action":"assign","agent":"Ada"}"#,
             r#"{"action":"run","command":"rm -rf /"}"#,
+            // Every message gets an owner; the coordinator neither asks nor ignores.
+            r#"{"action":"clarify","question":"Which region?"}"#,
+            r#"{"action":"none"}"#,
         ] {
             assert_eq!(decision(invalid), None, "{invalid}");
         }
-        assert_eq!(bounded(&"é".repeat(3000)).len(), 4096);
     }
 }

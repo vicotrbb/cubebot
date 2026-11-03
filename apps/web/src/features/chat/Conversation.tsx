@@ -7,7 +7,7 @@ import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Skeleton } from '../../components/primitives'
 import { Composer } from './Composer'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
-import { WorkCard } from './WorkCard'
+import { WorkCard, WorkLog } from './WorkCard'
 import './chat.css'
 
 const PAGE = 60
@@ -195,16 +195,20 @@ function Exchange({
               {stateLabel(turn, agent.activity)}
             </span>
           </div>
-          {turn.terminal.map((tool) => (
-            <div key={tool.id}>
-              {tool.reobserved && (
-                <p className="desktop-marker small faint">
-                  Control returned · agent re-observed the screen
-                </p>
-              )}
-              <WorkCard tool={tool} />
-            </div>
-          ))}
+          {turn.terminal.length > 0 && (
+            <WorkLog tools={turn.terminal} running={turn.status === 'running'}>
+              {turn.terminal.map((tool) => (
+                <div key={tool.id}>
+                  {tool.reobserved && (
+                    <p className="desktop-marker small faint">
+                      Control returned · agent re-observed the screen
+                    </p>
+                  )}
+                  <WorkCard tool={tool} />
+                </div>
+              ))}
+            </WorkLog>
+          )}
           {turn.response ? (
             <p className="msg__text">{turn.response}</p>
           ) : (

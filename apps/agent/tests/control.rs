@@ -279,10 +279,15 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     assert_eq!(request["model"], "test-model");
     assert_eq!(request["stream"], true);
     assert!(request.get("max_output_tokens").is_none());
+    // The platform's preamble comes first; the agent's own instructions close the prompt.
+    let system = request["input"][0]["content"].as_str().unwrap();
+    assert!(system.starts_with("You are an autonomous agent") && system.ends_with("\n\nBe brief."));
     assert_eq!(
-        request["input"],
-        json!([{"role":"system","content":"Be brief."},{"role":"user","content":"Earlier"},
+        request["input"].as_array().unwrap()[1..],
+        json!([{"role":"user","content":"Earlier"},
             {"role":"assistant","content":"Before"},{"role":"user","content":"Hello"}])
+        .as_array()
+        .unwrap()[..]
     );
     // Only the first event reaches the ledger before the connection drops.
     fake.ack(id, [3]);

@@ -118,6 +118,40 @@ pub struct Turn {
     /// The routine has no prompt: the turn answers with the command's result, without a model.
     #[serde(default)]
     pub command_only: bool,
+    /// The MCP servers this agent may use now, with their credentials; the agent connects
+    /// them when they differ from what it already has. Never log them.
+    #[serde(default)]
+    pub mcp_servers: Vec<McpServer>,
+}
+
+/// One MCP server (docs/adr/agents.md#local-and-remote-mcp-server-support) as the agent connects it: a local
+/// program run as the tool user, or a remote Streamable HTTP endpoint. Names are unique letters,
+/// digits or hyphens, and prefix the server's tools as `<name>__<tool>`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "transport", rename_all = "snake_case", deny_unknown_fields)]
+pub enum McpServer {
+    Stdio {
+        name: String,
+        command: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        env: std::collections::BTreeMap<String, String>,
+    },
+    Http {
+        name: String,
+        url: String,
+        #[serde(default)]
+        headers: std::collections::BTreeMap<String, String>,
+    },
+}
+
+impl McpServer {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Stdio { name, .. } | Self::Http { name, .. } => name,
+        }
+    }
 }
 
 /// A child's settled outcome. `evidence` holds its last tool events, so a failed child still
@@ -485,12 +519,17 @@ mod tests {
             task: false,
             command: None,
             command_only: false,
+            mcp_servers: vec![McpServer::Http {
+                name: "docs".into(),
+                url: "https://mcp.example".into(),
+                headers: [("Authorization".into(), "Bearer k".into())].into(),
+            }],
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));
         assert!(matches!(
             serde_json::from_str::<Delivery>(&text).unwrap(),
-            Delivery::Turn(turn) if turn.sequence == 1
+            Delivery::Turn(turn) if turn.sequence == 1 && turn.mcp_servers[0].name() == "docs"
         ));
         assert_eq!(ProviderKind::parse("openai"), Some(ProviderKind::Openai));
         assert_eq!(ProviderKind::parse("gemini"), None);

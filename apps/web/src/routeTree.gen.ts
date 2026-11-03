@@ -20,6 +20,7 @@ import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agen
 import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
 import { Route as AppPlatformAuditRouteImport } from './routes/_app.platform.audit'
 import { Route as AppPlatformHealthRouteImport } from './routes/_app.platform.health'
+import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
 import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
 import { Route as AppPlatformProvidersRouteImport } from './routes/_app.platform.providers'
 import { Route as AppPlatformSignInRouteImport } from './routes/_app.platform.sign-in'
@@ -31,6 +32,7 @@ import { Route as AppSkillsIndexRouteImport } from './routes/_app.skills.index'
 import { Route as AppSkillsSkillIdRouteImport } from './routes/_app.skills.$skillId'
 import { Route as AppAgentsAgentIdAboutRouteImport } from './routes/_app.agents.$agentId.about'
 import { Route as AppAgentsAgentIdAccessRouteImport } from './routes/_app.agents.$agentId.access'
+import { Route as AppAgentsAgentIdConnectionsRouteImport } from './routes/_app.agents.$agentId.connections'
 import { Route as AppAgentsAgentIdDreamsRouteImport } from './routes/_app.agents.$agentId.dreams'
 import { Route as AppAgentsAgentIdFilesRouteImport } from './routes/_app.agents.$agentId.files'
 import { Route as AppAgentsAgentIdMemoriesRouteImport } from './routes/_app.agents.$agentId.memories'
@@ -96,6 +98,11 @@ const AppPlatformHealthRoute = AppPlatformHealthRouteImport.update({
   path: '/health',
   getParentRoute: () => AppPlatformRoute,
 } as any)
+const AppPlatformMcpRoute = AppPlatformMcpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
 const AppPlatformPeopleRoute = AppPlatformPeopleRouteImport.update({
   id: '/people',
   path: '/people',
@@ -151,6 +158,12 @@ const AppAgentsAgentIdAccessRoute = AppAgentsAgentIdAccessRouteImport.update({
   path: '/access',
   getParentRoute: () => AppAgentsAgentIdRoute,
 } as any)
+const AppAgentsAgentIdConnectionsRoute =
+  AppAgentsAgentIdConnectionsRouteImport.update({
+    id: '/connections',
+    path: '/connections',
+    getParentRoute: () => AppAgentsAgentIdRoute,
+  } as any)
 const AppAgentsAgentIdDreamsRoute = AppAgentsAgentIdDreamsRouteImport.update({
   id: '/dreams',
   path: '/dreams',
@@ -216,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/agents/new': typeof AppAgentsNewRoute
   '/platform/audit': typeof AppPlatformAuditRoute
   '/platform/health': typeof AppPlatformHealthRoute
+  '/platform/mcp': typeof AppPlatformMcpRoute
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
@@ -227,6 +241,7 @@ export interface FileRoutesByFullPath {
   '/skills/': typeof AppSkillsIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
   '/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
   '/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
   '/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
@@ -249,6 +264,7 @@ export interface FileRoutesByTo {
   '/agents/new': typeof AppAgentsNewRoute
   '/platform/audit': typeof AppPlatformAuditRoute
   '/platform/health': typeof AppPlatformHealthRoute
+  '/platform/mcp': typeof AppPlatformMcpRoute
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
@@ -260,6 +276,7 @@ export interface FileRoutesByTo {
   '/skills': typeof AppSkillsIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
   '/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
   '/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
   '/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
@@ -284,6 +301,7 @@ export interface FileRoutesById {
   '/_app/agents/new': typeof AppAgentsNewRoute
   '/_app/platform/audit': typeof AppPlatformAuditRoute
   '/_app/platform/health': typeof AppPlatformHealthRoute
+  '/_app/platform/mcp': typeof AppPlatformMcpRoute
   '/_app/platform/people': typeof AppPlatformPeopleRoute
   '/_app/platform/providers': typeof AppPlatformProvidersRoute
   '/_app/platform/sign-in': typeof AppPlatformSignInRoute
@@ -295,6 +313,7 @@ export interface FileRoutesById {
   '/_app/skills/': typeof AppSkillsIndexRoute
   '/_app/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/_app/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/_app/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
   '/_app/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
   '/_app/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
   '/_app/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
@@ -319,6 +338,7 @@ export interface FileRouteTypes {
     | '/agents/new'
     | '/platform/audit'
     | '/platform/health'
+    | '/platform/mcp'
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
@@ -330,6 +350,7 @@ export interface FileRouteTypes {
     | '/skills/'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
+    | '/agents/$agentId/connections'
     | '/agents/$agentId/dreams'
     | '/agents/$agentId/files'
     | '/agents/$agentId/memories'
@@ -352,6 +373,7 @@ export interface FileRouteTypes {
     | '/agents/new'
     | '/platform/audit'
     | '/platform/health'
+    | '/platform/mcp'
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
@@ -363,6 +385,7 @@ export interface FileRouteTypes {
     | '/skills'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
+    | '/agents/$agentId/connections'
     | '/agents/$agentId/dreams'
     | '/agents/$agentId/files'
     | '/agents/$agentId/memories'
@@ -386,6 +409,7 @@ export interface FileRouteTypes {
     | '/_app/agents/new'
     | '/_app/platform/audit'
     | '/_app/platform/health'
+    | '/_app/platform/mcp'
     | '/_app/platform/people'
     | '/_app/platform/providers'
     | '/_app/platform/sign-in'
@@ -397,6 +421,7 @@ export interface FileRouteTypes {
     | '/_app/skills/'
     | '/_app/agents/$agentId/about'
     | '/_app/agents/$agentId/access'
+    | '/_app/agents/$agentId/connections'
     | '/_app/agents/$agentId/dreams'
     | '/_app/agents/$agentId/files'
     | '/_app/agents/$agentId/memories'
@@ -493,6 +518,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlatformHealthRouteImport
       parentRoute: typeof AppPlatformRoute
     }
+    '/_app/platform/mcp': {
+      id: '/_app/platform/mcp'
+      path: '/mcp'
+      fullPath: '/platform/mcp'
+      preLoaderRoute: typeof AppPlatformMcpRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
     '/_app/platform/people': {
       id: '/_app/platform/people'
       path: '/people'
@@ -568,6 +600,13 @@ declare module '@tanstack/react-router' {
       path: '/access'
       fullPath: '/agents/$agentId/access'
       preLoaderRoute: typeof AppAgentsAgentIdAccessRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/connections': {
+      id: '/_app/agents/$agentId/connections'
+      path: '/connections'
+      fullPath: '/agents/$agentId/connections'
+      preLoaderRoute: typeof AppAgentsAgentIdConnectionsRouteImport
       parentRoute: typeof AppAgentsAgentIdRoute
     }
     '/_app/agents/$agentId/dreams': {
@@ -646,6 +685,7 @@ declare module '@tanstack/react-router' {
 interface AppPlatformRouteChildren {
   AppPlatformAuditRoute: typeof AppPlatformAuditRoute
   AppPlatformHealthRoute: typeof AppPlatformHealthRoute
+  AppPlatformMcpRoute: typeof AppPlatformMcpRoute
   AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
   AppPlatformProvidersRoute: typeof AppPlatformProvidersRoute
   AppPlatformSignInRoute: typeof AppPlatformSignInRoute
@@ -656,6 +696,7 @@ interface AppPlatformRouteChildren {
 const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformAuditRoute: AppPlatformAuditRoute,
   AppPlatformHealthRoute: AppPlatformHealthRoute,
+  AppPlatformMcpRoute: AppPlatformMcpRoute,
   AppPlatformPeopleRoute: AppPlatformPeopleRoute,
   AppPlatformProvidersRoute: AppPlatformProvidersRoute,
   AppPlatformSignInRoute: AppPlatformSignInRoute,
@@ -670,6 +711,7 @@ const AppPlatformRouteWithChildren = AppPlatformRoute._addFileChildren(
 interface AppAgentsAgentIdRouteChildren {
   AppAgentsAgentIdAboutRoute: typeof AppAgentsAgentIdAboutRoute
   AppAgentsAgentIdAccessRoute: typeof AppAgentsAgentIdAccessRoute
+  AppAgentsAgentIdConnectionsRoute: typeof AppAgentsAgentIdConnectionsRoute
   AppAgentsAgentIdDreamsRoute: typeof AppAgentsAgentIdDreamsRoute
   AppAgentsAgentIdFilesRoute: typeof AppAgentsAgentIdFilesRoute
   AppAgentsAgentIdMemoriesRoute: typeof AppAgentsAgentIdMemoriesRoute
@@ -683,6 +725,7 @@ interface AppAgentsAgentIdRouteChildren {
 const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
   AppAgentsAgentIdAboutRoute: AppAgentsAgentIdAboutRoute,
   AppAgentsAgentIdAccessRoute: AppAgentsAgentIdAccessRoute,
+  AppAgentsAgentIdConnectionsRoute: AppAgentsAgentIdConnectionsRoute,
   AppAgentsAgentIdDreamsRoute: AppAgentsAgentIdDreamsRoute,
   AppAgentsAgentIdFilesRoute: AppAgentsAgentIdFilesRoute,
   AppAgentsAgentIdMemoriesRoute: AppAgentsAgentIdMemoriesRoute,

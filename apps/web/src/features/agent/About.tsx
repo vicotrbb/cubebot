@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import { api, ApiError, failure, ok } from '../../api/client'
 import {
   admin,
@@ -23,7 +24,7 @@ export function About({ agent }: { agent: AgentSummary }) {
       <Instructions agent={agent} onSaved={refresh} />
       <Behaviour agent={agent} onSaved={refresh} />
       <Lifecycle agent={agent} onChanged={refresh} />
-      <Tools />
+      <Tools agentId={agent.id} />
     </>
   )
 }
@@ -416,7 +417,7 @@ export function Lifecycle({
   )
 }
 
-function Tools() {
+function Tools({ agentId }: { agentId: string }) {
   const installation = useInstallation()
   const flags = installation.data
   return (
@@ -432,8 +433,10 @@ function Tools() {
         <dt>Computer use and browser</dt>
         <dd>{flags?.computer_use_enabled ? 'On' : 'Off'}</dd>
         <dt>MCP servers</dt>
-        <dd className="faint">
-          Configured through CUBEBOT_MCP_SERVERS; not yet visible here.
+        <dd>
+          <Link to="/agents/$agentId/connections" params={{ agentId }}>
+            Manage in Connections
+          </Link>
         </dd>
       </dl>
     </section>

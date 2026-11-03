@@ -62,8 +62,12 @@
   flex: 1;
   min-width: 0;
   background: transparent;
-  padding: 0;
+  padding: 0 0 2px;
   gap: 0;
+  /* The row scrolls in a narrow panel; a thin bar shows there is more. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  scroll-padding-inline: 8px;
 }
 .panel__tabs > * {
   padding: 5px 8px;
