@@ -14,5 +14,9 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{- define "cubebot.databaseSecret" -}}
-{{- .Values.externalDatabase.existingSecret | default "database" -}}
+{{- .Values.externalDatabase.existingSecret | default .Values.postgres.existingSecret | default "database" -}}
+{{- end -}}
+
+{{- define "cubebot.credentialsSecret" -}}
+{{- .Values.credentials.existingSecret | default "credentials" -}}
 {{- end -}}

@@ -58,3 +58,60 @@ fn projected_private_keys_are_read_without_accepting_missing_or_public_keys() {
     assert!(Credentials::from_file(&private).is_err());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_start_with_a_different_key_refuses_and_the_original_key_starts() {
+    use crate::reconciliation::{orchestrator_process, process_exit, process_ready};
+    use cubebot_orchestrator::{
+        connections::{ConfigureProvider, Connections},
+        identity::Identity,
+    };
+    use std::os::unix::fs::OpenOptionsExt;
+    let pool = crate::support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let input = ConfigureProvider {
+        request_id: uuid::Uuid::new_v4(),
+        expected_revision: 0,
+        provider: cubebot_protocol::runtime::ProviderKind::Openai,
+        model: "test-model".into(),
+        context_window: Some(200_000),
+        api_key: "secret-provider-key".into(),
+        access: None,
+    };
+    Connections::new(pool.clone(), Credentials::new([7; 32]))
+        .configure(&admin, &input)
+        .await
+        .unwrap();
+    let root = std::env::temp_dir().join(format!("cubebot-key-test-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir(&root).unwrap();
+    let key = |name: &str, byte: u8| {
+        let path = root.join(name);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&path)
+            .and_then(|mut file| std::io::Write::write_all(&mut file, &[byte; 32]))
+            .unwrap();
+        (
+            "CUBEBOT_CREDENTIAL_KEY_FILE",
+            path.to_str().unwrap().to_owned(),
+        )
+    };
+    let api = kube::Config::new("http://127.0.0.1:1".parse().unwrap());
+    let mut rotated = orchestrator_process(&pool, &api, false, Some(key("rotated", 8)));
+    assert!(!process_exit(&mut rotated).await.success());
+    let mut original = orchestrator_process(&pool, &api, false, Some(key("original", 7)));
+    process_ready(&mut original).await;
+    std::fs::remove_dir_all(&root).unwrap();
+}

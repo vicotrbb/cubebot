@@ -199,6 +199,42 @@ impl Connections {
             access: sqlx::types::Json(access),
         })
     }
+    /// Whether the key decrypts the first stored provider credential or vault item; true when
+    /// none is stored.
+    #[tracing::instrument(skip_all)]
+    pub async fn key_matches(&self) -> Result<bool, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        let provider = sqlx::query!(
+            r#"
+            SELECT credential AS "credential!", revision AS "revision!"
+            FROM provider_connection
+            "#,
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        let (record, context) = if let Some(row) = provider {
+            let context = credential_context(&mut tx, row.revision).await?;
+            (row.credential, context)
+        } else {
+            let item = sqlx::query!(
+                "
+                SELECT id, ciphertext
+                FROM vault_items
+                ORDER BY id
+                LIMIT 1
+                ",
+            )
+            .fetch_optional(&mut *tx)
+            .await?;
+            let Some(item) = item else {
+                return Ok(true);
+            };
+            (item.ciphertext, self.vault_context(item.id).await?)
+        };
+        tx.commit().await?;
+        Ok(self.credentials.decrypt(&record, &context).is_ok())
+    }
+
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub(crate) async fn inference(
         &self,
