@@ -1,4 +1,7 @@
-"""Shared files (ADRs 0059 and 0060) on real agents through Docker, from every side.
+"""Shared files
+(docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and
+docs/adr/memory.md#native-cubebot-storage-api) on real agents through Docker, from every
+side.
 
 Same host needs as docker_sandbox.py, plus Node with Playwright for the console. Writer
 and Reader are OpenAI agents with bash workspaces. People with no grant, workspace.read,
@@ -475,7 +478,9 @@ def restart(world):
     admin = world["people"]["admin"]
     world["process"].kill()
     world["process"].wait(timeout=30)
-    # Ownership after a kill waits for proof of termination (ADR 0011); the test has it.
+    # Ownership after a kill waits for proof of termination
+    # (docs/adr/agents.md#one-active-orchestrator-with-automatic-restart); the test has
+    # it.
     rows(world, "UPDATE orchestrator_development_owner SET released_at=now()")
     orphan = uuid.uuid4()
     (world["storage"] / "blobs" / str(orphan)).write_bytes(b"linked, never committed")

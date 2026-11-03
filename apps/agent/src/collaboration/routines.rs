@@ -1,4 +1,4 @@
-//! Routine tools (ADR 0087). The orchestrator validates each call and answers with the text the
+//! Routine tools (docs/adr/agents.md#routines). The orchestrator validates each call and answers with the text the
 //! model reads; the call's id makes a resent create or run make nothing new.
 use super::Collaboration;
 use crate::tools::Running;

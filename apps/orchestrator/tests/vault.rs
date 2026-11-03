@@ -1,4 +1,4 @@
-//! The vault (ADR 0086) end to end: a person saves a login through the console, the real agent
+//! The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) end to end: a person saves a login through the console, the real agent
 //! binary lists and fills it and saves a secret of its own with a scripted model, and a
 //! recording stand-in arbiter receives the fill. Neither secret is in the turn ledger, the
 //! model's requests or the desktop records; only the arbiter's line holds what it types.

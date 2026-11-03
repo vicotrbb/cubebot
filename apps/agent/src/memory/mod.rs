@@ -1,4 +1,4 @@
-//! Memory tools (ADRs 0021, 0023, 0026). Nothing is recalled unless the agent searches. Saves and
+//! Memory tools (docs/adr/memory.md#explicit-and-automatic-memory-creation, docs/adr/memory.md#tool-initiated-memory-retrieval and docs/adr/memory.md#direct-memory-editing-and-conversational-correction). Nothing is recalled unless the agent searches. Saves and
 //! removals stage in the turn and commit with its completion, so a failed or cancelled turn
 //! changes nothing; durable revisions belong to the orchestrator.
 use crate::{control::MemoryClient, tools::Running};

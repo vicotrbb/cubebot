@@ -1,4 +1,4 @@
-//! The agent application. The agent runs its own tools inside its sandbox (ADRs 0083, 0084).
+//! The agent application. The agent runs its own tools inside its sandbox (docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary and docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox).
 
 pub mod collaboration;
 #[cfg(target_os = "linux")]

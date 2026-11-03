@@ -1,4 +1,4 @@
-//! Screenshots as PNG (ADR 0085): 8-bit RGB rows, each with the Up filter, in one zlib stream
+//! Screenshots as PNG (docs/adr/sandbox.md#desktop-as-a-vmm-device): 8-bit RGB rows, each with the Up filter, in one zlib stream
 //! holding a single fixed-Huffman deflate block with LZ77 matches. Desktop frames repeat rows and
 //! runs of one colour, which the Up filter and back-references compress without a Huffman tree.
 

@@ -40,7 +40,7 @@ sandbox:
       namespaceSelector: {}
       podSelector: {}
       port: 443
-    # Outside cluster DNS and the ingress controller, sandboxes reach everything but these (ADR 0035).
+    # Outside cluster DNS and the ingress controller, sandboxes reach everything but these (docs/adr/sandbox.md#public-internet-access-with-grants-for-private-destinations).
     blockedRanges:
       - 10.0.0.0/8
       - 172.16.0.0/12
@@ -48,7 +48,7 @@ sandbox:
       - 169.254.0.0/16
       - 100.64.0.0/10
 
-# The orchestrator's shared files (ADR 0059); ReadWriteOncePod needs a CSI driver that supports it.
+# The orchestrator's shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume); ReadWriteOncePod needs a CSI driver that supports it.
 storage:
   size: 10Gi
   storageClass: ''

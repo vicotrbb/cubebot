@@ -1,4 +1,4 @@
-//! The agent's routine tools (ADR 0087): it lists all of its routines and changes only those it
+//! The agent's routine tools (docs/adr/agents.md#routines): it lists all of its routines and changes only those it
 //! manages, as the person whose turn made the call. Answers are the text the model reads.
 use super::{Locked, SaveRoutine, insert, list, lock, occur, remove, update};
 use crate::{

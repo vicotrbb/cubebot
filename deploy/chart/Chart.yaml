@@ -1,5 +1,5 @@
 apiVersion: v2
 name: cubebot
-description: One Cubebot installation in one namespace (ADR 0075).
+description: One Cubebot installation in one namespace (docs/adr/packaging.md#one-namespace-for-the-entire-installation).
 type: application
 version: 0.1.0

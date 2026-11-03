@@ -108,11 +108,11 @@ pub struct Turn {
     /// ones with their status only.
     #[serde(default)]
     pub delegations: Vec<Delegation>,
-    /// A delegated task in a task lane (ADR 0005): its own context, beside the main lane, and
+    /// A delegated task in a task lane (docs/adr/agents.md#agent-execution-lanes): its own context, beside the main lane, and
     /// no control of the shared desktop.
     #[serde(default)]
     pub task: bool,
-    /// A routine's shell command (ADR 0087), run once as the tool user before the model.
+    /// A routine's shell command (docs/adr/agents.md#routines), run once as the tool user before the model.
     #[serde(default)]
     pub command: Option<String>,
     /// The routine has no prompt: the turn answers with the command's result, without a model.
@@ -134,7 +134,7 @@ pub struct Delegation {
     pub evidence: Vec<TurnEvent>,
 }
 
-/// `POST /api/runtime/turns/{turn}/routines`: one routine tool call (ADR 0087), which the
+/// `POST /api/runtime/turns/{turn}/routines`: one routine tool call (docs/adr/agents.md#routines), which the
 /// orchestrator validates and answers with the text the model reads. `call` is the tool call's
 /// id, so a resent create or run makes nothing new.
 #[derive(Serialize, Deserialize)]
@@ -165,7 +165,7 @@ pub struct Collaborate {
     pub expects_reply: bool,
 }
 /// `POST /api/runtime/turns/{turn}/logins`: asks a person to log in on `site` through the
-/// desktop (ADR 0039). `call` is the tool call's id, so a resend records nothing new. A refusal
+/// desktop (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover). `call` is the tool call's id, so a resend records nothing new. A refusal
 /// is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -174,7 +174,7 @@ pub struct RequestLogin {
     pub site: String,
     pub reason: String,
 }
-/// A vault item (ADR 0086) from `GET /api/runtime/vault`: never its secret.
+/// A vault item (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) from `GET /api/runtime/vault`: never its secret.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(deny_unknown_fields)]
@@ -226,7 +226,7 @@ pub struct VaultPut {
     pub username: Option<String>,
     pub secret: String,
 }
-/// A shared file or folder (ADRs 0059 and 0060), as the console and `/api/runtime/files` list
+/// A shared file or folder (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api), as the console and `/api/runtime/files` list
 /// it. Uploads stream the raw bytes in the request body.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]

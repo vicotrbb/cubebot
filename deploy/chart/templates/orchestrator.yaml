@@ -1,4 +1,4 @@
-# Shared files (ADR 0059); kept on uninstall like the database volume.
+# Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume); kept on uninstall like the database volume.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -15,7 +15,7 @@ spec:
     requests:
       storage: {{ .Values.storage.size }}
 ---
-# One active orchestrator (ADR 0011): never two pods, even during a rollout.
+# One active orchestrator (docs/adr/agents.md#one-active-orchestrator-with-automatic-restart): never two pods, even during a rollout.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

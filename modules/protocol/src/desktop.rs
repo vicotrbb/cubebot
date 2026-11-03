@@ -1,4 +1,4 @@
-//! The desktop arbiter's requests (ADR 0085). The agent's tools send one [`AgentRequest`] JSON
+//! The desktop arbiter's requests (docs/adr/sandbox.md#desktop-as-a-vmm-device). The agent's tools send one [`AgentRequest`] JSON
 //! line per request on the arbiter's Unix socket; the host channel carries [`HostRequest`] lines
 //! from the orchestrator. Each request gets one [`Response`] line. The arbiter tags every request
 //! with its source from the stream it arrived on, never from its body.
@@ -13,10 +13,10 @@ pub const LINE_LIMIT: usize = 64 << 10;
 /// The refusal of agent input while a person holds control.
 pub const PERSON_HAS_CONTROL: &str = "a person has control";
 /// The refusal of agent input after a person handed control back, until the agent takes a
-/// screenshot: what it last saw may no longer be on the screen (ADR 0039).
+/// screenshot: what it last saw may no longer be on the screen (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
 pub const REOBSERVE: &str = "a person had control; take a screenshot before further input";
 /// The refusal of every agent request, screenshots included, while a person holds control to
-/// complete a login the agent asked for (ADR 0039).
+/// complete a login the agent asked for (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
 pub const LOGIN_PENDING: &str =
     "a person is logging in for you; wait for the message that the login handoff finished";
 /// Changed screen regions travel as square tiles of this many pixels per side.
@@ -125,7 +125,7 @@ pub enum HostRequest {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         handoff: bool,
     },
-    /// Types a vault item's field (ADR 0086) for `account`, who must hold control, or for the
+    /// Types a vault item's field (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) for `account`, who must hold control, or for the
     /// agent's `vault_fill` when `None`, which is refused like the agent's own input. Only `item`
     /// and the text's length are logged.
     Fill {

@@ -17,7 +17,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 # The workspace lints, except that unsafe code is denied rather than forbidden so the kvm module
-# alone can allow it (ADR 0084).
+# alone can allow it (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox).
 [lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"

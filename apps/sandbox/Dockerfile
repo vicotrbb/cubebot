@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && mkdir /out \
     && cp target/release/cubebot-agent target/release/cubebot-sandbox /out/
 
-# One container per agent (ADR 0084). The sandbox reads its guest kernel and root image from
+# One container per agent (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). The sandbox reads its guest kernel and root image from
 # CUBEBOT_GUEST_KERNEL and CUBEBOT_GUEST_ROOT; iproute2 joins its tap to the pod network and
 # e2fsprogs formats a new workspace disk. Launchers run it as root with only NET_ADMIN (see the
 # orchestrator's pod layout); the image's own default user stays unprivileged.

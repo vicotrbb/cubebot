@@ -1,4 +1,4 @@
-//! Shared files (ADRs 0059 and 0060) through the orchestrator, which authorizes every call.
+//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) through the orchestrator, which authorizes every call.
 //! `files_put` uploads a workspace file as the tool user reads it and `files_get` writes one as
 //! the tool user, so neither reaches further than a tool call does. A put's request id is the
 //! journaled call's, so a resent call returns the file it already made.

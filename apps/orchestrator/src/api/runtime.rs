@@ -238,7 +238,7 @@ async fn request_login(
         Err(reason) => refused(&reason),
     })
 }
-/// One routine tool call (ADR 0087) for the agent's running turn; a refusal is 409 with the
+/// One routine tool call (docs/adr/agents.md#routines) for the agent's running turn; a refusal is 409 with the
 /// reason the model reads.
 async fn routine(
     State(identity): State<RuntimeIdentity>,
@@ -269,7 +269,7 @@ fn vault_unavailable(error: crate::identity::IdentityError) -> Failure {
     tracing::warn!(?error, "runtime vault request failed");
     Failure(StatusCode::SERVICE_UNAVAILABLE)
 }
-/// The vault items the agent may fill (ADR 0086), without their secrets.
+/// The vault items the agent may fill (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills), without their secrets.
 async fn vault(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,

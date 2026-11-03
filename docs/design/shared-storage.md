@@ -1,6 +1,6 @@
 # Shared storage design
 
-Status: Engineering proposal supporting accepted ADRs 0059 and 0060; no implementation or durability qualification performed. Volume-backed storage and a native API are accepted; detailed mechanics below remain proposed.
+Status: Engineering proposal supporting accepted [Orchestrator-managed file storage on a persistent volume](../adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume) and [Native Cubebot storage API](../adr/memory.md#native-cubebot-storage-api); no implementation or durability qualification performed. Volume-backed storage and a native API are accepted; detailed mechanics below remain proposed.
 
 ## Shape and ownership
 
@@ -61,7 +61,7 @@ Object reads require orchestrator availability. Agents may keep authorized downl
 
 ## Cleanup, backups, and deployment
 
-[ADR 0064](../adr/0064-coordinated-backup-and-restore.md) selects Cubebot-owned backup and restore coordination. [ADR 0065](../adr/0065-maintenance-window-backups.md) selects a coordinated maintenance window. The specific capture and synchronization mechanics below remain proposed.
+[Cubebot-coordinated backup and restore workflows](../adr/packaging.md#cubebot-coordinated-backup-and-restore-workflows) selects Cubebot-owned backup and restore coordination. [Coordinated maintenance windows for backups](../adr/packaging.md#coordinated-maintenance-windows-for-backups) selects a coordinated maintenance window. The specific capture and synchronization mechanics below remain proposed.
 
 Removing a domain reference does not immediately unlink shared bytes. A transaction marks an eligible unreferenced blob for deletion and blocks new references; a retryable worker removes bytes and records completion. Coordinate deletion with active transfers and backups. Do not reclaim a file merely because one directory scan failed to match it to metadata.
 
@@ -73,4 +73,4 @@ The storage backend determines node-loss durability, reattachment behavior, expa
 
 ## Selected protocol direction
 
-[ADR 0060](../adr/0060-native-storage-api.md) selects a native Cubebot interface using platform identities and domain permissions, exposed to agents through native tools. S3 wire compatibility is outside the initial design. Exact transport and schemas remain open. The selected interface does not imply distributed replication or an arbitrary shared POSIX filesystem.
+[Native Cubebot storage API](../adr/memory.md#native-cubebot-storage-api) selects a native Cubebot interface using platform identities and domain permissions, exposed to agents through native tools. S3 wire compatibility is outside the initial design. Exact transport and schemas remain open. The selected interface does not imply distributed replication or an arbitrary shared POSIX filesystem.

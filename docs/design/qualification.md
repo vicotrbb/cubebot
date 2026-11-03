@@ -119,7 +119,7 @@ Test actual egress from arbitrary installed programs, not only native HTTP tools
 | Agent autonomy versus human cancellation/review | Durable ancestry and review policy enforced outside model judgment | Lifecycle race suite |
 | Retention versus deletion and backup restore | Separate active-data deletion, suppression, physical reclamation, and backup retention | Restore/deletion qualification |
 
-The architecture is reviewable without claiming these engineering risks are solved. The networking and fencing gates are especially important: they may reveal that a chosen deployment constraint needs an explicit ADR amendment.
+The architecture is reviewable without claiming these engineering risks are solved. The networking and fencing gates are especially important: they may reveal that a chosen deployment constraint needs an explicit amendment to its decision.
 
 ## Implementation sequence after design review
 

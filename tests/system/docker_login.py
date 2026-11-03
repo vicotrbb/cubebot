@@ -1,4 +1,5 @@
-"""Login handoff (ADRs 0039 and 0085) on a real agent through Docker.
+"""Login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover
+and docs/adr/sandbox.md#desktop-as-a-vmm-device) on a real agent through Docker.
 
 Same host needs as docker_desktop.py, Node with Playwright included. Keeper runs the
 guest desktop with OpenAI's model and asks for logins with request_login; a controller

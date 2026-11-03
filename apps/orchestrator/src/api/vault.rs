@@ -1,4 +1,4 @@
-//! The vault (ADR 0086) for people: no response carries a secret. Installation items are an
+//! The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) for people: no response carries a secret. Installation items are an
 //! administrator's; an agent's own items take `browser.control` on it to change, and the items
 //! an agent may fill are listed with `browser.view`. A fill types into the desktop for the person,
 //! who must hold control of it.

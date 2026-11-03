@@ -71,7 +71,7 @@ pub struct Agent {
     pub idle_delay_seconds: i32,
     /// The dreaming model on the agent's connection; `None` inherits the connection's model.
     pub dreaming_model: Option<String>,
-    /// Delegated tasks that may run beside the main lane (ADR 0005), one to four.
+    /// Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four.
     pub task_lanes: i16,
     /// `working`, `dreaming` or `idle` while running, otherwise the desired state such as
     /// `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
@@ -83,7 +83,7 @@ pub struct Agent {
     pub avatar: sqlx::types::Json<Avatar>,
     /// A running turn called a desktop tool in the last 120 seconds.
     pub desktop_active: bool,
-    /// The agent is waiting for a person to log in on a site (ADR 0039).
+    /// The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
     pub pending_login: bool,
     /// The highest turn sequence in the agent's conversation, 0 without turns.
     pub last_sequence: i64,

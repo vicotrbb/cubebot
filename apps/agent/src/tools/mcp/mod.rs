@@ -1,4 +1,4 @@
-//! MCP client (ADRs 0040, 0041): local stdio servers run as the tool user, remote servers over
+//! MCP client (docs/adr/agents.md#native-core-tools-with-mcp-integrations and docs/adr/agents.md#local-and-remote-mcp-server-support): local stdio servers run as the tool user, remote servers over
 //! Streamable HTTP. Server tools join the registry as `<server>__<tool>`, so they can never
 //! shadow a built-in or another server's tool. Descriptions and results are external data.
 mod http;
@@ -351,7 +351,7 @@ async fn initialize(sandbox: &Sandbox, config: &Config) -> Result<Arc<Transport>
 }
 
 /// Every page of the server's tool catalog. shortcut: the catalog is read once at startup and
-/// not after a restart; re-list it once catalog changes are reconciled with grants (ADR 0040).
+/// not after a restart; re-list it once catalog changes are reconciled with grants (docs/adr/agents.md#native-core-tools-with-mcp-integrations).
 async fn list(server: Arc<Server>, transport: &Transport) -> Result<Vec<Box<dyn Tool>>, String> {
     let name = server.config.name();
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();

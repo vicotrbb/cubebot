@@ -230,8 +230,8 @@ impl Registry {
         }
         let sandbox = Sandbox::from_environment()?;
         let mut tools = builtin::tools();
-        // The provider's computer-use tool, for models that support it (ADR 0085), and the
-        // browser tools on the desktop's Chromium (ADRs 0036 and 0037).
+        // The provider's computer-use tool, for models that support it (docs/adr/sandbox.md#desktop-as-a-vmm-device), and the
+        // browser tools on the desktop's Chromium (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction and docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions).
         if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() == Ok("1") {
             tools.push(computer::tool());
             tools.extend(browser::tools());

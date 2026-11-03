@@ -3260,7 +3260,7 @@
           },
           "pending_login": {
             "type": "boolean",
-            "description": "The agent is waiting for a person to log in on a site (ADR 0039)."
+            "description": "The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover)."
           },
           "read_sequence": {
             "type": "integer",
@@ -3278,7 +3278,7 @@
           "task_lanes": {
             "type": "integer",
             "format": "int32",
-            "description": "Delegated tasks that may run beside the main lane (ADR 0005), one to four."
+            "description": "Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four."
           }
         }
       },
@@ -3949,7 +3949,7 @@
       },
       "FileEntry": {
         "type": "object",
-        "description": "A shared file or folder (ADRs 0059 and 0060), as the console and `/api/runtime/files` list\nit. Uploads stream the raw bytes in the request body.",
+        "description": "A shared file or folder (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api), as the console and `/api/runtime/files` list\nit. Uploads stream the raw bytes in the request body.",
         "required": ["id", "name", "folder", "access", "updated_at"],
         "properties": {
           "access": {
@@ -4506,7 +4506,7 @@
           },
           {
             "type": "object",
-            "description": "A computer-use call that returns the screen; `image` is a base64 PNG (ADR 0085).",
+            "description": "A computer-use call that returns the screen; `image` is a base64 PNG (docs/adr/sandbox.md#desktop-as-a-vmm-device).",
             "required": ["output", "image", "status"],
             "properties": {
               "image": {

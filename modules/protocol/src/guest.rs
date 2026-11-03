@@ -1,4 +1,4 @@
-//! The control channel between `cubebot-sandbox` and the init of its `kvm` guest (ADR 0084): one
+//! The control channel between `cubebot-sandbox` and the init of its `kvm` guest (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): one
 //! vsock stream the guest opens to `HOST_CID:PORT`. The host first sends the agent's environment
 //! as `NAME=value` entries, each ending in NUL, then an empty entry. A `*_FILE` entry carries the
 //! named file's contents, which the guest writes to a private file of its own. Later messages in

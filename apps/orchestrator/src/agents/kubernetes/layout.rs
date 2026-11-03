@@ -93,7 +93,7 @@ impl Layout {
         }
     }
 
-    /// One container per agent (ADR 0084): `cubebot-sandbox` with the agent in its guest, or the
+    /// One container per agent (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): `cubebot-sandbox` with the agent in its guest, or the
     /// agent image itself.
     pub fn pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
         validate_namespace(claim_name)?;
@@ -142,7 +142,7 @@ impl Layout {
         serde_json::from_value(value).map_err(|error| Error::Configuration(error.into()))
     }
 
-    /// The memory limit holds the guest's default 2 GiB (ADR 0085) and the VMM around it, or the
+    /// The memory limit holds the guest's default 2 GiB (docs/adr/sandbox.md#desktop-as-a-vmm-device) and the VMM around it, or the
     /// same for a container; `env` and `mounts` follow the fixed entries.
     fn sandbox(&self, extra_env: Vec<Value>, extra_mounts: Vec<Value>) -> Value {
         let mut env = vec![
@@ -186,7 +186,7 @@ fn kvm_security() -> Value {
 }
 /// Container init runs the arbiter and both X servers as root and drops to the tool and browser
 /// users, which takes only SETUID, SETGID and CHOWN: baseline Pod Security. The root filesystem is
-/// writable, as in any container; agents still install into the workspace (ADR 0034).
+/// writable, as in any container; agents still install into the workspace (docs/adr/sandbox.md#agent-directed-software-installation-within-grants).
 fn container_security() -> Value {
     json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID","CHOWN"]}})
 }

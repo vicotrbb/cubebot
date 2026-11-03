@@ -1,6 +1,6 @@
-//! One dream run (ADR 0025): with every lane idle, the agent asks its model to consolidate its own
+//! One dream run (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results): with every lane idle, the agent asks its model to consolidate its own
 //! memories, and to write down a recurring procedure from its recent turns as a new or revised
-//! skill (ADR 0055). It commits the proposals one at a time, each naming the revision it read. A
+//! skill (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming). It commits the proposals one at a time, each naming the revision it read. A
 //! channel message stops the run before its next commit; what was committed stays.
 use crate::control::MemoryClient;
 use cubebot_protocol::runtime::{

@@ -18,7 +18,7 @@ pub struct ControllerConfig {
     control_ca_config_map: Option<String>,
     #[serde(default)]
     terminal_enabled: bool,
-    /// Offers the provider's computer-use tool and starts each guest's desktop (ADR 0085).
+    /// Offers the provider's computer-use tool and starts each guest's desktop (docs/adr/sandbox.md#desktop-as-a-vmm-device).
     #[serde(default)]
     computer_use_enabled: bool,
 }

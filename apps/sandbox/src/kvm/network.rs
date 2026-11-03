@@ -1,4 +1,4 @@
-//! The guest's network (ADR 0084): a tap device in the sandbox's network namespace, joined to the
+//! The guest's network (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): a tap device in the sandbox's network namespace, joined to the
 //! namespace's default-route interface by tc mirred redirects both ways, as Kata Containers'
 //! tcfilter mode does. The guest takes that interface's MAC, IPv4 address and gateway, so pod
 //! NetworkPolicy governs exactly the guest's traffic; the sandbox process keeps no network of its

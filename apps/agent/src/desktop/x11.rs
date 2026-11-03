@@ -1,4 +1,4 @@
-//! The arbiter's [`Screen`] and [`Input`] on the outer X display (ADR 0085), which only root can
+//! The arbiter's [`Screen`] and [`Input`] on the outer X display (docs/adr/sandbox.md#desktop-as-a-vmm-device), which only root can
 //! reach: frames are GetImage of its root window, and input is XTEST on it, which Xephyr's window
 //! receives as device events and passes to the tool user's display nested inside it.
 use super::{Event, HEIGHT, Input, Screen, WIDTH};

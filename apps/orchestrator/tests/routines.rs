@@ -1,4 +1,4 @@
-//! Routines (ADR 0087) against real PostgreSQL: coalescing, schedules after downtime, and the
+//! Routines (docs/adr/agents.md#routines) against real PostgreSQL: coalescing, schedules after downtime, and the
 //! webhook's secret and Idempotency-Key through HTTP.
 use crate::support;
 use axum::{body::Body, http::Request};

@@ -1,4 +1,7 @@
-"""The agent's browser tools (ADRs 0036, 0037 and 0085) on real agents through Docker.
+"""The agent's browser tools
+(docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction,
+docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions and
+docs/adr/sandbox.md#desktop-as-a-vmm-device) on real agents through Docker.
 
 Same host needs as docker_sandbox.py. Two agents with computer use drive the guest's
 desktop Chromium through the browser tools with OpenAI's model: Surfer in its main
@@ -228,7 +231,9 @@ def form(world):
         for call in calls(row, tool)
     }
     reads = {call["id"] for call in calls(row, "browser_read")}
-    # Every call asks, so a login handoff (ADR 0039) can refuse reads too.
+    # Every call asks, so a login handoff
+    # (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) can refuse
+    # reads too.
     assert inputs | reads <= checked, (inputs, reads, checked)
     print("PASS form: navigate, read, type and click in session main submitted")
     print(f"     name={NAME!r}; every call asked the arbiter first")

@@ -18,7 +18,7 @@ const ORIGINS: Record<string, string> = {
 }
 type Secret = { id: string; secret: string }
 
-/** Stored prompts and commands the agent runs by hand, on a schedule or by webhook (ADR 0087). */
+/** Stored prompts and commands the agent runs by hand, on a schedule or by webhook (docs/adr/agents.md#routines). */
 export function Routines({
   agent,
   editable,

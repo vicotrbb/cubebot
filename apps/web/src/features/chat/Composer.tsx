@@ -21,7 +21,7 @@ function write(key: string, value: string) {
 
 /**
  * The message box, Slack-shaped: Enter sends, Shift+Enter breaks a line. Drafts and an
- * unconfirmed request id persist per installation, person and conversation (ADR 0053), so a
+ * unconfirmed request id persist per installation, person and conversation (docs/adr/console.md#online-console-operations-with-local-drafts), so a
  * lost acknowledgement retries with the same id instead of sending twice.
  */
 export function Composer({

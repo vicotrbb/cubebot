@@ -1293,7 +1293,7 @@ export interface components {
        */
       last_sequence: number
       name: string
-      /** @description The agent is waiting for a person to log in on a site (ADR 0039). */
+      /** @description The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover). */
       pending_login: boolean
       /**
        * Format: int64
@@ -1306,7 +1306,7 @@ export interface components {
       revision: number
       /**
        * Format: int32
-       * @description Delegated tasks that may run beside the main lane (ADR 0005), one to four.
+       * @description Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four.
        */
       task_lanes: number
     }
@@ -1551,7 +1551,7 @@ export interface components {
      */
     FileAccess: 'read' | 'write' | 'manage'
     /**
-     * @description A shared file or folder (ADRs 0059 and 0060), as the console and `/api/runtime/files` list
+     * @description A shared file or folder (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api), as the console and `/api/runtime/files` list
      *     it. Uploads stream the raw bytes in the request body.
      */
     FileEntry: {

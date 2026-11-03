@@ -1,4 +1,4 @@
-//! Desktop session records (ADRs 0039 and 0085): the viewer, start, end and each mode change
+//! Desktop session records (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device): the viewer, start, end and each mode change
 //! they made. Frames pass through the orchestrator and are never stored.
 use super::{AgentId, Agents};
 use crate::identity::IdentityError;

@@ -1,11 +1,11 @@
-//! Browser tools (ADRs 0036 and 0037) on the desktop's Chromium, which this module starts as its
+//! Browser tools (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction and docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions) on the desktop's Chromium, which this module starts as its
 //! own user with its profile on the workspace disk, driven through Chromium's DevTools protocol on
 //! a pipe only the agent holds, so a tool command reaches neither. The
 //! `main` session is a page in the profile's own context; any other session name is a task
 //! session with a browser context of its own, whose cookies end when it closes. Calls address a
 //! session's page directly, so one session never moves another's page or takes its input. Input
-//! is refused while a person holds the desktop (ADR 0085), and every call while they hold it for
-//! a login handoff (ADR 0039); the arbiter is asked first.
+//! is refused while a person holds the desktop (docs/adr/sandbox.md#desktop-as-a-vmm-device), and every call while they hold it for
+//! a login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover); the arbiter is asked first.
 use super::{Running, Sandbox, Tool, Waiting, computer, lock};
 use cubebot_protocol::{
     desktop::{Action, Mode, PERSON_HAS_CONTROL},

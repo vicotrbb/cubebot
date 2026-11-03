@@ -1,8 +1,8 @@
-//! A person's view of an agent's desktop (ADRs 0039 and 0085): a WebSocket proxied to the
+//! A person's view of an agent's desktop (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device): a WebSocket proxied to the
 //! sandbox's host channel. Frames go to the page as the sandbox encoded them; the orchestrator
 //! never decodes or keeps them. Watching takes `browser.view` and taking control
 //! `browser.control`, and the session rechecks the viewer's credential and access while it runs.
-//! A pending login handoff (ADR 0039) is shown with `browser.view` and declined with
+//! A pending login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) is shown with `browser.view` and declined with
 //! `browser.control`; taking control while it is pending takes it for the handoff, and handing
 //! control back completes it.
 use crate::{
@@ -402,7 +402,7 @@ async fn send(socket: &mut WebSocket, text: String) -> Result<(), Closing> {
         .map_err(Closing::Disconnected)
 }
 
-/// Types a vault item's text on the agent's desktop (ADR 0086) over a host channel of its own,
+/// Types a vault item's text on the agent's desktop (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) over a host channel of its own,
 /// for `account` or, when `None`, for the agent. The inner error is the arbiter's refusal.
 pub(super) async fn fill(
     desktop: &Desktop,

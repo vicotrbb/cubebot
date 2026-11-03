@@ -3,7 +3,7 @@ import { api, ApiError, failure, ok, type VaultItem } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { Alert, Field } from '../../components/primitives'
 
-/** What the desktop can type (ADR 0086): printable ASCII and spaces. */
+/** What the desktop can type (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills): printable ASCII and spaces. */
 const TYPABLE = /^[\x20-\x7e]*$/
 type Kind = VaultItem['kind']
 

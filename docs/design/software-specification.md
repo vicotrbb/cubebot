@@ -1,6 +1,6 @@
 # Cubebot software specification
 
-Date: 2026-10-24, updated 2026-10-25 for ADR 0081. Status: engineering proposal implementing the accepted ADR baseline, ready for design review. The [architecture](../../ARCHITECTURE.md) defines the deployment and ownership map. This document proposes concrete contracts; illustrative identifiers and signatures are not implemented endpoints or migration files.
+Date: 2026-10-24, updated 2026-10-25 for [Installation-wide connection access by default](../adr/identity.md#installation-wide-connection-access-by-default). Status: engineering proposal implementing the accepted decision baseline, ready for design review. The [architecture](../../ARCHITECTURE.md) defines the deployment and ownership map. This document proposes concrete contracts; illustrative identifiers and signatures are not implemented endpoints or migration files.
 
 ## 1. Caller-facing contracts
 
@@ -53,7 +53,7 @@ All derived execution preserves root attribution. A recurring trigger starts an 
 
 Agent-initiated creation requires an explicit creation grant covering quantity, resource profiles, permitted capabilities, and allowed lifetime. The request selects persistent or task-bound lifetime within that grant; omitted lifetime defaults to task-bound for agent-created workers. The child receives fresh memory and an explicit source-attributed briefing. It does not inherit the creator's memory, workspace, rooms, credentials, or installed skills automatically. Any supplied configuration and skill selection must be independently permitted. Human-created lifetime defaults remain a UI proposal.
 
-The child's connection eligibility is evaluated from current installation policy, including all-agents connections under ADR 0081. That baseline is independent of the creator's specific grants and does not copy the creator's credential material.
+The child's connection eligibility is evaluated from current installation policy, including all-agents connections under [Installation-wide connection access by default](../adr/identity.md#installation-wide-connection-access-by-default). That baseline is independent of the creator's specific grants and does not copy the creator's credential material.
 
 Sleep is the default idle policy; managers may choose always-running agents. Only settled idle execution can sleep. Messages, triggers, and scheduled dreaming can wake eligible agents. Retired task-bound agents do not wake, and their retained data remains inspectable through authorized platform operations.
 
@@ -108,7 +108,7 @@ Cancellation and acceptance serialize against the same goal revision. The losing
 
 Use PostgreSQL tables for pending work, lane ownership, and delivery/outbox state. Claim bounded batches under short transactions using row locks where needed; never hold a transaction during model, browser, or Kubernetes calls. Application workers remain asynchronous tasks in the single orchestrator process.
 
-Proposed scheduling order is maintenance/authority checks, ancestor cancellation, goal limits, lane eligibility, provider/account capacity, then execution admission. Eligible queued human messages take precedence under ADR 0005, followed by queue age. Expose starvation metrics; do not silently replace that accepted priority rule with a different policy.
+Proposed scheduling order is maintenance/authority checks, ancestor cancellation, goal limits, lane eligibility, provider/account capacity, then execution admission. Eligible queued human messages take precedence under [Agent execution lanes](../adr/agents.md#agent-execution-lanes), followed by queue age. Expose starvation metrics; do not silently replace that accepted priority rule with a different policy.
 
 Main-lane context includes only its selected assignment and relevant conversation. Task lanes use task context. Default task concurrency is two, configurable one through four; main concurrency is one. Installation capacity and shared provider constraints may reduce actual admission. Start with a proposed installation lane cap of 50 for the qualification profile, independent of the 25-working-agent target, and tune using evidence.
 
@@ -212,7 +212,7 @@ Package imports validate paths, archive expansion, metadata, encoding, and suppo
 
 ## 8. Connections, tools, browser, and triggers
 
-Keep provider connections distinct from integration definitions, external account connections, and per-agent assignments. Connections remain installation-owned. Under [ADR 0081](../adr/0081-installation-wide-default-connection-access.md), use access_mode = all_agents by default, or explicit_grants when restricted. All-agents mode dynamically authorizes current and future eligible agents to use the connection's approved tools and resource scope. It does not require per-agent assignment records.
+Keep provider connections distinct from integration definitions, external account connections, and per-agent assignments. Connections remain installation-owned. Under [Installation-wide connection access by default](../adr/identity.md#installation-wide-connection-access-by-default), use access_mode = all_agents by default, or explicit_grants when restricted. All-agents mode dynamically authorizes current and future eligible agents to use the connection's approved tools and resource scope. It does not require per-agent assignment records.
 
 Proposed effective-access evaluation: the connection must be enabled and valid, the agent eligible, and either the all-agents baseline or a valid specific grant must authorize use. Intersect that authority with the connection's approved scope, applicable execution restrictions, upstream credential scope, and separately required network grants. Specific-grants mode denies access without a valid grant. A restricted grant cannot negate a broader baseline; choose specific-grants mode when only a subset should have access.
 
@@ -311,25 +311,18 @@ Monetary limits are unset by default. When enabled, allocate conservative bounde
 
 Hardware, concurrency, capture limits, and disconnected authority still constrain execution when no money limit is configured. Ordinary trigger autonomy cannot raise these limits. Dreaming and routine maintenance have explicit independent attribution rather than borrowing the last user goal's identity.
 
-## 13. ADR coverage
+## 13. Decision coverage
 
-Every accepted ADR is covered by the architecture, this specification, and the qualification plan. The ranges below are navigation groups; each ADR remains individually authoritative.
+Every accepted decision up to installation-wide connection access (2026-10-25) is covered by the architecture, this specification, and the qualification plan. The rows below are navigation groups; each decision section remains individually authoritative. Decisions accepted later (one permanent conversation, agent-centric execution in a sandbox, the in-house VMM, the desktop, the vault and routines) postdate this specification; for those the decision documents and the architecture are authoritative.
 
-| Accepted decisions | Consolidated contract |
+| Decision document | Consolidated contract |
 | --- | --- |
-| 0001–0004 | Installation, ownership, administrator access, unified memory: architecture and sections 2, 7, 9 |
-| 0005–0013 | Lanes, engine, lifecycle, persistence, orchestrator, recovery, autonomy: sections 2–6 and 12 |
-| 0014–0019 | Rooms, messaging, creation, lifetime, briefing: sections 2, 3, 5; architecture collaboration |
-| 0020–0027 | Source-preserving memory, retrieval, compaction, dreaming, correction: section 7 and deletion in 11 |
-| 0028–0032 | Provider connections, model policy, direct inference and refresh: sections 6, 8, 12 |
-| 0033–0039 | Runtime/tool separation, installation, network, browser and takeover: architecture trust and section 8 |
-| 0040–0048 | MCP, registry, accounts, restrictions, discovery, triggers: section 8 |
-| 0049–0054 | Accounts, admission, grants, teams, PWA and notifications: section 9 |
-| 0055–0060 | Skills, imports, shared storage and native interface: sections 7, 10, 11 |
-| 0061–0068 | Qualification, database deployment, backups, keys, budgets and pauses: architecture, section 12, qualification plan |
-| 0069–0073 | Frontend, conversation workspace, steering, cancellation and failure: sections 3, 5, 9 |
-| 0074–0077 | Database-owned definitions, namespace, runtimes and upgrades: architecture and sections 4, 11 |
-| 0078–0080 | Providers, retention and completion: sections 3, 6, 7, 11 |
-| 0081 | Installation-wide default connection access with specific-grants mode: sections 2, 8, 10 |
+| [Identity, access and credentials](../adr/identity.md) | Installation, ownership, administrator access, accounts, admission, grants, teams, connections, keys: architecture and sections 2, 6, 8, 9, 10, 12 |
+| [Agents and runtime](../adr/agents.md) | Engine, lanes, lifecycle, orchestrator, recovery, autonomy, creation, models, providers, MCP, discovery, triggers, budgets, definitions: sections 2–8, 11, 12 |
+| [Sandbox and isolation](../adr/sandbox.md) | Runtime/tool separation (since replaced), installation, network, browser, takeover, runtimes: architecture trust and sections 4, 8, 11 |
+| [Rooms and delegation](../adr/rooms.md) | Rooms, messaging, steering, cancellation, failure, completion: sections 2, 3, 5, 9; architecture collaboration |
+| [Memory, skills and files](../adr/memory.md) | Unified memory, briefing, source-preserving memory, retrieval, compaction, dreaming, correction, skills, imports, storage, retention: sections 2, 3, 5, 7, 9, 10, 11 |
+| [Console](../adr/console.md) | Frontend, conversation workspace, PWA and notifications: sections 3, 5, 9 |
+| [Packaging and operations](../adr/packaging.md) | Qualification, namespace, database deployment, backups, upgrades: architecture, sections 4, 11, 12, qualification plan |
 
-The [ADR index](../adr/README.md) provides the individual source links. The qualification plan records remaining evidence gaps and the order in which to resolve them.
+The [decision index](../adr/README.md) maps each former ADR number to its section. The qualification plan records remaining evidence gaps and the order in which to resolve them.

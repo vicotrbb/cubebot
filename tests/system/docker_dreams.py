@@ -1,4 +1,5 @@
-"""Dreaming (ADR 0025) on real agents through the Docker sandbox backend.
+"""Dreaming (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results) on
+real agents through the Docker sandbox backend.
 
 Same host needs as docker_sandbox.py. Three agents with a 60-second idle delay and a
 real OpenAI model: one consolidates seeded duplicates and contradictions, is refused a

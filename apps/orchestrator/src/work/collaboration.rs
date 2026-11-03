@@ -1,4 +1,4 @@
-//! Agent-to-agent work (ADRs 0016, 0072, 0073). A child is a turn in its recipient's
+//! Agent-to-agent work (docs/adr/rooms.md#explicit-agent-messaging-and-delegation, docs/adr/rooms.md#cancel-selected-work-and-its-descendants and docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt). A child is a turn in its recipient's
 //! conversation with `parent_turn_id` as its ancestry. A parent with awaited children yields when
 //! its run ends and is queued again each time one settles, receiving every settled outcome,
 //! failed and cancelled ones with their evidence, and which are still open. A completed

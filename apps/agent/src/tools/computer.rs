@@ -1,4 +1,4 @@
-//! The computer tool (ADR 0085): the provider's own computer-use tool, served by the sandbox's
+//! The computer tool (docs/adr/sandbox.md#desktop-as-a-vmm-device): the provider's own computer-use tool, served by the sandbox's
 //! screen arbiter over its Unix socket. Anthropic toolset calls arrive as
 //! `{"action": member, ...input}` and OpenAI calls as `{"actions": [...]}`; each becomes arbiter
 //! requests tagged with the call's id. An OpenAI call always answers with a screenshot.

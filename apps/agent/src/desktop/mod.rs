@@ -1,4 +1,4 @@
-//! The screen arbiter (ADR 0085): a root process in the sandbox and the only client of the outer
+//! The screen arbiter (docs/adr/sandbox.md#desktop-as-a-vmm-device): a root process in the sandbox and the only client of the outer
 //! display, so the only reader of the screen and the only writer of input. It serves the agent's
 //! tools on a Unix socket only root can open, and the host channel ([`Host`]): in a `kvm` guest
 //! over streams it holds open to the sandbox's vsock host port, which the sandbox pairs with the
@@ -6,7 +6,7 @@
 //! second root-only socket that `cubebot-agent desktop` relays; one request at a time. It holds the mode,
 //! refuses agent input while a person holds control and until the agent looks again after they
 //! hand it back, refuses every agent request while a person holds control for a login handoff
-//! (ADR 0039), and logs every request with its source: the agent and its tool call, or the
+//! (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover), and logs every request with its source: the agent and its tool call, or the
 //! person's account. Each host channel connection gets frames of the tiles that changed since its
 //! last one, encoded on its own relay thread. Its device edges are [`Screen`] and [`Input`].
 mod png;

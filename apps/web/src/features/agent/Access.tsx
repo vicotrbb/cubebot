@@ -5,7 +5,7 @@ import { CAPABILITIES, type AgentSummary } from '../../api/types'
 import { failure } from '../../api/client'
 import { Alert, Field, Status } from '../../components/primitives'
 
-/** Who may do what on this agent: grant, revoke by receipt, and the audit trail (ADR 0051). */
+/** Who may do what on this agent: grant, revoke by receipt, and the audit trail (docs/adr/identity.md#built-in-roles-with-scoped-resource-grants). */
 export function Access({ agent }: { agent: AgentSummary }) {
   const client = useQueryClient()
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: admin.accounts })

@@ -1,4 +1,6 @@
-"""Acceptance for the kvm backend (ADR 0084): x86_64 Linux, /dev/kvm, Docker and sudo.
+"""Acceptance for the kvm backend
+(docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): x86_64 Linux, /dev/kvm, Docker
+and sudo.
 
 A network namespace with a veth pair stands in for an agent pod, shaped as Calico
 gives one: a /32 address behind a link-local gateway that the host answers by proxy
@@ -10,7 +12,8 @@ The second boot must reopen the journal lock file the first one created, and run
 computer use on: a person takes control and closes the maximized Chromium until the host
 channel's screenshot shows the wallpaper. Before both,
 the sandbox must refuse to start in the host's own network namespace. A third boot
-runs guest_desktop.py as init around the real one (ADR 0085): as the tool user it must
+runs guest_desktop.py as init around the real one
+(docs/adr/sandbox.md#desktop-as-a-vmm-device): as the tool user it must
 find the outer display, the arbiter's socket and the host channel out of reach and no
 XTEST on its own display; through the host channel (`cubebot-sandbox desktop`) a
 screenshot must show the wallpaper, a person's key must be refused until that person

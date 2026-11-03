@@ -1,4 +1,4 @@
-//! Working-context assembly and rolling compaction (ADR 0024). The context is the system
+//! Working-context assembly and rolling compaction (docs/adr/memory.md#rolling-context-compaction). The context is the system
 //! prompt, tool definitions, the latest summary and every exchange after it. Once the
 //! provider reports 80% of the model window used, the context is summarized at the next safe
 //! point and replaced by that summary plus the current request.

@@ -13,7 +13,7 @@ pub enum Outcome {
         reason: String,
         output: String,
     },
-    /// A computer-use call that returns the screen; `image` is a base64 PNG (ADR 0085).
+    /// A computer-use call that returns the screen; `image` is a base64 PNG (docs/adr/sandbox.md#desktop-as-a-vmm-device).
     Screenshot {
         output: String,
         image: String,

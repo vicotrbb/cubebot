@@ -4,4 +4,4 @@ The orchestrator embeds and applies SQLx migrations from this directory when a d
 
 `just integration` applies migrations against real isolated PostgreSQL, reconnects, reapplies them and verifies constraints and transaction rollback. Agents never receive database credentials or access the schema directly.
 
-Coordinated maintenance, backup/restore and upgrades under ADRs 0064, 0065 and 0077 remain unimplemented. Development migration tests do not qualify those workflows.
+Coordinated maintenance, backup/restore and upgrades under [Cubebot-coordinated backup and restore workflows](../../../docs/adr/packaging.md#cubebot-coordinated-backup-and-restore-workflows), [Coordinated maintenance windows for backups](../../../docs/adr/packaging.md#coordinated-maintenance-windows-for-backups) and [Coordinated maintenance upgrades](../../../docs/adr/packaging.md#coordinated-maintenance-upgrades) remain unimplemented. Development migration tests do not qualify those workflows.

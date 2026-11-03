@@ -1,4 +1,5 @@
-"""Routines (ADR 0087) on real agents through Docker, from every side.
+"""Routines (docs/adr/agents.md#routines) on real agents through Docker, from every
+side.
 
 Same host needs as docker_sandbox.py, plus Node with Playwright for the console. Keeper
 and Other are OpenAI agents with bash workspaces. People with no grant,

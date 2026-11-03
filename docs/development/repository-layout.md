@@ -53,9 +53,9 @@ The orchestrator owns installation-wide state and rules. `api` translates HTTP r
 
 The agent owns the native loop and all agent-specific behavior. `engine` coordinates turns and recovery; `context` assembles and compacts working context; `memory` owns extraction and dreaming behavior; `skills` loads installed skill revisions; `tools` discovers and dispatches calls; `control` communicates with the orchestrator. The orchestrator remains authoritative for durable records, grants, credential refresh, and memory/skill revisions.
 
-The agent package has one binary, `cubebot-agent`, and runs its own tools inside its sandbox (ADR 0083).
+The agent package has one binary, `cubebot-agent`, and runs its own tools inside its sandbox ([Agent-centric execution in a sandbox boundary](../adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary)).
 
-The sandbox app builds `cubebot-sandbox`, the VMM that runs one agent ([ADR 0084](../adr/0084-in-house-vmm-as-the-agent-sandbox.md)). It owns KVM and guest devices and nothing agent-specific; it is the only crate allowed `unsafe`, for KVM ioctls and guest memory.
+The sandbox app builds `cubebot-sandbox`, the VMM that runs one agent ([In-house VMM as the agent sandbox](../adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)). It owns KVM and guest devices and nothing agent-specific; it is the only crate allowed `unsafe`, for KVM ioctls and guest memory.
 
 The web app owns the console and future PWA. Routes compose features. Feature-specific state and components stay with their feature; reusable interface primitives belong in `components`; API client/types and event transport belong in `api`. The text-chat workspace now implements sign-in/out, authorized agent management, provider configuration and durable conversations.
 

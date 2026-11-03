@@ -16,9 +16,9 @@ function SignInSettings() {
     <div className="platform">
       <div>
         <p className="platform__lead">
-          OpenID Connect is configured on the orchestrator (ADR 0050). Bindings
-          tie an account to an issuer and subject; revoking one ends its OIDC
-          sessions and keeps the record as a tombstone.
+          OpenID Connect is configured on the orchestrator. Bindings tie an
+          account to an issuer and subject; revoking one ends its OIDC sessions
+          and keeps the record as a tombstone.
         </p>
         {bindings.isPending && <Skeleton lines={3} />}
         {bindings.isError && (

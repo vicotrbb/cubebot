@@ -346,7 +346,7 @@ impl MemoryClient {
         accepted(self.post(&format!("turns/{turn}/logins"), request).await?)
     }
 
-    /// The answer to one routine tool call (ADR 0087), or the orchestrator's reason for refusing it.
+    /// The answer to one routine tool call (docs/adr/agents.md#routines), or the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn routine(
         &self,
@@ -363,7 +363,7 @@ impl MemoryClient {
         }
     }
 
-    /// The vault items this agent may fill, without their secrets (ADR 0086).
+    /// The vault items this agent may fill, without their secrets (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills).
     #[tracing::instrument(skip_all)]
     pub async fn vault(&self) -> Result<Vec<runtime::VaultItem>, Error> {
         let url = self.url.join("vault").map_err(Error::configuration)?;
@@ -390,7 +390,7 @@ impl MemoryClient {
         accepted(self.post("vault", request).await?)
     }
 
-    /// Shared files at the agent's own top level, in a folder, or shared with it (ADR 0060).
+    /// Shared files at the agent's own top level, in a folder, or shared with it (docs/adr/memory.md#native-cubebot-storage-api).
     #[tracing::instrument(skip_all)]
     pub async fn files(
         &self,

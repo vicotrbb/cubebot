@@ -1,4 +1,4 @@
-//! A login handoff (ADR 0039) end to end: the real agent binary asks for a login with a scripted
+//! A login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) end to end: the real agent binary asks for a login with a scripted
 //! model, a person takes control of the desktop through the browser router against a stand-in
 //! arbiter and hands it back, and the agent's next turn reads that the login completed.
 use crate::{

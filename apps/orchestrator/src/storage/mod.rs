@@ -1,8 +1,8 @@
-//! Shared files (ADRs 0059 and 0060): bytes on an exclusively owned volume, metadata in
+//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api): bytes on an exclusively owned volume, metadata in
 //! PostgreSQL. A person or an agent owns a folder tree; a share with a person, a team or an
 //! agent grants read or write on a file and everything under it. People also reach an agent's
 //! files through `workspace.read` and `workspace.write` on it, and administrators read every
-//! file (ADR 0003). Callers authenticate; this module authorizes every operation.
+//! file (docs/adr/identity.md#administrator-content-access). Callers authenticate; this module authorizes every operation.
 //!
 //! An upload is staged, synchronized and hard linked into place before its rows commit, so a row
 //! never names missing bytes; a crash in between leaves an unreferenced blob that [`Storage::start`]
@@ -165,7 +165,7 @@ struct Inner {
     volume: Volume,
     transfers: Arc<Semaphore>,
     quota: u64,
-    /// Stored and staged bytes. One active orchestrator owns the volume (ADR 0011).
+    /// Stored and staged bytes. One active orchestrator owns the volume (docs/adr/agents.md#one-active-orchestrator-with-automatic-restart).
     used: Mutex<u64>,
 }
 

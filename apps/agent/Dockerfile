@@ -13,13 +13,13 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo build --locked --release -p cubebot-agent --bin cubebot-agent \
     && install -D target/release/cubebot-agent /out/cubebot-agent
 
-# One agent image for both sandbox runtimes (ADR 0084). In `kvm` it is the guest's read-only root
+# One agent image for both sandbox runtimes (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). In `kvm` it is the guest's read-only root
 # filesystem: tooling/guest exports it to ext4, and the kernel runs `cubebot-agent guest` as init,
 # which mounts the workspace disk on /var/lib/cubebot. In `container` launchers run it directly
 # as `cubebot-agent container`, with the workspace volume mounted on /var/lib/cubebot.
 FROM debian:bookworm-slim
 # CUBEBOT_TOOL_USER is 10001:10001; init creates and chowns its home on the workspace volume.
-# The desktop (ADR 0085): init starts Xvfb, the outer display only the arbiter reaches, and
+# The desktop (docs/adr/sandbox.md#desktop-as-a-vmm-device): init starts Xvfb, the outer display only the arbiter reaches, and
 # Xephyr nested on it without XTEST as the tool user's display, when computer use is on; then
 # openbox and xwallpaper, which draws wallpaper.jpg on the root window, as the tool user. The
 # agent starts Chromium as the browser user, 10002, whose profile in /var/lib/cubebot/browser the
@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && groupadd -g 10002 browser \
     && useradd -u 10002 -g 10002 -M -d /var/lib/cubebot/browser -s /usr/sbin/nologin browser
 COPY apps/agent/wallpaper.jpg /usr/share/cubebot/wallpaper.jpg
-# A person who logs in for the agent (ADR 0039) must not leave the password in the profile on the
+# A person who logs in for the agent (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) must not leave the password in the profile on the
 # workspace disk, which the agent's tools can read; a managed policy on the read-only root holds.
 COPY apps/agent/chromium-policy.json /etc/chromium/policies/managed/cubebot.json
 COPY --from=build /out/cubebot-agent /usr/local/bin/

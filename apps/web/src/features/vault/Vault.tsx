@@ -4,7 +4,7 @@ import type { AgentSummary } from '../../api/types'
 import { Alert, Empty, when } from '../../components/primitives'
 import { agentVault, ItemForm } from './ItemForm'
 
-/** Logins and secrets the agent fills without reading them (ADR 0086). */
+/** Logins and secrets the agent fills without reading them (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills). */
 export function Vault({
   agent,
   administrator,

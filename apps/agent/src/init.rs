@@ -1,6 +1,6 @@
 //! What `cubebot-agent guest` and `cubebot-agent container` share once the agent's environment
 //! is known: its storage on the workspace volume, the desktop and its arbiter when computer use
-//! is on (ADR 0085), the agent as a child, and reaping as PID 1 until the agent exits.
+//! is on (docs/adr/sandbox.md#desktop-as-a-vmm-device), the agent as a child, and reaping as PID 1 until the agent exits.
 use crate::desktop::Host;
 use nix::{
     errno::Errno,
@@ -25,7 +25,7 @@ const JOURNAL: &str = "/var/lib/cubebot/runtime";
 const WORKSPACE: &str = "/var/lib/cubebot/workspace";
 /// Files only the agent reads.
 pub(crate) const PRIVATE: &str = "/run/cubebot";
-/// The outer display's cookie (ADR 0085), for the arbiter and Xephyr.
+/// The outer display's cookie (docs/adr/sandbox.md#desktop-as-a-vmm-device), for the arbiter and Xephyr.
 const OUTER_AUTHORITY: &str = "/run/cubebot/display";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 /// Written by openbox's startup command once it manages windows; a window mapped before then

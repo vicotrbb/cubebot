@@ -1,4 +1,4 @@
-// Shared files (ADRs 0059 and 0060) in real Chromium against the built console behind
+// Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) in real Chromium against the built console behind
 // Caddy: the administrator uploads with the picker and by dropping a file, makes a folder,
 // drags a file into it, renames and downloads it, shares the folder with a person and
 // deletes a file; that person then finds the folder under Shared with me, read only, and

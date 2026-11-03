@@ -25,7 +25,7 @@ pub struct DockerConfig {
     runtime: Runtime,
     #[serde(default)]
     terminal_enabled: bool,
-    /// The guest desktop and the agent's computer tool (ADR 0085); needs `terminal_enabled`.
+    /// The guest desktop and the agent's computer tool (docs/adr/sandbox.md#desktop-as-a-vmm-device); needs `terminal_enabled`.
     #[serde(default)]
     computer_use_enabled: bool,
     /// Host path of a PEM bundle the guest trusts for `orchestrator_origin`, e.g. from `just dev-ca`.

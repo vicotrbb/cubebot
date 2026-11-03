@@ -1,4 +1,4 @@
-//! Vault tools (ADR 0086). `vault_list` shows the items this agent may fill, without secrets;
+//! Vault tools (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills). `vault_list` shows the items this agent may fill, without secrets;
 //! `vault_fill` has the desktop's arbiter type one field at the keyboard focus, so the secret
 //! never reaches the model; `vault_put` saves a secret the agent made, and its `secret` argument
 //! is redacted before the call reaches the journal or the turn ledger.

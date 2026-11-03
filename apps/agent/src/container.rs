@@ -1,4 +1,4 @@
-//! `cubebot-agent container`: PID 1 of the `container` sandbox (ADR 0084 as amended). The
+//! `cubebot-agent container`: PID 1 of the `container` sandbox (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox as amended). The
 //! launcher mounts the workspace volume on `/var/lib/cubebot` and every `*_FILE`, and passes the
 //! agent's settings as `CUBEBOT_*` variables; there are no disks to mount and no routes to set.
 //! It refuses a volume a `kvm` sandbox laid out, hands the settings to [`crate::init`], passes
