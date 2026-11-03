@@ -1,6 +1,7 @@
 //! Anthropic Messages over SSE. Content blocks, including signed thinking, are kept for replay.
 use crate::{
-    Capabilities, Decoder, Error, Event, Limits, Message, Provider, Request, Usage, call, reply,
+    Capabilities, Decoder, Error, Event, Limits, Message, Model, Provider, Request, Usage, call,
+    reply,
 };
 use futures_util::Stream;
 use reqwest::{Client, RequestBuilder, Url};
@@ -66,6 +67,19 @@ impl Provider for Anthropic {
             context_window: model["max_input_tokens"].as_u64(),
             max_output_tokens: model["max_tokens"].as_u64(),
         })
+    }
+
+    /// Newest first, as Anthropic lists them; one page holds every model.
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic"))]
+    async fn models(&self, key: &str) -> Result<Vec<Model>, Error> {
+        let mut url = self
+            .base
+            .join("models")
+            .map_err(|error| Error::Configuration(Some(error.into())))?;
+        url.query_pairs_mut().append_pair("limit", "1000");
+        let response = crate::send(self.authorized(self.http.get(url), key)).await?;
+        let body = crate::json(response).await?;
+        crate::models(&body, |entry| entry["max_input_tokens"].as_u64())
     }
 
     fn stream<'a>(

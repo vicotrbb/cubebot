@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agents\n        SET restart_generation=restart_generation + CASE WHEN desired_state='stopped' THEN 1 ELSE 0 END,\n            revision=revision + CASE WHEN desired_state='stopped' THEN 1 ELSE 0 END,\n            desired_state='running'\n        WHERE id=$1 AND desired_state<>'retired'\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e827ac0b21ed1cfebb198945bd78d76eb77dc849ee08aef086e7215fcab466da"
+}

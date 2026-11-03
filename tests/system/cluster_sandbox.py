@@ -63,7 +63,7 @@ def operator(f, name, instructions=INSTRUCTIONS):
     created = f.request(
         "/api/agents", command(name=name, instructions=instructions), expected=201
     )
-    lifecycle(f, created["id"], "wake")
+    lifecycle(f, created["id"], "start")
     return created["id"], running(f, created["id"])
 
 
@@ -287,7 +287,7 @@ def revocation(f, evidence):
 def stop(f, identity, current, evidence):
     held = vms(f, container(current))
     assert held
-    lifecycle(f, identity, "sleep")
+    lifecycle(f, identity, "stop")
     wait_for("sandbox removal", lambda: pod(f, identity) is None)
     remaining = vms(f)
     assert not held & remaining, (held, remaining)

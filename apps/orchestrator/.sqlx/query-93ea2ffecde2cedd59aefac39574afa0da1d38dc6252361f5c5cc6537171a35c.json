@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE agents SET created_at = clock_timestamp() - make_interval(secs => idle_delay_seconds + 1) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "93ea2ffecde2cedd59aefac39574afa0da1d38dc6252361f5c5cc6537171a35c"
+}

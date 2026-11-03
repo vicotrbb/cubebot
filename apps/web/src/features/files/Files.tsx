@@ -1,8 +1,28 @@
-import { Download, FolderPlus, Share2, Upload } from 'lucide-react'
+import {
+  ChevronRight,
+  Download,
+  File as FileIcon,
+  FileImage,
+  FileText,
+  Folder,
+  FolderPlus,
+  MoreHorizontal,
+  Pencil,
+  Share2,
+  Trash2,
+  Upload,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
-import { Alert, Dialog, Empty, Status, when } from '../../components/primitives'
+import {
+  Alert,
+  Dialog,
+  Menu,
+  Skeleton,
+  Status,
+  when,
+} from '../../components/primitives'
 import './files.css'
 
 export type FileEntry = components['schemas']['FileEntry']
@@ -17,40 +37,13 @@ export type View = 'mine' | 'shared'
 export function Files({ only }: { only?: { agent: string } }) {
   const [view, setView] = useState<View>(only ? 'shared' : 'mine')
   const [path, setPath] = useState<Crumb[]>([])
-  const [entries, setEntries] = useState<FileEntry[]>([])
   const [sharing, setSharing] = useState<FileEntry | null>(null)
-  const [dragging, setDragging] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [status, setStatus] = useState('')
-  const [error, setError] = useState('')
-  const [loaded, setLoaded] = useState(false)
+  const upload = useRef<HTMLInputElement>(null)
   const folder = path.at(-1)
   const writable = folder ? folder.access !== 'read' : view === 'mine'
-  async function load() {
-    setEntries(await list(view, folder?.id))
-  }
-  useEffect(() => {
-    // A late answer for a folder the person already left must not replace the current one.
-    let live = true
-    void list(view, folder?.id)
-      .then((items) => {
-        if (!live) return
-        setEntries(items)
-        setError('')
-      })
-      .catch(
-        (error) =>
-          live &&
-          setError(
-            error instanceof ApiError && error.status === 503
-              ? 'Shared file storage is not configured for this installation (CUBEBOT_STORAGE_DIRECTORY).'
-              : failure(error),
-          ),
-      )
-      .finally(() => live && setLoaded(true))
-    return () => {
-      live = false
-    }
-  }, [view, folder?.id])
+  const { entries, loaded, error, setError, load } = useFolder(view, folder?.id)
   async function run(action: () => Promise<unknown>) {
     setError('')
     try {
@@ -60,7 +53,7 @@ export function Files({ only }: { only?: { agent: string } }) {
       setError(failure(error))
     }
   }
-  async function upload(files: FileList | null) {
+  async function send(files: FileList | null) {
     if (!files?.length || !writable) return
     await run(async () => {
       for (const [index, file] of [...files].entries()) {
@@ -78,89 +71,93 @@ export function Files({ only }: { only?: { agent: string } }) {
         }),
       ),
     )
-  const shown =
-    only && !folder
-      ? entries.filter((entry) => entry.owner_agent === only.agent)
-      : entries
+  const actions: Actions = {
+    onUpload: () => upload.current?.click(),
+    onFolder: () => setCreating(true),
+  }
+  const shown = visible(entries, only, folder)
+  const drop = useFileDrop(writable, (files) => void send(files))
   return (
     <section
-      className={dragging ? 'file-drop dragging' : 'file-drop'}
-      onDragOver={(event) => {
-        if (!writable || !event.dataTransfer.types.includes('Files')) return
-        event.preventDefault()
-        setDragging(true)
-      }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(event) => {
-        setDragging(false)
-        if (!event.dataTransfer.files.length) return
-        event.preventDefault()
-        void upload(event.dataTransfer.files)
-      }}
+      className={drop.dragging ? 'file-drop dragging' : 'file-drop'}
+      data-folder={folder?.name ?? rootLabel(only, view)}
+      {...drop.handlers}
     >
-      {!only && (
-        <ViewTabs
-          view={view}
-          onPick={(kind) => {
-            setView(kind)
-            setPath([])
-          }}
-        />
-      )}
-      <Breadcrumbs
+      <input
+        ref={upload}
+        type="file"
+        multiple
+        hidden
+        onChange={(event) => {
+          void send(event.currentTarget.files)
+          event.currentTarget.value = ''
+        }}
+      />
+      <FilesBar
         root={rootLabel(only, view)}
-        view={view}
+        view={only ? null : view}
         path={path}
-        onOpen={setPath}
+        // An empty folder offers them itself, so the surface keeps one primary action.
+        actions={writable && (creating || shown.length > 0) ? actions : null}
+        onView={(kind) => {
+          setView(kind)
+          setPath([])
+          setCreating(false)
+        }}
+        onOpen={(next) => {
+          setPath(next)
+          setCreating(false)
+        }}
         onMove={(id, name, parent) => void move(id, parent, name)}
       />
-      {writable && (
-        <Toolbar
-          onUpload={(files) => void upload(files)}
-          onFolder={(name) =>
-            run(() =>
-              ok(
+      <Status>{status}</Status>
+      <Alert>{error}</Alert>
+      {!loaded && !error && <Skeleton lines={3} />}
+      {loaded && (
+        <Listing
+          entries={shown}
+          creating={creating}
+          empty={
+            <EmptyFolder
+              view={view}
+              inFolder={Boolean(folder)}
+              writable={writable}
+              {...actions}
+            />
+          }
+          onCancelFolder={() => setCreating(false)}
+          onCreateFolder={(name) =>
+            run(async () => {
+              await ok(
                 api.POST('/api/files/folders', {
                   body: { parent: folder?.id ?? null, name },
                 }),
-              ),
-            )
+              )
+              setCreating(false)
+            })
           }
-        />
-      )}
-      <Status>{status}</Status>
-      <Alert>{error}</Alert>
-      {loaded && shown.length === 0 && (
-        <Empty title={emptyTitle(view, folder)}>
-          {writable ? 'Drop files here to upload them.' : ''}
-        </Empty>
-      )}
-      <ul className="list files">
-        {shown.map((entry) => (
-          <Row
-            key={entry.id}
-            entry={entry}
-            onOpen={() =>
+          row={(entry) => ({
+            onOpen: () => {
+              setCreating(false)
               setPath([
                 ...path,
                 { id: entry.id, name: entry.name, access: entry.access },
               ])
-            }
-            onShare={() => setSharing(entry)}
-            onRename={(name) => void move(entry.id, entry.parent ?? null, name)}
-            onMoveInto={(id, name) => void move(id, entry.id, name)}
-            onDelete={() =>
+            },
+            onShare: () => setSharing(entry),
+            onRename: (name) => void move(entry.id, entry.parent ?? null, name),
+            onMoveInto: (id, name) => void move(id, entry.id, name),
+            onDelete: () =>
               run(() =>
                 ok(
                   api.DELETE('/api/files/{file}', {
                     params: { path: { file: entry.id } },
                   }),
                 ),
-              )
-            }
-          />
-        ))}
-      </ul>
+              ),
+          })}
+        />
+      )}
       {sharing && (
         <ShareDialog entry={sharing} onClose={() => setSharing(null)} />
       )}
@@ -168,15 +165,149 @@ export function Files({ only }: { only?: { agent: string } }) {
   )
 }
 
+/** A folder's entries, reloaded when the view or folder changes; a late answer for a folder
+ *  the person already left never replaces the current one. */
+function useFolder(view: View, folder: string | undefined) {
+  const [entries, setEntries] = useState<FileEntry[]>([])
+  const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  useEffect(() => {
+    let live = true
+    void list(view, folder)
+      .then((items) => {
+        if (!live) return
+        setEntries(items)
+        setError('')
+      })
+      .catch((error) => live && setError(listProblem(error)))
+      .finally(() => live && setLoaded(true))
+    return () => {
+      live = false
+    }
+  }, [view, folder])
+  const load = async () => setEntries(await list(view, folder))
+  return { entries, loaded, error, setError, load }
+}
+
+function listProblem(error: unknown) {
+  return error instanceof ApiError && error.status === 503
+    ? 'Shared file storage is not configured for this installation (CUBEBOT_STORAGE_DIRECTORY).'
+    : failure(error)
+}
+
+type Actions = { onUpload: () => void; onFolder: () => void }
+type RowActions = {
+  onOpen: () => void
+  onShare: () => void
+  onRename: (name: string) => void
+  onMoveInto: (id: string, name: string) => void
+  onDelete: () => void
+}
+
+/** The folder's rows, a new folder's name row while one is being made, or `empty`. */
+function Listing({
+  entries,
+  creating,
+  empty,
+  onCreateFolder,
+  onCancelFolder,
+  row,
+}: {
+  entries: FileEntry[]
+  creating: boolean
+  empty: React.ReactNode
+  onCreateFolder: (name: string) => Promise<void>
+  onCancelFolder: () => void
+  row: (entry: FileEntry) => RowActions
+}) {
+  if (!creating && entries.length === 0) return empty
+  return (
+    <ul className="entries files" aria-label="Files">
+      {creating && (
+        <NewFolderRow onCreate={onCreateFolder} onCancel={onCancelFolder} />
+      )}
+      {entries.map((entry) => (
+        <Row key={entry.id} entry={entry} {...row(entry)} />
+      ))}
+    </ul>
+  )
+}
+
+/** Files dragged in from the desktop, while the folder takes them. */
+function useFileDrop(writable: boolean, onFiles: (files: FileList) => void) {
+  const [dragging, setDragging] = useState(false)
+  const handlers = {
+    onDragOver: (event: React.DragEvent) => {
+      if (!writable || !event.dataTransfer.types.includes('Files')) return
+      event.preventDefault()
+      setDragging(true)
+    },
+    onDragLeave: (event: React.DragEvent) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+        setDragging(false)
+    },
+    onDrop: (event: React.DragEvent) => {
+      setDragging(false)
+      if (!event.dataTransfer.files.length) return
+      event.preventDefault()
+      onFiles(event.dataTransfer.files)
+    },
+  }
+  return { dragging, handlers }
+}
+
+/** The view tabs and the folder's actions, then the path once inside a folder. */
+function FilesBar({
+  root,
+  view,
+  path,
+  actions,
+  onView,
+  onOpen,
+  onMove,
+}: {
+  root: string
+  /** `null` in an agent's panel, which has one view. */
+  view: View | null
+  path: Crumb[]
+  actions: Actions | null
+  onView: (view: View) => void
+  onOpen: (path: Crumb[]) => void
+  onMove: (id: string, name: string, parent: string | null) => void
+}) {
+  return (
+    <>
+      <div className="files-bar">
+        {view && <ViewTabs view={view} onPick={onView} />}
+        <span className="files-bar__space" />
+        {actions && <Toolbar {...actions} />}
+      </div>
+      {path.length > 0 && (
+        <Breadcrumbs
+          root={root}
+          view={view ?? 'shared'}
+          path={path}
+          onOpen={onOpen}
+          onMove={onMove}
+        />
+      )}
+    </>
+  )
+}
+
+/** At the top of an agent's panel, only that agent's files; inside a folder, all of it. */
+function visible(
+  entries: FileEntry[],
+  only: { agent: string } | undefined,
+  folder: Crumb | undefined,
+) {
+  if (!only || folder) return entries
+  return entries.filter((entry) => entry.owner_agent === only.agent)
+}
+
 function rootLabel(only: { agent: string } | undefined, view: View) {
   if (only) return 'Agent files'
   return view === 'mine' ? 'My files' : 'Shared with me'
-}
-
-function emptyTitle(view: View, folder: Crumb | undefined) {
-  return view === 'shared' && !folder
-    ? 'Nothing shared here yet.'
-    : 'This folder is empty.'
 }
 
 function ViewTabs({
@@ -199,6 +330,111 @@ function ViewTabs({
         </button>
       ))}
     </nav>
+  )
+}
+
+function Toolbar({ onUpload, onFolder }: Actions) {
+  return (
+    <div className="actions">
+      <button type="button" className="btn btn--sm" onClick={onFolder}>
+        <FolderPlus /> New folder
+      </button>
+      <button
+        type="button"
+        className="btn btn--primary btn--sm"
+        onClick={onUpload}
+      >
+        <Upload /> Upload
+      </button>
+    </div>
+  )
+}
+
+/** An empty folder teaches the drop: the whole pane takes files. */
+function EmptyFolder({
+  view,
+  inFolder,
+  writable,
+  onUpload,
+  onFolder,
+}: Actions & { view: View; inFolder: boolean; writable: boolean }) {
+  if (!writable)
+    return (
+      <div className="files-empty">
+        <Folder className="files-empty__icon" />
+        <h3>
+          {view === 'shared' && !inFolder
+            ? 'Nothing is shared with you yet.'
+            : 'This folder is empty.'}
+        </h3>
+        <p>
+          {view === 'shared' && !inFolder
+            ? 'When a person or an agent shares a file or folder with you, it appears here.'
+            : 'You can view this folder; only people who can edit it add files.'}
+        </p>
+      </div>
+    )
+  return (
+    <div className="files-empty files-empty--drop">
+      <Upload className="files-empty__icon" />
+      <h3>{inFolder ? 'This folder is empty.' : 'No files yet.'}</h3>
+      <p>
+        Drop files anywhere on this page to upload them. Agents read files you
+        share with them, even while they sleep.
+      </p>
+      <div className="actions">
+        <button type="button" className="btn btn--primary" onClick={onUpload}>
+          <Upload /> Upload files
+        </button>
+        <button type="button" className="btn" onClick={onFolder}>
+          <FolderPlus /> New folder
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function NewFolderRow({
+  onCreate,
+  onCancel,
+}: {
+  onCreate: (name: string) => Promise<void>
+  onCancel: () => void
+}) {
+  return (
+    <li className="entry">
+      <span className="entry__icon" aria-hidden="true">
+        <FolderPlus />
+      </span>
+      <form
+        className="files-name"
+        onSubmit={(event) => {
+          event.preventDefault()
+          const name = String(new FormData(event.currentTarget).get('name'))
+          if (name.trim()) void onCreate(name.trim())
+        }}
+      >
+        <input
+          className="input"
+          name="name"
+          aria-label="Folder name"
+          placeholder="Folder name"
+          required
+          maxLength={255}
+          autoFocus
+          onKeyDown={(event) => event.key === 'Escape' && onCancel()}
+        />
+        <button className="btn btn--primary btn--sm">Create</button>
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </form>
+      <span />
+    </li>
   )
 }
 
@@ -256,11 +492,13 @@ function Breadcrumbs({
         const above = path[depth - 1]
         const target = above ? above.id : view === 'mine' ? null : undefined
         return (
-          <span key={depth}>
-            {depth > 0 && <span className="faint"> / </span>}
+          <span key={depth} className="crumbs__step">
+            {depth > 0 && (
+              <ChevronRight className="crumbs__sep" aria-hidden="true" />
+            )}
             <button
               type="button"
-              className="link-btn"
+              className="crumbs__link"
               aria-current={depth === path.length ? 'page' : undefined}
               onClick={() => onOpen(path.slice(0, depth))}
               onDragOver={(event) => {
@@ -292,53 +530,13 @@ function dragged(event: React.DragEvent): { id: string; name: string } | null {
   return data ? JSON.parse(data) : { id: '', name: '' }
 }
 
-function Toolbar({
-  onUpload,
-  onFolder,
-}: {
-  onUpload: (files: FileList | null) => void
-  onFolder: (name: string) => Promise<void>
-}) {
-  const input = useRef<HTMLInputElement>(null)
-  return (
-    <form
-      className="actions"
-      onSubmit={(event) => {
-        event.preventDefault()
-        const form = event.currentTarget
-        const name = String(new FormData(form).get('folder') ?? '').trim()
-        if (name) void onFolder(name).then(() => form.reset())
-      }}
-    >
-      <button
-        type="button"
-        className="btn btn--primary btn--sm"
-        onClick={() => input.current?.click()}
-      >
-        <Upload /> Upload files
-      </button>
-      <input
-        ref={input}
-        type="file"
-        multiple
-        hidden
-        onChange={(event) => {
-          onUpload(event.currentTarget.files)
-          event.currentTarget.value = ''
-        }}
-      />
-      <input
-        className="input"
-        name="folder"
-        maxLength={255}
-        placeholder="New folder name"
-        style={{ width: 180 }}
-      />
-      <button className="btn btn--sm">
-        <FolderPlus /> Create folder
-      </button>
-    </form>
-  )
+const IMAGE = /\.(png|jpe?g|gif|webp|svg|avif)$/i
+const TEXT = /\.(md|txt|csv|json|ya?ml|log|pdf|docx?)$/i
+function EntryIcon({ entry }: { entry: FileEntry }) {
+  if (entry.folder) return <Folder />
+  if (IMAGE.test(entry.name)) return <FileImage />
+  if (TEXT.test(entry.name)) return <FileText />
+  return <FileIcon />
 }
 
 function Row({
@@ -348,20 +546,17 @@ function Row({
   onRename,
   onMoveInto,
   onDelete,
-}: {
-  entry: FileEntry
-  onOpen: () => void
-  onShare: () => void
-  onRename: (name: string) => void
-  onMoveInto: (id: string, name: string) => void
-  onDelete: () => void
-}) {
+}: RowActions & { entry: FileEntry }) {
   const [renaming, setRenaming] = useState(false)
   const writable = entry.access !== 'read'
   return (
     <li
-      className="files__row"
-      draggable={writable}
+      className={
+        entry.folder
+          ? 'entry files__row files__row--folder'
+          : 'entry files__row'
+      }
+      draggable={writable && !renaming}
       onDragStart={(event) =>
         event.dataTransfer.setData(
           ROW,
@@ -379,93 +574,148 @@ function Row({
         onMoveInto(row.id, row.name)
       }}
     >
+      <span className="entry__icon" aria-hidden="true">
+        <EntryIcon entry={entry} />
+      </span>
       {renaming ? (
-        <form
-          className="actions"
-          onSubmit={(event) => {
-            event.preventDefault()
-            const name = String(new FormData(event.currentTarget).get('name'))
+        <RenameForm
+          name={entry.name}
+          onDone={(name) => {
             setRenaming(false)
-            if (name.trim() && name !== entry.name) onRename(name.trim())
+            if (name && name !== entry.name) onRename(name)
           }}
-        >
-          <input
-            className="input"
-            name="name"
-            aria-label="New name"
-            required
-            maxLength={255}
-            defaultValue={entry.name}
-            autoFocus
-            style={{ width: 240 }}
-          />
-          <button className="btn btn--sm">Rename</button>
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => setRenaming(false)}
-          >
-            Cancel
-          </button>
-        </form>
+        />
       ) : (
-        <div className="title">
+        <div className="entry__main">
           {entry.folder ? (
-            <button type="button" className="link-btn" onClick={onOpen}>
-              {entry.name}/
+            <button
+              type="button"
+              className="files__open entry__name"
+              onClick={onOpen}
+            >
+              {entry.name}
             </button>
           ) : (
-            entry.name
+            <span className="entry__name">{entry.name}</span>
           )}
-          {entry.owner_agent && <span className="chip">from an agent</span>}
-          {entry.access === 'read' && <span className="chip">read only</span>}
+          <span className="entry__detail">
+            {entry.owner_agent && 'From an agent · '}
+            {entry.access === 'read' && 'View only · '}
+            {entry.folder ? 'Folder' : size(entry.size ?? 0)}
+          </span>
         </div>
       )}
-      <div className="actions files__meta">
-        <span className="faint small">
-          {entry.folder ? 'Folder' : size(entry.size ?? 0)} ·{' '}
-          {when(entry.updated_at)}
-        </span>
-        {!entry.folder && (
-          <a
-            href={`/api/files/${entry.id}/content`}
-            download={entry.name}
-            className="small"
-          >
-            <Download size={12} style={{ verticalAlign: '-2px' }} /> Download
-          </a>
-        )}
-        {entry.access === 'manage' && (
-          <button type="button" className="link-btn small" onClick={onShare}>
-            <Share2 size={12} style={{ verticalAlign: '-2px' }} /> Share
-          </button>
-        )}
-        {writable && (
-          <>
-            <button
-              type="button"
-              className="link-btn small"
-              onClick={() => setRenaming(true)}
-            >
-              Rename
-            </button>
-            <button
-              type="button"
-              className="link-btn small"
-              onClick={() => {
-                const what = entry.folder
-                  ? `${entry.name} and everything in it`
-                  : entry.name
-                if (window.confirm(`Delete ${what}? This cannot be undone.`))
-                  onDelete()
-              }}
-            >
-              Delete
-            </button>
-          </>
-        )}
+      <div className="entry__meta">
+        <span className="files__when">{when(entry.updated_at)}</span>
+        <RowMenu
+          entry={entry}
+          onShare={onShare}
+          onRename={() => setRenaming(true)}
+          onDelete={() => {
+            const what = entry.folder
+              ? `${entry.name} and everything in it`
+              : entry.name
+            if (window.confirm(`Delete ${what}? This cannot be undone.`))
+              onDelete()
+          }}
+        />
       </div>
     </li>
+  )
+}
+
+function RenameForm({
+  name,
+  onDone,
+}: {
+  name: string
+  onDone: (name: string) => void
+}) {
+  return (
+    <form
+      className="files-name"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onDone(String(new FormData(event.currentTarget).get('name')).trim())
+      }}
+    >
+      <input
+        className="input"
+        name="name"
+        aria-label="New name"
+        required
+        maxLength={255}
+        defaultValue={name}
+        autoFocus
+        onFocus={(event) => {
+          // Selects the name without its extension, as file managers do.
+          const dot = name.lastIndexOf('.')
+          event.currentTarget.setSelectionRange(0, dot > 0 ? dot : name.length)
+        }}
+        onKeyDown={(event) => event.key === 'Escape' && onDone(name)}
+      />
+      <button className="btn btn--primary btn--sm">Rename</button>
+      <button
+        type="button"
+        className="btn btn--ghost btn--sm"
+        onClick={() => onDone(name)}
+      >
+        Cancel
+      </button>
+    </form>
+  )
+}
+
+function RowMenu({
+  entry,
+  onShare,
+  onRename,
+  onDelete,
+}: {
+  entry: FileEntry
+  onShare: () => void
+  onRename: () => void
+  onDelete: () => void
+}) {
+  const writable = entry.access !== 'read'
+  // A folder you only view has nothing to download, share or change.
+  if (entry.folder && !writable) return <span />
+  return (
+    <Menu
+      className="menu--right"
+      trigger={<MoreHorizontal />}
+      triggerClassName="btn btn--ghost btn--icon btn--sm"
+      label={`Actions for ${entry.name}`}
+    >
+      {!entry.folder && (
+        <a
+          href={`/api/files/${entry.id}/content`}
+          download={entry.name}
+          className="menu__item"
+        >
+          <Download /> Download
+        </a>
+      )}
+      {entry.access === 'manage' && (
+        <button type="button" className="menu__item" onClick={onShare}>
+          <Share2 /> Share
+        </button>
+      )}
+      {writable && (
+        <button type="button" className="menu__item" onClick={onRename}>
+          <Pencil /> Rename
+        </button>
+      )}
+      {writable && (
+        <button
+          type="button"
+          className="menu__item menu__item--danger"
+          onClick={onDelete}
+        >
+          <Trash2 /> Delete
+        </button>
+      )}
+    </Menu>
   )
 }
 

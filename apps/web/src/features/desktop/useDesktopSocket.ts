@@ -17,8 +17,8 @@ export type Pointer = NonNullable<Frame['pointer']>
 
 /**
  * One desktop WebSocket: paints frames onto `canvas`, measures the input round trip, and
- * takes or hands back control. `watching` opens the socket; `take` takes control as soon
- * as it opens.
+ * takes or hands back control. `watching` opens the socket and reopens it, backing off, when
+ * it closes, since the sandbox may still be starting; `take` takes control as soon as it opens.
  */
 export function useDesktopSocket(
   agentId: string,
@@ -33,6 +33,10 @@ export function useDesktopSocket(
   const [error, setError] = useState('')
   const [latency, setLatency] = useState<number[]>([])
   const [updates, setUpdates] = useState(0)
+  // Whether this connection has painted a frame, and how many connections failed before one did.
+  const [live, setLive] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const failures = useRef(0)
   const socket = useRef<WebSocket | null>(null)
   // The `t` of an unanswered take; its answer says whether this viewer now has control.
   const taking = useRef<number | null>(null)
@@ -55,6 +59,8 @@ export function useDesktopSocket(
     // Frames paint in arrival order, so a tile never shows older pixels than one before it.
     let painting = Promise.resolve()
     let painted = 0
+    let ended = false
+    let retry: ReturnType<typeof setTimeout> | undefined
     const rate = setInterval(() => {
       setUpdates(painted)
       painted = 0
@@ -66,9 +72,14 @@ export function useDesktopSocket(
       taking.current = send({ kind: 'take' })
     }
     ws.onclose = (event) => {
-      setStatus(event.reason || 'The desktop connection closed.')
       setHolding(false)
       setMode(null)
+      setLive(false)
+      if (ended) return
+      setStatus(event.reason || 'The desktop connection closed.')
+      const delay = 1000 * 2 ** Math.min(failures.current, 3)
+      failures.current += 1
+      retry = setTimeout(() => setAttempt((count) => count + 1), delay)
     }
     ws.onmessage = (event) => {
       const message: Frame | Answer = JSON.parse(event.data)
@@ -86,6 +97,8 @@ export function useDesktopSocket(
       setPointer(message.pointer)
       if (message.mode !== 'human') setHolding(false)
       if (message.tiles?.length) {
+        failures.current = 0
+        setLive(true)
         painted += 1
         const context = canvas.current?.getContext('2d')
         const tiles = message.tiles
@@ -98,11 +111,13 @@ export function useDesktopSocket(
       }
     }
     return () => {
+      ended = true
+      clearTimeout(retry)
       clearInterval(rate)
       ws.close()
       socket.current = null
     }
-  }, [watching, agentId, send, canvas])
+  }, [watching, agentId, send, canvas, attempt])
 
   const input = useCallback(
     (action: Action) => send({ kind: 'input', action }),
@@ -123,6 +138,7 @@ export function useDesktopSocket(
   }, [send])
   return {
     status,
+    live,
     mode,
     holding,
     pointer,

@@ -73,8 +73,9 @@ pub struct Agent {
     pub dreaming_model: Option<String>,
     /// Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four.
     pub task_lanes: i16,
-    /// `working`, `dreaming` or `idle` while running, otherwise the desired state such as
-    /// `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
+    /// `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
+    /// otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
+    /// still holds its credential.
     pub activity: String,
     /// The caller's capabilities on this agent and its conversation as grant names, such as
     /// `conversation_send`.
@@ -190,6 +191,17 @@ impl Agents {
                        WHERE d.agent_id = g.id
                          AND d.status = 'running'
                    ) THEN 'dreaming'
+                   -- Idle past its delay with nothing pending: the agent sleeps, and dreams.
+                   WHEN NOT EXISTS(
+                       SELECT 1
+                       FROM chat_turns t
+                       WHERE t.conversation_id = g.id
+                         AND t.status IN ('queued', 'waiting', 'delegated')
+                   ) AND GREATEST(
+                       (SELECT max(COALESCE(t.completed_at, t.created_at)) FROM chat_turns t WHERE t.conversation_id = g.id),
+                       (SELECT max(r.updated_at) FROM agent_resources r WHERE r.agent_id = g.id AND r.kind = 'pod'),
+                       g.created_at
+                   ) < clock_timestamp() - make_interval(secs => g.idle_delay_seconds) THEN 'sleeping'
                    ELSE 'idle'
                END AS "activity!",
                c.names AS "capabilities!",

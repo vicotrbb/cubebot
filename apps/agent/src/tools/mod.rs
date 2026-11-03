@@ -76,6 +76,8 @@ pub struct Sandbox {
     workspace: PathBuf,
     uid: u32,
     gid: u32,
+    /// The desktop is on, so programs a tool starts open their windows on it.
+    desktop: bool,
 }
 
 impl Sandbox {
@@ -92,6 +94,7 @@ impl Sandbox {
             workspace,
             uid,
             gid,
+            desktop: std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() == Ok("1"),
         })
     }
 
@@ -109,6 +112,10 @@ impl Sandbox {
             .gid(self.gid)
             .process_group(0)
             .kill_on_drop(true);
+        // `:1` is the tool user's display (docs/adr/sandbox.md#desktop-as-a-vmm-device).
+        if self.desktop {
+            command.env("DISPLAY", ":1");
+        }
         command
     }
 
@@ -313,7 +320,6 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
         let mut command = self.sandbox.command("/bin/sh");
         command
             .args(["-c", DRAW, "wallpaper", default, DESKTOP_READY])
-            .env("DISPLAY", ":1")
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -346,7 +352,21 @@ mod tests {
             workspace,
             uid: owner.uid(),
             gid: owner.gid(),
+            desktop: false,
         }
+    }
+
+    #[tokio::test]
+    async fn tool_programs_reach_the_desktop_only_when_it_is_on() {
+        let mut sandbox = sandbox();
+        let display = |sandbox: &Sandbox| {
+            let mut command = sandbox.command("/bin/sh");
+            command.args(["-c", "printf %s \"$DISPLAY\""]);
+            async move { command.output().await.unwrap().stdout }
+        };
+        assert_eq!(display(&sandbox).await, b"");
+        sandbox.desktop = true;
+        assert_eq!(display(&sandbox).await, b":1");
     }
 
     fn output(outcome: Outcome) -> (Option<i32>, String) {

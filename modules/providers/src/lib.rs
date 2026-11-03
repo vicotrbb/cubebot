@@ -189,6 +189,13 @@ pub struct Capabilities {
     pub model_limits: bool,
 }
 
+/// A model the key can use, with its context window when the provider reports one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Model {
+    pub id: String,
+    pub context_window: Option<u64>,
+}
+
 #[derive(Default, Debug, PartialEq)]
 pub struct Limits {
     pub context_window: Option<u64>,
@@ -198,6 +205,8 @@ pub struct Limits {
 pub trait Provider: Sync {
     fn capabilities(&self) -> Capabilities;
     fn limits(&self, model: &str, key: &str) -> impl Future<Output = Result<Limits, Error>> + Send;
+    /// The models this key can use for conversations, newest first.
+    fn models(&self, key: &str) -> impl Future<Output = Result<Vec<Model>, Error>> + Send;
     /// Text deltas as they arrive, then exactly one `Done`. A stream that ends early is an
     /// error, never a partial reply.
     fn stream<'a>(
@@ -283,6 +292,24 @@ async fn json(mut response: Response) -> Result<Value, Error> {
         bytes.extend_from_slice(&chunk);
     }
     serde_json::from_slice(&bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
+}
+
+/// The `data` array of a models listing; `window` reads an entry's context window.
+fn models(body: &Value, window: impl Fn(&Value) -> Option<u64>) -> Result<Vec<Model>, Error> {
+    body["data"]
+        .as_array()
+        .ok_or(Error::InvalidResponse(None))?
+        .iter()
+        .map(|entry| {
+            Ok(Model {
+                id: entry["id"]
+                    .as_str()
+                    .ok_or(Error::InvalidResponse(None))?
+                    .to_owned(),
+                context_window: window(entry),
+            })
+        })
+        .collect()
 }
 
 trait Decoder: Default + Send {

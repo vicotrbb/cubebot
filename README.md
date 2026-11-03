@@ -19,13 +19,13 @@ The installer checks Docker, finds the latest release and asks four questions, e
 - **Install directory**, `~/.cubebot` by default: the release's compose files, a `.env` with a random database password, and the `cubebot` command. Running the installer again updates the installation there and never replaces its `.env`.
 - **Administrator.** Create it now in the terminal (login and password), or let the first account created at the console become the administrator. With a public domain, now is preselected, since otherwise whoever opens the console first claims it.
 
-It then shows a summary, asks to install, pulls the release's images from GHCR, starts them and prints the address. Add a provider key under Platform, Providers to run agents. Every question has a variable, `CUBEBOT_RUNTIME`, `CUBEBOT_ACCESS` (`local` or `domain`, with `CUBEBOT_DOMAIN`), `CUBEBOT_HOME` and `CUBEBOT_ADMIN` (`now` or `console`, with `CUBEBOT_BOOTSTRAP_LOGIN` and `CUBEBOT_BOOTSTRAP_PASSWORD`); a question whose variable is set is not asked, and `CUBEBOT_YES=1` or no terminal takes every default. `CUBEBOT_VERSION` picks a release tag instead of the latest; `NO_COLOR` turns colors off. Afterwards:
+It then shows a summary, asks to install, pulls the release's images from GHCR, starts them and prints the address. Add a provider key from the gear beside your name (AI providers) to run agents. Every question has a variable, `CUBEBOT_RUNTIME`, `CUBEBOT_ACCESS` (`local` or `domain`, with `CUBEBOT_DOMAIN`), `CUBEBOT_HOME` and `CUBEBOT_ADMIN` (`now` or `console`, with `CUBEBOT_BOOTSTRAP_LOGIN` and `CUBEBOT_BOOTSTRAP_PASSWORD`); a question whose variable is set is not asked, and `CUBEBOT_YES=1` or no terminal takes every default. `CUBEBOT_VERSION` picks a release tag instead of the latest; `NO_COLOR` turns colors off. Afterwards:
 
 ```sh
 ~/.cubebot/cubebot up | down | update [version] | logs [-f] | admin [login] | uninstall [--yes]
 ```
 
-`down` keeps your data in Docker volumes; `update` moves to the latest release, or the one named; `admin` creates the administrator from the terminal while nobody has. `uninstall` asks you to type `uninstall` (or takes `--yes`), then stops the agents, removes the containers, the volumes with all data, the release's Cubebot images and `~/.cubebot`, and prints what it removed.
+`down` keeps your data in Docker volumes; `update` moves to the latest release, or the one named; `admin` creates the administrator from the terminal while nobody has. `uninstall` asks you to type `uninstall` (or takes `--yes`), then removes every agent the installation created with its workspace, the containers, the volumes with all data, the Cubebot images of every release it ran and `~/.cubebot`, and prints what it removed; other installations on the machine are left alone.
 
 Agents are started through the host's Docker socket, which makes the orchestrator root on this machine: install it only where you would give Cubebot that. This is one machine's installation; `deploy/chart` installs on Kubernetes.
 

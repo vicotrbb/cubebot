@@ -320,8 +320,8 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
     };
     let changed = changes(&state.lock().unwrap());
     for (index, action) in [
-        LifecycleAction::Sleep,
-        LifecycleAction::Wake,
+        LifecycleAction::Stop,
+        LifecycleAction::Start,
         LifecycleAction::Restart,
         LifecycleAction::Retire,
     ]
@@ -512,7 +512,7 @@ async fn request_sleep(pool: &sqlx::PgPool, agent: cubebot_orchestrator::agents:
             &LifecycleCommand {
                 request_id: uuid::Uuid::new_v4(),
                 expected_revision: 2,
-                action: LifecycleAction::Sleep,
+                action: LifecycleAction::Stop,
             },
         )
         .await
@@ -825,7 +825,7 @@ async fn waking_after_proven_stop_creates_one_new_epoch_and_reuses_the_workspace
             &LifecycleCommand {
                 request_id: uuid::Uuid::new_v4(),
                 expected_revision: 3,
-                action: LifecycleAction::Wake,
+                action: LifecycleAction::Start,
             },
         )
         .await

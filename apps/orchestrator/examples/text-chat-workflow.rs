@@ -47,7 +47,7 @@ async fn main() -> Result<()> {
                 provider: cubebot_protocol::runtime::ProviderKind::Openai,
                 model,
                 context_window: Some(128_000),
-                api_key: key,
+                api_key: Some(key),
                 access: None,
             },
         )

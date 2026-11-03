@@ -35,6 +35,7 @@ function DesktopRoute() {
       accountId={session.data.id}
       take={take}
       canControl={can(agent, 'browser_control', session.data)}
+      canManage={can(agent, 'agent_manage', session.data)}
     />
   )
 }

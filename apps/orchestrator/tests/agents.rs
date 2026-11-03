@@ -56,7 +56,7 @@ async fn definitions_are_durable_scoped_and_creation_replays() {
         .unwrap();
     let definition = agents.get(&actor, AgentId(receipt.id)).await.unwrap();
     assert_eq!(definition.name, "Researcher");
-    assert_eq!(definition.desired_state, "sleeping");
+    assert_eq!(definition.desired_state, "running");
     sqlx::query!(
         "
         INSERT INTO agents (id, name, instructions, created_by)
@@ -87,7 +87,7 @@ async fn check_reconnect_and_revoke(
     let agents = Agents::new(pool);
     assert_eq!(agents.get(actor, AgentId(id)).await.unwrap().revision, 1);
     let status = agents.status(actor, AgentId(id)).await.unwrap();
-    assert_eq!(status.desired_state, "sleeping");
+    assert_eq!(status.desired_state, "running");
     assert!(status.pod_attempt.is_none());
     identity
         .revoke_grant(
@@ -192,4 +192,59 @@ async fn creation_is_atomic_under_retries_and_rechecks_current_role() {
     .await
     .unwrap();
     assert_eq!(stored, "Durable agent");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_agent_idle_past_its_delay_sleeps_without_stopping() {
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let token = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&token.token).await.unwrap();
+    let agents = Agents::new(pool.clone());
+    let receipt = agents
+        .create(
+            &admin,
+            &CreateAgent {
+                request_id: Uuid::new_v4(),
+                name: "Dreamer".into(),
+                instructions: "Rest well".into(),
+                avatar: None,
+            },
+        )
+        .await
+        .unwrap();
+    let id = AgentId(receipt.id);
+    let fresh = agents.get(&admin, id).await.unwrap();
+    assert_eq!(
+        (fresh.desired_state.as_str(), fresh.activity.as_str()),
+        ("running", "idle")
+    );
+    sqlx::query!(
+        "UPDATE agents SET created_at = clock_timestamp() - make_interval(secs => idle_delay_seconds + 1) WHERE id = $1",
+        receipt.id,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let rested = agents.get(&admin, id).await.unwrap();
+    assert_eq!(
+        (rested.desired_state.as_str(), rested.activity.as_str()),
+        ("running", "sleeping")
+    );
+    sqlx::query!(
+        "UPDATE agents SET desired_state = 'stopped' WHERE id = $1",
+        receipt.id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(agents.get(&admin, id).await.unwrap().activity, "stopped");
 }

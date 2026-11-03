@@ -151,8 +151,8 @@ function stateLabel(turn: Turn, activity: string) {
 /** Why a queued turn waits: the same state the header shows, not a guess. */
 function queuedLabel(activity: string) {
   if (activity === 'working') return 'Queued until the agent is free.'
-  if (activity === 'sleeping')
-    return 'Queued; the agent takes it when it wakes.'
+  if (activity === 'stopped')
+    return 'Queued; the agent takes it once its computer starts.'
   return 'Queued; waiting for the agent’s runtime.'
 }
 

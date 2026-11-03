@@ -3,9 +3,9 @@ use axum::{
     body::Body,
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
 };
-use cubebot_providers::{Event, Message, OpenAi, Provider, Request, Tool, Usage};
+use cubebot_providers::{Event, Message, Model, OpenAi, Provider, Request, Tool, Usage};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 
@@ -336,4 +336,40 @@ async fn only_server_faults_and_unreached_providers_are_retryable() {
     let provider = OpenAi::for_loopback_tests(&origin).unwrap();
     let events: Vec<_> = provider.stream(&request(&[], &[])).collect().await;
     assert!(events[0].as_ref().err().unwrap().retryable());
+}
+
+#[tokio::test]
+async fn lists_conversational_models_newest_first() {
+    async fn models(headers: HeaderMap) -> Json<Value> {
+        assert_eq!(headers["authorization"], "Bearer controlled-key");
+        Json(json!({"object":"list","data":[
+            {"id":"gpt-old","created":1},
+            {"id":"text-embedding-3-small","created":3},
+            {"id":"gpt-new","created":2},
+            {"id":"whisper-1","created":4}
+        ]}))
+    }
+    let (origin, task) = serve(Router::new().route("/models", get(models))).await;
+    let provider = OpenAi::for_loopback_tests(&origin).unwrap();
+    let ids: Vec<Model> = provider.models("controlled-key").await.unwrap();
+    assert_eq!(
+        ids.iter()
+            .map(|model| model.id.as_str())
+            .collect::<Vec<_>>(),
+        ["gpt-new", "gpt-old"]
+    );
+    assert!(ids.iter().all(|model| model.context_window.is_none()));
+    task.abort();
+}
+
+#[tokio::test]
+async fn a_rejected_key_lists_no_models() {
+    let (origin, task) =
+        serve(Router::new().route("/models", get(|| async { StatusCode::UNAUTHORIZED }))).await;
+    let provider = OpenAi::for_loopback_tests(&origin).unwrap();
+    assert!(matches!(
+        provider.models("bad-key").await,
+        Err(cubebot_providers::Error::Rejected)
+    ));
+    task.abort();
 }

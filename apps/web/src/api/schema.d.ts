@@ -1025,6 +1025,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/provider/models': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * The models a key can use, newest first: 422 when the provider rejects the key, 502 when it
+     *     cannot be reached, 404 without a key when none is saved for that provider.
+     */
+    post: operations['models']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/rooms': {
     parameters: {
       query?: never
@@ -1261,8 +1281,9 @@ export interface components {
      */
     Agent: {
       /**
-       * @description `working`, `dreaming` or `idle` while running, otherwise the desired state such as
-       *     `sleeping`. Dreaming needs a run whose sandbox still holds its credential.
+       * @description `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
+       *     otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
+       *     still holds its credential.
        */
       activity: string
       avatar: components['schemas']['Avatar']
@@ -1394,7 +1415,8 @@ export interface components {
     }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
-      api_key: string
+      /** @description `None` keeps the saved key, which must belong to the same provider. */
+      api_key?: string | null
       /**
        * Format: int64
        * @description Model window in tokens. Required for OpenAI, which cannot report it; Anthropic
@@ -1682,13 +1704,18 @@ export interface components {
       request_id: string
     }
     /** @enum {string} */
-    LifecycleAction: 'wake' | 'sleep' | 'restart' | 'retire'
+    LifecycleAction: 'start' | 'stop' | 'restart' | 'retire'
     LifecycleCommand: {
       action: components['schemas']['LifecycleAction']
       /** Format: int64 */
       expected_revision: number
       /** Format: uuid */
       request_id: string
+    }
+    ListModels: {
+      /** @description The key to list with; without one, the saved key when it belongs to `provider`. */
+      api_key?: string | null
+      provider: components['schemas']['ProviderKind']
     }
     /** @description Process liveness only; this does not attest to dependency or agent readiness. */
     Liveness: {
@@ -1767,6 +1794,14 @@ export interface components {
           /** @enum {string} */
           op: 'forget'
         }
+    ModelChoice: {
+      /**
+       * Format: int64
+       * @description Reported by the provider; OpenAI reports none.
+       */
+      context_window?: number | null
+      id: string
+    }
     /** @description One occurrence that made a turn: its origin and the turn's outcome so far. */
     Occurrence: {
       created_at: string
@@ -4033,6 +4068,41 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ProviderSummary']
         }
+      }
+    }
+  }
+  models: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ListModels']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ModelChoice'][]
+        }
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

@@ -422,7 +422,7 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
             .await
             .is_err()
     );
-    lifecycle(&f, LifecycleAction::Sleep, 2).await;
+    lifecycle(&f, LifecycleAction::Stop, 2).await;
     let request = f.auth.control(&session.token).await.unwrap().drain.unwrap();
     assert!(!request.acknowledged);
     assert!(
@@ -465,7 +465,7 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
     .await
     .unwrap();
     assert_eq!(original, retained);
-    lifecycle(&f, LifecycleAction::Wake, 3).await;
+    lifecycle(&f, LifecycleAction::Start, 3).await;
     let control = f.auth.control(&rotated.token).await.unwrap();
     assert_eq!(control.drain.unwrap().request_id, request.request_id);
     assert!(
@@ -659,7 +659,7 @@ async fn actual_native_runtime_acknowledges_a_persisted_drain_and_exits() {
     use cubebot_orchestrator::agents::LifecycleAction;
     use std::os::unix::fs::DirBuilderExt;
     let f = fixture().await;
-    lifecycle(&f, LifecycleAction::Sleep, 2).await;
+    lifecycle(&f, LifecycleAction::Stop, 2).await;
     let (origin, task) = runtime_server(f.auth.clone()).await;
     let root = std::env::temp_dir().join(format!("cubebot-native-pg-{}", Uuid::new_v4()));
     std::fs::DirBuilder::new()
@@ -1043,7 +1043,7 @@ pub(crate) async fn native_chat_setup(
                 provider: cubebot_protocol::runtime::ProviderKind::Openai,
                 model: "controlled-model".into(),
                 context_window: Some(128_000),
-                api_key: "controlled-key".into(),
+                api_key: Some("controlled-key".into()),
                 access: None,
             },
         )

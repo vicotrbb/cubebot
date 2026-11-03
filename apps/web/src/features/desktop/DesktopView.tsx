@@ -1,7 +1,11 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ChevronLeft, Hand, Pause, Play } from 'lucide-react'
+import { ChevronLeft, Hand, Pause, Play, Power } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { admin } from '../../api/admin'
+import { failure } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
+import { keys } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert } from '../../components/primitives'
 import { useIsPhone } from '../shell/viewport'
@@ -23,17 +27,25 @@ export function DesktopView({
   accountId,
   take,
   canControl,
+  canManage,
 }: {
   agent: AgentSummary
   accountId: string
   /** Watches and takes control as soon as the connection opens. */
   take?: boolean | undefined
   canControl: boolean
+  canManage: boolean
 }) {
   const [watching, setWatching] = useState(true)
   const phone = useIsPhone()
   const canvas = useRef<HTMLCanvasElement>(null)
-  const desk = useDesktopSocket(agent.id, watching, canvas, Boolean(take))
+  const running = agent.desired_state === 'running'
+  const desk = useDesktopSocket(
+    agent.id,
+    watching && running,
+    canvas,
+    Boolean(take),
+  )
   const takeControl = () => {
     if (desk.takeControl()) setWatching(true)
   }
@@ -52,7 +64,9 @@ export function DesktopView({
         <div className="agent-head__title">
           <h1>{agent.name}: desktop</h1>
           <p className="faint small" role="status">
-            {desk.status || modeLabel(watching, desk.mode, desk.holding)}
+            {running
+              ? desk.status || modeLabel(watching, desk.mode, desk.holding)
+              : 'Computer off'}
           </p>
         </div>
         <Controls
@@ -81,6 +95,14 @@ export function DesktopView({
           />
           {desk.pointer && watching && (
             <PointerMark pointer={desk.pointer} accountId={accountId} />
+          )}
+          {watching && !desk.live && (
+            <ScreenCover
+              agent={agent}
+              running={running}
+              reason={desk.status}
+              canManage={canManage}
+            />
           )}
         </div>
       </div>
@@ -138,6 +160,81 @@ function Controls({
           Hand back
         </button>
       )}
+    </div>
+  )
+}
+
+/** What the screen shows before its first frame: the computer off, or starting. */
+function ScreenCover({
+  agent,
+  running,
+  reason,
+  canManage,
+}: {
+  agent: AgentSummary
+  running: boolean
+  reason: string
+  canManage: boolean
+}) {
+  const client = useQueryClient()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const retired = agent.desired_state === 'retired'
+  async function start() {
+    setBusy(true)
+    setError('')
+    try {
+      await admin.lifecycle(agent.id, 'start', agent.revision)
+      await client.invalidateQueries({ queryKey: keys.agents })
+    } catch (error) {
+      setError(failure(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (running)
+    return (
+      <div className="desktop-cover" aria-live="polite">
+        <Cube avatar={agent.avatar} mood="desktop" size={64} />
+        <p className="desktop-cover__title">
+          {reason
+            ? `Waiting for ${agent.name}'s computer…`
+            : `Connecting to ${agent.name}'s desktop…`}
+        </p>
+        <p className="desktop-cover__note">
+          {reason
+            ? `${reason.replace(/^./, (first) => first.toUpperCase())}. Trying again.`
+            : 'The first picture arrives in a moment.'}
+        </p>
+      </div>
+    )
+  return (
+    <div className="desktop-cover">
+      <Cube avatar={agent.avatar} mood={moodOf(agent)} size={64} />
+      <p className="desktop-cover__title">
+        {retired
+          ? `${agent.name} is retired.`
+          : `${agent.name}'s computer is off.`}
+      </p>
+      {!retired && (
+        <p className="desktop-cover__note">
+          {canManage
+            ? 'Start it to see its desktop. Apps and files are where it left them.'
+            : 'A message starts it, or ask a manager of this agent to.'}
+        </p>
+      )}
+      {!retired && canManage && (
+        <button
+          type="button"
+          className="btn btn--primary"
+          disabled={busy}
+          onClick={() => void start()}
+        >
+          <Power />
+          {busy ? 'Starting…' : `Start ${agent.name}`}
+        </button>
+      )}
+      <Alert>{error}</Alert>
     </div>
   )
 }

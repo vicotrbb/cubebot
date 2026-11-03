@@ -1,37 +1,152 @@
+/* Files: a toolbar row, the path inside a folder, then entry rows; the pane takes drops */
 .file-drop {
+  position: relative;
   display: grid;
-  gap: 14px;
+  gap: 12px;
   align-content: start;
-  border-radius: var(--r-lg);
-  transition: box-shadow var(--quick);
+  container-type: inline-size;
+  max-width: 1100px;
+  min-height: 100%;
 }
-.file-drop.dragging {
-  box-shadow: inset 0 0 0 3px var(--orange);
-  background: var(--orange-wash);
+.file-drop.dragging::after {
+  content: 'Drop to upload into ' attr(data-folder);
+  position: absolute;
+  inset: -8px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-lg);
+  border: 2px dashed var(--orange);
+  background: color-mix(in srgb, var(--orange-wash) 90%, transparent);
+  color: var(--orange-base);
+  font-weight: 800;
+  pointer-events: none;
+}
+.files-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.files-bar__space {
+  flex: 1;
 }
 .crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   font-size: var(--t-sm);
   font-weight: 600;
 }
-.crumbs .link-btn {
-  text-decoration: none;
+.crumbs__step {
+  display: inline-flex;
+  align-items: center;
 }
-.crumbs [aria-current='page'] {
+.crumbs__sep {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px;
   color: var(--ink-faint);
-  cursor: default;
 }
-.files__row {
-  display: grid;
-  gap: 4px;
+.crumbs__link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 3px 6px;
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.crumbs__link:hover {
+  background: rgb(var(--shadow) / 0.06);
+  color: var(--ink);
+}
+.crumbs__link[aria-current='page'] {
+  color: var(--ink);
+  cursor: default;
+  background: none;
 }
 .files__row[draggable='true'] {
   cursor: grab;
 }
-.files__meta {
-  gap: 12px;
+.files__row--folder .entry__icon {
+  background: var(--orange-wash);
+  color: var(--orange-deep);
+}
+.files__open {
+  appearance: none;
+  justify-self: start;
+  max-width: 100%;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.files__open:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--orange);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+.files__when {
+  color: var(--ink-faint);
+}
+.files-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.files-name .input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+}
+.files-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.files-empty--drop {
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--inset);
+}
+.files-empty h3 {
+  color: var(--ink);
+}
+.files-empty p {
+  max-width: 46ch;
+}
+.files-empty .actions {
+  justify-content: center;
+  margin-top: 8px;
+}
+.files-empty__icon {
+  width: 28px;
+  height: 28px;
+  margin-bottom: 4px;
+  color: var(--ink-faint);
 }
 .share-row .input {
   width: auto;
   min-height: 34px;
   flex: 1;
+}
+/* In the agent panel, or on a phone, the time folds away and the path wraps. */
+@container (max-width: 520px) {
+  .files__when {
+    display: none;
+  }
+  .files-empty {
+    padding: 32px 16px;
+  }
 }

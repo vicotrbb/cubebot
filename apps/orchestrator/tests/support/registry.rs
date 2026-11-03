@@ -38,7 +38,7 @@ pub async fn setup() -> (sqlx::PgPool, Registry, AgentId) {
             &LifecycleCommand {
                 request_id: Uuid::new_v4(),
                 expected_revision: 1,
-                action: LifecycleAction::Wake,
+                action: LifecycleAction::Start,
             },
         )
         .await

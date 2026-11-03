@@ -1,3 +1,4 @@
+use axum::extract::RawQuery;
 use axum::{
     Json, Router,
     body::Body,
@@ -6,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use cubebot_providers::{Anthropic, Event, Limits, Message, Provider, Request, Tool, Usage};
+use cubebot_providers::{Anthropic, Event, Limits, Message, Model, Provider, Request, Tool, Usage};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 
@@ -309,6 +310,34 @@ async fn computer_toolset_calls_become_computer_calls_and_echo_their_toolset() {
     assert_eq!(
         serde_json::from_str::<Value>(&call.arguments).unwrap(),
         json!({"action":"left_click","coordinate":[5,6]})
+    );
+    task.abort();
+}
+
+#[tokio::test]
+async fn lists_models_with_their_reported_context_windows() {
+    async fn models(headers: HeaderMap, RawQuery(query): RawQuery) -> Json<Value> {
+        assert_eq!(headers["x-api-key"], "controlled-key");
+        assert_eq!(query.as_deref(), Some("limit=1000"));
+        Json(json!({"data":[
+            {"id":"claude-new","max_input_tokens":1000000},
+            {"id":"claude-old"}
+        ],"has_more":false}))
+    }
+    let (origin, task) = serve(Router::new().route("/models", get(models))).await;
+    let provider = Anthropic::for_loopback_tests(&origin).unwrap();
+    assert_eq!(
+        provider.models("controlled-key").await.unwrap(),
+        [
+            Model {
+                id: "claude-new".into(),
+                context_window: Some(1_000_000)
+            },
+            Model {
+                id: "claude-old".into(),
+                context_window: None
+            },
+        ]
     );
     task.abort();
 }

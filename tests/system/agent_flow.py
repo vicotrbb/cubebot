@@ -24,7 +24,7 @@ def check_agents(base, admin, member):
     team, membership = grant_manager(base, admin, member, receipt["id"])
     status, definition = request(base, path, member)
     assert status == 200 and definition["instructions"] == command["instructions"]
-    assert definition["desired_state"] == "sleeping"
+    assert definition["desired_state"] == "running"
     assert [item["id"] for item in request(base, "/api/agents", member)[1]] == [
         receipt["id"]
     ]
