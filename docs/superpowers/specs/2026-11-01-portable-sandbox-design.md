@@ -1,6 +1,6 @@
 # Portable sandbox: one agent image, declared runtimes
 
-Date: 2026-11-01. Status: approved design, not yet implemented. Amends ADRs 0084 and 0085; restores ADR 0076 as written.
+Date: 2026-11-01. Status: implemented 2026-11-02, PRs #49 to #53. Amends ADRs 0084 and 0085; restores ADR 0076 as written.
 
 ## Intent
 
