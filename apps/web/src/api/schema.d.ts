@@ -912,6 +912,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/setup': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['setup_state']
+    put?: never
+    /** Creates the installation's first account as its administrator and signs it in. */
+    post: operations['setup']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/suspend': {
     parameters: {
       query?: never
@@ -2020,6 +2037,9 @@ export interface components {
       message: string
       /** Format: uuid */
       request_id: string
+    }
+    Setup: {
+      open: boolean
     }
     /** @enum {string} */
     ShareKind: 'user' | 'team' | 'agent'
@@ -3791,6 +3811,54 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Authorization']
         }
+      }
+    }
+  }
+  setup_state: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Setup']
+        }
+      }
+    }
+  }
+  setup: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Login']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Token']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

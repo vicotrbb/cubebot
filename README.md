@@ -12,7 +12,7 @@ On Linux or macOS with Docker (Compose 2.23 or later):
 curl -fsSL https://raw.githubusercontent.com/vicotrbb/cubebot/main/deploy/install.sh | sh
 ```
 
-The installer puts the release's compose files, a `.env` with a random database password, and a `cubebot` command in `~/.cubebot`, pulls the release's images from GHCR, starts them, asks for the administrator's password, and prints the address: <http://localhost:3000> unless `CUBEBOT_PORT` is set. Sign in and add an OpenAI connection in the console. Afterwards:
+The installer puts the release's compose files, a `.env` with a random database password, and a `cubebot` command in `~/.cubebot`, pulls the release's images from GHCR, starts them, and prints the address: <http://localhost:3000> unless `CUBEBOT_PORT` is set. The first account created there becomes the administrator; `~/.cubebot/cubebot admin` claims it from the terminal instead, which matters when `CUBEBOT_DOMAIN` makes the console public before you open it. Then add an OpenAI connection in the console. Afterwards:
 
 ```sh
 ~/.cubebot/cubebot up | down | update [version] | logs [-f] | admin [login]
@@ -30,7 +30,7 @@ Agents are started through the host's Docker socket, which makes the orchestrato
 
 ```sh
 just up      # builds the images from source, runs them as the installer would, and waits until they answer
-just admin   # once: creates the administrator, prompting for a password
+just admin   # optional: claims the administrator from the terminal instead of the console's setup form
 ```
 
 `just up` adds `compose.dev.yaml`, which builds the same services `compose.yaml` pulls, and runs them with the same `deploy/cubebot` an installation uses; agents use a locally built sandbox (`kvm`, which also builds the guest kernel and root image and needs `make`, `gcc`, `flex`, `bison`, `bc` and the libelf headers) or agent image (`container`). The first run writes `.env` with a random database password; set `CUBEBOT_PORT`, `CUBEBOT_RUNTIME` or `CUBEBOT_DOMAIN` there. `just down` stops everything and keeps your data; `docker compose -f compose.yaml -f compose.dev.yaml down -v` deletes it.

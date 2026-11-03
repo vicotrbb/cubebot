@@ -73,8 +73,9 @@ fi
 
 CUBEBOT_HOME="$home" "$home/cubebot" update "$release"
 if [ -n "$fresh" ]; then
-    echo "Create the administrator:"
-    CUBEBOT_HOME="$home" "$home/cubebot" admin ||
-        echo "Create it later with: $home/cubebot admin"
+    domain=$(sed -n 's/^CUBEBOT_DOMAIN=//p' "$home/.env")
+    port=$(sed -n 's/^CUBEBOT_PORT=//p' "$home/.env")
+    if [ -n "$domain" ]; then url="https://$domain"; else url="http://localhost:${port:-3000}"; fi
+    echo "Open $url: the first account created there becomes the administrator. To claim it from this terminal instead, which matters when CUBEBOT_DOMAIN is public, run $home/cubebot admin."
 fi
 echo "Manage this installation with $home/cubebot up | down | update | logs | admin."
