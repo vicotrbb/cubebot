@@ -1,4 +1,5 @@
-"""ADR 0083's sandbox scenarios on the kvm backend, in an owned kind cluster.
+"""docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary's sandbox scenarios
+on the kvm backend, in an owned kind cluster.
 
 Needs x86_64 Linux with /dev/kvm, the kernel build tools of tooling/guest, the
 cluster-chat prerequisites (Docker, the pinned kind, kubectl, OpenSSL), a fresh

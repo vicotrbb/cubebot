@@ -1,9 +1,9 @@
-//! Collaboration tools (ADR 0016) and steering (ADR 0071). `delegate` gives work to an agent
+//! Collaboration tools (docs/adr/rooms.md#explicit-agent-messaging-and-delegation) and steering (docs/adr/rooms.md#queued-messages-with-explicit-steering). `delegate` gives work to an agent
 //! sharing a room and makes this turn yield when it ends, resuming as each outcome arrives; a
 //! `send_message` request is not waited for, and its reply can be relayed back. Steering from a person enters the context before
-//! the next model request, never in the middle of a tool call. `request_login` (ADR 0039) asks a
+//! the next model request, never in the middle of a tool call. `request_login` (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) asks a
 //! person to log in through the desktop; their hand-back or refusal arrives as a new message.
-//! The vault tools (ADR 0086) are in [`vault`], the routine tools (ADR 0087) in [`routines`].
+//! The vault tools (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) are in [`vault`], the routine tools (docs/adr/agents.md#routines) in [`routines`].
 mod routines;
 mod vault;
 pub use vault::redacted;

@@ -102,7 +102,7 @@ impl RuntimeIdentity {
         .ok_or(Error::Unauthorized)
     }
 }
-/// Revokes the agent credential of every incarnation of `agent` (ADR 0083). The sandbox keeps
+/// Revokes the agent credential of every incarnation of `agent` (docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary). The sandbox keeps
 /// running but can no longer write to the ledger, receive work or bootstrap again; a later
 /// incarnation gets a new credential. Returns how many credentials were revoked.
 #[tracing::instrument(skip_all, fields(agent = %agent.0))]

@@ -6,7 +6,7 @@ import { Alert } from '../../components/primitives'
 import { ItemForm } from '../vault/ItemForm'
 import './desktop.css'
 
-/** A pending login handoff (ADR 0039): the agent waits for a person to log in for it. */
+/** A pending login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover): the agent waits for a person to log in for it. */
 export function LoginBanner({
   agent,
   holding = false,

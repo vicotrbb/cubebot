@@ -1,4 +1,4 @@
-//! Rooms (ADRs 0014, 0015). A message mentioning members delivers one turn to each, without a
+//! Rooms (docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator and docs/adr/rooms.md#independent-assignments-for-multiple-room-mentions). A message mentioning members delivers one turn to each, without a
 //! model call; any other message waits for the coordinator. Deliveries are turns in each
 //! recipient's permanent conversation, unique per message and recipient.
 use super::{SendMessage, Work, access};

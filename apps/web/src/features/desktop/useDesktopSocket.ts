@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/** The guest screen (ADR 0085); frames and input use its pixels. */
+/** The guest screen (docs/adr/sandbox.md#desktop-as-a-vmm-device); frames and input use its pixels. */
 export const WIDTH = 1280
 export const HEIGHT = 800
 const SAMPLES = 20

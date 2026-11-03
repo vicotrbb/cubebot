@@ -1,4 +1,4 @@
-//! Where agent sandboxes run (ADR 0084). Every implementation launches the installation's declared
+//! Where agent sandboxes run (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). Every implementation launches the installation's declared
 //! [`Runtime`].
 mod docker;
 pub(crate) use docker::LAYOUT_MISMATCH;
@@ -51,7 +51,7 @@ impl Runtime {
             Self::Kvm {} => None,
         }
     }
-    /// The host channel command (ADR 0085) inside this runtime's sandbox.
+    /// The host channel command (docs/adr/sandbox.md#desktop-as-a-vmm-device) inside this runtime's sandbox.
     fn desktop(&self) -> [&'static str; 2] {
         match self {
             Self::Kvm {} => ["/usr/local/bin/cubebot-sandbox", "desktop"],
@@ -93,7 +93,7 @@ pub trait Sandbox {
     /// Creates the workspace and anything else that must outlive one run.
     fn create(&self, agent: AgentId) -> impl Future<Output = Result<(), Error>> + Send;
     fn start(&self, agent: AgentId) -> impl Future<Output = Result<(), Error>> + Send;
-    /// Stops execution and keeps the workspace (ADR 0079).
+    /// Stops execution and keeps the workspace (docs/adr/memory.md#retain-durable-data-until-explicitly-deleted).
     fn stop(&self, agent: AgentId) -> impl Future<Output = Result<(), Error>> + Send;
     fn exec_channel(
         &self,
@@ -110,7 +110,7 @@ pub trait Sandbox {
 
 type Opening = Pin<Box<dyn Future<Output = Result<ExecChannel, Error>> + Send>>;
 
-/// Opens the desktop host channel (ADR 0085) in an agent's running sandbox, whichever kind runs
+/// Opens the desktop host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device) in an agent's running sandbox, whichever kind runs
 /// it, and counts the people connected to each agent's desktop through this orchestrator.
 #[derive(Clone)]
 pub struct Desktop {

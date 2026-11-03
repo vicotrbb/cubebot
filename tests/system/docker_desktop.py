@@ -1,4 +1,6 @@
-"""The console desktop view (ADRs 0039 and 0085) on real agents through Docker.
+"""The console desktop view
+(docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and
+docs/adr/sandbox.md#desktop-as-a-vmm-device) on real agents through Docker.
 
 Same host needs as docker_sandbox.py, plus Node with Playwright's Chromium
 (CUBEBOT_PLAYWRIGHT_MODULE) for the console check. The Desk agent runs the guest desktop

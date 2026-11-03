@@ -135,7 +135,7 @@ pub(super) async fn run(
     run.emit(end, None);
 }
 
-/// A routine's command (ADR 0087) runs once, before the model, as a journaled bash call; a rerun
+/// A routine's command (docs/adr/agents.md#routines) runs once, before the model, as a journaled bash call; a rerun
 /// finds it among the turn's earlier events instead. The answer of a command-only turn, or `None`
 /// once the model has the result in its message.
 async fn command(
@@ -243,7 +243,7 @@ async fn start<P: Provider>(
     tools.extend(crate::files::definitions(registry.is_some()));
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
     tools.extend(crate::collaboration::definitions(desktop));
-    // A task lane never drives the shared desktop (ADR 0005); the main lane owns it.
+    // A task lane never drives the shared desktop (docs/adr/agents.md#agent-execution-lanes); the main lane owns it.
     tools.extend(
         registry
             .into_iter()
@@ -603,7 +603,7 @@ fn prepare<'a>(
 }
 
 /// Why a task lane may not make this call: the desktop and the main browser session belong to
-/// the main lane (ADR 0005, ADR 0037).
+/// the main lane (docs/adr/agents.md#agent-execution-lanes, docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions).
 fn lane(
     task: bool,
     tools: Option<&Registry>,

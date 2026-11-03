@@ -1,9 +1,12 @@
-"""The vault (ADR 0086) on real agents through Docker.
+"""The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) on real agents
+through Docker.
 
 Same host needs as docker_login.py, Node with Playwright included. Keeper and Other run
 guest desktops with OpenAI's model. An administrator, a controller (`browser.view` and
 `browser.control` on Keeper), a viewer (`browser.view`) and an outsider each manage
-what their grants allow; installation items follow ADR 0081 access. The agents list,
+what their grants allow; installation items follow
+docs/adr/identity.md#installation-wide-connection-access-by-default access. The agents
+list,
 fill and save items, and every fill is proved where it lands, on a login page this
 script serves, and refused fills in the arbiter's log and the ledger. No secret is in
 the database dump, the orchestrator's log or the sandboxes' logs. CUBEBOT_VAULT_EVIDENCE

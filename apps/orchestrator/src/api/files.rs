@@ -1,4 +1,4 @@
-//! Shared files (ADRs 0059 and 0060) for people. Storage authorizes every request; this adapter
+//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) for people. Storage authorizes every request; this adapter
 //! authenticates the person and streams bodies. An upload is the raw request body; a download
 //! is always an attachment the browser never renders in the console's origin.
 use crate::{

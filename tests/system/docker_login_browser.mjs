@@ -1,4 +1,4 @@
-// The login handoff banner (ADR 0039) in real Chromium against the built console behind
+// The login handoff banner (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) in real Chromium against the built console behind
 // Caddy. CUBEBOT_LOGIN_STEP is `take` (take control from the chat's banner and hand back
 // on the Desktop route) or `decline` (decline from the chat's banner with a reason).
 import assert from 'node:assert/strict'

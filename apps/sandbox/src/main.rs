@@ -1,4 +1,4 @@
-//! One agent sandbox of the `kvm` runtime (ADR 0084): a KVM guest.
+//! One agent sandbox of the `kvm` runtime (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): a KVM guest.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod kvm;
 use std::{
@@ -53,7 +53,7 @@ fn run() -> io::Result<u8> {
     Err(io::Error::other("the sandbox needs x86_64 Linux"))
 }
 
-/// The host channel (ADR 0085): relays desktop request lines on stdin to the running sandbox,
+/// The host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device): relays desktop request lines on stdin to the running sandbox,
 /// which passes them to the guest's arbiter, and its responses to stdout. The orchestrator runs it inside the sandbox container,
 /// so reaching it takes the platform's exec authorization for that container.
 fn desktop() -> io::Result<()> {

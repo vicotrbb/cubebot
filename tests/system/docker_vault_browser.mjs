@@ -1,4 +1,4 @@
-// The vault (ADR 0086) in real Chromium against the built console behind Caddy: during a
+// The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) in real Chromium against the built console behind Caddy: during a
 // login handoff the administrator takes control from the chat's banner, saves the login
 // to Keeper's vault with Save and fill, sees the fill picker and hands back, then finds
 // the items on the Vault tab with no secret anywhere on it.

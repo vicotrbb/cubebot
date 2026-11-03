@@ -1,7 +1,7 @@
-//! `cubebot-agent guest`: init of the `kvm` sandbox's guest (ADR 0084). It mounts the workspace
+//! `cubebot-agent guest`: init of the `kvm` sandbox's guest (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). It mounts the workspace
 //! disk, receives the agent's environment over the control channel ([`cubebot_protocol::guest`]),
-//! hands it to [`crate::init`], which runs the agent and, with computer use on, the desktop (ADR
-//! 0085), rewrites received files the host refreshes, and reports liveness and then the agent's
+//! hands it to [`crate::init`], which runs the agent and, with computer use on, the desktop
+//! (docs/adr/sandbox.md#desktop-as-a-vmm-device), rewrites received files the host refreshes, and reports liveness and then the agent's
 //! exit status to the host. When the agent exits it syncs the disks and reboots, which ends the
 //! VM; the host ending its side of the channel stops the agent first.
 use crate::init::{PRIVATE, STATE};

@@ -1,4 +1,4 @@
-//! Installed skills (ADR 0055). The system prompt names each installed skill; `load_skill` fetches
+//! Installed skills (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming). The system prompt names each installed skill; `load_skill` fetches
 //! the installed revision on demand, writes its files into the workspace as the tool user and
 //! returns its instructions, so its scripts run through the ordinary tools under the same limits
 //! as any other command. The library and installations belong to the orchestrator.

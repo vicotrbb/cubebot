@@ -1,4 +1,4 @@
-//! Login handoffs (ADR 0039). An agent's running turn asks a person to log in on a site through
+//! Login handoffs (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover). An agent's running turn asks a person to log in on a site through
 //! its desktop and ends; a person takes control for it. Handing control back completes it and
 //! declining refuses it, and either queues a message telling the agent. The message is sent as
 //! the person whose turn asked, since delivery needs `conversation.send`, which the person who

@@ -1,4 +1,4 @@
-//! The desktop WebSocket (ADRs 0039 and 0085) through the configured browser router, against a
+//! The desktop WebSocket (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device) through the configured browser router, against a
 //! stand-in sandbox whose host channel answers like the arbiter.
 use crate::{runtime_identity::http_server, support};
 use cubebot_orchestrator::{

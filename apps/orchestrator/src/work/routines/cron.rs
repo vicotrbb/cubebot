@@ -1,4 +1,4 @@
-//! Five-field cron in UTC (ADR 0087): minute, hour, day of month, month and day of week, each
+//! Five-field cron in UTC (docs/adr/agents.md#routines): minute, hour, day of month, month and day of week, each
 //! `*`, a value or a range, optionally with a `/step`, in comma lists. Day of week 0 and 7 are
 //! Sunday. When both day fields are restricted, a day matching either runs.
 pub(crate) struct Cron {

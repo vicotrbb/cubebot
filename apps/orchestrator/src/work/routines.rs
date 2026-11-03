@@ -1,4 +1,4 @@
-//! Routines (ADR 0087): a stored prompt and/or shell command for one agent. Every occurrence, by
+//! Routines (docs/adr/agents.md#routines): a stored prompt and/or shell command for one agent. Every occurrence, by
 //! hand, schedule or webhook, is a turn in the agent's conversation, inserted and woken like a
 //! message; a coalescing routine keeps at most one of its turns pending.
 mod agent;

@@ -1,4 +1,4 @@
-//! Lanes (ADR 0005): one main-lane turn per agent, for direct chat, room work and messages, beside
+//! Lanes (docs/adr/agents.md#agent-execution-lanes): one main-lane turn per agent, for direct chat, room work and messages, beside
 //! up to `task_lanes` delegated tasks. The ledger delivers conversation records; the agent
 //! assembles its own context.
 use super::Work;
@@ -344,7 +344,7 @@ async fn fail(
     turn: Uuid,
     code: &str,
 ) -> Result<(), Error> {
-    // shortcut: a child's provider outage fails it rather than waiting (ADR 0073 keeps them
+    // shortcut: a child's provider outage fails it rather than waiting (docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt keeps them
     // distinct); give children a provider wait if parents re-delegate needlessly.
     let failed = sqlx::query!(
         "
@@ -469,7 +469,7 @@ async fn history(
 }
 
 /// The provider for the turn, or `None` once it waits for one. A routine's command alone needs
-/// no model (ADR 0087).
+/// no model (docs/adr/agents.md#routines).
 async fn inference(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,

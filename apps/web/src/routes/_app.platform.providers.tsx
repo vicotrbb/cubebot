@@ -17,7 +17,7 @@ type Current = {
   revision: number
 }
 
-/** One installation-managed provider connection (ADRs 0028 and 0078). */
+/** One installation-managed provider connection (docs/adr/identity.md#installation-managed-provider-connections and docs/adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support). */
 function Providers() {
   const client = useQueryClient()
   const current = useQuery({
@@ -28,9 +28,9 @@ function Providers() {
     <div className="platform">
       <div>
         <p className="platform__lead">
-          One OpenAI or Anthropic connection and model for eligible agents (ADR
-          0081: enabled connections reach every agent). The key is encrypted on
-          the server and never shown again.
+          One OpenAI or Anthropic connection and model for eligible agents
+          (installation-wide connection access: enabled connections reach every
+          agent). The key is encrypted on the server and never shown again.
         </p>
         {current.isPending && <Skeleton lines={3} />}
         {current.data && (

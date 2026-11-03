@@ -1,8 +1,11 @@
 //! The sandbox: one VM with one memory region and a thread per vCPU booting a Linux guest from a
-//! read-only root disk, with the agent's guest init as init (ADR 0084). Its devices are a 16550 serial
+//! read-only root disk, with the agent's guest init as init (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). Its devices are a 16550 serial
 //! console relayed to stdout and virtio-mmio disks for the root and workspace, a network device on
-//! a tap, and vsock for the control channel and the desktop's host channel (ADR 0085).
-#![allow(unsafe_code, reason = "KVM ioctls and guest memory (ADR 0084)")]
+//! a tap, and vsock for the control channel and the desktop's host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device).
+#![allow(
+    unsafe_code,
+    reason = "KVM ioctls and guest memory (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)"
+)]
 mod boot;
 mod bridge;
 mod memory;
@@ -33,7 +36,7 @@ use virtio::{Mmio, Slot, block::Block, net::Net, vsock::Vsock};
 
 // shortcut: fixed workspace size, make it configurable when an agent needs more.
 const WORKSPACE_SIZE: u64 = 8 << 30;
-/// CUBEBOT_GUEST_VCPUS and CUBEBOT_GUEST_MEMORY_MIB (ADR 0085). 32 is the guest kernel's NR_CPUS;
+/// CUBEBOT_GUEST_VCPUS and CUBEBOT_GUEST_MEMORY_MIB (docs/adr/sandbox.md#desktop-as-a-vmm-device). 32 is the guest kernel's NR_CPUS;
 /// shortcut: a 64-vCPU guest hung in reboot on a 16-core host, find why before raising it.
 const VCPUS: (u32, std::ops::RangeInclusive<u32>) = (2, 1..=32);
 const MEMORY_MIB: (u32, std::ops::RangeInclusive<u32>) = (2048, 256..=3072);

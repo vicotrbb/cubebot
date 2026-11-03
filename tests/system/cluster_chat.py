@@ -88,7 +88,9 @@ def workflow(
     if qualify is None:
         from cluster_chat_flow import qualify
 
-    # A kvm sandbox runs as root with NET_ADMIN (ADR 0084): only privileged admits it.
+    # A kvm sandbox runs as root with NET_ADMIN
+    # (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): only privileged admits
+    # it.
     policy = "privileged" if RUNTIME == "kvm" else "baseline"
     admission.namespaces(config, fixture, ((NAMESPACE, policy),), runtime_account=False)
     references = startup.load_images(name, images)

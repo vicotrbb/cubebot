@@ -4,7 +4,7 @@ metadata:
   name: orchestrator
   labels: {{- include "cubebot.labels" . | nindent 4 }}
 ---
-# Agent pods run as this account with only their projected identity token (ADR 0075).
+# Agent pods run as this account with only their projected identity token (docs/adr/packaging.md#one-namespace-for-the-entire-installation).
 apiVersion: v1
 kind: ServiceAccount
 metadata:

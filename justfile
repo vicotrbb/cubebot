@@ -151,7 +151,7 @@ cluster-startup:
 cluster-chat:
     uv run --project tooling/quality --locked python tests/system/cluster_chat.py
 
-# ADR 0083 sandbox scenarios on the kvm backend; x86_64 Linux with /dev/kvm, as cluster-chat.
+# docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary sandbox scenarios on the kvm backend; x86_64 Linux with /dev/kvm, as cluster-chat.
 cluster-sandbox:
     uv run --project tooling/quality --locked python tests/system/cluster_sandbox.py
 
@@ -192,38 +192,38 @@ docker-sandbox:
     uv run --project tooling/quality --locked python tests/system/docker_sandbox.py
 
 # The docker-* suites take CUBEBOT_SANDBOX_RUNTIME=kvm|container (default: kvm where /dev/kvm exists).
-# Three real agents dream, yield and fail through Docker (ADR 0025); same needs as docker-sandbox.
+# Three real agents dream, yield and fail through Docker (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results); same needs as docker-sandbox.
 docker-dreams:
     uv run --project tooling/quality --locked python tests/system/docker_dreams.py
 
-# The console desktop view on real agents through Docker (ADRs 0039 and 0085); docker-sandbox's needs plus Node with Playwright.
+# The console desktop view on real agents through Docker (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device); docker-sandbox's needs plus Node with Playwright.
 docker-desktop:
     uv run --project tooling/quality --locked python tests/system/docker_desktop.py
 
-# The agent's browser tools on real agents through Docker (ADRs 0036, 0037 and 0085); same needs as docker-sandbox.
+# The agent's browser tools on real agents through Docker (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction, docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions and docs/adr/sandbox.md#desktop-as-a-vmm-device); same needs as docker-sandbox.
 docker-browser:
     uv run --project tooling/quality --locked python tests/system/docker_browser.py
 
-# Login handoff on a real agent through Docker (ADRs 0039 and 0085); docker-desktop's needs.
+# Login handoff on a real agent through Docker (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device); docker-desktop's needs.
 docker-login:
     uv run --project tooling/quality --locked python tests/system/docker_login.py
 
-# The vault on two real agents through Docker, from every scope and person's side (ADR 0086); docker-desktop's needs.
+# The vault on two real agents through Docker, from every scope and person's side (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills); docker-desktop's needs.
 docker-vault:
     uv run --project tooling/quality --locked python tests/system/docker_vault.py
 
-# Three real agents use rooms, delegation, messaging, steering, cancellation and lanes through Docker (ADRs 0005, 0014 to 0016, 0071 to 0073); same needs as docker-sandbox.
+# Three real agents use rooms, delegation, messaging, steering, cancellation and lanes through Docker (docs/adr/agents.md#agent-execution-lanes, docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator, docs/adr/rooms.md#independent-assignments-for-multiple-room-mentions, docs/adr/rooms.md#explicit-agent-messaging-and-delegation, docs/adr/rooms.md#queued-messages-with-explicit-steering, docs/adr/rooms.md#cancel-selected-work-and-its-descendants and docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt); same needs as docker-sandbox.
 docker-rooms:
     uv run --project tooling/quality --locked python tests/system/docker_rooms.py
 
-# Shared files on two real agents through Docker, from every scope and person's side (ADRs 0059 and 0060); docker-desktop's needs.
+# Shared files on two real agents through Docker, from every scope and person's side (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api); docker-desktop's needs.
 docker-files:
     uv run --project tooling/quality --locked python tests/system/docker_files.py
 
-# Routines on two real agents through Docker, from every scope and person's side (ADR 0087); docker-desktop's needs.
+# Routines on two real agents through Docker, from every scope and person's side (docs/adr/agents.md#routines); docker-desktop's needs.
 docker-routines:
     uv run --project tooling/quality --locked python tests/system/docker_routines.py
 
-# Three real agents publish, pin, load, run and dream skills through Docker (ADRs 0055 to 0057); same needs as docker-sandbox.
+# Three real agents publish, pin, load, run and dream skills through Docker (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming, docs/adr/memory.md#shared-installation-skill-library-by-default and docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user); same needs as docker-sandbox.
 docker-skills:
     uv run --project tooling/quality --locked python tests/system/docker_skills.py

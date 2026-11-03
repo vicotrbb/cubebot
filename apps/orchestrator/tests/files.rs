@@ -1,4 +1,4 @@
-//! Shared files (ADRs 0059 and 0060) against real PostgreSQL and a temporary volume: bytes
+//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) against real PostgreSQL and a temporary volume: bytes
 //! round-trip through the console and the runtime API, access stays inside its scope, and
 //! startup reconciles what a crash between publication and commit leaves.
 use crate::runtime_support::fixture;

@@ -1,4 +1,4 @@
-//! The tool-free room coordinator (ADR 0014). It takes one unaddressed room message, asks the
+//! The tool-free room coordinator (docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator). It takes one unaddressed room message, asks the
 //! installation's model to pick one owner, ask a question or do nothing, and validates the answer
 //! against current membership before any turn exists. The model call happens outside any
 //! transaction; the message stays `routing` until a valid result commits.

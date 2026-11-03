@@ -11,7 +11,7 @@ type FileShare = components['schemas']['FileShare']
 type Crumb = { id: string; name: string; access: FileEntry['access'] }
 export type View = 'mine' | 'shared'
 
-/** Shared files (ADRs 0059 and 0060): your folders, what others shared with you, uploads by
+/** Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api): your folders, what others shared with you, uploads by
  *  drag and drop, downloads, and sharing with people, teams and agents. `only` narrows the
  *  shared view to one agent's files. */
 export function Files({ only }: { only?: { agent: string } }) {

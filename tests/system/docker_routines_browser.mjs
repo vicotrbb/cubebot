@@ -1,4 +1,4 @@
-// Routines (ADR 0087) in real Chromium against the built console behind Caddy: the
+// Routines (docs/adr/agents.md#routines) in real Chromium against the built console behind Caddy: the
 // administrator makes a command routine with a webhook on Keeper's Routines tab, reads
 // its secret once and its URL, runs it now, finds the run in its history and the turn
 // labelled with the routine in the chat, and after a reload no secret is on the page.

@@ -1,6 +1,6 @@
 # Contributing
 
-Read [ARCHITECTURE](ARCHITECTURE.md) and the relevant [ADRs](docs/adr/README.md) before changing behavior, and [STATUS](docs/STATUS.md) for what actually runs. [AGENTS.md](AGENTS.md) holds the repository rules for people and coding agents alike.
+Read [ARCHITECTURE](ARCHITECTURE.md) and the relevant [decisions](docs/adr/README.md) before changing behavior, and [STATUS](docs/STATUS.md) for what actually runs. [AGENTS.md](AGENTS.md) holds the repository rules for people and coding agents alike.
 
 ## Before you open a change
 
@@ -23,7 +23,7 @@ Existing code predates the first three rules: it uses runtime `sqlx::query` thro
 
 ## Decisions
 
-A change that contradicts an accepted ADR needs a new ADR first. Mark the parts it replaces in the older ADRs and in the [index](docs/adr/README.md).
+A change that contradicts an accepted decision needs the user's acceptance first. Amend the decision's section in its area document and record what it replaced under **What changed**, as the [decision index](docs/adr/README.md) describes.
 
 ## License
 

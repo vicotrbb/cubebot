@@ -1,4 +1,4 @@
-//! The host channel (ADR 0085): each connection on the Unix socket that `cubebot-sandbox
+//! The host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device): each connection on the Unix socket that `cubebot-sandbox
 //! desktop` relays for the orchestrator is paired with one of the streams the guest's arbiter
 //! keeps open to the desktop host port, and bytes pass both ways unparsed. The arbiter treats
 //! each stream as one host channel connection, so its control and frame state end with it.

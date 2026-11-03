@@ -1,6 +1,6 @@
 # Provider subscription authentication (OpenAI and Anthropic)
 
-Research date: October 30, 2026. This note answers the open item in [ADR 0078](../adr/0078-initial-provider-support.md): can Cubebot's native Rust engine use a person's ChatGPT/Codex or Claude subscription in place of API keys? It uses primary sources: provider documentation, terms, help-center articles and the `openai/codex` source at commit [`cbe16d5`][codex-commit] (October 30, 2026). Secondary sources are labelled. No subscription login, token exchange or inference request was run for this note. Nothing here qualifies a provider path under ADR 0078.
+Research date: October 30, 2026. This note answers the open item in [Initial OpenAI, Anthropic, and compatible-endpoint support](../adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support): can Cubebot's native Rust engine use a person's ChatGPT/Codex or Claude subscription in place of API keys? It uses primary sources: provider documentation, terms, help-center articles and the `openai/codex` source at commit [`cbe16d5`][codex-commit] (October 30, 2026). Secondary sources are labelled. No subscription login, token exchange or inference request was run for this note. Nothing here qualifies a provider path under [Initial OpenAI, Anthropic, and compatible-endpoint support](../adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support).
 
 ## Summary and recommendation
 
@@ -11,9 +11,9 @@ The two providers now point in opposite directions.
 
 **Recommendation.**
 
-1. Ship and qualify API-key connections for both providers first (the current ADR 0078 baseline).
+1. Ship and qualify API-key connections for both providers first (the current [Initial OpenAI, Anthropic, and compatible-endpoint support](../adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support) baseline).
 2. Add an **OpenAI "ChatGPT plan" connection** through the official SIWC open-source flow. Cubebot's orchestrator would be the single SIWC host and refresh owner. Agents would receive only the one-hour access token. The connection should be limited to one subscriber's account, used for that subscriber's own agents. Mark it preview: OpenAI labels the flow a preview with request-shape limits.
-3. **Do not build Anthropic subscription authentication.** Direct use is prohibited. Running Claude Code inside the sandbox conflicts with ADR 0006 (native engine) and with ADRs 0031 and 0032 (the orchestrator stores and propagates credentials). For subscription value on Anthropic, document the monthly API credits that Max, Ultra and Team plans now include. They are consumed with an ordinary API key. [API credits for subscribers][anth-credits]
+3. **Do not build Anthropic subscription authentication.** Direct use is prohibited. Running Claude Code inside the sandbox conflicts with [Native Rust agent engine](../adr/agents.md#native-rust-agent-engine) (native engine) and with [Direct provider inference with propagated authentication](../adr/agents.md#direct-provider-inference-with-propagated-authentication) and [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh) (the orchestrator stores and propagates credentials). For subscription value on Anthropic, document the monthly API credits that Max, Ultra and Team plans now include. They are consumed with an ordinary API key. [API credits for subscribers][anth-credits]
 4. Do not use the Codex CLI's private route (Codex's own OAuth client ID against `chatgpt.com/backend-api/codex`). OpenAI's SIWC docs tell integrators not to use `backend-api`.
 
 ## OpenAI (ChatGPT / Codex)
@@ -61,7 +61,7 @@ The app-server protocol also defines a `chatgptAuthTokens` mode, where a host ap
 
 - **Plans.** The developer docs and DevDay page say "eligible Plus and Pro" subscribers. [DevDay 2026][devday], [Learn: SIWC][learn-siwc] The help center (about October 7, 2026) says Go, Plus and Pro for commercial apps, and "Supported open-source tools remain available to all ChatGPT users." [Help][oai-help] Business, Enterprise and Edu workspace eligibility for SIWC plan usage is **not stated**; unverified.
 - **Usage.** Requests count against the plan's "ChatGPT Work and Codex usage" with no new allowance. Users can cap each app's share of weekly usage and optionally allow credits after limits. [Help][oai-help] For Plus, "the five-hour usage limit is shared across all apps … including private and open-source clients"; it "does not apply for Pro users." [Accounts and sessions][siwc-sessions]
-- **Errors.** Exhausted usage arrives as `subscription_sharing_usage_limit_exceeded` (HTTP 429), possibly as `response.failed` mid-stream. "OpenAI does not silently switch the request to another billing path." This matches ADR 0030's no-fallback rule. [Errors and recovery][siwc-errors]
+- **Errors.** Exhausted usage arrives as `subscription_sharing_usage_limit_exceeded` (HTTP 429), possibly as `response.failed` mid-stream. "OpenAI does not silently switch the request to another billing path." This matches [Retry and wait for the selected model](../adr/agents.md#retry-and-wait-for-the-selected-model)'s no-fallback rule. [Errors and recovery][siwc-errors]
 - **Sharing.** One issued client is per user and workspace. A client can serve several hosts of the same user, each with its own host ID. [Overview][siwc-oss] Serving several humans from one subscription conflicts with the credential-sharing clause in the Terms of Use. Many agents owned by the same subscriber is not addressed. It is limited in practice by the plan's usage limits.
 
 ### Authentication lifecycle
@@ -70,10 +70,10 @@ The app-server protocol also defines a `chatgptAuthTokens` mode, where a host ap
 - **Refresh.** `grant_type=refresh_token` with the issued `client_id` and `resource`. "Serialize refreshes for the same session so two processes do not race a rotating token." [Accounts and sessions][siwc-sessions]
 - **Revocation.** Revoke the refresh token at the OIDC `revocation_endpoint`. Users can also disconnect the app in ChatGPT settings. "OpenAI does not currently notify your tool when a user disconnects." [Accounts and sessions][siwc-sessions], [Errors and recovery][siwc-errors]
 
-**Fit with ADR 0032.** The fit is good.
-- The refresh token is a separate credential, so the orchestrator can keep it and propagate only the one-hour access token. That is the separation ADR 0032 asks for "when the provider's credential format permits."
+**Fit with [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh).** The fit is good.
+- The refresh token is a separate credential, so the orchestrator can keep it and propagate only the one-hour access token. That is the separation [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh) asks for "when the provider's credential format permits."
 - Mandatory rotation makes a single refresh owner a requirement. Agents refreshing independently would invalidate each other.
-- Consequences: an agent cut off from the orchestrator keeps inference for at most about an hour (ADR 0012 continuation). Refresh lead time must be under an hour. A crash between a successful refresh and persistence loses the session and forces re-login. ADR 0032's "uncertain outcome" case is real here.
+- Consequences: an agent cut off from the orchestrator keeps inference for at most about an hour ([Bounded continuation during disconnection](../adr/agents.md#bounded-continuation-during-disconnection) continuation). Refresh lead time must be under an hour. A crash between a successful refresh and persistence loses the session and forces re-login. [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh)'s "uncertain outcome" case is real here.
 - Sign-in needs a browser and a loopback redirect. That means a "complete OAuth on the admin's machine and import" flow (the documented VM procedure) or a CLI helper. The web console cannot simply be the redirect target.
 
 ## Anthropic (Claude Pro / Max / Ultra / Team / Enterprise, Claude Code)
@@ -104,30 +104,30 @@ The app-server protocol also defines a `chatgptAuthTokens` mode, where a host ap
 ### Authentication lifecycle
 
 - `/login` credentials refresh automatically inside Claude Code. The access-token lifetime, refresh endpoint and rotation behaviour are not documented publicly; unverified. `setup-token` tokens last one year and are not refreshed. `/logout` revokes. [Authentication][cc-auth]
-- **Fit with ADR 0032.** The fit is poor. The orchestrator storing a Claude.ai token and propagating it to sandboxes is "collect, store, or intermediate," which is prohibited regardless of how well the lifecycle would fit.
+- **Fit with [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh).** The fit is poor. The orchestrator storing a Claude.ai token and propagating it to sandboxes is "collect, store, or intermediate," which is prohibited regardless of how well the lifecycle would fit.
 
 ## Feasibility for Cubebot
 
 | Option | OpenAI: ToS risk | OpenAI: effort / what breaks | Anthropic: ToS risk | Anthropic: effort / what breaks |
 | --- | --- | --- | --- | --- |
 | (a) Direct subscription OAuth from the Rust engine | **Low via SIWC** for an open-source, self-hosted installation used by the subscriber. High if Codex's own client and `backend-api` are reused. Waitlist needed for "paid or remotely hosted" offerings. | Medium. Add the orchestrator SIWC login, import, refresh and revoke flow. In the adapter: `instructions` instead of the system item, drop `max_output_tokens`, namespace tools or use `additional_tools`, map `subscription_sharing_*` and `{"detail":…}` errors. Breaks: hosted tools, sampling parameters, and turns longer than about 1 hour while the orchestrator is unreachable. | **Prohibited** ("may not collect, store, or intermediate"; no third-party Claude.ai login). Reported server-side blocking (secondary). | Not viable. |
-| (b) Official CLI in the KVM sandbox | Low. The SIWC + `codex app-server` setup is documented. | High. It replaces the native loop, tools, memory and journal (ADR 0006, 0083). Tokens are passed as env and app-server restarts every hour. Needs Node or the Codex binary in the guest image. | Narrowly allowed only if the binary is unmodified, the end user signs in through Anthropic's own flow, the operator accepts the Commercial Terms, and usage is "ordinary, individual." Cubebot's orchestrator-held, installation-shared connection (ADR 0028, 0031, 0032) does not fit. | High, plus ADR conflicts: external engine (0006, 0078), per-sandbox human login, no orchestrator refresh, many agents per person against individual-use limits. |
+| (b) Official CLI in the KVM sandbox | Low. The SIWC + `codex app-server` setup is documented. | High. It replaces the native loop, tools, memory and journal ([Native Rust agent engine](../adr/agents.md#native-rust-agent-engine) and [Agent-centric execution in a sandbox boundary](../adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary)). Tokens are passed as env and app-server restarts every hour. Needs Node or the Codex binary in the guest image. | Narrowly allowed only if the binary is unmodified, the end user signs in through Anthropic's own flow, the operator accepts the Commercial Terms, and usage is "ordinary, individual." Cubebot's orchestrator-held, installation-shared connection ([Installation-managed provider connections](../adr/identity.md#installation-managed-provider-connections), [Direct provider inference with propagated authentication](../adr/agents.md#direct-provider-inference-with-propagated-authentication) and [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh)) does not fit. | High, plus decision conflicts: external engine ([Native Rust agent engine](../adr/agents.md#native-rust-agent-engine), [Initial OpenAI, Anthropic, and compatible-endpoint support](../adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support)), per-sandbox human login, no orchestrator refresh, many agents per person against individual-use limits. |
 | (c) Official Agent SDKs | OpenAI has no comparable subscription SDK; SIWC devkit is TypeScript. | Not Rust; would add a non-Rust runtime (AGENTS.md). | Products must use API keys. Claude.ai login needs Anthropic approval. | Not Rust; wraps the Claude Code binary, so it inherits (b). |
-| (d) API keys only | None. | Already the ADR 0078 baseline. | None. Max, Ultra and Team API credits can be spent this way. | Already the baseline. Add docs on claiming plan API credits. |
+| (d) API keys only | None. | Already the [Initial OpenAI, Anthropic, and compatible-endpoint support](../adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support) baseline. | None. Max, Ultra and Team API credits can be spent this way. | Already the baseline. Add docs on claiming plan API credits. |
 
 **Ranked.**
 - **OpenAI:** (a) via SIWC > (d) > (b) > (c). Codex-client reuse is excluded.
-- **Anthropic:** (d) (with plan API credits) > (b) (only if Anthropic approves, and only with ADR changes) > (c) > (a) (prohibited).
+- **Anthropic:** (d) (with plan API credits) > (b) (only if Anthropic approves, and only with decision changes) > (c) > (a) (prohibited).
 
 ## Open questions
 
 1. Does a self-hosted Cubebot installation where *one* subscriber's agents serve *other* human users count as "remotely hosted"? OpenAI does not define the term; ask via the [interest form][oai-interest] before claiming multi-user support.
 2. Are Business, Enterprise and Edu workspaces eligible for SIWC plan usage? Undocumented. Codex access tokens cover Business and Enterprise but only through Codex.
 3. Exact tool-namespace schema required by SIWC (`namespace` grouping versus `additional_tools`): the preview-limitations page names both but the schema was not read. Needs a live test.
-4. Should one Cubebot installation be one SIWC "host" (orchestrator) or should each sandbox be a host? The docs let the app decide. The orchestrator-as-host model fits ADR 0032, but OpenAI says per-host attribution and revocation for transferred sessions "are not yet available."
+4. Should one Cubebot installation be one SIWC "host" (orchestrator) or should each sandbox be a host? The docs let the app decide. The orchestrator-as-host model fits [Orchestrator-owned provider authentication refresh](../adr/identity.md#orchestrator-owned-provider-authentication-refresh), but OpenAI says per-host attribution and revocation for transferred sessions "are not yet available."
 5. Anthropic `/login` token lifetime and rotation are undocumented. This is irrelevant unless Anthropic grants Cubebot an exception.
 6. The OpenAI Terms of Use and help-center pages blocked direct fetches (HTTP 403). Their text was read from Internet Archive captures and should be rechecked in a browser.
-7. Qualification under ADR 0078 still requires running the SIWC flow end to end: login, tool-using turn, refresh at under an hour, revocation, and the usage-limit error. None of that has been done.
+7. Qualification under [Initial OpenAI, Anthropic, and compatible-endpoint support](../adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support) still requires running the SIWC flow end to end: login, tool-using turn, refresh at under an hour, revocation, and the usage-limit error. None of that has been done.
 
 ## Sources
 

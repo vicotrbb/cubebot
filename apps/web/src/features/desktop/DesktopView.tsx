@@ -17,7 +17,7 @@ import {
 } from './useDesktopSocket'
 import './desktop.css'
 
-/** The full desktop (ADR 0039): watch, take control, hand back, fill from the vault. */
+/** The full desktop (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover): watch, take control, hand back, fill from the vault. */
 export function DesktopView({
   agent,
   accountId,

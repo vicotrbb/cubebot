@@ -190,7 +190,7 @@ async fn active(work: &Work, channel: &mut Channel) -> Result<Vec<Delivery>, Err
     Ok(deliveries)
 }
 
-/// The agent's configured idle delay before it may dream (ADR 0025).
+/// The agent's configured idle delay before it may dream (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results).
 async fn dream_after(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &super::RuntimeActor,

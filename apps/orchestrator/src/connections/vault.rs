@@ -1,6 +1,6 @@
-//! The vault (ADR 0086): logins and secrets an agent types into its desktop through the arbiter
+//! The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills): logins and secrets an agent types into its desktop through the arbiter
 //! without reading them. Secrets are Credentials records bound to their item's id and never
-//! leave this module except as the text of one fill. Installation items follow ADR 0081 access;
+//! leave this module except as the text of one fill. Installation items follow docs/adr/identity.md#installation-wide-connection-access-by-default access;
 //! an agent's own items belong to it alone. Callers authorize people; the runtime calls name
 //! the authenticated agent.
 use super::{Access, Connections, ProviderAccess, validate_access};

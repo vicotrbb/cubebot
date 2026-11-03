@@ -1,5 +1,6 @@
 #!/usr/bin/python3 -u
-"""Init of guest-boot's desktop boot (ADR 0085), wrapping the real guest init.
+"""Init of guest-boot's desktop boot (docs/adr/sandbox.md#desktop-as-a-vmm-device),
+wrapping the real guest init.
 
 Runs the real init (`cubebot-agent-real guest`) as its child, so the guest starts its
 desktop and arbiter as it does for an agent. Once the desktop is ready it checks, as the

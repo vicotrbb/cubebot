@@ -1,4 +1,4 @@
-//! Dream runs (ADR 0025). The agent decides when it is idle enough to dream; the ledger admits a
+//! Dream runs (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results). The agent decides when it is idle enough to dream; the ledger admits a
 //! run only while no turn is queued, running or waiting, tags every revision the run commits and
 //! keeps its report. Commits go through the same stale-write and human-rejection checks as a turn,
 //! so rerunning a dream over changes already made adds nothing. A run may also publish a new or

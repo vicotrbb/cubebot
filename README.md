@@ -21,7 +21,7 @@ The installer puts the release's compose files, a `.env` with a random database 
 `down` keeps your data in Docker volumes; `update` moves to the latest release, or the one named. Set these before running the installer to change what it writes to `~/.cubebot/.env`:
 
 - `CUBEBOT_DOMAIN=cubebot.example.com` serves the console on ports 80 and 443 with a public certificate Caddy obtains; the name must already resolve to this host, and sandboxes reach the orchestrator through it. Without it, the console listens on loopback only and sandboxes reach the orchestrator over a local development CA.
-- `CUBEBOT_RUNTIME` is `kvm` by default on x86_64 Linux with `/dev/kvm`, where each agent runs in a KVM guest, and `container` elsewhere, including every Mac, where each agent runs as a plain container (ADR 0084); `off` runs no agents. The console shows which.
+- `CUBEBOT_RUNTIME` is `kvm` by default on x86_64 Linux with `/dev/kvm`, where each agent runs in a KVM guest, and `container` elsewhere, including every Mac, where each agent runs as a plain container ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)); `off` runs no agents. The console shows which.
 - `CUBEBOT_VERSION` picks a release tag instead of the latest.
 
 Agents are started through the host's Docker socket, which makes the orchestrator root on this machine: install it only where you would give Cubebot that. This is one machine's installation; `deploy/chart` installs on Kubernetes.
@@ -74,26 +74,26 @@ cargo run --locked -p cubebot-orchestrator
 
 ## Layout
 
-| Path                | Responsibility                                                         |
-| ------------------- | ---------------------------------------------------------------------- |
-| `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown    |
-| `apps/agent`        | Agent runtime; runs its own tools inside its sandbox                   |
-| `apps/sandbox`      | `cubebot-sandbox`: in-house KVM VMM and dev process backend (ADR 0084) |
-| `apps/web`          | TanStack Start frontend and future PWA                                 |
-| `modules/protocol`  | Shared communication contracts                                         |
-| `modules/providers` | Bounded native OpenAI text and function-call adapter                   |
-| `tooling/quality`   | Complexity gate, regression tests, and Python development environment  |
-| `tests/system`      | Smoke checks spanning built application processes                      |
-| `deploy`            | Installation packaging; Dockerfiles live with their apps               |
-| `site`              | Public landing site: standalone static Astro build, no runtime code    |
-| `docs/adr`          | Accepted product and architecture decisions                            |
+| Path                | Responsibility                                                                                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown                                                                                      |
+| `apps/agent`        | Agent runtime; runs its own tools inside its sandbox                                                                                                     |
+| `apps/sandbox`      | `cubebot-sandbox`: in-house KVM VMM and dev process backend ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) |
+| `apps/web`          | TanStack Start frontend and future PWA                                                                                                                   |
+| `modules/protocol`  | Shared communication contracts                                                                                                                           |
+| `modules/providers` | Bounded native OpenAI text and function-call adapter                                                                                                     |
+| `tooling/quality`   | Complexity gate, regression tests, and Python development environment                                                                                    |
+| `tests/system`      | Smoke checks spanning built application processes                                                                                                        |
+| `deploy`            | Installation packaging; Dockerfiles live with their apps                                                                                                 |
+| `site`              | Public landing site: standalone static Astro build, no runtime code                                                                                      |
+| `docs/adr`          | Accepted product and architecture decisions                                                                                                              |
 
 See [repository layout](docs/development/repository-layout.md) for the module map and dependency rules.
 
 ## Read next
 
 - [Manifesto](MANIFESTO.md) and [architecture](ARCHITECTURE.md)
-- [Accepted ADRs](docs/adr/README.md)
+- [Accepted decisions](docs/adr/README.md)
 - [Status](docs/STATUS.md)
 - [Software specification](docs/design/software-specification.md) and [qualification plan](docs/design/qualification.md)
 - [Contributing](CONTRIBUTING.md)

@@ -17,7 +17,7 @@ type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = configuration().await?;
-    // ADR 0084: the sandbox pod runs as root with NET_ADMIN, which baseline forbids, so it needs
+    // docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox: the sandbox pod runs as root with NET_ADMIN, which baseline forbids, so it needs
     // a privileged namespace.
     let kvm = verify(&config, "cubebot-admission", true).await?;
     let kvm_baseline = verify(&config, "cubebot-admission-baseline", false).await?;

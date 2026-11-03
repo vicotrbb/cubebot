@@ -10,7 +10,7 @@ The node image is pinned to `kindest/node:v1.36.4@sha256:099e049362a1526b2db7149
 
 Each namespace has its own synthetic installation database and ConfigMap anchor. The two namespaces enforce Pod Security `privileged` and `baseline` at v1.36. This changes only the disposable fixture namespaces. The test creates dedicated runtime service accounts, then sends the actual library's Pod and PVC server dry runs through `Registry::record_prepared`. The supplied image digests are schema fixtures and are never pulled or executed.
 
-Prepared manifests are persisted twice from independent server previews. Direct API reads verify that no physical Pod or PVC was created. Under ADR 0084 the sandbox pod runs as root with `NET_ADMIN`, so it must be admitted by `privileged` and rejected by `baseline`, showing a visible admission failure rather than an unfiltered fallback. The fixture does not test a controller's running-Pod behavior under that rejection.
+Prepared manifests are persisted twice from independent server previews. Direct API reads verify that no physical Pod or PVC was created. Under [In-house VMM as the agent sandbox](../adr/sandbox.md#in-house-vmm-as-the-agent-sandbox) the sandbox pod runs as root with `NET_ADMIN`, so it must be admitted by `privileged` and rejected by `baseline`, showing a visible admission failure rather than an unfiltered fallback. The fixture does not test a controller's running-Pod behavior under that rejection.
 
 ## Evidence
 

@@ -1,4 +1,4 @@
-//! The shared skill library (ADRs 0055 to 0057). Any active person publishes and revises skills;
+//! The shared skill library (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming, docs/adr/memory.md#shared-installation-skill-library-by-default and docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user). Any active person publishes and revises skills;
 //! a revision names the one it read, so concurrent contributors get a conflict instead of
 //! overwriting each other. Installing pins a revision per agent, and a new revision never moves
 //! another agent's installation. Storing a package never runs its scripts.

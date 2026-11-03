@@ -1,4 +1,4 @@
-//! Routines (ADR 0087) for people, and the webhook that runs one. The webhook authenticates with
+//! Routines (docs/adr/agents.md#routines) for people, and the webhook that runs one. The webhook authenticates with
 //! the routine's own bearer secret, never a person's session.
 use crate::{
     agents::AgentId,

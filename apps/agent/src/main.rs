@@ -1,4 +1,4 @@
-//! Agent runtime entry point. It runs inside its sandbox: a `kvm` guest or a container (ADR 0084).
+//! Agent runtime entry point. It runs inside its sandbox: a `kvm` guest or a container (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox).
 use std::process::ExitCode;
 
 #[tokio::main(flavor = "current_thread")]

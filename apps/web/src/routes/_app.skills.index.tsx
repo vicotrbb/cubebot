@@ -6,7 +6,7 @@ import { Alert, Empty, Skeleton, when } from '../components/primitives'
 
 export const Route = createFileRoute('/_app/skills/')({ component: Library })
 
-/** The installation's shared skill library (ADRs 0055 to 0057). */
+/** The installation's shared skill library (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming, docs/adr/memory.md#shared-installation-skill-library-by-default and docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user). */
 function Library() {
   const skills = useQuery({
     queryKey: ['skills'],

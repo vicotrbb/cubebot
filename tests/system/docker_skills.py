@@ -1,4 +1,7 @@
-"""Skills (ADRs 0055 to 0057) on real agents through the Docker sandbox backend.
+"""Skills (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming,
+docs/adr/memory.md#shared-installation-skill-library-by-default and
+docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user) on real agents through
+the Docker sandbox backend.
 
 Same host needs as docker_sandbox.py. An administrator and a member share one library.
 The Operator agent loads an installed skill and runs its script as the tool user, stays

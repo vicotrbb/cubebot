@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_app/platform/vault')({
   component: InstallationVault,
 })
 
-/** Installation logins and secrets with ADR 0081 access (ADR 0086). */
+/** Installation logins and secrets with docs/adr/identity.md#installation-wide-connection-access-by-default access (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills). */
 function InstallationVault() {
   const client = useQueryClient()
   const items = useQuery({

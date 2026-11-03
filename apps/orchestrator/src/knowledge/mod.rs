@@ -229,7 +229,7 @@ fn parts(change: &MemoryChange) -> (Option<Uuid>, Option<i64>, Option<&str>) {
     }
 }
 
-/// Content a person replaced or removed is not brought back verbatim by the agent (ADR 0026),
+/// Content a person replaced or removed is not brought back verbatim by the agent (docs/adr/memory.md#direct-memory-editing-and-conversational-correction),
 /// and a new memory the agent already holds verbatim is not saved twice.
 /// shortcut: exact text only; paraphrases pass, and the scan is unindexed per agent. Compare
 /// normalized or embedded text once duplicates or slow commits show up.
