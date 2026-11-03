@@ -8,9 +8,13 @@ declared runtime, wakes one agent until its runtime authenticates over the devel
 control CA, runs install.sh again to check it keeps the database password, and stops
 the installation with `cubebot down`. With CUBEBOT_PLAYWRIGHT_MODULE set, it then
 empties the database and creates the administrator from the console's setup form in
-Chromium. No provider is called. Needs Docker only; the control port 8443 must be
-free. The runtime is container unless CUBEBOT_SANDBOX_RUNTIME=kvm, which also builds
-the guest and sandbox image and needs what `just guest-boot` needs.
+Chromium. It removes that installation with `cubebot uninstall --yes`, then installs
+again through a pty, answering every prompt with keystrokes into a temporary $HOME,
+signs in with the administrator created there and uninstalls it, checking the
+directory, the volumes and the images are gone each time. No provider is called.
+Needs Docker only; the control port 8443 must be free. The runtime is container unless
+CUBEBOT_SANDBOX_RUNTIME=kvm, which also builds the guest and sandbox image and needs
+what `just guest-boot` needs.
 """
 
 import os
@@ -24,6 +28,7 @@ from pathlib import Path
 
 from cluster_chat_setup import wait_for
 from docker_sandbox import INSTRUCTIONS, Api, agent, command, remove
+from install_widgets import Terminal
 
 ROOT = Path(__file__).resolve().parents[2]
 TAG = "install-check"
@@ -65,8 +70,8 @@ def publish(registry):
 
 def install(environment):
     subprocess.run(
-        ["sh", str(ROOT / "deploy/install.sh")],
-        env=environment,
+        ["bash", str(ROOT / "deploy/install.sh")],
+        env=environment | {"CUBEBOT_YES": "1"},
         stdin=subprocess.DEVNULL,
         check=True,
         cwd=ROOT,
@@ -99,8 +104,8 @@ def set_up(environment, home):
     return api
 
 
-def remove_volumes(name):
-    volumes = subprocess.run(
+def project_volumes(name):
+    return subprocess.run(
         [
             "docker",
             "volume",
@@ -111,10 +116,82 @@ def remove_volumes(name):
         ],
         capture_output=True,
         text=True,
-        check=False,
+        check=True,
     ).stdout.split()
+
+
+def remove_volumes(name):
+    volumes = project_volumes(name)
     if volumes:
         docker("volume", "rm", *volumes, check=False)
+
+
+def uninstall(environment, home, registry, name):
+    subprocess.run(
+        [str(home / "cubebot"), "uninstall", "--yes"], env=environment, check=True
+    )
+    assert not home.exists(), f"{home} is still there"
+    assert project_volumes(name) == [], project_volumes(name)
+    for image in ("orchestrator", "web", "agent"):
+        reference = f"{registry}/cubebot-{image}:{TAG}"
+        found = subprocess.run(
+            ["docker", "image", "inspect", reference], capture_output=True, check=False
+        )
+        assert found.returncode != 0, f"{reference} is still there"
+    print(f"PASS cubebot uninstall removed {home}, the volumes and the images")
+
+
+def interactive(environment, directory, registry, name):
+    """Answers every prompt the installer shows, as a person at a terminal would."""
+    user = directory / "user"
+    user.mkdir()
+    home = user / ".cubebot"
+    environment = {
+        key: value
+        for key, value in environment.items()
+        if key not in ("CUBEBOT_HOME", "CUBEBOT_RUNTIME")
+    } | {
+        "HOME": str(user),
+        # Docker's contexts stay where the CLI found them.
+        "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker")),
+    }
+    try:
+        answer(environment, home)
+    except BaseException:
+        if (home / "cubebot").exists():
+            subprocess.run(
+                [str(home / "cubebot"), "uninstall", "--yes"],
+                env=environment,
+                check=False,
+            )
+        raise
+    uninstall(environment, home, registry, name)
+
+
+def answer(environment, home):
+    terminal = Terminal("bash", f"exec bash {ROOT / 'deploy/install.sh'}", environment)
+    terminal.read_until("Where should agents run?", timeout=120)
+    terminal.read_until("Enter")
+    terminal.send(("1" if RUNTIME == "kvm" else "2") + "\r")
+    terminal.read_until("Install directory")
+    terminal.read_until("›")
+    terminal.send(f"{home}\r")
+    terminal.read_until("Administrator")
+    terminal.read_until("Enter")
+    terminal.send("1\r")
+    terminal.read_until("Administrator login")
+    terminal.send("\r")
+    terminal.read_until("Administrator password")
+    terminal.send(PASSWORD + "\r")
+    terminal.read_until("again")
+    terminal.send(PASSWORD + "\r")
+    terminal.read_until("Install?")
+    terminal.send("\r")
+    terminal.read_until("Cubebot is running", timeout=900)
+    assert terminal.finish() == 0, terminal.output.decode(errors="replace")
+    api = sign_in(environment, home)
+    assert api("/api/identity/me")["administrator"]
+    print("PASS the installer took every answer as keys; its administrator signed in")
 
 
 def browser_setup(environment, home, wrapper, name):
@@ -207,6 +284,8 @@ def main():
             subprocess.run(wrapper + ["down"], env=environment, check=True)
             print("PASS cubebot down stopped the installation")
             browser_setup(environment, home, wrapper, name)
+            uninstall(environment, home, registry, name)
+            interactive(environment, Path(directory), registry, name)
         except BaseException:
             if (home / "cubebot").exists():
                 subprocess.run(
