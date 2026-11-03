@@ -44,6 +44,8 @@ release=${CUBEBOT_VERSION:-}
 if [ -z "$release" ]; then
     release=$(curl -fsSIo /dev/null -w '%{redirect_url}' https://github.com/vicotrbb/cubebot/releases/latest) || die "could not find the latest release"
     release=${release##*/}
+    # Without a release, GitHub redirects to the releases page.
+    case "$release" in "" | releases) die "could not find the latest release" ;; esac
 fi
 home=${CUBEBOT_HOME:-$HOME/.cubebot}
 source=${CUBEBOT_SOURCE:-https://raw.githubusercontent.com/vicotrbb/cubebot/$release}

@@ -131,7 +131,7 @@ update() {
     if [ -z "$version" ]; then
         version=$(curl -fsSIo /dev/null -w '%{redirect_url}' https://github.com/vicotrbb/cubebot/releases/latest)
         version="${version##*/}"
-        [ -n "$version" ] || die "could not find the latest release"
+        [ -n "$version" ] && [ "$version" != releases ] || die "could not find the latest release"
     fi
     local source="${CUBEBOT_SOURCE:-https://raw.githubusercontent.com/vicotrbb/cubebot/$version}" file
     for file in compose.yaml compose.domain.yaml compose.agents.yaml compose.control.yaml deploy/cubebot; do
