@@ -3,7 +3,7 @@
 # or with CUBEBOT_HOME a checkout, where compose.dev.yaml builds it from source (`just up`).
 set -euo pipefail
 
-usage="usage: cubebot up | down | update [version] | logs [compose logs options] | admin [login]"
+usage="usage: cubebot up | down | update [version] | logs [compose logs options] | admin [login] | uninstall [--yes]"
 home="${CUBEBOT_HOME:-$HOME/.cubebot}"
 
 die() {
@@ -94,19 +94,27 @@ agents() {
     files+=(-f compose.control.yaml)
 }
 
-up() {
+# Adds the files `up` starts with.
+overlays() {
     case "${CUBEBOT_RUNTIME:-}" in
         off) echo "Agents off (CUBEBOT_RUNTIME=off)." ;;
         kvm | container) agents ;;
         *) die "set CUBEBOT_RUNTIME in $home/.env to kvm, container or off" ;;
     esac
     [ -z "${CUBEBOT_DOMAIN:-}" ] || files+=(-f compose.domain.yaml)
+}
+
+# install.sh's spinners follow the "Pulling release", "Starting Cubebot" and "Waiting for" lines.
+up() {
+    echo "Starting Cubebot."
+    overlays
     local build=()
     [ -z "$dev" ] || build=(--build)
     docker compose "${files[@]}" up -d ${build[@]+"${build[@]}"} --remove-orphans
     # With a domain, ask this host directly rather than trust DNS or hairpin routing.
     local resolve=()
     [ -z "${CUBEBOT_DOMAIN:-}" ] || resolve=(--resolve "$CUBEBOT_DOMAIN:443:127.0.0.1")
+    echo "Waiting for $origin."
     for _ in $(seq 180); do
         if curl -fsS ${resolve[@]+"${resolve[@]}"} "$origin/api/health/live" >/dev/null 2>&1; then
             echo "Cubebot is up at $origin (agents: $CUBEBOT_RUNTIME)."
@@ -146,6 +154,7 @@ update() {
     chmod 755 cubebot
     (umask 077 && { grep -v '^CUBEBOT_VERSION=' .env || true; echo "CUBEBOT_VERSION=$version"; } >.env.new && mv .env.new .env)
     export CUBEBOT_VERSION="$version"
+    echo "Pulling release $version."
     docker compose "${files[@]}" pull
     case "${CUBEBOT_RUNTIME:-}" in
         kvm) docker pull "$registry/cubebot-sandbox:$version" ;;
@@ -171,6 +180,42 @@ admin() {
     echo "Sign in at $origin as $login."
 }
 
+# Removes the installation: its containers, volumes and release images, and this directory.
+uninstall() {
+    [ -z "$dev" ] || die "this is a checkout; stop it with \`just down\`"
+    if [ "${1:-}" != --yes ] && [ "${CUBEBOT_YES:-}" != 1 ]; then
+        { exec 3</dev/tty; } 2>/dev/null || die "no terminal to confirm; pass --yes"
+        local answer
+        printf 'This deletes %s, its data and its images. Type uninstall to confirm: ' "$home" >&2
+        read -r -u 3 answer
+        [ "$answer" = uninstall ] || die "nothing removed"
+    fi
+    local image agent running volume volumes
+    running=$(docker ps -q --filter label=cubebot.dev/agent)
+    # shellcheck disable=SC2086 # one container ID per word
+    [ -z "$running" ] || docker stop $running >/dev/null
+    overlays
+    docker compose "${files[@]}" down -v --remove-orphans
+    for agent in cubebot-agent cubebot-sandbox; do
+        # Agents of other installations on this machine run other images.
+        for running in $(docker ps -aq --filter label=cubebot.dev/agent --filter "ancestor=$registry/$agent:$CUBEBOT_VERSION"); do
+            volumes=$(docker inspect --format '{{range .Mounts}}{{.Name}} {{end}}' "$running")
+            docker rm -f "$running" >/dev/null
+            for volume in $volumes; do
+                docker volume rm "$volume" >/dev/null && echo "Removed agent volume $volume."
+            done
+        done
+    done
+    for image in cubebot-orchestrator cubebot-web cubebot-agent cubebot-sandbox; do
+        image="$registry/$image:$CUBEBOT_VERSION"
+        docker image inspect "$image" >/dev/null 2>&1 || continue
+        docker image rm "$image" >/dev/null && echo "Removed image $image."
+    done
+    cd /
+    rm -rf "$home"
+    echo "Removed $home."
+}
+
 command="${1:-}"
 [ $# -eq 0 ] || shift
 case "$command" in
@@ -179,5 +224,6 @@ case "$command" in
     update) update "$@" ;;
     logs) docker compose "${files[@]}" logs "$@" ;;
     admin) admin "$@" ;;
+    uninstall) uninstall "$@" ;;
     *) die "$usage" ;;
 esac
