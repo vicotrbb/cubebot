@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { type FormEvent, useState } from 'react'
+import { type SubmitEvent, useState } from 'react'
 import { api, failure, ok } from '../api/client'
 import { keys } from '../app/queries'
 import { Cube } from '../components/Cube'
@@ -56,7 +56,7 @@ function Credentials({ setup }: { setup: boolean }) {
   const client = useQueryClient()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
     const body = {

@@ -18,7 +18,6 @@ pub mod tools;
 
 pub mod journal;
 
-/// Any error carried as the cause of another.
 pub type Source = Box<dyn std::error::Error + Send + Sync>;
 
 /// A fixed message that keeps the error that caused it.

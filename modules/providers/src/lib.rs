@@ -285,7 +285,6 @@ async fn json(mut response: Response) -> Result<Value, Error> {
     serde_json::from_slice(&bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
 }
 
-/// Turns one provider's stream payloads into events.
 trait Decoder: Default + Send {
     /// Pushes the events in one payload; true once the provider's final event arrived.
     fn decode(&mut self, data: Value, events: &mut VecDeque<Event>) -> Result<bool, Error>;
@@ -373,9 +372,10 @@ fn unavailable(error: reqwest::Error) -> Error {
         error.is_body()
     );
     // A failed connection proves the request never arrived, so retrying cannot repeat it.
-    match error.is_connect() {
-        true => Error::Transient(None),
-        false => Error::Unavailable,
+    if error.is_connect() {
+        Error::Transient(None)
+    } else {
+        Error::Unavailable
     }
 }
 

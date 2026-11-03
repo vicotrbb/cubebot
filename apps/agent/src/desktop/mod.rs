@@ -551,8 +551,6 @@ fn encode(response: &Response) -> io::Result<Vec<u8>> {
     Ok(serde_json::to_vec(response)?)
 }
 
-/// Starts the arbiter on its own thread with the agent's socket and, in a guest, the host
-/// channel's streams.
 /// Where the host channel reaches the arbiter.
 #[derive(Clone, Copy)]
 pub enum Host {
@@ -562,6 +560,8 @@ pub enum Host {
     Socket,
 }
 
+/// Starts the arbiter on its own thread with the agent's socket and, in a guest, the host
+/// channel's streams.
 pub fn start<S: Screen + 'static, I: Input + 'static>(
     screen: S,
     input: I,

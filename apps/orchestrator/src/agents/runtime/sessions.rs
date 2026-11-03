@@ -128,7 +128,7 @@ fn token() -> String {
 
 /// A Docker sandbox bootstrap token: `cb_sandbox_` and 64 hex digits, minted per container.
 pub(crate) fn sandbox_token() -> String {
-    format!("cb_sandbox_{}", &token()["cb_runtime_".len()..])
+    format!("cb_sandbox_{}", crate::identity::token())
 }
 pub(crate) fn sandbox_digest(token: &str) -> Result<Vec<u8>, Error> {
     let secret = token

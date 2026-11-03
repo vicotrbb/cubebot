@@ -108,7 +108,12 @@ fn body(request: &Request) -> Result<Value, Error> {
                 output,
                 image,
             } => {
-                let result = tool_result(call_id, output, image, computer.contains(&&**call_id));
+                let result = tool_result(
+                    call_id,
+                    output,
+                    image.as_deref(),
+                    computer.contains(&&**call_id),
+                );
                 // Parallel results answer one assistant message, so they share one user message.
                 if let Some(Value::Array(content)) = messages
                     .last_mut()
@@ -134,9 +139,12 @@ fn body(request: &Request) -> Result<Value, Error> {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| match tool.computer {
-                true => json!({"type":"computer_toolset_20260801","configs":unserved()}),
-                false => json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":tool.strict}),
+            .map(|tool| {
+                if tool.computer {
+                    json!({"type":"computer_toolset_20260801","configs":unserved()})
+                } else {
+                    json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":tool.strict})
+                }
             })
             .collect();
         body["tool_choice"] = if request.tools_disabled {
@@ -180,7 +188,7 @@ fn unserved() -> Value {
 }
 
 /// A result with its image after the text; a computer toolset result echoes its toolset.
-fn tool_result(call_id: &str, output: &str, image: &Option<String>, computer: bool) -> Value {
+fn tool_result(call_id: &str, output: &str, image: Option<&str>, computer: bool) -> Value {
     let mut result = json!({"type":"tool_result","tool_use_id":call_id,"content":output});
     if let Some(image) = image {
         result["content"] = json!([
@@ -246,9 +254,10 @@ impl Messages {
     }
 
     fn block(&mut self, data: &Value) -> Result<&mut Value, Error> {
-        let index = data["index"].as_u64().ok_or(Error::InvalidResponse(None))? as usize;
-        self.blocks
-            .get_mut(index)
+        data["index"]
+            .as_u64()
+            .and_then(|index| usize::try_from(index).ok())
+            .and_then(|index| self.blocks.get_mut(index))
             .ok_or(Error::InvalidResponse(None))
     }
 

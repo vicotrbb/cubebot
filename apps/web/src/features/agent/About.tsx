@@ -8,7 +8,7 @@ import {
 } from '../../api/admin'
 import type { AgentSummary } from '../../api/types'
 import { keys, useInstallation } from '../../app/queries'
-import { DEFAULT_AVATAR, moodOf, type Avatar } from '../../components/Cube'
+import { moodOf, type Avatar } from '../../components/Cube'
 import { Alert, Field, Status } from '../../components/primitives'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
@@ -71,10 +71,10 @@ function Identity({
 }) {
   const { save, error, notice, busy } = useSave(onSaved)
   const [name, setName] = useState(agent.name)
-  const [avatar, setAvatar] = useState<Avatar>(agent.avatar ?? DEFAULT_AVATAR)
+  const [avatar, setAvatar] = useState<Avatar>(agent.avatar)
   const changed =
     name !== agent.name ||
-    JSON.stringify(avatar) !== JSON.stringify(agent.avatar ?? DEFAULT_AVATAR)
+    JSON.stringify(avatar) !== JSON.stringify(agent.avatar)
   return (
     <section className="panel__section">
       <h2>About</h2>

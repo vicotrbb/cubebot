@@ -122,13 +122,13 @@ impl Http {
             request = request.header("mcp-protocol-version", version);
         }
         // Only a failed connection proves the request never arrived.
-        let response = request
-            .send()
-            .await
-            .map_err(|error| match error.is_connect() {
-                true => Failure::NotSent("connection failed".into()),
-                false => Failure::Lost,
-            })?;
+        let response = request.send().await.map_err(|error| {
+            if error.is_connect() {
+                Failure::NotSent("connection failed".into())
+            } else {
+                Failure::Lost
+            }
+        })?;
         let status = response.status();
         if status == reqwest::StatusCode::NOT_FOUND && session.is_some() {
             return Err(Failure::Expired);

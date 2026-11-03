@@ -63,12 +63,12 @@ pub(super) fn tools() -> Vec<Box<dyn Tool>> {
 pub(super) fn shell(script: &str, arguments: &[&str]) -> Job {
     let mut argv: Vec<String> = BASH.map(Into::into).into();
     argv.extend(["-c".into(), script.into(), "tool".into()]);
-    argv.extend(arguments.iter().map(|argument| argument.to_string()));
+    argv.extend(arguments.iter().map(ToString::to_string));
     Job { argv, stdin: None }
 }
 
 /// Typed arguments with unknown fields refused, so model input can never add options.
-fn parse<T: DeserializeOwned>(input: &Value) -> Result<T, &'static str> {
+pub(crate) fn parse<T: DeserializeOwned>(input: &Value) -> Result<T, &'static str> {
     T::deserialize(input).map_err(|_| "invalid tool arguments")
 }
 

@@ -342,7 +342,7 @@ impl Vsock {
                 Some(lines) => {
                     for line in lines {
                         match serde_json::from_slice(&line) {
-                            Ok(report) => self.record(report),
+                            Ok(report) => self.record(&report),
                             Err(_) => return self.refuse(header),
                         }
                     }
@@ -373,7 +373,7 @@ impl Vsock {
         }
     }
 
-    fn record(&mut self, report: Report) {
+    fn record(&mut self, report: &Report) {
         match report {
             Report::Liveness(_) if !std::mem::replace(&mut self.alive, true) => {
                 eprintln!("Guest agent alive");
@@ -381,7 +381,7 @@ impl Vsock {
             Report::Liveness(_) => (),
             Report::Exit { exit } => {
                 eprintln!("Guest agent exited with status {exit}");
-                self.exit = Some(exit);
+                self.exit = Some(*exit);
             }
         }
     }
@@ -417,8 +417,10 @@ impl Vsock {
         Ok(used)
     }
 
-    /// Writes waiting packets into receive buffers: replies first, then credit-limited data.
-    fn flush(&mut self, queue: &mut Queue, memory: &GuestMemory) -> io::Result<bool> {
+    /// Writes waiting packets into receive buffers: replies first, then credit-limited data. Also
+    /// delivers packets queued outside a driver notification, such as a shutdown.
+    pub fn deliver(&mut self, queues: &mut [Queue], memory: &GuestMemory) -> io::Result<bool> {
+        let queue = &mut queues[RECEIVE];
         let mut used = false;
         while self.pending() && queue.has_available(memory)? {
             let chain = queue.pop(memory)?;
@@ -462,11 +464,6 @@ impl Vsock {
         }
         Some((header, payload))
     }
-
-    /// Delivers packets queued outside a driver notification, such as a shutdown.
-    pub fn deliver(&mut self, queues: &mut [Queue], memory: &GuestMemory) -> io::Result<bool> {
-        self.flush(&mut queues[RECEIVE], memory)
-    }
 }
 
 /// A stream packet from the guest to the host.
@@ -494,12 +491,12 @@ impl Device for Vsock {
         queues: &mut [Queue],
         memory: &GuestMemory,
     ) -> io::Result<bool> {
-        let flushed = self.flush(&mut queues[RECEIVE], memory)?;
+        let flushed = self.deliver(queues, memory)?;
         // Transmit waits while replies do, so any notification, such as new receive buffers,
         // resumes it.
         let transmitted = queues[TRANSMIT].ready && self.transmit(&mut queues[TRANSMIT], memory)?;
         // The event queue only ever holds buffers; this device raises no events.
-        Ok(self.flush(&mut queues[RECEIVE], memory)? | flushed | transmitted)
+        Ok(self.deliver(queues, memory)? | flushed | transmitted)
     }
 
     fn reset(&mut self) {

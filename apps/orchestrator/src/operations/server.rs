@@ -106,7 +106,7 @@ where
     let (server_done, controller_done, first) = tokio::select! {
         result = &mut server => (true,false,result.map_err(|_| Error::Conflict)),
         result = &mut lifecycle => (false,true,result),
-        _ = &mut shutdown => (false,false,Ok(())),
+        () = &mut shutdown => (false,false,Ok(())),
     };
     stop.send_replace(true);
     let (server_result, controller_result) = tokio::join!(

@@ -142,17 +142,16 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             };
             let storage = shared_files(&pool).await?;
             let controller = configured_controller(&pool).await?;
-            let router =
-                match cubebot_orchestrator::api::configured_router(pool, origin, config).await {
-                    Ok(router) => with_storage(controller.routes(router), storage),
-                    Err(_) => {
-                        controller
-                            .release()
-                            .await
-                            .map_err(failure("startup cleanup could not release ownership"))?;
-                        return Err("identity configuration failed".into());
-                    }
-                };
+            let Ok(router) =
+                cubebot_orchestrator::api::configured_router(pool, origin, config).await
+            else {
+                controller
+                    .release()
+                    .await
+                    .map_err(failure("startup cleanup could not release ownership"))?;
+                return Err("identity configuration failed".into());
+            };
+            let router = with_storage(controller.routes(router), storage);
             Ok((router, Some(controller)))
         }
         Err(std::env::VarError::NotPresent) => {

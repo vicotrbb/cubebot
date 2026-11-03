@@ -85,7 +85,7 @@ function Rows({ s, activity }: { s: AgentStatus; activity: string }) {
 function sandbox(s: AgentStatus) {
   const parts = [s.resource_phase ?? 'none']
   if (s.pod_epoch != null) parts.push(`epoch ${s.pod_epoch}`)
-  if (s.pod_attempt) parts.push(`attempt ${String(s.pod_attempt).slice(0, 8)}`)
+  if (s.pod_attempt) parts.push(`attempt ${s.pod_attempt.slice(0, 8)}`)
   return parts.join(' · ')
 }
 

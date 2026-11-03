@@ -138,9 +138,10 @@ async fn decline_login(
     } else {
         reason
     };
-    match api.work.settle_login(agent, actor.id, Some(reason)).await? {
-        true => Ok(StatusCode::NO_CONTENT),
-        false => Err(IdentityError::NotFound),
+    if api.work.settle_login(agent, actor.id, Some(reason)).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(IdentityError::NotFound)
     }
 }
 
@@ -234,7 +235,7 @@ impl Session {
         self.desktop
             .viewers
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Hands back control this viewer still holds, and the desktop to the agent alone when no

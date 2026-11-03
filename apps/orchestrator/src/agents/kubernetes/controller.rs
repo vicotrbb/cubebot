@@ -173,7 +173,7 @@ impl Controller {
                     cursor = AgentId(Uuid::nil());
                     tokio::select! {
                         _ = stop.changed() => return Ok(()),
-                        _ = tokio::time::sleep(Duration::from_secs(5)) => {},
+                        () = tokio::time::sleep(Duration::from_secs(5)) => {},
                     }
                 }
             }
@@ -192,7 +192,7 @@ impl Controller {
             // Each effect is durably reserved before dispatch. Cancellation never replays it.
             if !matches!(
                 tokio::time::timeout(Duration::from_secs(60), self.reconcile(*agent)).await,
-                Ok(Ok(_))
+                Ok(Ok(()))
             ) {
                 tracing::warn!(agent = %agent.0,"agent lifecycle reconciliation held or failed");
             }

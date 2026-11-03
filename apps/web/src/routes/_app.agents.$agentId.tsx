@@ -109,7 +109,7 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
             <Conversation
               agent={agent}
               accountId={me.id}
-              you={me.login ?? 'You'}
+              you={me.login}
               canSend={can(agent, 'conversation_send', me)}
               turns={conversation.turns}
               streaming={conversation.streaming}

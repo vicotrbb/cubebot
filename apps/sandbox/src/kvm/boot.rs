@@ -15,7 +15,6 @@ const EBDA: u64 = 0x9_fc00;
 const IOAPIC: u32 = 0xfec0_0000;
 const LOCAL_APIC: u32 = 0xfee0_0000;
 
-/// Loads the guest for `vcpus` processors and returns the kernel's 64-bit entry point.
 #[tracing::instrument(name = "boot_load", skip_all, fields(vcpus = vcpus))]
 pub fn load(memory: &mut [u8], kernel: &[u8], cmdline: &str, vcpus: u8) -> io::Result<u64> {
     let header = Header::parse(kernel)?;
