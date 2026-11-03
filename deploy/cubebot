@@ -61,7 +61,9 @@ fi
 agents() {
     local image=cubebot-agent
     if [ "$CUBEBOT_RUNTIME" = kvm ]; then
-        [ -c /dev/kvm ] && [ -c /dev/net/tun ] || die "CUBEBOT_RUNTIME=kvm needs /dev/kvm and /dev/net/tun; set container in $home/.env"
+        if [ ! -c /dev/kvm ] || [ ! -c /dev/net/tun ]; then
+            die "CUBEBOT_RUNTIME=kvm needs /dev/kvm and /dev/net/tun; set container in $home/.env"
+        fi
         image=cubebot-sandbox
     fi
     if [ -n "$dev" ]; then
@@ -131,7 +133,8 @@ update() {
     if [ -z "$version" ]; then
         version=$(curl -fsSIo /dev/null -w '%{redirect_url}' https://github.com/vicotrbb/cubebot/releases/latest)
         version="${version##*/}"
-        [ -n "$version" ] && [ "$version" != releases ] || die "could not find the latest release"
+        # Without a release, GitHub redirects to the releases page.
+        case "$version" in "" | releases) die "could not find the latest release" ;; esac
     fi
     local source="${CUBEBOT_SOURCE:-https://raw.githubusercontent.com/vicotrbb/cubebot/$version}" file
     for file in compose.yaml compose.domain.yaml compose.agents.yaml compose.control.yaml deploy/cubebot; do
