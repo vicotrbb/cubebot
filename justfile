@@ -41,6 +41,7 @@ test:
     bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
+    uv run --project tooling/quality --locked python tests/system/install_widgets.py
 
 build:
     cargo build --workspace --locked
@@ -79,7 +80,8 @@ release-check file="digests.json":
         echo "$image:$tag $have"; \
     done
 
-# Installs a build of this checkout with deploy/install.sh from a local registry, signs in and wakes one container agent; Docker only.
+# Installs a build of this checkout with deploy/install.sh from a local registry, signs in, wakes one container agent and uninstalls,
+# then installs again answering every prompt through a pty and uninstalls that; Docker only.
 install-check:
     uv run --project tooling/quality --locked python tests/system/install_check.py
 
