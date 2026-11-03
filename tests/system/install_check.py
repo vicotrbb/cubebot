@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 from cluster_chat_setup import wait_for
-from docker_sandbox import Api, agent, command, remove
+from docker_sandbox import INSTRUCTIONS, Api, agent, command, remove
 
 ROOT = Path(__file__).resolve().parents[2]
 TAG = "install-check"
@@ -153,7 +153,7 @@ def qualify(environment, home, agents):
         context_window=128000,
     )
     api("/api/provider", provider)
-    identity = agent(api, "Install check")
+    identity = agent(api, "Install check", INSTRUCTIONS)
     agents.append(identity)
     status = f"/api/agents/{identity}/status"
     wait_for(

@@ -26,6 +26,7 @@ from pathlib import Path
 from cluster_chat_setup import wait_for
 from docker_desktop import Desktop, container
 from docker_sandbox import (
+    INSTRUCTIONS,
     ROOT,
     Api,
     agent,
@@ -167,7 +168,7 @@ def qualify(directory: Path):
                 context_window=128000,
             )
             api("/api/provider", provider)
-            identity = agent(api, "Container check")
+            identity = agent(api, "Container check", INSTRUCTIONS)
             try:
                 status = f"/api/agents/{identity}/status"
                 wait_for(
