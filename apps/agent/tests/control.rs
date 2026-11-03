@@ -297,6 +297,21 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
 }
 
 #[tokio::test]
+async fn a_silent_channel_is_replaced_by_a_new_connection() {
+    let mut fake = fake(Vec::new()).await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    // The fake switchboard never pings, so the agent hears nothing and reconnects.
+    let again = tokio::time::timeout(Duration::from_secs(25), fake.reports.recv())
+        .await
+        .expect("reconnect after silence");
+    assert_eq!(again, Some(json!({"type":"pull"})));
+    fake.drain(&mut child).await;
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
 async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_parallel_calls() {
     let root = root();
     let earlier = Uuid::new_v4();

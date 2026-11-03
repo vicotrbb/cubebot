@@ -1,6 +1,6 @@
 //! Remote servers over Streamable HTTP: each message is a POST answered by JSON or by an SSE
 //! stream carrying the response.
-use super::{Failure, answer, result};
+use super::{Failure, RESPONSE_BYTES, answer, result};
 use reqwest::{
     Client, Response, Url,
     header::{ACCEPT, HeaderMap, HeaderName, HeaderValue},
@@ -11,9 +11,6 @@ use std::{
     sync::{Mutex, OnceLock},
     time::Duration,
 };
-
-/// Remote output is held in memory before it is retained, so it is bounded here.
-const RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
 pub(in crate::tools) struct Http {
     client: Client,

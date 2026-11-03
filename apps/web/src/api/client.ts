@@ -1,7 +1,6 @@
 import createClient, { type Client } from 'openapi-fetch'
 import type { components, paths } from './schema'
 
-export type Account = components['schemas']['Account']
 export type Agent = components['schemas']['Agent']
 export type Memory = components['schemas']['Memory']
 export type DreamRun = components['schemas']['DreamRun']
@@ -62,6 +61,17 @@ export async function agents(client: Client<paths> = api) {
     )
     items.push(...page)
     if (page.length < 100) return items
+  }
+}
+/** Loads a whole sequence-ordered history, one page of up to 100 after another. */
+export async function history<T extends { sequence: number }>(
+  page: (after: number) => Promise<T[]>,
+) {
+  const items: T[] = []
+  for (;;) {
+    const next = await page(items.at(-1)?.sequence ?? 0)
+    items.push(...next)
+    if (next.length < 100) return items
   }
 }
 export function messageProblem(text: string): string | null {

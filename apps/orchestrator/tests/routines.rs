@@ -173,7 +173,7 @@ async fn a_webhook_needs_its_secret_and_a_replayed_key_makes_no_second_turn() {
     let created = work.create_routine(&admin, agent, &input).await.unwrap();
     let secret = created.secret.unwrap();
     let id = created.routine.id;
-    let router = cubebot_orchestrator::api::database_router(pool.clone());
+    let router = crate::database_router(pool.clone());
     let hook = |secret: &str, key: &str| {
         let request = Request::builder()
             .method("POST")
@@ -220,4 +220,60 @@ async fn a_webhook_needs_its_secret_and_a_replayed_key_makes_no_second_turn() {
         .secret;
     assert_eq!(hook(&secret, "b").await.0, 401);
     assert_eq!(hook(&rotated, "b").await.0, 202);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_person_who_edits_or_rekeys_a_routine_becomes_who_it_runs_as() {
+    use cubebot_orchestrator::identity::access::{Capability, GrantRequest, Recipient, Scope};
+    let (pool, admin, agent) = setup().await;
+    let identity = Identity::new(pool.clone());
+    let work = Work::new(pool.clone());
+    identity
+        .create_account(&admin, "member", "member password", false, Uuid::new_v4())
+        .await
+        .unwrap();
+    let session = identity.login("member", "member password").await.unwrap();
+    let member = identity.authenticate(&session.token).await.unwrap();
+    for capability in [Capability::ConversationRead, Capability::ConversationSend] {
+        let grant = GrantRequest {
+            request_id: Uuid::new_v4(),
+            recipient: Recipient::User { id: member.id },
+            scope: Scope::Conversation { id: agent.0 },
+            capability,
+        };
+        identity.grant(&admin, &grant).await.unwrap();
+    }
+    let runs_as = |id: Uuid| {
+        let pool = pool.clone();
+        async move {
+            sqlx::query_scalar!("SELECT created_by FROM routines WHERE id=$1", id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    let edited = work
+        .create_routine(&admin, agent, &routine(Some("*/5 * * * *"), false))
+        .await
+        .unwrap()
+        .routine;
+    let update = routines::UpdateRoutine {
+        expected_revision: edited.revision,
+        routine: routine(Some("*/5 * * * *"), false).routine,
+    };
+    work.update_routine(&member, agent, edited.id, &update)
+        .await
+        .unwrap();
+    assert_eq!(runs_as(edited.id).await, member.id);
+
+    let rekeyed = work
+        .create_routine(&admin, agent, &routine(None, false))
+        .await
+        .unwrap()
+        .routine;
+    work.rotate_routine_secret(&member, agent, rekeyed.id)
+        .await
+        .unwrap();
+    assert_eq!(runs_as(rekeyed.id).await, member.id);
 }

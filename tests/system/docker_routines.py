@@ -34,10 +34,13 @@ from docker_desktop import CONSOLE, Person, container, logs, person, psql, surro
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     unsupported,
@@ -775,48 +778,10 @@ def scenarios(world):
         assert secret not in stored
 
 
-def agent(admin, name):
-    identity = admin("/api/agents", command(name=name, instructions=INSTRUCTIONS), 201)[
-        "id"
-    ]
-    current = admin(f"/api/agents/{identity}")
-    admin(
-        f"/api/agents/{identity}/definition",
-        command(
-            expected_revision=current["revision"],
-            name=name,
-            instructions=INSTRUCTIONS,
-            idle_policy=current["idle_policy"],
-            idle_delay_seconds=86400,
-            dreaming_model=None,
-        ),
-    )
-    status = admin(f"/api/agents/{identity}/status")
-    wake = command(expected_revision=status["revision"], action="wake")
-    admin(f"/api/agents/{identity}/lifecycle", wake, expected=202)
-    return identity
-
-
-def grant(admin, account, agent_id, capability):
-    body = command(
-        recipient={"kind": "user", "id": account},
-        scope={"kind": "conversation", "id": agent_id},
-        capability=capability,
-    )
-    return admin("/api/identity/access/grants", body, expected=201)
-
-
 def setup(admin, base, ca, password):
-    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-    provider = command(
-        expected_revision=0,
-        api_key=key,
-        model=MODEL,
-        provider="openai",
-        context_window=128000,
-    )
-    admin("/api/provider", provider)
-    keeper, other = agent(admin, "Keeper"), agent(admin, "Other")
+    configure_provider(admin, MODEL)
+    keeper = agent(admin, "Keeper", INSTRUCTIONS, 86400)
+    other = agent(admin, "Other", INSTRUCTIONS, 86400)
     people = {
         "admin": Person(
             admin, "routines-admin", password, admin("/api/identity/me")["id"]
@@ -825,9 +790,15 @@ def setup(admin, base, ca, password):
     for name in ("reader", "sender", "outsider"):
         people[name] = person(admin, base, ca, f"routines-{name}")
     grants = {
-        "read": grant(admin, people["reader"].id, keeper, "conversation_read"),
-        "sender_read": grant(admin, people["sender"].id, keeper, "conversation_read"),
-        "send": grant(admin, people["sender"].id, keeper, "conversation_send"),
+        "read": grant(
+            admin, people["reader"].id, keeper, "conversation_read", "conversation"
+        ),
+        "sender_read": grant(
+            admin, people["sender"].id, keeper, "conversation_read", "conversation"
+        ),
+        "send": grant(
+            admin, people["sender"].id, keeper, "conversation_send", "conversation"
+        ),
     }
     for identity in (keeper, other):
         status = f"/api/agents/{identity}/status"

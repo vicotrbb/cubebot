@@ -14,6 +14,7 @@ mod preferences;
 pub(crate) use passwords::token;
 pub use preferences::{Favorite, FavoriteKind, Preferences, Theme};
 mod sessions;
+pub(crate) use sessions::digest;
 
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -104,21 +105,29 @@ impl Identity {
     }
 
     async fn require_administrator(&self, actor: &Actor) -> Result<(), IdentityError> {
-        let allowed = sqlx::query_scalar!(
-            r#"
+        administrator(&self.pool, actor.id).await
+    }
+}
+
+/// Forbidden unless the actor is an active administrator; locks nothing.
+pub(crate) async fn administrator(
+    executor: impl sqlx::PgExecutor<'_>,
+    actor: Uuid,
+) -> Result<(), IdentityError> {
+    let allowed = sqlx::query_scalar!(
+        r#"
             SELECT EXISTS(
                 SELECT 1
                 FROM human_accounts
                 WHERE id = $1 AND active AND role = 'administrator'
             ) AS "allowed!"
             "#,
-            actor.id,
-        )
-        .fetch_one(&self.pool)
-        .await?;
-        if !allowed {
-            return Err(IdentityError::Forbidden);
-        }
-        Ok(())
+        actor,
+    )
+    .fetch_one(executor)
+    .await?;
+    if !allowed {
+        return Err(IdentityError::Forbidden);
     }
+    Ok(())
 }

@@ -60,6 +60,9 @@ async fn shutdown(terminate: &mut Signal) {
     }
 }
 
+/// The switchboard closes a channel silent this long (agents/runtime/channel.rs).
+const SILENCE: Duration = Duration::from_secs(15);
+
 enum Next {
     Exit,
     Reconnect,
@@ -136,10 +139,12 @@ impl Agent {
             send(&mut channel, &report(entry)).await?;
         }
         self.idle(&mut channel).await?;
+        let mut heard = Instant::now();
         loop {
             let dream_at = self.dream_at;
             tokio::select! {
                 message = channel.next() => {
+                    heard = Instant::now();
                     let text = match message {
                         Some(Ok(Message::Text(text))) => text,
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
@@ -153,6 +158,8 @@ impl Agent {
                 }
                 Some(event) = self.events.recv() => self.forward(&mut channel, event).await?,
                 _ = until(dream_at) => self.dream(),
+                // The switchboard pings every few seconds, so silence means a dead connection.
+                _ = tokio::time::sleep_until(heard + SILENCE) => return Ok(Next::Reconnect),
             }
         }
     }
@@ -195,16 +202,24 @@ impl Agent {
         let message = report(&event.0);
         let turn = event.0.turn;
         self.outbox.push(event);
-        send(channel, &message).await?;
+        // Before sending, so a failed send still leaves the lane idle for the next connection.
         if finished {
             self.active.remove(&turn);
+        }
+        send(channel, &message).await?;
+        if finished {
             self.idle(channel).await?;
         }
         Ok(())
     }
 
     /// With no turn running, reports a requested drain or asks for work.
-    async fn idle(&self, channel: &mut Channel) -> Result<(), Error> {
+    async fn idle(&mut self, channel: &mut Channel) -> Result<(), Error> {
+        // A turn that ended without a final event, such as one that panicked, holds no lane.
+        // With events still queued, a finished turn may yet report its end in order.
+        if self.events.is_empty() {
+            self.active.retain(|_, active| !active.task.is_finished());
+        }
         if !self.active.is_empty() {
             return Ok(());
         }
@@ -357,4 +372,74 @@ async fn send(channel: &mut Channel, report: &Report) -> Result<(), Error> {
         .send(Message::Text(text.into()))
         .await
         .map_err(Error::unavailable)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::DirBuilderExt;
+
+    /// A channel the switchboard has already closed, so every send fails.
+    async fn closed() -> Channel {
+        use axum::{Router, extract::WebSocketUpgrade, routing::get};
+        let upgrade = |upgrade: WebSocketUpgrade| async move {
+            upgrade.on_upgrade(|mut socket| async move {
+                let _ = socket.send(axum::extract::ws::Message::Close(None)).await;
+                while socket.recv().await.is_some() {}
+            })
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("ws://{}/", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            axum::serve(listener, Router::new().route("/", get(upgrade)))
+                .await
+                .unwrap()
+        });
+        let (mut channel, _) = tokio_tungstenite::connect_async(url).await.unwrap();
+        while channel.next().await.is_some_and(|message| message.is_ok()) {}
+        channel
+    }
+
+    fn active(task: tokio::task::JoinHandle<()>) -> Active {
+        Active {
+            cancel: watch::channel(false).0,
+            task,
+            steering: Default::default(),
+            steered: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_finished_turn_frees_its_lane_even_when_its_report_is_not_sent() {
+        let root = std::env::temp_dir().join(format!("cubebot-engine-{}", Uuid::new_v4()));
+        std::fs::DirBuilder::new()
+            .mode(0o700)
+            .create(&root)
+            .unwrap();
+        let mut agent = Agent::open(&root, None).unwrap();
+        let mut channel = closed().await;
+        let turn = Uuid::new_v4();
+        agent
+            .active
+            .insert(turn, active(tokio::spawn(std::future::pending())));
+        let done = attempts::Entry {
+            turn,
+            sequence: 1,
+            event: TurnEvent::Done {
+                response: "ok".into(),
+                memories: Vec::new(),
+            },
+        };
+        assert!(agent.forward(&mut channel, (done, None)).await.is_err());
+        assert!(agent.active.is_empty());
+        // A turn whose task ended without a final event holds no lane either.
+        let ended = tokio::spawn(async {});
+        while !ended.is_finished() {
+            tokio::task::yield_now().await;
+        }
+        agent.active.insert(Uuid::new_v4(), active(ended));
+        assert!(agent.idle(&mut channel).await.is_err());
+        assert!(agent.active.is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 }

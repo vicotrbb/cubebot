@@ -1,6 +1,7 @@
 //! The Linux x86 boot protocol's 64-bit entry (Documentation/arch/x86/boot.rst): places a bzImage,
 //! command line, zero page, MP table, GDT and identity page tables in guest memory. The guest
 //! mounts its root disk itself, so there is no initramfs.
+use super::memory::invalid;
 use std::io;
 
 pub const ZERO_PAGE: u64 = 0x7000;
@@ -163,10 +164,6 @@ fn u16_at(bytes: &[u8], offset: usize) -> u16 {
 
 fn u32_at(bytes: &[u8], offset: usize) -> u32 {
     u32::from(u16_at(bytes, offset)) | u32::from(u16_at(bytes, offset + 2)) << 16
-}
-
-fn invalid(message: &str) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
 #[cfg(test)]

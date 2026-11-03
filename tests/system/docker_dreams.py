@@ -22,10 +22,12 @@ from cluster_chat_setup import wait_for
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
     live,
     remove,
     sign_in,
@@ -52,27 +54,6 @@ def psql(postgres, query):
         text=True,
         check=True,
     ).stdout.split()
-
-
-def agent(api, name, memories, dreaming_model=None):
-    created = command(name=name, instructions=INSTRUCTIONS)
-    identity = api("/api/agents", created, expected=201)["id"]
-    current = api(f"/api/agents/{identity}")
-    update = command(
-        expected_revision=current["revision"],
-        name=name,
-        instructions=INSTRUCTIONS,
-        idle_policy=current["idle_policy"],
-        idle_delay_seconds=60,
-        dreaming_model=dreaming_model,
-    )
-    api(f"/api/agents/{identity}/definition", update)
-    for content in memories:
-        api(f"/api/agents/{identity}/memories", {"content": content}, expected=201)
-    status = api(f"/api/agents/{identity}/status")
-    wake = command(expected_revision=status["revision"], action="wake")
-    api(f"/api/agents/{identity}/lifecycle", wake, expected=202)
-    return identity
 
 
 class Watch:
@@ -214,9 +195,9 @@ def dream_log(identity):
 
 
 def scenarios(api, postgres):
-    dreamer = agent(api, "Dreamer", SEEDS)
-    nano = agent(api, "Nano", SEEDS[:2], dreaming_model="gpt-4o-mini")
-    broken = agent(api, "Broken", SEEDS[:1], dreaming_model="no-such-model")
+    dreamer = agent(api, "Dreamer", INSTRUCTIONS, 60, memories=SEEDS)
+    nano = agent(api, "Nano", INSTRUCTIONS, 60, "gpt-4o-mini", SEEDS[:2])
+    broken = agent(api, "Broken", INSTRUCTIONS, 60, "no-such-model", SEEDS[:1])
     identities = [dreamer, nano, broken]
     try:
         watch = consolidates(api, postgres, dreamer)
@@ -244,15 +225,7 @@ def qualify(directory: Path):
         with running(binary, ROOT, environment):
             wait_for("orchestrator HTTPS", lambda: live(api), timeout=30)
             sign_in(api, database, "dream-admin", secrets.token_urlsafe(24))
-            key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-            provider = command(
-                expected_revision=0,
-                api_key=key,
-                model="gpt-4.1-mini",
-                provider="openai",
-                context_window=128000,
-            )
-            api("/api/provider", provider)
+            configure_provider(api)
             scenarios(api, postgres)
         print("PASS agents dreamed, yielded, honored overrides and kept history")
 

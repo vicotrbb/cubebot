@@ -229,6 +229,44 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
     f.task.abort();
 }
 
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn concurrent_saves_of_one_new_name_keep_one_item() {
+    use axum::{body::Body, http::Request};
+    use tower::ServiceExt;
+    let f = fixture().await;
+    let auth = f.auth.clone().with_credentials(Credentials::new([7; 32]));
+    let token = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap()
+        .token;
+    let runtime = cubebot_orchestrator::api::runtime_router(auth);
+    let saves = (0..8).map(|n| {
+        let body = json!({"kind":"secret","name":"API key","secret":format!("secret {n}")});
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/runtime/vault")
+            .header("authorization", format!("Bearer {token}"))
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap();
+        runtime.clone().oneshot(request)
+    });
+    for response in futures_util::future::join_all(saves).await {
+        assert_eq!(response.unwrap().status(), 204);
+    }
+    let items = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM vault_items WHERE agent_id=$1"#,
+        f.agent.0
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(items, 1);
+    f.task.abort();
+}
+
 async fn settled(work: &Work, admin: &cubebot_orchestrator::identity::Actor, agent: Uuid) {
     for _ in 0..200 {
         let turns = work.history(admin, agent, 0).await.unwrap();

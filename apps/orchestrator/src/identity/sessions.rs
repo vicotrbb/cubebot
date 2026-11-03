@@ -19,7 +19,11 @@ impl Identity {
         )
         .fetch_optional(&self.pool)
         .await?;
-        let account = account.ok_or(IdentityError::Unauthorized)?;
+        let Some(account) = account else {
+            // The same Argon2 work as a real login, so timing does not reveal which logins exist.
+            passwords::verify(password, passwords::DUMMY.into()).await?;
+            return Err(IdentityError::Unauthorized);
+        };
         let id = account.id;
         self.reserve_password_check(id).await?;
         passwords::verify(password, account.password_hash).await?;
@@ -100,7 +104,7 @@ impl Identity {
     }
 }
 
-pub(super) fn digest(token: &str) -> Vec<u8> {
+pub(crate) fn digest(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 

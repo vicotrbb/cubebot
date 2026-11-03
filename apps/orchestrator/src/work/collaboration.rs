@@ -44,7 +44,7 @@ impl Work {
             return Err(Error::InvalidConfiguration);
         }
         let mut tx = self.pool.begin().await?;
-        let (root, _, _) = lineage(&mut tx, turn).await?;
+        let (root, _, _) = lineage(&mut tx, turn).await?.ok_or(Error::Conflict)?;
         lock_root(&mut tx, root).await?;
         let human = sqlx::query_scalar!(
             "
@@ -313,7 +313,7 @@ async fn create(
     human: Uuid,
     input: &Collaborate,
 ) -> Result<Result<Uuid, String>, Error> {
-    let (_, depth, cancelled) = lineage(tx, turn).await?;
+    let (_, depth, cancelled) = lineage(tx, turn).await?.ok_or(Error::Conflict)?;
     if cancelled {
         return Ok(Err("this work was cancelled; nothing was sent".into()));
     }
@@ -423,11 +423,11 @@ async fn repeated(
 }
 
 /// The root of the turn's ancestry, its number of ancestors, and whether any of the turn and
-/// its ancestors is cancelled.
+/// its ancestors is cancelled; `None` when no such turn exists.
 async fn lineage(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
-) -> Result<(Uuid, i32, bool), sqlx::Error> {
+) -> Result<Option<(Uuid, i32, bool)>, sqlx::Error> {
     let lineage = sqlx::query!(
         r#"
         WITH RECURSIVE up(id,parent,status,depth) AS (
@@ -437,12 +437,13 @@ async fn lineage(
         )
         SELECT (SELECT id FROM up WHERE parent IS NULL) AS "root!", max(depth) AS "depth!", bool_or(status='cancelled') AS "cancelled!"
         FROM up
+        HAVING count(*) > 0
         "#,
         turn,
     )
-    .fetch_one(&mut **tx)
+    .fetch_optional(&mut **tx)
     .await?;
-    Ok((lineage.root, lineage.depth, lineage.cancelled))
+    Ok(lineage.map(|lineage| (lineage.root, lineage.depth, lineage.cancelled)))
 }
 
 /// States the agent's own name, so a mention or a message addressed to it reads as its own,
@@ -608,7 +609,7 @@ pub(super) async fn cancel_subtree(
     agent: AgentId,
     turn: Uuid,
 ) -> Result<(), IdentityError> {
-    let (root, _, _) = lineage(tx, turn).await?;
+    let (root, _, _) = lineage(tx, turn).await?.ok_or(IdentityError::Conflict)?;
     lock_root(tx, root).await?;
     // Cancelling again is accepted; finished results stay what they were.
     let changed = sqlx::query!(

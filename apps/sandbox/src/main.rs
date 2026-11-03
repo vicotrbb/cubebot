@@ -7,6 +7,10 @@ use std::{
     process::ExitCode,
 };
 
+/// The host channel's socket; `CUBEBOT_GUEST_DESKTOP_SOCKET` moves it, such as for several
+/// sandboxes sharing one host's /tmp.
+const DESKTOP_SOCKET: &str = "/tmp/cubebot-desktop.sock";
+
 fn main() -> ExitCode {
     // Silent unless RUST_LOG asks for spans' events; the eprintln! lines stay the output.
     let _ = tracing_subscriber::fmt()
@@ -53,8 +57,8 @@ fn run() -> io::Result<u8> {
 /// which passes them to the guest's arbiter, and its responses to stdout. The orchestrator runs it inside the sandbox container,
 /// so reaching it takes the platform's exec authorization for that container.
 fn desktop() -> io::Result<()> {
-    let path = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")
-        .unwrap_or_else(|| "/tmp/cubebot-desktop.sock".into());
+    let path =
+        std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET").unwrap_or_else(|| DESKTOP_SOCKET.into());
     let socket = UnixStream::connect(&path)?;
     let requests = socket.try_clone()?;
     std::thread::spawn(move || {

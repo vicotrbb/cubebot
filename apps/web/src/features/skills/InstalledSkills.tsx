@@ -160,7 +160,7 @@ export function InstalledSkills({ agent }: { agent: AgentSummary }) {
   )
 }
 
-export function listSkills(agent: string) {
+function listSkills(agent: string) {
   return Promise.all([
     ok(api.GET('/api/agents/{agent}/skills', { params: { path: { agent } } })),
     ok(api.GET('/api/skills')),

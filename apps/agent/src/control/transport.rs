@@ -23,11 +23,14 @@ pub(super) async fn bytes(response: reqwest::Response, limit: usize) -> Result<V
     read(response, limit).await
 }
 
-/// A refusal's small JSON body.
-pub(super) async fn decode_conflict<T: DeserializeOwned>(
-    response: reqwest::Response,
-) -> Result<T, Error> {
-    body(response, 4 * 1024).await
+/// A refusal's reason from its small JSON body, or `fallback` when the body has none.
+pub(super) async fn refusal(response: reqwest::Response, fallback: String) -> String {
+    #[derive(serde::Deserialize)]
+    struct Refused {
+        error: String,
+    }
+    let refused: Result<Refused, _> = body(response, 4 * 1024).await;
+    refused.map_or(fallback, |refused| refused.error)
 }
 
 async fn body<T: DeserializeOwned>(response: reqwest::Response, limit: usize) -> Result<T, Error> {

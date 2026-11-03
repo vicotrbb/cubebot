@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api, ApiError, failure, ok } from '../../api/client'
 import {
   admin,
@@ -10,7 +9,7 @@ import {
 import type { AgentSummary } from '../../api/types'
 import { keys, useInstallation } from '../../app/queries'
 import { DEFAULT_AVATAR, moodOf, type Avatar } from '../../components/Cube'
-import { Alert, Field, Status, when } from '../../components/primitives'
+import { Alert, Field, Status } from '../../components/primitives'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
 
@@ -55,11 +54,7 @@ function useSave(onSaved: () => Promise<unknown>) {
       await onSaved()
       setNotice(done)
     } catch (error) {
-      setError(
-        error instanceof ApiError && error.status === 409
-          ? 'The agent changed since you opened it. Reload and try again.'
-          : failure(error),
-      )
+      setError(failure(error))
     } finally {
       setBusy(false)
     }
@@ -447,13 +442,3 @@ function Tools() {
     </section>
   )
 }
-
-/** Used by the create route: a fresh agent's first saved definition carries the avatar. */
-export function useRetireRedirect(agent: AgentSummary) {
-  const navigate = useNavigate()
-  useEffect(() => {
-    if (agent.desired_state === 'retired') void navigate({ to: '/' })
-  }, [agent.desired_state, navigate])
-}
-
-export { when }

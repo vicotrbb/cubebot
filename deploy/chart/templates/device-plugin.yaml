@@ -23,9 +23,10 @@ spec:
           args:
             - --domain
             - devices.kubevirt.io
+            {{- /* Each sandbox takes one of each; 110 is the kubelet's default pod limit per node. */}}
             {{- range list (list "kvm" "/dev/kvm") (list "tun" "/dev/net/tun") }}
             - --device
-            - {{ dict "name" (index . 0) "groups" (list (dict "count" 8 "paths" (list (dict "path" (index . 1))))) | toJson | quote }}
+            - {{ dict "name" (index . 0) "groups" (list (dict "count" 110 "paths" (list (dict "path" (index . 1))))) | toJson | quote }}
             {{- end }}
           securityContext:
             privileged: true

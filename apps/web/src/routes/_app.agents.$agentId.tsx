@@ -19,7 +19,7 @@ import { AgentProvider } from '../features/agent/context'
 import { Conversation } from '../features/chat/Conversation'
 import { useConversation } from '../features/chat/useConversation'
 import { LoginBanner } from '../features/desktop/LoginBanner'
-import { FavoriteButton } from '../features/shell/Sidebar'
+import { ACTIVITY, FavoriteButton } from '../features/shell/Sidebar'
 import { useIsPhone } from '../features/shell/viewport'
 import '../features/agent/agent.css'
 
@@ -27,16 +27,8 @@ export const Route = createFileRoute('/_app/agents/$agentId')({
   component: AgentScreen,
 })
 
-const ACTIVITY: Record<string, string> = {
-  working: 'Working',
-  dreaming: 'Dreaming',
-  idle: 'Idle',
-  sleeping: 'Sleeping',
-  retired: 'Retired',
-}
-
 /** The panel tabs, each a child route; the viewer sees the ones their grants allow. */
-export const TABS: { to: string; label: string; needs: Capability }[] = [
+const TABS: { to: string; label: string; needs: Capability }[] = [
   { to: '/agents/$agentId/about', label: 'About', needs: 'agent_manage' },
   { to: '/agents/$agentId/memories', label: 'Memories', needs: 'memory_read' },
   { to: '/agents/$agentId/dreams', label: 'Dreams', needs: 'memory_read' },

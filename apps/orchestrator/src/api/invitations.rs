@@ -75,7 +75,7 @@ struct Revoke {
     id: Uuid,
 }
 
-#[utoipa::path(post, path = "/api/identity/invitations/revoke", request_body = Revoke, responses((status = 200, body = Receipt)))]
+#[utoipa::path(post, path = "/api/identity/invitations/revoke", operation_id = "revoke_invitation", request_body = Revoke, responses((status = 200, body = Receipt)))]
 async fn revoke(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -94,7 +94,7 @@ struct Cursor {
     after: Option<Uuid>,
 }
 
-#[utoipa::path(get, path = "/api/identity/invitations", params(("after" = Option<Uuid>, Query)), responses((status = 200, body = Vec<crate::identity::InvitationSummary>)))]
+#[utoipa::path(get, path = "/api/identity/invitations", operation_id = "list_invitations", params(("after" = Option<Uuid>, Query)), responses((status = 200, body = Vec<crate::identity::InvitationSummary>)))]
 async fn list(
     State(identity): State<Identity>,
     headers: HeaderMap,

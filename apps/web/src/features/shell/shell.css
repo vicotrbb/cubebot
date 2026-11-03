@@ -220,10 +220,6 @@
   right: 0;
   bottom: calc(100% + 6px);
 }
-.menu--down .menu__list {
-  right: 0;
-  top: calc(100% + 6px);
-}
 .menu__item {
   appearance: none;
   display: flex;
@@ -249,9 +245,6 @@
   width: 16px;
   height: 16px;
   color: var(--ink-faint);
-}
-.menu__item--danger {
-  color: var(--danger);
 }
 
 /* Page frame used by non-conversation screens */

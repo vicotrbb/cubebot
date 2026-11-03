@@ -14,7 +14,7 @@ use crate::{
 use axum::{
     Json, Router,
     extract::{DefaultBodyLimit, Path, State},
-    http::{HeaderMap, StatusCode, header},
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
@@ -153,11 +153,7 @@ async fn hook(
     headers: HeaderMap,
     body: String,
 ) -> Result<Response, IdentityError> {
-    let secret = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or(IdentityError::Unauthorized)?;
+    let secret = super::bearer(&headers).ok_or(IdentityError::Unauthorized)?;
     let key = match headers.get("idempotency-key") {
         Some(key) => Some(key.to_str().map_err(|_| IdentityError::InvalidInput)?),
         None => None,

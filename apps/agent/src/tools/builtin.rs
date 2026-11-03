@@ -37,20 +37,8 @@ impl Tool for Builtin {
 
 pub(super) fn tools() -> Vec<Box<dyn Tool>> {
     let tool = |name: &str, description: String, properties: Value, job| -> Box<dyn Tool> {
-        let required: Vec<&String> = properties
-            .as_object()
-            .into_iter()
-            .flatten()
-            .map(|(key, _)| key)
-            .collect();
         Box::new(Builtin {
-            definition: cubebot_providers::Tool {
-                name: name.into(),
-                description,
-                parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
-                strict: true,
-                computer: false,
-            },
+            definition: cubebot_providers::Tool::strict(name, description, properties),
             job,
         })
     };

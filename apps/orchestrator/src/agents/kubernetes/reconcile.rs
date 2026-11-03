@@ -44,11 +44,15 @@ impl Reconciler {
             layout,
         })
     }
+    /// The production lifecycle step, `sandbox::drive`, keeping the outcome it collapses.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn reconcile(&self, agent: AgentId) -> Result<ReconcileResult, Error> {
-        let (revision, generation, state) = self.intent(agent).await?;
-        self.converge(agent, revision, generation, state == "running")
-            .await
+        let (_, _, state) = self.intent(agent).await?;
+        if state != "running" {
+            return self.halt(agent).await;
+        }
+        crate::agents::sandbox::Sandbox::create(self, agent).await?;
+        self.launch(agent).await
     }
     pub(super) async fn intent(&self, agent: AgentId) -> Result<(i64, i64, String), Error> {
         sqlx::query!(
@@ -63,27 +67,6 @@ impl Reconciler {
         .await?
         .map(|row| (row.revision, row.restart_generation, row.desired_state))
         .ok_or(Error::Conflict)
-    }
-    /// Settles any stale or unwanted pod first; a replacement never starts before that.
-    pub(super) async fn converge(
-        &self,
-        agent: AgentId,
-        revision: i64,
-        generation: i64,
-        running: bool,
-    ) -> Result<ReconcileResult, Error> {
-        let verified = match self.settle(agent, generation, running).await? {
-            Ok(verified) => verified,
-            Err(outcome) => return Ok(outcome),
-        };
-        if !running {
-            return Ok(ReconcileResult::Idle);
-        }
-        let workspace = match self.prepare_workspace(agent, revision).await? {
-            Ok(workspace) => workspace,
-            Err(attempt) => return Ok(ReconcileResult::Uncertain { attempt }),
-        };
-        self.provision(agent, revision, &workspace, verified).await
     }
     /// The verified healthy pod attempt, or the outcome that holds this agent.
     pub(super) async fn settle(

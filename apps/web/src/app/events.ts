@@ -6,7 +6,8 @@ import { keys } from './queries'
 /**
  * Follows the installation stream (`GET /api/events`) and folds its frames into the
  * query cache, so the sidebar and the live preview update without polling each
- * conversation. Without the route, the agent list refreshes every 5 seconds instead.
+ * conversation. A closed stream falls back to refreshing agents, rooms and the
+ * session every 5 seconds.
  */
 export function useInstallationStream(enabled: boolean) {
   const client = useQueryClient()
@@ -36,12 +37,11 @@ export function useInstallationStream(enabled: boolean) {
     })
     source.onerror = () => {
       if (source.readyState !== EventSource.CLOSED || fallback) return
-      // shortcut: a closed stream (404 before the contract lands, or a lost session)
-      // falls back to polling; the stream is the intended path.
-      fallback = setInterval(
-        () => void client.invalidateQueries({ queryKey: keys.agents }),
-        5000,
-      )
+      // A closed stream (a lost session or a restart) falls back to polling.
+      fallback = setInterval(() => {
+        for (const queryKey of [keys.agents, keys.rooms, keys.session])
+          void client.invalidateQueries({ queryKey })
+      }, 5000)
     }
     return () => {
       source.close()

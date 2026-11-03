@@ -125,7 +125,7 @@ impl Work {
         }
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
-        administrator(&mut tx, actor).await?;
+        crate::identity::administrator(&mut *tx, actor.id).await?;
         let previous = sqlx::query_scalar!(
             "
             SELECT id
@@ -607,21 +607,6 @@ async fn allowed(
     )
     .fetch_one(&mut **tx)
     .await
-}
-
-async fn administrator(
-    tx: &mut Transaction<'_, Postgres>,
-    actor: &Actor,
-) -> Result<(), IdentityError> {
-    let admin = sqlx::query_scalar!(
-        r#"
-        SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id=$1 AND active AND role='administrator') AS "admin!"
-        "#,
-        actor.id,
-    )
-    .fetch_one(&mut **tx)
-    .await?;
-    admin.then_some(()).ok_or(IdentityError::Forbidden)
 }
 
 async fn attach(

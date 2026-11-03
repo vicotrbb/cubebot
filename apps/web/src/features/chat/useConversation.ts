@@ -2,28 +2,13 @@ import { useEffect, useState } from 'react'
 import {
   api,
   failure,
+  history,
   merge,
   ok,
   type Turn,
   type TurnEvent,
 } from '../../api/client'
 import { markRead } from '../../app/queries'
-
-async function history(id: string) {
-  const messages: Turn[] = []
-  for (;;) {
-    const page = await ok(
-      api.GET('/api/conversations/{conversation}/messages', {
-        params: {
-          path: { conversation: id },
-          query: { after: messages.at(-1)?.sequence ?? 0 },
-        },
-      }),
-    )
-    messages.push(...page)
-    if (page.length < 100) return messages
-  }
-}
 
 /** Follows one permanent conversation: its history, live turn snapshots and streamed text. */
 export function useConversation(id: string) {
@@ -37,7 +22,13 @@ export function useConversation(id: string) {
     // reconnect reloads it to catch turns that changed without an event.
     source.onopen = () => {
       setReadError('')
-      history(id).then(
+      history((after) =>
+        ok(
+          api.GET('/api/conversations/{conversation}/messages', {
+            params: { path: { conversation: id }, query: { after } },
+          }),
+        ),
+      ).then(
         (loaded) => {
           setTurns((current) => merge(current, loaded))
           setLoaded(true)
@@ -86,8 +77,8 @@ export function useConversation(id: string) {
   return { turns, streaming, loaded, readError, add }
 }
 
-export const OPEN = ['queued', 'running', 'delegated'] as const
-export const UNSETTLED = ['queued', 'running', 'waiting', 'delegated'] as const
+const OPEN = ['queued', 'running', 'delegated'] as const
+const UNSETTLED = ['queued', 'running', 'waiting', 'delegated'] as const
 export const isOpen = (turn: Turn) =>
   (OPEN as readonly string[]).includes(turn.status)
 export const isUnsettled = (turn: Turn) =>

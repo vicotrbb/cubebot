@@ -221,15 +221,7 @@ async fn refused(
     if !(status.is_client_error() || full) || status == reqwest::StatusCode::UNAUTHORIZED {
         return Err(Error::Unavailable(None));
     }
-    #[derive(serde::Deserialize)]
-    struct Refused {
-        error: String,
-    }
-    let refused: Result<Refused, _> = transport::decode_conflict(response).await;
-    Ok(Err(refused.map_or_else(
-        |_| status.to_string(),
-        |refused| refused.error,
-    )))
+    Ok(Err(transport::refusal(response, status.to_string()).await))
 }
 #[derive(Clone)]
 pub struct MemoryClient {
@@ -501,15 +493,8 @@ impl MemoryClient {
         if response.status() != reqwest::StatusCode::CONFLICT {
             return Ok(Ok(response));
         }
-        #[derive(serde::Deserialize)]
-        struct Refused {
-            error: String,
-        }
-        let refused: Result<Refused, _> = transport::decode_conflict(response).await;
-        Ok(Err(refused.map_or_else(
-            |_| "this turn can no longer make this request".into(),
-            |refused| refused.error,
-        )))
+        let fallback = "this turn can no longer make this request".into();
+        Ok(Err(transport::refusal(response, fallback).await))
     }
 
     #[tracing::instrument(skip_all, fields(run = %run))]

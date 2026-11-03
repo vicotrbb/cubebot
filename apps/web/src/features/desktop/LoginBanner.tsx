@@ -28,15 +28,17 @@ export function LoginBanner({
     // Without browser.view the request is refused and no banner shows.
     if (response.ok) setHandoff(data ?? null)
   }, [agent.id])
+  const pending = agent.pending_login
   useEffect(() => {
-    // shortcut: each open view polls every 3 s; `pending_login` on the installation stream
-    // says when, but the site and reason still come from this route.
+    // `pending_login` on the installation stream says when to ask; the site and reason
+    // come from this route, polled every 3 s while the login is pending.
+    if (!pending) return
     const poll = () => void refresh().catch(() => undefined)
     poll()
     const timer = setInterval(poll, 3000)
     return () => clearInterval(timer)
-  }, [refresh])
-  if (!handoff) return null
+  }, [refresh, pending])
+  if (!handoff || !pending) return null
   async function decline() {
     setBusy(true)
     setError('')

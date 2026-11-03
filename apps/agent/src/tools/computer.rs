@@ -11,8 +11,11 @@ use serde_json::Value;
 use std::{
     io::{self, BufRead, BufReader, Write},
     os::unix::net::UnixStream,
-    sync::{Arc, Mutex},
-    time::Duration,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 
@@ -22,6 +25,10 @@ const LONGEST_WAIT: Duration = Duration::from_secs(30);
 const SETTLE: Duration = Duration::from_millis(500);
 /// Pixels per wheel click, as Chromium scrolls on Linux.
 const WHEEL_PIXELS: i64 = 100;
+/// Most actions one OpenAI call may batch; each may wait a second.
+const ACTIONS: usize = 50;
+/// How often a wait checks whether its call was cancelled.
+const POLL: Duration = Duration::from_millis(100);
 
 pub(super) struct Computer {
     definition: cubebot_providers::Tool,
@@ -55,13 +62,24 @@ impl Tool for Computer {
     ) -> Result<Running<'a>, &'static str> {
         let plan = plan(input)?;
         let desktop = self.desktop.clone();
+        let stopped = Arc::new(AtomicBool::new(false));
+        let stop = Stop(stopped.clone());
         Ok(Box::pin(async move {
-            let ran = tokio::task::spawn_blocking(move || run(&desktop, id, plan)).await;
+            let _stop = stop;
+            let ran = tokio::task::spawn_blocking(move || run(&desktop, id, plan, &stopped)).await;
             ran.unwrap_or_else(|_| Outcome::Exited {
                 code: None,
                 output: "The desktop call failed.".into(),
             })
         }))
+    }
+}
+
+/// Tells the blocking steps their call was dropped, as cancellation does, so they stop.
+struct Stop(Arc<AtomicBool>);
+impl Drop for Stop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Release);
     }
 }
 
@@ -80,6 +98,9 @@ struct Plan {
 
 fn plan(input: &Value) -> Result<Plan, &'static str> {
     if let Some(actions) = input["actions"].as_array() {
+        if actions.len() > ACTIONS {
+            return Err("a computer call may batch at most 50 actions");
+        }
         let mut steps = actions.iter().map(openai).collect::<Result<Vec<_>, _>>()?;
         if !steps.is_empty() {
             steps.push(Step::Wait(SETTLE));
@@ -276,15 +297,22 @@ fn seconds(value: &Value) -> Duration {
 }
 
 /// Runs the steps until the arbiter refuses one, then takes the screenshot the call answers with.
-fn run(desktop: &Mutex<Option<BufReader<UnixStream>>>, call: Uuid, plan: Plan) -> Outcome {
+/// A dropped call stops between steps; nobody reads its outcome.
+fn run(
+    desktop: &Mutex<Option<BufReader<UnixStream>>>,
+    call: Uuid,
+    plan: Plan,
+    stopped: &AtomicBool,
+) -> Outcome {
     let mut desktop = desktop
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut refusal = None;
     for step in plan.steps {
         let action = match step {
+            _ if stopped.load(Ordering::Acquire) => return cancelled(),
             Step::Wait(duration) => {
-                std::thread::sleep(duration);
+                pause(duration, stopped);
                 continue;
             }
             Step::Act(action) => action,
@@ -315,6 +343,24 @@ fn run(desktop: &Mutex<Option<BufReader<UnixStream>>>, call: Uuid, plan: Plan) -
             output: error.unwrap_or_else(|| "The desktop returned no screenshot.".into()),
         },
         Err(error) => unreachable_desktop(&error),
+    }
+}
+
+fn pause(duration: Duration, stopped: &AtomicBool) {
+    let until = Instant::now() + duration;
+    while !stopped.load(Ordering::Acquire) {
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return;
+        }
+        std::thread::sleep(left.min(POLL));
+    }
+}
+
+fn cancelled() -> Outcome {
+    Outcome::Stopped {
+        reason: "cancelled".into(),
+        output: String::new(),
     }
 }
 
@@ -409,6 +455,28 @@ mod tests {
         );
         assert!(plan(&json!({"action":"zoom","region":[0,0,1,1]})).is_err());
         assert!(plan(&json!({"action":"mouse_move"})).is_err());
+    }
+
+    #[tokio::test]
+    async fn a_dropped_call_stops_its_steps_and_batches_are_bounded() {
+        let computer = Computer {
+            definition: tool().definition().clone(),
+            desktop: Arc::default(),
+        };
+        let sandbox = crate::tools::tests::sandbox();
+        let wait = json!({"action":"wait","duration":30});
+        let call = computer.call(&sandbox, Uuid::new_v4(), &wait).unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), call)
+                .await
+                .is_err()
+        );
+        // The blocking wait holds the desktop until it notices the call is gone.
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        assert!(computer.desktop.try_lock().is_ok());
+        let batch = json!({"actions": vec![json!({"type":"wait"}); ACTIONS + 1]});
+        assert!(plan(&batch).is_err());
+        std::fs::remove_dir_all(&sandbox.workspace).unwrap();
     }
 
     #[test]

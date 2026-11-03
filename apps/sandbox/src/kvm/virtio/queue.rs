@@ -43,18 +43,21 @@ impl Queue {
     }
 
     pub fn has_available(&self, memory: &GuestMemory) -> io::Result<bool> {
-        Ok(memory.load_u16(self.driver + 2)? != self.next_available)
+        Ok(memory.load_u16(at(self.driver, 2)?)? != self.next_available)
     }
 
     pub fn pop(&mut self, memory: &GuestMemory) -> io::Result<Option<Chain>> {
-        let available = memory.load_u16(self.driver + 2)?;
+        let available = memory.load_u16(at(self.driver, 2)?)?;
         if available == self.next_available {
             return Ok(None);
         }
         if available.wrapping_sub(self.next_available) > self.size {
             return Err(invalid("virtqueue driver ring overrun"));
         }
-        let slot = self.driver + 4 + 2 * u64::from(self.next_available % self.size);
+        let slot = at(
+            self.driver,
+            4 + 2 * u64::from(self.next_available % self.size),
+        )?;
         let head = u16::from_le_bytes(read(memory, slot)?);
         self.next_available = self.next_available.wrapping_add(1);
         let mut descriptors = Vec::new();
@@ -63,7 +66,7 @@ impl Queue {
             if index >= self.size || descriptors.len() == usize::from(self.size) {
                 return Err(invalid("malformed virtqueue chain"));
             }
-            let raw: [u8; 16] = read(memory, self.descriptors + 16 * u64::from(index))?;
+            let raw: [u8; 16] = read(memory, at(self.descriptors, 16 * u64::from(index))?)?;
             let [address @ .., l0, l1, l2, l3, f0, f1, n0, n1] = raw;
             let flags = u16::from_le_bytes([f0, f1]);
             descriptors.push(Descriptor {
@@ -80,11 +83,11 @@ impl Queue {
 
     /// Returns a chain to the driver with the number of bytes the device wrote into it.
     pub fn push(&mut self, memory: &GuestMemory, head: u16, written: u32) -> io::Result<()> {
-        let slot = self.device + 4 + 8 * u64::from(self.next_used % self.size);
+        let slot = at(self.device, 4 + 8 * u64::from(self.next_used % self.size))?;
         let element = (u64::from(written) << 32) | u64::from(head);
         memory.write(slot, &element.to_le_bytes())?;
         self.next_used = self.next_used.wrapping_add(1);
-        memory.store_u16(self.device + 2, self.next_used)
+        memory.store_u16(at(self.device, 2)?, self.next_used)
     }
 }
 
@@ -138,13 +141,22 @@ impl Chain {
             let position = offset + done as u64;
             if done < len && position < end && position >= start {
                 let count = ((end - position) as usize).min(len - done);
-                copy(descriptor.address + (position - start), done..done + count)?;
+                copy(
+                    at(descriptor.address, position - start)?,
+                    done..done + count,
+                )?;
                 done += count;
             }
             start = end;
         }
         Ok(done)
     }
+}
+
+/// Ring and buffer addresses come from the guest, so an offset from one may overflow.
+fn at(base: u64, offset: u64) -> io::Result<u64> {
+    base.checked_add(offset)
+        .ok_or_else(|| invalid("virtqueue address outside guest memory"))
 }
 
 fn read<const N: usize>(memory: &GuestMemory, address: u64) -> io::Result<[u8; N]> {
@@ -272,5 +284,20 @@ pub mod tests {
         assert!(queue.pop(&memory).is_err());
         queue.size = 3;
         assert!(!queue.valid());
+    }
+
+    #[test]
+    fn rejects_guest_addresses_that_overflow() {
+        let memory = GuestMemory::map(1 << 16).unwrap();
+        let mut queue = Ring(0x1000).queue(4);
+        queue.driver = u64::MAX - 1;
+        assert!(queue.has_available(&memory).is_err());
+        queue.device = u64::MAX - 3;
+        assert!(queue.push(&memory, 0, 0).is_err());
+        let chain = Chain {
+            head: 0,
+            descriptors: vec![readable(u64::MAX, 2)],
+        };
+        assert!(chain.read_at(&memory, 1, &mut [0; 1]).is_err());
     }
 }

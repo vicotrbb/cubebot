@@ -15,9 +15,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// The host channel's socket; `CUBEBOT_GUEST_DESKTOP_SOCKET` moves it, such as for several
-/// sandboxes sharing one host's /tmp.
-pub const SOCKET: &str = "/tmp/cubebot-desktop.sock";
 /// How long a connection waits for the guest's arbiter, such as while the guest boots.
 const WAIT: Duration = Duration::from_secs(30);
 

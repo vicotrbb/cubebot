@@ -7,7 +7,9 @@ use axum::{
     response::{IntoResponse, Response},
     routing::any,
 };
-use cubebot_orchestrator::agents::kubernetes::{Error, Kubernetes};
+use cubebot_orchestrator::agents::kubernetes::{
+    Error, Identity, Kubernetes, ResourceObject, verify_pod,
+};
 use k8s_openapi::api::core::v1::Pod;
 use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
@@ -82,12 +84,23 @@ async fn server(
     )
 }
 
+/// The pod as the reconciler reads it before stopping or finalizing.
+async fn observed(client: &Kubernetes, identity: &Identity) -> Option<Pod> {
+    let expected = ResourceObject::Pod(Box::new(fixtures::pod(identity)));
+    match client.fetch_candidate(&expected).await.unwrap()? {
+        ResourceObject::Pod(pod) => Some(*pod),
+        ResourceObject::Workspace(_) => panic!("pod expected"),
+    }
+}
+
 #[tokio::test]
 async fn stop_is_namespaced_uid_guarded_and_never_force_deletes() {
     let identity = fixtures::identity();
     let recorded = fixtures::recorded(identity.clone());
     let (client, state, task) = server(fixtures::pod(&identity)).await;
-    client.request_stop(&recorded).await.unwrap();
+    let pod = observed(&client, &identity).await.unwrap();
+    verify_pod(&pod, &recorded).unwrap();
+    client.stop_observed(&pod).await.unwrap();
     let calls = state.lock().unwrap().calls.clone();
     assert_eq!(calls.len(), 2);
     assert_eq!(calls[1].0, Method::DELETE);
@@ -104,14 +117,15 @@ async fn stop_is_namespaced_uid_guarded_and_never_force_deletes() {
 #[tokio::test]
 async fn finalization_requires_observed_termination_and_preserves_foreign_finalizers() {
     let identity = fixtures::identity();
-    let recorded = fixtures::recorded(identity.clone());
     let (client, state, task) = server(fixtures::pod(&identity)).await;
+    let running = observed(&client, &identity).await.unwrap();
     assert!(matches!(
-        client.finalize_stopped(&recorded).await,
+        client.finalize_observed(&running).await,
         Err(Error::TerminationUnproven)
     ));
     fixtures::terminate(state.lock().unwrap().pod.as_mut().unwrap());
-    client.finalize_stopped(&recorded).await.unwrap();
+    let terminated = observed(&client, &identity).await.unwrap();
+    client.finalize_observed(&terminated).await.unwrap();
     let calls = state.lock().unwrap().calls.clone();
     let patch = &calls.last().unwrap().2;
     assert_eq!(calls.last().unwrap().0, Method::PATCH);
@@ -130,16 +144,13 @@ async fn missing_or_replaced_pods_never_authorize_stop_or_finalizer_release() {
     let recorded = fixtures::recorded(identity.clone());
     let (client, state, task) = server(fixtures::pod(&identity)).await;
     state.lock().unwrap().pod.as_mut().unwrap().metadata.uid = Some("other-uid".into());
+    let replaced = observed(&client, &identity).await.unwrap();
     assert!(matches!(
-        client.request_stop(&recorded).await,
+        verify_pod(&replaced, &recorded),
         Err(Error::OwnershipMismatch)
     ));
     state.lock().unwrap().pod = None;
-    assert!(client.observe(&recorded).await.unwrap().is_none());
-    assert!(matches!(
-        client.finalize_stopped(&recorded).await,
-        Err(Error::TerminationUnproven)
-    ));
+    assert!(observed(&client, &identity).await.is_none());
     assert!(
         state
             .lock()
@@ -154,13 +165,13 @@ async fn missing_or_replaced_pods_never_authorize_stop_or_finalizer_release() {
 #[tokio::test]
 async fn terminal_status_without_a_stop_request_keeps_the_finalizer() {
     let identity = fixtures::identity();
-    let recorded = fixtures::recorded(identity.clone());
     let mut pod = fixtures::pod(&identity);
     fixtures::terminate(&mut pod);
     pod.metadata.deletion_timestamp = None;
     let (client, state, task) = server(pod).await;
+    let pod = observed(&client, &identity).await.unwrap();
     assert!(matches!(
-        client.finalize_stopped(&recorded).await,
+        client.finalize_observed(&pod).await,
         Err(Error::TerminationUnproven)
     ));
     assert!(

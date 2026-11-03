@@ -19,6 +19,29 @@ use std::{
 use tokio::{io::AsyncWriteExt, process::Command};
 use uuid::Uuid;
 
+/// Callers waiting for a reply by request id, shared with the task that routes replies.
+type Waiting = std::sync::Arc<
+    std::sync::Mutex<std::collections::HashMap<u64, tokio::sync::oneshot::Sender<Value>>>,
+>;
+
+/// The waiting callers. A panic while one held the map leaves it consistent: every change is
+/// a single insert, remove or clear.
+fn lock(
+    waiting: &Waiting,
+) -> std::sync::MutexGuard<'_, std::collections::HashMap<u64, tokio::sync::oneshot::Sender<Value>>>
+{
+    waiting
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// A `uid:gid` tool user, never root.
+pub(crate) fn tool_user(user: &str) -> Option<(u32, u32)> {
+    user.split_once(':')
+        .and_then(|(uid, gid)| Some((uid.parse().ok()?, gid.parse().ok()?)))
+        .filter(|&(uid, gid)| uid != 0 && gid != 0)
+}
+
 /// Output shown from each end of a longer result.
 const HEAD: u64 = 8 * 1024;
 const TAIL: u64 = 8 * 1024;
@@ -63,11 +86,7 @@ impl Sandbox {
             .ok_or("tool workspace not configured")?;
         let user = std::env::var("CUBEBOT_TOOL_USER")
             .map_err(|error| crate::Caused::new("tool user not configured", error))?;
-        let (uid, gid) = user
-            .split_once(':')
-            .and_then(|(uid, gid)| Some((uid.parse().ok()?, gid.parse().ok()?)))
-            .filter(|&(uid, gid)| uid != 0 && gid != 0)
-            .ok_or("tool user must be a non-root uid:gid")?;
+        let (uid, gid) = tool_user(&user).ok_or("tool user must be a non-root uid:gid")?;
         Ok(Self {
             workspace,
             uid,

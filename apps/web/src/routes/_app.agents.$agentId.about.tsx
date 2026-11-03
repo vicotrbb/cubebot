@@ -8,5 +8,5 @@ export const Route = createFileRoute('/_app/agents/$agentId/about')({
 
 function AboutTab() {
   const { agent } = useAgentScreen()
-  return <About key={`${agent.id}:${agent.revision}`} agent={agent} />
+  return <About key={agent.id} agent={agent} />
 }

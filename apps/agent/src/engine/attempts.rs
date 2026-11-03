@@ -1,8 +1,9 @@
 //! Local crash recovery for tool effects. A call is durable before its command starts and is
 //! never run again; after a crash it is reported with its outcome or as uncertain.
-use crate::journal::Journal;
+use crate::journal::{Journal, MAX_PAYLOAD};
 use cubebot_protocol::{runtime::TurnEvent, terminal::Outcome};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{io, path::Path};
 use uuid::Uuid;
 
@@ -23,7 +24,9 @@ impl Store {
         })
     }
     /// Returns the journal sequence that acknowledges this entry. A screenshot is recorded
-    /// without its image, which is no effect to recover and outgrows a journal record.
+    /// without its image, which is no effect to recover and outgrows a journal record. A large
+    /// input or output is recorded truncated: the ledger gets it whole as the turn emits it, and
+    /// a call whose record failed would never be released.
     pub fn record(&mut self, entry: &Entry) -> io::Result<u64> {
         let mut entry = entry.clone();
         if let TurnEvent::ToolResult {
@@ -33,7 +36,7 @@ impl Store {
         {
             image.clear();
         }
-        self.journal.append(&serde_json::to_vec(&entry)?)
+        self.journal.append(&fit(&mut entry)?)
     }
     /// Called once the ledger has the entry and everything before it. A call stays journaled
     /// until its result is acknowledged too, so a crash while it runs still reports it.
@@ -83,6 +86,47 @@ impl Store {
             .collect()
     }
 }
+const TRUNCATED: &str = "\n[truncated]";
+
+/// Serializes `entry`, cutting its one large text until the record fits the journal.
+fn fit(entry: &mut Entry) -> io::Result<Vec<u8>> {
+    if let TurnEvent::ToolCall { input, .. } = &mut entry.event
+        && !input.is_string()
+        && input.to_string().len() > MAX_PAYLOAD
+    {
+        *input = Value::String(input.to_string());
+    }
+    loop {
+        let bytes = serde_json::to_vec(&entry)?;
+        let text = match &mut entry.event {
+            TurnEvent::ToolCall {
+                input: Value::String(text),
+                ..
+            }
+            | TurnEvent::ToolResult {
+                outcome:
+                    Outcome::Exited { output: text, .. }
+                    | Outcome::Stopped { output: text, .. }
+                    | Outcome::Screenshot { output: text, .. },
+                ..
+            } => text,
+            _ => return Ok(bytes),
+        };
+        if bytes.len() <= MAX_PAYLOAD || text.len() <= TRUNCATED.len() {
+            return Ok(bytes);
+        }
+        // Each removed byte shrinks the record by at least one byte, escaped or not.
+        let excess = bytes.len() - MAX_PAYLOAD + TRUNCATED.len();
+        let keep = text
+            .strip_suffix(TRUNCATED)
+            .unwrap_or(text)
+            .len()
+            .saturating_sub(excess);
+        text.truncate(text.floor_char_boundary(keep));
+        text.push_str(TRUNCATED);
+    }
+}
+
 /// The id of `entry` when it is a call without a result among `pending`.
 fn unfinished(pending: &[(Entry, u64)], entry: &Entry) -> Option<Uuid> {
     match entry.event {
@@ -181,6 +225,50 @@ mod tests {
             &recorded.event,
             TurnEvent::ToolResult { outcome: Outcome::Screenshot { image, .. }, .. } if image.is_empty()
         ));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn oversized_calls_and_results_are_journaled_truncated_and_still_released() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let turn = Uuid::new_v4();
+        let mut store = Store::open(&root).unwrap();
+        let id = Uuid::new_v4();
+        let large = Entry {
+            turn,
+            sequence: 1,
+            event: TurnEvent::ToolCall {
+                id,
+                name: "write_file".into(),
+                input: serde_json::json!({"content": "é".repeat(MAX_PAYLOAD)}),
+            },
+        };
+        store.record(&large).unwrap();
+        let result = Entry {
+            turn,
+            sequence: 2,
+            event: TurnEvent::ToolResult {
+                id,
+                // Escaped control characters grow sixfold in JSON.
+                outcome: Outcome::Exited {
+                    code: Some(0),
+                    output: "\u{1}".repeat(MAX_PAYLOAD),
+                },
+            },
+        };
+        let done = store.record(&result).unwrap();
+        let entries = store.entries().unwrap();
+        assert!(matches!(
+            &entries[0].0.event,
+            TurnEvent::ToolCall { input: Value::String(text), .. } if text.ends_with(TRUNCATED)
+        ));
+        assert!(matches!(
+            &entries[1].0.event,
+            TurnEvent::ToolResult { outcome: Outcome::Exited { output, .. }, .. }
+                if output.ends_with(TRUNCATED)
+        ));
+        store.acknowledge(done).unwrap();
+        assert!(store.pending().unwrap().is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }
 

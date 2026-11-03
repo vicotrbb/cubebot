@@ -40,20 +40,7 @@ struct Forget {
 }
 
 pub fn definitions() -> Vec<cubebot_providers::Tool> {
-    let tool = |name: &str, description: &str, properties: Value| {
-        let required: Vec<String> = properties
-            .as_object()
-            .into_iter()
-            .flat_map(|object| object.keys().cloned())
-            .collect();
-        cubebot_providers::Tool {
-            name: name.into(),
-            description: description.into(),
-            parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
-            strict: true,
-            computer: false,
-        }
-    };
+    let tool = cubebot_providers::Tool::strict;
     let id = json!({"type":["string","null"],"description":"The id search_memory returned for the memory to correct; null for a new memory."});
     let revision = json!({"type":["integer","null"],"description":"That memory's revision from search_memory; null for a new memory."});
     vec![

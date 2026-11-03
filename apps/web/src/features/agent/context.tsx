@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { Turn } from '../../api/client'
 import type { AgentSummary, Session } from '../../api/types'
 
-export type AgentScreen = {
+type AgentScreen = {
   agent: AgentSummary
   session: Session
   turns: Turn[]

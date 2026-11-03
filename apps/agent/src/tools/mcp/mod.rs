@@ -20,6 +20,8 @@ use uuid::Uuid;
 
 const VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
 /// Initialization only; tool calls have no duration budget and end by cancellation.
+/// Server output is held in memory before it is retained, so one message is bounded here.
+const RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const CONNECT: Duration = Duration::from_secs(30);
 /// Request ids are unique across every session, so they never need resetting on reconnect.
 static NEXT: AtomicU64 = AtomicU64::new(1);

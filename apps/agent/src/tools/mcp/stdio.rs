@@ -1,22 +1,22 @@
 //! Local servers: newline-delimited JSON-RPC over the pipes of a child run as the tool user.
-use super::{Failure, answer, result};
-use crate::tools::Sandbox;
+use super::{Failure, RESPONSE_BYTES, answer, result};
+use crate::tools::{Sandbox, lock};
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     process::Stdio as Pipe,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout},
     sync::oneshot,
 };
 
-type Pending = Arc<Mutex<HashMap<u64, oneshot::Sender<Value>>>>;
+type Pending = crate::tools::Waiting;
 
 pub(in crate::tools) struct Stdio {
     stdin: Arc<tokio::sync::Mutex<ChildStdin>>,
@@ -84,12 +84,6 @@ impl Stdio {
     }
 }
 
-fn lock(pending: &Pending) -> std::sync::MutexGuard<'_, HashMap<u64, oneshot::Sender<Value>>> {
-    pending
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 async fn write(stdin: &tokio::sync::Mutex<ChildStdin>, message: &Value) -> std::io::Result<()> {
     let mut line = message.to_string();
     line.push('\n');
@@ -104,9 +98,19 @@ async fn read(
     pending: Pending,
     closed: Arc<AtomicBool>,
 ) {
-    let mut lines = BufReader::new(stdout).lines();
-    while let Ok(Some(line)) = lines.next_line().await {
-        let Ok(message) = serde_json::from_str::<Value>(&line) else {
+    let mut stdout = BufReader::new(stdout);
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = (&mut stdout)
+            .take(RESPONSE_BYTES as u64)
+            .read_until(b'\n', &mut line)
+            .await;
+        // The end of the output, or a line over the bound, ends the connection.
+        if read.is_err() || line.pop() != Some(b'\n') {
+            break;
+        }
+        let Ok(message) = serde_json::from_slice::<Value>(&line) else {
             continue;
         };
         let id = &message["id"];
@@ -184,6 +188,30 @@ done"#;
         let starts = std::fs::read_to_string(sandbox.workspace.join("starts")).unwrap();
         assert_eq!(starts.lines().count(), 2);
         assert!(sandbox.workspace.join("cancelled").exists());
+        std::fs::remove_dir_all(&sandbox.workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_overlong_line_closes_the_server_instead_of_filling_memory() {
+        let sandbox = crate::tools::tests::sandbox();
+        let flood = format!(
+            "head -c {} /dev/zero | tr '\\0' a; sleep 30",
+            RESPONSE_BYTES + 1
+        );
+        let server = Stdio::spawn(
+            &sandbox,
+            "/bin/bash",
+            &["-c".into(), flood],
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        for _ in 0..100 {
+            if !server.alive() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        assert!(!server.alive());
         std::fs::remove_dir_all(&sandbox.workspace).unwrap();
     }
 

@@ -152,7 +152,7 @@ struct EventCursor {
     after: i64,
 }
 
-#[utoipa::path(get, path = "/api/identity/access/events", params(("after" = Option<i64>, Query)), responses((status = 200, body = Vec<crate::identity::IdentityEvent>)))]
+#[utoipa::path(get, path = "/api/identity/access/events", operation_id = "access_events", params(("after" = Option<i64>, Query)), responses((status = 200, body = Vec<crate::identity::IdentityEvent>)))]
 async fn events(
     State(identity): State<Identity>,
     headers: HeaderMap,

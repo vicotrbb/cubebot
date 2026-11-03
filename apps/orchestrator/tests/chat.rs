@@ -450,3 +450,36 @@ async fn seed_legacy(pool: &sqlx::PgPool) -> Legacy {
         second,
     }
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn cancelling_an_unknown_turn_is_a_conflict_not_a_fault() {
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let agent = Agents::new(pool.clone())
+        .create(
+            &admin,
+            &CreateAgent {
+                request_id: Uuid::new_v4(),
+                name: "Writer".into(),
+                instructions: "Be brief".into(),
+                avatar: None,
+            },
+        )
+        .await
+        .unwrap();
+    let work = Work::new(pool);
+    assert!(matches!(
+        work.cancel(&admin, agent.id, Uuid::new_v4()).await,
+        Err(IdentityError::Conflict)
+    ));
+}

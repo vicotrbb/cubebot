@@ -105,6 +105,9 @@ export function Composer({
           onChange={(event) => {
             setText(event.target.value)
             write(draftKey, event.target.value)
+            // A retry must resend the same text; edited text is a new request.
+            setPending('')
+            write(`${draftKey}:request`, '')
             event.target.style.height = 'auto'
             event.target.style.height = `${Math.min(event.target.scrollHeight, 240)}px`
           }}

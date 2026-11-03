@@ -1,4 +1,5 @@
 //! Machine credential boundary. It never consults human cookies or human session authority.
+use super::refused;
 use crate::agents::{
     kubernetes::Error,
     runtime::{RuntimeAccess, RuntimeIdentity},
@@ -216,11 +217,7 @@ async fn collaborate(
         .map_err(Failure::from)?;
     Ok(match created {
         Ok(turn) => Json(Collaborated { turn }).into_response(),
-        Err(reason) => (
-            StatusCode::CONFLICT,
-            Json(serde_json::json!({"error": reason})),
-        )
-            .into_response(),
+        Err(reason) => refused(&reason),
     })
 }
 /// Asks a person to log in for the agent's running turn; a refusal is 409 with the reason the
@@ -238,11 +235,7 @@ async fn request_login(
         .map_err(Failure::from)?;
     Ok(match recorded {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(reason) => (
-            StatusCode::CONFLICT,
-            Json(serde_json::json!({"error": reason})),
-        )
-            .into_response(),
+        Err(reason) => refused(&reason),
     })
 }
 /// One routine tool call (ADR 0087) for the agent's running turn; a refusal is 409 with the
@@ -275,13 +268,6 @@ fn vault_of(identity: &RuntimeIdentity) -> Result<&crate::connections::Connectio
 fn vault_unavailable(error: crate::identity::IdentityError) -> Failure {
     tracing::warn!(?error, "runtime vault request failed");
     Failure(StatusCode::SERVICE_UNAVAILABLE)
-}
-fn refused(reason: &str) -> Response {
-    (
-        StatusCode::CONFLICT,
-        Json(serde_json::json!({"error": reason})),
-    )
-        .into_response()
 }
 /// The vault items the agent may fill (ADR 0086), without their secrets.
 async fn vault(
@@ -440,11 +426,7 @@ fn unavailable(error: sqlx::Error) -> Failure {
     Failure(StatusCode::SERVICE_UNAVAILABLE)
 }
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or(Failure(StatusCode::UNAUTHORIZED))
+    super::bearer(headers).ok_or(Failure(StatusCode::UNAUTHORIZED))
 }
 struct Failure(StatusCode);
 impl From<Error> for Failure {

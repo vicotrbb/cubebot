@@ -31,7 +31,6 @@ from docker_desktop import (
     MODEL,
     arbiter_events,
     container,
-    grant,
     host_frame,
     key,
     logs,
@@ -42,10 +41,13 @@ from docker_desktop import (
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     unsupported,
@@ -124,24 +126,6 @@ def page(path):
         cookie = f"{name}={MARKER}; Max-Age=86400; Path=/"
         return f"<!doctype html><title>Set {name}</title><p>set {name}</p>", cookie
     return f"<!doctype html><title>{path}</title><p>{path}</p>", None
-
-
-def agent(api, name):
-    identity = api("/api/agents", command(name=name, instructions=INSTRUCTIONS), 201)[
-        "id"
-    ]
-    current = api(f"/api/agents/{identity}")
-    update = command(
-        expected_revision=current["revision"],
-        name=name,
-        instructions=INSTRUCTIONS,
-        idle_policy=current["idle_policy"],
-        idle_delay_seconds=86400,
-        dreaming_model=None,
-    )
-    api(f"/api/agents/{identity}/definition", update)
-    lifecycle(api, identity, "wake")
-    return identity
 
 
 def lifecycle(api, identity, action):
@@ -534,16 +518,9 @@ def scenarios(world, postgres):
 
 
 def setup(admin, base, ca, password):
-    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-    provider = command(
-        expected_revision=0,
-        api_key=key,
-        model=MODEL,
-        provider="openai",
-        context_window=128000,
-    )
-    admin("/api/provider", provider)
-    surfer, tasks = agent(admin, "Surfer"), agent(admin, "Tasks")
+    configure_provider(admin, MODEL)
+    surfer = agent(admin, "Surfer", INSTRUCTIONS, 86400)
+    tasks = agent(admin, "Tasks", INSTRUCTIONS, 86400)
     controller = person(admin, base, ca, "surf-controller")
     viewer = person(admin, base, ca, "surf-viewer")
     grant(admin, viewer.id, surfer, "browser_view")

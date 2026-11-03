@@ -169,30 +169,12 @@ fn adler32(data: &[u8]) -> u32 {
 }
 
 /// CRC-32 (ISO-HDLC, as zlib and PNG compute it).
-pub fn crc32(data: &[u8]) -> u32 {
+fn crc32(data: &[u8]) -> u32 {
     !data.iter().fold(!0u32, |crc, &byte| {
         (0..8).fold(crc ^ u32::from(byte), |crc, _| {
             crc >> 1 ^ 0xedb8_8320 & (crc & 1).wrapping_neg()
         })
     })
-}
-
-/// Standard base64 with padding, as data URLs and provider image blocks take it.
-pub fn base64(bytes: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut text = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for group in bytes.chunks(3) {
-        let word = group.iter().enumerate().fold(0u32, |word, (index, &byte)| {
-            word | u32::from(byte) << (16 - 8 * index)
-        });
-        for index in 0..4 {
-            text.push(match index <= group.len() {
-                true => ALPHABET[(word >> (18 - 6 * index) & 63) as usize] as char,
-                false => '=',
-            });
-        }
-    }
-    text
 }
 
 #[cfg(test)]
@@ -265,12 +247,8 @@ mod tests {
     }
 
     #[test]
-    fn checksums_and_base64_match_their_standards() {
+    fn checksums_match_their_standards() {
         assert_eq!(crc32(b"123456789"), 0xcbf4_3926);
         assert_eq!(adler32(b"Wikipedia"), 0x11e6_0398);
-        assert_eq!(base64(b""), "");
-        assert_eq!(base64(b"f"), "Zg==");
-        assert_eq!(base64(b"fo"), "Zm8=");
-        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
     }
 }

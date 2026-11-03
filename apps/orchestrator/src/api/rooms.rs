@@ -96,7 +96,7 @@ async fn set_members(
 
 /// Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
 /// with the cursor as stored.
-#[utoipa::path(put, path = "/api/rooms/{room}/read", params(("room" = Uuid, Path)), request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
+#[utoipa::path(put, path = "/api/rooms/{room}/read", operation_id = "read_room", params(("room" = Uuid, Path)), request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
 async fn read(
     State(api): State<Api>,
     headers: HeaderMap,

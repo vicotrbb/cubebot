@@ -9,12 +9,15 @@ const EVENT_BYTES: usize = 16 * 1024 * 1024;
 pub(crate) struct Reader {
     response: Response,
     buffer: Vec<u8>,
+    /// Bytes already searched for a boundary, so a large event is not rescanned per chunk.
+    scanned: usize,
 }
 impl Reader {
     pub fn new(response: Response) -> Self {
         Self {
             response,
             buffer: Vec::new(),
+            scanned: 0,
         }
     }
 
@@ -22,13 +25,20 @@ impl Reader {
     /// keep-alives are skipped; both providers repeat the event type in the data.
     pub async fn next(&mut self) -> Result<Option<Value>, Error> {
         loop {
-            if let Some(end) = self.buffer.windows(2).position(|pair| pair == b"\n\n") {
-                let event: Vec<u8> = self.buffer.drain(..end + 2).collect();
+            let from = self.scanned;
+            if let Some(end) = self.buffer[from..]
+                .windows(2)
+                .position(|pair| pair == b"\n\n")
+            {
+                let event: Vec<u8> = self.buffer.drain(..from + end + 2).collect();
+                self.scanned = 0;
                 if let Some(data) = data(&event)? {
                     return Ok(Some(data));
                 }
                 continue;
             }
+            // The last byte may be the first half of a boundary.
+            self.scanned = self.buffer.len().saturating_sub(1);
             if self.buffer.len() > EVENT_BYTES {
                 return Err(Error::InvalidResponse(None));
             }
