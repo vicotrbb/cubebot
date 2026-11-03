@@ -21,12 +21,18 @@ FROM debian:bookworm-slim
 # CUBEBOT_TOOL_USER is 10001:10001; init creates and chowns its home on the workspace volume.
 # The desktop (docs/adr/sandbox.md#desktop-as-a-vmm-device): init starts Xvfb, the outer display only the arbiter reaches, and
 # Xephyr nested on it without XTEST as the tool user's display, when computer use is on; then
-# openbox and xwallpaper, which draws wallpaper.jpg on the root window, as the tool user. The
-# agent starts Chromium as the browser user, 10002, whose profile in /var/lib/cubebot/browser the
-# tool user cannot read.
+# openbox, xwallpaper, which draws wallpaper.jpg on the root window, and tint2, the taskbar a
+# person or the agent uses to open the browser, a terminal, files or an editor, as the tool user.
+# The agent starts its own Chromium as the browser user, 10002, whose profile in
+# /var/lib/cubebot/browser the tool user cannot read.
+# The tool user is not root, so it installs software where it can write: pip and npm put
+# packages in ~/.local (pip.conf, npmrc), which is on its PATH, as are virtual environments.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-        git curl python3 build-essential ripgrep jq openssh-client \
+        git curl wget python3 python-is-python3 python3-pip python3-venv pipx \
+        nodejs npm build-essential ripgrep jq openssh-client \
+        unzip zip xz-utils file less nano procps sqlite3 xdg-utils \
         xvfb xserver-xephyr openbox xwallpaper chromium \
+        tint2 lxterminal pcmanfm l3afpad \
         xfonts-base fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -m 0755 /var/lib/cubebot \
@@ -37,4 +43,8 @@ COPY apps/agent/wallpaper.jpg /usr/share/cubebot/wallpaper.jpg
 # A person who logs in for the agent (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) must not leave the password in the profile on the
 # workspace disk, which the agent's tools can read; a managed policy on the read-only root holds.
 COPY apps/agent/chromium-policy.json /etc/chromium/policies/managed/cubebot.json
+COPY apps/agent/desktop/chromium-flags /etc/chromium.d/cubebot
+COPY apps/agent/desktop/tint2rc /etc/xdg/tint2/tint2rc
+COPY apps/agent/desktop/pip.conf /etc/pip.conf
+COPY apps/agent/desktop/npmrc /etc/npmrc
 COPY --from=build /out/cubebot-agent /usr/local/bin/

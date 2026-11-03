@@ -1,0 +1,2 @@
+# Global installs go to the tool user's ~/.local, which is on its PATH.
+prefix=${HOME}/.local

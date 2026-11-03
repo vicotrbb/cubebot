@@ -30,6 +30,7 @@ mod identity_requests;
 mod invitations;
 mod kubernetes_http;
 mod kubernetes_policy;
+mod mcp;
 mod memories;
 mod memory_agent;
 mod memory_http;

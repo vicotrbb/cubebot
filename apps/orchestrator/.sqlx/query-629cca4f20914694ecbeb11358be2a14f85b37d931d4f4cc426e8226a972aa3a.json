@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE mcp_servers\n            SET name=$2, transport=$3, command=$4, args=$5, url=$6,\n                ciphertext=COALESCE($7, ciphertext), secret_names=COALESCE($8, secret_names),\n                access=COALESCE($9, access), updated_at=clock_timestamp()\n            WHERE id=$1 AND NOT EXISTS(SELECT 1 FROM mcp_servers o WHERE o.name=$2 AND o.id<>$1)\n            RETURNING id, name, transport, command, args AS \"args!: _\", url,\n                secret_names AS \"secret_names!: _\", access AS \"access!: Access\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "transport",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "command",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "args!: _",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "secret_names!: _",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Text",
+        "Bytea",
+        "Jsonb",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "629cca4f20914694ecbeb11358be2a14f85b37d931d4f4cc426e8226a972aa3a"
+}

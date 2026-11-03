@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, name, transport, command, args AS \"args!: sqlx::types::Json<Vec<String>>\", url, ciphertext\n            FROM mcp_servers\n            WHERE access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)\n            ORDER BY name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "transport",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "command",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "args!: sqlx::types::Json<Vec<String>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "ciphertext",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "87a627d7e78e4882cf4607e71ef2271ae0858a0bf07f142dbbf811859f41ef6d"
+}

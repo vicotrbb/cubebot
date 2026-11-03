@@ -193,10 +193,12 @@ def coordinated(admin, postgres, room, ids):
     chatter = routed(
         admin, room, post(admin, room, "Thanks, everyone!")["id"], "chatter"
     )
-    assert (
-        chatter["routing"] in ("no_action", "clarify") and not chatter["deliveries"]
-    ), chatter
-    print(f"PASS coordinator: one owner chosen, chatter -> {chatter['routing']}")
+    # A person always gets an answer: chatter goes to one owner too.
+    assert chatter["routing"] == "routed" and len(chatter["deliveries"]) == 1, chatter
+    print(
+        "PASS coordinator: one owner chosen, chatter answered by "
+        f"{chatter['deliveries'][0]['agent']}"
+    )
 
 
 def room_context(admin, postgres, room):

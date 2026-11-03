@@ -283,6 +283,15 @@
   flex: 1;
   min-width: 0;
 }
+/* A long tab row takes its own line on phones instead of covering the title. */
+@media (max-width: 640px) {
+  .page__head {
+    flex-wrap: wrap;
+  }
+  .page__head h1 {
+    flex-basis: 100%;
+  }
+}
 .page__body {
   flex: 1;
   min-height: 0;

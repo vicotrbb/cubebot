@@ -123,6 +123,16 @@ fn invalid(input: &SaveVaultItem) -> bool {
 
 impl Connections {
     pub(super) async fn vault_context(&self, item: Uuid) -> Result<Vec<u8>, IdentityError> {
+        self.sealing_context("vault", item).await
+    }
+
+    /// Binds a sealed record to this installation, its kind and its row, so a record copied
+    /// to another row does not open.
+    pub(super) async fn sealing_context(
+        &self,
+        kind: &str,
+        id: Uuid,
+    ) -> Result<Vec<u8>, IdentityError> {
         let installation = sqlx::query_scalar!(
             r#"
             SELECT id AS "id!"
@@ -131,7 +141,7 @@ impl Connections {
         )
         .fetch_one(&self.pool)
         .await?;
-        Ok(format!("cubebot:{installation}:vault:{item}:key:1").into_bytes())
+        Ok(format!("cubebot:{installation}:{kind}:{id}:key:1").into_bytes())
     }
 
     async fn seal(&self, item: Uuid, secret: &str) -> Result<Vec<u8>, IdentityError> {

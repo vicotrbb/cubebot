@@ -1,0 +1,89 @@
+/* MCP servers: the platform list, its form, and an agent's Connections tab */
+.mcp-detail {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+}
+.mcp-reach {
+  min-width: 9ch;
+  text-align: right;
+}
+.mcp-share {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mcp-secrets {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.mcp-secrets__label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  margin-bottom: 2px;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.mcp-secrets__label .hint {
+  font-weight: 400;
+  color: var(--ink-faint);
+}
+.mcp-secrets__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+.mcp-secrets__row input {
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-sm);
+}
+.mcp-secrets__row input.mono {
+  font-family: var(--mono);
+}
+.mcp-secrets__row input:focus {
+  outline: none;
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px rgb(242 106 27 / 0.2);
+}
+.mcp-secrets__add {
+  justify-self: start;
+}
+.field textarea.mono {
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+}
+
+/* Connections tab */
+.connections {
+  display: grid;
+  gap: 28px;
+}
+.connections .entries {
+  border-top: 0;
+}
+.connections .entry {
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  padding-inline: 0;
+}
+.connections .entry:hover {
+  background: none;
+}
+@media (max-width: 640px) {
+  .mcp-reach,
+  .mcp-share > span {
+    display: none;
+  }
+}

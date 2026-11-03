@@ -1,8 +1,11 @@
-//! Installation-managed inference configuration, encrypted credential storage and the vault.
+//! Installation-managed inference configuration, encrypted credential storage, the vault and
+//! MCP servers.
 mod credentials;
+mod mcp;
 mod models;
 mod vault;
 pub use credentials::{CredentialError, Credentials};
+pub use mcp::{AgentMcpServer, McpServerSummary, McpTransport, SaveMcpServer};
 pub(crate) use models::configured;
 pub use models::{ListModels, ModelChoice, ModelsError};
 pub use vault::{SaveVaultItem, VaultSummary};

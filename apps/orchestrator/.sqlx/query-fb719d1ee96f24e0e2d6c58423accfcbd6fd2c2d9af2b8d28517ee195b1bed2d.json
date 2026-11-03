@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, name, transport, command, args AS \"args!: _\", url,\n                secret_names AS \"secret_names!: _\", access AS \"access!: Access\"\n            FROM mcp_servers\n            ORDER BY name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "transport",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "command",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "args!: _",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "secret_names!: _",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "fb719d1ee96f24e0e2d6c58423accfcbd6fd2c2d9af2b8d28517ee195b1bed2d"
+}

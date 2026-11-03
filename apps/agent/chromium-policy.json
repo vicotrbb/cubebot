@@ -1,3 +1,4 @@
 {
-  "PasswordManagerEnabled": false
+  "PasswordManagerEnabled": false,
+  "BrowserSignin": 0
 }

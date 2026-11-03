@@ -160,7 +160,8 @@ fn appears(path: &Path, server: &str) -> io::Result<()> {
 }
 
 /// Xephyr on :1 as root, a window filling :0 at (0, 0) and without XTEST, as the tool user's
-/// display; then openbox and the wallpaper on it as the tool user, and the arbiter on :0. The
+/// display; then openbox, the wallpaper and the taskbar on it as the tool user, and the arbiter
+/// on :0. The
 /// agent's browser module starts Chromium as a user of its own.
 fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()> {
     Command::new("/usr/bin/Xephyr")
@@ -183,12 +184,8 @@ fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()
         let mut command = Command::new(program);
         command
             .env_clear()
-            .envs([
-                ("HOME", WORKSPACE),
-                ("PATH", PATH),
-                ("DISPLAY", ":1"),
-                ("LANG", "C.UTF-8"),
-            ])
+            .envs([("HOME", WORKSPACE), ("DISPLAY", ":1"), ("LANG", "C.UTF-8")])
+            .env("PATH", crate::tools::user_path(Path::new(WORKSPACE)))
             .current_dir(WORKSPACE)
             .uid(uid)
             .gid(gid)
@@ -208,6 +205,9 @@ fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()
         Err(error) if error.raw_os_error() != Some(Errno::ECHILD as i32) => return Err(error),
         _ => (),
     }
+    // The taskbar makes the desktop usable by a person as well as the agent; programs it
+    // launches run as the tool user, like the agent's own commands.
+    client("/usr/bin/tint2").spawn()?;
     let input = crate::desktop::x11::connect(0, cookie)?;
     input.focus()?;
     crate::desktop::start(crate::desktop::x11::connect(0, cookie)?, input, host)?;

@@ -842,6 +842,84 @@
         }
       }
     },
+    "/api/agents/{id}/mcp-servers": {
+      "get": {
+        "tags": [],
+        "summary": "Every server with whether this agent may use it; needs `agent.manage` on the agent.",
+        "operationId": "agent_mcp_servers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentMcpServer"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/mcp-servers/{server}": {
+      "put": {
+        "tags": [],
+        "summary": "Grants or withdraws the agent's use of a server with explicit grants, for administrators;\n409 for a server every agent may use, whose access is changed on the server.",
+        "operationId": "grant_mcp_server",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "server",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/McpGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/revisions": {
       "get": {
         "tags": [],
@@ -2511,6 +2589,120 @@
         }
       }
     },
+    "/api/mcp-servers": {
+      "get": {
+        "tags": [],
+        "operationId": "list_mcp_servers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/McpServerSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "409 when another server has the name.",
+        "operationId": "create_mcp_server",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMcpServer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerSummary"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/mcp-servers/{server}": {
+      "put": {
+        "tags": [],
+        "summary": "409 when another server has the name.",
+        "operationId": "update_mcp_server",
+        "parameters": [
+          {
+            "name": "server",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMcpServer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpServerSummary"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "delete_mcp_server",
+        "parameters": [
+          {
+            "name": "server",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/provider": {
       "get": {
         "tags": [],
@@ -3323,6 +3515,31 @@
       "AgentId": {
         "type": "string",
         "format": "uuid"
+      },
+      "AgentMcpServer": {
+        "type": "object",
+        "description": "A server as one agent's Connections tab shows it.",
+        "required": ["id", "name", "transport", "all_agents", "enabled"],
+        "properties": {
+          "all_agents": {
+            "type": "boolean",
+            "description": "Every agent may use it; access is changed on the server, not per agent."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "This agent may use it."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/McpTransport"
+          }
+        }
       },
       "AgentStatus": {
         "type": "object",
@@ -4349,6 +4566,66 @@
           }
         }
       },
+      "McpGrant": {
+        "type": "object",
+        "required": ["enabled"],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the agent may use the server."
+          }
+        },
+        "additionalProperties": false
+      },
+      "McpServerSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "transport",
+          "args",
+          "secret_names",
+          "access"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/ProviderAccess"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "command": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "secret_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The environment variable or header names; their values are never returned."
+          },
+          "transport": {
+            "$ref": "#/components/schemas/McpTransport"
+          },
+          "url": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "McpTransport": {
+        "type": "string",
+        "enum": ["stdio", "http"]
+      },
       "Member": {
         "type": "object",
         "required": ["id", "name"],
@@ -5017,7 +5294,7 @@
           },
           "routing": {
             "type": "string",
-            "description": "`routing` until the coordinator settles it as `routed`, `continued`, `clarify`,\n`no_action` or `failed`; mentioned messages are `routed` at once."
+            "description": "`routing` until the coordinator settles it as `routed`, `continued` or `failed`;\nmentioned messages are `routed` at once. Messages from before 2026-11-03 may also be\n`clarify` or `no_action`."
           },
           "sequence": {
             "type": "integer",
@@ -5086,6 +5363,56 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveMcpServer": {
+        "type": "object",
+        "required": ["name", "transport"],
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess",
+                "description": "All agents when absent on create, unchanged on update."
+              }
+            ]
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Stdio only."
+          },
+          "command": {
+            "type": ["string", "null"],
+            "description": "Stdio only: the program, found on the tool user's PATH."
+          },
+          "name": {
+            "type": "string",
+            "description": "Letters, digits or hyphens, at most 32; the server's tools are offered as `<name>__<tool>`."
+          },
+          "secrets": {
+            "type": ["object", "null"],
+            "description": "Environment variables (stdio) or request headers (HTTP), stored encrypted. Required on\ncreate, where it may be empty; an update without it keeps the current ones, unless the\ntransport changes.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "transport": {
+            "$ref": "#/components/schemas/McpTransport"
+          },
+          "url": {
+            "type": ["string", "null"],
+            "description": "HTTP only: an `https://` or `http://` endpoint."
           }
         },
         "additionalProperties": false

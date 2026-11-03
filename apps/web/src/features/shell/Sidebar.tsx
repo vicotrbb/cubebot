@@ -46,6 +46,7 @@ export const PLATFORM = [
   ['/platform/teams', 'Teams and access'],
   ['/platform/sign-in', 'Sign-in'],
   ['/platform/providers', 'AI providers'],
+  ['/platform/mcp', 'MCP servers'],
   ['/platform/vault', 'Vault'],
   ['/platform/audit', 'Audit log'],
   ['/platform/health', 'Health'],

@@ -81,6 +81,17 @@ impl Work {
         let instructions = super::collaboration::with_peers(tx, actor.agent, instructions).await?;
         let (summary, history, message) = context(tx, actor, task, room, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
+        // An unreadable server configuration leaves the turn without MCP rather than stuck.
+        let mcp_servers = match connections {
+            Some(connections) => connections
+                .runtime_mcp(tx, actor.agent)
+                .await
+                .unwrap_or_else(|error| {
+                    tracing::warn!(?error, "MCP servers unavailable for the turn");
+                    Vec::new()
+                }),
+            None => Vec::new(),
+        };
         Ok(Some(Turn {
             turn,
             sequence: last as u64 + 1,
@@ -97,6 +108,7 @@ impl Work {
             task,
             command,
             command_only,
+            mcp_servers,
         }))
     }
 

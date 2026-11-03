@@ -10,6 +10,7 @@ mod files;
 mod identity;
 mod installation;
 mod invitations;
+mod mcp;
 mod memories;
 mod oidc;
 mod rooms;
@@ -76,6 +77,7 @@ pub fn openapi() -> String {
     doc.merge(memories::Doc::openapi());
     doc.merge(skills::Doc::openapi());
     doc.merge(vault::Doc::openapi());
+    doc.merge(mcp::Doc::openapi());
     doc.merge(files::Doc::openapi());
     doc.merge(routines::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
@@ -155,7 +157,8 @@ pub async fn configured_router_with_credentials(
         let connections = crate::connections::Connections::new(pool, credentials);
         routes = routes
             .merge(connections::router(identity.clone(), connections.clone()))
-            .merge(vault::router(identity.clone(), connections));
+            .merge(vault::router(identity.clone(), connections.clone()))
+            .merge(mcp::router(identity.clone(), connections));
     }
     Ok(routes.layer(axum::middleware::from_fn_with_state(
         identity,

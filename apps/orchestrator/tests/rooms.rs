@@ -109,7 +109,8 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     ));
 
     // Unaddressed: no turn until the coordinator decides. Without a provider each attempt fails,
-    // and the message is reported as failed after three, never broadcast.
+    // and after three the room's first member by name answers, so the sender always gets a
+    // reply; it is never broadcast.
     let open = work
         .post_room_message(&admin, room.id, &message("Can someone check the numbers?"))
         .await
@@ -136,12 +137,12 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     );
     let messages = work.room_messages(&admin, room.id, 0).await.unwrap();
     let settled = messages.iter().find(|m| m.id == open.id).unwrap();
-    assert_eq!(settled.routing, "failed");
-    assert_eq!(settled.note.as_deref(), Some("provider_unavailable"));
-    assert!(settled.deliveries.is_empty());
-    for agent in [ada, bob] {
-        assert_eq!(work.history(&admin, agent, 0).await.unwrap().len(), 1);
-    }
+    assert_eq!(settled.routing, "routed");
+    assert_eq!(settled.note, None);
+    assert_eq!(settled.deliveries.len(), 1);
+    assert_eq!(settled.deliveries[0].agent, "Ada");
+    assert_eq!(work.history(&admin, ada, 0).await.unwrap().len(), 2);
+    assert_eq!(work.history(&admin, bob, 0).await.unwrap().len(), 1);
 
     // Room access is its own grant; agent conversation access is not needed to use the room.
     identity

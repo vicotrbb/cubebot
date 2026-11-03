@@ -135,6 +135,8 @@ function Preview({
       <div
         className="pip__head"
         onPointerDown={(event) => {
+          // Capturing the pointer would retarget the click away from Expand and Dismiss.
+          if ((event.target as Element).closest('button')) return
           const box = event.currentTarget.parentElement?.getBoundingClientRect()
           if (!box) return
           drag.current = {

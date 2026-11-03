@@ -238,6 +238,9 @@ async fn start<P: Provider>(
     if !capabilities.tool_calls {
         return failed("provider_rejected");
     }
+    if let Some(registry) = registry {
+        registry.connect_mcp(&turn.mcp_servers).await;
+    }
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
     tools.extend(crate::files::definitions(registry.is_some()));
@@ -247,7 +250,7 @@ async fn start<P: Provider>(
     tools.extend(
         registry
             .into_iter()
-            .flat_map(|registry| registry.definitions().to_vec())
+            .flat_map(Registry::definitions)
             .filter(|tool| !(turn.task && tool.computer)),
     );
     let limits = if capabilities.model_limits {
