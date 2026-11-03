@@ -90,13 +90,85 @@ export function Dialog({
   )
 }
 
+/** A `details` menu that closes when an item is chosen, on a click outside it and on Escape,
+ *  as well as from its trigger. */
+export function Menu({
+  className,
+  trigger,
+  triggerClassName,
+  label,
+  children,
+}: {
+  className?: string
+  trigger: ReactNode
+  triggerClassName: string
+  label?: string
+  children: ReactNode
+}) {
+  const ref = useRef<HTMLDetailsElement>(null)
+  const detach = useRef<(() => void) | null>(null)
+  // Listens from the opening click, not from `toggle`: browsers coalesce toggle events, so a
+  // quick close and reopen can skip one. Each handler reads the element's own state.
+  const watch = () => {
+    const menu = ref.current
+    if (!menu || detach.current) return
+    const outside = (event: PointerEvent) => {
+      if (menu.open && !menu.contains(event.target as Node)) close()
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !menu.open) return
+      close()
+      menu.querySelector('summary')?.focus()
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    detach.current = () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+      detach.current = null
+    }
+  }
+  const close = () => {
+    if (ref.current) ref.current.open = false
+    detach.current?.()
+  }
+  useEffect(() => () => detach.current?.(), [])
+  return (
+    <details
+      ref={ref}
+      className={className ? `menu ${className}` : 'menu'}
+      onToggle={(event) => {
+        if (!event.currentTarget.open) detach.current?.()
+      }}
+    >
+      <summary
+        className={triggerClassName}
+        aria-label={label}
+        onClick={() => {
+          if (!ref.current?.open) watch()
+        }}
+      >
+        {trigger}
+      </summary>
+      <div
+        className="menu__list"
+        onClick={(event) => {
+          if ((event.target as Element).closest('a, button')) close()
+        }}
+      >
+        {children}
+      </div>
+    </details>
+  )
+}
+
 export function Field({
   label,
   hint,
   children,
 }: {
   label: string
-  hint?: string
+  hint?: string | undefined
   children: ReactNode
 }) {
   return (

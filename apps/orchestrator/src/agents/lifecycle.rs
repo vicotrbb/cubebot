@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LifecycleAction {
-    Wake,
-    Sleep,
+    Start,
+    /// Stops the sandbox until a person starts it or work arrives; an idle agent sleeps
+    /// without stopping.
+    Stop,
     Restart,
     Retire,
 }
@@ -14,8 +16,8 @@ pub enum LifecycleAction {
 impl LifecycleAction {
     fn desired(self) -> &'static str {
         match self {
-            Self::Wake | Self::Restart => "running",
-            Self::Sleep => "sleeping",
+            Self::Start | Self::Restart => "running",
+            Self::Stop => "stopped",
             Self::Retire => "retired",
         }
     }
@@ -51,7 +53,7 @@ impl Agents {
             UPDATE agents
             SET desired_state = $2,
                 restart_generation = restart_generation
-                    + CASE WHEN $3 OR (desired_state = 'sleeping' AND $2 = 'running') THEN 1 ELSE 0 END,
+                    + CASE WHEN $3 OR (desired_state = 'stopped' AND $2 = 'running') THEN 1 ELSE 0 END,
                 revision = revision + 1
             WHERE id = $1
               AND revision = $4

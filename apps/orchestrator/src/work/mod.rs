@@ -230,8 +230,8 @@ pub(super) async fn wake(
     let eligible = sqlx::query_scalar!(
         "
         UPDATE agents
-        SET restart_generation=restart_generation + CASE WHEN desired_state='sleeping' THEN 1 ELSE 0 END,
-            revision=revision + CASE WHEN desired_state='sleeping' THEN 1 ELSE 0 END,
+        SET restart_generation=restart_generation + CASE WHEN desired_state='stopped' THEN 1 ELSE 0 END,
+            revision=revision + CASE WHEN desired_state='stopped' THEN 1 ELSE 0 END,
             desired_state='running'
         WHERE id=$1 AND desired_state<>'retired'
         RETURNING id

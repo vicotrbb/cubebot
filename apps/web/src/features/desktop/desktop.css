@@ -60,6 +60,38 @@
   background: var(--plum-deep);
   color: #fff;
 }
+/* The screen before its first frame: a dark monitor with the agent in front of it. */
+.desktop-cover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(120% 90% at 50% 40%, #2b2420 0%, #120e0b 70%);
+  color: #f3ece2;
+}
+.desktop-cover .cube {
+  margin-bottom: 8px;
+}
+.desktop-cover__title {
+  font-size: var(--t-lg);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+.desktop-cover__note {
+  max-width: 44ch;
+  color: #cfc3b6;
+  font-size: var(--t-sm);
+}
+.desktop-cover .btn {
+  margin-top: 8px;
+}
+.desktop-cover .notice {
+  margin-top: 4px;
+}
 .desktop-latency {
   padding: 8px 20px;
 }

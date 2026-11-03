@@ -297,8 +297,6 @@ function Behaviour({
                 body: {
                   request_id: crypto.randomUUID(),
                   ...definition(agent),
-                  idle_policy: String(data.get('idle_policy')) as
-                    'sleep' | 'keep_running',
                   idle_delay_seconds: Number(data.get('idle_minutes')) * 60,
                   dreaming_model:
                     String(data.get('dreaming_model')).trim() || null,
@@ -310,13 +308,10 @@ function Behaviour({
         }}
       >
         <div className="row">
-          <Field label="When idle">
-            <select name="idle_policy" defaultValue={agent.idle_policy}>
-              <option value="sleep">Sleep after idling</option>
-              <option value="keep_running">Keep running</option>
-            </select>
-          </Field>
-          <Field label="Idle minutes before dreaming">
+          <Field
+            label="Idle minutes before sleeping"
+            hint="It dreams while it sleeps"
+          >
             <input
               name="idle_minutes"
               type="number"
@@ -360,13 +355,13 @@ function Behaviour({
 
 /** The desired state an action would repeat, so the current one is disabled. */
 const held: Partial<Record<LifecycleAction, string>> = {
-  wake: 'running',
-  sleep: 'sleeping',
+  start: 'running',
+  stop: 'stopped',
 }
 const ACTIONS: { action: LifecycleAction; label: string; danger?: boolean }[] =
   [
-    { action: 'wake', label: 'Wake' },
-    { action: 'sleep', label: 'Sleep' },
+    { action: 'start', label: 'Start' },
+    { action: 'stop', label: 'Stop' },
     { action: 'restart', label: 'Restart' },
     { action: 'retire', label: 'Retire', danger: true },
   ]
@@ -384,9 +379,11 @@ export function Lifecycle({
     <section className="panel__section">
       <h2>Lifecycle</h2>
       <p className="panel__lead">
-        Desired state: <strong>{agent.desired_state}</strong>. A change is
-        recorded intent; the Status tab shows what actually runs. Sleeping or
-        retiring keeps the workspace and memory.
+        Desired state: <strong>{agent.desired_state}</strong>. An agent's
+        computer stays on: idle, it sleeps and dreams without stopping. Stop
+        turns the computer off until you start it or a message arrives; the
+        Status tab shows what actually runs. Stopping or retiring keeps the
+        workspace and memory.
       </p>
       <div className="actions">
         {ACTIONS.map(({ action, label, danger }) => (
@@ -399,7 +396,7 @@ export function Lifecycle({
               if (
                 danger &&
                 !window.confirm(
-                  `Retire ${agent.name}? It cannot be woken again.`,
+                  `Retire ${agent.name}? It cannot be started again.`,
                 )
               )
                 return

@@ -185,10 +185,20 @@
   gap: 16px;
   max-width: 62ch;
 }
+/* A form's row of fields; it shares the name with the sidebar's navigation row, whose
+   padding, hover and pointer must not reach it. */
 .form .row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 12px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  cursor: auto;
+}
+.form .row:hover {
+  background: none;
 }
 .form .actions,
 .actions {
@@ -268,6 +278,14 @@
 .dot--retired {
   background: var(--wood-deep);
 }
+.spin {
+  animation: spin 1.2s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes pulse {
   0%,
   100% {
@@ -324,6 +342,64 @@
   align-items: center;
   gap: 8px;
   font-weight: 600;
+}
+
+/* Entry rows: an icon well, the name over its detail, meta, then the row's menu */
+.entries {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+.entry {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 6px 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.entry:hover {
+  background: rgb(var(--shadow) / 0.03);
+}
+.entry__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+  color: var(--ink-soft);
+}
+.entry__icon svg {
+  width: 16px;
+  height: 16px;
+}
+.entry__main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.entry__name,
+.entry__detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry__name {
+  font-weight: 600;
+}
+.entry__detail {
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+}
+.entry__meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Empty state */

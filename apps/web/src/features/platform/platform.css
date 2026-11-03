@@ -34,3 +34,136 @@
     position: static;
   }
 }
+
+/* AI providers: one column, in the order the choices depend on each other */
+.provider-page {
+  display: grid;
+  gap: 16px;
+  max-width: 62ch;
+}
+.provider-page .platform__lead {
+  margin-bottom: 0;
+}
+.provider-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  border: 1px solid var(--line);
+}
+.provider-current__title {
+  font-weight: 700;
+}
+.provider-current code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  font-weight: 600;
+}
+.provider-form {
+  padding: 18px 18px 20px;
+  border-radius: var(--r-lg);
+  background: var(--ground);
+  border: 1px solid var(--line);
+}
+.provider-form h2 {
+  font-size: var(--t-lg);
+}
+.provider-choice {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.provider-choice legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.provider-choice__option {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px 12px;
+  border-radius: var(--r-md);
+  border: 2px solid var(--line);
+  background: var(--raised);
+  cursor: pointer;
+  transition: border-color var(--quick);
+}
+.provider-choice__option:hover {
+  border-color: var(--line-strong);
+}
+.provider-choice__option:has(input:checked) {
+  border-color: var(--orange);
+}
+.provider-choice__option:has(input:focus-visible) {
+  outline: 3px solid var(--orange);
+  outline-offset: 2px;
+}
+.provider-choice__option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.provider-choice__name {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.provider-choice__note {
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}
+.provider-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+.provider-key .btn {
+  min-height: 38px;
+}
+.provider-group {
+  display: grid;
+  gap: 8px;
+}
+.provider-problem {
+  margin-top: -8px;
+  color: var(--danger);
+}
+.provider-sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.provider-size {
+  appearance: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--t-xs);
+  font-weight: 700;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background var(--quick);
+}
+.provider-size:hover {
+  background: rgb(var(--shadow) / 0.1);
+}
+.provider-size[aria-pressed='true'] {
+  background: var(--orange);
+  color: var(--on-paint);
+}
+.provider-size__tag {
+  font-weight: 600;
+  opacity: 0.75;
+}
+@media (max-width: 520px) {
+  .provider-key {
+    grid-template-columns: 1fr;
+  }
+}

@@ -165,9 +165,21 @@
   background: var(--paper);
 }
 
-.sidebar__account {
+/* The account row and, for administrators, the platform gear beside it */
+.sidebar__foot {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   border-top: 1px solid var(--line);
   padding: 8px;
+}
+.sidebar__account {
+  flex: 1;
+  min-width: 0;
+}
+.sidebar__gear[aria-current='page'] {
+  background: rgb(var(--shadow) / 0.08);
+  color: var(--ink);
 }
 .row--account {
   list-style: none;
@@ -245,6 +257,10 @@
   width: 16px;
   height: 16px;
   color: var(--ink-faint);
+}
+.menu__item--danger,
+.menu__item--danger svg {
+  color: var(--danger);
 }
 
 /* Page frame used by non-conversation screens */

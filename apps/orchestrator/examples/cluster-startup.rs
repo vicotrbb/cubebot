@@ -61,7 +61,7 @@ async fn main() -> Result<()> {
     let rejection = verify_rwop(&fixture, &workspace).await?;
     settle(&fixture, &first, &first_pod, 2).await?;
     verify_revoked(&fixture, &projected, &session).await?;
-    availability(&fixture, LifecycleAction::Wake, 3).await?;
+    availability(&fixture, LifecycleAction::Start, 3).await?;
     let (retained, second) = provision(&fixture).await?;
     let second_pod = started(&fixture, &second).await?;
     let (_, second_session) = verify_identity(&fixture, &second, &second_pod).await?;
@@ -288,7 +288,7 @@ async fn availability(f: &Fixture, action: LifecycleAction, revision: i64) -> Re
     Ok(())
 }
 async fn settle(f: &Fixture, attempt: &Attempt, pod: &Pod, revision: i64) -> Result<()> {
-    availability(f, LifecycleAction::Sleep, revision).await?;
+    availability(f, LifecycleAction::Stop, revision).await?;
     assert!(matches!(
         f.reconciler.reconcile(f.agent).await?,
         ReconcileResult::AwaitingDrain { .. }

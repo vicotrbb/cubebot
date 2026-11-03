@@ -5,6 +5,9 @@ name: cubebot
 services:
   postgres:
     image: postgres:18-bookworm
+    # An init reaps a health check docker killed on timeout; as PID 1 the postmaster would take
+    # its exit for a crashed backend and restart every connection.
+    init: true
     environment:
       POSTGRES_DB: cubebot
       POSTGRES_USER: cubebot

@@ -180,36 +180,55 @@ admin() {
     echo "Sign in at $origin as $login."
 }
 
-# Removes the installation: its containers, volumes and release images, and this directory.
+# This installation's agents, as its own database lists them; fails when it cannot be read.
+installation_agents() {
+    docker compose "${files[@]}" up -d --wait postgres >/dev/null 2>&1 || return 1
+    docker compose "${files[@]}" exec -T postgres psql -U cubebot -d cubebot -Atc 'SELECT id FROM agents' 2>/dev/null
+}
+
+# Removes an agent's containers and its workspace volume.
+remove_agent() {
+    local container
+    for container in $(docker ps -aq --filter "label=cubebot.dev/agent=$1"); do
+        docker rm -f "$container" >/dev/null
+    done
+    if docker volume inspect "cubebot-workspace-$1" >/dev/null 2>&1; then
+        docker volume rm "cubebot-workspace-$1" >/dev/null && echo "Removed agent volume cubebot-workspace-$1."
+    fi
+}
+
+# Removes the installation: every agent it created, its containers, volumes and the images of
+# every release it ran, and this directory. Other installations on this machine are untouched.
 uninstall() {
     [ -z "$dev" ] || die "this is a checkout; stop it with \`just down\`"
     if [ "${1:-}" != --yes ] && [ "${CUBEBOT_YES:-}" != 1 ]; then
         { exec 3</dev/tty; } 2>/dev/null || die "no terminal to confirm; pass --yes"
         local answer
-        printf 'This deletes %s, its data and its images. Type uninstall to confirm: ' "$home" >&2
+        printf 'This deletes %s, every agent with its workspace, all data and the images. Type uninstall to confirm: ' "$home" >&2
         read -r -u 3 answer
         [ "$answer" = uninstall ] || die "nothing removed"
     fi
-    local image agent running volume volumes
-    running=$(docker ps -q --filter label=cubebot.dev/agent)
-    # shellcheck disable=SC2086 # one container ID per word
-    [ -z "$running" ] || docker stop $running >/dev/null
+    local agents agent image container
     overlays
-    docker compose "${files[@]}" down -v --remove-orphans
-    for agent in cubebot-agent cubebot-sandbox; do
-        # Agents of other installations on this machine run other images.
-        for running in $(docker ps -aq --filter label=cubebot.dev/agent --filter "ancestor=$registry/$agent:$CUBEBOT_VERSION"); do
-            volumes=$(docker inspect --format '{{range .Mounts}}{{.Name}} {{end}}' "$running")
-            docker rm -f "$running" >/dev/null
-            for volume in $volumes; do
-                docker volume rm "$volume" >/dev/null && echo "Removed agent volume $volume."
+    if ! agents=$(installation_agents); then
+        # Without the database, agent containers on this release's images are this installation's.
+        agents=""
+        echo "The database could not be read; removing agents that run this release's images."
+        for image in cubebot-agent cubebot-sandbox; do
+            for container in $(docker ps -aq --filter label=cubebot.dev/agent --filter "ancestor=$registry/$image:$CUBEBOT_VERSION"); do
+                agents="$agents $(docker inspect --format '{{index .Config.Labels "cubebot.dev/agent"}}' "$container")"
             done
         done
+    fi
+    # Down first, so the orchestrator cannot start an agent again as it is removed.
+    docker compose "${files[@]}" down -v --remove-orphans
+    for agent in $agents; do
+        remove_agent "$agent"
     done
-    for image in cubebot-orchestrator cubebot-web cubebot-agent cubebot-sandbox; do
-        image="$registry/$image:$CUBEBOT_VERSION"
-        docker image inspect "$image" >/dev/null 2>&1 || continue
-        docker image rm "$image" >/dev/null && echo "Removed image $image."
+    # Every release this installation pulled, not only the current one.
+    # Matched here, not with a reference filter, which containerd image stores ignore.
+    for image in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "^$registry/cubebot-(orchestrator|web|agent|sandbox):" || true); do
+        docker image rm "$image" >/dev/null 2>&1 && echo "Removed image $image."
     done
     cd /
     rm -rf "$home"

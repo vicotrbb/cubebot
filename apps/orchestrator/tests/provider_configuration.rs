@@ -32,7 +32,7 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         provider: cubebot_protocol::runtime::ProviderKind::Openai,
         model: "test-model".into(),
         context_window: Some(200_000),
-        api_key: "secret-provider-key".into(),
+        api_key: Some("secret-provider-key".into()),
         access: None,
     };
     assert!(matches!(
@@ -62,10 +62,11 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
     .fetch_one(&pool)
     .await
     .unwrap();
+    let key = input.api_key.as_deref().unwrap();
     assert!(
         !encrypted
-            .windows(input.api_key.len())
-            .any(|window| window == input.api_key.as_bytes())
+            .windows(key.len())
+            .any(|window| window == key.as_bytes())
     );
     let restarted = Connections::new(pool, Credentials::new([7; 32]));
     assert_eq!(
@@ -102,4 +103,30 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         cubebot_protocol::runtime::ProviderKind::Anthropic
     );
     assert_eq!((current.revision, current.context_window), (2, None));
+    // A model change alone keeps the saved key, re-encrypted under the next revision.
+    let model_only = ConfigureProvider {
+        request_id: Uuid::new_v4(),
+        expected_revision: 2,
+        model: "other-model".into(),
+        api_key: None,
+        ..anthropic
+    };
+    restarted.configure(&admin, &model_only).await.unwrap();
+    assert!(restarted.key_matches().await.unwrap());
+    assert_eq!(
+        restarted.inspect(&admin).await.unwrap().unwrap().model,
+        "other-model"
+    );
+    // A saved key never moves to another provider.
+    let switched = ConfigureProvider {
+        request_id: Uuid::new_v4(),
+        expected_revision: 3,
+        provider: cubebot_protocol::runtime::ProviderKind::Openai,
+        context_window: Some(200_000),
+        ..model_only
+    };
+    assert!(matches!(
+        restarted.configure(&admin, &switched).await,
+        Err(IdentityError::InvalidInput)
+    ));
 }

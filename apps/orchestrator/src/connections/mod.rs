@@ -1,7 +1,10 @@
 //! Installation-managed inference configuration, encrypted credential storage and the vault.
 mod credentials;
+mod models;
 mod vault;
 pub use credentials::{CredentialError, Credentials};
+pub(crate) use models::configured;
+pub use models::{ListModels, ModelChoice, ModelsError};
 pub use vault::{SaveVaultItem, VaultSummary};
 
 use crate::identity::{Actor, IdentityError};
@@ -29,7 +32,9 @@ pub struct ConfigureProvider {
     /// reports its own when this is absent.
     #[serde(default)]
     pub context_window: Option<i64>,
-    pub api_key: String,
+    /// `None` keeps the saved key, which must belong to the same provider.
+    #[serde(default)]
+    pub api_key: Option<String>,
     #[serde(default)]
     pub access: Option<ProviderAccess>,
 }
@@ -143,11 +148,7 @@ impl Connections {
             .next_revision(&mut transaction, input.expected_revision)
             .await?;
         let access = selected_access(&mut transaction, input.access.as_ref()).await?;
-        let context = credential_context(&mut transaction, revision).await?;
-        let encrypted = self
-            .credentials
-            .encrypt(input.api_key.as_bytes(), &context)
-            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+        let encrypted = self.credential(&mut transaction, input, revision).await?;
         sqlx::query!(
             "
             INSERT INTO provider_connection
@@ -295,6 +296,42 @@ impl Connections {
         })
     }
 
+    /// The key to store under `revision`, encrypted: the given one, or the saved one when the
+    /// model alone changes.
+    async fn credential(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        input: &ConfigureProvider,
+        revision: i64,
+    ) -> Result<Vec<u8>, IdentityError> {
+        let key = match &input.api_key {
+            Some(key) => key.clone(),
+            None => self.saved_key(transaction, input.provider).await?,
+        };
+        let context = credential_context(transaction, revision).await?;
+        self.credentials
+            .encrypt(key.as_bytes(), &context)
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))
+    }
+
+    async fn saved_key(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        provider: ProviderKind,
+    ) -> Result<String, IdentityError> {
+        let saved = self
+            .connection(transaction, None)
+            .await
+            .map_err(|error| match error {
+                IdentityError::CredentialUnavailable(None) => IdentityError::InvalidInput,
+                error => error,
+            })?;
+        if saved.provider != provider {
+            return Err(IdentityError::InvalidInput);
+        }
+        Ok(saved.api_key)
+    }
+
     async fn next_revision(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -366,8 +403,7 @@ fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
         || input.expected_revision < 0
         || input.model.is_empty()
         || input.model.len() > 128
-        || input.api_key.is_empty()
-        || input.api_key.len() > 4096
+        || !input.api_key.as_deref().is_none_or(key_valid)
         || !input
             .context_window
             .map_or(input.provider == ProviderKind::Anthropic, |window| {
@@ -380,11 +416,14 @@ fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
         .model
         .bytes()
         .all(|byte| byte.is_ascii_alphanumeric() || b"-._:/".contains(&byte))
-        || !input.api_key.bytes().all(|byte| byte.is_ascii_graphic())
     {
         return Err(IdentityError::InvalidInput);
     }
     Ok(())
+}
+
+fn key_valid(key: &str) -> bool {
+    (1..=4096).contains(&key.len()) && key.bytes().all(|byte| byte.is_ascii_graphic())
 }
 
 async fn current_access(

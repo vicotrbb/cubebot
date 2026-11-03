@@ -39,7 +39,7 @@ async fn a_manager_sets_the_wallpaper_the_agent_fetches_it_and_a_reset_falls_bac
                 provider: cubebot_protocol::runtime::ProviderKind::Openai,
                 model: "controlled-model".into(),
                 context_window: Some(128_000),
-                api_key: "controlled-key".into(),
+                api_key: Some("controlled-key".into()),
                 access: None,
             },
         )

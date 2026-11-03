@@ -2562,6 +2562,44 @@
         }
       }
     },
+    "/api/provider/models": {
+      "post": {
+        "tags": [],
+        "summary": "The models a key can use, newest first: 422 when the provider rejects the key, 502 when it\ncannot be reached, 404 without a key when none is saved for that provider.",
+        "operationId": "models",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ListModels"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelChoice"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": ""
+          },
+          "502": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/rooms": {
       "get": {
         "tags": [],
@@ -3208,7 +3246,7 @@
         "properties": {
           "activity": {
             "type": "string",
-            "description": "`working`, `dreaming` or `idle` while running, otherwise the desired state such as\n`sleeping`. Dreaming needs a run whose sandbox still holds its credential."
+            "description": "`working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,\notherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox\nstill holds its credential."
           },
           "avatar": {
             "$ref": "#/components/schemas/Avatar"
@@ -3525,7 +3563,7 @@
       },
       "ConfigureProvider": {
         "type": "object",
-        "required": ["request_id", "expected_revision", "model", "api_key"],
+        "required": ["request_id", "expected_revision", "model"],
         "properties": {
           "access": {
             "oneOf": [
@@ -3538,7 +3576,8 @@
             ]
           },
           "api_key": {
-            "type": "string"
+            "type": ["string", "null"],
+            "description": "`None` keeps the saved key, which must belong to the same provider."
           },
           "context_window": {
             "type": ["integer", "null"],
@@ -4232,7 +4271,7 @@
       },
       "LifecycleAction": {
         "type": "string",
-        "enum": ["wake", "sleep", "restart", "retire"]
+        "enum": ["start", "stop", "restart", "retire"]
       },
       "LifecycleCommand": {
         "type": "object",
@@ -4248,6 +4287,20 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ListModels": {
+        "type": "object",
+        "required": ["provider"],
+        "properties": {
+          "api_key": {
+            "type": ["string", "null"],
+            "description": "The key to list with; without one, the saved key when it belongs to `provider`."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
           }
         },
         "additionalProperties": false
@@ -4426,6 +4479,21 @@
           }
         ],
         "description": "A memory write staged by the agent. A revision or removal names the revision it read; a\nnewer one, such as a human edit, wins and the change is dropped."
+      },
+      "ModelChoice": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "Reported by the provider; OpenAI reports none.",
+            "minimum": 0
+          },
+          "id": {
+            "type": "string"
+          }
+        }
       },
       "Occurrence": {
         "type": "object",

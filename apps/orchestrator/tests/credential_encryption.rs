@@ -85,7 +85,7 @@ async fn a_start_with_a_different_key_refuses_and_the_original_key_starts() {
         provider: cubebot_protocol::runtime::ProviderKind::Openai,
         model: "test-model".into(),
         context_window: Some(200_000),
-        api_key: "secret-provider-key".into(),
+        api_key: Some("secret-provider-key".into()),
         access: None,
     };
     Connections::new(pool.clone(), Credentials::new([7; 32]))

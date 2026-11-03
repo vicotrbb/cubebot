@@ -496,8 +496,8 @@ finish() {
         elif [ -n "$fresh_install" ]; then
             echo "Open $url: the first account created there becomes the administrator. To claim it from this terminal instead, which matters when CUBEBOT_DOMAIN is public, run $command admin."
         fi
-        [ "$runtime" = off ] || echo "Then add a provider key under Platform, Providers."
-        echo "Manage this installation with $command up | down | update | logs | admin."
+        [ "$runtime" = off ] || echo "Then add a provider key: the gear beside your name, then AI providers."
+        echo "Manage this installation with $command up | down | update | logs | admin | uninstall."
         return
     fi
     local admin="" next=""
@@ -506,18 +506,19 @@ finish() {
     elif [ -n "$fresh_install" ]; then
         admin="The first account created there becomes the administrator; $command admin claims it here."
     fi
-    [ "$runtime" = off ] || next="${bold}Next$reset           add a provider key under Platform, Providers"
+    [ "$runtime" = off ] || next="${bold}Next$reset           add a provider key: the gear beside your name, then AI providers"
     card "${bold}Cubebot is running$reset" \
         "Console        $orange$url$reset" \
         "Agents         $runtime" \
         ${admin:+"$admin"} \
         ${next:+"$next"} \
         "" \
-        "$command up       start it" \
-        "$command down     stop it, keeping data" \
-        "$command update   move to the latest release" \
-        "$command logs     show the services' logs" \
-        "$command admin    create the administrator"
+        "$command up          start it" \
+        "$command down        stop it, keeping data" \
+        "$command update      move to the latest release" \
+        "$command logs        show the services' logs" \
+        "$command admin       create the administrator" \
+        "$command uninstall   remove it, its agents and all data"
 }
 
 # Wrapped so a download cut short runs nothing.

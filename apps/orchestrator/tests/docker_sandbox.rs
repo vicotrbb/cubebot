@@ -196,7 +196,7 @@ async fn sleep_and_restart_wait_for_drain_before_stopping_a_running_agent() {
     sqlx::query!(
         "
         UPDATE agents
-        SET desired_state = 'sleeping'
+        SET desired_state = 'stopped'
         WHERE id = $1
         ",
         f.agent as _,

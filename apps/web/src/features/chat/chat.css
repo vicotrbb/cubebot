@@ -155,13 +155,7 @@
   color: var(--danger);
 }
 .work__mark .spin {
-  animation: spin 1.2s linear infinite;
   color: var(--orange-deep);
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 .work__body {
   display: grid;

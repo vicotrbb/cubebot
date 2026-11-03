@@ -75,7 +75,7 @@ def check_definition_history(base, token, path, original):
 def check_transitions(base, token, path):
     wake = None
     for revision, action in enumerate(
-        ("wake", "sleep", "wake", "restart", "retire"), start=2
+        ("start", "stop", "start", "restart", "retire"), start=2
     ):
         command = {
             "request_id": str(uuid.uuid4()),
@@ -90,10 +90,15 @@ def check_transitions(base, token, path):
     definition = request(base, path, token)[1]
     assert (
         definition["desired_state"] == "retired"
-        and definition["restart_generation"] == 3
+        # A new agent runs, so only the start after the stop and the restart count.
+        and definition["restart_generation"] == 2
     )
     assert definition["instructions_revision"] == 2
-    denied = {"request_id": str(uuid.uuid4()), "expected_revision": 7, "action": "wake"}
+    denied = {
+        "request_id": str(uuid.uuid4()),
+        "expected_revision": 7,
+        "action": "start",
+    }
     assert request(base, path + "/lifecycle", token, denied)[0] == 409
     return wake
 

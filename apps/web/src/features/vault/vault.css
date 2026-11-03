@@ -1,0 +1,51 @@
+/* Installation vault: a list of items with their reach; one dialog creates or edits */
+.vault-page {
+  display: grid;
+  gap: 14px;
+  max-width: 1100px;
+}
+.vault-page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.vault-page__head .platform__lead {
+  margin-bottom: 0;
+}
+.vault-filled {
+  min-width: 13ch;
+  text-align: right;
+  color: var(--ink-faint);
+}
+.vault-access {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.vault-access legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.vault-access__agents {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px 12px;
+  margin-left: 28px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+@media (max-width: 640px) {
+  .vault-page__head {
+    flex-direction: column;
+  }
+  .vault-filled {
+    display: none;
+  }
+}

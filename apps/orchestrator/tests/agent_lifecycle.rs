@@ -97,15 +97,32 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
     assert_eq!(retained, "Corrected evidence");
 }
 
+/// A new agent runs; stopping it keeps its generation, so only a later start brings up a
+/// new sandbox.
+async fn check_stop(agents: &Agents, actor: &cubebot_orchestrator::identity::Actor, id: AgentId) {
+    assert_eq!(
+        agents.get(actor, id).await.unwrap().desired_state,
+        "running"
+    );
+    let stop = LifecycleCommand {
+        request_id: Uuid::new_v4(),
+        expected_revision: 2,
+        action: LifecycleAction::Stop,
+    };
+    agents.lifecycle(actor, id, &stop).await.unwrap();
+    assert_eq!(agents.get(actor, id).await.unwrap().restart_generation, 0);
+}
+
 async fn check_wake(
     agents: &Agents,
     actor: &cubebot_orchestrator::identity::Actor,
     id: AgentId,
 ) -> (LifecycleCommand, cubebot_orchestrator::identity::Receipt) {
+    check_stop(agents, actor, id).await;
     let wake = LifecycleCommand {
         request_id: Uuid::new_v4(),
-        expected_revision: 2,
-        action: LifecycleAction::Wake,
+        expected_revision: 3,
+        action: LifecycleAction::Start,
     };
     let receipt = agents.lifecycle(actor, id, &wake).await.unwrap();
     assert_eq!(agents.lifecycle(actor, id, &wake).await.unwrap(), receipt);
@@ -120,8 +137,8 @@ async fn check_wake(
     ));
     let repeated_wake = LifecycleCommand {
         request_id: Uuid::new_v4(),
-        expected_revision: 3,
-        action: LifecycleAction::Wake,
+        expected_revision: 4,
+        action: LifecycleAction::Start,
     };
     agents.lifecycle(actor, id, &repeated_wake).await.unwrap();
     assert_eq!(agents.get(actor, id).await.unwrap().restart_generation, 1);
@@ -137,7 +154,7 @@ async fn check_restart_and_retire(
 ) {
     let restart = LifecycleCommand {
         request_id: Uuid::new_v4(),
-        expected_revision: 4,
+        expected_revision: 5,
         action: LifecycleAction::Restart,
     };
     let restarted = agents.lifecycle(actor, id, &restart).await.unwrap();
@@ -148,7 +165,7 @@ async fn check_restart_and_retire(
     assert_eq!(agents.get(actor, id).await.unwrap().restart_generation, 2);
     let retire = LifecycleCommand {
         request_id: Uuid::new_v4(),
-        expected_revision: 5,
+        expected_revision: 6,
         action: LifecycleAction::Retire,
     };
     agents.lifecycle(actor, id, &retire).await.unwrap();
@@ -159,8 +176,8 @@ async fn check_restart_and_retire(
     );
     let wake = LifecycleCommand {
         request_id: Uuid::new_v4(),
-        expected_revision: 6,
-        action: LifecycleAction::Wake,
+        expected_revision: 7,
+        action: LifecycleAction::Start,
     };
     assert!(matches!(
         agents.lifecycle(actor, id, &wake).await,
@@ -316,7 +333,7 @@ async fn check_revocation_while_waiting(
                 &LifecycleCommand {
                     request_id: Uuid::new_v4(),
                     expected_revision: 2,
-                    action: LifecycleAction::Wake,
+                    action: LifecycleAction::Start,
                 },
             )
             .await

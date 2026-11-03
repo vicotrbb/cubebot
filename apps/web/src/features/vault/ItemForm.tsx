@@ -4,7 +4,7 @@ import type { AgentSummary } from '../../api/types'
 import { Alert, Field } from '../../components/primitives'
 
 /** What the desktop can type (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills): printable ASCII and spaces. */
-const TYPABLE = /^[\x20-\x7e]*$/
+export const TYPABLE = /^[\x20-\x7e]*$/
 type Kind = VaultItem['kind']
 
 /** Creates or edits an item; `fill` adds Save and fill, which types the secret for a person
@@ -122,7 +122,7 @@ export function ItemForm({
   )
 }
 
-function LoginFields({
+export function LoginFields({
   existing,
   site,
 }: {

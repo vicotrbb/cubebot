@@ -133,7 +133,7 @@ def agent(
     wake=True,
 ):
     """Creates an agent, sets its idle delay and dreaming model when given an idle
-    delay, seeds its memories and wakes it."""
+    delay and seeds its memories. A new agent runs; `wake=False` stops it."""
     created = command(name=name, instructions=instructions)
     identity = api("/api/agents", created, expected=201)["id"]
     if idle_delay_seconds is not None:
@@ -149,9 +149,9 @@ def agent(
         api(f"/api/agents/{identity}/definition", update)
     for content in memories:
         api(f"/api/agents/{identity}/memories", {"content": content}, expected=201)
-    if wake:
+    if not wake:
         status = api(f"/api/agents/{identity}/status")
-        body = command(expected_revision=status["revision"], action="wake")
+        body = command(expected_revision=status["revision"], action="stop")
         api(f"/api/agents/{identity}/lifecycle", body, expected=202)
     return identity
 

@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   BookOpen,
   ChevronDown,
@@ -30,12 +30,14 @@ import {
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
 import { Cube, moodOf } from '../../components/Cube'
+import { Menu } from '../../components/primitives'
 
 export const ACTIVITY: Record<string, string> = {
   working: 'Working',
   dreaming: 'Dreaming',
   idle: 'Idle',
   sleeping: 'Sleeping',
+  stopped: 'Stopped',
   retired: 'Retired',
 }
 
@@ -112,22 +114,11 @@ export function Sidebar({
             <span className="row__label">Skills</span>
           </Link>
         </Section>
-        {administrator && (
-          <Section id="platform" title="Platform">
-            {PLATFORM.map(([to, label]) => (
-              <Link
-                key={to}
-                to={to}
-                className="row row--page"
-                activeProps={{ 'aria-current': 'page' }}
-              >
-                <span className="row__label">{label}</span>
-              </Link>
-            ))}
-          </Section>
-        )}
       </nav>
-      <AccountMenu />
+      <footer className="sidebar__foot">
+        <AccountMenu />
+        {administrator && <PlatformGear />}
+      </footer>
     </aside>
   )
 }
@@ -285,19 +276,37 @@ function RowSkeleton() {
 
 function NewMenu() {
   return (
-    <details className="menu menu--right">
-      <summary className="btn btn--ghost btn--icon btn--sm" aria-label="New">
-        <Plus />
-      </summary>
-      <div className="menu__list">
-        <Link to="/agents/new" className="menu__item">
-          New agent
-        </Link>
-        <Link to="/rooms/new" className="menu__item">
-          New room
-        </Link>
-      </div>
-    </details>
+    <Menu
+      className="menu--right"
+      trigger={<Plus />}
+      triggerClassName="btn btn--ghost btn--icon btn--sm"
+      label="New"
+    >
+      <Link to="/agents/new" className="menu__item">
+        New agent
+      </Link>
+      <Link to="/rooms/new" className="menu__item">
+        New room
+      </Link>
+    </Menu>
+  )
+}
+
+/** Installation settings: every Platform tab, current while one is open. */
+function PlatformGear() {
+  const inPlatform = useLocation({
+    select: (location) => location.pathname.startsWith('/platform'),
+  })
+  return (
+    <Link
+      to={PLATFORM[0][0]}
+      className="btn btn--ghost btn--icon sidebar__gear"
+      aria-label="Platform settings"
+      title="Platform settings"
+      aria-current={inPlatform ? 'page' : undefined}
+    >
+      <Settings />
+    </Link>
   )
 }
 
@@ -315,49 +324,47 @@ function AccountMenu() {
   }
   const ThemeIcon = theme === 'light' ? Sun : theme === 'dark' ? Moon : SunMoon
   return (
-    <details className="menu menu--up sidebar__account">
-      <summary className="row row--account">
-        <span className="avatar-initial" aria-hidden="true">
-          {name.slice(0, 1).toUpperCase()}
-        </span>
-        <span className="row__label">{name}</span>
-        <span className="faint small">
-          {session.data?.administrator ? 'Administrator' : 'Member'}
-        </span>
-      </summary>
-      <div className="menu__list">
-        <Link to="/you" className="menu__item">
-          <UserRound /> You
-        </Link>
-        <button
-          type="button"
-          className="menu__item"
-          onClick={() => {
-            const next = nextTheme[theme]
-            applyTheme(next)
-            if (preferences.data)
-              save.mutate({ ...preferences.data, theme: next })
-          }}
-        >
-          <ThemeIcon /> Theme: {theme}
-        </button>
-        {session.data?.administrator && (
-          <Link to="/platform/health" className="menu__item">
-            <Settings /> Platform
-          </Link>
-        )}
-        <button
-          type="button"
-          className="menu__item"
-          onClick={async () => {
-            await signOut()
-            await navigate({ to: '/sign-in' })
-          }}
-        >
-          <LogOut /> Sign out
-        </button>
-      </div>
-    </details>
+    <Menu
+      className="menu--up sidebar__account"
+      triggerClassName="row row--account"
+      trigger={
+        <>
+          <span className="avatar-initial" aria-hidden="true">
+            {name.slice(0, 1).toUpperCase()}
+          </span>
+          <span className="row__label">{name}</span>
+          <span className="faint small">
+            {session.data?.administrator ? 'Administrator' : 'Member'}
+          </span>
+        </>
+      }
+    >
+      <Link to="/you" className="menu__item">
+        <UserRound /> You
+      </Link>
+      <button
+        type="button"
+        className="menu__item"
+        onClick={() => {
+          const next = nextTheme[theme]
+          applyTheme(next)
+          if (preferences.data)
+            save.mutate({ ...preferences.data, theme: next })
+        }}
+      >
+        <ThemeIcon /> Theme: {theme}
+      </button>
+      <button
+        type="button"
+        className="menu__item"
+        onClick={async () => {
+          await signOut()
+          await navigate({ to: '/sign-in' })
+        }}
+      >
+        <LogOut /> Sign out
+      </button>
+    </Menu>
   )
 }
 

@@ -43,8 +43,8 @@ def free_port():
         return probe.getsockname()[1]
 
 
-def docker(*args, check=True):
-    return subprocess.run(["docker", *args], check=check, cwd=ROOT)
+def docker(*args, check=True, **options):
+    return subprocess.run(["docker", *args], check=check, cwd=ROOT, **options)
 
 
 def publish(registry):
@@ -126,12 +126,24 @@ def remove_volumes(name):
         docker("volume", "rm", *volumes, check=False)
 
 
-def uninstall(environment, home, registry, name):
+def uninstall(environment, home, registry, name, agents=()):
     subprocess.run(
         [str(home / "cubebot"), "uninstall", "--yes"], env=environment, check=True
     )
     assert not home.exists(), f"{home} is still there"
     assert project_volumes(name) == [], project_volumes(name)
+    for identity in agents:
+        label = f"label=cubebot.dev/agent={identity}"
+        left = docker("ps", "--all", "--quiet", "--filter", label, capture_output=True)
+        assert not left.stdout.strip(), f"agent {identity}'s container is still there"
+        volume = docker(
+            "volume",
+            "inspect",
+            f"cubebot-workspace-{identity}",
+            check=False,
+            capture_output=True,
+        )
+        assert volume.returncode != 0, f"agent {identity}'s workspace is still there"
     for image in ("orchestrator", "web", "agent"):
         reference = f"{registry}/cubebot-{image}:{TAG}"
         found = subprocess.run(
@@ -284,7 +296,7 @@ def main():
             subprocess.run(wrapper + ["down"], env=environment, check=True)
             print("PASS cubebot down stopped the installation")
             browser_setup(environment, home, wrapper, name)
-            uninstall(environment, home, registry, name)
+            uninstall(environment, home, registry, name, agents)
             interactive(environment, Path(directory), registry, name)
         except BaseException:
             if (home / "cubebot").exists():

@@ -22,6 +22,7 @@ export type Mood =
   | 'working'
   | 'dreaming'
   | 'sleeping'
+  | 'stopped'
   | 'desktop'
   | 'waiting'
   | 'retired'
@@ -44,6 +45,7 @@ export function moodOf(agent: {
   if (agent.activity === 'working') return 'working'
   if (agent.activity === 'dreaming') return 'dreaming'
   if (agent.activity === 'sleeping') return 'sleeping'
+  if (agent.activity === 'stopped') return 'stopped'
   return 'idle'
 }
 
@@ -85,7 +87,7 @@ export function Cube({
       <div className="cube__body">
         <div className="cube__face cube__face--front">
           {eyes && <EyePair eyes={eyes} mood={mood} />}
-          {eyes && mood !== 'sleeping' && (
+          {eyes && mood !== 'sleeping' && mood !== 'stopped' && (
             <>
               <span className="cube__blush cube__blush--l" />
               <span className="cube__blush cube__blush--r" />
@@ -111,7 +113,7 @@ export function Cube({
 }
 
 function EyePair({ eyes, mood }: { eyes: Eyes; mood: Mood }) {
-  const closed = mood === 'sleeping'
+  const closed = mood === 'sleeping' || mood === 'stopped'
   const lid = mood === 'dreaming'
   const eyeClass = `cube__eye${lid ? ' cube__eye--lid' : ''}`
   return (

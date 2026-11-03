@@ -272,7 +272,7 @@ def exclusive_storage(f, current):
 
 def in_flight_control_crash(f):
     identity = agent(f, "Outbox during control crash")
-    lifecycle(f, identity, "wake")
+    lifecycle(f, identity, "start")
     current = running(f, identity)
     controller = f.platform("orchestrator")
     stopped = False
@@ -336,7 +336,7 @@ def control_partition(f, identity, current):
 
 def interrupted_inference(f):
     identity = agent(f, "Interrupted inference")
-    lifecycle(f, identity, "wake")
+    lifecycle(f, identity, "start")
     current = running(f, identity)
     with partition(f, current, provider=True):
         turn = send(f, identity, "Reply briefly.")
@@ -358,7 +358,7 @@ def interrupted_inference(f):
 
 def provider_partition(f):
     identity = agent(f, "Provider unreachable")
-    lifecycle(f, identity, "wake")
+    lifecycle(f, identity, "start")
     current = running(f, identity)
     with partition(f, current, provider=True):
         turn = send(f, identity, "Reply with recovered.")
@@ -376,14 +376,14 @@ def provider_partition(f):
 def lifecycle_retention(f, identity, current):
     claim = current["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"]
     uid = json.loads(f.k("get", "pvc", claim, "-o", "json"))["metadata"]["uid"]
-    for action in ("restart", "sleep"):
+    for action in ("restart", "stop"):
         lifecycle(f, identity, action)
         if action == "restart":
             current = replacement(f, identity, current)
             retained_workspace(f, current, claim, uid)
         else:
             wait_for("sleep drain", lambda: pod(f, identity) is None)
-    lifecycle(f, identity, "wake")
+    lifecycle(f, identity, "start")
     current = running(f, identity)
     retained_workspace(f, current, claim, uid)
     assert history(f, identity)[0]["response"]
@@ -396,11 +396,11 @@ def lifecycle_retention(f, identity, current):
     assert len(history(f, identity)) == 3
     f.request(
         f"/api/agents/{identity}/lifecycle",
-        command(expected_revision=status["revision"], action="wake"),
+        command(expected_revision=status["revision"], action="start"),
         expected=409,
     )
     print(
-        "PASS restart, sleep, wake and retirement preserve history/workspace",
+        "PASS restart, stop, start and retirement preserve history/workspace",
         flush=True,
     )
 
@@ -467,7 +467,7 @@ def permissions(f):
                 expected=201,
             )
         )
-    lifecycle(f, identity, "wake")
+    lifecycle(f, identity, "start")
     current = running(f, identity)
     with partition(f, current):
         turn = send(f, identity, "Retain after permission revocation", token)

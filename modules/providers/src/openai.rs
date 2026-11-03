@@ -1,11 +1,28 @@
 //! OpenAI Responses over SSE, stateless (`store: false`) with encrypted reasoning replay.
 use crate::{
-    Capabilities, Decoder, Error, Event, Limits, Message, Provider, Request, Usage, call, reply,
+    Capabilities, Decoder, Error, Event, Limits, Message, Model, Provider, Request, Usage, call,
+    reply,
 };
 use futures_util::Stream;
 use reqwest::{Client, Url};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
+
+/// Model families the Models API lists that cannot hold a conversation.
+const NOT_CONVERSATIONAL: [&str; 12] = [
+    "embedding",
+    "tts",
+    "whisper",
+    "transcribe",
+    "dall-e",
+    "image",
+    "moderation",
+    "audio",
+    "realtime",
+    "sora",
+    "davinci",
+    "babbage",
+];
 
 pub struct OpenAi {
     http: Client,
@@ -47,6 +64,25 @@ impl Provider for OpenAi {
     async fn limits(&self, _model: &str, _key: &str) -> Result<Limits, Error> {
         // The Models API reports no context window.
         Ok(Limits::default())
+    }
+
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "openai"))]
+    async fn models(&self, key: &str) -> Result<Vec<Model>, Error> {
+        let url = self
+            .endpoint
+            .join("models")
+            .map_err(|error| Error::Configuration(Some(error.into())))?;
+        let response = crate::send(self.http.get(url).bearer_auth(key)).await?;
+        let mut body = crate::json(response).await?;
+        if let Some(data) = body["data"].as_array_mut() {
+            data.retain(|entry| {
+                entry["id"]
+                    .as_str()
+                    .is_some_and(|id| !NOT_CONVERSATIONAL.iter().any(|word| id.contains(word)))
+            });
+            data.sort_by_key(|entry| std::cmp::Reverse(entry["created"].as_u64()));
+        }
+        crate::models(&body, |_| None)
     }
 
     fn stream<'a>(

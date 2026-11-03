@@ -178,8 +178,13 @@
   animation: none;
 }
 .cube--dreaming .cube__eye,
-.cube--sleeping .cube__eye {
+.cube--sleeping .cube__eye,
+.cube--stopped .cube__eye {
   animation: none;
+}
+/* Stopped: the computer is off, so the paint dims and nothing moves. */
+.cube--stopped .cube__face {
+  filter: saturate(0.35) brightness(0.94);
 }
 .cube__eye svg {
   display: block;

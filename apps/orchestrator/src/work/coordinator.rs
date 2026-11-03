@@ -3,7 +3,10 @@
 //! against current membership before any turn exists. The model call happens outside any
 //! transaction; the message stays `routing` until a valid result commits.
 use super::rooms;
-use crate::{agents::kubernetes::Error, connections::Connections};
+use crate::{
+    agents::kubernetes::Error,
+    connections::{Connections, configured},
+};
 use cubebot_protocol::runtime::ProviderKind;
 use cubebot_providers::{Anthropic, Event, Message, OpenAi, Provider, Request};
 use futures_util::StreamExt;
@@ -171,14 +174,16 @@ async fn ask(
     let reply = match inference.provider {
         ProviderKind::Openai => {
             complete(
-                configured(OpenAi::new, OpenAi::for_loopback_tests)?,
+                configured(OpenAi::new, OpenAi::for_loopback_tests)
+                    .map_err(|error| error.code())?,
                 &request,
             )
             .await
         }
         ProviderKind::Anthropic => {
             complete(
-                configured(Anthropic::new, Anthropic::for_loopback_tests)?,
+                configured(Anthropic::new, Anthropic::for_loopback_tests)
+                    .map_err(|error| error.code())?,
                 &request,
             )
             .await
@@ -206,19 +211,6 @@ async fn complete<P: Provider>(
             () = &mut deadline => return Err(cubebot_providers::Error::Unavailable),
         }
     }
-}
-
-/// The same provider seam as the agent's: a literal loopback origin only under test.
-fn configured<P>(
-    new: fn() -> Result<P, cubebot_providers::Error>,
-    loopback: fn(&str) -> Result<P, cubebot_providers::Error>,
-) -> Result<P, &'static str> {
-    match std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
-        Ok(origin) => loopback(&origin),
-        Err(std::env::VarError::NotPresent) => new(),
-        Err(error) => Err(cubebot_providers::Error::Configuration(Some(error.into()))),
-    }
-    .map_err(|error| error.code())
 }
 
 /// The first JSON object in the reply, so a fenced or explained answer still parses.
