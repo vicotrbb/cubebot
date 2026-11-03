@@ -28,7 +28,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: database
+                  name: {{ include "cubebot.databaseSecret" . }}
                   key: password
           ports:
             - containerPort: 5432

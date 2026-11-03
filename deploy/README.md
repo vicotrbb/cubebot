@@ -20,7 +20,18 @@ kubectl -n cubebot exec -it deploy/orchestrator -- sh -c \
   'read -rs CUBEBOT_BOOTSTRAP_PASSWORD && export CUBEBOT_BOOTSTRAP_PASSWORD && CUBEBOT_BOOTSTRAP_LOGIN=admin cubebot-admin bootstrap'
 ```
 
-The chart needs an ingress controller with TLS, and `sandbox.networkPolicy.ingressController` must select its pods: sandboxes reach the orchestrator only through it, at `controlOrigin`. `sandbox.runtime` is `container` by default; `kvm` needs nodes with `/dev/kvm` and a privileged namespace. The credential key, the database password Secret and both volumes outlive `helm uninstall`. `tests/system/cluster_chat_setup.py` installs the chart into kind behind Traefik.
+The chart needs an ingress controller with TLS, and `sandbox.networkPolicy.ingressController` must select its pods: sandboxes reach the orchestrator only through it, at `controlOrigin`. `sandbox.runtime` is `container` by default; `kvm` needs nodes with `/dev/kvm` and a privileged namespace. The credential key, the database password Secret and both volumes outlive `helm uninstall`.
+
+The chart generates the credential key and the bundled database password once, and reads them back with `lookup` on later upgrades. `lookup` finds nothing under Argo CD or any pipeline that renders with `helm template`, so there every sync would generate new ones: a new key cannot decrypt the stored provider and vault credentials, and a new password no longer matches the initialized database. Under those tools set both `credentials.existingSecret` (a Secret whose `key` holds 32 random bytes) and `postgres.existingSecret` (a Secret with `password` and `database_url`, as `postgres://cubebot:<password>@postgres:5432/cubebot`); the chart then emits neither Secret and uses the named ones. Flux's helm-controller and plain `helm install` and `helm upgrade` run `lookup` against the cluster and are unaffected. The orchestrator refuses to start with a key that cannot decrypt a stored credential, saying to restore the previous `CUBEBOT_CREDENTIAL_KEY_FILE`.
+
+```sh
+head -c 32 /dev/urandom > key && kubectl -n cubebot create secret generic cubebot-credentials --from-file=key && rm key
+password=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+kubectl -n cubebot create secret generic cubebot-database --from-literal=password="$password" \
+  --from-literal=database_url="postgres://cubebot:$password@postgres:5432/cubebot"
+```
+
+`tests/system/cluster_chat_setup.py` installs the chart into kind behind Traefik.
 
 Application image recipes live with their applications:
 

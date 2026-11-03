@@ -122,7 +122,7 @@ fn invalid(input: &SaveVaultItem) -> bool {
 }
 
 impl Connections {
-    async fn vault_context(&self, item: Uuid) -> Result<Vec<u8>, IdentityError> {
+    pub(super) async fn vault_context(&self, item: Uuid) -> Result<Vec<u8>, IdentityError> {
         let installation = sqlx::query_scalar!(
             r#"
             SELECT id AS "id!"

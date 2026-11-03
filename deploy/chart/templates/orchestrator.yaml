@@ -105,7 +105,7 @@ spec:
             medium: Memory
         - name: source-key
           secret:
-            secretName: credentials
+            secretName: {{ include "cubebot.credentialsSecret" . }}
             defaultMode: 0440
         - name: shared-files
           persistentVolumeClaim:

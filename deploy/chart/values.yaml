@@ -53,8 +53,17 @@ storage:
   size: 10Gi
   storageClass: ''
 
+# A Secret in this namespace whose key key holds the 32 raw bytes that encrypt stored provider
+# and vault credentials; generated when empty. Set it under Argo CD or helm template, where a
+# generated key changes on every render.
+credentials:
+  existingSecret: ''
+
 # Bundled PostgreSQL, used unless externalDatabase.existingSecret is set.
 postgres:
+  # A Secret in this namespace with password and database_url keys; generated when empty. Set it
+  # under Argo CD or helm template, where a generated password changes on every render.
+  existingSecret: ''
   size: 10Gi
   storageClass: ''
 

@@ -1101,7 +1101,7 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
     api_task.abort();
 }
 
-struct OrchestratorProcess {
+pub(crate) struct OrchestratorProcess {
     child: std::process::Child,
     directory: std::path::PathBuf,
     origin: String,
@@ -1113,7 +1113,7 @@ impl Drop for OrchestratorProcess {
         let _ = std::fs::remove_dir_all(&self.directory);
     }
 }
-fn orchestrator_process(
+pub(crate) fn orchestrator_process(
     pool: &sqlx::PgPool,
     api: &kube::Config,
     configured: bool,
@@ -1161,7 +1161,7 @@ fn orchestrator_process(
         origin: format!("http://{address}"),
     }
 }
-async fn process_exit(process: &mut OrchestratorProcess) -> std::process::ExitStatus {
+pub(crate) async fn process_exit(process: &mut OrchestratorProcess) -> std::process::ExitStatus {
     for _ in 0..400 {
         if let Some(status) = process.child.try_wait().unwrap() {
             return status;
@@ -1170,7 +1170,7 @@ async fn process_exit(process: &mut OrchestratorProcess) -> std::process::ExitSt
     }
     panic!("orchestrator did not exit");
 }
-async fn process_ready(process: &mut OrchestratorProcess) {
+pub(crate) async fn process_ready(process: &mut OrchestratorProcess) {
     let client = openidconnect::reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(100))
         .build()

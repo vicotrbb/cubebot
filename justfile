@@ -63,6 +63,7 @@ chart:
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.runtime=kvm,controlCA=pem > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set externalDatabase.existingSecret=database > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set credentials.existingSecret=key,postgres.existingSecret=database > /dev/null
 
 # Building first generates the route tree on a fresh checkout.
 check: format-check lint test build chart

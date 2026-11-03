@@ -133,6 +133,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                 .map_err(failure(
                     "configured database connection or migration failed",
                 ))?;
+            credential_key(&pool).await?;
             let config = cubebot_orchestrator::identity::oidc::environment()
                 .map_err(failure("invalid OIDC configuration"))?;
             let origin = match std::env::var("CUBEBOT_PUBLIC_ORIGIN") {
@@ -164,6 +165,25 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
         }
         Err(_) => Err("invalid CUBEBOT_DATABASE_URL".into()),
     }
+}
+
+/// Refuses a key that cannot decrypt what is stored, before a new key can encrypt anything.
+async fn credential_key(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    use cubebot_orchestrator::connections::{Connections, Credentials};
+    let Some(path) = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE") else {
+        return Ok(());
+    };
+    let credentials = Credentials::from_file(std::path::Path::new(&path)).map_err(failure(
+        "CUBEBOT_CREDENTIAL_KEY_FILE is not a private 32-byte key",
+    ))?;
+    let matches = Connections::new(pool.clone(), credentials)
+        .key_matches()
+        .await
+        .map_err(failure("stored credentials could not be read"))?;
+    if !matches {
+        return Err("the credential key does not match the one that encrypted this installation's credentials; restore the previous CUBEBOT_CREDENTIAL_KEY_FILE".into());
+    }
+    Ok(())
 }
 
 /// Reconciles the shared-file volume before anything is served.
