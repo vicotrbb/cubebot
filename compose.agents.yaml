@@ -18,4 +18,4 @@ configs:
   # one, sandboxes trust public certificates only (CUBEBOT_DOMAIN).
   docker:
     content: |
-      {"image": "${CUBEBOT_SANDBOX_IMAGE:?set by deploy/cubebot}", "orchestrator_origin": "${CUBEBOT_CONTROL_ORIGIN:?set by deploy/cubebot}", "runtime": {"kind": "${CUBEBOT_RUNTIME}"},${CUBEBOT_DEV_CA:+ "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt",} "terminal_enabled": true}
+      {"image": "${CUBEBOT_SANDBOX_IMAGE:?set by deploy/cubebot}", "orchestrator_origin": "${CUBEBOT_CONTROL_ORIGIN:?set by deploy/cubebot}", "runtime": {"kind": "${CUBEBOT_RUNTIME}"},${CUBEBOT_DEV_CA:+ "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt",} "terminal_enabled": true, "computer_use_enabled": true}
