@@ -47,3 +47,9 @@ mod runtime_token_review;
 mod skills;
 mod vault;
 mod wallpaper;
+
+/// The application endpoints without OIDC, credentials or the browser CSRF layer.
+fn database_router(pool: sqlx::PgPool) -> axum::Router {
+    let identity = cubebot_orchestrator::identity::Identity::new(pool.clone());
+    cubebot_orchestrator::api::identity_router(pool, identity)
+}

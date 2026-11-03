@@ -7,7 +7,6 @@ use axum::{
 };
 use cubebot_orchestrator::{
     agents::{Accessory, AgentId, Agents, Avatar, CreateAgent, Eyes, Paint},
-    api,
     identity::{
         Actor, Identity,
         access::{Capability, GrantRequest, Recipient, Scope},
@@ -116,7 +115,7 @@ impl Fixture {
     }
 
     fn router(&self) -> axum::Router {
-        api::database_router(self.pool.clone())
+        crate::database_router(self.pool.clone())
     }
 }
 

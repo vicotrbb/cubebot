@@ -1,6 +1,5 @@
 use super::*;
-use rand_core::{OsRng, RngCore};
-use sha2::{Digest, Sha256};
+use crate::identity::digest;
 
 impl RuntimeIdentity {
     #[tracing::instrument(skip_all, fields(attempt = %attempt.id.0))]
@@ -124,13 +123,7 @@ pub async fn revoke(pool: &sqlx::PgPool, agent: AgentId) -> Result<u64, Error> {
     Ok(revoked.rows_affected())
 }
 fn token() -> String {
-    let mut bytes = [0_u8; 32];
-    OsRng.fill_bytes(&mut bytes);
-    let secret: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
-    format!("cb_runtime_{secret}")
-}
-pub(super) fn digest(token: &str) -> Vec<u8> {
-    Sha256::digest(token.as_bytes()).to_vec()
+    format!("cb_runtime_{}", crate::identity::token())
 }
 
 /// A Docker sandbox bootstrap token: `cb_sandbox_` and 64 hex digits, minted per container.

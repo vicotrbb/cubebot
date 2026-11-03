@@ -44,7 +44,7 @@ pub async fn coordinate(pool: PgPool, connections: Connections, mut stop: watch:
     }
 }
 
-/// Whether a message was settled, so another may be waiting.
+/// Whether a message left `routing`, so another may be waiting without a pause.
 async fn routed(pool: &PgPool, connections: &Connections) -> bool {
     route(pool, connections).await.unwrap_or_else(|error| {
         tracing::warn!(?error, "room coordination failed");
@@ -52,7 +52,8 @@ async fn routed(pool: &PgPool, connections: &Connections) -> bool {
     })
 }
 
-/// Settles at most one waiting message; `false` when none was waiting.
+/// Settles at most one waiting message; `false` when none was waiting or a failed attempt left
+/// it `routing`, so the caller waits before retrying.
 pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Error> {
     let mut tx = pool.begin().await?;
     let Some(pending) = pending(&mut tx).await? else {
@@ -60,8 +61,7 @@ pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Err
     };
     let inference = connections.coordinator(&mut tx).await.ok();
     tx.commit().await?;
-    dispatch(pool, &pending, inference).await?;
-    Ok(true)
+    dispatch(pool, &pending, inference).await
 }
 
 /// Asks the model about one waiting message and settles the answer.
@@ -70,7 +70,7 @@ async fn dispatch(
     pool: &PgPool,
     pending: &Pending,
     inference: Option<crate::connections::Inference>,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let reply = match inference {
         Some(inference) => ask(&inference, &pending.prompt).await,
         None => Err("provider_unavailable"),
@@ -234,7 +234,7 @@ async fn settle(
     pool: &PgPool,
     pending: &Pending,
     decision: Result<Decision, &'static str>,
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     let mut tx = pool.begin().await?;
     let routing = sqlx::query_scalar!(
         "
@@ -248,7 +248,7 @@ async fn settle(
     .fetch_optional(&mut *tx)
     .await?;
     if routing.as_deref() != Some("routing") {
-        return Ok(());
+        return Ok(true);
     }
     let room = sqlx::query_scalar!(
         "
@@ -274,7 +274,7 @@ async fn settle(
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
-    Ok(())
+    Ok(routing != "routing")
 }
 
 /// The routing state a coordinator result leads to, delivering a valid assignment.

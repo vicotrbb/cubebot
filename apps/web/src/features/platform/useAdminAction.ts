@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { ApiError, failure } from '../../api/client'
+import { failure } from '../../api/client'
 
 /** Runs one administrator command, refreshes the named queries and keeps its outcome. */
 export function useAdminAction(invalidate: string[]) {
@@ -23,11 +23,7 @@ export function useAdminAction(invalidate: string[]) {
       setNotice(done)
       return result
     } catch (error) {
-      setError(
-        error instanceof ApiError && error.status === 409
-          ? 'This changed since you loaded it. Refresh and try again.'
-          : failure(error),
-      )
+      setError(failure(error))
       return undefined
     } finally {
       setBusy(false)

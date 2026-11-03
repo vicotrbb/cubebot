@@ -91,7 +91,7 @@ pub fn run() -> io::Result<u8> {
     let stopped = vsock.clone();
     std::thread::spawn(move || stop(termination, &stopped, memory));
     let socket = std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET")
-        .map_or_else(|| PathBuf::from(bridge::SOCKET), PathBuf::from);
+        .map_or_else(|| PathBuf::from(crate::DESKTOP_SOCKET), PathBuf::from);
     bridge::listen(&socket, vsock.clone(), spares, memory).map_err(|error| {
         io::Error::other(format!("desktop socket {}: {error}", socket.display()))
     })?;
@@ -105,13 +105,22 @@ pub fn run() -> io::Result<u8> {
             let _ = ended.send(run_vcpu(&vcpu, size, vm_fd, &bus, &serial, memory));
         });
     }
-    end.recv().map_err(io::Error::other)??;
-    // A guest that ends without reporting an exit status failed before or while running the agent.
-    let exit = vsock.lock().device.exit();
-    Ok(exit.unwrap_or_else(|| {
-        eprintln!("Guest ended without an agent exit status");
-        1
-    }))
+    let ended = end.recv().map_err(io::Error::other)?;
+    let reported = vsock.lock().device.exit();
+    exit_status(ended, reported)
+}
+
+/// The agent's reported status stands even when a vCPU then fails, such as on a closed serial.
+fn exit_status(ended: io::Result<()>, reported: Option<u8>) -> io::Result<u8> {
+    match (reported, ended) {
+        (Some(exit), _) => Ok(exit),
+        (None, Err(error)) => Err(error),
+        // A guest that ends without reporting an exit status failed before or while running it.
+        (None, Ok(())) => {
+            eprintln!("Guest ended without an agent exit status");
+            Ok(1)
+        }
+    }
 }
 
 #[tracing::instrument(name = "vm_create", skip_all)]
@@ -159,7 +168,7 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
     };
     let net = Net::new(network.tap.try_clone()?, network.mac, network.mtu);
     let net = Arc::new(Slot::new(net, irq(2)));
-    let (offered, spares) = mpsc::channel();
+    let (offered, spares) = mpsc::sync_channel(virtio::vsock::DESKTOP_STREAMS);
     let vsock = Arc::new(Slot::new(Vsock::new(encoded, offered), irq(3)));
     let bus: [Arc<dyn Mmio>; 4] = [
         Arc::new(Slot::new(Block::new(root, true)?, irq(0))),
@@ -273,14 +282,19 @@ fn refresh(mut sent: Vec<(String, String)>, vsock: &Slot<Vsock>, memory: &GuestM
         let (Ok(environment), Ok(changed)) = (encode(&current), encode(&changed)) else {
             fail("refreshed guest environment cannot be encoded");
         };
+        // The device skips the work until the driver is ready; those files are sent next time.
+        let mut ran = false;
         let delivered = vsock.run(|vsock, queues| {
+            ran = true;
             vsock.refresh(environment, &changed);
             vsock.deliver(queues, memory)
         });
         if let Err(error) = delivered {
             fail(&format!("guest control channel: {error}"));
         }
-        sent = current;
+        if ran {
+            sent = current;
+        }
     }
 }
 
@@ -575,6 +589,14 @@ impl Irq {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_reported_exit_outlasts_a_failing_vcpu() {
+        let broken = || Err(io::Error::from(io::ErrorKind::BrokenPipe));
+        assert_eq!(exit_status(broken(), Some(0)).unwrap(), 0);
+        assert!(exit_status(broken(), None).is_err());
+        assert_eq!(exit_status(Ok(()), None).unwrap(), 1);
+    }
 
     #[test]
     fn cpuid_reports_the_vcpus_apic_id_and_keeps_other_leaves() {

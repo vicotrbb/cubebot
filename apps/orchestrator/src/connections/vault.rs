@@ -372,6 +372,14 @@ impl Connections {
             return Ok(Err(problem));
         }
         let mut tx = self.pool.begin().await?;
+        // A name not saved yet has no row to lock; the agent's row orders concurrent saves.
+        sqlx::query!(
+            "SELECT id FROM agents WHERE id=$1 FOR NO KEY UPDATE",
+            agent.0
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(IdentityError::NotFound)?;
         let existing = sqlx::query_scalar!(
             "
             SELECT id

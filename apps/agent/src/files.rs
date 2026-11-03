@@ -52,20 +52,7 @@ struct Share {
 
 /// `workspace` offers `files_get` and `files_put`, which need the tool user.
 pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
-    let tool = |name: &str, description: &str, properties: Value| {
-        let required: Vec<&String> = properties
-            .as_object()
-            .into_iter()
-            .flat_map(|o| o.keys())
-            .collect();
-        cubebot_providers::Tool {
-            name: name.into(),
-            description: description.into(),
-            parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
-            strict: true,
-            computer: false,
-        }
-    };
+    let tool = cubebot_providers::Tool::strict;
     let text = |description: &str| json!({"type":"string","description":description});
     let folder = json!({"type":["string","null"],"description":"A folder's id from files_list; null for your own top level."});
     let mut tools = vec![

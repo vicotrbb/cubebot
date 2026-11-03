@@ -1343,7 +1343,7 @@
       "put": {
         "tags": [],
         "summary": "Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds\nwith the cursor as stored.",
-        "operationId": "read",
+        "operationId": "read_conversation",
         "parameters": [
           {
             "name": "conversation",
@@ -1383,7 +1383,7 @@
       "get": {
         "tags": [],
         "summary": "Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary\nwhenever its activity, desktop, pending login or last turn changed, and every visible\nagent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest\nmessage changed. Polled once a second.",
-        "operationId": "events",
+        "operationId": "installation_events",
         "responses": {
           "200": {
             "description": "",
@@ -1770,7 +1770,7 @@
     "/api/identity/access/events": {
       "get": {
         "tags": [],
-        "operationId": "events",
+        "operationId": "access_events",
         "parameters": [
           {
             "name": "after",
@@ -1982,7 +1982,7 @@
     "/api/identity/invitations": {
       "get": {
         "tags": [],
-        "operationId": "list",
+        "operationId": "list_invitations",
         "parameters": [
           {
             "name": "after",
@@ -2071,7 +2071,7 @@
     "/api/identity/invitations/revoke": {
       "post": {
         "tags": [],
-        "operationId": "revoke",
+        "operationId": "revoke_invitation",
         "requestBody": {
           "content": {
             "application/json": {
@@ -2781,7 +2781,7 @@
       "put": {
         "tags": [],
         "summary": "Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds\nwith the cursor as stored.",
-        "operationId": "read",
+        "operationId": "read_room",
         "parameters": [
           {
             "name": "room",

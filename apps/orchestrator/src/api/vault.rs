@@ -166,15 +166,10 @@ async fn fill(
     let text = text.ok_or(IdentityError::NotFound)?;
     match super::desktop::fill(&desktop, agent, item, text, Some(actor.id)).await {
         Ok(Ok(())) => Ok(StatusCode::NO_CONTENT.into_response()),
-        Ok(Err(reason)) => Ok(refused(&reason)),
+        Ok(Err(reason)) => Ok(super::refused(&reason)),
         Err(error) => {
             tracing::warn!(?error, "vault fill did not reach the desktop");
-            Ok(refused("the desktop is unavailable"))
+            Ok(super::refused("the desktop is unavailable"))
         }
     }
-}
-
-fn refused(reason: &str) -> Response {
-    let body = Json(serde_json::json!({ "error": reason }));
-    (StatusCode::CONFLICT, body).into_response()
 }

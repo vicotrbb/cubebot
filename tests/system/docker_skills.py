@@ -24,10 +24,13 @@ from docker_dreams import dream_log, psql
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     sign_in,
@@ -51,25 +54,6 @@ def probe(revision, steps="Run the script and reply with exactly the line it pri
     )
     script = f'echo "PROBE-{MARKER}-r{revision} uid=$(id -u)"\n'
     return {"SKILL.md": entry, "scripts/probe.sh": script}
-
-
-def agent(api, name, idle_delay_seconds):
-    created = command(name=name, instructions=INSTRUCTIONS)
-    identity = api("/api/agents", created, expected=201)["id"]
-    current = api(f"/api/agents/{identity}")
-    update = command(
-        expected_revision=current["revision"],
-        name=name,
-        instructions=INSTRUCTIONS,
-        idle_policy=current["idle_policy"],
-        idle_delay_seconds=idle_delay_seconds,
-        dreaming_model=None,
-    )
-    api(f"/api/agents/{identity}/definition", update)
-    status = api(f"/api/agents/{identity}/status")
-    wake = command(expected_revision=status["revision"], action="wake")
-    api(f"/api/agents/{identity}/lifecycle", wake, expected=202)
-    return identity
 
 
 def chat(api, identity, message):
@@ -153,15 +137,6 @@ def member(api, base, ca):
         "token"
     ]
     return other, other("/api/identity/me")["id"]
-
-
-def grant(api, account, agent_id, capability):
-    body = command(
-        recipient={"kind": "user", "id": account},
-        scope={"kind": "agent", "id": agent_id},
-        capability=capability,
-    )
-    api("/api/identity/access/grants", body, expected=201)
 
 
 def library(admin, people, operator):
@@ -341,9 +316,9 @@ def suspended(admin, other, account):
 
 
 def scenarios(admin, people, postgres):
-    operator = agent(admin, "Operator", 86400)
-    bystander = agent(admin, "Bystander", 86400)
-    learner = agent(admin, "Learner", 60)
+    operator = agent(admin, "Operator", INSTRUCTIONS, 86400)
+    bystander = agent(admin, "Bystander", INSTRUCTIONS, 86400)
+    learner = agent(admin, "Learner", INSTRUCTIONS, 60)
     identities = [operator, bystander, learner]
     other, account = people
     try:
@@ -373,15 +348,7 @@ def qualify(directory: Path):
         with running(binary, ROOT, environment):
             wait_for("orchestrator HTTPS", lambda: live(admin), timeout=30)
             sign_in(admin, database, "skills-admin", secrets.token_urlsafe(24))
-            key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-            provider = command(
-                expected_revision=0,
-                api_key=key,
-                model="gpt-4.1-mini",
-                provider="openai",
-                context_window=128000,
-            )
-            admin("/api/provider", provider)
+            configure_provider(admin)
             scenarios(admin, member(admin, base, ca), postgres)
         print("PASS skills published, scoped, pinned, loaded, run and dreamed")
 

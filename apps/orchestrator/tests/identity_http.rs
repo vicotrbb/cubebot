@@ -3,7 +3,6 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use cubebot_orchestrator::api;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -41,7 +40,7 @@ async fn http_login_logout_and_authorized_account_creation() {
         .bootstrap("http-admin", "http administrator password")
         .await
         .unwrap();
-    let router = api::database_router(pool);
+    let router = crate::database_router(pool);
     let (status, _) = request(router.clone(), "GET", "/api/identity/me", "", json!(null)).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     let (status, login) = request(
@@ -91,7 +90,7 @@ const FIRST: &str = r#"{"login":"first-admin","password":"first administrator pa
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn setup_makes_the_first_account_the_administrator_once() {
-    let router = api::database_router(support::database().await);
+    let router = crate::database_router(support::database().await);
     let (status, setup) = request(
         router.clone(),
         "GET",
@@ -134,7 +133,7 @@ async fn setup_closes_after_the_cli_bootstrap() {
         .bootstrap("cli-admin", "cli administrator password")
         .await
         .unwrap();
-    let router = api::database_router(pool);
+    let router = crate::database_router(pool);
     let (_, setup) = request(
         router.clone(),
         "GET",
@@ -153,7 +152,7 @@ async fn setup_closes_after_the_cli_bootstrap() {
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn concurrent_setups_create_one_administrator() {
     let pool = support::database().await;
-    let router = api::database_router(pool.clone());
+    let router = crate::database_router(pool.clone());
     let attempt = |login: &str| {
         let body = json!({"login": login, "password": "racing administrator password"});
         request(router.clone(), "POST", "/api/identity/setup", "", body)

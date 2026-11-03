@@ -38,7 +38,13 @@ def source() -> Path:
         partial.unlink()
         raise SystemExit(f"{URL}: checksum mismatch")
     partial.rename(archive)
-    run("tar", "-xf", archive, "-C", BUILD)
+    # Extracted aside, so a cut-short extraction is never taken for the tree.
+    staging = BUILD / f"linux-{VERSION}.partial"
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir()
+    run("tar", "-xf", archive, "-C", staging)
+    (staging / tree.name).rename(tree)
+    staging.rmdir()
     archive.unlink()
     return tree
 

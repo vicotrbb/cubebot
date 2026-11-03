@@ -27,10 +27,13 @@ from docker_dreams import psql
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     sign_in,
@@ -56,15 +59,6 @@ ROLES = {
     ),
     "Scribe": "You write short prose answers. You never run shell commands.",
 }
-
-
-def agent(api, name, role=None):
-    created = command(name=name, instructions=role or ROLES[name])
-    identity = api("/api/agents", created, expected=201)["id"]
-    status = api(f"/api/agents/{identity}/status")
-    wake = command(expected_revision=status["revision"], action="wake")
-    api(f"/api/agents/{identity}/lifecycle", wake, expected=202)
-    return identity
 
 
 def deputy(admin, room, ids, name):
@@ -442,12 +436,12 @@ def members(admin, people, postgres, room, ids):
     asker = deputy(admin, room, ids, "Asker")
     body = {"agents": [asker, ids["Analyst"]]}
     other(f"/api/rooms/{room}/members", body, expected=404, method="PUT")
-    grant(admin, account, room, "conversation_read")
+    grant(admin, account, room, "conversation_read", "room")
     assert other(f"/api/rooms/{room}/messages")
     other(f"/api/rooms/{room}/members", body, expected=403, method="PUT")
     post_body = {"request_id": str(uuid.uuid4()), "message": "@Scribe hi"}
     other(f"/api/rooms/{room}/messages", post_body, expected=404)
-    grant(admin, account, room, "room_manage")
+    grant(admin, account, room, "room_manage", "room")
     changed = other(f"/api/rooms/{room}/members", body, method="PUT")
     assert sorted(m["name"] for m in changed["members"]) == ["Analyst", "Asker"], (
         changed
@@ -460,15 +454,6 @@ def members(admin, people, postgres, room, ids):
     assert refused and "shares a room with you" in refused[0]["outcome"], calls
     assert not turn(admin, asker, lead)["children"]
     print("PASS membership: scoped to room.manage; a removed member is unreachable")
-
-
-def grant(api, account, room, capability):
-    body = command(
-        recipient={"kind": "user", "id": account},
-        scope={"kind": "room", "id": room},
-        capability=capability,
-    )
-    api("/api/identity/access/grants", body, expected=201)
 
 
 def stream(api, room, frames, stop):
@@ -555,7 +540,7 @@ def member(admin, base, ca):
 
 
 def scenarios(admin, people, postgres, browser):
-    ids = {name: agent(admin, name) for name in ROLES}
+    ids = {name: agent(admin, name, role) for name, role in ROLES.items()}
     try:
         body = command(name="Launch", agents=list(ids.values()))
         room = admin("/api/rooms", body, expected=201)["id"]
@@ -609,15 +594,7 @@ def qualify(directory: Path):
             wait_for("orchestrator HTTPS", lambda: live(admin), timeout=30)
             password = secrets.token_urlsafe(24)
             sign_in(admin, database, "rooms-admin", password)
-            key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-            provider = command(
-                expected_revision=0,
-                api_key=key,
-                model=MODEL,
-                provider="openai",
-                context_window=128000,
-            )
-            admin("/api/provider", provider)
+            configure_provider(admin, MODEL)
             browser = (password, address, ca)
             scenarios(admin, member(admin, base, ca), postgres, browser)
         print(

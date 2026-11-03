@@ -18,7 +18,8 @@ type Source = Box<dyn std::error::Error + Send + Sync>;
 pub enum Error {
     Configuration(Option<Source>),
     Unavailable,
-    /// HTTP 429 or 5xx, with the delay the provider asked for when it sent one.
+    /// HTTP 429 or 5xx, or a connection that failed, with the delay the provider asked for
+    /// when it sent one.
     Transient(Option<Duration>),
     Rejected,
     InvalidResponse(Option<Source>),
@@ -84,6 +85,29 @@ pub struct Tool {
     /// of this tool: Anthropic's as `{"action": member, ...input}`, OpenAI's as
     /// `{"actions": [...]}`, and their results go back in the provider's computer form.
     pub computer: bool,
+}
+
+impl Tool {
+    /// A strict function tool taking an object of exactly `properties`, each required.
+    pub fn strict(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        properties: Value,
+    ) -> Self {
+        let required: Vec<&String> = properties
+            .as_object()
+            .into_iter()
+            .flatten()
+            .map(|(key, _)| key)
+            .collect();
+        Self {
+            name: name.into(),
+            description: description.into(),
+            parameters: serde_json::json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
+            strict: true,
+            computer: false,
+        }
+    }
 }
 
 /// The call ids of computer-use calls in replayed provider output, whose results take the
@@ -275,7 +299,7 @@ struct Open<D> {
 }
 enum Phase<F, D> {
     Opening(F),
-    Open(Open<D>),
+    Open(Box<Open<D>>),
 }
 
 /// The span covers opening the request (send and status), never the event loop.
@@ -288,12 +312,12 @@ fn events<'a, D: Decoder + 'a>(
     let open = Box::pin(tracing::Instrument::instrument(open, span));
     futures_util::stream::try_unfold(Phase::Opening(open), |phase| async move {
         let mut open = match phase {
-            Phase::Opening(future) => Open {
+            Phase::Opening(future) => Box::new(Open {
                 reader: sse::Reader::new(future.await?),
                 decoder: D::default(),
                 pending: VecDeque::new(),
                 finished: false,
-            },
+            }),
             Phase::Open(open) => open,
         };
         loop {
@@ -321,12 +345,15 @@ fn reply(text: String, calls: Vec<FunctionCall>, native: Value) -> Result<Reply,
     })
 }
 
+/// Tool arguments carry whole files for `write_file`; the SSE event bound still applies.
+const ARGUMENT_BYTES: usize = 1024 * 1024;
+
 fn call(call_id: &str, name: &str, arguments: String) -> Result<FunctionCall, Error> {
     if call_id.is_empty()
         || call_id.len() > 256
         || name.is_empty()
         || name.len() > 128
-        || arguments.len() > 16384
+        || arguments.len() > ARGUMENT_BYTES
     {
         return Err(Error::InvalidResponse(None));
     }
@@ -345,5 +372,28 @@ fn unavailable(error: reqwest::Error) -> Error {
         error.is_connect(),
         error.is_body()
     );
-    Error::Unavailable
+    // A failed connection proves the request never arrived, so retrying cannot repeat it.
+    match error.is_connect() {
+        true => Error::Transient(None),
+        false => Error::Unavailable,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_strict_tool_closes_its_object_and_requires_every_property() {
+        let tool = super::Tool::strict("t", "d", serde_json::json!({"a":{},"b":{}}));
+        assert!(tool.strict && !tool.computer);
+        assert_eq!(
+            tool.parameters,
+            serde_json::json!({"type":"object","properties":{"a":{},"b":{}},"required":["a","b"],"additionalProperties":false})
+        );
+    }
+
+    #[test]
+    fn tool_arguments_may_carry_a_large_file_but_stay_bounded() {
+        assert!(super::call("c", "write_file", "x".repeat(super::ARGUMENT_BYTES)).is_ok());
+        assert!(super::call("c", "write_file", "x".repeat(super::ARGUMENT_BYTES + 1)).is_err());
+    }
 }

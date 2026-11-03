@@ -68,10 +68,7 @@ fn setting<'a>(environment: &'a [(String, String)], wanted: &str) -> Option<&'a 
 /// The configured tool user; the agent refuses a malformed or root one itself, and then runs no
 /// tools.
 fn tool_user(environment: &[(String, String)]) -> Option<(u32, u32)> {
-    setting(environment, "CUBEBOT_TOOL_USER")
-        .and_then(|user| user.split_once(':'))
-        .and_then(|(uid, gid)| Some((uid.parse().ok()?, gid.parse().ok()?)))
-        .filter(|&(uid, gid)| uid != 0 && gid != 0)
+    setting(environment, "CUBEBOT_TOOL_USER").and_then(crate::tools::tool_user)
 }
 
 /// The agent's private journal, and a workspace the tool user can write.

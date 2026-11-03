@@ -115,7 +115,7 @@ async fn installation(
 /// whenever its activity, desktop, pending login or last turn changed, and every visible
 /// agent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest
 /// message changed. Polled once a second.
-#[utoipa::path(get, path = "/api/events", responses((status = 200, content_type = "text/event-stream", body = Agent)))]
+#[utoipa::path(get, path = "/api/events", operation_id = "installation_events", responses((status = 200, content_type = "text/event-stream", body = Agent)))]
 async fn events(
     State(api): State<Api>,
     headers: HeaderMap,

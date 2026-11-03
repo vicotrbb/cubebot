@@ -10,6 +10,7 @@ import {
   rejectedInput,
 } from './client'
 import type { paths } from './schema'
+import { keys, markRead, queryClient } from '../app/queries'
 
 test('message validation uses the server UTF-8 byte bound and keeps definite rejections editable', () => {
   assert.equal(messageProblem('a'.repeat(16384)), null)
@@ -86,4 +87,38 @@ test('turn snapshots keep sequence order and never undo a finished turn', () => 
   // A failed child is settled too; an older running snapshot cannot reopen it.
   const failed = merge([turn('c', 3, 'failed')], [turn('c', 3, 'running')])
   assert.equal(failed[0]?.status, 'failed')
+})
+
+test('marking a room read clears its unread mark and never moves the cursor back', async () => {
+  const requests: string[] = []
+  let status = 200
+  const client = createClient<paths>({
+    baseUrl: 'http://cubebot.test',
+    fetch: async (request) => {
+      requests.push(`${request.method} ${new URL(request.url).pathname}`)
+      return new Response('{"sequence":0}', {
+        status,
+        headers: { 'content-type': 'application/json' },
+      })
+    },
+  })
+  const room = { last_sequence: 5, read_sequence: 2 }
+  queryClient.setQueryData(keys.rooms, [
+    { ...room, id: 'one' },
+    { ...room, id: 'two' },
+  ])
+  const cursors = () =>
+    queryClient
+      .getQueryData<{ id: string; read_sequence: number }[]>(keys.rooms)
+      ?.map((item) => item.read_sequence)
+  await markRead('rooms', 'one', 5, client)
+  await markRead('rooms', 'one', 3, client)
+  status = 503
+  await markRead('rooms', 'two', 5, client)
+  assert.deepEqual(cursors(), [5, 2])
+  assert.deepEqual(requests, [
+    'PUT /api/rooms/one/read',
+    'PUT /api/rooms/one/read',
+    'PUT /api/rooms/two/read',
+  ])
 })

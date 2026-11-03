@@ -24,6 +24,11 @@ spec:
           podSelector:
             matchLabels:
               k8s-app: kube-dns
+        # The sandboxes' own nameservers, such as a NodeLocal DNSCache on a host address.
+        {{- range $.Values.sandbox.dns }}
+        - ipBlock:
+            cidr: {{ . }}/{{ ternary 128 32 (contains ":" .) }}
+        {{- end }}
       ports:
         - protocol: UDP
           port: 53

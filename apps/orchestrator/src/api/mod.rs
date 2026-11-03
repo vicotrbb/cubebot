@@ -83,12 +83,24 @@ pub fn openapi() -> String {
     doc.to_pretty_json().unwrap_or_default()
 }
 
-/// Configured application endpoints share one concrete PostgreSQL pool.
-pub fn database_router(pool: sqlx::PgPool) -> Router {
-    identity_router(pool.clone(), crate::identity::Identity::new(pool))
+/// A refusal: 409 with the reason the model or person reads.
+fn refused(reason: &str) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let body = Json(serde_json::json!({ "error": reason }));
+    (axum::http::StatusCode::CONFLICT, body).into_response()
 }
 
-fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
+/// The credential of an `Authorization: Bearer` header.
+fn bearer(headers: &axum::http::HeaderMap) -> Option<&str> {
+    headers
+        .get(axum::http::header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
+        .strip_prefix("Bearer ")
+}
+
+/// Configured application endpoints share one concrete PostgreSQL pool.
+pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
         .merge(installation::router(pool.clone(), identity.clone()))

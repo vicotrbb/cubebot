@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-export const PHONE = '(max-width: 820px)'
+const PHONE = '(max-width: 820px)'
 
 /** True on phone-sized viewports, where the sidebar becomes the Home page. */
 export function useIsPhone() {

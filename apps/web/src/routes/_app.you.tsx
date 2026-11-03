@@ -1,8 +1,6 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { api, ok } from '../api/client'
 import {
-  keys,
+  signOut,
   useInstallation,
   usePreferences,
   useSavePreferences,
@@ -18,7 +16,6 @@ function You() {
   const installation = useInstallation()
   const preferences = usePreferences()
   const save = useSavePreferences()
-  const client = useQueryClient()
   const navigate = useNavigate()
   const theme = preferences.data?.theme ?? 'system'
   return (
@@ -59,9 +56,7 @@ function You() {
               type="button"
               className="btn"
               onClick={async () => {
-                await ok(api.POST('/api/identity/logout'))
-                client.setQueryData(keys.session, null)
-                client.clear()
+                await signOut()
                 await navigate({ to: '/sign-in' })
               }}
             >

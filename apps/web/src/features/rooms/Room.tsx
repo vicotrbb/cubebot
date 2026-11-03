@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, failure, ok, type RoomMessage } from '../../api/client'
+import { api, failure, history, ok, type RoomMessage } from '../../api/client'
 import type { RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
@@ -7,26 +7,23 @@ import { Alert, Empty, Skeleton } from '../../components/primitives'
 import { Composer } from '../chat/Composer'
 import '../chat/chat.css'
 
-async function history(room: string) {
-  const messages: RoomMessage[] = []
-  for (;;) {
-    const page = await ok(
-      api.GET('/api/rooms/{room}/messages', {
-        params: {
-          path: { room },
-          query: { after: messages.at(-1)?.sequence ?? 0 },
-        },
-      }),
-    )
-    messages.push(...page)
-    if (page.length < 100) return messages
-  }
-}
+const FINISHED = ['complete', 'failed', 'cancelled']
 
-/** Applies message snapshots by id, in room order. */
+/** Applies message snapshots by id, in room order; a finished delivery never goes back. */
 function merge(known: RoomMessage[], incoming: RoomMessage[]) {
   const byId = new Map(known.map((message) => [message.id, message]))
-  for (const message of incoming) byId.set(message.id, message)
+  for (const message of incoming) {
+    const before = byId.get(message.id)?.deliveries ?? []
+    const deliveries = message.deliveries.map((delivery) => {
+      const prior = before.find((item) => item.turn === delivery.turn)
+      return prior &&
+        FINISHED.includes(prior.status) &&
+        !FINISHED.includes(delivery.status)
+        ? prior
+        : delivery
+    })
+    byId.set(message.id, { ...message, deliveries })
+  }
   return [...byId.values()].sort((a, b) => a.sequence - b.sequence)
 }
 
@@ -57,6 +54,7 @@ export function Room({
   const [loaded, setLoaded] = useState(false)
   const [readError, setReadError] = useState('')
   const scroller = useRef<HTMLDivElement>(null)
+  const pinned = useRef(true)
   const agents = useAgents()
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
   useEffect(() => {
@@ -65,7 +63,13 @@ export function Room({
     // reconnect reloads it to catch messages that changed while disconnected.
     source.onopen = () => {
       setReadError('')
-      history(room.id).then(
+      history((after) =>
+        ok(
+          api.GET('/api/rooms/{room}/messages', {
+            params: { path: { room: room.id }, query: { after } },
+          }),
+        ),
+      ).then(
         (loaded) => {
           setMessages((current) => merge(current, loaded))
           setLoaded(true)
@@ -88,9 +92,12 @@ export function Room({
   const last = messages.at(-1)?.sequence ?? 0
   useEffect(() => {
     if (loaded && last > 0) void markRead('rooms', room.id, last)
+  }, [room.id, loaded, last])
+  // Follow the newest message unless the reader scrolled up to read history.
+  useEffect(() => {
     const element = scroller.current
-    if (element) element.scrollTop = element.scrollHeight
-  }, [room.id, loaded, last, messages])
+    if (element && pinned.current) element.scrollTop = element.scrollHeight
+  }, [loaded, messages])
   return (
     <section className="conversation" aria-label="Room">
       <div
@@ -98,6 +105,11 @@ export function Room({
         className="transcript"
         tabIndex={0}
         aria-label="Room messages"
+        onScroll={(event) => {
+          const element = event.currentTarget
+          pinned.current =
+            element.scrollHeight - element.scrollTop - element.clientHeight < 80
+        }}
       >
         {!loaded && <Skeleton lines={4} width="60%" />}
         {loaded && messages.length === 0 && (

@@ -158,7 +158,7 @@ function Latency({ samples, updates }: { samples: number[]; updates: number }) {
   )
 }
 
-export function PointerMark({
+function PointerMark({
   pointer,
   accountId,
 }: {

@@ -45,12 +45,9 @@ pub(super) fn credential<'a>(
     identity: &Identity,
     headers: &'a HeaderMap,
 ) -> Result<&'a str, IdentityError> {
-    if let Some(header) = headers.get("authorization") {
-        return header
-            .to_str()
-            .ok()
-            .and_then(|value| value.strip_prefix("Bearer "))
-            .ok_or(IdentityError::Unauthorized);
+    // A present but malformed header never falls back to the cookie.
+    if headers.contains_key("authorization") {
+        return super::bearer(headers).ok_or(IdentityError::Unauthorized);
     }
     identity
         .browser_origin

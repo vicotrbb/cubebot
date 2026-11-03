@@ -6,7 +6,7 @@ use crate::control::MemoryClient;
 use cubebot_protocol::runtime::{
     Dream, DreamEnd, DreamOutcome, MemoryChange, ProviderKind, REPORT_BYTES, SkillChange,
 };
-use cubebot_providers::{Anthropic, Error, Event, Message, OpenAi, Provider, Request};
+use cubebot_providers::{Anthropic, Error, Event, Limits, Message, OpenAi, Provider, Request};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio::sync::watch;
@@ -119,7 +119,16 @@ async fn reply<P: Provider>(
     request: &Request<'_>,
 ) -> Result<String, Error> {
     let provider = provider?;
-    let mut events = std::pin::pin!(provider.stream(request));
+    // Anthropic requires an output limit; a turn passes the model's own the same way.
+    let limits = match provider.capabilities().model_limits {
+        true => provider.limits(request.model, request.key).await?,
+        false => Limits::default(),
+    };
+    let request = Request {
+        max_output_tokens: limits.max_output_tokens,
+        ..*request
+    };
+    let mut events = std::pin::pin!(provider.stream(&request));
     while let Some(event) = events.next().await {
         if let Event::Done { reply, .. } = event? {
             return Ok(reply.text);
@@ -166,6 +175,52 @@ fn parse(reply: &str) -> Option<Plan> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn an_anthropic_dream_asks_for_the_model_output_limit() {
+        use axum::{
+            Json, Router,
+            routing::{get, post},
+        };
+        let events = [
+            serde_json::json!({"type":"message_start","message":{"usage":{"input_tokens":1}}}),
+            serde_json::json!({"type":"content_block_start","index":0,"content_block":{"type":"text","text":"planned"}}),
+            serde_json::json!({"type":"content_block_stop","index":0}),
+            serde_json::json!({"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}),
+            serde_json::json!({"type":"message_stop"}),
+        ];
+        let stream: String = events
+            .iter()
+            .map(|event| format!("data: {event}\n\n"))
+            .collect();
+        let router = Router::new()
+            .route(
+                "/models/{model}",
+                get(|| async { Json(serde_json::json!({"max_tokens": 77})) }),
+            )
+            .route(
+                "/messages",
+                post(|Json(body): Json<serde_json::Value>| async move {
+                    assert_eq!(body["max_tokens"], 77);
+                    ([("content-type", "text/event-stream")], stream)
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}/", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let request = Request {
+            model: "m",
+            key: "k",
+            system: SYSTEM,
+            messages: &[],
+            tools: &[],
+            tools_disabled: true,
+            max_output_tokens: None,
+        };
+        let text = reply(Anthropic::for_loopback_tests(&origin), &request).await;
+        assert_eq!(text.unwrap(), "planned");
+        server.abort();
+    }
 
     #[test]
     fn a_plan_keeps_valid_changes_and_refuses_anything_else() {

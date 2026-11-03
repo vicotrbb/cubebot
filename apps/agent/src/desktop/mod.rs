@@ -11,6 +11,7 @@
 //! last one, encoded on its own relay thread. Its device edges are [`Screen`] and [`Input`].
 mod png;
 pub mod x11;
+use base64::{Engine, engine::general_purpose::STANDARD};
 use cubebot_protocol::desktop::{
     Action, AgentRequest, Button, HostRequest, LINE_LIMIT, LOGIN_PENDING, Mode, PERSON_HAS_CONTROL,
     Pointer, REOBSERVE, Response, TILE, Tile,
@@ -378,7 +379,7 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
             .screen
             .capture()
             .map_err(|error| format!("screen: {error}"))?;
-        Ok(png::base64(&png::encode(WIDTH, HEIGHT, &screen)))
+        Ok(STANDARD.encode(png::encode(WIDTH, HEIGHT, &screen)))
     }
 
     fn keys(&mut self, events: Vec<Event>) -> Result<Option<String>, String> {
@@ -807,7 +808,7 @@ fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
                 continue;
             }
             let pixels: Vec<u8> = rows.flat_map(|row| screen[row].iter().copied()).collect();
-            let png = png::base64(&png::encode(w, h, &pixels));
+            let png = STANDARD.encode(png::encode(w, h, &pixels));
             changed.push(Tile { x, y, png });
         }
     }

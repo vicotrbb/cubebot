@@ -463,7 +463,7 @@ export interface paths {
      * Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
      *     with the cursor as stored.
      */
-    put: operations['read']
+    put: operations['read_conversation']
     post?: never
     delete?: never
     options?: never
@@ -484,7 +484,7 @@ export interface paths {
      *     agent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest
      *     message changed. Polled once a second.
      */
-    get: operations['events']
+    get: operations['installation_events']
     put?: never
     post?: never
     delete?: never
@@ -641,7 +641,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['events']
+    get: operations['access_events']
     put?: never
     post?: never
     delete?: never
@@ -738,7 +738,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get: operations['list']
+    get: operations['list_invitations']
     put?: never
     /** The token is in the first response only. */
     post: operations['invite']
@@ -774,7 +774,7 @@ export interface paths {
     }
     get?: never
     put?: never
-    post: operations['revoke']
+    post: operations['revoke_invitation']
     delete?: never
     options?: never
     head?: never
@@ -1109,7 +1109,7 @@ export interface paths {
      * Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
      *     with the cursor as stored.
      */
-    put: operations['read']
+    put: operations['read_room']
     post?: never
     delete?: never
     options?: never
@@ -3073,7 +3073,7 @@ export interface operations {
       }
     }
   }
-  read: {
+  read_conversation: {
     parameters: {
       query?: never
       header?: never
@@ -3098,7 +3098,7 @@ export interface operations {
       }
     }
   }
-  events: {
+  installation_events: {
     parameters: {
       query?: never
       header?: never
@@ -3383,7 +3383,7 @@ export interface operations {
       }
     }
   }
-  events: {
+  access_events: {
     parameters: {
       query?: {
         after?: number
@@ -3539,7 +3539,7 @@ export interface operations {
       }
     }
   }
-  list: {
+  list_invitations: {
     parameters: {
       query?: {
         after?: string
@@ -3606,7 +3606,7 @@ export interface operations {
       }
     }
   }
-  revoke: {
+  revoke_invitation: {
     parameters: {
       query?: never
       header?: never
@@ -4176,7 +4176,7 @@ export interface operations {
       }
     }
   }
-  read: {
+  read_room: {
     parameters: {
       query?: never
       header?: never

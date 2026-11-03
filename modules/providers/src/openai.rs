@@ -143,9 +143,18 @@ impl Decoder for Responses {
             }
             // Truncated output is not a reply.
             Some("response.incomplete") => Err(Error::InvalidResponse(None)),
-            Some("response.failed" | "error") => Err(Error::Transient(None)),
+            Some("response.failed") => Err(failure(&data["response"]["error"]["code"])),
+            Some("error") => Err(failure(&data["code"])),
             _ => Ok(false),
         }
+    }
+}
+
+/// Only rate limits and server faults are worth retrying; anything else fails the same again.
+fn failure(code: &Value) -> Error {
+    match code.as_str() {
+        Some("server_error" | "rate_limit_exceeded") => Error::Transient(None),
+        _ => Error::Rejected,
     }
 }
 

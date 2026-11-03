@@ -78,7 +78,10 @@ impl Volume {
             .open(staging)
             .await?;
         let (mut hash, mut size) = (Sha256::new(), 0);
-        while let Some(chunk) = body.next().await {
+        loop {
+            let next = tokio::time::timeout(IDLE, body.next()).await;
+            let next = next.map_err(|elapsed| StorageError::Incomplete(elapsed.into()))?;
+            let Some(chunk) = next else { break };
             let chunk = chunk.map_err(|error| StorageError::Incomplete(error.into()))?;
             if !reserve(chunk.len() as u64) {
                 drain(&mut body).await;
@@ -152,6 +155,12 @@ impl Volume {
     }
 }
 
+/// A peer that sends nothing for this long loses its upload and frees its transfer slot.
+#[cfg(not(test))]
+const IDLE: std::time::Duration = std::time::Duration::from_secs(60);
+#[cfg(test)]
+const IDLE: std::time::Duration = std::time::Duration::from_millis(50);
+
 // shortcut: a refused upload is read out up to 64 MiB or 30 seconds; serve HTTP/2, whose
 // streams end without closing the connection, if larger uploads must still see their 507.
 const DRAIN: u64 = 64 * 1024 * 1024;
@@ -196,6 +205,19 @@ mod tests {
             body.next().await.is_none(),
             "the rest of the body was left unread"
         );
+        assert_eq!(std::fs::read_dir(root.join("staging")).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(root.join("blobs")).unwrap().count(), 0);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_stalled_upload_ends_incomplete_and_leaves_nothing() {
+        let root = std::env::temp_dir().join(format!("cubebot-volume-{}", Uuid::new_v4()));
+        let volume = Volume::new(root.clone()).unwrap();
+        let first = futures_util::stream::iter([Ok::<_, io::Error>(Bytes::from_static(b"b"))]);
+        let mut body = first.chain(futures_util::stream::pending());
+        let stalled = volume.receive(Uuid::new_v4(), &mut body, |_| true).await;
+        assert!(matches!(stalled, Err(StorageError::Incomplete(_))));
         assert_eq!(std::fs::read_dir(root.join("staging")).unwrap().count(), 0);
         assert_eq!(std::fs::read_dir(root.join("blobs")).unwrap().count(), 0);
         std::fs::remove_dir_all(root).unwrap();

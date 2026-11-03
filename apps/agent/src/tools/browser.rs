@@ -6,7 +6,7 @@
 //! session's page directly, so one session never moves another's page or takes its input. Input
 //! is refused while a person holds the desktop (ADR 0085), and every call while they hold it for
 //! a login handoff (ADR 0039); the arbiter is asked first.
-use super::{Running, Sandbox, Tool, computer};
+use super::{Running, Sandbox, Tool, Waiting, computer, lock};
 use cubebot_protocol::{
     desktop::{Action, Mode, PERSON_HAS_CONTROL},
     terminal::Outcome,
@@ -19,7 +19,7 @@ use std::{
     path::Path,
     process::Stdio,
     sync::{
-        Arc, Mutex as Blocking,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
@@ -100,15 +100,8 @@ pub(super) fn tools() -> Vec<Box<dyn Tool>> {
     ]
     .into_iter()
     .map(|(kind, name, description, properties)| -> Box<dyn Tool> {
-        let required: Vec<&String> = properties.as_object().into_iter().flatten().map(|(key, _)| key).collect();
         Box::new(BrowserTool {
-            definition: cubebot_providers::Tool {
-                name: name.into(),
-                description: description.into(),
-                parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
-                strict: true,
-                computer: false,
-            },
+            definition: cubebot_providers::Tool::strict(name, description, properties),
             kind,
             browser: browser.clone(),
         })
@@ -448,8 +441,6 @@ fn field(result: &Value, name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("The browser's reply had no {name}."))
 }
 
-type Waiting = Arc<Blocking<HashMap<u64, oneshot::Sender<Value>>>>;
-
 /// The DevTools pipe to the browser, which dies with it; page commands travel on it with their
 /// session id.
 struct Cdp {
@@ -590,12 +581,6 @@ fn profile() -> std::io::Result<()> {
         .create(PROFILE)?;
     std::os::unix::fs::chown(PROFILE, Some(USER), Some(USER))?;
     std::fs::set_permissions(PROFILE, std::fs::Permissions::from_mode(0o700))
-}
-
-fn lock(waiting: &Waiting) -> std::sync::MutexGuard<'_, HashMap<u64, oneshot::Sender<Value>>> {
-    waiting
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 impl Drop for Cdp {

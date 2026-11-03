@@ -4,11 +4,11 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import type { Client } from 'openapi-fetch'
 import { agents as listAgents, api, ApiError, ok } from '../api/client'
+import type { paths } from '../api/schema'
 import type {
-  ActivityItem,
   AgentSummary,
-  Installation,
   Preferences,
   RoomSummary,
   Session,
@@ -29,33 +29,6 @@ export const keys = {
   activity: ['activity'] as const,
 }
 
-/** A JSON GET outside the generated contract, or `fallback` when the route is absent. */
-export async function fetchJson<T>(path: string, fallback?: T): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    cache: 'no-store',
-  })
-  if (response.status === 404 && fallback !== undefined) return fallback
-  if (!response.ok) throw new ApiError(response.status)
-  return (await response.json()) as T
-}
-
-export async function sendJson<T>(
-  path: string,
-  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch(path, {
-    method,
-    credentials: 'same-origin',
-    headers: body === undefined ? {} : { 'content-type': 'application/json' },
-    body: body === undefined ? null : JSON.stringify(body),
-  })
-  if (!response.ok) throw new ApiError(response.status)
-  const text = await response.text()
-  return (text ? JSON.parse(text) : null) as T
-}
-
 export function useSession() {
   return useQuery({
     queryKey: keys.session,
@@ -74,13 +47,7 @@ export function useSession() {
 export function useInstallation() {
   return useQuery({
     queryKey: keys.installation,
-    queryFn: () =>
-      fetchJson<Installation>('/api/installation', {
-        name: 'Cubebot',
-        terminal_enabled: true,
-        computer_use_enabled: true,
-        controller: 'database_only',
-      }),
+    queryFn: () => ok(api.GET('/api/installation')),
     staleTime: Infinity,
   })
 }
@@ -94,10 +61,9 @@ export function usePreferences() {
   return useQuery({
     queryKey: keys.preferences,
     queryFn: () =>
-      fetchJson<Preferences>(
-        '/api/identity/me/preferences',
-        DEFAULT_PREFERENCES,
-      ).then((loaded) => ({ ...DEFAULT_PREFERENCES, ...loaded })),
+      ok(api.GET('/api/identity/me/preferences')).then(
+        (loaded): Preferences => ({ ...DEFAULT_PREFERENCES, ...loaded }),
+      ),
     staleTime: Infinity,
   })
 }
@@ -105,14 +71,9 @@ export function useSavePreferences() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (next: Preferences) =>
-      sendJson<Preferences | null>('/api/identity/me/preferences', 'PUT', next)
-        .then(() => next)
-        .catch((error) => {
-          // shortcut: without the preferences route the choice lives in this tab only;
-          // the bridge in api/types.ts names the contract.
-          if (error instanceof ApiError && error.status === 404) return next
-          throw error
-        }),
+      ok(api.PUT('/api/identity/me/preferences', { body: next })).then(
+        () => next,
+      ),
     onMutate: (next) => client.setQueryData(keys.preferences, next),
   })
 }
@@ -138,27 +99,55 @@ export function useRooms() {
 export function useActivity() {
   return useQuery({
     queryKey: keys.activity,
-    queryFn: () => fetchJson<ActivityItem[]>('/api/activity', []),
+    queryFn: () => ok(api.GET('/api/activity')),
     refetchInterval: 30_000,
   })
 }
 
-/** Marks the conversation read up to `sequence`; ignored by servers without cursors. */
+/** Marks the conversation read up to `sequence` and clears its unread mark in the cached list. */
 export async function markRead(
   scope: 'conversations' | 'rooms',
   id: string,
   sequence: number,
+  client: Client<paths> = api,
 ) {
+  const request =
+    scope === 'rooms'
+      ? client.PUT('/api/rooms/{room}/read', {
+          params: { path: { room: id } },
+          body: { sequence },
+        })
+      : client.PUT('/api/conversations/{conversation}/read', {
+          params: { path: { conversation: id } },
+          body: { sequence },
+        })
+  const { response } = await request.catch(() => ({ response: null }))
+  // A lost request leaves the cursor, and the mark, where they were.
+  if (!response?.ok) return
+  queryClient.setQueryData<{ id: string; read_sequence: number }[]>(
+    scope === 'rooms' ? keys.rooms : keys.agents,
+    (current) =>
+      current?.map((item) =>
+        item.id === id
+          ? { ...item, read_sequence: Math.max(item.read_sequence, sequence) }
+          : item,
+      ),
+  )
+}
+
+/** Ends the session and forgets everything cached for it. */
+export async function signOut() {
   try {
-    await sendJson(`/api/${scope}/${id}/read`, 'PUT', { sequence })
-  } catch {
-    /* A missing route or a lost request leaves the cursor where it was. */
+    const { response } = await api.POST('/api/identity/logout')
+    // 401: the session had already ended, which is what signing out wants.
+    if (!response.ok && response.status !== 401)
+      throw new ApiError(response.status)
+  } finally {
+    queryClient.setQueryData(keys.session, null)
+    queryClient.clear()
   }
 }
 
-export function unread(item: {
-  last_sequence?: number
-  read_sequence?: number
-}) {
-  return (item.last_sequence ?? 0) > (item.read_sequence ?? 0)
+export function unread(item: { last_sequence: number; read_sequence: number }) {
+  return item.last_sequence > item.read_sequence
 }

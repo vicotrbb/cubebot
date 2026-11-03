@@ -14,6 +14,7 @@ test = false
 
 [dependencies]
 cubebot-providers = { path = "../../modules/providers" }
+base64 = "0.22.1"
 sha2 = "0.10"
 cubebot-protocol.workspace = true
 serde.workspace = true

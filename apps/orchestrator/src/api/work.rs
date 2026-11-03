@@ -148,7 +148,7 @@ async fn steer(
 
 /// Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
 /// with the cursor as stored.
-#[utoipa::path(put, path = "/api/conversations/{conversation}/read", params(("conversation" = Uuid, Path)), request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
+#[utoipa::path(put, path = "/api/conversations/{conversation}/read", operation_id = "read_conversation", params(("conversation" = Uuid, Path)), request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
 async fn read(
     State(api): State<Api>,
     headers: HeaderMap,

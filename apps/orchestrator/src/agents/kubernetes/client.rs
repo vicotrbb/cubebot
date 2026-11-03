@@ -1,6 +1,4 @@
-use super::{
-    Error, RecordedPod, ResourceObject, ownership::FINALIZER, termination_proven, verify_pod,
-};
+use super::{Error, ResourceObject, ownership::FINALIZER, termination_proven};
 use k8s_openapi::api::authentication::v1::{TokenReview, TokenReviewSpec};
 use k8s_openapi::api::core::v1::{ConfigMap, PersistentVolumeClaim, Pod};
 use kube::{
@@ -192,31 +190,9 @@ impl Kubernetes {
             .await?)
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn observe(&self, recorded: &RecordedPod) -> Result<Option<Pod>, Error> {
-        validate_namespace(&recorded.name)?;
-        if recorded.namespace != self.namespace {
-            return Err(Error::OwnershipMismatch);
-        }
-        let pod = self.pods.get_opt(&recorded.name).await?;
-        if let Some(pod) = &pod {
-            verify_pod(pod, recorded)?;
-        }
-        Ok(pod)
-    }
-
     /// The caller must settle/drain assigned work before requesting ordinary termination.
     #[tracing::instrument(skip_all)]
-    pub async fn request_stop(&self, recorded: &RecordedPod) -> Result<(), Error> {
-        let pod = self
-            .observe(recorded)
-            .await?
-            .ok_or(Error::TerminationUnproven)?;
-        self.stop_observed(&pod).await
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub(super) async fn stop_observed(&self, pod: &Pod) -> Result<(), Error> {
+    pub async fn stop_observed(&self, pod: &Pod) -> Result<(), Error> {
         self.validate_target(&pod.metadata)?;
         if !pod
             .metadata
@@ -235,16 +211,7 @@ impl Kubernetes {
 
     /// Never infer termination from 404 or remove another controller's finalizer.
     #[tracing::instrument(skip_all)]
-    pub async fn finalize_stopped(&self, recorded: &RecordedPod) -> Result<(), Error> {
-        let pod = self
-            .observe(recorded)
-            .await?
-            .ok_or(Error::TerminationUnproven)?;
-        self.finalize_observed(&pod).await
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub(super) async fn finalize_observed(&self, pod: &Pod) -> Result<(), Error> {
+    pub async fn finalize_observed(&self, pod: &Pod) -> Result<(), Error> {
         self.validate_target(&pod.metadata)?;
         if pod.metadata.deletion_timestamp.is_none() || !termination_proven(pod) {
             return Err(Error::TerminationUnproven);

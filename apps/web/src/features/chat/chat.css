@@ -271,13 +271,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.composer__strip {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: var(--t-sm);
-}
 
 @media (max-width: 820px) {
   .transcript {

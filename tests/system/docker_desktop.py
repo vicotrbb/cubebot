@@ -36,10 +36,13 @@ from cluster_chat_setup import wait_for
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     unsupported,
@@ -195,36 +198,6 @@ def person(admin, base, ca, login, administrator=False):
         "token"
     ]
     return Person(api, login, password, api("/api/identity/me")["id"])
-
-
-def grant(admin, account, agent, capability):
-    body = command(
-        recipient={"kind": "user", "id": account},
-        scope={"kind": "agent", "id": agent},
-        capability=capability,
-    )
-    return admin("/api/identity/access/grants", body, expected=201)
-
-
-def agent(api, name, wake):
-    identity = api("/api/agents", command(name=name, instructions=INSTRUCTIONS), 201)[
-        "id"
-    ]
-    current = api(f"/api/agents/{identity}")
-    update = command(
-        expected_revision=current["revision"],
-        name=name,
-        instructions=INSTRUCTIONS,
-        idle_policy=current["idle_policy"],
-        idle_delay_seconds=86400,
-        dreaming_model=None,
-    )
-    api(f"/api/agents/{identity}/definition", update)
-    if wake:
-        status = api(f"/api/agents/{identity}/status")
-        body = command(expected_revision=status["revision"], action="wake")
-        api(f"/api/agents/{identity}/lifecycle", body, expected=202)
-    return identity
 
 
 def container(identity):
@@ -710,16 +683,9 @@ def ready(people, desk):
 
 def setup(admin, base, ca, password):
     admin_id = admin("/api/identity/me")["id"]
-    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-    provider = command(
-        expected_revision=0,
-        api_key=key,
-        model=MODEL,
-        provider="openai",
-        context_window=128000,
-    )
-    admin("/api/provider", provider)
-    desk, idle = agent(admin, "Desk", True), agent(admin, "Idle", False)
+    configure_provider(admin, MODEL)
+    desk = agent(admin, "Desk", INSTRUCTIONS, 86400)
+    idle = agent(admin, "Idle", INSTRUCTIONS, 86400, wake=False)
     people = {"admin": Person(admin, "desk-admin", password, admin_id)}
     for name in ["viewer", "controller", "outsider"]:
         people[name] = person(admin, base, ca, f"desk-{name}")

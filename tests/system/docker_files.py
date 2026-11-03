@@ -36,10 +36,13 @@ from docker_desktop import CONSOLE, Person, container, logs, person, psql, surro
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
     command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     unsupported,
@@ -572,48 +575,10 @@ def scenarios(world):
     restart(world)
 
 
-def agent(admin, name):
-    identity = admin("/api/agents", command(name=name, instructions=INSTRUCTIONS), 201)[
-        "id"
-    ]
-    current = admin(f"/api/agents/{identity}")
-    admin(
-        f"/api/agents/{identity}/definition",
-        command(
-            expected_revision=current["revision"],
-            name=name,
-            instructions=INSTRUCTIONS,
-            idle_policy=current["idle_policy"],
-            idle_delay_seconds=86400,
-            dreaming_model=None,
-        ),
-    )
-    status = admin(f"/api/agents/{identity}/status")
-    wake = command(expected_revision=status["revision"], action="wake")
-    admin(f"/api/agents/{identity}/lifecycle", wake, expected=202)
-    return identity
-
-
-def grant(admin, account, agent_id, capability):
-    body = command(
-        recipient={"kind": "user", "id": account},
-        scope={"kind": "agent", "id": agent_id},
-        capability=capability,
-    )
-    admin("/api/identity/access/grants", body, expected=201)
-
-
 def setup(admin, base, ca, password):
-    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-    provider = command(
-        expected_revision=0,
-        api_key=key,
-        model=MODEL,
-        provider="openai",
-        context_window=128000,
-    )
-    admin("/api/provider", provider)
-    writer, reader = agent(admin, "Writer"), agent(admin, "Reader")
+    configure_provider(admin, MODEL)
+    writer = agent(admin, "Writer", INSTRUCTIONS, 86400)
+    reader = agent(admin, "Reader", INSTRUCTIONS, 86400)
     people = {
         "admin": Person(admin, "files-admin", password, admin("/api/identity/me")["id"])
     }

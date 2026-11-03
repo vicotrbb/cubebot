@@ -305,3 +305,35 @@ async fn computer_calls_arrive_as_action_batches_and_answer_with_screenshots() {
     );
     task.abort();
 }
+
+#[tokio::test]
+async fn only_server_faults_and_unreached_providers_are_retryable() {
+    let router = Router::new().route(
+        "/responses",
+        post(|Json(body): Json<Value>| async move {
+            let code = body["model"].as_str().unwrap().to_owned();
+            sse(&[
+                json!({"type":"response.failed","response":{"status":"failed","error":{"code":code}}}),
+            ])
+        }),
+    );
+    let (origin, task) = serve(router).await;
+    let provider = OpenAi::for_loopback_tests(&origin).unwrap();
+    for (code, retryable) in [("server_error", true), ("invalid_prompt", false)] {
+        let mut failed = request(&[], &[]);
+        failed.model = code;
+        let events: Vec<_> = provider.stream(&failed).collect().await;
+        assert_eq!(
+            events[0].as_ref().err().unwrap().retryable(),
+            retryable,
+            "{code}"
+        );
+    }
+    task.abort();
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}/", closed.local_addr().unwrap());
+    drop(closed);
+    let provider = OpenAi::for_loopback_tests(&origin).unwrap();
+    let events: Vec<_> = provider.stream(&request(&[], &[])).collect().await;
+    assert!(events[0].as_ref().err().unwrap().retryable());
+}

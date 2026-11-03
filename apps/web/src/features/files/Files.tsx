@@ -29,16 +29,27 @@ export function Files({ only }: { only?: { agent: string } }) {
     setEntries(await list(view, folder?.id))
   }
   useEffect(() => {
+    // A late answer for a folder the person already left must not replace the current one.
+    let live = true
     void list(view, folder?.id)
-      .then(setEntries)
-      .catch((error) =>
-        setError(
-          error instanceof ApiError && error.status === 503
-            ? 'Shared file storage is not configured for this installation (CUBEBOT_STORAGE_DIRECTORY).'
-            : failure(error),
-        ),
+      .then((items) => {
+        if (!live) return
+        setEntries(items)
+        setError('')
+      })
+      .catch(
+        (error) =>
+          live &&
+          setError(
+            error instanceof ApiError && error.status === 503
+              ? 'Shared file storage is not configured for this installation (CUBEBOT_STORAGE_DIRECTORY).'
+              : failure(error),
+          ),
       )
-      .finally(() => setLoaded(true))
+      .finally(() => live && setLoaded(true))
+    return () => {
+      live = false
+    }
   }, [view, folder?.id])
   async function run(action: () => Promise<unknown>) {
     setError('')
@@ -198,8 +209,7 @@ function list(view: View, parent: string | undefined) {
   return ok(api.GET('/api/files', { params: { query: {} } }))
 }
 
-/** Streams the file as the request body; the request id lets a retry find the first attempt's
- *  file. */
+/** Streams the file as the request body. */
 async function uploadFile(file: File, parent: string | undefined) {
   const query = new URLSearchParams({
     name: file.name,

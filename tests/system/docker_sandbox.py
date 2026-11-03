@@ -110,24 +110,60 @@ def sign_in(api, database, login, password):
     api.token = api("/api/identity/login", body)["token"]
 
 
-def agent(api, name):
-    """Sets the OpenAI provider if none is set, then creates and wakes an agent."""
-    if api("/api/provider") is None:
-        key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-        provider = command(
-            expected_revision=0,
-            api_key=key,
-            model="gpt-4.1-mini",
-            provider="openai",
-            context_window=128000,
-        )
-        api("/api/provider", provider)
-    created = command(name=name, instructions=INSTRUCTIONS)
+def configure_provider(api, model="gpt-4.1-mini"):
+    """Sets the OpenAI provider from OPENAI_API_KEY_FILE."""
+    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
+    provider = command(
+        expected_revision=0,
+        api_key=key,
+        model=model,
+        provider="openai",
+        context_window=128000,
+    )
+    api("/api/provider", provider)
+
+
+def agent(
+    api,
+    name,
+    instructions,
+    idle_delay_seconds=None,
+    dreaming_model=None,
+    memories=(),
+    wake=True,
+):
+    """Creates an agent, sets its idle delay and dreaming model when given an idle
+    delay, seeds its memories and wakes it."""
+    created = command(name=name, instructions=instructions)
     identity = api("/api/agents", created, expected=201)["id"]
-    status = api(f"/api/agents/{identity}/status")
-    wake = command(expected_revision=status["revision"], action="wake")
-    api(f"/api/agents/{identity}/lifecycle", wake, expected=202)
+    if idle_delay_seconds is not None:
+        current = api(f"/api/agents/{identity}")
+        update = command(
+            expected_revision=current["revision"],
+            name=name,
+            instructions=instructions,
+            idle_policy=current["idle_policy"],
+            idle_delay_seconds=idle_delay_seconds,
+            dreaming_model=dreaming_model,
+        )
+        api(f"/api/agents/{identity}/definition", update)
+    for content in memories:
+        api(f"/api/agents/{identity}/memories", {"content": content}, expected=201)
+    if wake:
+        status = api(f"/api/agents/{identity}/status")
+        body = command(expected_revision=status["revision"], action="wake")
+        api(f"/api/agents/{identity}/lifecycle", body, expected=202)
     return identity
+
+
+def grant(api, account, scope, capability, kind="agent"):
+    """Grants a person `capability` on the `kind` resource `scope`."""
+    body = command(
+        recipient={"kind": "user", "id": account},
+        scope={"kind": kind, "id": scope},
+        capability=capability,
+    )
+    return api("/api/identity/access/grants", body, expected=201)
 
 
 def create(name):
@@ -139,7 +175,9 @@ def create(name):
     api = Api(f"https://{bridge()}:8443", ROOT / ".cubebot/dev-ca/ca.crt")
     login = os.environ["CUBEBOT_BOOTSTRAP_LOGIN"]
     sign_in(api, database, login, os.environ["CUBEBOT_BOOTSTRAP_PASSWORD"])
-    print(agent(api, name))
+    if api("/api/provider") is None:
+        configure_provider(api)
+    print(agent(api, name, INSTRUCTIONS))
 
 
 def reachable(address):
@@ -286,7 +324,8 @@ def qualify(directory: Path):
         with running(binary, ROOT, environment):
             wait_for("orchestrator HTTPS", lambda: live(api), timeout=30)
             sign_in(api, database, "docker-admin", secrets.token_urlsafe(24))
-            identity = agent(api, "Docker sandbox")
+            configure_provider(api)
+            identity = agent(api, "Docker sandbox", INSTRUCTIONS)
             try:
                 status = f"/api/agents/{identity}/status"
                 wait_for(

@@ -6,16 +6,12 @@ import {
   Mail,
   PauseCircle,
 } from 'lucide-react'
-import type { ActivityItem } from '../api/types'
 import { useActivity, useAgents } from '../app/queries'
 import { Empty, Skeleton, when } from '../components/primitives'
 
 export const Route = createFileRoute('/_app/activity')({ component: Activity })
 
-const ICONS: Record<
-  ActivityItem['kind'],
-  React.ComponentType<{ className?: string }>
-> = {
+const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   login_pending: KeyRound,
   turn_waiting: PauseCircle,
   turn_failed: CircleAlert,
@@ -27,7 +23,7 @@ const ICONS: Record<
 function Activity() {
   const activity = useActivity()
   const agents = useAgents()
-  const name = (id: string | null) =>
+  const name = (id?: string | null) =>
     agents.data?.find((agent) => agent.id === id)?.name
   return (
     <div className="page">
@@ -44,7 +40,7 @@ function Activity() {
         )}
         <ul className="list">
           {activity.data?.map((item, index) => {
-            const Icon = ICONS[item.kind]
+            const Icon = ICONS[item.kind] ?? CircleAlert
             const to = item.agent
               ? item.kind === 'login_pending'
                 ? `/agents/${item.agent}/desktop`

@@ -9,6 +9,9 @@ use super::IdentityError;
 // Shared by hashing and verification. The permit stays with uncancellable CPU work.
 static HASH_SLOTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
 
+/// Verified when no account matches; Argon2's default parameters, as `hash` uses.
+pub(super) const DUMMY: &str = "$argon2id$v=19$m=19456,t=2,p=1$d/c+Rv9LNz04V+YxO1vG1w$bB3cTCdN5nGRoNKI72l8I0U5u+M5QFmqNOke/Wy8hcw";
+
 pub fn validate_login(login: &str) -> Result<(), IdentityError> {
     let valid_login = login
         .bytes()
@@ -73,6 +76,14 @@ pub fn token() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn the_dummy_verifier_parses_and_rejects() {
+        assert!(matches!(
+            verify("any password at all", DUMMY.into()).await,
+            Err(IdentityError::Unauthorized)
+        ));
+    }
 
     #[tokio::test]
     async fn saturated_hash_capacity_rejects_hash_and_verification_without_queueing() {

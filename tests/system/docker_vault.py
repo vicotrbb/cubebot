@@ -25,14 +25,13 @@ import uuid
 from pathlib import Path
 
 from cluster_chat_setup import wait_for
-from docker_browser import calls, chat, lifecycle, ready
+from docker_browser import calls, chat, ready
 from docker_desktop import (
     CONSOLE,
     MODEL,
     Person,
     arbiter_events,
     container,
-    grant,
     key,
     logs,
     person,
@@ -44,10 +43,12 @@ from docker_login import Site, modes, pending
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
-    command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     unsupported,
@@ -235,11 +236,11 @@ def access(world):
 
 def agent_lists(world):
     admin = world["people"]["admin"].api
-    for agent, expected in (
+    for item, expected in (
         (world["keeper"], ["Keeper only", "Own", "Shared"]),
         (world["other"], ["Shared"]),
     ):
-        row = chat(admin, agent, "Call vault_list once and reply with the item names.")
+        row = chat(admin, item, "Call vault_list once and reply with the item names.")
         listed = json.loads(calls(row, "vault_list")[-1]["outcome"]["output"])
         assert names(listed) == expected, listed
         clean(json.dumps(row))
@@ -502,8 +503,8 @@ def secrets_kept(world, postgres):
     ).stdout
     assert "vault_items" in dump and "[redacted]" in dump
     texts = {"database": dump, "orchestrator": world["orchestrator_log"].read_text()}
-    for agent in ("keeper", "other"):
-        texts[agent] = logs(world[agent])
+    for name in ("keeper", "other"):
+        texts[name] = logs(world[name])
     for where, text in texts.items():
         for secret in SECRETS + world_secrets:
             assert secret not in text, (where, secret[:3])
@@ -528,38 +529,11 @@ def scenarios(world, postgres):
     secrets_kept(world, postgres)
 
 
-def agent(admin, name):
-    identity = admin("/api/agents", command(name=name, instructions=INSTRUCTIONS), 201)[
-        "id"
-    ]
-    current = admin(f"/api/agents/{identity}")
-    admin(
-        f"/api/agents/{identity}/definition",
-        command(
-            expected_revision=current["revision"],
-            name=name,
-            instructions=INSTRUCTIONS,
-            idle_policy=current["idle_policy"],
-            idle_delay_seconds=86400,
-            dreaming_model=None,
-        ),
-    )
-    lifecycle(admin, identity, "wake")
-    return identity
-
-
 def setup(admin, base, ca, password):
     admin_id = admin("/api/identity/me")["id"]
-    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-    provider = command(
-        expected_revision=0,
-        api_key=key,
-        model=MODEL,
-        provider="openai",
-        context_window=128000,
-    )
-    admin("/api/provider", provider)
-    keeper, other = agent(admin, "Keeper"), agent(admin, "Other")
+    configure_provider(admin, MODEL)
+    keeper = agent(admin, "Keeper", INSTRUCTIONS, 86400)
+    other = agent(admin, "Other", INSTRUCTIONS, 86400)
     people = {"admin": Person(admin, "vault-admin", password, admin_id)}
     for name in ["viewer", "controller", "outsider"]:
         people[name] = person(admin, base, ca, f"vault-{name}")

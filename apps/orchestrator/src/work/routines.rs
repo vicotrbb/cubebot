@@ -183,6 +183,7 @@ impl Work {
             return Err(IdentityError::Conflict);
         }
         update(&mut tx, &locked, &input.routine, "person").await?;
+        adopt(&mut tx, locked.id, actor).await?;
         let routine = one(&mut tx, agent, routine).await?;
         tx.commit().await?;
         Ok(routine)
@@ -216,6 +217,7 @@ impl Work {
         let locked = lock(&mut tx, agent, routine).await?;
         let secret = crate::identity::token();
         set_secret(&mut tx, locked.id, &secret).await?;
+        adopt(&mut tx, locked.id, actor).await?;
         tx.commit().await?;
         Ok(WebhookSecret { secret })
     }
@@ -696,6 +698,23 @@ async fn remove(tx: &mut Transaction<'_, Postgres>, routine: Uuid) -> Result<(),
     sqlx::query!("DELETE FROM routines WHERE id=$1", routine)
         .execute(&mut **tx)
         .await?;
+    Ok(())
+}
+
+/// Scheduled and webhook runs act as `created_by`, so a person who changes the routine
+/// becomes the one it runs as; it must not keep running as someone else.
+async fn adopt(
+    tx: &mut Transaction<'_, Postgres>,
+    routine: Uuid,
+    actor: &Actor,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE routines SET created_by=$2 WHERE id=$1",
+        routine,
+        actor.id,
+    )
+    .execute(&mut **tx)
+    .await?;
     Ok(())
 }
 

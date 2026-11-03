@@ -843,8 +843,7 @@ async fn human_status_http_reports_observed_facts_without_runtime_secrets_or_wor
         .login("admin", "administrator password")
         .await
         .unwrap();
-    let (origin, task) =
-        http_server(cubebot_orchestrator::api::database_router(f.pool.clone())).await;
+    let (origin, task) = http_server(crate::database_router(f.pool.clone())).await;
     let client = openidconnect::reqwest::Client::new();
     let path = format!("{origin}/api/agents/{}/status", f.agent.0);
     assert_eq!(client.get(&path).send().await.unwrap().status(), 401);
@@ -1537,7 +1536,7 @@ async fn conversation_events_replay_after_a_cursor_and_then_follow_live() {
         .login("admin", "administrator password")
         .await
         .unwrap();
-    let response = cubebot_orchestrator::api::database_router(f.pool.clone())
+    let response = crate::database_router(f.pool.clone())
         .oneshot(
             Request::get(format!("/api/conversations/{conversation}/events"))
                 .header("authorization", format!("Bearer {}", human.token))

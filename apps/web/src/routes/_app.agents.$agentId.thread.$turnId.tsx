@@ -69,7 +69,7 @@ function Thread() {
         <h2>Steering</h2>
         <Steering turn={turn} />
         {isOpen(turn) && can(agent, 'conversation_send', session) ? (
-          <Steer conversation={agent.id} turnId={turn.id} />
+          <Steer key={turn.id} conversation={agent.id} turnId={turn.id} />
         ) : (
           <p className="panel__lead">
             {isOpen(turn)
@@ -133,7 +133,10 @@ function Steer({
           rows={3}
           maxLength={16384}
           placeholder="A correction, applied at the next safe point"
-          onChange={(event) => setText(event.target.value)}
+          onChange={(event) => {
+            setText(event.target.value)
+            setRequestId('')
+          }}
         />
       </label>
       <Alert>{error}</Alert>

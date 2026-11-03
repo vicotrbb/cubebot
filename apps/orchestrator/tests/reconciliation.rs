@@ -8,7 +8,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::any,
 };
-use cubebot_orchestrator::agents::kubernetes::{Layout, ReconcileResult, Reconciler};
+use cubebot_orchestrator::agents::kubernetes::{Error, Layout, ReconcileResult, Reconciler};
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -217,9 +217,15 @@ async fn missing_bound_objects_retain_identity_and_never_authorize_recreation() 
             .unwrap()
             .clone();
         let removed = state.lock().unwrap().objects.remove(&path).unwrap();
-        assert!(
-            matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Uncertain { attempt } if attempt == id)
-        );
+        // A missing workspace refuses `create`, as in the controller; a missing pod is uncertain.
+        let result = reconciler.reconcile(agent).await;
+        if id == workspace {
+            assert!(matches!(result, Err(Error::Conflict)));
+        } else {
+            assert!(
+                matches!(result.unwrap(), ReconcileResult::Uncertain { attempt } if attempt == id)
+            );
+        }
         let after = registry.attempt(id).await.unwrap();
         assert_eq!(after.uid, before.uid);
         assert_eq!(after.blocked_reason.as_deref(), Some("object_missing"));
@@ -305,6 +311,14 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
     let actor = identity.authenticate(&session.token).await.unwrap();
     let agents = Agents::new(pool);
     let requests = state.lock().unwrap().requests;
+    let changes = |state: &Server| {
+        (
+            state.creates.len(),
+            state.deletes.len(),
+            state.patches.len(),
+        )
+    };
+    let changed = changes(&state.lock().unwrap());
     for (index, action) in [
         LifecycleAction::Sleep,
         LifecycleAction::Wake,
@@ -330,7 +344,10 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
             matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
         );
     }
-    assert_eq!(state.lock().unwrap().requests, requests + 4);
+    // One pod read per pass; the two running passes (wake, restart) also reread the anchor and
+    // the workspace first, as the controller's `drive` does. Nothing is created or cleaned up.
+    assert_eq!(state.lock().unwrap().requests, requests + 4 + 2 * 2);
+    assert_eq!(changes(&state.lock().unwrap()), changed);
     assert_eq!(
         registry
             .attempt(pod)
@@ -1015,8 +1032,7 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
         .await
         .unwrap();
     assert!(Controller::database_only(pool.clone()).await.is_err());
-    let routes =
-        cubebot_orchestrator::api::database_router(pool.clone()).merge(controller.runtime_router());
+    let routes = crate::database_router(pool.clone()).merge(controller.runtime_router());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let (stop, stopped) = tokio::sync::oneshot::channel();

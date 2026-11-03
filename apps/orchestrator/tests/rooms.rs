@@ -118,14 +118,17 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         (open.routing.as_str(), open.deliveries.len()),
         ("routing", 0)
     );
+    // A failed attempt that leaves the message routing reports `false`, so the loop pauses.
     let connections = Connections::new(pool.clone(), Credentials::new([7; 32]));
+    let mut left_routing = Vec::new();
     for _ in 0..3 {
-        assert!(
+        left_routing.push(
             cubebot_orchestrator::work::route(&pool, &connections)
                 .await
-                .unwrap()
+                .unwrap(),
         );
     }
+    assert_eq!(left_routing, [false, false, true]);
     assert!(
         !cubebot_orchestrator::work::route(&pool, &connections)
             .await

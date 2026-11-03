@@ -10,7 +10,11 @@ use cubebot_protocol::{
     desktop,
     guest::{GUEST_CID, HOST_CID, LINE_LIMIT, PORT, Report},
 };
-use std::{collections::VecDeque, io, sync::mpsc::Sender};
+use std::{
+    collections::VecDeque,
+    io,
+    sync::mpsc::{Sender, SyncSender},
+};
 
 const HEADER: usize = 44;
 const STREAM: u16 = 1;
@@ -27,7 +31,10 @@ const SHUTDOWN_SEND: u32 = 2;
 const BUFFER: u32 = 64 << 10;
 const RECEIVE: usize = 0;
 const TRANSMIT: usize = 1;
-const DESKTOP_STREAMS: usize = 16;
+pub const DESKTOP_STREAMS: usize = 16;
+/// Transmit waits while this many replies wait for receive buffers, so a guest that stops taking
+/// them cannot grow the host's memory.
+const REPLIES: usize = 1024;
 /// The guest kernel's last reserved vsock port; binding one takes root.
 const RESERVED: u32 = 1023;
 
@@ -153,7 +160,7 @@ pub struct Vsock {
     environment: Vec<u8>,
     connections: Vec<Connection>,
     /// The guest port of each new host channel stream, for pairing.
-    spares: Sender<u32>,
+    spares: SyncSender<u32>,
     /// Packets without payload, waiting for receive buffers.
     replies: VecDeque<Header>,
     alive: bool,
@@ -162,7 +169,7 @@ pub struct Vsock {
 
 impl Vsock {
     /// `environment` is the encoded message the guest receives when it connects.
-    pub fn new(environment: Vec<u8>, spares: Sender<u32>) -> Self {
+    pub fn new(environment: Vec<u8>, spares: SyncSender<u32>) -> Self {
         Self {
             config: u64::from(GUEST_CID).to_le_bytes(),
             environment,
@@ -305,9 +312,10 @@ impl Vsock {
             PORT => self.environment.iter().copied().collect(),
             _ => VecDeque::new(),
         };
-        if request.dst_port == desktop::HOST_PORT {
-            // The pairing side outlives the device; a send can only fail at exit.
-            let _ = self.spares.send(request.src_port);
+        // A full queue means no client has paired streams for a while; the arbiter dials again.
+        if request.dst_port == desktop::HOST_PORT && self.spares.try_send(request.src_port).is_err()
+        {
+            return self.replies.push_back(request.reply(RESET));
         }
         self.connections.push(Connection {
             port: request.src_port,
@@ -387,7 +395,9 @@ impl Vsock {
 
     fn transmit(&mut self, queue: &mut Queue, memory: &GuestMemory) -> io::Result<bool> {
         let mut used = false;
-        while let Some(chain) = queue.pop(memory)? {
+        while self.replies.len() < REPLIES
+            && let Some(chain) = queue.pop(memory)?
+        {
             let mut raw = [0; HEADER];
             if chain.read_at(memory, 0, &mut raw)? < HEADER {
                 return Err(invalid("malformed vsock packet"));
@@ -480,13 +490,16 @@ impl Device for Vsock {
 
     fn notify(
         &mut self,
-        queue: usize,
+        _queue: usize,
         queues: &mut [Queue],
         memory: &GuestMemory,
     ) -> io::Result<bool> {
-        let transmitted = queue == TRANSMIT && self.transmit(&mut queues[TRANSMIT], memory)?;
+        let flushed = self.flush(&mut queues[RECEIVE], memory)?;
+        // Transmit waits while replies do, so any notification, such as new receive buffers,
+        // resumes it.
+        let transmitted = queues[TRANSMIT].ready && self.transmit(&mut queues[TRANSMIT], memory)?;
         // The event queue only ever holds buffers; this device raises no events.
-        Ok(self.flush(&mut queues[RECEIVE], memory)? | transmitted)
+        Ok(self.flush(&mut queues[RECEIVE], memory)? | flushed | transmitted)
     }
 
     fn reset(&mut self) {
@@ -517,7 +530,7 @@ mod tests {
 
     impl Guest {
         fn new() -> Self {
-            let (sender, spares) = std::sync::mpsc::channel();
+            let (sender, spares) = std::sync::mpsc::sync_channel(DESKTOP_STREAMS);
             Self {
                 memory: GuestMemory::map(1 << 20).unwrap(),
                 queues: [RX.queue(64), TX.queue(64), Queue::default()],
@@ -542,6 +555,15 @@ mod tests {
         }
 
         fn send_from(&mut self, from: u32, op: u16, port: u32, credit: (u32, u32), payload: &[u8]) {
+            self.offer(from, op, port, credit, payload);
+            assert!(
+                self.vsock
+                    .notify(TRANSMIT, &mut self.queues, &self.memory)
+                    .unwrap()
+            );
+        }
+
+        fn offer(&mut self, from: u32, op: u16, port: u32, credit: (u32, u32), payload: &[u8]) {
             let header = Header {
                 src_cid: GUEST_CID.into(),
                 dst_cid: HOST_CID.into(),
@@ -560,11 +582,6 @@ mod tests {
             let packet = readable(address, (HEADER + payload.len()) as u32);
             TX.offer(&self.memory, self.sent, self.sent, &[packet]);
             self.sent += 1;
-            assert!(
-                self.vsock
-                    .notify(TRANSMIT, &mut self.queues, &self.memory)
-                    .unwrap()
-            );
         }
 
         /// The packets the host delivered since the last call.
@@ -713,5 +730,41 @@ mod tests {
         guest.send_from(900, DATA, port, (4096, 8), b"gone");
         assert_eq!(ops(&guest.receive()), [(RESET, &b""[..])]);
         assert!(guest.vsock.connections.is_empty());
+    }
+
+    #[test]
+    fn transmit_waits_while_replies_wait_for_buffers() {
+        let mut guest = Guest::new();
+        guest.vsock.replies.extend([Header::default(); REPLIES]);
+        guest.offer(5000, REQUEST, 9, (4096, 0), &[]);
+        let notify = |guest: &mut Guest, queue| {
+            let Guest {
+                vsock,
+                queues,
+                memory,
+                ..
+            } = guest;
+            vsock.notify(queue, queues, memory).unwrap()
+        };
+        assert!(!notify(&mut guest, TRANSMIT), "the request waits");
+        assert_eq!(guest.vsock.replies.len(), REPLIES);
+        guest.post(64);
+        assert!(notify(&mut guest, RECEIVE));
+        assert_eq!(guest.vsock.replies.len(), REPLIES - 64 + 1);
+        assert_eq!(guest.vsock.replies.back().unwrap().op, RESET);
+    }
+
+    #[test]
+    fn refuses_host_channel_streams_once_unpaired_ones_queue_up() {
+        let mut guest = Guest::new();
+        let port = desktop::HOST_PORT;
+        for from in 900..900 + DESKTOP_STREAMS as u32 {
+            guest.send_from(from, REQUEST, port, (4096, 0), &[]);
+            guest.send_from(from, RESET, port, (4096, 0), &[]);
+        }
+        guest.send_from(950, REQUEST, port, (4096, 0), &[]);
+        assert!(guest.vsock.connections.is_empty());
+        assert_eq!(guest.vsock.replies.back().unwrap().op, RESET);
+        assert_eq!(guest.spares.try_iter().count(), DESKTOP_STREAMS);
     }
 }

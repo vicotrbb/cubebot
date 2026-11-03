@@ -408,8 +408,13 @@ impl Docker {
 fn runtime_arguments(runtime: &Runtime) -> Vec<&str> {
     match runtime {
         // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
-        // group 10001 writes the image's workspace volume.
+        // group 10001 writes the image's workspace volume. Memory is the pod's limit; the VMM runs
+        // only threads per vCPU, device and host channel connection, well inside the pids limit.
         Runtime::Kvm {} => vec![
+            "--memory",
+            "3g",
+            "--pids-limit",
+            "256",
             "--read-only",
             "--tmpfs",
             "/tmp",
@@ -509,6 +514,10 @@ fn phase(state: Option<&Value>) -> &'static str {
 impl Sandbox for Docker {
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn create(&self, agent: AgentId) -> Result<(), Error> {
+        // An attempt already has its volume; every reconcile pass would otherwise run the CLI.
+        if self.current(agent).await?.is_some() {
+            return Ok(());
+        }
         let label = format!("cubebot.dev/agent={}", agent.0);
         self.docker(&["volume", "create", "--label", &label, &volume(agent)])
             .await
@@ -525,12 +534,14 @@ impl Sandbox for Docker {
         }
         let state = self.inspect(&attempt.name).await?;
         let (_, generation) = self.intent(agent).await?;
-        match next(attempt.target_generation != generation, state.as_ref()) {
+        let state = match next(attempt.target_generation != generation, state.as_ref()) {
             Next::Retire => return self.retire(&attempt, state).await,
-            Next::Start => drop(self.docker(&["container", "start", &attempt.name]).await?),
-            Next::Observe => (),
-        }
-        let state = self.inspect(&attempt.name).await?;
+            Next::Start => {
+                self.docker(&["container", "start", &attempt.name]).await?;
+                self.inspect(&attempt.name).await?
+            }
+            Next::Observe => state,
+        };
         self.observe(&attempt, state.as_ref()).await
     }
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
@@ -659,6 +670,7 @@ mod tests {
     fn a_container_runs_the_agent_image_without_devices_or_net_admin() {
         let kvm = runtime_arguments(&Runtime::Kvm {});
         assert!(kvm.contains(&"/dev/kvm") && kvm.contains(&"NET_ADMIN"));
+        assert!(kvm.windows(2).any(|pair| pair == ["--memory", "3g"]));
         assert_eq!(command(&Runtime::Kvm {}), ["run"]);
         let container = Runtime::Container {
             class: Some("runsc".into()),

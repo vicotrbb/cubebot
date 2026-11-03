@@ -161,7 +161,7 @@ impl RuntimeIdentity {
             "#,
             actor.attempt.0,
             actor.version,
-            super::sessions::digest(token),
+            crate::identity::digest(token),
         )
         .fetch_optional(&mut **transaction)
         .await?

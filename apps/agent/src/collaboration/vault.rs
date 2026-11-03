@@ -21,40 +21,34 @@ struct Fill {
 
 /// `desktop` offers `vault_fill`, which only a lane that controls the desktop can use.
 pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
-    let tool = |name: &str, description: &str, parameters: Value| cubebot_providers::Tool {
-        name: name.into(),
-        description: description.into(),
-        parameters,
-        strict: true,
-        computer: false,
-    };
+    let tool = cubebot_providers::Tool::strict;
     let text = |description: &str| json!({"type":"string","description":description});
     let nullable = |description: &str| json!({"type":["string","null"],"description":description});
     let mut tools = vec![
         tool(
             "vault_list",
             "List the logins and secrets in your vault: id, kind, name, site and username, never the secret. Fill one with vault_fill instead of asking a person for it.",
-            json!({"type":"object","properties":{},"required":[],"additionalProperties":false}),
+            json!({}),
         ),
         tool(
             "vault_put",
             "Save a password or secret you created, such as for a new account, in your own vault to fill later. An item with the same name is replaced. Only printable ASCII and spaces can be filled.",
-            json!({"type":"object","properties":{
+            json!({
                 "kind":{"type":"string","enum":["login","secret"],"description":"login has a site, a username and the password as secret."},
                 "name":text("A short name, such as GitHub."),
                 "site":nullable("A login's domain, such as github.com; null for a secret."),
                 "username":nullable("A login's username; null for a secret."),
                 "secret":text("The password or secret value."),
-            },"required":["kind","name","site","username","secret"],"additionalProperties":false}),
+            }),
         ),
     ];
     tools.extend(desktop.then(|| tool(
         "vault_fill",
         "Type a username or secret from your vault at the desktop's keyboard focus without seeing it. Click the field first, then take a screenshot to check.",
-        json!({"type":"object","properties":{
+        json!({
             "item":text("The item's id from vault_list."),
             "field":{"type":"string","enum":["username","secret"],"description":"secret is a login's password or a secret's value."},
-        },"required":["item","field"],"additionalProperties":false}),
+        }),
     )));
     tools
 }

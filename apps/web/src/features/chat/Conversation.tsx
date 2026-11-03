@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok, type Turn } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
-import { Alert, Skeleton, when } from '../../components/primitives'
+import { Alert, Skeleton } from '../../components/primitives'
 import { Composer } from './Composer'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
 import { WorkCard } from './WorkCard'
@@ -424,5 +424,3 @@ export function Stop({
     </>
   )
 }
-
-export { when }

@@ -1,4 +1,3 @@
-import { useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import {
   BookOpen,
@@ -17,10 +16,9 @@ import {
   UserRound,
 } from 'lucide-react'
 import { type ReactNode } from 'react'
-import { api, ok } from '../../api/client'
 import type { AgentSummary, RoomSummary } from '../../api/types'
 import {
-  keys,
+  signOut,
   unread,
   useActivity,
   useAgents,
@@ -33,7 +31,7 @@ import {
 import { applyTheme, type Theme } from '../../app/theme'
 import { Cube, moodOf } from '../../components/Cube'
 
-const ACTIVITY: Record<string, string> = {
+export const ACTIVITY: Record<string, string> = {
   working: 'Working',
   dreaming: 'Dreaming',
   idle: 'Idle',
@@ -240,7 +238,7 @@ function Section({
   )
 }
 
-export function AgentRow({ agent }: { agent: AgentSummary }) {
+function AgentRow({ agent }: { agent: AgentSummary }) {
   const mood = moodOf(agent)
   const fresh = unread(agent)
   return (
@@ -307,7 +305,6 @@ function AccountMenu() {
   const session = useSession()
   const preferences = usePreferences()
   const save = useSavePreferences()
-  const client = useQueryClient()
   const navigate = useNavigate()
   const theme = preferences.data?.theme ?? 'system'
   const name = session.data?.name || session.data?.login || 'You'
@@ -353,9 +350,7 @@ function AccountMenu() {
           type="button"
           className="menu__item"
           onClick={async () => {
-            await ok(api.POST('/api/identity/logout'))
-            client.setQueryData(keys.session, null)
-            client.clear()
+            await signOut()
             await navigate({ to: '/sign-in' })
           }}
         >

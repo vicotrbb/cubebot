@@ -25,14 +25,13 @@ import uuid
 from pathlib import Path
 
 from cluster_chat_setup import wait_for
-from docker_browser import calls, chat, lifecycle, ready
+from docker_browser import calls, chat, ready
 from docker_desktop import (
     CONSOLE,
     MODEL,
     Person,
     arbiter_events,
     container,
-    grant,
     logs,
     person,
     psql,
@@ -42,10 +41,12 @@ from docker_desktop import (
 from docker_sandbox import (
     ROOT,
     Api,
+    agent,
     bridge,
     build,
-    command,
     configure,
+    configure_provider,
+    grant,
     live,
     remove,
     unsupported,
@@ -439,30 +440,8 @@ def scenarios(world, postgres):
 
 def setup(admin, base, ca, password):
     admin_id = admin("/api/identity/me")["id"]
-    key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
-    provider = command(
-        expected_revision=0,
-        api_key=key,
-        model=MODEL,
-        provider="openai",
-        context_window=128000,
-    )
-    admin("/api/provider", provider)
-    body = command(name="Keeper", instructions=INSTRUCTIONS)
-    keeper = admin("/api/agents", body, 201)["id"]
-    current = admin(f"/api/agents/{keeper}")
-    admin(
-        f"/api/agents/{keeper}/definition",
-        command(
-            expected_revision=current["revision"],
-            name="Keeper",
-            instructions=INSTRUCTIONS,
-            idle_policy=current["idle_policy"],
-            idle_delay_seconds=86400,
-            dreaming_model=None,
-        ),
-    )
-    lifecycle(admin, keeper, "wake")
+    configure_provider(admin, MODEL)
+    keeper = agent(admin, "Keeper", INSTRUCTIONS, 86400)
     people = {"admin": Person(admin, "login-admin", password, admin_id)}
     for name in ["viewer", "controller", "outsider"]:
         people[name] = person(admin, base, ca, f"login-{name}")

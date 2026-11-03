@@ -17,29 +17,12 @@ impl Sandbox for Reconciler {
     /// Requires `create`; settles any stale pod before starting a new epoch.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn start(&self, agent: AgentId) -> Result<(), Error> {
-        let (revision, generation, _) = self.intent(agent).await?;
-        let verified = match self.settle(agent, generation, true).await? {
-            Ok(verified) => verified,
-            Err(outcome) => return settled(outcome),
-        };
-        let workspace = self
-            .registry
-            .current(agent, ResourceKind::Workspace)
-            .await?
-            .filter(|workspace| workspace.phase == Phase::Bound)
-            .ok_or(Error::Conflict)?;
-        settled(
-            self.provision(agent, revision, &workspace, verified)
-                .await?,
-        )
+        // Boxed, as is `stop`: inline, the server future's layout overflows the depth limit.
+        settled(Box::pin(self.launch(agent)).await?)
     }
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn stop(&self, agent: AgentId) -> Result<(), Error> {
-        let (_, generation, _) = self.intent(agent).await?;
-        match self.settle(agent, generation, false).await? {
-            Ok(_) => Ok(()),
-            Err(outcome) => settled(outcome),
-        }
+        settled(Box::pin(self.halt(agent)).await?)
     }
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn exec_channel(&self, agent: AgentId, command: &[&str]) -> Result<ExecChannel, Error> {
@@ -80,6 +63,27 @@ fn settled(result: ReconcileResult) -> Result<(), Error> {
 }
 
 impl Reconciler {
+    pub(super) async fn launch(&self, agent: AgentId) -> Result<ReconcileResult, Error> {
+        let (revision, generation, _) = self.intent(agent).await?;
+        let verified = match self.settle(agent, generation, true).await? {
+            Ok(verified) => verified,
+            Err(outcome) => return Ok(outcome),
+        };
+        let workspace = self
+            .registry
+            .current(agent, ResourceKind::Workspace)
+            .await?
+            .filter(|workspace| workspace.phase == Phase::Bound)
+            .ok_or(Error::Conflict)?;
+        self.provision(agent, revision, &workspace, verified).await
+    }
+    pub(super) async fn halt(&self, agent: AgentId) -> Result<ReconcileResult, Error> {
+        let (_, generation, _) = self.intent(agent).await?;
+        Ok(match self.settle(agent, generation, false).await? {
+            Ok(_) => ReconcileResult::Idle,
+            Err(outcome) => outcome,
+        })
+    }
     async fn current_name(
         &self,
         agent: AgentId,

@@ -56,26 +56,13 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
         if reply {
             properties["expects_reply"] = json!({"type":"boolean","description":"True to receive the recipient's answer back here as a new message once it is done; false for information only."});
         }
-        let required: Vec<&String> = properties
-            .as_object()
-            .into_iter()
-            .flat_map(|object| object.keys())
-            .collect();
-        cubebot_providers::Tool {
-            name: name.into(),
-            description: description.into(),
-            parameters: json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
-            strict: true,
-            computer: false,
-        }
+        cubebot_providers::Tool::strict(name, description, properties)
     };
-    let login = cubebot_providers::Tool {
-        name: "request_login".into(),
-        description: "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.".into(),
-        parameters: json!({"type":"object","properties":{"site":{"type":"string","description":"The website's domain, such as github.com."},"reason":{"type":"string","description":"What you need the login for, shown to the person."}},"required":["site","reason"],"additionalProperties":false}),
-        strict: true,
-        computer: false,
-    };
+    let login = cubebot_providers::Tool::strict(
+        "request_login",
+        "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.",
+        json!({"site":{"type":"string","description":"The website's domain, such as github.com."},"reason":{"type":"string","description":"What you need the login for, shown to the person."}}),
+    );
     let mut tools = vec![
         tool(
             "delegate",

@@ -89,9 +89,12 @@ export function useDesktopSocket(
         painted += 1
         const context = canvas.current?.getContext('2d')
         const tiles = message.tiles
-        painting = painting.then(async () => {
-          if (context) await paint(context, tiles)
-        })
+        // A tile that fails to decode drops its frame, not every frame after it.
+        painting = painting
+          .then(async () => {
+            if (context) await paint(context, tiles)
+          })
+          .catch(() => undefined)
       }
     }
     return () => {

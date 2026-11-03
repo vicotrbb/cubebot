@@ -35,6 +35,8 @@ struct Run {
     turn: Uuid,
     next: u64,
     events: UnboundedSender<Event>,
+    /// Journaled calls without a journaled result.
+    open: u64,
 }
 impl Run {
     fn emit(&mut self, event: TurnEvent, journal: Option<u64>) -> Entry {
@@ -54,10 +56,23 @@ impl Run {
             sequence: self.next,
             event,
         };
-        let journal = store
+        let recorded = store
             .lock()
-            .map_err(|_| io::Error::other("journal lock poisoned"))?
-            .record(&entry)?;
+            .map_err(|_| io::Error::other("journal lock poisoned"))
+            .and_then(|mut store| store.record(&entry));
+        let journal = match recorded {
+            Ok(journal) => journal,
+            Err(error) => {
+                // Recovery reports each open call as uncertain right after the last journaled
+                // entry; this run's later events must not take those sequences.
+                self.next += self.open;
+                return Err(error);
+            }
+        };
+        match entry.event {
+            TurnEvent::ToolCall { .. } => self.open += 1,
+            _ => self.open = self.open.saturating_sub(1),
+        }
         self.emit(entry.event, Some(journal));
         Ok(())
     }
@@ -78,6 +93,7 @@ pub(super) async fn run(
         turn: turn.turn,
         next: turn.sequence,
         events,
+        open: 0,
     };
     if turn.command.is_some() {
         let ended = match command(&mut turn, &mut run, &store, tools, cancel.clone()).await {
@@ -557,22 +573,17 @@ fn prepare<'a>(
             let id = Uuid::new_v4();
             let parsed = serde_json::from_str(&call.arguments);
             let running = match &parsed {
-                Ok(_)
-                    if task
-                        && (crate::collaboration::drives_desktop(&call.name)
-                            || tools.is_some_and(|tools| tools.computer(&call.name))) =>
-                {
-                    Err("a delegated task cannot control the desktop")
-                }
-                Ok(input) => memories
-                    .call(&call.name, input)
-                    .or_else(|| skills.call(&call.name, id, input, tools))
-                    .or_else(|| collaboration.call(&call.name, id, input))
-                    .unwrap_or_else(|| {
-                        tools
-                            .ok_or("no tool has this name")
-                            .and_then(|tools| tools.call(&call.name, id, input))
-                    }),
+                Ok(input) => lane(task, tools, &call.name, input).and_then(|()| {
+                    memories
+                        .call(&call.name, input)
+                        .or_else(|| skills.call(&call.name, id, input, tools))
+                        .or_else(|| collaboration.call(&call.name, id, input))
+                        .unwrap_or_else(|| {
+                            tools
+                                .ok_or("no tool has this name")
+                                .and_then(|tools| tools.call(&call.name, id, input))
+                        })
+                }),
                 Err(_) => Err("arguments are not valid JSON"),
             };
             let running = running.unwrap_or_else(|reason| {
@@ -588,6 +599,29 @@ fn prepare<'a>(
             (id, call.name.clone(), input, running)
         })
         .collect()
+}
+
+/// Why a task lane may not make this call: the desktop and the main browser session belong to
+/// the main lane (ADR 0005, ADR 0037).
+fn lane(
+    task: bool,
+    tools: Option<&Registry>,
+    name: &str,
+    input: &serde_json::Value,
+) -> Result<(), &'static str> {
+    if !task {
+        return Ok(());
+    }
+    if crate::collaboration::drives_desktop(name) || tools.is_some_and(|tools| tools.computer(name))
+    {
+        return Err("a delegated task cannot control the desktop");
+    }
+    if name.starts_with("browser_") && input["session"] == "main" {
+        return Err(
+            "a delegated task cannot use the main browser session; name a session for the task",
+        );
+    }
+    Ok(())
 }
 
 /// What the model reads of an outcome: a screenshot's image goes beside its text, not in it.
@@ -632,6 +666,64 @@ mod tests {
             output,
             "The call was not run: a delegated task cannot control the desktop."
         );
+    }
+
+    #[tokio::test]
+    async fn a_task_lane_cannot_drive_the_main_browser_session() {
+        let knowledge = (
+            Memories::new(None),
+            Skills::new(None),
+            Collaboration::new(None, Uuid::nil(), Default::default()),
+        );
+        let call = |session: &str| FunctionCall {
+            call_id: "call".into(),
+            name: "browser_navigate".into(),
+            arguments: format!(r#"{{"session":"{session}","url":"https://example.com"}}"#),
+        };
+        let calls = [call("main"), call("research")];
+        let knowledge = (&knowledge.0, &knowledge.1, &knowledge.2);
+        let mut prepared = prepare(None, knowledge, &calls, true).into_iter();
+        let outputs = [
+            prepared.next().unwrap().3.await,
+            prepared.next().unwrap().3.await,
+        ];
+        let [
+            Outcome::Exited { output: main, .. },
+            Outcome::Exited { output: own, .. },
+        ] = outputs
+        else {
+            panic!("refusals are exited outcomes");
+        };
+        assert!(main.contains("main browser session"), "{main}");
+        // Without a registry the task's own session is refused only for lacking the tool.
+        assert_eq!(own, "The call was not run: no tool has this name.");
+    }
+
+    #[test]
+    fn a_failed_record_leaves_the_recovery_sequences_of_open_calls_free() {
+        let root = std::env::temp_dir().join(format!("cubebot-run-{}", Uuid::new_v4()));
+        let store = Mutex::new(Store::open(&root).unwrap());
+        let (events, _received) = tokio::sync::mpsc::unbounded_channel();
+        let mut run = Run {
+            turn: Uuid::new_v4(),
+            next: 1,
+            events,
+            open: 0,
+        };
+        let call = |name: String| TurnEvent::ToolCall {
+            id: Uuid::new_v4(),
+            name,
+            input: serde_json::json!({}),
+        };
+        run.journaled(&store, call("bash".into())).unwrap();
+        // A name past the journal's record bound cannot be recorded.
+        let oversized = call("x".repeat(crate::journal::MAX_PAYLOAD));
+        assert!(run.journaled(&store, oversized).is_err());
+        let error = run.emit(failed("journal_unavailable"), None);
+        let pending = store.lock().unwrap().pending().unwrap();
+        let uncertain = pending.last().unwrap().0.sequence;
+        assert!(error.sequence > uncertain, "{} {uncertain}", error.sequence);
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

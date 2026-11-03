@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { admin } from '../../api/admin'
 import { CAPABILITIES, type AgentSummary } from '../../api/types'
 import { failure } from '../../api/client'
-import { Alert, Field, Status, when } from '../../components/primitives'
+import { Alert, Field, Status } from '../../components/primitives'
 
 /** Who may do what on this agent: grant, revoke by receipt, and the audit trail (ADR 0051). */
 export function Access({ agent }: { agent: AgentSummary }) {
@@ -127,8 +127,7 @@ export function Access({ agent }: { agent: AgentSummary }) {
               <div className="title">
                 {event.kind.replace('access.', '')}
                 <span className="faint" style={{ fontWeight: 400 }}>
-                  · rev {event.revision} ·{' '}
-                  {when(typeof event.at === 'string' ? event.at : undefined)}
+                  · rev {event.revision}
                 </span>
               </div>
               <pre className="small">

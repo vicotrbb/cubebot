@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 // Keeps each container's status in a file named after it; records create arguments.
 const FAKE: &str = r#"#!/bin/sh
-state="$(dirname "$0")/state"; mkdir -p "$state"
+state="$(dirname "$0")/state"; mkdir -p "$state"; echo "$1 $2" >> "$state/calls"
 name() { while [ "$#" -gt 1 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1 $2" in
 "volume create") eval "echo \${$#}" ;;
@@ -137,6 +137,21 @@ async fn container_token_authenticates_only_its_own_running_epoch() {
         .bootstrap(&f.token(2), Uuid::new_v4())
         .await
         .unwrap();
+    std::fs::remove_dir_all(&f.root).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_running_agent_costs_one_inspect_per_pass() {
+    let f = fixture().await;
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    let calls = f.root.join("state").join("calls");
+    std::fs::remove_file(&calls).unwrap();
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(
+        std::fs::read_to_string(&calls).unwrap(),
+        "container inspect\n"
+    );
     std::fs::remove_dir_all(&f.root).unwrap();
 }
 
