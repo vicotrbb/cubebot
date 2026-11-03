@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT bootstrapped AS \"bootstrapped!\"\n            FROM installation\n            WHERE singleton\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "bootstrapped!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "91e0fcd82dc0f083b755f561f1d32fbd144e9210ee8b76329cae165a7e9d13f0"
+}

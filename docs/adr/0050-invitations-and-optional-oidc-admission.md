@@ -16,7 +16,7 @@ Automatic admission is disabled unless configured. Rules apply to a specific tru
 
 New members receive only their configured baseline authority. Membership does not automatically grant access to private agents, rooms, memories, or workspaces. [ADR 0051](0051-built-in-roles-and-scoped-resource-grants.md) selects built-in roles and scoped grants; the detailed matrix must make baseline access and any privileged assignment explicit. This decision does not select automatic administrator assignment or group synchronization.
 
-Invitations must have a defined recipient or redemption constraint, expiry, revocation, and one-time acceptance semantics. Concurrent acceptance or repeated qualifying logins must not create duplicate memberships. Account linking follows ADR 0049's verified linking requirement rather than silently merging records by email. Initial administrator provisioning is a separate bootstrap path, not public registration.
+Invitations must have a defined recipient or redemption constraint, expiry, revocation, and one-time acceptance semantics. Concurrent acceptance or repeated qualifying logins must not create duplicate memberships. Account linking follows ADR 0049's verified linking requirement rather than silently merging records by email. Initial administrator provisioning is a separate bootstrap path, not public registration; the amendment below defines it.
 
 Suspending a member must prevent automatic admission from silently recreating or reactivating that membership. Ongoing eligibility, identity-provider changes, member removal, and re-admission require explicit lifecycle rules. The first-login admission decision alone does not establish continuous synchronization with an organization's directory.
 
@@ -24,6 +24,8 @@ Alternatives considered: Admit every member individually, including identity-pro
 
 [ADR 0052](0052-locally-managed-human-teams.md) keeps team membership locally managed. Admission does not synchronize identity-provider groups into teams.
 
-Open details: Invitation delivery and redemption; delegated inviter authority; eligibility rule vocabulary; baseline roles; initial administrator setup; changes to eligibility; account removal and re-admission; and lifecycle audit records.
+Amendment (2026-11-02), initial administrator provisioning: a new installation is open for exactly its first account, which becomes the administrator. The console's setup form or the unauthenticated `POST /api/identity/setup` creates it and signs it in; the operator CLI (`cubebot-admin bootstrap`, `cubebot admin`) remains the other path. Both run the same bootstrap under the installation row's lock, so concurrent attempts yield one administrator, and setup closes permanently once either succeeds. Setup takes no invitation, so until it closes, whoever reaches the console first claims the installation; operators exposing a public domain before signing in should use the CLI.
 
-Validation scenarios: Accept a valid invitation once; reject expired or revoked invitations; admit an eligible identity-provider user when enabled; deny automatic admission when disabled or ineligible; prevent duplicate membership and unsafe linking; enforce baseline resource restrictions; and prevent login from undoing a suspension.
+Open details: Invitation delivery and redemption; delegated inviter authority; eligibility rule vocabulary; baseline roles; changes to eligibility; account removal and re-admission; and lifecycle audit records.
+
+Validation scenarios: Open setup on a fresh installation, refuse it once bootstrapped by either path, and create one administrator from concurrent attempts; accept a valid invitation once; reject expired or revoked invitations; admit an eligible identity-provider user when enabled; deny automatic admission when disabled or ineligible; prevent duplicate membership and unsafe linking; enforce baseline resource restrictions; and prevent login from undoing a suspension.

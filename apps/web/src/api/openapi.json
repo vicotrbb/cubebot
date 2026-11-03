@@ -2303,6 +2303,54 @@
         }
       }
     },
+    "/api/identity/setup": {
+      "get": {
+        "tags": [],
+        "operationId": "setup_state",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setup"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "Creates the installation's first account as its administrator and signs it in.",
+        "operationId": "setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/identity/suspend": {
       "post": {
         "tags": [],
@@ -5101,6 +5149,15 @@
           }
         },
         "additionalProperties": false
+      },
+      "Setup": {
+        "type": "object",
+        "required": ["open"],
+        "properties": {
+          "open": {
+            "type": "boolean"
+          }
+        }
       },
       "ShareKind": {
         "type": "string",

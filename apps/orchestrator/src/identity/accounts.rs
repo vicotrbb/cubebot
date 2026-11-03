@@ -55,6 +55,20 @@ impl Identity {
         .await?)
     }
 
+    /// Whether the installation still has no administrator, so its first account may be created.
+    pub async fn setup_open(&self) -> Result<bool, IdentityError> {
+        let bootstrapped = sqlx::query_scalar!(
+            r#"
+            SELECT bootstrapped AS "bootstrapped!"
+            FROM installation
+            WHERE singleton
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(!bootstrapped)
+    }
+
     #[tracing::instrument(skip_all)]
     pub async fn bootstrap(&self, login: &str, password: &str) -> Result<Uuid, IdentityError> {
         passwords::validate(login, password)?;

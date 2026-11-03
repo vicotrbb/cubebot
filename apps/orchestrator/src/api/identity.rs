@@ -13,6 +13,8 @@ use crate::identity::{Actor, Identity, IdentityError};
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(
     login,
+    setup_state,
+    setup,
     me,
     logout,
     preferences,
@@ -28,6 +30,7 @@ pub(super) struct Doc;
 pub fn router(identity: Identity) -> Router {
     Router::new()
         .route("/api/identity/login", post(login))
+        .route("/api/identity/setup", get(setup_state).post(setup))
         .route("/api/identity/oidc/bindings", get(oidc_bindings))
         .route("/api/identity/oidc/revoke", post(revoke_oidc))
         .route("/api/identity/logout", post(logout))
@@ -91,6 +94,35 @@ async fn login(
         &session.token,
         86400,
     ))
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct Setup {
+    open: bool,
+}
+
+#[utoipa::path(get, path = "/api/identity/setup", responses((status = 200, body = Setup)))]
+async fn setup_state(State(identity): State<Identity>) -> Result<impl IntoResponse, IdentityError> {
+    Ok((
+        [("cache-control", "no-store")],
+        Json(Setup {
+            open: identity.setup_open().await?,
+        }),
+    ))
+}
+
+/// Creates the installation's first account as its administrator and signs it in.
+#[utoipa::path(post, path = "/api/identity/setup", request_body = Login, responses((status = 200, body = Token), (status = 409)))]
+async fn setup(
+    State(identity): State<Identity>,
+    Json(input): Json<Login>,
+) -> Result<impl IntoResponse, IdentityError> {
+    // Refuse before hashing, so a closed setup costs no password work; bootstrap's lock decides races.
+    if !identity.setup_open().await? {
+        return Err(IdentityError::Conflict);
+    }
+    identity.bootstrap(&input.login, &input.password).await?;
+    login(State(identity), Json(input)).await
 }
 
 pub(super) async fn actor(
