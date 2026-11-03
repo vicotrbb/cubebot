@@ -45,7 +45,6 @@ impl Channel {
 }
 
 impl RuntimeIdentity {
-    /// One span per connection.
     #[tracing::instrument(skip_all)]
     pub async fn serve(self, token: String, mut socket: WebSocket) {
         let mut channel = Channel::default();

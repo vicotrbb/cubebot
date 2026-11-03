@@ -69,7 +69,7 @@ impl Block {
         for done in (0..len).step_by(CHUNK) {
             let buffer = &mut buffer[..(len - done).min(CHUNK as u64) as usize];
             if let Err(error) = self.file.read_exact_at(buffer, start + done) {
-                return Ok(failed(error));
+                return Ok(failed(&error));
             }
             chain.write_at(memory, done, buffer)?;
         }
@@ -86,7 +86,7 @@ impl Block {
             let buffer = &mut buffer[..(len - done).min(CHUNK as u64) as usize];
             chain.read_at(memory, HEADER + done, buffer)?;
             if let Err(error) = self.file.write_all_at(buffer, start + done) {
-                return Ok(failed(error));
+                return Ok(failed(&error));
             }
         }
         Ok(OK)
@@ -95,7 +95,7 @@ impl Block {
     fn flush(&self) -> u8 {
         match self.file.sync_data() {
             Ok(()) => OK,
-            Err(error) => failed(error),
+            Err(error) => failed(&error),
         }
     }
 
@@ -106,7 +106,7 @@ impl Block {
 }
 
 /// A host I/O failure is the guest's disk error, not the sandbox's; it is logged once here.
-fn failed(error: io::Error) -> u8 {
+fn failed(error: &io::Error) -> u8 {
     eprintln!("Sandbox disk I/O failed: {error}");
     IO_ERROR
 }

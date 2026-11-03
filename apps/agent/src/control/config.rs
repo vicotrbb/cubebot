@@ -54,13 +54,12 @@ impl Config {
     }
     pub fn from_environment() -> Result<Self, Error> {
         let origin = std::env::var("CUBEBOT_ORCHESTRATOR_ORIGIN").map_err(Error::configuration)?;
-        let config = match std::env::var("CUBEBOT_BOOTSTRAP_TOKEN") {
-            Ok(token) => Self::new(&origin, PathBuf::new())?.with_token(token)?,
-            Err(_) => {
-                let path = std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE")
-                    .ok_or(Error::Configuration(None))?;
-                Self::new(&origin, path.into())?
-            }
+        let config = if let Ok(token) = std::env::var("CUBEBOT_BOOTSTRAP_TOKEN") {
+            Self::new(&origin, PathBuf::new())?.with_token(token)?
+        } else {
+            let path = std::env::var_os("CUBEBOT_BOOTSTRAP_TOKEN_FILE")
+                .ok_or(Error::Configuration(None))?;
+            Self::new(&origin, path.into())?
         };
         let Some(ca) = std::env::var_os("CUBEBOT_CONTROL_CA_FILE") else {
             return Ok(config);

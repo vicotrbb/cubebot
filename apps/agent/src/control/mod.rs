@@ -117,7 +117,7 @@ impl RuntimeClient {
             .send()
             .await
             .map_err(request_failed)?;
-        let issued: RuntimeSession = transport::decode(response).await?;
+        let issued: RuntimeSession = transport::decode(response, 20 * 1024).await?;
         validate_session(&issued)?;
         self.token = Some(issued.token);
         Ok(())
@@ -241,7 +241,7 @@ impl MemoryClient {
             .await
             .map_err(request_failed)?;
         // Ten results of at most 4 KiB each, JSON-escaped.
-        transport::decode_bounded(response, 256 * 1024).await
+        transport::decode(response, 256 * 1024).await
     }
 
     /// `None` when the orchestrator does not admit the run.
@@ -253,9 +253,7 @@ impl MemoryClient {
             return Ok(None);
         }
         // Fifty memories of 4 KiB, twenty exchanges and twenty 64 KiB skills, JSON-escaped.
-        transport::decode_bounded(response, 8 * 1024 * 1024)
-            .await
-            .map(Some)
+        transport::decode(response, 8 * 1024 * 1024).await.map(Some)
     }
 
     /// `false` once the run has ended, so the change was not committed.
@@ -303,9 +301,7 @@ impl MemoryClient {
             return Ok(None);
         }
         // One package of at most 64 KiB, JSON-escaped.
-        transport::decode_bounded(response, 512 * 1024)
-            .await
-            .map(Some)
+        transport::decode(response, 512 * 1024).await.map(Some)
     }
 
     /// This agent's wallpaper image; `None` when it uses the default.
@@ -328,9 +324,12 @@ impl MemoryClient {
         turn: Uuid,
         request: &runtime::Collaborate,
     ) -> Result<Result<Uuid, String>, Error> {
-        match self.post_for_turn(turn, "messages", request).await? {
+        match self
+            .post(&format!("turns/{turn}/messages"), request)
+            .await?
+        {
             Ok(response) => {
-                let created: runtime::Collaborated = transport::decode(response).await?;
+                let created: runtime::Collaborated = transport::decode(response, 20 * 1024).await?;
                 Ok(Ok(created.turn))
             }
             Err(reason) => Ok(Err(reason)),
@@ -344,7 +343,7 @@ impl MemoryClient {
         turn: Uuid,
         request: &runtime::RequestLogin,
     ) -> Result<Result<(), String>, Error> {
-        accepted(self.post_for_turn(turn, "logins", request).await?)
+        accepted(self.post(&format!("turns/{turn}/logins"), request).await?)
     }
 
     /// The answer to one routine tool call (ADR 0087), or the orchestrator's reason for refusing it.
@@ -354,10 +353,10 @@ impl MemoryClient {
         turn: Uuid,
         call: &runtime::RoutineCall,
     ) -> Result<Result<String, String>, Error> {
-        match self.post_for_turn(turn, "routines", call).await? {
+        match self.post(&format!("turns/{turn}/routines"), call).await? {
             Ok(response) => {
                 let answer: runtime::RoutineAnswer =
-                    transport::decode_bounded(response, 1024 * 1024).await?;
+                    transport::decode(response, 1024 * 1024).await?;
                 Ok(Ok(answer.output))
             }
             Err(reason) => Ok(Err(reason)),
@@ -370,7 +369,7 @@ impl MemoryClient {
         let url = self.url.join("vault").map_err(Error::configuration)?;
         let response = self.http.get(url).bearer_auth(&self.token).send().await;
         let response = response.map_err(request_failed)?;
-        transport::decode_bounded(response, 1024 * 1024).await
+        transport::decode(response, 1024 * 1024).await
     }
 
     /// Has the arbiter type the field, or returns the reason it was refused.
@@ -404,9 +403,7 @@ impl MemoryClient {
             .files_request(reqwest::Method::GET, "files")?
             .query(&query);
         match refused(request).await? {
-            Ok(response) => Ok(Ok(
-                transport::decode_bounded(response, 4 * 1024 * 1024).await?
-            )),
+            Ok(response) => Ok(Ok(transport::decode(response, 4 * 1024 * 1024).await?)),
             Err(reason) => Ok(Err(reason)),
         }
     }
@@ -428,7 +425,7 @@ impl MemoryClient {
         query.extend(parent.map(|parent| ("parent", parent.to_string())));
         let request = self.files_request(reqwest::Method::POST, "files")?;
         match refused(request.query(&query).body(body)).await? {
-            Ok(response) => Ok(Ok(transport::decode_bounded(response, 64 * 1024).await?)),
+            Ok(response) => Ok(Ok(transport::decode(response, 64 * 1024).await?)),
             Err(reason) => Ok(Err(reason)),
         }
     }
@@ -467,16 +464,6 @@ impl MemoryClient {
         let url = self.url.join(path).map_err(Error::configuration)?;
         let request = self.http.request(method, url).bearer_auth(&self.token);
         Ok(request.timeout(Duration::from_secs(30 * 60)))
-    }
-
-    /// The response to a runtime request, or the reason of a 409 refusal.
-    async fn post_for_turn(
-        &self,
-        turn: Uuid,
-        path: &str,
-        body: &impl serde::Serialize,
-    ) -> Result<Result<reqwest::Response, String>, Error> {
-        self.post(&format!("turns/{turn}/{path}"), body).await
     }
 
     /// The response to a runtime request, or the reason of a 409 refusal.

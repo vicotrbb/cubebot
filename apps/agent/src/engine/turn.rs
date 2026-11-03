@@ -250,12 +250,13 @@ async fn start<P: Provider>(
             .flat_map(|registry| registry.definitions().to_vec())
             .filter(|tool| !(turn.task && tool.computer)),
     );
-    let limits = match capabilities.model_limits {
-        true => tokio::select! {
+    let limits = if capabilities.model_limits {
+        tokio::select! {
             limits = provider.limits(&turn.model, &turn.api_key) => limits,
             _ = cancel.wait_for(|cancelled| *cancelled) => return failed("cancelled"),
-        },
-        false => Ok(Limits::default()),
+        }
+    } else {
+        Ok(Limits::default())
     };
     let limits = match limits {
         Ok(limits) => limits,

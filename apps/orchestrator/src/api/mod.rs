@@ -1,6 +1,4 @@
 //! HTTP entry point for the Cubebot control plane.
-//!
-//! Database-enabled mode exposes the initial authenticated identity endpoints.
 
 mod access;
 mod activity;

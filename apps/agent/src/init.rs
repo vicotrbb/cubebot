@@ -35,7 +35,8 @@ const OPENBOX_STARTED: &str = "/tmp/.cubebot-openbox-started";
 /// Prepares storage, starts the desktop and then the agent with `environment` and init's own
 /// paths, which win over any duplicate; returns the agent's pid.
 pub(crate) fn start(mut environment: Vec<(String, String)>, host: Host) -> io::Result<Pid> {
-    let user = tool_user(&environment);
+    // The agent refuses a malformed or root tool user itself, and then runs no tools.
+    let user = setting(&environment, "CUBEBOT_TOOL_USER").and_then(crate::tools::tool_user);
     storage(user)?;
     environment.extend([
         ("PATH".to_owned(), PATH.to_owned()),
@@ -63,12 +64,6 @@ fn setting<'a>(environment: &'a [(String, String)], wanted: &str) -> Option<&'a 
         .rev()
         .find(|(name, _)| name == wanted)
         .map(|(_, value)| value.as_str())
-}
-
-/// The configured tool user; the agent refuses a malformed or root one itself, and then runs no
-/// tools.
-fn tool_user(environment: &[(String, String)]) -> Option<(u32, u32)> {
-    setting(environment, "CUBEBOT_TOOL_USER").and_then(crate::tools::tool_user)
 }
 
 /// The agent's private journal, and a workspace the tool user can write.

@@ -256,18 +256,19 @@ async fn context(
     room: Option<Uuid>,
     message: String,
 ) -> Result<(Option<String>, Vec<Exchange>, String), Error> {
-    let (summary, history) = match task {
-        true => (None, Vec::new()),
-        false => history(tx, actor).await?,
+    let (summary, history) = if task {
+        (None, Vec::new())
+    } else {
+        history(tx, actor).await?
     };
     let message = match room {
-        Some(room) => in_room(super::rooms::context(tx, room).await?, message),
+        Some(room) => in_room(&super::rooms::context(tx, room).await?, message),
         None => message,
     };
     Ok((summary, history, message))
 }
 
-fn in_room(context: String, message: String) -> String {
+fn in_room(context: &str, message: String) -> String {
     if context.is_empty() {
         return message;
     }

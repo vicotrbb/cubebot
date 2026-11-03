@@ -120,9 +120,10 @@ async fn reply<P: Provider>(
 ) -> Result<String, Error> {
     let provider = provider?;
     // Anthropic requires an output limit; a turn passes the model's own the same way.
-    let limits = match provider.capabilities().model_limits {
-        true => provider.limits(request.model, request.key).await?,
-        false => Limits::default(),
+    let limits = if provider.capabilities().model_limits {
+        provider.limits(request.model, request.key).await?
+    } else {
+        Limits::default()
     };
     let request = Request {
         max_output_tokens: limits.max_output_tokens,

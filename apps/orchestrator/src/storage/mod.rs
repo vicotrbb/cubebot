@@ -226,7 +226,7 @@ impl Storage {
             .0
             .used
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let admitted = used.saturating_add(bytes) <= self.0.quota;
         if admitted {
             *used += bytes;
@@ -239,7 +239,7 @@ impl Storage {
             .0
             .used
             .lock()
-            .unwrap_or_else(|poison| poison.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *used = used.saturating_sub(bytes);
     }
 

@@ -361,7 +361,6 @@ function AccountMenu() {
   )
 }
 
-/** Star control used by headers to pin an agent or room in Favorites. */
 export function FavoriteButton({
   kind,
   id,

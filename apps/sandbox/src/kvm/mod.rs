@@ -196,7 +196,6 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
     })
 }
 
-/// Runs one vCPU until the guest shuts down, serving its port I/O and MMIO.
 fn run_vcpu(
     vcpu: &OwnedFd,
     size: usize,
@@ -229,7 +228,7 @@ fn run_vcpu(
                 let mut serial = serial
                     .lock()
                     .map_err(|_| io::Error::other("serial lock poisoned"))?;
-                port_io(run, &mut serial, vm)?
+                port_io(run, &mut serial, vm)?;
             }
             sys::EXIT_MMIO => mmio(run, bus, memory)?,
             // reboot=t and panic=-1 turn a guest reboot, including init exiting, into a triple fault.
@@ -357,10 +356,11 @@ fn guest_environment(
         let value = value
             .into_string()
             .map_err(|_| io::Error::other(format!("{name} is not UTF-8")))?;
-        let value = match name.ends_with("_FILE") {
-            true => read_bounded(Path::new(&value))
-                .map_err(|error| io::Error::other(format!("{name} {value}: {error}")))?,
-            false => value,
+        let value = if name.ends_with("_FILE") {
+            read_bounded(Path::new(&value))
+                .map_err(|error| io::Error::other(format!("{name} {value}: {error}")))?
+        } else {
+            value
         };
         environment.push((name.to_owned(), value));
     }
@@ -382,7 +382,6 @@ fn mmio_base(index: usize) -> u64 {
     MMIO + index as u64 * virtio::WINDOW
 }
 
-/// A size from the environment, or its default when unset.
 fn sized(name: &str, (default, range): (u32, std::ops::RangeInclusive<u32>)) -> io::Result<u32> {
     let Some(value) = std::env::var_os(name) else {
         return Ok(default);

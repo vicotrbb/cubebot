@@ -4,13 +4,13 @@
 //! journaled call's, so a resent call returns the file it already made.
 use crate::{
     control::{Error, MemoryClient},
-    tools::{Registry, Running},
+    tools::{Registry, Running, parse},
 };
 use cubebot_protocol::{
     runtime::{FileShare, ShareKind, SharePermission},
     terminal::Outcome,
 };
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::io;
 use tokio::{
@@ -104,23 +104,13 @@ pub fn call<'a>(
     let Some(client) = client else {
         return Some(Err("shared files are unavailable"));
     };
-    Some(prepare(client, name, id, input, tools))
-}
-
-fn prepare<'a>(
-    client: &'a MemoryClient,
-    name: &str,
-    id: Uuid,
-    input: &Value,
-    tools: Option<&'a Registry>,
-) -> Result<Running<'a>, &'static str> {
     let workspace = || tools.ok_or("your tools are disabled, so there is no workspace");
-    match name {
+    Some(match name {
         "files_list" => list(client, input),
         "files_share" => share(client, input),
-        "files_put" => put(client, id, input, workspace()?),
-        _ => get(client, input, workspace()?),
-    }
+        "files_put" => workspace().and_then(|tools| put(client, id, input, tools)),
+        _ => workspace().and_then(|tools| get(client, input, tools)),
+    })
 }
 
 fn list<'a>(client: &'a MemoryClient, input: &Value) -> Result<Running<'a>, &'static str> {
@@ -171,10 +161,6 @@ fn get<'a>(
     Ok(Box::pin(async move {
         reported(download(client, tools, file, &get.path).await)
     }))
-}
-
-fn parse<T: DeserializeOwned>(input: &Value) -> Result<T, &'static str> {
-    T::deserialize(input).map_err(|_| "invalid tool arguments")
 }
 
 fn uuid(text: &str) -> Result<Uuid, &'static str> {

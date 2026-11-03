@@ -63,7 +63,6 @@ impl Agents {
     }
 }
 
-/// The agent's own wallpaper, if one is set.
 pub async fn wallpaper(
     pool: &sqlx::PgPool,
     agent: AgentId,

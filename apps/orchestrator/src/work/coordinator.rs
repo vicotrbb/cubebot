@@ -38,7 +38,7 @@ pub async fn coordinate(pool: PgPool, connections: Connections, mut stop: watch:
         if !routed(&pool, &connections).await {
             tokio::select! {
                 _ = stop.changed() => return,
-                _ = tokio::time::sleep(Duration::from_secs(2)) => (),
+                () = tokio::time::sleep(Duration::from_secs(2)) => (),
             }
         }
     }
@@ -203,7 +203,7 @@ async fn complete<P: Provider>(
                 Some(Err(error)) => return Err(error),
                 None => return Err(cubebot_providers::Error::Unavailable),
             },
-            _ = &mut deadline => return Err(cubebot_providers::Error::Unavailable),
+            () = &mut deadline => return Err(cubebot_providers::Error::Unavailable),
         }
     }
 }

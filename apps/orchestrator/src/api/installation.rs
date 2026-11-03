@@ -102,7 +102,10 @@ async fn installation(
             terminal_enabled: flags.terminal_enabled,
             computer_use_enabled: flags.computer_use_enabled,
             controller: flags.controller,
-            sandbox_runtime: flags.runtime.as_ref().map(|runtime| runtime.kind()),
+            sandbox_runtime: flags
+                .runtime
+                .as_ref()
+                .map(crate::agents::sandbox::Runtime::kind),
             sandbox_runtime_class: flags
                 .runtime
                 .as_ref()

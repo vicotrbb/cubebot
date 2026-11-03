@@ -115,9 +115,12 @@ fn body(request: &Request) -> Value {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| match tool.computer {
-                true => json!({"type":"computer"}),
-                false => json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters}),
+            .map(|tool| {
+                if tool.computer {
+                    json!({"type":"computer"})
+                } else {
+                    json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters})
+                }
             })
             .collect();
         if request.tools_disabled {

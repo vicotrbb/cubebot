@@ -24,7 +24,6 @@ pub trait Device: Send {
     const QUEUES: usize;
     /// Device-specific feature bits; the transport adds VIRTIO_F_VERSION_1.
     fn features(&self) -> u64;
-    /// Device configuration space.
     fn config(&self) -> &[u8];
     /// The driver wrote `data` at `offset` in the configuration space, which is read-only unless
     /// the device says otherwise.
@@ -36,7 +35,6 @@ pub trait Device: Send {
         queues: &mut [Queue],
         memory: &GuestMemory,
     ) -> io::Result<bool>;
-    /// The driver reset the device.
     fn reset(&mut self) {}
 }
 

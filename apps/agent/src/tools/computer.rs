@@ -12,7 +12,7 @@ use std::{
     io::{self, BufRead, BufReader, Write},
     os::unix::net::UnixStream,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, Instant},
@@ -123,7 +123,6 @@ fn plan(input: &Value) -> Result<Plan, &'static str> {
     })
 }
 
-/// Anthropic's click members.
 const CLICKS: [(&str, Button, u8); 5] = [
     ("left_click", Button::Left, 1),
     ("right_click", Button::Right, 1),
@@ -196,7 +195,7 @@ fn repeated(input: &Value) -> Result<Vec<Step>, &'static str> {
 
 /// One action of an OpenAI computer call.
 fn openai(action: &Value) -> Result<Step, &'static str> {
-    let at = point(&json_pair(action));
+    let at = point_of(action);
     let hold: Vec<String> = action["keys"]
         .as_array()
         .map(|keys| {
@@ -269,12 +268,8 @@ fn wheel(pixels: &Value) -> i32 {
     }
 }
 
-fn json_pair(action: &Value) -> Value {
-    serde_json::json!([action["x"], action["y"]])
-}
-
-fn point_of(value: &Value) -> Option<[u32; 2]> {
-    point(&json_pair(value))
+fn point_of(action: &Value) -> Option<[u32; 2]> {
+    point(&serde_json::json!([action["x"], action["y"]]))
 }
 
 fn point(value: &Value) -> Option<[u32; 2]> {
@@ -304,9 +299,7 @@ fn run(
     plan: Plan,
     stopped: &AtomicBool,
 ) -> Outcome {
-    let mut desktop = desktop
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut desktop = desktop.lock().unwrap_or_else(PoisonError::into_inner);
     let mut refusal = None;
     for step in plan.steps {
         let action = match step {
@@ -328,9 +321,8 @@ fn run(
     }
     let output = refusal.clone().unwrap_or_else(|| "OK".into());
     if !plan.screenshot {
-        let code = if refusal.is_some() { 1 } else { 0 };
         return Outcome::Exited {
-            code: Some(code),
+            code: Some(i32::from(refusal.is_some())),
             output,
         };
     }

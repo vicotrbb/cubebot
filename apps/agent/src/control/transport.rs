@@ -1,11 +1,7 @@
 use super::Error;
 use serde::de::DeserializeOwned;
 
-pub(super) async fn decode<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, Error> {
-    decode_bounded(response, 20 * 1024).await
-}
-
-pub(super) async fn decode_bounded<T: DeserializeOwned>(
+pub(super) async fn decode<T: DeserializeOwned>(
     response: reqwest::Response,
     limit: usize,
 ) -> Result<T, Error> {
@@ -29,12 +25,8 @@ pub(super) async fn refusal(response: reqwest::Response, fallback: String) -> St
     struct Refused {
         error: String,
     }
-    let refused: Result<Refused, _> = body(response, 4 * 1024).await;
-    refused.map_or(fallback, |refused| refused.error)
-}
-
-async fn body<T: DeserializeOwned>(response: reqwest::Response, limit: usize) -> Result<T, Error> {
-    serde_json::from_slice(&read(response, limit).await?).map_err(Error::protocol)
+    let body = read(response, 4 * 1024).await.unwrap_or_default();
+    serde_json::from_slice::<Refused>(&body).map_or(fallback, |refused| refused.error)
 }
 
 async fn read(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>, Error> {

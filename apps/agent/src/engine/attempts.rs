@@ -98,19 +98,19 @@ fn fit(entry: &mut Entry) -> io::Result<Vec<u8>> {
     }
     loop {
         let bytes = serde_json::to_vec(&entry)?;
-        let text = match &mut entry.event {
-            TurnEvent::ToolCall {
-                input: Value::String(text),
-                ..
-            }
-            | TurnEvent::ToolResult {
-                outcome:
-                    Outcome::Exited { output: text, .. }
-                    | Outcome::Stopped { output: text, .. }
-                    | Outcome::Screenshot { output: text, .. },
-                ..
-            } => text,
-            _ => return Ok(bytes),
+        let (TurnEvent::ToolCall {
+            input: Value::String(text),
+            ..
+        }
+        | TurnEvent::ToolResult {
+            outcome:
+                Outcome::Exited { output: text, .. }
+                | Outcome::Stopped { output: text, .. }
+                | Outcome::Screenshot { output: text, .. },
+            ..
+        }) = &mut entry.event
+        else {
+            return Ok(bytes);
         };
         if bytes.len() <= MAX_PAYLOAD || text.len() <= TRUNCATED.len() {
             return Ok(bytes);

@@ -42,7 +42,6 @@ export function Empty({
   )
 }
 
-/** A native dialog with the house frame; `open` controls it. */
 export function Dialog({
   open,
   title,

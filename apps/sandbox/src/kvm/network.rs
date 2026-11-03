@@ -127,13 +127,9 @@ fn ipv4(link: &str) -> io::Result<(Ipv4Addr, Ipv4Addr)> {
 }
 
 fn mac(text: &str) -> io::Result<[u8; 6]> {
-    let octets: Vec<_> = text
-        .trim()
+    text.trim()
         .split(':')
         .map(|octet| u8::from_str_radix(octet, 16))
-        .collect();
-    octets
-        .into_iter()
         .collect::<Result<Vec<_>, _>>()
         .ok()
         .and_then(|octets| octets.try_into().ok())

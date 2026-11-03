@@ -12,7 +12,6 @@ pub struct AccountSummary {
 }
 
 impl Identity {
-    /// The caller's own login.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn account_login(&self, actor: &Actor) -> Result<String, IdentityError> {
         sqlx::query_scalar!(

@@ -7,6 +7,7 @@ mod computer;
 mod mcp;
 
 pub use builtin::edit_file;
+pub(crate) use builtin::parse;
 use cubebot_protocol::terminal::Outcome;
 use serde_json::Value;
 use std::{
@@ -32,7 +33,7 @@ fn lock(
 {
     waiting
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// A `uid:gid` tool user, never root.
@@ -320,7 +321,6 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
         matches!(self.sandbox.wait(command, Some(image)).await, Ok(Some(0)))
     }
 
-    /// Whether `name` is the provider's computer-use tool.
     pub fn computer(&self, name: &str) -> bool {
         self.definitions
             .iter()
