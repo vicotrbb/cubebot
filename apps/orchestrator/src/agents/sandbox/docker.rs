@@ -138,14 +138,19 @@ impl Docker {
         }
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
     }
-    /// The container's `State`, or `None` when it does not exist.
+    /// The container's `State` with its image as `Image`, or `None` when it does not exist.
     async fn inspect(&self, name: &str) -> Result<Option<Value>, Error> {
+        let format = r#"{"State":{{json .State}},"Image":{{json .Config.Image}}}"#;
         match self
-            .docker(&["container", "inspect", "--format", "{{json .State}}", name])
+            .docker(&["container", "inspect", "--format", format, name])
             .await
         {
-            Ok(state) => serde_json::from_str(&state)
-                .map(Some)
+            Ok(found) => serde_json::from_str::<Value>(&found)
+                .map(|mut found| {
+                    let mut state = found["State"].take();
+                    state["Image"] = found["Image"].take();
+                    Some(state)
+                })
                 .map_err(|error| Error::Configuration(error.into())),
             Err(Error::Sandbox(error)) if error.to_string().contains("No such container") => {
                 Ok(None)
@@ -490,6 +495,12 @@ fn next(stale: bool, state: Option<&Value>) -> Next {
         _ => Next::Retire,
     }
 }
+/// The container runs another image than the configured one.
+fn outdated(state: Option<&Value>, image: &str) -> bool {
+    state
+        .and_then(|state| state["Image"].as_str())
+        .is_some_and(|running| running != image)
+}
 /// Why a sandbox exited, when it says.
 fn reason(state: Option<&Value>) -> Option<&'static str> {
     state
@@ -534,7 +545,11 @@ impl Sandbox for Docker {
         }
         let state = self.inspect(&attempt.name).await?;
         let (_, generation) = self.intent(agent).await?;
-        let state = match next(attempt.target_generation != generation, state.as_ref()) {
+        // A changed definition or a new sandbox image, as after `cubebot update`, starts a new
+        // epoch on the next pass; the workspace volume carries over.
+        let stale =
+            attempt.target_generation != generation || outdated(state.as_ref(), &self.config.image);
+        let state = match next(stale, state.as_ref()) {
             Next::Retire => return self.retire(&attempt, state).await,
             Next::Start => {
                 self.docker(&["container", "start", &attempt.name]).await?;
@@ -700,6 +715,16 @@ mod tests {
         let refused = json!({"Status":"exited","ExitCode":78});
         assert_eq!(reason(Some(&refused)), Some("RuntimeLayoutMismatch"));
         assert!(matches!(next(false, Some(&refused)), Next::Observe));
+        let running = json!({"Status":"running","Image":"ghcr.io/vicotrbb/cubebot-agent:v0.1.2"});
+        assert!(outdated(
+            Some(&running),
+            "ghcr.io/vicotrbb/cubebot-agent:v0.1.3"
+        ));
+        assert!(!outdated(
+            Some(&running),
+            "ghcr.io/vicotrbb/cubebot-agent:v0.1.2"
+        ));
+        assert!(!outdated(None, "ghcr.io/vicotrbb/cubebot-agent:v0.1.3"));
         assert!(matches!(next(true, Some(&refused)), Next::Retire));
         let failed = json!({"Status":"exited","ExitCode":1});
         assert!(matches!(next(false, Some(&failed)), Next::Retire));

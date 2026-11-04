@@ -368,6 +368,43 @@ async fn first_frames(router: axum::Router, token: &str, count: usize) -> Vec<(S
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn quiet_streams_send_their_first_bytes_at_once() {
+    // Firefox reports an EventSource open only once body bytes arrive, and the console loads
+    // a conversation's history on open; a quiet stream must not wait for its keep-alive.
+    let f = fixture().await;
+    let token = f
+        .identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap()
+        .token;
+    for uri in [
+        format!("/api/conversations/{}/events", f.ada),
+        "/api/events".into(),
+    ] {
+        let response = f
+            .router()
+            .oneshot(
+                Request::builder()
+                    .uri(&uri)
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{uri}");
+        let frame = tokio::time::timeout(Duration::from_secs(2), response.into_body().frame())
+            .await
+            .unwrap_or_else(|_| panic!("{uri} sent nothing within two seconds"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(frame.into_data().unwrap(), ": open\n\n", "{uri}");
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn the_installation_stream_opens_with_every_visible_agent_and_room() {
     let f = fixture().await;
     let room = Work::new(f.pool.clone())

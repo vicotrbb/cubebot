@@ -166,6 +166,14 @@ pub async fn configured_router_with_credentials(
     )))
 }
 
+/// Starts an event stream's first frames with a comment. Firefox reports an EventSource open
+/// only once body bytes arrive, and the console loads history on open, so a quiet stream would
+/// otherwise keep it waiting for the first keep-alive, 15 s later.
+fn opening(mut first: Vec<axum::response::sse::Event>) -> Vec<axum::response::sse::Event> {
+    first.insert(0, axum::response::sse::Event::default().comment("open"));
+    first
+}
+
 /// The configured database answers; 503 otherwise.
 #[utoipa::path(get, path = "/api/health/ready", responses((status = 200), (status = 503)))]
 async fn readiness(
