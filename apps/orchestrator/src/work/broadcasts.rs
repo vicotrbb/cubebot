@@ -361,7 +361,7 @@ async fn deliver(
         r#"
         INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, broadcast_id)
         SELECT r, b.actor_id, gen_random_uuid(),
-            format('Broadcast to every agent from %s:%s%s',
+            format('Broadcast received from %s. Every agent already has it, so do not forward or rebroadcast it; respond only for yourself:%s%s',
                 COALESCE(g.name || ' (an agent)', h.login), E'\n\n', b.message),
             b.id
         FROM broadcasts b

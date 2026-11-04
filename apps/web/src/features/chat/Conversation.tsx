@@ -255,10 +255,7 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
         </div>
         <p className="msg__text">
           {from?.kind === 'broadcast'
-            ? turn.message.replace(
-                /^Broadcast to every agent from [^\n]*:\n\n/,
-                '',
-              )
+            ? turn.message.replace(/^Broadcast [^\n]*:\n\n/, '')
             : turn.message}
         </p>
       </div>

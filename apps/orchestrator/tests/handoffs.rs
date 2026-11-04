@@ -246,7 +246,8 @@ async fn an_agent_with_the_capability_broadcasts_once_to_every_other_agent() {
     .unwrap();
     assert_eq!(delivered.len(), 1);
     assert!(
-        delivered[0].ends_with("(an agent):\n\nThe deploy is done."),
+        delivered[0].contains("(an agent). Every agent already has it")
+            && delivered[0].ends_with(":\n\nThe deploy is done."),
         "{}",
         delivered[0]
     );
