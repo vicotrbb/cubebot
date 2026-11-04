@@ -10,7 +10,7 @@ pub use vault::redacted;
 
 use crate::{control::MemoryClient, tools::Running};
 use cubebot_protocol::{
-    runtime::{Collaborate, RequestLogin},
+    runtime::{Broadcast, Collaborate, RequestLogin},
     terminal::Outcome,
 };
 use serde::Deserialize;
@@ -49,8 +49,8 @@ pub fn drives_desktop(name: &str) -> bool {
 }
 
 /// `desktop` offers `request_login` and `vault_fill`, which only a lane that controls the
-/// desktop can use.
-pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
+/// desktop can use; `broadcast` offers `broadcast` when the turn may send one.
+pub fn definitions(desktop: bool, broadcast: bool) -> Vec<cubebot_providers::Tool> {
     let tool = |name: &str, description: &str, reply: bool| {
         let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":"Self-contained instructions or information; the recipient sees nothing else of this conversation."}});
         if reply {
@@ -60,7 +60,7 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     };
     let login = cubebot_providers::Tool::strict(
         "request_login",
-        "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.",
+        "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you. First call vault_list: when a login item's site is the page's domain or a parent of it (amazon.com.br serves www.amazon.com.br), fill its username and password with vault_fill and submit, and ask a person only if the site still blocks you, such as for a one-time code. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.",
         json!({"site":{"type":"string","description":"The website's domain, such as github.com."},"reason":{"type":"string","description":"What you need the login for, shown to the person."}}),
     );
     let mut tools = vec![
@@ -76,6 +76,13 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
         ),
     ];
     tools.extend(desktop.then_some(login));
+    tools.extend(broadcast.then(|| {
+        cubebot_providers::Tool::strict(
+            "broadcast",
+            "Send one message to every other agent on the platform at once, each in its own conversation; their replies stay there and show in the console's Broadcast channel. Use it only for news or requests that truly concern every agent, at most once per turn; for one agent use send_message.",
+            json!({"message":{"type":"string","description":"Self-contained text every agent can act on without this conversation."}}),
+        )
+    }));
     tools.extend(vault::definitions(desktop));
     tools.extend(routines::definitions());
     tools
@@ -102,6 +109,7 @@ impl Collaboration {
             "delegate" => true,
             "send_message" => false,
             "request_login" => return Some(self.login(id, input)),
+            "broadcast" => return Some(self.broadcast(id, input)),
             _ => {
                 return self
                     .vault(name, input)
@@ -150,6 +158,29 @@ impl Collaboration {
         }))
     }
 
+    fn broadcast(&self, id: Uuid, input: &Value) -> Result<Running<'_>, &'static str> {
+        let message = input["message"]
+            .as_str()
+            .filter(|message| !message.trim().is_empty() && message.len() <= 16384)
+            .ok_or("a message of at most 16 KiB is required")?;
+        let request = Broadcast {
+            call: id,
+            message: message.into(),
+        };
+        Ok(Box::pin(async move {
+            let sent = match &self.client {
+                Some(client) => client.broadcast(self.turn, &request).await,
+                None => Err(crate::control::Error::Unavailable(None)),
+            };
+            let (code, output) = match sent {
+                Ok(Ok(agents)) => (Some(0), format!("Broadcast to {agents} agents.")),
+                Ok(Err(reason)) => (Some(1), format!("Not broadcast: {reason}.")),
+                Err(_) => (None, "The orchestrator did not answer; the broadcast may or may not have been sent. Do not send it again.".into()),
+            };
+            Outcome::Exited { code, output }
+        }))
+    }
+
     async fn send(&self, request: Collaborate) -> Outcome {
         let sent = match &self.client {
             Some(client) => client.collaborate(self.turn, &request).await,
@@ -167,5 +198,25 @@ impl Collaboration {
     /// Steering waiting for the next safe point, oldest first.
     pub fn take_steering(&self) -> Vec<(Uuid, String)> {
         std::mem::take(&mut *self.steering.lock().unwrap())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn broadcast_is_offered_only_to_a_turn_that_may_broadcast() {
+        let names = |broadcast| -> Vec<String> {
+            super::definitions(false, broadcast)
+                .into_iter()
+                .map(|tool| tool.name)
+                .collect()
+        };
+        assert!(names(true).contains(&"broadcast".to_owned()));
+        assert!(!names(false).contains(&"broadcast".to_owned()));
+        let login = super::definitions(true, false)
+            .into_iter()
+            .find(|tool| tool.name == "request_login")
+            .unwrap();
+        assert!(login.description.contains("First call vault_list"));
     }
 }

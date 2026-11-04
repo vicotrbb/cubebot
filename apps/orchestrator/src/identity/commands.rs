@@ -109,6 +109,10 @@ impl Command {
         .fetch_all(&mut *transaction)
         .await?;
         self.record(&mut transaction, receipt).await?;
+        let event = super::audit::Event::by(self.actor, self.kind)
+            .on(receipt.id)
+            .detail(self.input.clone());
+        super::audit::record(&mut *transaction, &event).await?;
         transaction.commit().await?;
         Ok(receipt)
     }

@@ -263,5 +263,21 @@ pub(super) async fn audit(
     )
     .execute(&mut **transaction)
     .await?;
-    Ok(())
+    let kind = match action {
+        "bootstrap" => "account.bootstrap",
+        "invitation_accepted" => "invitation.accept",
+        "oidc_sign_in" => "session.sign_in",
+        "oidc_identity_linked" => "oidc.link",
+        // account_created, account_suspended and oidc_identity_revoked are commands, which
+        // record themselves.
+        _ => return Ok(()),
+    };
+    let detail = match kind {
+        "session.sign_in" => serde_json::json!({"method": "oidc"}),
+        _ => serde_json::json!({}),
+    };
+    let event = super::audit::Event::by(actor, kind)
+        .on(subject)
+        .detail(detail);
+    super::audit::record(&mut **transaction, &event).await
 }

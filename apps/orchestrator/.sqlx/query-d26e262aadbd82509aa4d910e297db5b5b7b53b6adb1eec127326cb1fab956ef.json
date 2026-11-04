@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM human_sessions\n            WHERE token_hash = $1\n            RETURNING account_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d26e262aadbd82509aa4d910e297db5b5b7b53b6adb1eec127326cb1fab956ef"
+}

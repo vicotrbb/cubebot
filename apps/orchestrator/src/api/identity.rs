@@ -1,14 +1,15 @@
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    body::Bytes,
+    extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::identity::{Actor, Identity, IdentityError};
+use crate::identity::{Actor, Identity, IdentityError, audit::Event};
 
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(
@@ -19,6 +20,10 @@ use crate::identity::{Actor, Identity, IdentityError};
     logout,
     preferences,
     set_preferences,
+    avatars,
+    avatar,
+    set_avatar,
+    remove_avatar,
     accounts,
     create_account,
     suspend,
@@ -38,6 +43,14 @@ pub fn router(identity: Identity) -> Router {
         .route(
             "/api/identity/me/preferences",
             get(preferences).put(set_preferences),
+        )
+        .route("/api/identity/avatars", get(avatars))
+        .route("/api/identity/accounts/{id}/avatar", get(avatar))
+        .route(
+            "/api/identity/me/avatar",
+            put(set_avatar)
+                .delete(remove_avatar)
+                .layer(DefaultBodyLimit::max(crate::identity::AVATAR_BYTES)),
         )
         .route("/api/identity/accounts", get(accounts).post(create_account))
         .route("/api/identity/suspend", post(suspend))
@@ -80,7 +93,15 @@ async fn login(
     State(identity): State<Identity>,
     Json(input): Json<Login>,
 ) -> Result<impl IntoResponse, IdentityError> {
-    let session = identity.login(&input.login, &input.password).await?;
+    let session = match identity.login(&input.login, &input.password).await {
+        Err(IdentityError::Unauthorized) => {
+            let event = Event::anonymous("session.sign_in_failed")
+                .detail(serde_json::json!({"login": input.login, "method": "password"}));
+            identity.audit(event).await;
+            return Err(IdentityError::Unauthorized);
+        }
+        session => session?,
+    };
     let response = (
         [("cache-control", "no-store")],
         Json(Token {
@@ -184,6 +205,59 @@ async fn set_preferences(
     let actor = actor(&identity, &headers).await?;
     identity.set_preferences(&actor, &input).await?;
     Ok(([("cache-control", "no-store")], Json(input)))
+}
+
+/// Everyone's picture revision, for people who have one.
+#[utoipa::path(get, path = "/api/identity/avatars", responses((status = 200, body = Vec<crate::identity::AvatarRevision>)))]
+async fn avatars(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(identity.avatars().await?),
+    ))
+}
+
+/// A person's picture. Pages ask with `?v=<revision>`, so a new picture is a new URL and this
+/// one may be cached.
+#[utoipa::path(get, path = "/api/identity/accounts/{id}/avatar", params(("id" = Uuid, Path)), responses((status = 200, content_type = "image/png"), (status = 404)))]
+async fn avatar(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse, IdentityError> {
+    actor(&identity, &headers).await?;
+    let image = identity.avatar(id).await?.ok_or(IdentityError::NotFound)?;
+    let content_type = crate::agents::content_type(&image).ok_or(IdentityError::NotFound)?;
+    Ok((
+        [
+            ("cache-control", "private, max-age=31536000, immutable"),
+            ("content-type", content_type),
+        ],
+        image,
+    ))
+}
+
+/// Sets the caller's picture from a JPEG or PNG body of at most 1 MiB; returns its revision.
+#[utoipa::path(put, path = "/api/identity/me/avatar", request_body(content = Vec<u8>, content_type = "image/png"), responses((status = 200, body = i64), (status = 400)))]
+async fn set_avatar(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    image: Bytes,
+) -> Result<Json<i64>, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok(Json(identity.set_avatar(&actor, Some(&image)).await?))
+}
+
+#[utoipa::path(delete, path = "/api/identity/me/avatar", responses((status = 200, body = i64)))]
+async fn remove_avatar(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+) -> Result<Json<i64>, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok(Json(identity.set_avatar(&actor, None).await?))
 }
 
 #[utoipa::path(post, path = "/api/identity/logout", responses((status = 200, body = bool)))]

@@ -122,6 +122,10 @@ pub struct Turn {
     /// them when they differ from what it already has. Never log them.
     #[serde(default)]
     pub mcp_servers: Vec<McpServer>,
+    /// The agent may broadcast to every agent from this turn: its broadcast capability is on
+    /// and the turn is not itself a broadcast, so broadcasts never answer each other.
+    #[serde(default)]
+    pub broadcast: bool,
 }
 
 /// One MCP server (docs/adr/agents.md#local-and-remote-mcp-server-support) as the agent connects it: a local
@@ -208,6 +212,23 @@ pub struct RequestLogin {
     pub site: String,
     pub reason: String,
 }
+/// A message from the agent's running turn to every other agent, at `POST
+/// /api/runtime/turns/{turn}/broadcasts`. `call` is the tool call's id, so a resend sends
+/// nothing new; a refusal is 409 with the reason the model reads.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Broadcast {
+    pub call: Uuid,
+    pub message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Broadcasted {
+    /// The agents it was delivered to.
+    pub agents: u32,
+}
+
 /// A vault item (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) from `GET /api/runtime/vault`: never its secret.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -524,6 +545,7 @@ mod tests {
                 url: "https://mcp.example".into(),
                 headers: [("Authorization".into(), "Bearer k".into())].into(),
             }],
+            broadcast: false,
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));

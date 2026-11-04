@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(t.id) AS \"agents!\"\n        FROM broadcasts b\n        LEFT JOIN chat_turns t ON t.broadcast_id = b.id\n        WHERE b.request_id=$1 AND b.agent_id=$2\n        GROUP BY b.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agents!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7665aa8b67958778b2ba646eab6d738e55afb255e7b9df57b1b482d51ec6f5bd"
+}

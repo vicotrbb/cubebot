@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO broadcasts (actor_id, agent_id, turn_id, request_id, message)\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "eea6bac4853367c8bb8a6ccd3554366c305e2b0f469e7eec3dff7ae2ecf58a2b"
+}

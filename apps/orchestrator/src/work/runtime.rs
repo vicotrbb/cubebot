@@ -32,8 +32,9 @@ impl Work {
         .await?;
         // A waiting turn holds its lane until it is retried or cancelled.
         let pending = sqlx::query!(
-            "
-            SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only
+            r#"
+            SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
+                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!"
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -44,7 +45,7 @@ impl Work {
             ORDER BY t.sequence
             LIMIT 1
             FOR UPDATE OF t
-            ",
+            "#,
             actor.agent.0,
         )
         .fetch_optional(&mut **tx)
@@ -59,6 +60,7 @@ impl Work {
             pending.room_message_id,
         );
         let (command, command_only) = (pending.command, pending.command_only);
+        let broadcast = pending.broadcast && !task;
         if !sender_allowed(tx, turn).await? {
             wait(tx, turn, "sender_access_revoked").await?;
             return Ok(None);
@@ -109,6 +111,7 @@ impl Work {
             command,
             command_only,
             mcp_servers,
+            broadcast,
         }))
     }
 

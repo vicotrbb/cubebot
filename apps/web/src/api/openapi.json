@@ -1162,6 +1162,134 @@
         }
       }
     },
+    "/api/audit": {
+      "get": {
+        "tags": [],
+        "summary": "The installation audit log, newest first; administrators only.",
+        "operationId": "audit_log",
+        "parameters": [
+          {
+            "name": "before",
+            "in": "query",
+            "description": "Entries older than this sequence; the newest when absent.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "area",
+            "in": "query",
+            "description": "Areas such as `vault` or `session`, comma-separated; every area when absent.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/broadcasts": {
+      "get": {
+        "tags": [],
+        "summary": "The Broadcast channel, administrators only: up to 100 broadcasts after `after`, oldest first.",
+        "operationId": "broadcasts",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastFeed"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "Sends one message to every agent that is not retired; administrators only.",
+        "operationId": "broadcast",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BroadcastMessage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/broadcasts/read": {
+      "put": {
+        "tags": [],
+        "operationId": "read_broadcasts",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadCursor"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadCursor"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/conversations/{conversation}/events": {
       "get": {
         "tags": [],
@@ -2020,6 +2148,57 @@
         }
       }
     },
+    "/api/identity/accounts/{id}/avatar": {
+      "get": {
+        "tags": [],
+        "summary": "A person's picture. Pages ask with `?v=<revision>`, so a new picture is a new URL and this\none may be cached.",
+        "operationId": "avatar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "image/png": {}
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/avatars": {
+      "get": {
+        "tags": [],
+        "summary": "Everyone's picture revision, for people who have one.",
+        "operationId": "avatars",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvatarRevision"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/identity/commands/{kind}/{request_id}": {
       "get": {
         "tags": [],
@@ -2231,6 +2410,61 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/me/avatar": {
+      "put": {
+        "tags": [],
+        "summary": "Sets the caller's picture from a JPEG or PNG body of at most 1 MiB; returns its revision.",
+        "operationId": "set_avatar",
+        "requestBody": {
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "remove_avatar",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "integer",
+                  "format": "int64"
                 }
               }
             }
@@ -3427,6 +3661,7 @@
           "restart_generation",
           "idle_delay_seconds",
           "task_lanes",
+          "broadcast",
           "activity",
           "capabilities",
           "avatar",
@@ -3442,6 +3677,10 @@
           },
           "avatar": {
             "$ref": "#/components/schemas/Avatar"
+          },
+          "broadcast": {
+            "type": "boolean",
+            "description": "The agent may broadcast to every agent (migrations/0046_broadcasts.sql)."
           },
           "capabilities": {
             "type": "array",
@@ -3664,6 +3903,47 @@
         "type": "string",
         "format": "uuid"
       },
+      "AuditEntry": {
+        "type": "object",
+        "required": ["sequence", "at", "kind", "detail"],
+        "properties": {
+          "actor": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "actor_name": {
+            "type": ["string", "null"]
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "agent_name": {
+            "type": ["string", "null"]
+          },
+          "at": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "resource": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "resource_name": {
+            "type": ["string", "null"],
+            "description": "The resource's current name when it is an agent, account, team, room, vault item or MCP\nserver that still exists."
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Authorization": {
         "type": "object",
         "required": ["authorization_url"],
@@ -3689,6 +3969,24 @@
           }
         },
         "additionalProperties": false
+      },
+      "AvatarRevision": {
+        "type": "object",
+        "required": ["account", "login", "revision"],
+        "properties": {
+          "account": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "login": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Changes with each new picture; part of the picture's URL so it can be cached."
+          }
+        }
       },
       "BTreeMap": {
         "type": "object",
@@ -3730,6 +4028,71 @@
           },
           "subject": {
             "type": "string"
+          }
+        }
+      },
+      "BroadcastFeed": {
+        "type": "object",
+        "required": ["messages", "read_sequence"],
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BroadcastMessage"
+            }
+          },
+          "read_sequence": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The caller's read cursor, 0 until set."
+          }
+        }
+      },
+      "BroadcastMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "sequence",
+          "author",
+          "account",
+          "message",
+          "at",
+          "deliveries"
+        ],
+        "properties": {
+          "account": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The person who sent it, or on whose behalf the agent did."
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The agent that sent it; `None` when a person did."
+          },
+          "at": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string",
+            "description": "The sending person's login, or the agent's name."
+          },
+          "deliveries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Delivery"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -4802,11 +5165,11 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`room`, `routine`, `delegation` or `message`."
+            "description": "`broadcast`, `room`, `routine`, `delegation` or `message`."
           },
           "name": {
             "type": "string",
-            "description": "The room's or routine's name, or the sending agent's."
+            "description": "The room's or routine's name, the sending agent's, or a broadcast's sender."
           },
           "parent_turn_id": {
             "type": ["string", "null"],
@@ -5927,6 +6290,10 @@
                 "description": "`None` keeps the current cube; not part of the revision history."
               }
             ]
+          },
+          "broadcast": {
+            "type": ["boolean", "null"],
+            "description": "Whether the agent may broadcast to every agent; `None` keeps the current setting."
           },
           "dreaming_model": {
             "type": ["string", "null"],

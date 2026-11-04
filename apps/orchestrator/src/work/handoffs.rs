@@ -6,7 +6,11 @@
 use super::Work;
 use crate::{
     agents::{AgentId, kubernetes::Error, runtime::RuntimeActor},
-    identity::IdentityError,
+    connections::same_site,
+    identity::{
+        IdentityError,
+        audit::{Event, record},
+    },
 };
 use cubebot_protocol::runtime::RequestLogin;
 use serde::{Deserialize, Serialize};
@@ -96,6 +100,9 @@ impl Work {
                 "a login on {site} is already waiting for a person"
             )));
         }
+        if let Some(refusal) = unfilled_login(&mut tx, actor.agent, turn, &input.site).await? {
+            return Ok(Err(refusal));
+        }
         sqlx::query!(
             "
             INSERT INTO login_handoffs (agent_id, turn_id, call_id, site, reason)
@@ -109,6 +116,9 @@ impl Work {
         )
         .execute(&mut *tx)
         .await?;
+        let detail = serde_json::json!({ "site": input.site, "reason": input.reason });
+        let event = Event::by_agent(actor.agent.0, "login.request").on(actor.agent.0);
+        record(&mut *tx, &event.detail(detail)).await?;
         tx.commit().await?;
         Ok(Ok(()))
     }
@@ -205,4 +215,46 @@ fn valid(input: &RequestLogin) -> bool {
         !value.trim().is_empty() && value.len() <= limit && !value.contains('\0')
     };
     text(&input.site, 255) && text(&input.reason, 2048)
+}
+
+/// The refusal for a login the vault can do: a saved login for the site that this turn has not
+/// filled yet. Once one was filled the person is asked anyway, for a code or a challenge the
+/// vault cannot answer.
+async fn unfilled_login(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    agent: AgentId,
+    turn: Uuid,
+    site: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let logins = sqlx::query!(
+        r#"
+        SELECT v.id, v.name, v.site AS "site!",
+            COALESCE(v.last_used_at >= t.created_at, false) AS "filled!"
+        FROM vault_items v, chat_turns t
+        WHERE t.id=$2 AND v.kind='login'
+            AND (v.agent_id=$1
+                OR (v.agent_id IS NULL AND (v.access->>'mode' = 'all_agents'
+                    OR v.access->'agents' @> jsonb_build_array($1::uuid))))
+        ORDER BY v.agent_id IS NULL, v.name
+        "#,
+        agent.0,
+        turn,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let matching: Vec<_> = logins
+        .iter()
+        .filter(|login| same_site(&login.site, site))
+        .collect();
+    if matching.iter().any(|login| login.filled) {
+        return Ok(None);
+    }
+    Ok(matching.first().map(|login| {
+        format!(
+            "your vault has a login for {} ({}, item {}): fill the username and password with \
+             vault_fill and submit the form; ask a person only if the site still blocks you, \
+             such as for a one-time code",
+            login.site, login.name, login.id
+        )
+    }))
 }

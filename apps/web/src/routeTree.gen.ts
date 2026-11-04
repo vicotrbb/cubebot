@@ -13,6 +13,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
+import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppYouRouteImport } from './routes/_app.you'
@@ -61,6 +62,11 @@ const AppIndexRoute = AppIndexRouteImport.update({
 const AppActivityRoute = AppActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppBroadcastRoute = AppBroadcastRouteImport.update({
+  id: '/broadcast',
+  path: '/broadcast',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFilesRoute = AppFilesRouteImport.update({
@@ -222,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/sign-in': typeof SignInRoute
   '/activity': typeof AppActivityRoute
+  '/broadcast': typeof AppBroadcastRoute
   '/files': typeof AppFilesRoute
   '/platform': typeof AppPlatformRouteWithChildren
   '/you': typeof AppYouRoute
@@ -256,6 +263,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/activity': typeof AppActivityRoute
+  '/broadcast': typeof AppBroadcastRoute
   '/files': typeof AppFilesRoute
   '/platform': typeof AppPlatformRouteWithChildren
   '/you': typeof AppYouRoute
@@ -293,6 +301,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/sign-in': typeof SignInRoute
   '/_app/activity': typeof AppActivityRoute
+  '/_app/broadcast': typeof AppBroadcastRoute
   '/_app/files': typeof AppFilesRoute
   '/_app/platform': typeof AppPlatformRouteWithChildren
   '/_app/you': typeof AppYouRoute
@@ -331,6 +340,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sign-in'
     | '/activity'
+    | '/broadcast'
     | '/files'
     | '/platform'
     | '/you'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
   to:
     | '/sign-in'
     | '/activity'
+    | '/broadcast'
     | '/files'
     | '/platform'
     | '/you'
@@ -401,6 +412,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/sign-in'
     | '/_app/activity'
+    | '/_app/broadcast'
     | '/_app/files'
     | '/_app/platform'
     | '/_app/you'
@@ -467,6 +479,13 @@ declare module '@tanstack/react-router' {
       path: '/activity'
       fullPath: '/activity'
       preLoaderRoute: typeof AppActivityRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/broadcast': {
+      id: '/_app/broadcast'
+      path: '/broadcast'
+      fullPath: '/broadcast'
+      preLoaderRoute: typeof AppBroadcastRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/files': {
@@ -753,6 +772,7 @@ const AppRoomsRoomIdRouteWithChildren = AppRoomsRoomIdRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppActivityRoute: typeof AppActivityRoute
+  AppBroadcastRoute: typeof AppBroadcastRoute
   AppFilesRoute: typeof AppFilesRoute
   AppPlatformRoute: typeof AppPlatformRouteWithChildren
   AppYouRoute: typeof AppYouRoute
@@ -768,6 +788,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppActivityRoute: AppActivityRoute,
+  AppBroadcastRoute: AppBroadcastRoute,
   AppFilesRoute: AppFilesRoute,
   AppPlatformRoute: AppPlatformRouteWithChildren,
   AppYouRoute: AppYouRoute,

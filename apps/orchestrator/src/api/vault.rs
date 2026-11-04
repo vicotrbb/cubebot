@@ -8,6 +8,7 @@ use crate::{
     identity::{
         Actor, Identity, IdentityError,
         access::{Capability, Scope},
+        audit::Event,
     },
 };
 use axum::{
@@ -19,6 +20,7 @@ use axum::{
 };
 use cubebot_protocol::runtime::VaultField;
 use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -99,9 +101,16 @@ async fn create(
     let actor = super::identity::actor(&api.identity, &headers).await?;
     let agent = input.agent.map(AgentId);
     allowed(&api, &actor, agent, Capability::BrowserControl).await?;
-    Ok(Json(
-        api.connections.create_vault_item(actor.id, &input).await?,
-    ))
+    let item = api.connections.create_vault_item(actor.id, &input).await?;
+    audit(&api, &actor, "vault.create", &item).await;
+    Ok(Json(item))
+}
+
+async fn audit(api: &Api, actor: &Actor, kind: &'static str, item: &VaultSummary) {
+    let detail =
+        json!({"name": item.name, "site": item.site, "kind": item.kind, "agent": item.agent});
+    let event = Event::by(actor.id, kind).on(item.id).detail(detail);
+    api.identity.audit(event).await;
 }
 
 #[utoipa::path(put, path = "/api/vault/{item}", operation_id = "update_vault_item", params(("item" = Uuid, Path)), request_body = SaveVaultItem, responses((status = 200, body = VaultSummary)))]
@@ -116,7 +125,9 @@ async fn update(
     if item_scope(&api, &actor, item).await?.is_some() && input.access.is_some() {
         return Err(IdentityError::InvalidInput);
     }
-    Ok(Json(api.connections.update_vault_item(item, &input).await?))
+    let item = api.connections.update_vault_item(item, &input).await?;
+    audit(&api, &actor, "vault.update", &item).await;
+    Ok(Json(item))
 }
 
 #[utoipa::path(delete, path = "/api/vault/{item}", operation_id = "delete_vault_item", params(("item" = Uuid, Path)), responses((status = 204)))]
@@ -126,8 +137,11 @@ async fn delete(
     Path(item): Path<Uuid>,
 ) -> Result<StatusCode, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
-    item_scope(&api, &actor, item).await?;
-    api.connections.delete_vault_item(item).await?;
+    let agent = item_scope(&api, &actor, item).await?;
+    let name = api.connections.delete_vault_item(item).await?;
+    let detail = json!({"name": name, "agent": agent.map(|agent| agent.0)});
+    let event = Event::by(actor.id, "vault.delete").on(item).detail(detail);
+    api.identity.audit(event).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -161,7 +175,7 @@ async fn fill(
     };
     let text = api
         .connections
-        .vault_fill_text(agent, item, input.field)
+        .vault_fill_text(agent, Some(actor.id), item, input.field)
         .await?;
     let text = text.ok_or(IdentityError::NotFound)?;
     match super::desktop::fill(&desktop, agent, item, text, Some(actor.id)).await {

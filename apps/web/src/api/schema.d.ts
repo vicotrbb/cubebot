@@ -396,6 +396,57 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/audit': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The installation audit log, newest first; administrators only. */
+    get: operations['audit_log']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/broadcasts': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The Broadcast channel, administrators only: up to 100 broadcasts after `after`, oldest first. */
+    get: operations['broadcasts']
+    put?: never
+    /** Sends one message to every agent that is not retired; administrators only. */
+    post: operations['broadcast']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/broadcasts/read': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['read_broadcasts']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/conversations/{conversation}/events': {
     parameters: {
       query?: never
@@ -752,6 +803,43 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/accounts/{id}/avatar': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * A person's picture. Pages ask with `?v=<revision>`, so a new picture is a new URL and this
+     *     one may be cached.
+     */
+    get: operations['avatar']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/avatars': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Everyone's picture revision, for people who have one. */
+    get: operations['avatars']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/commands/{kind}/{request_id}': {
     parameters: {
       query?: never
@@ -861,6 +949,23 @@ export interface paths {
     put?: never
     post?: never
     delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/avatar': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Sets the caller's picture from a JPEG or PNG body of at most 1 MiB; returns its revision. */
+    put: operations['set_avatar']
+    post?: never
+    delete: operations['remove_avatar']
     options?: never
     head?: never
     patch?: never
@@ -1358,6 +1463,8 @@ export interface components {
        */
       activity: string
       avatar: components['schemas']['Avatar']
+      /** @description The agent may broadcast to every agent (migrations/0046_broadcasts.sql). */
+      broadcast: boolean
       /**
        * @description The caller's capabilities on this agent and its conversation as grant names, such as
        *     `conversation_send`.
@@ -1448,6 +1555,26 @@ export interface components {
     }
     /** Format: uuid */
     AttemptId: string
+    AuditEntry: {
+      /** Format: uuid */
+      actor?: string | null
+      actor_name?: string | null
+      /** Format: uuid */
+      agent?: string | null
+      agent_name?: string | null
+      at: string
+      detail: Record<string, never>
+      kind: string
+      /** Format: uuid */
+      resource?: string | null
+      /**
+       * @description The resource's current name when it is an agent, account, team, room, vault item or MCP
+       *     server that still exists.
+       */
+      resource_name?: string | null
+      /** Format: int64 */
+      sequence: number
+    }
     Authorization: {
       authorization_url: string
     }
@@ -1456,6 +1583,16 @@ export interface components {
       accessory: components['schemas']['Accessory']
       eyes: components['schemas']['Eyes']
       paint: components['schemas']['Paint']
+    }
+    AvatarRevision: {
+      /** Format: uuid */
+      account: string
+      login: string
+      /**
+       * Format: int64
+       * @description Changes with each new picture; part of the picture's URL so it can be cached.
+       */
+      revision: number
     }
     BTreeMap: {
       [key: string]: string
@@ -1470,6 +1607,35 @@ export interface components {
       /** Format: int64 */
       revision: number
       subject: string
+    }
+    BroadcastFeed: {
+      messages: components['schemas']['BroadcastMessage'][]
+      /**
+       * Format: int64
+       * @description The caller's read cursor, 0 until set.
+       */
+      read_sequence: number
+    }
+    BroadcastMessage: {
+      /**
+       * Format: uuid
+       * @description The person who sent it, or on whose behalf the agent did.
+       */
+      account: string
+      /**
+       * Format: uuid
+       * @description The agent that sent it; `None` when a person did.
+       */
+      agent?: string | null
+      at: string
+      /** @description The sending person's login, or the agent's name. */
+      author: string
+      deliveries: components['schemas']['Delivery'][]
+      /** Format: uuid */
+      id: string
+      message: string
+      /** Format: int64 */
+      sequence: number
     }
     /** @enum {string} */
     Capability:
@@ -1913,9 +2079,9 @@ export interface components {
       turn: string
     }
     Origin: {
-      /** @description `room`, `routine`, `delegation` or `message`. */
+      /** @description `broadcast`, `room`, `routine`, `delegation` or `message`. */
       kind: string
-      /** @description The room's or routine's name, or the sending agent's. */
+      /** @description The room's or routine's name, the sending agent's, or a broadcast's sender. */
       name: string
       /** Format: uuid */
       parent_turn_id?: string | null
@@ -2331,6 +2497,8 @@ export interface components {
         }
     UpdateAgent: {
       avatar?: null | components['schemas']['Avatar']
+      /** @description Whether the agent may broadcast to every agent; `None` keeps the current setting. */
+      broadcast?: boolean | null
       /** @description `None` dreams with the connection's model. */
       dreaming_model?: string | null
       /** Format: int64 */
@@ -3135,6 +3303,97 @@ export interface operations {
       }
     }
   }
+  audit_log: {
+    parameters: {
+      query?: {
+        /** @description Entries older than this sequence; the newest when absent. */
+        before?: number
+        /** @description Areas such as `vault` or `session`, comma-separated; every area when absent. */
+        area?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AuditEntry'][]
+        }
+      }
+    }
+  }
+  broadcasts: {
+    parameters: {
+      query?: {
+        after?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BroadcastFeed']
+        }
+      }
+    }
+  }
+  broadcast: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendMessage']
+      }
+    }
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BroadcastMessage']
+        }
+      }
+    }
+  }
+  read_broadcasts: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReadCursor']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ReadCursor']
+        }
+      }
+    }
+  }
   events: {
     parameters: {
       query?: {
@@ -3724,6 +3983,52 @@ export interface operations {
       }
     }
   }
+  avatar: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'image/png': unknown
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  avatars: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AvatarRevision'][]
+        }
+      }
+    }
+  }
   receipt: {
     parameters: {
       query?: never
@@ -3893,6 +4198,54 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Account']
+        }
+      }
+    }
+  }
+  set_avatar: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'image/png': number[]
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/plain': number
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  remove_avatar: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/plain': number
         }
       }
     }

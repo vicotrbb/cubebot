@@ -128,6 +128,7 @@ async fn events(
         headers,
         agents: HashMap::new(),
         rooms: HashMap::new(),
+        broadcast: None,
     };
     // The first poll runs before responding so a refusal is an HTTP status, not a closed stream.
     let first = follow.poll().await?;
@@ -154,6 +155,8 @@ struct Follow {
     /// What each agent last looked like: activity, desktop, pending login, last sequence.
     agents: HashMap<AgentId, (String, bool, bool, i64)>,
     rooms: HashMap<Uuid, i64>,
+    /// The newest broadcast's sequence, for administrators.
+    broadcast: Option<i64>,
 }
 
 impl Follow {
@@ -177,6 +180,14 @@ impl Follow {
                 frames.push(frame("room", &room));
             }
         }
+        let broadcast = self.api.work.broadcast_sequence(&actor).await?;
+        if let Some(last_sequence) = broadcast.filter(|_| broadcast != self.broadcast) {
+            frames.push(frame(
+                "broadcast",
+                &serde_json::json!({ "last_sequence": last_sequence }),
+            ));
+        }
+        self.broadcast = broadcast;
         Ok(frames)
     }
 }

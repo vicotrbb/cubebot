@@ -334,14 +334,13 @@ impl Connections {
     }
 
     #[tracing::instrument(skip_all, fields(server = %server))]
-    pub async fn delete_mcp_server(&self, server: Uuid) -> Result<(), IdentityError> {
-        let deleted = sqlx::query!("DELETE FROM mcp_servers WHERE id=$1", server)
-            .execute(&self.pool)
-            .await?;
-        if deleted.rows_affected() == 0 {
-            return Err(IdentityError::NotFound);
-        }
-        Ok(())
+    /// Returns the deleted server's name.
+    pub async fn delete_mcp_server(&self, server: Uuid) -> Result<String, IdentityError> {
+        let deleted =
+            sqlx::query_scalar!("DELETE FROM mcp_servers WHERE id=$1 RETURNING name", server)
+                .fetch_optional(&self.pool)
+                .await?;
+        deleted.ok_or(IdentityError::NotFound)
     }
 
     /// Every server with whether `agent` may use it.

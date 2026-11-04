@@ -23,7 +23,7 @@
   margin-bottom: 12px;
 }
 .sign-in__name {
-  font-weight: 800;
+  font-weight: var(--w-head);
   font-size: var(--t-xl);
   letter-spacing: -0.015em;
 }

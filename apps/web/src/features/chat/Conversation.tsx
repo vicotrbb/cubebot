@@ -1,9 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { Hash, Repeat } from 'lucide-react'
+import { Hash, Megaphone, Repeat } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok, type Turn } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
+import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Skeleton } from '../../components/primitives'
 import { Composer } from './Composer'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
@@ -159,6 +160,7 @@ function queuedLabel(activity: string) {
 function origin(turn: Turn) {
   const from = turn.origin
   if (!from) return null
+  if (from.kind === 'broadcast') return `broadcast from ${from.name}`
   if (from.kind === 'room') return `via room ${from.name}`
   if (from.kind === 'routine') return `via routine ${from.name}`
   if (from.kind === 'delegation') return `delegated by ${from.name}`
@@ -231,23 +233,34 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
   const from = turn.origin
   return (
     <div className="msg msg--person">
-      <span className="avatar-initial msg__avatar" aria-hidden="true">
-        {from?.kind === 'room' && <Hash size={16} />}
-        {from?.kind === 'routine' && <Repeat size={16} />}
-        {(from?.kind === 'delegation' || from?.kind === 'message') &&
-          from.name.slice(0, 1).toUpperCase()}
-        {!from && you.slice(0, 1).toUpperCase()}
-      </span>
+      {from ? (
+        <span className="avatar-initial msg__avatar" aria-hidden="true">
+          {from.kind === 'room' && <Hash size={16} />}
+          {from.kind === 'routine' && <Repeat size={16} />}
+          {from.kind === 'broadcast' && <Megaphone size={16} />}
+          {(from.kind === 'delegation' || from.kind === 'message') &&
+            from.name.slice(0, 1).toUpperCase()}
+        </span>
+      ) : (
+        <PersonAvatar login={you} className="msg__avatar" />
+      )}
       <div className="msg__body">
         <div className="msg__head">
           <span className="msg__author">{via ? capital(via) : you}</span>
           {from && (from.kind === 'routine' || from.kind === 'room') && (
             <span className="chip">
-              {from.kind === 'routine' ? 'Routine' : 'Room'} · {from.name}
+              {CHIPS[from.kind]} · {from.name}
             </span>
           )}
         </div>
-        <p className="msg__text">{turn.message}</p>
+        <p className="msg__text">
+          {from?.kind === 'broadcast'
+            ? turn.message.replace(
+                /^Broadcast to every agent from [^\n]*:\n\n/,
+                '',
+              )
+            : turn.message}
+        </p>
       </div>
     </div>
   )
@@ -315,6 +328,11 @@ function TurnActions({
       </Link>
     </div>
   )
+}
+
+const CHIPS: Record<string, string> = {
+  routine: 'Routine',
+  room: 'Room',
 }
 
 function capital(text: string) {

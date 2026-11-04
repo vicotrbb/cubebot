@@ -34,7 +34,7 @@ use uuid::Uuid;
 /// The browser's own user and profile, apart from the tool user's (10001) workspace.
 const USER: u32 = 10002;
 const PROFILE: &str = "/var/lib/cubebot/browser";
-const CHROMIUM: [&str; 12] = [
+const CHROMIUM: [&str; 13] = [
     "--no-sandbox",
     // DevTools reads commands on fd 3 and writes replies on fd 4, each ending with a NUL.
     "--remote-debugging-pipe",
@@ -44,6 +44,8 @@ const CHROMIUM: [&str; 12] = [
     "--test-type",
     "--no-first-run",
     "--no-default-browser-check",
+    // A sandbox stopped mid-session is not a crash the agent or a person should answer.
+    "--hide-crash-restore-bubble",
     "--disable-gpu",
     "--start-maximized",
     "--password-store=basic",

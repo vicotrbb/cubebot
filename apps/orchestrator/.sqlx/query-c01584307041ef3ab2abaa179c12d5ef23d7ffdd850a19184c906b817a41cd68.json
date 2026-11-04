@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id AS turn_id,\n                CASE WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS \"kind!\",\n                COALESCE(ba.name,bh.login,r.name,u.name,CASE WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS \"name!\",\n                t.parent_turn_id\n            FROM chat_turns t\n            LEFT JOIN room_messages m ON m.id=t.room_message_id\n            LEFT JOIN rooms r ON r.id=m.room_id\n            LEFT JOIN routines u ON u.id=t.routine_id\n            LEFT JOIN chat_turns p ON p.id=t.parent_turn_id\n            LEFT JOIN agents a ON a.id=p.conversation_id\n            LEFT JOIN broadcasts b ON b.id=t.broadcast_id\n            LEFT JOIN agents ba ON ba.id=b.agent_id\n            LEFT JOIN human_accounts bh ON bh.id=b.actor_id AND b.agent_id IS NULL\n            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "parent_turn_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "c01584307041ef3ab2abaa179c12d5ef23d7ffdd850a19184c906b817a41cd68"
+}

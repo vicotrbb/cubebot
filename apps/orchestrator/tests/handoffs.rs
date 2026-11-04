@@ -183,3 +183,78 @@ async fn a_person_completes_a_requested_login_and_the_next_turn_sees_it() {
     provider_task.abort();
     f.task.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_agent_with_the_capability_broadcasts_once_to_every_other_agent() {
+    use cubebot_orchestrator::agents::{Agents, CreateAgent};
+    let f = fixture().await;
+    let (auth, work, admin, agent) =
+        native_chat_setup(&f, "Tell everyone the deploy is done").await;
+    let peer = Agents::new(f.pool.clone())
+        .create(
+            &admin,
+            &CreateAgent {
+                request_id: Uuid::new_v4(),
+                name: "Peer".into(),
+                instructions: String::new(),
+                avatar: None,
+            },
+        )
+        .await
+        .unwrap()
+        .id;
+    sqlx::query!("UPDATE agents SET broadcast=true WHERE id=$1", agent)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let news = json!({"message":"The deploy is done."});
+    let model = Arc::new(Model::default());
+    model.turn(
+        vec![
+            Step::Reply(json!([call("broadcast", news.clone())])),
+            Step::Reply(json!([call("broadcast", news)])),
+            Step::Reply(json!([text("Everyone knows.")])),
+        ],
+        json!([]),
+    );
+    let (provider, provider_task) = http_server(
+        Router::new()
+            .route("/responses", axum::routing::post(respond))
+            .with_state(model.clone()),
+    )
+    .await;
+    let (origin, server) = runtime_server(auth).await;
+    let child = spawn_native_text(&origin, &provider);
+    settled(&work, &admin, agent, 1).await;
+
+    let requests = model.requests();
+    let offered = requests[0].to_string();
+    assert!(offered.contains("\"broadcast\""), "the tool is offered");
+    assert!(requests[1].to_string().contains("Broadcast to 1 agents."));
+    assert!(
+        requests[2]
+            .to_string()
+            .contains("this turn already broadcast once")
+    );
+    let delivered: Vec<String> = sqlx::query_scalar!(
+        "SELECT message FROM chat_turns WHERE conversation_id=$1 AND broadcast_id IS NOT NULL",
+        peer,
+    )
+    .fetch_all(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(delivered.len(), 1);
+    assert!(
+        delivered[0].ends_with("(an agent):\n\nThe deploy is done."),
+        "{}",
+        delivered[0]
+    );
+    let feed = work.broadcasts(&admin, 0).await.unwrap();
+    assert_eq!(feed.messages[0].agent, Some(agent));
+
+    drop(child);
+    server.abort();
+    provider_task.abort();
+    f.task.abort();
+}

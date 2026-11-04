@@ -26,18 +26,21 @@
 
 .exchange {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   padding: 6px 0;
 }
 .msg {
   display: grid;
-  grid-template-columns: 36px 1fr;
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
   padding: 6px 8px;
   border-radius: var(--r-md);
+  font-size: var(--t-lg);
+  line-height: 1.46;
 }
 .msg:hover {
-  background: rgb(var(--shadow) / 0.035);
+  background: rgb(var(--shadow) / 0.03);
 }
 .msg__avatar {
   margin-top: 2px;
@@ -46,15 +49,15 @@
   margin-left: 2px;
 }
 .msg--person .avatar-initial {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   font-size: var(--t-md);
-  background: var(--wood-deep);
-  color: var(--ink);
+  border-radius: var(--r-md);
 }
 .msg__body {
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
 }
 .msg__head {
@@ -65,8 +68,8 @@
   min-height: 20px;
 }
 .msg__author {
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-weight: var(--w-head);
+  letter-spacing: -0.005em;
 }
 .msg__text {
   white-space: pre-wrap;
@@ -81,7 +84,9 @@
   min-height: 0;
 }
 .msg__time {
-  color: var(--ink-soft);
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
 }
 .exchange[data-status='failed'] .msg__state,
 .exchange[data-status='waiting'] .msg__state {
@@ -244,6 +249,9 @@
 .thread-line {
   appearance: none;
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  text-align: left;
   align-items: center;
   gap: 8px;
   padding: 4px 10px 4px 6px;
@@ -255,7 +263,7 @@
   font-size: var(--t-sm);
   font-weight: 600;
   cursor: pointer;
-  width: max-content;
+  justify-self: start;
 }
 .thread-line:hover {
   border-color: var(--orange);
@@ -299,13 +307,16 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--r-lg);
   background: var(--raised);
+  box-shadow: 0 1px 2px rgb(var(--shadow) / 0.06);
   transition:
     border-color var(--quick),
     box-shadow var(--quick);
 }
 .composer__box:focus-within {
-  border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgb(242 106 27 / 0.2);
+  border-color: rgb(var(--shadow) / 0.38);
+  box-shadow:
+    0 0 0 3px rgb(var(--shadow) / 0.06),
+    0 6px 18px -10px rgb(var(--shadow) / 0.35);
 }
 .mention-menu {
   position: absolute;
@@ -350,7 +361,8 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
-  padding: 12px 14px 6px;
+  font-size: var(--t-lg);
+  padding: 11px 14px 4px;
   resize: none;
   min-height: 44px;
   max-height: 240px;

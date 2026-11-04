@@ -10,7 +10,7 @@ import {
 import type { AgentSummary } from '../../api/types'
 import { keys, useInstallation } from '../../app/queries'
 import { moodOf, type Avatar } from '../../components/Cube'
-import { Alert, Field, Status } from '../../components/primitives'
+import { Alert, Field, Status, Switch } from '../../components/primitives'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
 
@@ -23,6 +23,7 @@ export function About({ agent }: { agent: AgentSummary }) {
       <Identity agent={agent} onSaved={refresh} />
       <Instructions agent={agent} onSaved={refresh} />
       <Behaviour agent={agent} onSaved={refresh} />
+      <Capabilities agent={agent} onSaved={refresh} />
       <Lifecycle agent={agent} onChanged={refresh} />
       <Tools agentId={agent.id} />
     </>
@@ -350,6 +351,53 @@ function Behaviour({
           </button>
         </div>
       </form>
+    </section>
+  )
+}
+
+/** What the agent may do beyond its own conversation; each switch applies at once. */
+function Capabilities({
+  agent,
+  onSaved,
+}: {
+  agent: AgentSummary
+  onSaved: () => Promise<unknown>
+}) {
+  const { save, error, busy } = useSave(onSaved)
+  return (
+    <section className="panel__section">
+      <h2>Capabilities</h2>
+      <div className="capability">
+        <div>
+          <p className="capability__name" id={`broadcast-${agent.id}`}>
+            Broadcast to every agent
+          </p>
+          <p className="faint small">
+            Lets {agent.name} post in the Broadcast channel, which reaches every
+            agent at once. A broadcast never answers another broadcast.
+          </p>
+        </div>
+        <Switch
+          checked={agent.broadcast}
+          label={`${agent.name} may broadcast to every agent`}
+          disabled={busy || agent.desired_state === 'retired'}
+          onChange={(broadcast) =>
+            void save(() =>
+              ok(
+                api.POST('/api/agents/{id}/definition', {
+                  params: { path: { id: agent.id } },
+                  body: {
+                    request_id: crypto.randomUUID(),
+                    ...definition(agent),
+                    broadcast,
+                  },
+                }),
+              ),
+            )
+          }
+        />
+      </div>
+      <Alert>{error}</Alert>
     </section>
   )
 }

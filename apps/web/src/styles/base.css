@@ -18,6 +18,9 @@ body {
   font-size: var(--t-md);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'kern';
   overscroll-behavior: none;
 }
 
@@ -32,7 +35,7 @@ body > div {
 }
 
 :focus-visible {
-  outline: 3px solid var(--orange);
+  outline: 2px solid var(--orange);
   outline-offset: 2px;
   border-radius: var(--r-sm);
 }
@@ -60,9 +63,9 @@ h2,
 h3,
 h4 {
   margin: 0;
-  font-weight: 800;
-  letter-spacing: -0.015em;
-  line-height: 1.15;
+  font-weight: var(--w-head);
+  letter-spacing: -0.012em;
+  line-height: 1.2;
   text-wrap: balance;
 }
 h1 {
@@ -92,9 +95,9 @@ ol {
 a {
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: var(--orange);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 0.18em;
+  text-decoration-color: rgb(242 106 27 / 0.6);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 a:hover {
   text-decoration-color: currentColor;

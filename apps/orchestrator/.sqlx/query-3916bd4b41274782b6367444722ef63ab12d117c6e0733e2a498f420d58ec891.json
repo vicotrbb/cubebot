@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT t.id AS turn, t.broadcast_id AS \"room_message_id!\", t.conversation_id AS agent_id,\n            a.name AS agent, t.status, t.response, t.error\n        FROM chat_turns t\n        JOIN agents a ON a.id=t.conversation_id\n        WHERE t.broadcast_id=ANY($1)\n        ORDER BY a.name, t.sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "room_message_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "response",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "3916bd4b41274782b6367444722ef63ab12d117c6e0733e2a498f420d58ec891"
+}

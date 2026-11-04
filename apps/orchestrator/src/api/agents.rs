@@ -202,6 +202,8 @@ async fn set_wallpaper(
 ) -> Result<StatusCode, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     api.agents.set_wallpaper(&actor, id, Some(&image)).await?;
+    let event = crate::identity::audit::Event::by(actor.id, "agent.wallpaper").on(id.0);
+    api.identity.audit(event).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -213,5 +215,9 @@ async fn reset_wallpaper(
 ) -> Result<StatusCode, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     api.agents.set_wallpaper(&actor, id, None).await?;
+    let event = crate::identity::audit::Event::by(actor.id, "agent.wallpaper").on(id.0);
+    api.identity
+        .audit(event.detail(serde_json::json!({ "reset": true })))
+        .await;
     Ok(StatusCode::NO_CONTENT)
 }

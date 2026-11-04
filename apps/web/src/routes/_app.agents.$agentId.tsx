@@ -101,6 +101,7 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
         {can(agent, 'browser_view', me) && (
           <LoginBanner
             agent={agent}
+            takeLabel={phone ? 'Open desktop' : 'Take control'}
             onTake={() =>
               void navigate({
                 to: '/agents/$agentId/desktop',
@@ -188,7 +189,7 @@ function AgentHeader({
           <ChevronLeft />
         </Link>
       )}
-      <Cube avatar={agent.avatar} mood={mood} size={36} />
+      <Cube avatar={agent.avatar} mood={mood} size={28} />
       <div className="agent-head__title">
         <h1>{agent.name}</h1>
         <p className="faint small">

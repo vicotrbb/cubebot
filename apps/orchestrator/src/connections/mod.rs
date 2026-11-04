@@ -8,6 +8,7 @@ pub use credentials::{CredentialError, Credentials};
 pub use mcp::{AgentMcpServer, McpServerSummary, McpTransport, SaveMcpServer};
 pub(crate) use models::configured;
 pub use models::{ListModels, ModelChoice, ModelsError};
+pub(crate) use vault::same_site;
 pub use vault::{SaveVaultItem, VaultSummary};
 
 use crate::identity::{Actor, IdentityError};

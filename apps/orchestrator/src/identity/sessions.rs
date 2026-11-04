@@ -52,6 +52,10 @@ impl Identity {
         )
         .execute(&mut *transaction)
         .await?;
+        let event = super::audit::Event::by(id, "session.sign_in")
+            .on(id)
+            .detail(serde_json::json!({"method": "password"}));
+        super::audit::record(&mut *transaction, &event).await?;
         transaction.commit().await?;
         Ok(Session { token })
     }
@@ -91,15 +95,20 @@ impl Identity {
 
     #[tracing::instrument(skip_all)]
     pub async fn logout(&self, token: &str) -> Result<(), IdentityError> {
-        sqlx::query!(
+        let ended = sqlx::query_scalar!(
             "
             DELETE FROM human_sessions
             WHERE token_hash = $1
+            RETURNING account_id
             ",
             digest(token),
         )
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
+        if let Some(account) = ended {
+            self.audit(super::audit::Event::by(account, "session.sign_out").on(account))
+                .await;
+        }
         Ok(())
     }
 }

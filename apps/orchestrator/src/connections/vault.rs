@@ -4,12 +4,19 @@
 //! an agent's own items belong to it alone. Callers authorize people; the runtime calls name
 //! the authenticated agent.
 use super::{Access, Connections, ProviderAccess, validate_access};
-use crate::{agents::AgentId, identity::IdentityError};
+use crate::{
+    agents::AgentId,
+    identity::{
+        IdentityError,
+        audit::{Event, record},
+    },
+};
 use cubebot_protocol::{
     desktop::typable,
     runtime::{VaultField, VaultItem, VaultKind, VaultPut},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use uuid::Uuid;
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -85,6 +92,33 @@ fn stored(kind: VaultKind) -> &'static str {
         VaultKind::Login => "login",
         VaultKind::Secret => "secret",
     }
+}
+
+/// The host a site names, however it was written: `https://www.Example.com:443/a` is
+/// `example.com`.
+fn host(site: &str) -> String {
+    let site = site.trim().to_ascii_lowercase();
+    let site = site
+        .split_once("://")
+        .map_or(site.as_str(), |(_, rest)| rest);
+    let site = site.split(['/', '?', '#']).next().unwrap_or_default();
+    let site = site.rsplit_once('@').map_or(site, |(_, host)| host);
+    let site = site
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches('.');
+    site.strip_prefix("www.").unwrap_or(site).to_owned()
+}
+
+/// Whether a login saved for `saved` serves `wanted`: the same host or one a subdomain of the
+/// other, so `amazon.com.br` serves `www.amazon.com.br` and `signin.amazon.com.br` but never
+/// `amazon.com`.
+pub(crate) fn same_site(saved: &str, wanted: &str) -> bool {
+    let (saved, wanted) = (host(saved), host(wanted));
+    let under =
+        |child: &str, parent: &str| parent.contains('.') && child.ends_with(&format!(".{parent}"));
+    !saved.is_empty() && (saved == wanted || under(&wanted, &saved) || under(&saved, &wanted))
 }
 
 /// Why an item cannot be saved, in words the model and the console can show.
@@ -312,28 +346,29 @@ impl Connections {
 
     /// The caller has authorized the deletion for the item's scope.
     #[tracing::instrument(skip_all, fields(item = %item))]
-    pub async fn delete_vault_item(&self, item: Uuid) -> Result<(), IdentityError> {
-        let deleted = sqlx::query!(
+    /// Returns the deleted item's name.
+    pub async fn delete_vault_item(&self, item: Uuid) -> Result<String, IdentityError> {
+        let deleted = sqlx::query_scalar!(
             "
             DELETE FROM vault_items
             WHERE id=$1
+            RETURNING name
             ",
             item,
         )
-        .execute(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
-        if deleted.rows_affected() == 0 {
-            return Err(IdentityError::NotFound);
-        }
-        Ok(())
+        deleted.ok_or(IdentityError::NotFound)
     }
 
     /// The text to type for one field of an item `agent` may fill, and records its use; `None`
     /// when the agent has no such item. Never log it.
     #[tracing::instrument(skip_all, fields(agent = %agent.0, item = %item))]
+    /// `person` is who fills it from the console; `None` when the agent fills it itself.
     pub(crate) async fn vault_fill_text(
         &self,
         agent: AgentId,
+        person: Option<Uuid>,
         item: Uuid,
         field: VaultField,
     ) -> Result<Option<String>, IdentityError> {
@@ -344,7 +379,7 @@ impl Connections {
             WHERE id=$2 AND (agent_id=$1
                 OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'
                     OR access->'agents' @> jsonb_build_array($1::uuid))))
-            RETURNING username, ciphertext
+            RETURNING username, ciphertext, name, site
             ",
             agent.0,
             item,
@@ -354,6 +389,14 @@ impl Connections {
         let Some(row) = row else {
             return Ok(None);
         };
+        let event = match person {
+            Some(person) => Event::by(person, "vault.fill"),
+            None => Event::by_agent(agent.0, "vault.fill"),
+        };
+        let detail = json!({"agent": agent.0, "field": field, "name": row.name, "site": row.site});
+        if let Err(error) = record(&self.pool, &event.on(item).detail(detail)).await {
+            tracing::error!(%error, "vault fill not recorded in the audit log");
+        }
         if field == VaultField::Username {
             return Ok(row.username);
         }
@@ -422,6 +465,17 @@ impl Connections {
         )
         .execute(&mut *tx)
         .await?;
+        let kind = if existing.is_some() {
+            "vault.update"
+        } else {
+            "vault.create"
+        };
+        let detail = json!({"name": input.name, "site": input.site, "kind": input.kind});
+        record(
+            &mut *tx,
+            &Event::by_agent(agent.0, kind).on(id).detail(detail),
+        )
+        .await?;
         tx.commit().await?;
         Ok(Ok(id))
     }
@@ -430,6 +484,33 @@ impl Connections {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_login_serves_its_site_and_subdomains_only() {
+        for page in [
+            "amazon.com.br",
+            "www.amazon.com.br",
+            "https://www.amazon.com.br/gp/your-account/order-history",
+            "https://www.amazon.com.br/ap/signin?openid.return_to=x",
+            "HTTPS://Signin.Amazon.com.br:443/",
+            "user@amazon.com.br.",
+        ] {
+            assert!(same_site("amazon.com.br", page), "{page}");
+            assert!(same_site("https://www.amazon.com.br/", page), "{page}");
+        }
+        assert!(same_site("accounts.google.com", "google.com"));
+        for page in [
+            "amazon.com",
+            "notamazon.com.br",
+            "amazon.com.br.evil.io",
+            "",
+            "br",
+        ] {
+            assert!(!same_site("amazon.com.br", page), "{page}");
+        }
+        assert!(!same_site("", "amazon.com.br"));
+        assert!(!same_site("br", "amazon.com.br"));
+    }
 
     #[test]
     fn items_the_desktop_cannot_fill_are_refused() {

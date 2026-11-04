@@ -1,6 +1,7 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
 mod access;
 mod activity;
+mod broadcasts;
 mod collaboration;
 mod coordinator;
 mod cursors;
@@ -16,6 +17,7 @@ use crate::{
     identity::{Actor, IdentityError},
 };
 pub use activity::ActivityItem;
+pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use collaboration::Steering;
 pub use coordinator::{coordinate, route};
 pub use cursors::ReadCursor;

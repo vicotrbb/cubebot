@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE human_accounts\n            SET avatar = $2, avatar_revision = avatar_revision + 1\n            WHERE id = $1 AND active\n            RETURNING avatar_revision\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "avatar_revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cc9834e7589aaae865358a2723363ff7b35d7163e6550ce0d6f3b91e3549b418"
+}

@@ -140,7 +140,7 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
     let runtime = cubebot_orchestrator::api::runtime_router(auth).layer(axum::Extension(desktop));
     let (origin, server) = http_server(runtime).await;
     let child = spawn_native_text(&origin, &provider);
-    settled(&work, &admin, agent).await;
+    settled(&work, &admin, agent, "Filled and saved.").await;
 
     let requests = model.requests();
     let listed = requests[1].to_string();
@@ -267,14 +267,104 @@ async fn concurrent_saves_of_one_new_name_keep_one_item() {
     f.task.abort();
 }
 
-async fn settled(work: &Work, admin: &cubebot_orchestrator::identity::Actor, agent: Uuid) {
+async fn settled(
+    work: &Work,
+    admin: &cubebot_orchestrator::identity::Actor,
+    agent: Uuid,
+    response: &str,
+) {
     for _ in 0..200 {
         let turns = work.history(admin, agent, 0).await.unwrap();
         if turns.first().is_some_and(|turn| turn.status == "complete") {
-            assert_eq!(turns[0].response.as_deref(), Some("Filled and saved."));
+            assert_eq!(turns[0].response.as_deref(), Some(response));
             return;
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("the turn did not complete");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_login_the_vault_holds_is_filled_before_a_person_is_asked() {
+    let f = fixture().await;
+    let (auth, work, admin, agent) = native_chat_setup(&f, "Open my GitHub orders").await;
+    let item = cubebot_orchestrator::connections::Connections::new(
+        f.pool.clone(),
+        Credentials::new([7; 32]),
+    )
+    .create_vault_item(
+        admin.id,
+        &cubebot_orchestrator::connections::SaveVaultItem {
+            agent: None,
+            kind: cubebot_protocol::runtime::VaultKind::Login,
+            name: "GitHub".into(),
+            site: Some("github.com".into()),
+            username: Some("octocat".into()),
+            secret: Some(PASSWORD.into()),
+            access: None,
+        },
+    )
+    .await
+    .unwrap()
+    .id;
+    let login = json!({"site":"www.github.com","reason":"Sign in to read your orders"});
+    let model = Arc::new(Model::default());
+    model.turn(
+        vec![
+            Step::Reply(json!([call("request_login", login.clone())])),
+            Step::Reply(json!([call(
+                "vault_fill",
+                json!({"item":item,"field":"secret"})
+            )])),
+            // After a fill the person is asked anyway, as for a one-time code.
+            Step::Reply(json!([call("request_login", login)])),
+            Step::Reply(json!([text("Waiting for the code.")])),
+        ],
+        json!([]),
+    );
+    let (provider, provider_task) = http_server(
+        Router::new()
+            .route("/responses", axum::routing::post(respond))
+            .with_state(model.clone()),
+    )
+    .await;
+    let desktop = Desktop::new(Arc::new(Recording::default()), &Runtime::Kvm {});
+    let runtime = cubebot_orchestrator::api::runtime_router(auth).layer(axum::Extension(desktop));
+    let (origin, server) = http_server(runtime).await;
+    let child = spawn_native_text(&origin, &provider);
+    settled(&work, &admin, agent, "Waiting for the code.").await;
+
+    let requests = model.requests();
+    let refused = requests[1].to_string();
+    assert!(
+        refused.contains("your vault has a login for github.com")
+            && refused.contains(&item.to_string()),
+        "{refused}"
+    );
+    assert!(
+        requests[3]
+            .to_string()
+            .contains("A person was asked to log in on www.github.com")
+    );
+    let pending = work.pending_login(AgentId(agent)).await.unwrap().unwrap();
+    assert_eq!(pending.site, "www.github.com");
+    let kinds: Vec<(String, Option<Uuid>)> = sqlx::query_as(
+        "SELECT kind, agent_id FROM audit_log WHERE kind IN ('vault.fill', 'login.request') ORDER BY sequence",
+    )
+    .fetch_all(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        kinds,
+        [
+            ("vault.fill".into(), Some(agent)),
+            ("login.request".into(), Some(agent))
+        ]
+    );
+
+    drop(child);
+    server.abort();
+    provider_task.abort();
+    f.task.abort();
 }
