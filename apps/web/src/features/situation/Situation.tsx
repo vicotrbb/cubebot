@@ -53,6 +53,7 @@ export function Situation() {
 }
 
 function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
+  const [view, setView] = useState<(typeof VIEWS)[number][0]>('now')
   const named = new Map(agents.map((agent) => [agent.id, agent]))
   const rows = data.agents.filter((row) => named.has(row.id))
   const line = headline({
@@ -70,11 +71,23 @@ function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
       </Empty>
     )
   return (
-    <div className="situation__grid">
+    <div className="situation__grid" data-view={view}>
       <section className="brief" aria-label="Summary" data-calm={line.calm}>
         <h2>{line.text}</h2>
         <p>{line.state}</p>
       </section>
+      <div className="tabs situation__views" role="group" aria-label="View">
+        {VIEWS.map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={view === id}
+            onClick={() => setView(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <div className="situation__main">
         <Spend data={data} />
         <AgentsLedger rows={rows} named={named} />
@@ -82,17 +95,27 @@ function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
       <aside className="situation__rail" aria-label="What is happening">
         <NowList work={data.work} named={named} />
         <RecentList recent={data.recent} named={named} />
-        <Platform data={data} />
       </aside>
+      <Platform data={data} />
     </div>
   )
 }
+
+/** A phone cannot hold every section at once, so it shows one of these at a time. */
+const VIEWS = [
+  ['now', 'Now'],
+  ['agents', 'Agents'],
+  ['spend', 'Spend'],
+] as const
 
 function Spend({ data }: { data: Data }) {
   const [measure, setMeasure] = useState<'cost_usd' | 'tokens'>('cost_usd')
   const unpriced = data.month.unpriced
   return (
-    <section className="board-section" aria-labelledby="spend">
+    <section
+      className="board-section board-section--spend"
+      aria-labelledby="spend"
+    >
       <div className="board-section__head">
         <h3 id="spend">Spend</h3>
         <div className="tabs" role="group" aria-label="Measure">
@@ -112,41 +135,47 @@ function Spend({ data }: { data: Data }) {
           </button>
         </div>
       </div>
-      <dl className="figures">
-        <Figure name="Today" spend={data.today} />
-        <Figure name="7 days" spend={data.week} />
-        <Figure name="This month" spend={data.month} />
-      </dl>
-      <DayBars
-        days={data.days}
-        measure={measure}
-        format={measure === 'cost_usd' ? money : count}
-        label={measure === 'cost_usd' ? 'Estimated cost' : 'Tokens'}
-      />
-      {data.models.length > 0 && (
-        <table className="table models">
-          <thead>
-            <tr>
-              <th scope="col">Model, last 30 days</th>
-              <th scope="col" className="num">
-                Tokens
-              </th>
-              <th scope="col" className="num">
-                Cost
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.models.map((model) => (
-              <tr key={`${model.provider}/${model.model}`}>
-                <td className="models__name">{model.model}</td>
-                <td className="num">{count(model.tokens)}</td>
-                <td className="num">{modelCost(model)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <div className="spend">
+        <div className="spend__chart">
+          <dl className="figures">
+            <Figure name="Today" spend={data.today} />
+            <Figure name="7 days" spend={data.week} />
+            <Figure name="This month" spend={data.month} />
+          </dl>
+          <DayBars
+            days={data.days}
+            measure={measure}
+            format={measure === 'cost_usd' ? money : count}
+            label={measure === 'cost_usd' ? 'Estimated cost' : 'Tokens'}
+          />
+        </div>
+        <div className="spend__models" tabIndex={0} aria-label="Models">
+          {data.models.length > 0 && (
+            <table className="table models">
+              <thead>
+                <tr>
+                  <th scope="col">Model, last 30 days</th>
+                  <th scope="col" className="num">
+                    Tokens
+                  </th>
+                  <th scope="col" className="num">
+                    Cost
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.models.map((model) => (
+                  <tr key={`${model.provider}/${model.model}`}>
+                    <td className="models__name">{model.model}</td>
+                    <td className="num">{count(model.tokens)}</td>
+                    <td className="num">{modelCost(model)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
       <p className="board-section__note">
         Costs are estimates from each model&rsquo;s listed price, in UTC
         {data.prices_at ? '' : '; no price list has loaded yet'}.
@@ -190,34 +219,39 @@ function AgentsLedger({
   named: Map<string, AgentSummary>
 }) {
   return (
-    <section className="board-section" aria-labelledby="agents">
+    <section
+      className="board-section board-section--agents"
+      aria-labelledby="agents"
+    >
       <div className="board-section__head">
         <h3 id="agents">Agents</h3>
       </div>
-      <table className="table ledger">
-        <thead>
-          <tr>
-            <th scope="col">Agent</th>
-            <th scope="col" className="num ledger__wide">
-              Open
-            </th>
-            <th scope="col" className="num ledger__wide">
-              7 days
-            </th>
-            <th scope="col" className="ledger__money">
-              This month
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const agent = named.get(row.id)
-            return agent ? (
-              <AgentRow key={row.id} row={row} agent={agent} />
-            ) : null
-          })}
-        </tbody>
-      </table>
+      <div className="board-section__scroll" tabIndex={0} aria-label="Agents">
+        <table className="table ledger">
+          <thead>
+            <tr>
+              <th scope="col">Agent</th>
+              <th scope="col" className="num ledger__wide">
+                Open
+              </th>
+              <th scope="col" className="num ledger__wide">
+                7 days
+              </th>
+              <th scope="col" className="ledger__money">
+                This month
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const agent = named.get(row.id)
+              return agent ? (
+                <AgentRow key={row.id} row={row} agent={agent} />
+              ) : null
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   )
 }
@@ -323,7 +357,7 @@ function NowList({
   named: Map<string, AgentSummary>
 }) {
   return (
-    <section className="board-section" aria-labelledby="now">
+    <section className="board-section board-section--now" aria-labelledby="now">
       <div className="board-section__head">
         <h3 id="now">Now</h3>
         {work.length > 0 && (
@@ -333,7 +367,7 @@ function NowList({
       {work.length === 0 && (
         <p className="board-section__note">Nothing is running.</p>
       )}
-      <ul className="feed">
+      <ul className="feed" tabIndex={0} aria-label="Open work">
         {work.map((item) => (
           <li key={item.turn} data-status={item.status}>
             <Link to={workLink(item)}>
@@ -379,14 +413,17 @@ function RecentList({
   named: Map<string, AgentSummary>
 }) {
   return (
-    <section className="board-section" aria-labelledby="latest">
+    <section
+      className="board-section board-section--latest"
+      aria-labelledby="latest"
+    >
       <div className="board-section__head">
         <h3 id="latest">Latest</h3>
       </div>
       {recent.length === 0 && (
         <p className="board-section__note">Nothing has happened yet.</p>
       )}
-      <ul className="feed">
+      <ul className="feed" tabIndex={0} aria-label="Latest events">
         {recent.map((item, index) => {
           const [Icon, verb] = RECENT[item.kind] ?? [CircleCheck, item.kind]
           return (
@@ -421,10 +458,7 @@ function Platform({ data }: { data: Data }) {
     refetchInterval: 15_000,
   })
   return (
-    <section className="board-section" aria-labelledby="platform">
-      <div className="board-section__head">
-        <h3 id="platform">Platform</h3>
-      </div>
+    <section className="platform-strip" aria-label="Platform">
       <dl className="facts">
         <dt>Database</dt>
         <dd data-bad={ready.data === false}>

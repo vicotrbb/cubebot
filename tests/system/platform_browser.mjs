@@ -61,6 +61,95 @@ async function session(viewport, scheme, tag, extra = {}) {
   }
 }
 fs.mkdirSync(S + '/shots', { recursive: true })
+const longList = (view) =>
+  view === 'Now'
+    ? '.board-section--latest .feed'
+    : '.board-section--agents .board-section__scroll'
+
+/** Nothing but a list scrolls, every section ends on screen, and a long list scrolls by itself. */
+async function situationFits(p, viewport, tag) {
+  await p.goto(`${B}/situation`)
+  await p.locator('.brief h2').waitFor({ timeout: 10000 })
+  await p.waitForTimeout(600)
+  const phone = viewport.width < 900
+  const sizes = phone
+    ? [viewport]
+    : [viewport, { width: 1500, height: 860 }, { width: 1280, height: 720 }]
+  for (const size of sizes) {
+    await p.setViewportSize(size)
+    await p.waitForTimeout(250)
+    const label = `${tag} ${size.width}x${size.height}`
+    const views = phone ? ['Now', 'Agents', 'Spend'] : [null]
+    for (const view of views) {
+      if (view) {
+        const tab = p.getByRole('button', { name: view, exact: true })
+        await tab.click()
+        ok(
+          (await tab.getAttribute('aria-pressed')) === 'true',
+          `${label} ${view}: its tab is the selected one`,
+        )
+        await p.waitForTimeout(250)
+      }
+      const name = `${label} ${view ?? 'all'}`
+      const facts = await p.evaluate(() => {
+        const body = globalThis.document.querySelector('.situation__body')
+        const bottom = body.getBoundingClientRect().bottom + 1
+        const shown = (el) => el.getBoundingClientRect().height > 0
+        const sections = [
+          ...globalThis.document.querySelectorAll(
+            '.board-section, .platform-strip',
+          ),
+        ].filter(shown)
+        return {
+          page: body.scrollHeight - body.clientHeight,
+          sideways:
+            globalThis.document.documentElement.scrollWidth -
+            globalThis.innerWidth,
+          past: sections
+            .filter((el) => el.getBoundingClientRect().bottom > bottom)
+            .map((el) => el.className),
+          short: sections
+            .filter(
+              (el) =>
+                el.getBoundingClientRect().height < 60 &&
+                el.className.includes('board-section--') &&
+                !el.className.includes('now'),
+            )
+            .map((el) => el.className),
+        }
+      })
+      ok(
+        facts.page <= 1,
+        `${name}: the page itself does not scroll (${facts.page})`,
+      )
+      ok(facts.sideways <= 1, `${name}: no sideways scroll (${facts.sideways})`)
+      ok(
+        facts.past.length === 0,
+        `${name}: every section ends on screen ${facts.past}`,
+      )
+      ok(facts.short.length === 0, `${name}: no list is crushed ${facts.short}`)
+      if (view !== 'Spend') {
+        const scrolled = await p.evaluate((wanted) => {
+          const list = globalThis.document.querySelector(wanted)
+          list.scrollTop = 80
+          const moved = list.scrollTop
+          list.scrollTop = 0
+          return { moved, over: list.scrollHeight - list.clientHeight }
+        }, longList(view))
+        ok(
+          scrolled.over > 0 && scrolled.moved > 0,
+          `${name}: the long list scrolls in its own space (${scrolled.moved})`,
+        )
+      }
+      await p.screenshot({
+        path: `${S}/shots/${process.env.BROWSER || 'chromium'}-fit-${size.width}x${size.height}-${view ?? 'all'}.png`,
+      })
+    }
+  }
+  await p.setViewportSize(viewport)
+  await p.waitForTimeout(200)
+}
+
 async function run(viewport, scheme, tag) {
   const { ctx, p, errs, shot } = await session(
     viewport,
@@ -217,7 +306,16 @@ async function run(viewport, scheme, tag) {
     )
   }
   await overflow('files')
-  // Routines
+  // Routines, after real deliveries: one accepted, then its repeat.
+  for (let delivery = 0; delivery < 2; delivery++)
+    await globalThis.fetch(`${B}/api/hooks/${seed.routine}`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${seed.secret}`,
+        'idempotency-key': `${tag}-browser`,
+      },
+      body: '{"event":"browser check"}',
+    })
   await p.goto(`${B}/agents/${seed.ayla}/routines`)
   await p
     .locator('.panel .title', { hasText: 'Deploy alert' })
@@ -239,6 +337,7 @@ async function run(viewport, scheme, tag) {
   await shot('usage')
   await overflow('usage')
   // Situation
+  await situationFits(p, viewport, tag)
   await p.goto(`${B}/situation`)
   await p.locator('.brief h2').waitFor({ timeout: 10000 })
   await p.waitForTimeout(800)

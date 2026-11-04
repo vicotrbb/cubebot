@@ -11,28 +11,39 @@
   align-items: center;
   gap: 6px;
 }
+/* The page never scrolls: it fills the pane, and each list scrolls in its own space. A pane too
+   short to hold that scrolls as a whole rather than crushing the lists to nothing. */
 .situation__body {
   container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  padding-block: 12px;
 }
 .situation__grid {
+  flex: 1;
+  width: 100%;
+  min-height: 520px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     'brief brief'
-    'main rail';
-  gap: 28px 48px;
+    'main rail'
+    'platform platform';
+  gap: 14px 40px;
   max-width: 1240px;
   margin-inline: auto;
-  padding-bottom: 32px;
+}
+.situation__views {
+  display: none;
 }
 .brief {
   grid-area: brief;
   display: grid;
-  gap: 4px;
-  padding-block: 8px 4px;
+  gap: 2px;
 }
 .brief h2 {
-  font-size: clamp(1.375rem, 1.1rem + 1.1cqi, 1.875rem);
+  font-size: clamp(1.25rem, 1.05rem + 0.7cqi, 1.625rem);
   font-weight: var(--w-head);
   line-height: 1.2;
   letter-spacing: -0.018em;
@@ -45,34 +56,94 @@
 .brief p {
   color: var(--ink-soft);
 }
-.situation__main,
-.situation__rail {
-  display: grid;
-  align-content: start;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 32px;
-  min-width: 0;
-}
 .situation__main {
   grid-area: main;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
 }
 .situation__rail {
   grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
 }
 .board-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  min-height: 0;
+}
+/* Now takes what it needs up to two fifths of the rail; Latest takes the rest. */
+.board-section--now {
+  flex: 0 1 auto;
+  max-height: 40%;
+}
+.board-section--latest {
+  flex: 1 1 0;
+}
+.board-section__scroll,
+.situation .feed,
+.spend__models {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  outline-offset: -2px;
+}
+.board-section__scroll,
+.situation .feed {
+  flex: 1;
+  min-height: 0;
+}
+.situation .feed {
+  align-content: start;
+}
+/* The chart sets the row's height; the models scroll within it instead of growing it. */
+.spend {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 24px;
+}
+.spend__chart {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 12px;
-  min-width: 0;
+  gap: 8px;
+}
+.spend__models {
+  height: 0;
+  min-height: 100%;
+}
+.situation .bars svg {
+  height: clamp(56px, 11vh, 120px);
+}
+.situation thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--line);
+  border-bottom: 0;
+}
+.platform-strip {
+  grid-area: platform;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
 }
 .board-section__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 32px;
+  flex: none;
+  min-height: 30px;
   border-bottom: 1px solid var(--line-strong);
-  padding-bottom: 6px;
+  padding-bottom: 4px;
 }
 .board-section__head h3 {
   font-size: var(--t-md);
@@ -102,9 +173,8 @@
   cursor: pointer;
 }
 .board-section__head .tabs button[aria-pressed='true'] {
-  background: var(--raised);
+  background: var(--orange-wash);
   color: var(--ink);
-  box-shadow: var(--hairline);
 }
 .figures {
   display: grid;
@@ -342,18 +412,18 @@
   -webkit-line-clamp: 2;
 }
 .facts {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 6px;
   margin: 0;
-  font-size: var(--t-sm);
+  font-size: var(--t-xs);
 }
 .facts dt {
   color: var(--ink-faint);
 }
 .facts dd {
-  margin: 0;
-  text-align: right;
+  margin: 0 14px 0 0;
   font-variant-numeric: tabular-nums;
 }
 .facts__wrap {
@@ -364,15 +434,79 @@
   font-weight: var(--w-strong);
 }
 
-/* One column once the rail would crowd the ledger: the sentence, then what is happening. */
+/* Too narrow for the sections side by side: the sentence, then one view at a time, each filling
+   the screen with its list scrolling inside it. */
 @container (max-width: 860px) {
   .situation__grid {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       'brief'
-      'rail'
-      'main';
-    gap: 24px;
+      'views'
+      'content'
+      'platform';
+    gap: 10px;
+    min-height: 420px;
+  }
+  .situation__views {
+    grid-area: views;
+    display: flex;
+    justify-self: start;
+  }
+  .situation__views button {
+    appearance: none;
+    border: 0;
+    background: none;
+    color: var(--ink-soft);
+    font: inherit;
+    font-size: var(--t-sm);
+    font-weight: var(--w-label);
+    min-height: 36px;
+    padding: 4px 14px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .situation__views button[aria-pressed='true'] {
+    background: var(--orange-wash);
+    color: var(--ink);
+    font-weight: var(--w-strong);
+  }
+  /* The tab already names this view. */
+  .board-section--agents .board-section__head {
+    display: none;
+  }
+  .situation__main,
+  .situation__rail {
+    grid-area: content;
+  }
+  .situation__main {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .situation__grid[data-view='now'] .situation__main,
+  .situation__grid:not([data-view='now']) .situation__rail,
+  .situation__grid[data-view='agents'] .board-section--spend,
+  .situation__grid[data-view='spend'] .board-section--agents {
+    display: none;
+  }
+  /* On a small screen Spend's parts stack, and the view scrolls as one. */
+  .board-section--spend {
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .spend {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .spend__models {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .platform-strip {
+    display: none;
+  }
+  .situation__grid[data-view='spend'] .platform-strip {
+    display: block;
   }
 }
 @container (max-width: 520px) {

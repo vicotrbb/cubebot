@@ -52,6 +52,7 @@ export function DayBars({
       </div>
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+        preserveAspectRatio="none"
         role="img"
         aria-label={`${label}, last 30 days; peak ${format(peak)}`}
         onPointerLeave={() => setHover(null)}
@@ -95,19 +96,21 @@ export function DayBars({
         <span>{dayLabel(filled[0]?.day ?? '')}</span>
         <span>Today</span>
       </div>
-      <table className="sr-only">
-        <caption>{label} by day</caption>
-        <tbody>
-          {filled
-            .filter((day) => day[measure] > 0)
-            .map((day) => (
-              <tr key={day.day}>
-                <th scope="row">{dayLabel(day.day)}</th>
-                <td>{format(day[measure])}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+      <div className="sr-only">
+        <table>
+          <caption>{label} by day</caption>
+          <tbody>
+            {filled
+              .filter((day) => day[measure] > 0)
+              .map((day) => (
+                <tr key={day.day}>
+                  <th scope="row">{dayLabel(day.day)}</th>
+                  <td>{format(day[measure])}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </figure>
   )
 }

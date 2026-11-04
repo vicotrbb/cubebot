@@ -88,6 +88,18 @@ for name, paint, acc in [
     )
     assert s < 300, (s, a)
     ids[name] = a["id"]
+# Enough agents that the Situation room's ledger has to scroll in its own space.
+for number in range(24):
+    status, made = call(
+        "POST",
+        "/api/agents",
+        {
+            "request_id": str(uuid.uuid4()),
+            "name": f"Helper {number:02}",
+            "instructions": "Be useful.",
+        },
+    )
+    assert status < 300, (status, made)
 me = sql("select id from human_accounts where login='victor'")
 RESP = r"""I found these five most recent items in the order history:
 
@@ -157,6 +169,9 @@ turn(k, "Summarize the launch", status="running", ago="3 minutes")
 turn(t, "Check the disk", status="waiting", err="provider_unavailable", ago="8 minutes")
 turn(y, "Rotate the logs", status="failed", err="provider_rejected", ago="20 minutes")
 turn(a, "Queued follow-up", status="queued", ago="1 minute")
+# Enough history that the Situation room's Latest list has to scroll in its own space.
+for number in range(16):
+    turn(k, f"Earlier job {number}", resp="Done.", ago=f"{number + 3} hours")
 # usage history over 30 days
 vals = []
 random.seed(4)
