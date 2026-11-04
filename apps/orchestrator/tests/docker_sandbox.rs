@@ -8,7 +8,8 @@ use cubebot_orchestrator::agents::{
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 use uuid::Uuid;
 
-// Keeps each container's status in a file named after it; records create arguments.
+// Keeps each container's status in a file named after it; records create arguments. A
+// container's image is the configured one unless a test writes `<name>.image`.
 const FAKE: &str = r#"#!/bin/sh
 state="$(dirname "$0")/state"; mkdir -p "$state"; echo "$1 $2" >> "$state/calls"
 name() { while [ "$#" -gt 1 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
@@ -18,10 +19,11 @@ case "$1 $2" in
 "container create") n=$(name "$@"); printf '%s\n' "$@" > "$state/$n.args"; printf '%s' "$CUBEBOT_BOOTSTRAP_TOKEN" > "$state/$n.token"; echo created > "$state/$n"; echo "id-$n" ;;
 "container inspect")
   n=$5; [ -f "$state/$n" ] || { echo "Error: No such container: $n" >&2; exit 1; }
-  if [ "$4" = '{{.Id}}' ]; then echo "id-$n"; else printf '{"Status":"%s","ExitCode":%s}\n' "$(cat "$state/$n")" "${EXIT:-0}"; fi ;;
+  image=cubebot-sandbox:test; [ -f "$state/$n.image" ] && image=$(cat "$state/$n.image")
+  if [ "$4" = '{{.Id}}' ]; then echo "id-$n"; else printf '{"State":{"Status":"%s","ExitCode":%s},"Image":"%s"}\n' "$(cat "$state/$n")" "${EXIT:-0}" "$image"; fi ;;
 "container start") echo running > "$state/$3" ;;
 "container stop") echo exited > "$state/$3" ;;
-"container rm") rm "$state/$3" "$state/$3.args" "$state/$3.token" ;;
+"container rm") rm -f "$state/$3" "$state/$3.args" "$state/$3.token" "$state/$3.image" ;;
 *) echo "unexpected: $*" >&2; exit 1 ;;
 esac
 "#;
@@ -152,6 +154,48 @@ async fn a_running_agent_costs_one_inspect_per_pass() {
         std::fs::read_to_string(&calls).unwrap(),
         "container inspect\n"
     );
+    std::fs::remove_dir_all(&f.root).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_sandbox_on_an_older_image_is_drained_and_replaced() {
+    // After `cubebot update` the configured image is new; running sandboxes still have the old.
+    let f = fixture().await;
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    let state = f.root.join("state");
+    let name = std::fs::read_dir(&state)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .find(|name| name.ends_with(".args"))
+        .unwrap()
+        .trim_end_matches(".args")
+        .to_owned();
+    std::fs::write(state.join(format!("{name}.image")), "cubebot-sandbox:older").unwrap();
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(
+        f.phases().await,
+        vec![(1, "bound".into())],
+        "waits for its drain"
+    );
+    sqlx::query!(
+        "
+        UPDATE agent_runtime_drains
+        SET acknowledged_at = clock_timestamp(),acknowledged_session_version = 1
+        WHERE attempt_id = (SELECT id FROM agent_resources WHERE agent_id = $1 AND epoch = 1)
+        ",
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(
+        f.phases().await,
+        vec![(1, "stopped".into()), (2, "bound".into())]
+    );
+    assert_eq!(f.docker.status(f.agent).await.unwrap(), Status::Running);
     std::fs::remove_dir_all(&f.root).unwrap();
 }
 

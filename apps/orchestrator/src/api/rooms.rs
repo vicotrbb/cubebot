@@ -176,7 +176,7 @@ async fn room_events(
         let frames = follow.poll().await.ok()?;
         Some((frames, follow))
     });
-    let frames = stream::iter([first])
+    let frames = stream::iter([super::opening(first)])
         .chain(live)
         .flat_map(stream::iter)
         .map(Ok::<_, Infallible>);
