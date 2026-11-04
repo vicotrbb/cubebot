@@ -21,6 +21,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/activity/read': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Marks the caller's inbox as seen, on every device; its items stay until they are dealt with. */
+    put: operations['read_activity']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents': {
     parameters: {
       query?: never
@@ -31,6 +48,23 @@ export interface paths {
     get: operations['list']
     put?: never
     post: operations['create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/budget': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Needs `agent.manage`. Room to spend requeues the work the old limit paused. */
+    put: operations['set_agent_budget']
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -122,6 +156,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/routines/{routine}/deliveries': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The webhook's authenticated deliveries of the last 30 days, newest first. */
+    get: operations['routine_deliveries']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{agent}/routines/{routine}/runs': {
     parameters: {
       query?: never
@@ -149,7 +200,8 @@ export interface paths {
     put?: never
     /** Makes or replaces the webhook secret, shown only in this response. */
     post: operations['rotate_routine_secret']
-    delete?: never
+    /** Stops the webhook; its URL answers 401 and the routine keeps its other triggers. */
+    delete: operations['remove_routine_secret']
     options?: never
     head?: never
     patch?: never
@@ -184,6 +236,23 @@ export interface paths {
     post?: never
     /** The skill stays in the library. */
     delete: operations['uninstall_skill']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/usage': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Needs `conversation.read` on the agent. */
+    get: operations['agent_usage']
+    put?: never
+    post?: never
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -391,6 +460,26 @@ export interface paths {
     put: operations['set_wallpaper']
     post?: never
     delete: operations['reset_wallpaper']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/attachments/{turn}/{file}/content': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * A file an agent sent with a reply; reading the reply is what allows it. As ever a download
+     *     the browser does not render itself: the console reads the bytes and shows them.
+     */
+    get: operations['attachment_content']
+    put?: never
+    post?: never
+    delete?: never
     options?: never
     head?: never
     patch?: never
@@ -1529,6 +1618,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/situation': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The agents the caller may read: their spend, open work and latest events. */
+    get: operations['situation']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/skills': {
     parameters: {
       query?: never
@@ -1657,8 +1763,8 @@ export interface components {
       /** @description RFC 3339. */
       at: string
       /**
-       * @description `login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending` or
-       *     `dream_published_skill`.
+       * @description `login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending`,
+       *     `dream_published_skill` or `agent_published_skill`.
        */
       kind: string
       /** Format: uuid */
@@ -1666,6 +1772,8 @@ export interface components {
       text: string
       /** Format: uuid */
       turn?: string | null
+      /** @description It reached the inbox after the caller last opened it. */
+      unread: boolean
     }
     /**
      * @description What the caller may know about an agent: everyone holding any capability on it sees it,
@@ -1777,6 +1885,28 @@ export interface components {
       workspace_attempt?: null | components['schemas']['AttemptId']
       workspace_blocked_reason?: string | null
       workspace_resource_phase?: null | components['schemas']['Phase']
+    }
+    /** @description One agent's usage: its windows, this month against its budget, the last 30 days by day. */
+    AgentUsage: {
+      days: components['schemas']['DaySpend'][]
+      /** Format: int64 */
+      failed_turns: number
+      models: components['schemas']['ModelSpend'][]
+      month: components['schemas']['Spend']
+      /** Format: double */
+      monthly_budget_usd?: number | null
+      /**
+       * Format: int64
+       * @description Turns paused because this agent's budget ran out.
+       */
+      paused_turns: number
+      today: components['schemas']['Spend']
+      /**
+       * Format: int64
+       * @description The share of the agent's responses that failed or waited for a person, last 30 days.
+       */
+      turns: number
+      week: components['schemas']['Spend']
     }
     Attachment: {
       content_type?: string | null
@@ -1954,6 +2084,14 @@ export interface components {
       /** @description The webhook's bearer secret, only in the response that made it. */
       secret?: string | null
     }
+    DaySpend: {
+      /** Format: double */
+      cost_usd: number
+      /** @description `YYYY-MM-DD`, UTC. */
+      day: string
+      /** Format: int64 */
+      tokens: number
+    }
     DeclineLogin: {
       /** @description Returned to the agent; empty when the person gave none. */
       reason: string
@@ -1985,6 +2123,8 @@ export interface components {
       agent: string
       /** Format: uuid */
       agent_id: string
+      /** @description Files the agent sent with this reply. */
+      attachments: components['schemas']['ReplyAttachment'][]
       error?: string | null
       response?: string | null
       status: string
@@ -2111,6 +2251,24 @@ export interface components {
       /** Format: uuid */
       request_id: string
       scope: components['schemas']['Scope']
+    }
+    /**
+     * @description One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:
+     *     it never reached the routine.
+     */
+    HookDelivery: {
+      /** Format: int32 */
+      bytes: number
+      /**
+       * @description `accepted` made a turn, `coalesced` joined a pending one, `replayed` repeated an
+       *     Idempotency-Key and `paused` reached a disabled routine.
+       */
+      outcome: string
+      received_at: string
+      /** @description The turn's status so far. */
+      status?: string | null
+      /** Format: uuid */
+      turn?: string | null
     }
     IdentityEvent: {
       /** Format: uuid */
@@ -2306,6 +2464,14 @@ export interface components {
       /** @description Whether it can call tools; a model that cannot only talks. */
       tools: boolean
     }
+    ModelSpend: {
+      /** Format: double */
+      cost_usd: number
+      model: string
+      provider: string
+      /** Format: int64 */
+      tokens: number
+    }
     MovePage: {
       /**
        * Format: uuid
@@ -2338,6 +2504,19 @@ export interface components {
       error?: string | null
       /** @description `person`, `agent`, `schedule` or `webhook`. */
       origin: string
+      status: string
+      /** Format: uuid */
+      turn: string
+    }
+    OpenWork: {
+      /** Format: uuid */
+      agent: string
+      error?: string | null
+      /** @description The start of the request. */
+      message: string
+      /** Format: uuid */
+      room?: string | null
+      since: string
       status: string
       /** Format: uuid */
       turn: string
@@ -2495,6 +2674,18 @@ export interface components {
       /** Format: int64 */
       revision: number
     }
+    RecentEvent: {
+      /** Format: uuid */
+      agent: string
+      at: string
+      /** @description `turn_complete`, `turn_failed`, `turn_cancelled`, `dream` or `skill`. */
+      kind: string
+      /** Format: uuid */
+      room?: string | null
+      text: string
+      /** Format: uuid */
+      turn?: string | null
+    }
     Recipient:
       | {
           /** Format: uuid */
@@ -2511,6 +2702,18 @@ export interface components {
     Replace: {
       new_text: string
       old_text: string
+    }
+    /**
+     * @description A file the agent sent with its reply. Its bytes are at
+     *     `GET /api/attachments/{turn}/{file}/content`, for whoever may read the reply.
+     */
+    ReplyAttachment: {
+      content_type?: string | null
+      /** Format: uuid */
+      file: string
+      name: string
+      /** Format: int64 */
+      size: number
     }
     RetryMessage: {
       /** Format: uuid */
@@ -2594,6 +2797,8 @@ export interface components {
       enabled: boolean
       /** Format: uuid */
       id: string
+      /** @description When the webhook last received an authenticated delivery. */
+      last_delivery_at?: string | null
       last_run_at?: string | null
       /** @description `person` or `agent`: an agent changes only the routines it manages. */
       managed_by: string
@@ -2697,6 +2902,13 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    SetBudget: {
+      /**
+       * Format: double
+       * @description US dollars per calendar month in UTC; `null` removes the limit.
+       */
+      monthly_budget_usd?: number | null
+    }
     Setup: {
       open: boolean
     }
@@ -2704,6 +2916,48 @@ export interface components {
     ShareKind: 'user' | 'team' | 'agent'
     /** @enum {string} */
     SharePermission: 'read' | 'write'
+    Situation: {
+      agents: components['schemas']['SituationAgent'][]
+      days: components['schemas']['DaySpend'][]
+      model?: string | null
+      models: components['schemas']['ModelSpend'][]
+      month: components['schemas']['Spend']
+      /** Format: int64 */
+      people: number
+      /** @description When prices last refreshed, RFC 3339; `None` means every cost is unknown. */
+      prices_at?: string | null
+      /** @description The provider and model in use; administrators only. */
+      provider?: string | null
+      /** @description The latest settled turns, dreams and published skills, newest first. */
+      recent: components['schemas']['RecentEvent'][]
+      /** Format: int64 */
+      rooms: number
+      /** Format: int64 */
+      stored_bytes: number
+      today: components['schemas']['Spend']
+      week: components['schemas']['Spend']
+      /** @description Queued, running, delegated and waiting turns, oldest first, at most 50. */
+      work: components['schemas']['OpenWork'][]
+    }
+    SituationAgent: {
+      /** Format: double */
+      cost_month_usd: number
+      /** Format: double */
+      cost_week_usd: number
+      /** Format: int64 */
+      failed_today: number
+      /** Format: uuid */
+      id: string
+      last_turn_at?: string | null
+      /** Format: double */
+      monthly_budget_usd?: number | null
+      /** Format: int64 */
+      open_turns: number
+      /** Format: int64 */
+      tokens_week: number
+      /** Format: int64 */
+      turns_week: number
+    }
     /** @description A library entry at its current revision. */
     Skill: {
       description: string
@@ -2715,6 +2969,8 @@ export interface components {
       updated_at: string
     }
     SkillRevision: {
+      /** @description The agent that wrote this revision during its work. */
+      agent?: string | null
       created_at: string
       description: string
       /**
@@ -2733,6 +2989,20 @@ export interface components {
       revision: number
       /** Format: uuid */
       skill: string
+    }
+    /** @description Tokens and estimated cost over a period. `unpriced` responses are in the tokens, not the cost. */
+    Spend: {
+      /**
+       * Format: double
+       * @description Estimated from the model's listed price, or as the provider reported it.
+       */
+      cost_usd: number
+      /** Format: int64 */
+      input_tokens: number
+      /** Format: int64 */
+      output_tokens: number
+      /** Format: int64 */
+      unpriced: number
     }
     Steering: {
       /** Format: uuid */
@@ -2766,6 +3036,8 @@ export interface components {
       token: string
     }
     Turn: {
+      /** @description Files the agent sent with this reply. */
+      attachments: components['schemas']['ReplyAttachment'][]
       /** @description Work this turn delegated or sent to other agents. */
       children: components['schemas']['Child'][]
       error?: string | null
@@ -2802,6 +3074,10 @@ export interface components {
           outcome: components['schemas']['Outcome']
         }
       | {
+          /** Format: int64 */
+          cached_input_tokens?: number
+          /** Format: double */
+          cost_usd?: number | null
           /** Format: int64 */
           input_tokens: number
           /** @enum {string} */
@@ -2910,6 +3186,23 @@ export interface operations {
       }
     }
   }
+  read_activity: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   list: {
     parameters: {
       query?: {
@@ -2950,6 +3243,31 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  set_agent_budget: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetBudget']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentUsage']
         }
       }
     }
@@ -3163,6 +3481,28 @@ export interface operations {
       }
     }
   }
+  routine_deliveries: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HookDelivery'][]
+        }
+      }
+    }
+  }
   routine_occurrences: {
     parameters: {
       query?: never
@@ -3233,6 +3573,26 @@ export interface operations {
       }
     }
   }
+  remove_routine_secret: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        routine: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   installed_skills: {
     parameters: {
       query?: never
@@ -3295,6 +3655,27 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  agent_usage: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentUsage']
+        }
       }
     }
   }
@@ -3639,6 +4020,28 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  attachment_content: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        turn: string
+        file: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/octet-stream': number[]
+        }
       }
     }
   }
@@ -5621,6 +6024,25 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ReadCursor']
+        }
+      }
+    }
+  }
+  situation: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Situation']
         }
       }
     }

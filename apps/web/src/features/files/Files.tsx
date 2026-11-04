@@ -12,6 +12,7 @@ import {
   Trash2,
   Upload,
 } from 'lucide-react'
+import { useNavigate, useRouter, useSearch } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
@@ -23,6 +24,8 @@ import {
   Status,
   when,
 } from '../../components/primitives'
+import { FileViewer } from './FileViewer'
+import { fileSize } from './viewer'
 import './files.css'
 
 export type FileEntry = components['schemas']['FileEntry']
@@ -77,6 +80,7 @@ export function Files({ only }: { only?: { agent: string } }) {
   }
   const shown = visible(entries, only, folder)
   const drop = useFileDrop(writable, (files) => void send(files))
+  const viewer = useOpenFile()
   return (
     <section
       className={drop.dragging ? 'file-drop dragging' : 'file-drop'}
@@ -138,6 +142,7 @@ export function Files({ only }: { only?: { agent: string } }) {
           }
           row={(entry) => ({
             onOpen: () => {
+              if (!entry.folder) return viewer.show(entry.id)
               setCreating(false)
               setPath([
                 ...path,
@@ -161,12 +166,66 @@ export function Files({ only }: { only?: { agent: string } }) {
       {sharing && (
         <ShareDialog entry={sharing} onClose={() => setSharing(null)} />
       )}
+      <OpenFile entries={entries} open={viewer.open} onClose={viewer.close} />
     </section>
   )
 }
 
 /** A folder's entries, reloaded when the view or folder changes; a late answer for a folder
  *  the person already left never replaces the current one. */
+function OpenFile({
+  entries,
+  open,
+  onClose,
+}: {
+  entries: FileEntry[]
+  open: string | undefined
+  onClose: () => void
+}) {
+  const entry = entries.find((item) => item.id === open && !item.folder)
+  if (!entry) return null
+  return (
+    <FileViewer
+      file={{
+        name: entry.name,
+        content_type: entry.content_type,
+        size: entry.size ?? 0,
+        url: `/api/files/${entry.id}/content`,
+      }}
+      onClose={onClose}
+    />
+  )
+}
+
+/** The open file lives in the URL, so a phone's back gesture closes it and a link reopens it. */
+function useOpenFile() {
+  const search = useSearch({ strict: false }) as { open?: string }
+  const navigate = useNavigate()
+  const router = useRouter()
+  const pushed = useRef(false)
+  const to = (open: string | undefined, replace: boolean) =>
+    void navigate({
+      to: '.',
+      replace,
+      search: ((previous: Record<string, unknown>) => ({
+        ...previous,
+        open,
+      })) as never,
+    })
+  return {
+    open: search.open,
+    show: (id: string) => {
+      pushed.current = true
+      to(id, false)
+    },
+    close: () => {
+      if (pushed.current) router.history.back()
+      else to(undefined, true)
+      pushed.current = false
+    },
+  }
+}
+
 function useFolder(view: View, folder: string | undefined) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [error, setError] = useState('')
@@ -587,21 +646,17 @@ function Row({
         />
       ) : (
         <div className="entry__main">
-          {entry.folder ? (
-            <button
-              type="button"
-              className="files__open entry__name"
-              onClick={onOpen}
-            >
-              {entry.name}
-            </button>
-          ) : (
-            <span className="entry__name">{entry.name}</span>
-          )}
+          <button
+            type="button"
+            className="files__open entry__name"
+            onClick={onOpen}
+          >
+            {entry.name}
+          </button>
           <span className="entry__detail">
             {entry.owner_agent && 'From an agent · '}
             {entry.access === 'read' && 'View only · '}
-            {entry.folder ? 'Folder' : size(entry.size ?? 0)}
+            {entry.folder ? 'Folder' : fileSize(entry.size ?? 0)}
           </span>
         </div>
       )}
@@ -717,18 +772,6 @@ function RowMenu({
       )}
     </Menu>
   )
-}
-
-function size(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KiB', 'MiB', 'GiB', 'TiB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit += 1
-  }
-  return `${value.toFixed(1)} ${units[unit]}`
 }
 
 /** The entry's own shares; a folder's reach everything inside it. */

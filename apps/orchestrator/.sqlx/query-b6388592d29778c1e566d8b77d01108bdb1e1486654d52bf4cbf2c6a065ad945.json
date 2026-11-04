@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO model_prices (provider, key, input_per_token, cached_per_token, output_per_token)\n            VALUES ($1, price_key($2), $3, $4, $5)\n            ON CONFLICT (provider, key) DO UPDATE\n            SET input_per_token=EXCLUDED.input_per_token, cached_per_token=EXCLUDED.cached_per_token,\n                output_per_token=EXCLUDED.output_per_token, fetched_at=clock_timestamp()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b6388592d29778c1e566d8b77d01108bdb1e1486654d52bf4cbf2c6a065ad945"
+}

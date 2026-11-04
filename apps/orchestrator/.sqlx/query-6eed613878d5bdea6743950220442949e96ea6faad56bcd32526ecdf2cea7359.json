@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"held!\" FROM turn_attachments WHERE turn_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "held!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6eed613878d5bdea6743950220442949e96ea6faad56bcd32526ecdf2cea7359"
+}

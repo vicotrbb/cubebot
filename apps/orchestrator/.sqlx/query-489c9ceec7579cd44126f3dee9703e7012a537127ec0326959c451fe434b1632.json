@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT provider, model,\n            COALESCE(sum(input_tokens + output_tokens), 0)::int8 AS \"tokens!\",\n            COALESCE(sum(cost_usd), 0) AS \"cost_usd!\"\n        FROM usage_events\n        WHERE (agent_id=ANY($1) OR ($2 AND agent_id IS NULL))\n            AND created_at > clock_timestamp() - interval '30 days'\n        GROUP BY provider, model\n        ORDER BY 3 DESC\n        LIMIT 8\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "tokens!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "cost_usd!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "489c9ceec7579cd44126f3dee9703e7012a537127ec0326959c451fe434b1632"
+}

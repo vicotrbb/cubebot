@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE chat_turns t\n                SET status='queued', error=NULL\n                WHERE t.conversation_id=$1 AND t.status='waiting' AND t.error='budget_exhausted'\n                    AND NOT EXISTS(SELECT 1 FROM turn_events c WHERE c.turn_id=t.id AND c.payload->>'kind'='tool_call' AND NOT EXISTS(SELECT 1 FROM turn_events r WHERE r.turn_id=c.turn_id AND r.payload->>'kind'='tool_result' AND r.payload->>'id'=c.payload->>'id' AND r.payload->'outcome'->>'status'<>'uncertain'))\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9a6a9a3a8a2bf28deb8cd9fe9c3e6e3f48df299f37608add8a30a7f5d6c5db5"
+}

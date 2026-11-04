@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.model, COALESCE((SELECT provider FROM provider_connection LIMIT 1), 'unknown') AS \"provider!\"\n            FROM dream_runs d\n            WHERE d.id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "provider!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "9c7621639642c0b2f233e4c4de526ceccc8c1a5cec16197d4342a76c435813a9"
+}

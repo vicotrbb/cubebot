@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE usage_events\n        SET cost_usd=usage_cost(provider, model, input_tokens, cached_input_tokens, output_tokens)\n        WHERE cost_usd IS NULL AND provider=$1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dbcd94f717daab12609d7b22748a41001424bc42a305950f307ac69f28f45745"
+}

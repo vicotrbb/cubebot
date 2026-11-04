@@ -6,7 +6,9 @@ import {
   Mail,
   PauseCircle,
 } from 'lucide-react'
-import { useActivity, useAgents } from '../app/queries'
+import { useEffect } from 'react'
+import { markActivityRead, useActivity, useAgents } from '../app/queries'
+import type { components } from '../api/schema'
 import { Empty, Skeleton, when } from '../components/primitives'
 
 export const Route = createFileRoute('/_app/activity')({ component: Activity })
@@ -17,12 +19,30 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   turn_failed: CircleAlert,
   invitation_pending: Mail,
   dream_published_skill: BookOpen,
+  agent_published_skill: BookOpen,
+}
+
+/** Where an item leads: room work is answered in its room, not the agent's own conversation. */
+function destination(item: components['schemas']['ActivityItem']) {
+  if (item.room) return `/rooms/${item.room}`
+  if (!item.agent) return '/platform/people'
+  if (item.kind === 'login_pending') return `/agents/${item.agent}/desktop`
+  if (item.kind.endsWith('published_skill')) return '/skills'
+  if (item.text.endsWith('work is paused')) return `/agents/${item.agent}/usage`
+  return item.turn
+    ? `/agents/${item.agent}/thread/${item.turn}`
+    : `/agents/${item.agent}`
 }
 
 /** What needs the person: pending logins, waiting or failed work, invitations, new skills. */
 function Activity() {
   const activity = useActivity()
   const agents = useAgents()
+  // Seeing the page is what reads it, also when something new arrives while it is open.
+  const fresh = activity.data?.some((item) => item.unread)
+  useEffect(() => {
+    if (fresh) void markActivityRead()
+  }, [fresh])
   const name = (id?: string | null) =>
     agents.data?.find((agent) => agent.id === id)?.name
   return (
@@ -41,13 +61,7 @@ function Activity() {
         <ul className="list">
           {activity.data?.map((item, index) => {
             const Icon = ICONS[item.kind] ?? CircleAlert
-            const to = item.agent
-              ? item.kind === 'login_pending'
-                ? `/agents/${item.agent}/desktop`
-                : item.turn
-                  ? `/agents/${item.agent}/thread/${item.turn}`
-                  : `/agents/${item.agent}`
-              : '/platform/people'
+            const to = destination(item)
             return (
               <li key={`${item.kind}:${item.turn ?? item.agent ?? index}`}>
                 <div className="title">

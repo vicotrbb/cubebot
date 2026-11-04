@@ -1,5 +1,38 @@
-import { X } from 'lucide-react'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { Check, Copy, X } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+
+/** Plain-HTTP installs have no Clipboard API, so a hidden selection does the copying there. */
+async function copyText(text: string) {
+  if (navigator.clipboard) return navigator.clipboard.writeText(text)
+  const area = document.createElement('textarea')
+  area.value = text
+  area.style.position = 'fixed'
+  area.style.opacity = '0'
+  document.body.append(area)
+  area.select()
+  document.execCommand('copy')
+  area.remove()
+}
+
+export function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--sm"
+      aria-label={copied ? 'Copied' : label}
+      title={label}
+      onClick={() => {
+        void copyText(text).then(() => {
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1500)
+        })
+      }}
+    >
+      {copied ? <Check /> : <Copy />}
+    </button>
+  )
+}
 
 export function Skeleton({
   lines = 3,

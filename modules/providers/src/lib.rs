@@ -9,10 +9,12 @@ use std::{collections::VecDeque, time::Duration};
 mod anthropic;
 mod openai;
 mod openrouter;
+mod prices;
 mod sse;
 pub use anthropic::Anthropic;
 pub use openai::OpenAi;
 pub use openrouter::OpenRouter;
+pub use prices::Price;
 
 type Source = Box<dyn std::error::Error + Send + Sync>;
 
@@ -161,6 +163,10 @@ pub struct Usage {
     /// The whole request, including cached input.
     pub input_tokens: u64,
     pub output_tokens: u64,
+    /// The part of `input_tokens` read from the provider's cache, billed at its lower rate.
+    pub cached_input_tokens: u64,
+    /// What the provider itself says this cost, when it says; only OpenRouter does.
+    pub cost_usd: Option<f64>,
 }
 
 pub enum Event {
@@ -287,7 +293,12 @@ fn retry_after(response: &Response) -> Option<Duration> {
 }
 
 /// A non-streaming JSON body, such as model metadata. OpenRouter's listing alone is about 1 MiB.
-async fn json(mut response: Response) -> Result<Value, Error> {
+async fn json(response: Response) -> Result<Value, Error> {
+    let bytes = body(response).await?;
+    serde_json::from_slice(&bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
+}
+
+async fn body(mut response: Response) -> Result<Vec<u8>, Error> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(unavailable)? {
         if bytes.len() + chunk.len() > 8 * 1024 * 1024 {
@@ -295,7 +306,7 @@ async fn json(mut response: Response) -> Result<Value, Error> {
         }
         bytes.extend_from_slice(&chunk);
     }
-    serde_json::from_slice(&bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
+    Ok(bytes)
 }
 
 /// The `data` array of a models listing; `window` reads an entry's context window.

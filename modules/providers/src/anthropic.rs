@@ -10,29 +10,54 @@ use std::collections::VecDeque;
 
 const VERSION: &str = "2026-10-21";
 
+const PRICES: crate::prices::Columns = crate::prices::Columns {
+    input: &["Base input tokens"],
+    cached: &["Cache hits and refreshes"],
+    output: &["Output tokens"],
+};
+
+/// `Claude Opus 5.5` as the API's `claude-opus-5.5`; dots and dates are matched up when stored.
+fn model_id(name: &str) -> String {
+    name.to_lowercase().replace(' ', "-")
+}
+
 pub struct Anthropic {
     http: Client,
     /// Ends in `/`; `messages` and `models/{id}` resolve against it.
     base: Url,
+    pricing: Url,
 }
 
 impl Anthropic {
     pub fn new() -> Result<Self, Error> {
+        let parse = |url| Url::parse(url).map_err(|error| Error::Configuration(Some(error.into())));
         Self::base(
-            Url::parse("https://api.anthropic.com/v1/")
-                .map_err(|error| Error::Configuration(Some(error.into())))?,
+            parse("https://api.anthropic.com/v1/")?,
+            parse("https://platform.claude.com/docs/en/about-claude/pricing.md")?,
         )
     }
 
     pub fn for_loopback_tests(origin: &str) -> Result<Self, Error> {
-        Self::base(crate::loopback(origin)?)
+        let base = crate::loopback(origin)?;
+        let pricing = base
+            .join("pricing.md")
+            .map_err(|error| Error::Configuration(Some(error.into())))?;
+        Self::base(base, pricing)
     }
 
-    fn base(base: Url) -> Result<Self, Error> {
+    fn base(base: Url, pricing: Url) -> Result<Self, Error> {
         Ok(Self {
             http: crate::client()?,
             base,
+            pricing,
         })
+    }
+
+    /// The prices on Anthropic's pricing page.
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic"))]
+    pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
+        let page = crate::prices::page(&self.http, self.pricing.clone()).await?;
+        crate::prices::from_markdown(&page, "## Model pricing", &PRICES, model_id)
     }
 
     fn authorized(&self, request: RequestBuilder, key: &str) -> RequestBuilder {
@@ -221,6 +246,7 @@ struct Messages {
     blocks: Vec<Value>,
     input_tokens: Option<u64>,
     output_tokens: Option<u64>,
+    cached_input_tokens: u64,
     stop: Option<String>,
 }
 impl Decoder for Messages {
@@ -261,6 +287,8 @@ impl Messages {
                 .filter_map(|field| usage[*field].as_u64())
                 .sum::<u64>();
             self.input_tokens = Some(input + cached);
+            // shortcut: cache writes count as ordinary input, slightly under their rate.
+            self.cached_input_tokens = usage["cache_read_input_tokens"].as_u64().unwrap_or(0);
         }
         if let Some(output) = usage["output_tokens"].as_u64() {
             self.output_tokens = Some(output);
@@ -345,6 +373,8 @@ impl Messages {
                 .map(|(input_tokens, output_tokens)| Usage {
                     input_tokens,
                     output_tokens,
+                    cached_input_tokens: self.cached_input_tokens,
+                    cost_usd: None,
                 });
         Ok(Event::Done {
             reply: reply(text, calls, Value::Array(std::mem::take(&mut self.blocks)))?,

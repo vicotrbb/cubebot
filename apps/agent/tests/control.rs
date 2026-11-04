@@ -249,12 +249,12 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     );
     assert_eq!(
         fake.event(4).await,
-        json!({"kind":"usage","input_tokens":9,"output_tokens":2})
+        json!({"kind":"usage","input_tokens":9,"output_tokens":2,"cached_input_tokens":0,"cost_usd":null})
     );
     // Extraction streams nothing; its fact commits with the turn.
     assert_eq!(
         fake.event(5).await,
-        json!({"kind":"usage","input_tokens":12,"output_tokens":3})
+        json!({"kind":"usage","input_tokens":12,"output_tokens":3,"cached_input_tokens":0,"cost_usd":null})
     );
     let done = json!({"kind":"done","response":"Hello back",
         "memories":[{"op":"remember","content":"Likes short greetings"}]});
@@ -565,7 +565,7 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
     );
     assert_eq!(
         fake.event(2).await,
-        json!({"kind":"usage","input_tokens":790,"output_tokens":20})
+        json!({"kind":"usage","input_tokens":790,"output_tokens":20,"cached_input_tokens":0,"cost_usd":null})
     );
     // 810 of the discovered 1000-token window: after extraction, summarize before the reply
     // settles the turn.

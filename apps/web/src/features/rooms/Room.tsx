@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, history, ok, type RoomMessage } from '../../api/client'
-import type { RoomSummary, Session } from '../../api/types'
+import type { AgentSummary, RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
 import { followWhileVisible } from '../../app/stream'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Empty, Skeleton } from '../../components/primitives'
+import { can } from '../../api/types'
+import { Attachments } from '../chat/Attachments'
 import { Composer } from '../chat/Composer'
+import { Retry, Stop } from '../chat/Conversation'
+import { Markdown } from '../chat/Markdown'
 import '../chat/chat.css'
 
 const FINISHED = ['complete', 'failed', 'cancelled']
@@ -37,7 +41,7 @@ const ROUTING: Record<string, string> = {
 const DELIVERY: Record<string, string> = {
   queued: 'queued',
   running: 'working…',
-  waiting: 'waiting for a retry in its conversation',
+  waiting: 'waiting for a retry',
   delegated: 'waiting on delegated work',
   complete: 'replied',
   failed: 'failed',
@@ -130,7 +134,7 @@ export function Room({
                 <div className="msg__head">
                   <span className="msg__author">{message.author}</span>
                 </div>
-                <p className="msg__text">{message.message}</p>
+                <Markdown text={message.message} />
                 {message.routing === 'continued' && (
                   <p className="small faint" role="status">
                     Coordinator added this to {message.note}’s open task as
@@ -153,7 +157,7 @@ export function Room({
                   <div className="msg__head">
                     <span className="msg__author">Coordinator</span>
                   </div>
-                  <p className="msg__text">{message.note}</p>
+                  <Markdown text={message.note ?? ''} />
                 </div>
               </div>
             )}
@@ -170,14 +174,18 @@ export function Room({
                       · {DELIVERY[item.status] ?? item.status}
                     </span>
                   </div>
-                  {item.response && (
-                    <p className="msg__text">{item.response}</p>
-                  )}
+                  {item.response && <Markdown text={item.response} />}
+                  <Attachments turn={item.turn} items={item.attachments} />
                   {item.status === 'failed' && item.error && (
                     <p className="small" style={{ color: 'var(--danger)' }}>
                       {item.error.replaceAll('_', ' ')}
                     </p>
                   )}
+                  <DeliveryActions
+                    item={item}
+                    agent={agentOf(item.agent_id)}
+                    session={session}
+                  />
                 </div>
               </div>
             ))}
@@ -209,6 +217,36 @@ export function Room({
         }}
       />
     </section>
+  )
+}
+
+/** A delivery's work is steered from here: the agent's own conversation never shows it. Needs
+ *  send access on the agent, like the same actions in its conversation. */
+function DeliveryActions({
+  item,
+  agent,
+  session,
+}: {
+  item: RoomMessage['deliveries'][number]
+  agent: AgentSummary | undefined
+  session: Session
+}) {
+  const open = ['queued', 'running', 'delegated', 'waiting'].includes(
+    item.status,
+  )
+  if (!agent || !open || !can(agent, 'conversation_send', session)) return null
+  const turn = { id: item.turn, status: item.status }
+  return (
+    <div className="msg__actions">
+      {item.status === 'waiting' && item.error !== 'budget_exhausted' && (
+        <Retry conversation={item.agent_id} turn={turn} />
+      )}
+      <Stop
+        conversation={item.agent_id}
+        turn={turn}
+        label={item.status === 'queued' ? 'Cancel' : 'Stop'}
+      />
+    </div>
   )
 }
 

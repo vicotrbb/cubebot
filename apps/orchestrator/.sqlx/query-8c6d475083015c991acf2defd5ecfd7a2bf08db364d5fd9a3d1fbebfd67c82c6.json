@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO skill_installations (agent_id, skill_id, revision)\n            SELECT $1, id, revision\n            FROM skills\n            WHERE installs_by_default\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8c6d475083015c991acf2defd5ecfd7a2bf08db364d5fd9a3d1fbebfd67c82c6"
+}

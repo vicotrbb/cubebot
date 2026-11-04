@@ -173,7 +173,9 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         *usage,
         Some(Usage {
             input_tokens: 100,
-            output_tokens: 20
+            output_tokens: 20,
+            cached_input_tokens: 90,
+            cost_usd: None,
         })
     );
     let [call] = &reply.calls[..] else {
@@ -342,4 +344,66 @@ async fn lists_models_with_their_reported_context_windows() {
         ]
     );
     task.abort();
+}
+
+/// The table Anthropic's pricing page used on 2026-11-04.
+const PRICING: &str = "## Model pricing\n\n\
+| Model | Base input tokens | 5m cache writes | 1h cache writes | Cache hits and refreshes | Output tokens |\n\
+| :---- | :---- | :---- | :---- | :---- | :---- |\n\
+| Claude Opus 5.5 | $4 / MTok | $5 / MTok | $8 / MTok | $0.20 / MTok<sup>2</sup> | $20 / MTok |\n\
+| Claude Mythos 5 ([limited availability](https://example.com/a)) | $10 / MTok | $12.50 / MTok | $20 / MTok | $1 / MTok | $50 / MTok |\n\
+| Claude Haiku 5.5 (for prompts up to 100,000 tokens) | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok | $0.01 / MTok | $0.50 / MTok |\n\
+| Claude Haiku 5.5 (for prompts over 100,000 tokens) | $0.50 / MTok | $0.625 / MTok | $1 / MTok | $0.05 / MTok | $2.50 / MTok |\n\n\
+## Other\n\n| Concept | Details |\n| --- | --- |\n| **CCU price** | $0.01 USD |\n";
+
+#[tokio::test]
+async fn prices_come_from_its_own_page_under_the_ids_its_api_uses() {
+    let router = axum::Router::new().route(
+        "/pricing.md",
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert!(!headers.contains_key("x-api-key"));
+            PRICING
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}/", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let prices = cubebot_providers::Anthropic::for_loopback_tests(&origin)
+        .unwrap()
+        .prices()
+        .await
+        .unwrap();
+    server.abort();
+    let names: Vec<&str> = prices.iter().map(|price| price.model.as_str()).collect();
+    assert_eq!(
+        names,
+        ["claude-opus-5.5", "claude-mythos-5", "claude-haiku-5.5"]
+    );
+    assert!((prices[0].cached_per_token - 0.2e-6).abs() < 1e-12);
+    assert!((prices[0].output_per_token - 20e-6).abs() < 1e-12);
+    assert!(
+        (prices[2].input_per_token - 0.1e-6).abs() < 1e-12,
+        "the lowest tier of a tiered model"
+    );
+}
+
+/// Reads the real page; `cargo test -- --ignored live_page` tells whether the parser still fits.
+#[tokio::test]
+#[ignore = "reaches platform.claude.com"]
+async fn live_page_still_parses() {
+    let prices = cubebot_providers::Anthropic::new()
+        .unwrap()
+        .prices()
+        .await
+        .unwrap();
+    println!(
+        "{} Anthropic prices, e.g. {:?}",
+        prices.len(),
+        prices.first()
+    );
+    assert!(prices.len() >= 5, "{prices:?}");
+    assert!(
+        prices.iter().all(|p| p.output_per_token > 0.0),
+        "{prices:?}"
+    );
 }

@@ -409,8 +409,7 @@ async fn attach(
 ) -> Result<(), IdentityError> {
     let ids: Vec<Uuid> = messages.iter().map(|message| message.id).collect();
     // `room_message_id` is the broadcast here: Delivery's grouping key, never serialized.
-    let deliveries = sqlx::query_as!(
-        Delivery,
+    let deliveries = sqlx::query!(
         r#"
         SELECT t.id AS turn, t.broadcast_id AS "room_message_id!", t.conversation_id AS agent_id,
             a.name AS agent, t.status, t.response, t.error
@@ -423,7 +422,19 @@ async fn attach(
     )
     .fetch_all(&mut **tx)
     .await?;
+    let turns: Vec<Uuid> = deliveries.iter().map(|delivery| delivery.turn).collect();
+    let mut attachments = super::terminal::attachments(tx, &turns).await?;
     for delivery in deliveries {
+        let delivery = Delivery {
+            attachments: attachments.remove(&delivery.turn).unwrap_or_default(),
+            turn: delivery.turn,
+            room_message_id: delivery.room_message_id,
+            agent_id: delivery.agent_id,
+            agent: delivery.agent,
+            status: delivery.status,
+            response: delivery.response,
+            error: delivery.error,
+        };
         if let Some(message) = messages
             .iter_mut()
             .find(|message| message.id == delivery.room_message_id)

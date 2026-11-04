@@ -21,6 +21,9 @@ use uuid::Uuid;
 const DREAM_MEMORIES: i64 = 50;
 /// Latest completed exchanges a run sees, for skills worth writing down.
 const DREAM_TURNS: i64 = 20;
+/// Completed turns that earn a dream without any new memory, so procedures worth a skill get
+/// looked at; fewer would spend tokens on too little to learn from.
+const DREAM_NEW_TURNS: i64 = 5;
 /// Runs the console lists, newest first.
 const LISTED_RUNS: i64 = 50;
 
@@ -162,7 +165,8 @@ pub(crate) async fn start_dream(
         SELECT g.desired_state='running'
                 AND NOT EXISTS(SELECT 1 FROM chat_turns WHERE conversation_id=g.id AND status IN ('queued','running','waiting'))
                 AND NOT EXISTS(SELECT 1 FROM dream_runs WHERE id=$2)
-                AND EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id WHERE m.agent_id=g.id AND r.dream_run_id IS NULL AND r.created_at > COALESCE((SELECT max(started_at) FROM dream_runs WHERE agent_id=g.id AND outcome IN ('completed','no_op')),'-infinity'))
+                AND (EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id WHERE m.agent_id=g.id AND r.dream_run_id IS NULL AND r.created_at > COALESCE((SELECT max(started_at) FROM dream_runs WHERE agent_id=g.id AND outcome IN ('completed','no_op')),'-infinity'))
+                    OR (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status='complete' AND t.completed_at > COALESCE((SELECT max(started_at) FROM dream_runs WHERE agent_id=g.id AND outcome IN ('completed','no_op')),'-infinity')) >= $3)
                 AS "eligible!",
             g.dreaming_model
         FROM agents g
@@ -171,10 +175,14 @@ pub(crate) async fn start_dream(
         "#,
         actor.agent.0,
         run,
+        DREAM_NEW_TURNS,
     )
     .fetch_one(&mut *tx)
     .await?;
-    if !agent.eligible || run.is_nil() {
+    if !agent.eligible
+        || run.is_nil()
+        || crate::work::usage::exhausted(&mut tx, actor.agent).await?
+    {
         return Ok(None);
     }
     let inference = match connections {
@@ -185,34 +193,13 @@ pub(crate) async fn start_dream(
         return Ok(None);
     };
     let model = agent.dreaming_model.unwrap_or(inference.model);
-    sqlx::query!(
-        "
-        UPDATE dream_runs
-        SET status='finished', outcome='failed', ended_at=clock_timestamp()
-        WHERE agent_id=$1 AND status='running'
-        ",
-        actor.agent.0,
-    )
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query!(
-        "
-        INSERT INTO dream_runs (id, agent_id, attempt_id, model)
-        VALUES ($1, $2, $3, $4)
-        ",
-        run,
-        actor.agent.0,
-        actor.attempt.0,
-        &model,
-    )
-    .execute(&mut *tx)
-    .await?;
+    begin_run(&mut tx, actor, run, &model).await?;
     let memories = search(&mut tx, actor.agent, None, DREAM_MEMORIES).await?;
     let turns = sqlx::query_as!(
         Exchange,
         r#"
         SELECT message AS "message!", response AS "response!"
-        FROM (SELECT left(message,2000) AS message,left(response,2000) AS response,sequence FROM chat_turns WHERE conversation_id=$1 AND status='complete' ORDER BY sequence DESC LIMIT $2) t
+        FROM (SELECT left(c.message,2000) AS message,left(c.response,2000) || COALESCE(E'\n[tools used: ' || (SELECT string_agg(DISTINCT e.payload->>'name', ', ') FROM turn_events e WHERE e.turn_id=c.id AND e.payload->>'kind'='tool_call') || ']', '') AS response,c.sequence FROM chat_turns c WHERE c.conversation_id=$1 AND c.status='complete' ORDER BY c.sequence DESC LIMIT $2) t
         ORDER BY sequence
         "#,
         actor.agent.0,
@@ -221,6 +208,7 @@ pub(crate) async fn start_dream(
     .fetch_all(&mut *tx)
     .await?;
     let skills = skills::packages(&mut *tx, actor.agent, None, skills::DREAM_SKILLS).await?;
+    let library = skills::catalog(&mut tx).await?;
     tx.commit().await?;
     Ok(Some(Dream {
         provider: inference.provider,
@@ -236,7 +224,40 @@ pub(crate) async fn start_dream(
             .collect(),
         turns,
         skills,
+        library,
     }))
+}
+
+/// Closes an unfinished earlier run as failed and opens this one.
+async fn begin_run(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    run: Uuid,
+    model: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "
+        UPDATE dream_runs
+        SET status='finished', outcome='failed', ended_at=clock_timestamp()
+        WHERE agent_id=$1 AND status='running'
+        ",
+        actor.agent.0,
+    )
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query!(
+        "
+        INSERT INTO dream_runs (id, agent_id, attempt_id, model)
+        VALUES ($1, $2, $3, $4)
+        ",
+        run,
+        actor.agent.0,
+        actor.attempt.0,
+        model,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 /// Commits one change of this attempt's running run. `false` once the run has ended.
@@ -327,7 +348,22 @@ pub(crate) async fn finish_dream(
     )
     .execute(pool)
     .await?;
-    Ok(ended.rows_affected() == 1)
+    let finished = ended.rows_affected() == 1;
+    if let (true, Some(usage)) = (finished, &end.usage) {
+        let priced = sqlx::query!(
+            "
+            SELECT d.model, COALESCE((SELECT provider FROM provider_connection LIMIT 1), 'unknown') AS \"provider!\"
+            FROM dream_runs d
+            WHERE d.id=$1
+            ",
+            run,
+        )
+        .fetch_one(pool)
+        .await?;
+        let model = (priced.provider.as_str(), priced.model.as_str());
+        crate::work::usage::record_duty(pool, Some(actor.agent), Some(run), model, usage).await?;
+    }
+    Ok(finished)
 }
 
 /// A run whose sandbox lost its credential cannot report; it failed.

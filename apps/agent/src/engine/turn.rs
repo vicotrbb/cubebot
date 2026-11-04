@@ -430,6 +430,8 @@ impl<P: Provider> Session<'_, P> {
                 TurnEvent::Usage {
                     input_tokens: usage.input_tokens,
                     output_tokens: usage.output_tokens,
+                    cached_input_tokens: usage.cached_input_tokens,
+                    cost_usd: usage.cost_usd,
                 },
                 None,
             );
@@ -663,7 +665,7 @@ mod tests {
     async fn a_task_lane_cannot_ask_for_a_login() {
         let knowledge = (
             Memories::new(None),
-            Skills::new(None),
+            Skills::new(None, Uuid::nil()),
             Collaboration::new(None, Uuid::nil(), Default::default()),
         );
         let call = FunctionCall {
@@ -691,7 +693,7 @@ mod tests {
     async fn a_task_lane_cannot_drive_the_main_browser_session() {
         let knowledge = (
             Memories::new(None),
-            Skills::new(None),
+            Skills::new(None, Uuid::nil()),
             Collaboration::new(None, Uuid::nil(), Default::default()),
         );
         let call = |session: &str| FunctionCall {

@@ -10,6 +10,7 @@ import {
   Megaphone,
   Moon,
   Plus,
+  Radar,
   Search,
   Settings,
   Star,
@@ -22,7 +23,7 @@ import type { AgentSummary, RoomSummary } from '../../api/types'
 import {
   signOut,
   unread,
-  useActivity,
+  useUnreadActivity,
   useAgents,
   useBroadcasts,
   useInstallation,
@@ -68,9 +69,8 @@ export function Sidebar({
 }) {
   const session = useSession()
   const installation = useInstallation()
-  const activity = useActivity()
   const administrator = Boolean(session.data?.administrator)
-  const attention = activity.data?.length ?? 0
+  const attention = useUnreadActivity()
   return (
     <aside className={page ? 'sidebar sidebar--page' : 'sidebar'}>
       <header className="sidebar__head">
@@ -104,6 +104,14 @@ export function Sidebar({
           {attention > 0 && <span className="row__badge">{attention}</span>}
         </Link>
         {administrator && <BroadcastRow />}
+        <Link
+          to="/situation"
+          className="row row--page"
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <Radar className="row__icon" />
+          <span className="row__label">Situation room</span>
+        </Link>
         <Favorites />
         <AgentsSection administrator={administrator} />
         <RoomsSection />

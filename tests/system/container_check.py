@@ -75,6 +75,11 @@ def scripted(system, outputs):
         lambda: ("kb_search", {"query": MARKER}),
         lambda: ("kb_edit", {"page": id_in(outputs[3]), "old_text": "first",
                              "new_text": "agent"}),
+        lambda: ("skill_create", {"name": "write-a-poem",
+                                  "description": "Write and share a short poem.",
+                                  "instructions": "Write it, then share it.",
+                                  "files": []}),
+        lambda: ("send_attachment", {"path": "poem.txt", "name": "poem.txt"}),
     ]
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
@@ -166,7 +171,7 @@ def shared_and_written(api, postgres, identity, marker):
         print(json.dumps(tool_calls(postgres, turn), indent=1)[:4000])
         raise
     calls = tool_calls(postgres, turn)
-    assert len(calls) == 6, calls
+    assert len(calls) == 8, calls
     for call in calls:
         assert call["outcome"]["code"] == 0, call
     shared = [entry["name"] for entry in api("/api/files/shared")]
@@ -176,6 +181,15 @@ def shared_and_written(api, postgres, identity, marker):
     page = api(f"/api/kb/pages/{pages[0]['id']}")
     assert page["body"] == "agent words", page
     assert page["updated_by"]["agent"] == identity, page
+    # A skill the agent wrote is a real library entry it has installed, not a file.
+    library = {skill["name"]: skill for skill in api("/api/skills")}
+    assert {"coding", "design", "write-a-poem"} <= set(library), library
+    installed = [s["name"] for s in api(f"/api/agents/{identity}/skills")]
+    assert sorted(installed) == ["coding", "design", "write-a-poem"], installed
+    # What it sent is on the reply, and the person reads it through the reply.
+    reply = finished(api, identity, turn)
+    assert [a["name"][:4] for a in reply["attachments"]] == ["poem"], reply
+    assert reply["attachments"][0]["size"] == len("verse\n"), reply
     # The switch a person turns off reaches the definition.
     definition = api(f"/api/agents/{identity}")
     update = command(

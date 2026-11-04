@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE routine_hooks\n        SET key=NULL\n        WHERE key IS NOT NULL AND received_at < clock_timestamp() - interval '1 day'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ea3e41a4c0415a1f7a0c245ac8aa465a4f185a68173dd62ce496315a876de762"
+}

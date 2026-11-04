@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"written!\" FROM skill_revisions WHERE turn_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "written!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4b76beba7c017f6dad160471609823a2688a9bc2023b2ef78e79c4e53d9def91"
+}

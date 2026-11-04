@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import type { components } from '../api/schema'
 import type { Client } from 'openapi-fetch'
 import { agents as listAgents, api, ApiError, ok } from '../api/client'
 import type { paths } from '../api/schema'
@@ -103,6 +104,29 @@ export function useActivity() {
     queryKey: keys.activity,
     queryFn: () => ok(api.GET('/api/activity')),
     refetchInterval: 30_000,
+  })
+}
+
+/** How many inbox items arrived since the person last opened it. */
+export function useUnreadActivity() {
+  const activity = useActivity()
+  return activity.data?.filter((item) => item.unread).length ?? 0
+}
+
+/** Marks the inbox seen on the server, so the badge clears on every device, and here at once. */
+export async function markActivityRead() {
+  queryClient.setQueryData<components['schemas']['ActivityItem'][]>(
+    keys.activity,
+    (current) => current?.map((item) => ({ ...item, unread: false })),
+  )
+  await api.PUT('/api/activity/read').catch(() => undefined)
+}
+
+export function useSituation() {
+  return useQuery({
+    queryKey: ['situation'],
+    queryFn: () => ok(api.GET('/api/situation')),
+    refetchInterval: 10_000,
   })
 }
 

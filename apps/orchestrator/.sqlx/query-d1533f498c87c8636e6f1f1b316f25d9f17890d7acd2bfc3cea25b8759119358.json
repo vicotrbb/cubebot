@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT kind AS \"kind!\", agent AS \"agent!\", turn, room, text AS \"text!\", (to_jsonb(at) #>> '{}') AS \"at!\"\n            FROM (\n                (SELECT 'turn_' || t.status AS kind, t.conversation_id AS agent, t.id AS turn, m.room_id AS room,\n                    left(COALESCE(m.message, t.message), 160) AS text, t.status_at AS at\n                FROM chat_turns t\n                LEFT JOIN room_messages m ON m.id=t.room_message_id\n                WHERE t.conversation_id=ANY($1) AND t.status IN ('complete','failed','cancelled')\n                ORDER BY t.status_at DESC\n                LIMIT 12)\n                UNION ALL\n                (SELECT 'dream', d.agent_id, NULL, NULL, left(d.report, 160), d.ended_at\n                FROM dream_runs d\n                WHERE d.agent_id=ANY($1) AND d.outcome IN ('completed','failed')\n                ORDER BY d.ended_at DESC\n                LIMIT 6)\n                UNION ALL\n                (SELECT 'skill', COALESCE(d.agent_id, t.conversation_id), r.turn_id, NULL, s.name, r.created_at\n                FROM skill_revisions r\n                JOIN skills s ON s.id=r.skill_id\n                LEFT JOIN dream_runs d ON d.id=r.dream_run_id\n                LEFT JOIN chat_turns t ON t.id=r.turn_id\n                WHERE COALESCE(d.agent_id, t.conversation_id)=ANY($1)\n                ORDER BY r.created_at DESC\n                LIMIT 6)\n            ) e\n            ORDER BY at DESC\n            LIMIT 14\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "room",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "text!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d1533f498c87c8636e6f1f1b316f25d9f17890d7acd2bfc3cea25b8759119358"
+}

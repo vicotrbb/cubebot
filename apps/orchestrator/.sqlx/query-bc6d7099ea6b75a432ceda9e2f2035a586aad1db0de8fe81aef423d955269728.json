@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO usage_events (agent_id, turn_id, event_sequence, kind, provider, model, input_tokens, cached_input_tokens, output_tokens, cost_usd)\n        SELECT t.conversation_id, t.id, $2, 'turn', COALESCE(t.provider, 'unknown'), COALESCE(t.model, 'unknown'), $3, $4, $5,\n            COALESCE($6, usage_cost(COALESCE(t.provider, 'unknown'), COALESCE(t.model, 'unknown'), $3, $4, $5))\n        FROM chat_turns t\n        WHERE t.id=$1\n        ON CONFLICT (turn_id, event_sequence) DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc6d7099ea6b75a432ceda9e2f2035a586aad1db0de8fe81aef423d955269728"
+}

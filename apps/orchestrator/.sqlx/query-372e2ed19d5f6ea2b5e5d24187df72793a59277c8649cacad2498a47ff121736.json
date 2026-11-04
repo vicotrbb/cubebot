@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT (to_jsonb(h.received_at) #>> '{}') AS \"received_at!\", h.outcome, h.bytes,\n                h.turn_id AS turn, t.status AS \"status?\"\n            FROM routine_hooks h\n            LEFT JOIN chat_turns t ON t.id=h.turn_id\n            WHERE h.routine_id=$1\n            ORDER BY h.received_at DESC\n            LIMIT 50\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "received_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "outcome",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "bytes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "status?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "372e2ed19d5f6ea2b5e5d24187df72793a59277c8649cacad2498a47ff121736"
+}

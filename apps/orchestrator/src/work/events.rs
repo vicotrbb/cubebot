@@ -35,8 +35,8 @@ impl Work {
         let cursor = sqlx::query_scalar!(
             r#"
             SELECT COALESCE(
-                (SELECT min(e.id)-1 FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND t.status='running'),
-                (SELECT max(e.id) FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1),
+                (SELECT min(e.id)-1 FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND t.room_message_id IS NULL AND t.status='running'),
+                (SELECT max(e.id) FROM turn_events e JOIN chat_turns t ON t.id=e.turn_id WHERE t.conversation_id=$1 AND t.room_message_id IS NULL),
                 0
             ) AS "cursor!"
             "#,
@@ -66,7 +66,7 @@ impl Work {
             SELECT e.id, e.turn_id, e.payload #- '{outcome,image}' AS "payload!"
             FROM turn_events e
             JOIN chat_turns t ON t.id=e.turn_id
-            WHERE t.conversation_id=$1 AND e.id>$2
+            WHERE t.conversation_id=$1 AND t.room_message_id IS NULL AND e.id>$2
             ORDER BY e.id
             LIMIT 100
             "#,
@@ -85,7 +85,7 @@ impl Work {
             "
             SELECT id, sequence, message, status, response, error
             FROM chat_turns
-            WHERE conversation_id=$1 AND (status IN ('queued','running','waiting','delegated') OR id=ANY($2))
+            WHERE conversation_id=$1 AND room_message_id IS NULL AND (status IN ('queued','running','waiting','delegated') OR id=ANY($2))
             ORDER BY sequence
             ",
             canonical.0,

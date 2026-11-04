@@ -17,6 +17,7 @@ import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
 import { Route as AppKbRouteImport } from './routes/_app.kb'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
+import { Route as AppSituationRouteImport } from './routes/_app.situation'
 import { Route as AppYouRouteImport } from './routes/_app.you'
 import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agentId'
 import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
@@ -43,6 +44,7 @@ import { Route as AppAgentsAgentIdMemoriesRouteImport } from './routes/_app.agen
 import { Route as AppAgentsAgentIdRoutinesRouteImport } from './routes/_app.agents.$agentId.routines'
 import { Route as AppAgentsAgentIdSkillsRouteImport } from './routes/_app.agents.$agentId.skills'
 import { Route as AppAgentsAgentIdStatusRouteImport } from './routes/_app.agents.$agentId.status'
+import { Route as AppAgentsAgentIdUsageRouteImport } from './routes/_app.agents.$agentId.usage'
 import { Route as AppAgentsAgentIdVaultRouteImport } from './routes/_app.agents.$agentId.vault'
 import { Route as AppAgentsAgentIdDesktopRouteImport } from './routes/_app.agents_.$agentId_.desktop'
 import { Route as AppRoomsRoomIdMembersRouteImport } from './routes/_app.rooms.$roomId.members'
@@ -85,6 +87,11 @@ const AppKbRoute = AppKbRouteImport.update({
 const AppPlatformRoute = AppPlatformRouteImport.update({
   id: '/platform',
   path: '/platform',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSituationRoute = AppSituationRouteImport.update({
+  id: '/situation',
+  path: '/situation',
   getParentRoute: () => AppRoute,
 } as any)
 const AppYouRoute = AppYouRouteImport.update({
@@ -220,6 +227,11 @@ const AppAgentsAgentIdStatusRoute = AppAgentsAgentIdStatusRouteImport.update({
   path: '/status',
   getParentRoute: () => AppAgentsAgentIdRoute,
 } as any)
+const AppAgentsAgentIdUsageRoute = AppAgentsAgentIdUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
 const AppAgentsAgentIdVaultRoute = AppAgentsAgentIdVaultRouteImport.update({
   id: '/vault',
   path: '/vault',
@@ -250,6 +262,7 @@ export interface FileRoutesByFullPath {
   '/files': typeof AppFilesRoute
   '/kb': typeof AppKbRouteWithChildren
   '/platform': typeof AppPlatformRouteWithChildren
+  '/situation': typeof AppSituationRoute
   '/you': typeof AppYouRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
@@ -276,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
   '/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
   '/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
+  '/agents/$agentId/usage': typeof AppAgentsAgentIdUsageRoute
   '/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
   '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
@@ -287,6 +301,7 @@ export interface FileRoutesByTo {
   '/broadcast': typeof AppBroadcastRoute
   '/files': typeof AppFilesRoute
   '/platform': typeof AppPlatformRouteWithChildren
+  '/situation': typeof AppSituationRoute
   '/you': typeof AppYouRoute
   '/': typeof AppIndexRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
@@ -314,6 +329,7 @@ export interface FileRoutesByTo {
   '/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
   '/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
   '/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
+  '/agents/$agentId/usage': typeof AppAgentsAgentIdUsageRoute
   '/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
   '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
@@ -328,6 +344,7 @@ export interface FileRoutesById {
   '/_app/files': typeof AppFilesRoute
   '/_app/kb': typeof AppKbRouteWithChildren
   '/_app/platform': typeof AppPlatformRouteWithChildren
+  '/_app/situation': typeof AppSituationRoute
   '/_app/you': typeof AppYouRoute
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
@@ -355,6 +372,7 @@ export interface FileRoutesById {
   '/_app/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
   '/_app/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
   '/_app/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
+  '/_app/agents/$agentId/usage': typeof AppAgentsAgentIdUsageRoute
   '/_app/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
   '/_app/agents_/$agentId_/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/_app/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
@@ -370,6 +388,7 @@ export interface FileRouteTypes {
     | '/files'
     | '/kb'
     | '/platform'
+    | '/situation'
     | '/you'
     | '/agents/$agentId'
     | '/agents/new'
@@ -396,6 +415,7 @@ export interface FileRouteTypes {
     | '/agents/$agentId/routines'
     | '/agents/$agentId/skills'
     | '/agents/$agentId/status'
+    | '/agents/$agentId/usage'
     | '/agents/$agentId/vault'
     | '/agents/$agentId/desktop'
     | '/rooms/$roomId/members'
@@ -407,6 +427,7 @@ export interface FileRouteTypes {
     | '/broadcast'
     | '/files'
     | '/platform'
+    | '/situation'
     | '/you'
     | '/'
     | '/agents/$agentId'
@@ -434,6 +455,7 @@ export interface FileRouteTypes {
     | '/agents/$agentId/routines'
     | '/agents/$agentId/skills'
     | '/agents/$agentId/status'
+    | '/agents/$agentId/usage'
     | '/agents/$agentId/vault'
     | '/agents/$agentId/desktop'
     | '/rooms/$roomId/members'
@@ -447,6 +469,7 @@ export interface FileRouteTypes {
     | '/_app/files'
     | '/_app/kb'
     | '/_app/platform'
+    | '/_app/situation'
     | '/_app/you'
     | '/_app/'
     | '/_app/agents/$agentId'
@@ -474,6 +497,7 @@ export interface FileRouteTypes {
     | '/_app/agents/$agentId/routines'
     | '/_app/agents/$agentId/skills'
     | '/_app/agents/$agentId/status'
+    | '/_app/agents/$agentId/usage'
     | '/_app/agents/$agentId/vault'
     | '/_app/agents_/$agentId_/desktop'
     | '/_app/rooms/$roomId/members'
@@ -541,6 +565,13 @@ declare module '@tanstack/react-router' {
       path: '/platform'
       fullPath: '/platform'
       preLoaderRoute: typeof AppPlatformRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/situation': {
+      id: '/_app/situation'
+      path: '/situation'
+      fullPath: '/situation'
+      preLoaderRoute: typeof AppSituationRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/you': {
@@ -725,6 +756,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgentsAgentIdStatusRouteImport
       parentRoute: typeof AppAgentsAgentIdRoute
     }
+    '/_app/agents/$agentId/usage': {
+      id: '/_app/agents/$agentId/usage'
+      path: '/usage'
+      fullPath: '/agents/$agentId/usage'
+      preLoaderRoute: typeof AppAgentsAgentIdUsageRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
     '/_app/agents/$agentId/vault': {
       id: '/_app/agents/$agentId/vault'
       path: '/vault'
@@ -804,6 +842,7 @@ interface AppAgentsAgentIdRouteChildren {
   AppAgentsAgentIdRoutinesRoute: typeof AppAgentsAgentIdRoutinesRoute
   AppAgentsAgentIdSkillsRoute: typeof AppAgentsAgentIdSkillsRoute
   AppAgentsAgentIdStatusRoute: typeof AppAgentsAgentIdStatusRoute
+  AppAgentsAgentIdUsageRoute: typeof AppAgentsAgentIdUsageRoute
   AppAgentsAgentIdVaultRoute: typeof AppAgentsAgentIdVaultRoute
   AppAgentsAgentIdThreadTurnIdRoute: typeof AppAgentsAgentIdThreadTurnIdRoute
 }
@@ -818,6 +857,7 @@ const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
   AppAgentsAgentIdRoutinesRoute: AppAgentsAgentIdRoutinesRoute,
   AppAgentsAgentIdSkillsRoute: AppAgentsAgentIdSkillsRoute,
   AppAgentsAgentIdStatusRoute: AppAgentsAgentIdStatusRoute,
+  AppAgentsAgentIdUsageRoute: AppAgentsAgentIdUsageRoute,
   AppAgentsAgentIdVaultRoute: AppAgentsAgentIdVaultRoute,
   AppAgentsAgentIdThreadTurnIdRoute: AppAgentsAgentIdThreadTurnIdRoute,
 }
@@ -843,6 +883,7 @@ interface AppRouteChildren {
   AppFilesRoute: typeof AppFilesRoute
   AppKbRoute: typeof AppKbRouteWithChildren
   AppPlatformRoute: typeof AppPlatformRouteWithChildren
+  AppSituationRoute: typeof AppSituationRoute
   AppYouRoute: typeof AppYouRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAgentsAgentIdRoute: typeof AppAgentsAgentIdRouteWithChildren
@@ -860,6 +901,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppFilesRoute: AppFilesRoute,
   AppKbRoute: AppKbRouteWithChildren,
   AppPlatformRoute: AppPlatformRouteWithChildren,
+  AppSituationRoute: AppSituationRoute,
   AppYouRoute: AppYouRoute,
   AppIndexRoute: AppIndexRoute,
   AppAgentsAgentIdRoute: AppAgentsAgentIdRouteWithChildren,

@@ -36,6 +36,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Build the sandbox image with the guest
-        run: docker build --build-context guest=target/guest -f apps/sandbox/Dockerfile ${TAG:+--push -t "ghcr.io/vicotrbb/cubebot-sandbox:$TAG"} .
+        run: >-
+          docker build --build-context guest=target/guest -f apps/sandbox/Dockerfile
+          --build-arg CUBEBOT_VERSION="${TAG:-dev}"
+          --build-arg CUBEBOT_REVISION="$GITHUB_SHA"
+          --build-arg CUBEBOT_CREATED="$(git log -1 --format=%cI)"
+          ${TAG:+--push -t "ghcr.io/vicotrbb/cubebot-sandbox:$TAG"} .
         env:
           TAG: ${{ inputs.tag }}

@@ -1,14 +1,15 @@
+use crate::storage::{Principal, Storage};
 use crate::{
     agents::AgentId,
     identity::{Identity, IdentityError},
     work::{SendMessage, Work},
 };
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{
-        IntoResponse,
+        IntoResponse, Response,
         sse::{self, KeepAlive, Sse},
     },
     routing::{get, post, put},
@@ -25,7 +26,7 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(history, send, retry, cancel, steer, events, read))]
+#[openapi(paths(history, send, retry, cancel, steer, events, read, attachment))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -37,6 +38,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         )
         .route("/api/conversations/{conversation}/events", get(events))
         .route("/api/conversations/{conversation}/read", put(read))
+        .route("/api/attachments/{turn}/{file}/content", get(attachment))
         .route(
             "/api/conversations/{conversation}/messages/{turn}/retry",
             post(retry),
@@ -61,6 +63,23 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
 struct HistoryCursor {
     #[serde(default)]
     after: i64,
+}
+
+/// A file an agent sent with a reply; reading the reply is what allows it. As ever a download
+/// the browser does not render itself: the console reads the bytes and shows them.
+#[utoipa::path(get, path = "/api/attachments/{turn}/{file}/content", operation_id = "attachment_content", params(("turn" = Uuid, Path), ("file" = Uuid, Path)), responses((status = 200, content_type = "application/octet-stream", body = Vec<u8>)))]
+async fn attachment(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    storage: Option<Extension<Storage>>,
+    Path((turn, file)): Path<(Uuid, Uuid)>,
+) -> Result<Response, super::files::Failure> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let owner = api.work.attachment_owner(&actor, turn, file).await?;
+    let (entry, bytes, transfer) = super::files::configured(storage)?
+        .open(Principal::Agent(owner), file)
+        .await?;
+    Ok(super::files::download(entry, bytes, transfer, &headers).await)
 }
 
 async fn conversation(

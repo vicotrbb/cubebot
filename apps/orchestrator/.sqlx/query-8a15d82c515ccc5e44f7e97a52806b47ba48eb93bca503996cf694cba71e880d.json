@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT p.provider AS \"provider!\"\n        FROM (SELECT provider FROM provider_connection UNION SELECT provider FROM provider_saved) p\n        WHERE NOT EXISTS(\n            SELECT 1 FROM model_prices m\n            WHERE m.provider=p.provider AND m.fetched_at > clock_timestamp() - interval '1 day'\n        )\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8a15d82c515ccc5e44f7e97a52806b47ba48eb93bca503996cf694cba71e880d"
+}

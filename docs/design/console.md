@@ -56,3 +56,7 @@ The contract the console needs beyond what the orchestrator serves today. Runtim
 ## Routes
 
 `/sign-in`, `/` (redirects to the first favorite or agent), `/activity`, `/agents/$agentId` with child tabs `/about`, `/memories`, `/dreams`, `/skills`, `/routines`, `/vault`, `/files`, `/access`, `/status`, and `/desktop`; `/rooms/$roomId` with `/members`; `/files` and `/files/$folderId`; `/skills` and `/skills/$skillId`; `/platform/people`, `/teams`, `/access`, `/sign-in`, `/providers`, `/vault`, `/audit`, `/health`; `/you`.
+
+## Situation room (2026-11-04)
+
+`/situation`, below Broadcast in the sidebar and on a phone's Home page: everything happening on the installation for the agents the viewer may read. It is the one screen that is an overview rather than a conversation, so it is a ruled ledger, not a wall of tiles: one sentence on what needs a person, or that nothing does; Spend (today, 7 days, this month, 30 daily bars, models); Agents, each with what it is doing and its month against its budget; and a rail of Now, Latest and Platform. It stacks to one column by its own width, with the sentence and Now first. Colour stays for what wants attention, and state is always in words too. An agent's Usage tab reuses the same meter and bars and holds the budget.

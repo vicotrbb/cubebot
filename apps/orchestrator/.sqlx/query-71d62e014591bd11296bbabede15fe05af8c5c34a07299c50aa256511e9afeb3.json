@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE turn_steering\n        SET incorporated_at=clock_timestamp()\n        WHERE id=$1 AND turn_id=$2 AND incorporated_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "71d62e014591bd11296bbabede15fe05af8c5c34a07299c50aa256511e9afeb3"
+}

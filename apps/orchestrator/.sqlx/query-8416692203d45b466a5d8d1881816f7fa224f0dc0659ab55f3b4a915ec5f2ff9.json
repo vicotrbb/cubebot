@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            COALESCE(sum(input_tokens) FILTER (WHERE created_at >= date_trunc('day', clock_timestamp(), 'UTC')), 0)::int8 AS \"day_input!\",\n            COALESCE(sum(output_tokens) FILTER (WHERE created_at >= date_trunc('day', clock_timestamp(), 'UTC')), 0)::int8 AS \"day_output!\",\n            COALESCE(sum(cost_usd) FILTER (WHERE created_at >= date_trunc('day', clock_timestamp(), 'UTC')), 0) AS \"day_cost!\",\n            count(*) FILTER (WHERE cost_usd IS NULL AND created_at >= date_trunc('day', clock_timestamp(), 'UTC')) AS \"day_unpriced!\",\n            COALESCE(sum(input_tokens) FILTER (WHERE created_at > clock_timestamp() - interval '7 days'), 0)::int8 AS \"week_input!\",\n            COALESCE(sum(output_tokens) FILTER (WHERE created_at > clock_timestamp() - interval '7 days'), 0)::int8 AS \"week_output!\",\n            COALESCE(sum(cost_usd) FILTER (WHERE created_at > clock_timestamp() - interval '7 days'), 0) AS \"week_cost!\",\n            count(*) FILTER (WHERE cost_usd IS NULL AND created_at > clock_timestamp() - interval '7 days') AS \"week_unpriced!\",\n            COALESCE(sum(input_tokens) FILTER (WHERE created_at >= date_trunc('month', clock_timestamp(), 'UTC')), 0)::int8 AS \"month_input!\",\n            COALESCE(sum(output_tokens) FILTER (WHERE created_at >= date_trunc('month', clock_timestamp(), 'UTC')), 0)::int8 AS \"month_output!\",\n            COALESCE(sum(cost_usd) FILTER (WHERE created_at >= date_trunc('month', clock_timestamp(), 'UTC')), 0) AS \"month_cost!\",\n            count(*) FILTER (WHERE cost_usd IS NULL AND created_at >= date_trunc('month', clock_timestamp(), 'UTC')) AS \"month_unpriced!\"\n        FROM usage_events\n        WHERE (agent_id=ANY($1) OR ($2 AND agent_id IS NULL))\n            AND created_at >= LEAST(date_trunc('month', clock_timestamp(), 'UTC'), clock_timestamp() - interval '7 days')\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day_input!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "day_output!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "day_cost!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "day_unpriced!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "week_input!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "week_output!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "week_cost!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "week_unpriced!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "month_input!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "month_output!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "month_cost!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "month_unpriced!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8416692203d45b466a5d8d1881816f7fa224f0dc0659ab55f3b4a915ec5f2ff9"
+}

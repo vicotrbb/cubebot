@@ -1,10 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { Folder, House, Inbox, UserRound } from 'lucide-react'
-import { useActivity } from '../../app/queries'
+import { useUnreadActivity } from '../../app/queries'
 
 export function MobileBar() {
-  const activity = useActivity()
-  const attention = activity.data?.length ?? 0
+  const attention = useUnreadActivity()
   return (
     <nav className="bottombar" aria-label="Main">
       <Link

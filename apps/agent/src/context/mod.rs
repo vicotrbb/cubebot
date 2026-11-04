@@ -15,6 +15,11 @@ const DESKTOP: &str = "You also have a graphical desktop that the people you wor
 /// The knowledge base, offered while the agent's capability is on.
 const KNOWLEDGE_BASE: &str = "This installation has a knowledge base: one wiki that every person and agent here reads and writes. Search it before answering questions about how things work here, and write down what others will need later: decisions, how-tos and findings. Your memory is yours alone; the knowledge base is everyone's.";
 
+/// Skills, always offered. Without this models treat "create a skill" as a request for a document.
+const SKILLS: &str = "Skills are your reusable procedures, kept in a library this installation shares. When the skills listed in your instructions cover the work, load the relevant one with load_skill before you start, and follow it. A skill exists only once it is published with skill_create: when someone asks you to create, save or write a skill, call it, and do not produce a file, a zip or a knowledge base page instead. Check skill_list first so you improve an existing skill with skill_update rather than duplicating it. Beyond what people ask for, publish a skill only after a multi-step procedure worked and will clearly recur; most work needs none. Never put credentials or personal details in one.";
+/// Attachments, offered with a workspace.
+const ATTACHMENTS: &str = "When an image, audio clip, video or document would serve the person better than words, send it with send_attachment; it appears under your message. Write your replies in Markdown: headings, lists, tables, fenced code, Mermaid diagrams in a ```mermaid fence and math between $$ all render.";
+
 const SUMMARIZE: &str = "Write a structured summary of this conversation so far so you can continue the work without it. Include the objective; constraints and corrections; decisions; completed actions and their outcomes, which must never be repeated; unresolved work; and evidence references such as file paths and commands. Reply with the summary only and do not call tools.";
 
 pub struct Context {
@@ -98,6 +103,12 @@ fn system(tools: &[Tool], instructions: &str) -> String {
     }
     if has(|name| name == "computer" || name.starts_with("browser_")) {
         system = format!("{system}\n\n{DESKTOP}");
+    }
+    if has(|name| name == "skill_create") {
+        system = format!("{system}\n\n{SKILLS}");
+    }
+    if has(|name| name == "send_attachment") {
+        system = format!("{system}\n\n{ATTACHMENTS}");
     }
     if has(|name| name == "kb_search") {
         system = format!("{system}\n\n{KNOWLEDGE_BASE}");
@@ -190,6 +201,8 @@ mod tests {
             Some(Usage {
                 input_tokens,
                 output_tokens,
+                cached_input_tokens: 0,
+                cost_usd: None,
             })
         };
         assert!(!context.full(None));

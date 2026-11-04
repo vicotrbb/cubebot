@@ -1,11 +1,18 @@
 //! Terminal progress derived from turn events. A call without a result after its run ended is
 //! uncertain: its effects may have happened.
 use super::Work;
-use crate::identity::{Actor, IdentityError};
+use crate::{
+    agents::AgentId,
+    identity::{Actor, IdentityError},
+};
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{Postgres, Transaction};
+use std::collections::HashMap;
 use uuid::Uuid;
+
+/// Files one reply may carry.
+const ATTACHMENTS: i64 = 10;
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
 pub struct Progress {
@@ -50,7 +57,146 @@ struct TurnSteering {
     turn_id: Uuid,
     steering: super::Steering,
 }
+/// A file the agent sent with its reply. Its bytes are at
+/// `GET /api/attachments/{turn}/{file}/content`, for whoever may read the reply.
+#[derive(Clone, Serialize, utoipa::ToSchema)]
+pub struct ReplyAttachment {
+    pub file: Uuid,
+    pub name: String,
+    pub content_type: Option<String>,
+    pub size: i64,
+}
+
+/// Each turn's attachments, oldest first.
+pub(super) async fn attachments(
+    tx: &mut Transaction<'_, Postgres>,
+    turns: &[Uuid],
+) -> Result<HashMap<Uuid, Vec<ReplyAttachment>>, sqlx::Error> {
+    let rows = sqlx::query!(
+        "
+        SELECT a.turn_id, f.id, f.name, f.content_type, b.size
+        FROM turn_attachments a
+        JOIN files f ON f.id=a.file_id
+        JOIN blobs b ON b.id=f.blob_id
+        WHERE a.turn_id=ANY($1)
+        ORDER BY a.created_at
+        ",
+        turns,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut grouped = HashMap::<Uuid, Vec<ReplyAttachment>>::new();
+    for row in rows {
+        grouped
+            .entry(row.turn_id)
+            .or_default()
+            .push(ReplyAttachment {
+                file: row.id,
+                name: row.name,
+                content_type: row.content_type,
+                size: row.size,
+            });
+    }
+    Ok(grouped)
+}
+
 impl Work {
+    /// Sends one of the agent's own files with its running turn's reply. The inner error is the
+    /// refusal the model reads.
+    #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn, file = %file))]
+    pub(crate) async fn attach_file(
+        &self,
+        actor: &crate::agents::runtime::RuntimeActor,
+        turn: Uuid,
+        file: Uuid,
+    ) -> Result<Result<(), String>, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        let running = sqlx::query_scalar!(
+            "
+            SELECT id
+            FROM chat_turns
+            WHERE id=$1 AND conversation_id=$2 AND status='running' AND attempt_id=$3
+            FOR UPDATE
+            ",
+            turn,
+            actor.agent.0,
+            actor.attempt.0,
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if running.is_none() {
+            return Ok(Err("this turn is no longer running".into()));
+        }
+        let held = sqlx::query_scalar!(
+            r#"SELECT count(*) AS "held!" FROM turn_attachments WHERE turn_id=$1"#,
+            turn,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if held >= ATTACHMENTS {
+            return Ok(Err(format!("a reply carries at most {ATTACHMENTS} files")));
+        }
+        let attached = sqlx::query!(
+            "
+            INSERT INTO turn_attachments (turn_id, file_id)
+            SELECT $1, f.id
+            FROM files f
+            WHERE f.id=$2 AND f.owner_agent_id=$3 AND f.blob_id IS NOT NULL
+            ON CONFLICT DO NOTHING
+            ",
+            turn,
+            file,
+            actor.agent.0,
+        )
+        .execute(&mut *tx)
+        .await?;
+        let known = attached.rows_affected() == 1
+            || sqlx::query_scalar!(
+                r#"SELECT EXISTS(SELECT 1 FROM turn_attachments WHERE turn_id=$1 AND file_id=$2) AS "known!""#,
+                turn,
+                file,
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(known
+            .then_some(())
+            .ok_or_else(|| "that is not a file of yours".to_owned()))
+    }
+
+    /// The agent whose file this is, when the caller may read the reply it came with: in the
+    /// agent's conversation, or in the room the turn belongs to.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, turn = %turn, file = %file))]
+    pub async fn attachment_owner(
+        &self,
+        actor: &Actor,
+        turn: Uuid,
+        file: Uuid,
+    ) -> Result<AgentId, IdentityError> {
+        sqlx::query_scalar!(
+            r#"
+            SELECT t.conversation_id AS "agent: AgentId"
+            FROM turn_attachments x
+            JOIN chat_turns t ON t.id=x.turn_id
+            LEFT JOIN room_messages m ON m.id=t.room_message_id
+            JOIN human_accounts a ON a.id=$1 AND a.active
+            WHERE x.turn_id=$2 AND x.file_id=$3
+                AND (a.role='administrator' OR EXISTS(
+                    SELECT 1 FROM effective_human_grants g
+                    WHERE g.actor_id=a.id AND g.capability='conversation.read'
+                        AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id)
+                            OR (g.scope_kind='room' AND g.scope_id=m.room_id))
+                ))
+            "#,
+            actor.id,
+            turn,
+            file,
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(IdentityError::NotFound)
+    }
+
     #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation, turn = %turn))]
     pub async fn cancel(
         &self,
@@ -94,8 +240,10 @@ impl Work {
         for row in rows {
             grouped.entry(row.turn_id).or_default().push(row);
         }
+        let mut attachments = attachments(tx, &ids).await?;
         for turn in turns.iter_mut() {
             turn.terminal = grouped.remove(&turn.id).unwrap_or_default();
+            turn.attachments = attachments.remove(&turn.id).unwrap_or_default();
         }
         Self::collaboration(tx, turns, &ids).await
     }

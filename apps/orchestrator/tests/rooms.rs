@@ -86,17 +86,23 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     let mut expected = vec![ada, bob];
     expected.sort();
     assert_eq!(recipients, expected);
-    let ada_turns = work.history(&admin, ada, 0).await.unwrap();
-    assert_eq!(ada_turns.len(), 1);
+    // A delivery belongs to the room: it is a turn on the agent's ledger, not in its conversation.
+    assert!(work.history(&admin, ada, 0).await.unwrap().is_empty());
+    let delivered: String = sqlx::query_scalar(
+        "SELECT message FROM chat_turns WHERE conversation_id=$1 AND room_message_id IS NOT NULL",
+    )
+    .bind(ada)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(delivered.starts_with("In room Launch, admin wrote:"));
+    let unread = cubebot_orchestrator::agents::Agents::new(pool.clone())
+        .list(&admin, None)
+        .await
+        .unwrap();
     assert!(
-        ada_turns[0]
-            .message
-            .starts_with("In room Launch, admin wrote:")
-    );
-    let origin = ada_turns[0].origin.as_ref().unwrap();
-    assert_eq!(
-        (origin.kind.as_str(), origin.name.as_str()),
-        ("room", "Launch")
+        unread.iter().all(|agent| agent.last_sequence == 0),
+        "a room message must not mark the agent's own conversation unread"
     );
     assert!(work.history(&admin, outsider, 0).await.unwrap().is_empty());
     let changed = SendMessage {
@@ -141,8 +147,8 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     assert_eq!(settled.note, None);
     assert_eq!(settled.deliveries.len(), 1);
     assert_eq!(settled.deliveries[0].agent, "Ada");
-    assert_eq!(work.history(&admin, ada, 0).await.unwrap().len(), 2);
-    assert_eq!(work.history(&admin, bob, 0).await.unwrap().len(), 1);
+    assert!(work.history(&admin, ada, 0).await.unwrap().is_empty());
+    assert!(work.history(&admin, bob, 0).await.unwrap().is_empty());
 
     // Room access is its own grant; agent conversation access is not needed to use the room.
     identity
@@ -233,7 +239,7 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         removed.routing, "routing",
         "a removed member is no longer mentionable"
     );
-    assert_eq!(work.history(&admin, bob, 0).await.unwrap().len(), 2);
+    assert!(work.history(&admin, bob, 0).await.unwrap().is_empty());
     let with_outsider = RoomMembers {
         agents: vec![ada, outsider],
     };

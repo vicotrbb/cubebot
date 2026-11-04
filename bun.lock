@@ -32,9 +32,12 @@
         "@tiptap/react": "3.32.2",
         "@tiptap/starter-kit": "3.32.2",
         "@tiptap/suggestion": "3.32.2",
+        "katex": "0.18.11",
         "lucide-react": "1.66.0",
+        "marked": "17.0.6",
         "mermaid": "12.3.0",
         "openapi-fetch": "0.17.0",
+        "pdfjs-dist": "6.4.299",
         "react": "19.3.1",
         "react-dom": "19.3.1",
       },
@@ -152,6 +155,30 @@
     "@keyv/serialize": ["@keyv/serialize@1.1.1", "", {}, "sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA=="],
 
     "@mermaid-js/parser": ["@mermaid-js/parser@2.0.1", "", { "dependencies": { "@chevrotain/types": "~13.2.0" } }, "sha512-j37dj/h6p6pots1L7pLPPNuABEEu9WP4OYg9pW1g+nYG331j0+3canE9OagtYdytYvdSAMG+2fKU5cxep6LgjA=="],
+
+    "@napi-rs/canvas": ["@napi-rs/canvas@1.1.0", "", { "optionalDependencies": { "@napi-rs/canvas-android-arm64": "1.1.0", "@napi-rs/canvas-darwin-arm64": "1.1.0", "@napi-rs/canvas-darwin-x64": "1.1.0", "@napi-rs/canvas-linux-arm-gnueabihf": "1.1.0", "@napi-rs/canvas-linux-arm64-gnu": "1.1.0", "@napi-rs/canvas-linux-arm64-musl": "1.1.0", "@napi-rs/canvas-linux-riscv64-gnu": "1.1.0", "@napi-rs/canvas-linux-x64-gnu": "1.1.0", "@napi-rs/canvas-linux-x64-musl": "1.1.0", "@napi-rs/canvas-win32-arm64-msvc": "1.1.0", "@napi-rs/canvas-win32-x64-msvc": "1.1.0" } }, "sha512-k+ph/D8H9GS8ZZ48okvHrKeJynkqAA1kMUZRuzRWNlQUDHXngq7oRaWMZBdmSfd9ZhVy9bwNKei/7wMboI/uMg=="],
+
+    "@napi-rs/canvas-android-arm64": ["@napi-rs/canvas-android-arm64@1.1.0", "", { "os": "android", "cpu": "arm64" }, "sha512-mKrSmRyhWK4q699Q1xthbZIZi7JBvLtsRNnOZAeFaLPOFT1yo8y82aRC2nNZbXTGJXU7fVDONgGQPr0vo3kerw=="],
+
+    "@napi-rs/canvas-darwin-arm64": ["@napi-rs/canvas-darwin-arm64@1.1.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-iqwST4g0oH+x8VCpBIYh+MYokv/mVvkM+v9oJGB0d9A3P2qBh42ogJlVyWq9SpPCrAjS7tplMb1D3OIfxl+utw=="],
+
+    "@napi-rs/canvas-darwin-x64": ["@napi-rs/canvas-darwin-x64@1.1.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-jkeA8eVTxDum03LTvc32YJ28F6KB1U0gYwnWMfOAUQZvWWEh/kvONby4iWGJx3+Tw45UqMGMXjtw2GKNVZDhVg=="],
+
+    "@napi-rs/canvas-linux-arm-gnueabihf": ["@napi-rs/canvas-linux-arm-gnueabihf@1.1.0", "", { "os": "linux", "cpu": "arm" }, "sha512-Y4YkKG1ijoqkgUdTEEBNG4k+2BK5bR5jGL6S56YxCXYPwGfUd5nED8/74xyc7z+bpixPasCjSYoP3xYPOIGNxw=="],
+
+    "@napi-rs/canvas-linux-arm64-gnu": ["@napi-rs/canvas-linux-arm64-gnu@1.1.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-dE/XthqYkiWcBVtKFlZbUXwAYfDuQGqDWixznipJNmevLGpprNnTVQZyftm1RZJudkIOn2EkzYZDMMETM08Row=="],
+
+    "@napi-rs/canvas-linux-arm64-musl": ["@napi-rs/canvas-linux-arm64-musl@1.1.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-DqZ/CMcHlhU56pPjv9AP0h3U7MFQ5LzC1HzMyRMotL+PFsJmZJA/ziApPYVyyz78DaVLhI8t3So3ztqtijbYpg=="],
+
+    "@napi-rs/canvas-linux-riscv64-gnu": ["@napi-rs/canvas-linux-riscv64-gnu@1.1.0", "", { "os": "linux", "cpu": "none" }, "sha512-kJ7m5n2VffxWXM5QGa5lfq8ZN4LdOJEoz3aAJAmIqYvKiZw1gRdXqpucnRXsF6D9nLYiiIlevaAtAclR7c5ilg=="],
+
+    "@napi-rs/canvas-linux-x64-gnu": ["@napi-rs/canvas-linux-x64-gnu@1.1.0", "", { "os": "linux", "cpu": "x64" }, "sha512-uQ9JuJlRhQdHyttcMWOiwLkfIqkqaB0YFUVe835LUe12THt2b51HXkTItq0fxWT1jdhUPX2ylWZ1walkJyD6GQ=="],
+
+    "@napi-rs/canvas-linux-x64-musl": ["@napi-rs/canvas-linux-x64-musl@1.1.0", "", { "os": "linux", "cpu": "x64" }, "sha512-has4CPPAkkCac/LZ13VAw5p+MJLdaKVoyrhumN/A7uJd6960xYkJNDZgUebyxiha82AFzXx6RV+QJg5qGG079g=="],
+
+    "@napi-rs/canvas-win32-arm64-msvc": ["@napi-rs/canvas-win32-arm64-msvc@1.1.0", "", { "os": "win32", "cpu": "arm64" }, "sha512-MJnktLKNijmXqdjTughHDZ9TDLZ9uUm2hvFXqaOqn0+w7lphXFnft6bpSgQAc9U1exc20UGIBlzGu9+kiCj9Ag=="],
+
+    "@napi-rs/canvas-win32-x64-msvc": ["@napi-rs/canvas-win32-x64-msvc@1.1.0", "", { "os": "win32", "cpu": "x64" }, "sha512-08575bFk7iiadxap4h+JxgGut9xDCHAGum6wh0eInN53zEMImkmEHi5MushX2FOmNO7qRNX7BPiDC5ZYBwHeEg=="],
 
     "@oozcitak/dom": ["@oozcitak/dom@2.0.2", "", { "dependencies": { "@oozcitak/infra": "^2.0.2", "@oozcitak/url": "^3.0.0", "@oozcitak/util": "^10.0.0" } }, "sha512-GjpKhkSYC3Mj4+lfwEyI1dqnsKTgwGy48ytZEhm4A/xnH/8z9M3ZVXKr/YGQi3uCLs1AEBS+x5T2JPiueEDW8w=="],
 
@@ -754,6 +781,8 @@
     "path-key": ["path-key@3.1.1", "", {}, "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q=="],
 
     "pathe": ["pathe@2.0.3", "", {}, "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w=="],
+
+    "pdfjs-dist": ["pdfjs-dist@6.4.299", "", { "optionalDependencies": { "@napi-rs/canvas": "^1.0.10" } }, "sha512-AVl138zALtfaAPvADulE0PZThbYzCBS79nL4pOSL/6Sm/4AH5A21BD9VHt97OlCuzJuCpmeZtAtkinisF4Vb1g=="],
 
     "picocolors": ["picocolors@1.1.1", "", {}, "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA=="],
 

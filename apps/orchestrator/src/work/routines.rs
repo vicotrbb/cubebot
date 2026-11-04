@@ -38,6 +38,8 @@ pub struct Routine {
     pub managed_by: String,
     pub next_at: Option<String>,
     pub last_run_at: Option<String>,
+    /// When the webhook last received an authenticated delivery.
+    pub last_delivery_at: Option<String>,
     pub revision: i64,
 }
 
@@ -106,6 +108,20 @@ pub struct Occurrence {
     pub status: String,
     pub error: Option<String>,
     pub created_at: String,
+}
+
+/// One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:
+/// it never reached the routine.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct HookDelivery {
+    pub received_at: String,
+    /// `accepted` made a turn, `coalesced` joined a pending one, `replayed` repeated an
+    /// Idempotency-Key and `paused` reached a disabled routine.
+    pub outcome: String,
+    pub bytes: i32,
+    pub turn: Option<Uuid>,
+    /// The turn's status so far.
+    pub status: Option<String>,
 }
 
 pub enum Hooked {
@@ -269,6 +285,62 @@ impl Work {
         Ok(occurrences)
     }
 
+    /// Stops the webhook: its URL answers 401 from now on. The routine keeps its other triggers.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
+    pub async fn remove_routine_secret(
+        &self,
+        actor: &Actor,
+        agent: AgentId,
+        routine: Uuid,
+    ) -> Result<(), IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        authorize(&mut tx, actor, agent, "conversation.send").await?;
+        let locked = lock(&mut tx, agent, routine).await?;
+        sqlx::query!(
+            "
+            UPDATE routines
+            SET webhook_secret_hash=NULL, revision=revision+1
+            WHERE id=$1
+            ",
+            locked.id,
+        )
+        .execute(&mut *tx)
+        .await?;
+        adopt(&mut tx, locked.id, actor).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// The webhook's latest deliveries, newest first.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
+    pub async fn routine_deliveries(
+        &self,
+        actor: &Actor,
+        agent: AgentId,
+        routine: Uuid,
+    ) -> Result<Vec<HookDelivery>, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        authorize(&mut tx, actor, agent, "conversation.read").await?;
+        let locked = lock(&mut tx, agent, routine).await?;
+        let deliveries = sqlx::query_as!(
+            HookDelivery,
+            r#"
+            SELECT (to_jsonb(h.received_at) #>> '{}') AS "received_at!", h.outcome, h.bytes,
+                h.turn_id AS turn, t.status AS "status?"
+            FROM routine_hooks h
+            LEFT JOIN chat_turns t ON t.id=h.turn_id
+            WHERE h.routine_id=$1
+            ORDER BY h.received_at DESC
+            LIMIT 50
+            "#,
+            locked.id,
+        )
+        .fetch_all(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(deliveries)
+    }
+
     /// A webhook delivery: `secret` is the bearer token, `key` the Idempotency-Key.
     #[tracing::instrument(skip_all, fields(routine = %routine))]
     pub async fn hook(
@@ -287,39 +359,42 @@ impl Work {
         let locked = locked
             .filter(|locked| locked.webhook_secret_hash.as_ref() == Some(&digest))
             .ok_or(IdentityError::Unauthorized)?;
-        if !locked.enabled {
-            return Err(IdentityError::Conflict);
-        }
-        if let Some(turn) = replayed(&mut tx, routine, key).await? {
-            return Ok(Hooked::Replayed(turn));
-        }
-        if recent_hooks(&mut tx, routine).await? >= HOOKS_PER_MINUTE {
-            return Ok(Hooked::Limited);
-        }
-        let creator = locked.created_by;
-        let turn = occur(
-            &mut tx,
-            &locked,
-            "webhook",
-            creator,
-            Uuid::new_v4(),
-            Some(body),
-        )
-        .await?;
-        sqlx::query!(
-            "
-            INSERT INTO routine_hooks (routine_id, key, turn_id)
-            VALUES ($1, $2, $3)
-            ",
-            routine,
-            key,
-            turn,
-        )
-        .execute(&mut *tx)
-        .await?;
+        let answer = delivered(&mut tx, &locked, key, body).await?;
         tx.commit().await?;
-        Ok(Hooked::Accepted(turn))
+        answer
     }
+}
+
+/// One authenticated delivery, recorded however it ends. The inner error is the caller's answer
+/// and still commits, so a refused delivery stays in the routine's history.
+async fn delivered(
+    tx: &mut Transaction<'_, Postgres>,
+    routine: &Locked,
+    key: Option<&str>,
+    body: &str,
+) -> Result<Result<Hooked, IdentityError>, IdentityError> {
+    let (id, bytes) = (routine.id, body.len() as i32);
+    if !routine.enabled {
+        remember(tx, id, (None, None), "paused", bytes).await?;
+        return Ok(Err(IdentityError::Conflict));
+    }
+    if let Some(turn) = replayed(tx, id, key).await? {
+        remember(tx, id, (None, turn), "replayed", bytes).await?;
+        return Ok(Ok(Hooked::Replayed(turn)));
+    }
+    if recent_hooks(tx, id).await? >= HOOKS_PER_MINUTE {
+        return Ok(Ok(Hooked::Limited));
+    }
+    let creator = routine.created_by;
+    let request = Uuid::new_v4();
+    let turn = occur(tx, routine, "webhook", creator, request, Some(body)).await?;
+    let outcome = if turn.is_some() {
+        "accepted"
+    } else {
+        "coalesced"
+    };
+    remember(tx, id, (key, turn), outcome, bytes).await?;
+    Ok(Ok(Hooked::Accepted(turn)))
 }
 
 /// Runs due schedules every 30 seconds until stopped.
@@ -343,7 +418,17 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     sqlx::query!(
         "
         DELETE FROM routine_hooks
-        WHERE received_at < clock_timestamp() - interval '1 day'
+        WHERE received_at < clock_timestamp() - interval '30 days'
+        "
+    )
+    .execute(&mut *tx)
+    .await?;
+    // A key replays for one day; the row stays as history.
+    sqlx::query!(
+        "
+        UPDATE routine_hooks
+        SET key=NULL
+        WHERE key IS NOT NULL AND received_at < clock_timestamp() - interval '1 day'
         "
     )
     .execute(&mut *tx)
@@ -737,6 +822,30 @@ async fn set_secret(
     Ok(())
 }
 
+/// Records one authenticated delivery, in the history and the rate window.
+async fn remember(
+    tx: &mut Transaction<'_, Postgres>,
+    routine: Uuid,
+    (key, turn): (Option<&str>, Option<Uuid>),
+    outcome: &str,
+    bytes: i32,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "
+        INSERT INTO routine_hooks (routine_id, key, turn_id, outcome, bytes)
+        VALUES ($1, $2, $3, $4, $5)
+        ",
+        routine,
+        key,
+        turn,
+        outcome,
+        bytes,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 async fn replayed(
     tx: &mut Transaction<'_, Postgres>,
     routine: Uuid,
@@ -746,7 +855,11 @@ async fn replayed(
         return Ok(None);
     };
     sqlx::query_scalar!(
-        "SELECT turn_id FROM routine_hooks WHERE routine_id=$1 AND key=$2",
+        "
+        SELECT turn_id
+        FROM routine_hooks
+        WHERE routine_id=$1 AND key=$2 AND received_at > clock_timestamp() - interval '1 day'
+        ",
         routine,
         key,
     )
@@ -762,7 +875,8 @@ async fn recent_hooks(
         r#"
         SELECT count(*) AS "recent!"
         FROM routine_hooks
-        WHERE routine_id=$1 AND received_at > clock_timestamp() - interval '1 minute'
+        WHERE routine_id=$1 AND outcome IN ('accepted', 'coalesced')
+            AND received_at > clock_timestamp() - interval '1 minute'
         "#,
         routine,
     )
@@ -780,6 +894,7 @@ async fn list(
         SELECT id, name, prompt, command, schedule, coalesce, enabled,
             webhook_secret_hash IS NOT NULL AS "webhook!", managed_by,
             (to_jsonb(next_at) #>> '{}') AS next_at, (to_jsonb(last_run_at) #>> '{}') AS last_run_at,
+            (SELECT to_jsonb(max(h.received_at)) #>> '{}' FROM routine_hooks h WHERE h.routine_id=routines.id) AS last_delivery_at,
             revision
         FROM routines
         WHERE agent_id=$1

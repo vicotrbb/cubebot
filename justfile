@@ -38,7 +38,7 @@ lint: complexity
     shellcheck deploy/install.sh deploy/cubebot
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
     uv run --project tooling/quality --locked python tests/system/install_widgets.py

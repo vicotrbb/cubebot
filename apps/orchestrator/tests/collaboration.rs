@@ -343,8 +343,27 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
 
     // The room delivery carries earlier room messages, which its stored request does not.
     let delivery = addressed.deliveries[0].turn;
-    let delivered = reaches(&work, &admin, lead, delivery, "complete").await;
-    assert!(!delivered.message.contains("nginx"));
+    // It settles in the room and stays out of the agent's own conversation and context.
+    for _ in 0..200 {
+        let messages = work.room_messages(&admin, room.id, 0).await.unwrap();
+        let settled = messages
+            .iter()
+            .flat_map(|message| &message.deliveries)
+            .find(|item| item.turn == delivery)
+            .is_some_and(|item| item.status == "complete");
+        if settled {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let stored: String = sqlx::query_scalar("SELECT message FROM chat_turns WHERE id=$1")
+        .bind(delivery)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert!(!stored.contains("nginx"));
+    let own = work.history(&admin, lead, 0).await.unwrap();
+    assert!(own.iter().all(|turn| turn.id != delivery));
     let roomy = model
         .requests()
         .into_iter()

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.turn_id, f.id, f.name, f.content_type, b.size\n        FROM turn_attachments a\n        JOIN files f ON f.id=a.file_id\n        JOIN blobs b ON b.id=f.blob_id\n        WHERE a.turn_id=ANY($1)\n        ORDER BY a.created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "content_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "size",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "0ce8f8ef6a3fff25fef67d8bbb87e84c780d57c0ba9582f10b7005a3b59d01db"
+}

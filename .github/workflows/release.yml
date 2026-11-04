@@ -39,7 +39,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       # shortcut: per-architecture tags stay in the registry beside the manifest; push by digest if they clutter.
-      - run: docker build --push -f "apps/$IMAGE/Dockerfile" -t "ghcr.io/vicotrbb/cubebot-$IMAGE:$TAG-${{ matrix.arch }}" .
+      # The commit's time, not the build's, so both architectures of one release agree.
+      - run: >-
+          docker build --push -f "apps/$IMAGE/Dockerfile"
+          --build-arg CUBEBOT_VERSION="$TAG"
+          --build-arg CUBEBOT_REVISION="$GITHUB_SHA"
+          --build-arg CUBEBOT_CREATED="$(git log -1 --format=%cI)"
+          -t "ghcr.io/vicotrbb/cubebot-$IMAGE:$TAG-${{ matrix.arch }}" .
         env:
           IMAGE: ${{ matrix.image }}
 

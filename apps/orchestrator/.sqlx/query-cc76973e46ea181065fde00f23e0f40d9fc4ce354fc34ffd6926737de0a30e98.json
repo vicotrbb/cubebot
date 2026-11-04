@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(g.monthly_budget_usd <= (\n            SELECT COALESCE(sum(u.cost_usd), 0)\n            FROM usage_events u\n            WHERE u.agent_id=g.id AND u.created_at >= date_trunc('month', clock_timestamp(), 'UTC')\n        ), false) AS \"exhausted!\"\n        FROM agents g\n        WHERE g.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exhausted!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cc76973e46ea181065fde00f23e0f40d9fc4ce354fc34ffd6926737de0a30e98"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE routines\n            SET webhook_secret_hash=NULL, revision=revision+1\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5aa1aa3520813c6558ecb860323c24b7b9d042b66ddf198ae05bc68a70e28e45"
+}

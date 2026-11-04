@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM routine_hooks\n        WHERE received_at < clock_timestamp() - interval '30 days'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "75f7b819bdf0a47a05f56dd7d4b512f0e7287141345ff32707d8a109362f8a01"
+}

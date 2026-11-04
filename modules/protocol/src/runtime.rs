@@ -193,6 +193,14 @@ pub struct RoutineAnswer {
     pub output: String,
 }
 
+/// `POST /api/runtime/turns/{turn}/attachments`: sends one of the agent's own shared files with
+/// the turn's reply. A refusal is 409 with the reason the model reads.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AttachFile {
+    pub file: Uuid,
+}
+
 /// `POST /api/runtime/turns/{turn}/messages`: work for another agent sharing a room. `call`
 /// is the tool call's id, so a resend creates nothing new. With `wait` the sending turn yields
 /// when it ends and resumes once every awaited child has settled.
@@ -391,6 +399,10 @@ pub enum TurnEvent {
     Usage {
         input_tokens: u64,
         output_tokens: u64,
+        #[serde(default)]
+        cached_input_tokens: u64,
+        #[serde(default)]
+        cost_usd: Option<f64>,
     },
     /// Replaces the earlier context for later model requests; the source history remains.
     Summary {
@@ -449,6 +461,16 @@ pub struct Dream {
     /// `POST /api/runtime/dreams/{run}/skills` as a `SkillChange`.
     #[serde(default)]
     pub skills: Vec<SkillPackage>,
+    /// Every skill in the shared library, so a dream improves one instead of duplicating it.
+    #[serde(default)]
+    pub library: Vec<LibrarySkill>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LibrarySkill {
+    pub name: String,
+    pub description: String,
 }
 
 /// Largest skill package: the sum of its path and content bytes.
@@ -487,6 +509,21 @@ pub enum DreamOutcome {
 pub struct DreamEnd {
     pub outcome: DreamOutcome,
     pub report: String,
+    /// What the run's model call used, when the provider reported it.
+    #[serde(default)]
+    pub usage: Option<TokenUsage>,
+}
+
+/// Provider-reported tokens for work outside a turn; a turn reports them as `TurnEvent::Usage`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    #[serde(default)]
+    pub cached_input_tokens: u64,
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
 }
 
 /// Largest dream report in bytes; escaped, it still fits a runtime request body.

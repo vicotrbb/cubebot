@@ -2,7 +2,13 @@ use crate::{
     identity::{Identity, IdentityError},
     work::Work,
 };
-use axum::{Json, Router, extract::State, http::HeaderMap, response::IntoResponse, routing::get};
+use axum::{
+    Json, Router,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::{get, put},
+};
 
 #[derive(Clone)]
 struct Api {
@@ -11,12 +17,13 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(activity))]
+#[openapi(paths(activity, read_activity))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/activity", get(activity))
+        .route("/api/activity/read", put(read_activity))
         .with_state(Api {
             identity,
             work: Work::new(pool),
@@ -34,4 +41,15 @@ async fn activity(
         [("cache-control", "no-store")],
         Json(api.work.activity(&actor).await?),
     ))
+}
+
+/// Marks the caller's inbox as seen, on every device; its items stay until they are dealt with.
+#[utoipa::path(put, path = "/api/activity/read", operation_id = "read_activity", responses((status = 204)))]
+async fn read_activity(
+    State(api): State<Api>,
+    headers: HeaderMap,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.work.read_activity(&actor).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

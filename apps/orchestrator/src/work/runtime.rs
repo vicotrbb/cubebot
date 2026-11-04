@@ -9,6 +9,9 @@ use crate::{
 use cubebot_protocol::runtime::{EVENT_BYTES, Exchange, Turn, TurnEvent};
 use uuid::Uuid;
 
+/// Why a turn waits when its agent spent its monthly budget; raising the budget requeues it.
+const BUDGET_EXHAUSTED: &str = "budget_exhausted";
+
 impl Work {
     /// Caller authenticates machine identity and holds the agent/resource transaction locks.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0))]
@@ -62,21 +65,24 @@ impl Work {
         let (command, command_only) = (pending.command, pending.command_only);
         let broadcast = pending.broadcast && !task;
         let knowledge_base = pending.knowledge_base;
-        if !sender_allowed(tx, turn).await? {
-            wait(tx, turn, "sender_access_revoked").await?;
+        if let Some(reason) = refused(tx, actor, turn, command_only).await? {
+            wait(tx, turn, reason).await?;
             return Ok(None);
         }
         let Some(inference) = inference(tx, connections, actor, turn, command_only).await? else {
             return Ok(None);
         };
+        let priced = (!command_only).then_some((inference.provider.as_str(), &inference.model));
         sqlx::query!(
             "
             UPDATE chat_turns
-            SET status='running', attempt_id=$2, error=NULL
+            SET status='running', attempt_id=$2, error=NULL, provider=$3, model=$4
             WHERE id=$1
             ",
             turn,
             actor.attempt.0,
+            priced.map(|(provider, _)| provider),
+            priced.map(|(_, model)| model.as_str()),
         )
         .execute(&mut **tx)
         .await?;
@@ -85,17 +91,7 @@ impl Work {
             super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
         let (summary, history, message) = context(tx, actor, task, room, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
-        // An unreadable server configuration leaves the turn without MCP rather than stuck.
-        let mcp_servers = match connections {
-            Some(connections) => connections
-                .runtime_mcp(tx, actor.agent)
-                .await
-                .unwrap_or_else(|error| {
-                    tracing::warn!(?error, "MCP servers unavailable for the turn");
-                    Vec::new()
-                }),
-            None => Vec::new(),
-        };
+        let mcp_servers = mcp_servers(tx, connections, actor).await;
         Ok(Some(Turn {
             turn,
             sequence: last as u64 + 1,
@@ -170,21 +166,11 @@ impl Work {
         )
         .execute(&mut *tx)
         .await?;
-        if let TurnEvent::Steered { id, .. } = event {
-            sqlx::query!(
-                "
-                UPDATE turn_steering
-                SET incorporated_at=clock_timestamp()
-                WHERE id=$1 AND turn_id=$2 AND incorporated_at IS NULL
-                ",
-                id,
-                turn,
-            )
-            .execute(&mut *tx)
-            .await?;
-        }
+        incorporated(&mut tx, turn, event).await?;
         let owned = attempt == Some(actor.attempt.0);
-        if status == "running" && owned {
+        let live = status == "running" && owned;
+        account(&mut tx, actor, turn, sequence, live, event).await?;
+        if live {
             settle(&mut tx, actor, turn, event).await?;
         }
         tx.commit().await?;
@@ -195,7 +181,7 @@ impl Work {
     pub(crate) async fn cancelled(&self, turn: Uuid) -> Result<bool, Error> {
         Ok(sqlx::query_scalar!(
             r#"
-            SELECT status='cancelled' AS "cancelled!"
+            SELECT status='cancelled' OR (status='waiting' AND error='budget_exhausted') AS "cancelled!"
             FROM chat_turns
             WHERE id=$1
             "#,
@@ -221,6 +207,93 @@ impl Work {
         crate::knowledge::recover_dreams(&self.pool).await?;
         Ok(())
     }
+}
+
+/// Steering the running work took in is incorporated.
+async fn incorporated(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    event: &TurnEvent,
+) -> Result<(), Error> {
+    let TurnEvent::Steered { id, .. } = event else {
+        return Ok(());
+    };
+    sqlx::query!(
+        "
+        UPDATE turn_steering
+        SET incorporated_at=clock_timestamp()
+        WHERE id=$1 AND turn_id=$2 AND incorporated_at IS NULL
+        ",
+        id,
+        turn,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+/// Why this turn may not start now, if so. A command-only routine calls no model, so it spends
+/// nothing.
+async fn refused(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    turn: Uuid,
+    command_only: bool,
+) -> Result<Option<&'static str>, Error> {
+    if !sender_allowed(tx, turn).await? {
+        return Ok(Some("sender_access_revoked"));
+    }
+    let spent = !command_only && super::usage::exhausted(tx, actor.agent).await?;
+    Ok(spent.then_some(BUDGET_EXHAUSTED))
+}
+
+/// An unreadable server configuration leaves the turn without MCP rather than stuck.
+async fn mcp_servers(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    connections: Option<&Connections>,
+    actor: &RuntimeActor,
+) -> Vec<cubebot_protocol::runtime::McpServer> {
+    let Some(connections) = connections else {
+        return Vec::new();
+    };
+    connections
+        .runtime_mcp(tx, actor.agent)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(?error, "MCP servers unavailable for the turn");
+            Vec::new()
+        })
+}
+
+/// Records a usage event and pauses the running turn once it spends the budget; `cancelled` then
+/// tells the agent to stop at its next safe point.
+async fn account(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    turn: Uuid,
+    sequence: u64,
+    live: bool,
+    event: &TurnEvent,
+) -> Result<(), Error> {
+    let TurnEvent::Usage {
+        input_tokens,
+        output_tokens,
+        cached_input_tokens,
+        cost_usd,
+    } = event
+    else {
+        return Ok(());
+    };
+    let tokens = (
+        *input_tokens as i64,
+        *cached_input_tokens as i64,
+        *output_tokens as i64,
+    );
+    super::usage::record_turn(tx, turn, sequence as i64, tokens, *cost_usd).await?;
+    if live && super::usage::exhausted(tx, actor.agent).await? {
+        wait(tx, turn, BUDGET_EXHAUSTED).await?;
+    }
+    Ok(())
 }
 
 /// What earlier runs of the turn left: their tool and steering events, the last event sequence,
@@ -265,8 +338,8 @@ async fn earlier(
     Ok((prior, last, delegations))
 }
 
-/// A task's context is the task itself, not the main conversation; a room delivery carries
-/// the room's recent messages ahead of its request.
+/// A task's context is the task itself, not the main conversation. A room delivery's is the
+/// room's recent messages: rooms and the main conversation stay out of each other's context.
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -274,7 +347,7 @@ async fn context(
     room: Option<Uuid>,
     message: String,
 ) -> Result<(Option<String>, Vec<Exchange>, String), Error> {
-    let (summary, history) = if task {
+    let (summary, history) = if task || room.is_some() {
         (None, Vec::new())
     } else {
         history(tx, actor).await?
@@ -461,7 +534,7 @@ async fn history(
         SELECT e.payload->>'text' AS "text!", t.sequence
         FROM turn_events e
         JOIN chat_turns t ON t.id=e.turn_id
-        WHERE t.conversation_id=$1 AND e.payload->>'kind'='summary'
+        WHERE t.conversation_id=$1 AND t.room_message_id IS NULL AND e.payload->>'kind'='summary'
         ORDER BY t.sequence DESC, e.sequence DESC
         LIMIT 1
         "#,
@@ -475,7 +548,7 @@ async fn history(
         r#"
         SELECT message, response AS "response!"
         FROM chat_turns
-        WHERE conversation_id=$1 AND status='complete' AND sequence>=$2
+        WHERE conversation_id=$1 AND room_message_id IS NULL AND status='complete' AND sequence>=$2
         ORDER BY sequence
         "#,
         actor.agent.0,

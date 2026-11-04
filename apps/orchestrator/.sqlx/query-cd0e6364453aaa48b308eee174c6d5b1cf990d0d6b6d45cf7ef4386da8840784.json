@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, name, prompt, command, schedule, coalesce, enabled,\n            webhook_secret_hash IS NOT NULL AS \"webhook!\", managed_by,\n            (to_jsonb(next_at) #>> '{}') AS next_at, (to_jsonb(last_run_at) #>> '{}') AS last_run_at,\n            (SELECT to_jsonb(max(h.received_at)) #>> '{}' FROM routine_hooks h WHERE h.routine_id=routines.id) AS last_delivery_at,\n            revision\n        FROM routines\n        WHERE agent_id=$1\n        ORDER BY name, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "prompt",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "command",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "schedule",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "coalesce",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "webhook!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "managed_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "next_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "last_run_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "last_delivery_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      null,
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "cd0e6364453aaa48b308eee174c6d5b1cf990d0d6b6d45cf7ef4386da8840784"
+}

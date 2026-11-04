@@ -383,6 +383,39 @@ impl MemoryClient {
         }
     }
 
+    /// The answer to one skill tool call, or the orchestrator's reason for refusing it.
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
+    pub async fn skill_tool(
+        &self,
+        turn: Uuid,
+        call: &runtime::RoutineCall,
+    ) -> Result<Result<String, String>, Error> {
+        match self.post(&format!("turns/{turn}/skills"), call).await? {
+            Ok(response) => {
+                let answer: runtime::RoutineAnswer =
+                    transport::decode(response, 1024 * 1024).await?;
+                Ok(Ok(answer.output))
+            }
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
+    /// Sends one of the agent's shared files with the turn's reply.
+    #[tracing::instrument(skip_all, fields(turn = %turn, file = %file))]
+    pub async fn attach_file(&self, turn: Uuid, file: Uuid) -> Result<Result<(), String>, Error> {
+        let body = runtime::AttachFile { file };
+        match self
+            .post(&format!("turns/{turn}/attachments"), &body)
+            .await?
+        {
+            Ok(response) if response.status().is_success() => Ok(Ok(())),
+            Ok(response) => Err(Error::Unavailable(Some(
+                response.status().to_string().into(),
+            ))),
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
     /// The vault items this agent may fill, without their secrets (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills).
     #[tracing::instrument(skip_all)]
     pub async fn vault(&self) -> Result<Vec<runtime::VaultItem>, Error> {

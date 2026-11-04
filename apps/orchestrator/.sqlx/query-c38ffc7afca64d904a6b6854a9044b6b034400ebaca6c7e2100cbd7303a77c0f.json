@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id AS turn, t.conversation_id AS agent, m.room_id AS \"room?\", t.status, t.error,\n                left(COALESCE(m.message, t.message), 160) AS \"message!\",\n                (to_jsonb(t.status_at) #>> '{}') AS \"since!\"\n            FROM chat_turns t\n            LEFT JOIN room_messages m ON m.id=t.room_message_id\n            WHERE t.conversation_id=ANY($1) AND t.status IN ('queued','running','delegated','waiting')\n            ORDER BY t.status_at\n            LIMIT 50\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "room?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "message!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "since!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "c38ffc7afca64d904a6b6854a9044b6b034400ebaca6c7e2100cbd7303a77c0f"
+}

@@ -8,8 +8,8 @@ use crate::{
     agents::kubernetes::Error,
     connections::{Connections, configured},
 };
-use cubebot_protocol::runtime::ProviderKind;
-use cubebot_providers::{Anthropic, Event, Message, OpenAi, OpenRouter, Provider, Request};
+use cubebot_protocol::runtime::{ProviderKind, TokenUsage};
+use cubebot_providers::{Anthropic, Event, Message, OpenAi, OpenRouter, Provider, Request, Usage};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -74,7 +74,7 @@ async fn dispatch(
     inference: Option<crate::connections::Inference>,
 ) -> Result<bool, Error> {
     let reply = match inference {
-        Some(inference) => ask(&inference, &pending.prompt).await,
+        Some(inference) => ask(pool, &inference, &pending.prompt).await,
         None => Err("provider_unavailable"),
     };
     let decision = reply.and_then(|text| decision(&text).ok_or("invalid_coordinator_result"));
@@ -156,7 +156,9 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
     Ok(Some(Pending { id, prompt }))
 }
 
+/// Asks the model and records what the coordinator spent; a lost record never loses the answer.
 async fn ask(
+    pool: &PgPool,
     inference: &crate::connections::Inference,
     prompt: &str,
 ) -> Result<String, &'static str> {
@@ -196,13 +198,26 @@ async fn ask(
             .await
         }
     };
-    reply.map_err(|error| error.code())
+    let (text, usage) = reply.map_err(|error| error.code())?;
+    if let Some(usage) = usage {
+        let usage = TokenUsage {
+            input_tokens: usage.input_tokens,
+            output_tokens: usage.output_tokens,
+            cached_input_tokens: usage.cached_input_tokens,
+            cost_usd: usage.cost_usd,
+        };
+        let model = (inference.provider.as_str(), inference.model.as_str());
+        if let Err(error) = super::usage::record_duty(pool, None, None, model, &usage).await {
+            tracing::warn!(?error, "coordinator usage not recorded");
+        }
+    }
+    Ok(text)
 }
 
 async fn complete<P: Provider>(
     provider: P,
     request: &Request<'_>,
-) -> Result<String, cubebot_providers::Error> {
+) -> Result<(String, Option<Usage>), cubebot_providers::Error> {
     let stream = provider.stream(request);
     let mut stream = std::pin::pin!(stream);
     let deadline = tokio::time::sleep(Duration::from_secs(60));
@@ -210,7 +225,7 @@ async fn complete<P: Provider>(
     loop {
         tokio::select! {
             event = stream.next() => match event {
-                Some(Ok(Event::Done { reply, .. })) => return Ok(reply.text),
+                Some(Ok(Event::Done { reply, usage })) => return Ok((reply.text, usage)),
                 Some(Ok(Event::Text(_))) => (),
                 Some(Err(error)) => return Err(error),
                 None => return Err(cubebot_providers::Error::Unavailable),

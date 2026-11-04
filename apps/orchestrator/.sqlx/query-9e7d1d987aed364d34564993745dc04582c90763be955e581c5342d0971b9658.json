@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.role='administrator' AS \"administrator!\",\n                COALESCE((\n                    SELECT array_agg(g.id)\n                    FROM agents g\n                    WHERE a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read')\n                ), '{}') AS \"agents!\"\n            FROM human_accounts a\n            WHERE a.id=$1 AND a.active\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "administrator!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "agents!",
+        "type_info": "UuidArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "9e7d1d987aed364d34564993745dc04582c90763be955e581c5342d0971b9658"
+}

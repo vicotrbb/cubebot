@@ -48,3 +48,19 @@ COPY apps/agent/desktop/tint2rc /etc/xdg/tint2/tint2rc
 COPY apps/agent/desktop/pip.conf /etc/pip.conf
 COPY apps/agent/desktop/npmrc /etc/npmrc
 COPY --from=build /out/cubebot-agent /usr/local/bin/
+# Release builds pass these (.github/workflows/release.yml); last, so they never invalidate a cached layer.
+ARG CUBEBOT_VERSION=dev
+ARG CUBEBOT_REVISION=unknown
+ARG CUBEBOT_CREATED=unknown
+LABEL org.opencontainers.image.title="Cubebot agent" \
+      org.opencontainers.image.description="One persistent Cubebot agent: its Rust runtime, tools and desktop, run directly in the container runtime or as the root filesystem of a KVM guest." \
+      org.opencontainers.image.url="https://cubebot.io" \
+      org.opencontainers.image.source="https://github.com/vicotrbb/cubebot" \
+      org.opencontainers.image.documentation="https://github.com/vicotrbb/cubebot/blob/main/README.md" \
+      org.opencontainers.image.vendor="Cubebot" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.base.name="docker.io/library/debian:bookworm-slim" \
+      org.opencontainers.image.version="$CUBEBOT_VERSION" \
+      org.opencontainers.image.revision="$CUBEBOT_REVISION" \
+      org.opencontainers.image.created="$CUBEBOT_CREATED" \
+      dev.orbstack.icon="https://raw.githubusercontent.com/vicotrbb/cubebot/main/apps/web/public/icons/icon-512.png"
