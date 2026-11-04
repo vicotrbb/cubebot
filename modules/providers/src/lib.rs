@@ -7,11 +7,16 @@ use serde_json::Value;
 use std::{collections::VecDeque, time::Duration};
 
 mod anthropic;
+mod completions;
+mod gemini;
+mod grok;
 mod openai;
 mod openrouter;
 mod prices;
 mod sse;
 pub use anthropic::Anthropic;
+pub use gemini::Gemini;
+pub use grok::Grok;
 pub use openai::OpenAi;
 pub use openrouter::OpenRouter;
 pub use prices::Price;
@@ -165,7 +170,7 @@ pub struct Usage {
     pub output_tokens: u64,
     /// The part of `input_tokens` read from the provider's cache, billed at its lower rate.
     pub cached_input_tokens: u64,
-    /// What the provider itself says this cost, when it says; only OpenRouter does.
+    /// What the provider itself says this cost, when it says; OpenRouter and Grok do.
     pub cost_usd: Option<f64>,
 }
 

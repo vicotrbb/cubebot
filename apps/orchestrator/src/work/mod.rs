@@ -12,6 +12,7 @@ mod rooms;
 pub mod routines;
 mod runtime;
 mod situation;
+pub mod tasks;
 pub(crate) mod terminal;
 pub(crate) mod usage;
 use crate::{

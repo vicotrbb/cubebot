@@ -29,12 +29,15 @@ import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
 import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
 import { Route as AppPlatformProvidersRouteImport } from './routes/_app.platform.providers'
 import { Route as AppPlatformSignInRouteImport } from './routes/_app.platform.sign-in'
+import { Route as AppPlatformTasksRouteImport } from './routes/_app.platform.tasks'
 import { Route as AppPlatformTeamsRouteImport } from './routes/_app.platform.teams'
 import { Route as AppPlatformVaultRouteImport } from './routes/_app.platform.vault'
 import { Route as AppRoomsRoomIdRouteImport } from './routes/_app.rooms.$roomId'
 import { Route as AppRoomsNewRouteImport } from './routes/_app.rooms.new'
 import { Route as AppSkillsIndexRouteImport } from './routes/_app.skills.index'
 import { Route as AppSkillsSkillIdRouteImport } from './routes/_app.skills.$skillId'
+import { Route as AppTasksIndexRouteImport } from './routes/_app.tasks.index'
+import { Route as AppTasksTaskIdRouteImport } from './routes/_app.tasks.$taskId'
 import { Route as AppAgentsAgentIdAboutRouteImport } from './routes/_app.agents.$agentId.about'
 import { Route as AppAgentsAgentIdAccessRouteImport } from './routes/_app.agents.$agentId.access'
 import { Route as AppAgentsAgentIdConnectionsRouteImport } from './routes/_app.agents.$agentId.connections'
@@ -149,6 +152,11 @@ const AppPlatformSignInRoute = AppPlatformSignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => AppPlatformRoute,
 } as any)
+const AppPlatformTasksRoute = AppPlatformTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
 const AppPlatformTeamsRoute = AppPlatformTeamsRouteImport.update({
   id: '/teams',
   path: '/teams',
@@ -177,6 +185,16 @@ const AppSkillsIndexRoute = AppSkillsIndexRouteImport.update({
 const AppSkillsSkillIdRoute = AppSkillsSkillIdRouteImport.update({
   id: '/skills/$skillId',
   path: '/skills/$skillId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTasksIndexRoute = AppTasksIndexRouteImport.update({
+  id: '/tasks/',
+  path: '/tasks/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTasksTaskIdRoute = AppTasksTaskIdRouteImport.update({
+  id: '/tasks/$taskId',
+  path: '/tasks/$taskId',
   getParentRoute: () => AppRoute,
 } as any)
 const AppAgentsAgentIdAboutRoute = AppAgentsAgentIdAboutRouteImport.update({
@@ -273,13 +291,16 @@ export interface FileRoutesByFullPath {
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
+  '/platform/tasks': typeof AppPlatformTasksRoute
   '/platform/teams': typeof AppPlatformTeamsRoute
   '/platform/vault': typeof AppPlatformVaultRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
   '/rooms/new': typeof AppRoomsNewRoute
   '/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/kb/': typeof AppKbIndexRoute
   '/skills/': typeof AppSkillsIndexRoute
+  '/tasks/': typeof AppTasksIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
   '/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
@@ -313,13 +334,16 @@ export interface FileRoutesByTo {
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
+  '/platform/tasks': typeof AppPlatformTasksRoute
   '/platform/teams': typeof AppPlatformTeamsRoute
   '/platform/vault': typeof AppPlatformVaultRoute
   '/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
   '/rooms/new': typeof AppRoomsNewRoute
   '/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/kb': typeof AppKbIndexRoute
   '/skills': typeof AppSkillsIndexRoute
+  '/tasks': typeof AppTasksIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
   '/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
@@ -356,13 +380,16 @@ export interface FileRoutesById {
   '/_app/platform/people': typeof AppPlatformPeopleRoute
   '/_app/platform/providers': typeof AppPlatformProvidersRoute
   '/_app/platform/sign-in': typeof AppPlatformSignInRoute
+  '/_app/platform/tasks': typeof AppPlatformTasksRoute
   '/_app/platform/teams': typeof AppPlatformTeamsRoute
   '/_app/platform/vault': typeof AppPlatformVaultRoute
   '/_app/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
   '/_app/rooms/new': typeof AppRoomsNewRoute
   '/_app/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/_app/kb/': typeof AppKbIndexRoute
   '/_app/skills/': typeof AppSkillsIndexRoute
+  '/_app/tasks/': typeof AppTasksIndexRoute
   '/_app/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/_app/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
   '/_app/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
@@ -399,13 +426,16 @@ export interface FileRouteTypes {
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
+    | '/platform/tasks'
     | '/platform/teams'
     | '/platform/vault'
     | '/rooms/$roomId'
     | '/rooms/new'
     | '/skills/$skillId'
+    | '/tasks/$taskId'
     | '/kb/'
     | '/skills/'
+    | '/tasks/'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
     | '/agents/$agentId/connections'
@@ -439,13 +469,16 @@ export interface FileRouteTypes {
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
+    | '/platform/tasks'
     | '/platform/teams'
     | '/platform/vault'
     | '/rooms/$roomId'
     | '/rooms/new'
     | '/skills/$skillId'
+    | '/tasks/$taskId'
     | '/kb'
     | '/skills'
+    | '/tasks'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
     | '/agents/$agentId/connections'
@@ -481,13 +514,16 @@ export interface FileRouteTypes {
     | '/_app/platform/people'
     | '/_app/platform/providers'
     | '/_app/platform/sign-in'
+    | '/_app/platform/tasks'
     | '/_app/platform/teams'
     | '/_app/platform/vault'
     | '/_app/rooms/$roomId'
     | '/_app/rooms/new'
     | '/_app/skills/$skillId'
+    | '/_app/tasks/$taskId'
     | '/_app/kb/'
     | '/_app/skills/'
+    | '/_app/tasks/'
     | '/_app/agents/$agentId/about'
     | '/_app/agents/$agentId/access'
     | '/_app/agents/$agentId/connections'
@@ -651,6 +687,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPlatformSignInRouteImport
       parentRoute: typeof AppPlatformRoute
     }
+    '/_app/platform/tasks': {
+      id: '/_app/platform/tasks'
+      path: '/tasks'
+      fullPath: '/platform/tasks'
+      preLoaderRoute: typeof AppPlatformTasksRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
     '/_app/platform/teams': {
       id: '/_app/platform/teams'
       path: '/teams'
@@ -691,6 +734,20 @@ declare module '@tanstack/react-router' {
       path: '/skills/$skillId'
       fullPath: '/skills/$skillId'
       preLoaderRoute: typeof AppSkillsSkillIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/tasks/': {
+      id: '/_app/tasks/'
+      path: '/tasks'
+      fullPath: '/tasks/'
+      preLoaderRoute: typeof AppTasksIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/tasks/$taskId': {
+      id: '/_app/tasks/$taskId'
+      path: '/tasks/$taskId'
+      fullPath: '/tasks/$taskId'
+      preLoaderRoute: typeof AppTasksTaskIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/agents/$agentId/about': {
@@ -813,6 +870,7 @@ interface AppPlatformRouteChildren {
   AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
   AppPlatformProvidersRoute: typeof AppPlatformProvidersRoute
   AppPlatformSignInRoute: typeof AppPlatformSignInRoute
+  AppPlatformTasksRoute: typeof AppPlatformTasksRoute
   AppPlatformTeamsRoute: typeof AppPlatformTeamsRoute
   AppPlatformVaultRoute: typeof AppPlatformVaultRoute
 }
@@ -824,6 +882,7 @@ const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformPeopleRoute: AppPlatformPeopleRoute,
   AppPlatformProvidersRoute: AppPlatformProvidersRoute,
   AppPlatformSignInRoute: AppPlatformSignInRoute,
+  AppPlatformTasksRoute: AppPlatformTasksRoute,
   AppPlatformTeamsRoute: AppPlatformTeamsRoute,
   AppPlatformVaultRoute: AppPlatformVaultRoute,
 }
@@ -891,7 +950,9 @@ interface AppRouteChildren {
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRouteWithChildren
   AppRoomsNewRoute: typeof AppRoomsNewRoute
   AppSkillsSkillIdRoute: typeof AppSkillsSkillIdRoute
+  AppTasksTaskIdRoute: typeof AppTasksTaskIdRoute
   AppSkillsIndexRoute: typeof AppSkillsIndexRoute
+  AppTasksIndexRoute: typeof AppTasksIndexRoute
   AppAgentsAgentIdDesktopRoute: typeof AppAgentsAgentIdDesktopRoute
 }
 
@@ -909,7 +970,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppRoomsRoomIdRoute: AppRoomsRoomIdRouteWithChildren,
   AppRoomsNewRoute: AppRoomsNewRoute,
   AppSkillsSkillIdRoute: AppSkillsSkillIdRoute,
+  AppTasksTaskIdRoute: AppTasksTaskIdRoute,
   AppSkillsIndexRoute: AppSkillsIndexRoute,
+  AppTasksIndexRoute: AppTasksIndexRoute,
   AppAgentsAgentIdDesktopRoute: AppAgentsAgentIdDesktopRoute,
 }
 

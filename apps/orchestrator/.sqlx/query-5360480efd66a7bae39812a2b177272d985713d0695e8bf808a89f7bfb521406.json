@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE tasks SET status='working', updated_at=clock_timestamp() WHERE id=$1 AND status<>'stopped'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5360480efd66a7bae39812a2b177272d985713d0695e8bf808a89f7bfb521406"
+}

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT t.id, t.room_id, t.created_by\n        FROM chat_turns c\n        JOIN room_messages m ON m.id=c.room_message_id\n        JOIN tasks t ON t.room_id=m.room_id\n        WHERE c.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "room_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_by",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "126bf0e8b134ea564848835900cbd79cb1652c676d331b787bdc013803b3ea69"
+}

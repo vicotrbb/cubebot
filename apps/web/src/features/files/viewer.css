@@ -95,15 +95,101 @@ dialog.viewer::backdrop {
   margin-inline: auto;
   padding: 24px;
 }
-.viewer__text {
-  margin: 0;
-  padding: 16px;
-  font-family: var(--mono);
-  font-size: var(--t-sm);
-  line-height: 1.55;
-  tab-size: 2;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.viewer__views {
+  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+/* Preview and Code, the same wherever something can be drawn. */
+.view-switch {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+.view-switch button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: calc(var(--r-md) - 2px);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-xs);
+  font-weight: var(--w-label);
+  cursor: pointer;
+}
+.view-switch button svg {
+  width: 13px;
+  height: 13px;
+}
+.view-switch button:hover {
+  color: var(--ink);
+}
+.view-switch button[aria-pressed='true'] {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(var(--shadow) / 0.12);
+}
+.view-switch button:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
+}
+.preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.preview__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.preview__label {
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+.preview__tools {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.preview__tools .view-switch {
+  margin-right: 4px;
+}
+.preview__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.preview__frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+.preview__page {
+  padding: 12px 16px;
+  overflow: auto;
 }
 .viewer__table {
   padding: 8px;
@@ -118,6 +204,7 @@ dialog.viewer::backdrop {
   width: 100%;
   min-height: 0;
   border: 0;
+  background: #fff;
   /* A page without its own background must stay readable in the dark theme. */
   background: #fff;
 }

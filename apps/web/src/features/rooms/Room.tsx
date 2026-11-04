@@ -11,7 +11,9 @@ import { Attachments } from '../chat/Attachments'
 import { Composer } from '../chat/Composer'
 import { Retry, Stop } from '../chat/Conversation'
 import { Markdown } from '../chat/Markdown'
+import { WorkCard, WorkLog } from '../chat/WorkCard'
 import '../chat/chat.css'
+import { ORCHESTRATOR_AVATAR } from '../tasks/orchestrator'
 
 const FINISHED = ['complete', 'failed', 'cancelled']
 
@@ -38,6 +40,9 @@ const ROUTING: Record<string, string> = {
   no_action: 'The coordinator found nothing for an agent to do.',
   failed: 'Routing failed. Mention an agent with @name to address it directly.',
 }
+const TASK_ROUTING: Record<string, string> = {
+  routing: 'The orchestrator is reading this…',
+}
 const DELIVERY: Record<string, string> = {
   queued: 'queued',
   running: 'working…',
@@ -56,6 +61,43 @@ export function Room({
   room: RoomSummary
   session: Session
 }) {
+  return (
+    <RoomView
+      roomId={room.id}
+      session={session}
+      label="Room"
+      draftKey={`cubebot:${session.id}:room:${room.id}`}
+      placeholder={`Message #${room.name} · @name addresses a member`}
+      note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
+      empty="Mention members with @name to ask each of them, or write without a mention and the coordinator picks one owner."
+      mentionable={room.members}
+    />
+  )
+}
+
+/** A room's conversation, for a room in the sidebar and for a task's private one. */
+export function RoomView({
+  roomId,
+  session,
+  label,
+  draftKey,
+  placeholder,
+  note,
+  empty,
+  mentionable,
+  task = false,
+}: {
+  roomId: string
+  session: Session
+  label: string
+  draftKey: string
+  placeholder: string
+  note: string
+  empty: string
+  /** Who `@` offers; every agent the viewer sees when absent. */
+  mentionable?: { id: string; name: string }[]
+  task?: boolean
+}) {
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [loaded, setLoaded] = useState(false)
   const [readError, setReadError] = useState('')
@@ -65,7 +107,7 @@ export function Room({
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
   useEffect(
     () =>
-      followWhileVisible(`/api/rooms/${room.id}/events`, (source) => {
+      followWhileVisible(`/api/rooms/${roomId}/events`, (source) => {
         // History loads once the stream is following, so nothing falls between the two; a
         // reconnect reloads it to catch messages that changed while disconnected.
         source.onopen = () => {
@@ -73,7 +115,7 @@ export function Room({
           history((after) =>
             ok(
               api.GET('/api/rooms/{room}/messages', {
-                params: { path: { room: room.id }, query: { after } },
+                params: { path: { room: roomId }, query: { after } },
               }),
             ),
           ).then(
@@ -95,19 +137,19 @@ export function Room({
           setMessages((current) => merge(current, [message]))
         })
       }),
-    [room.id],
+    [roomId],
   )
   const last = messages.at(-1)?.sequence ?? 0
   useEffect(() => {
-    if (loaded && last > 0) void markRead('rooms', room.id, last)
-  }, [room.id, loaded, last])
+    if (loaded && last > 0) void markRead('rooms', roomId, last)
+  }, [roomId, loaded, last])
   // Follow the newest message unless the reader scrolled up to read history.
   useEffect(() => {
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
   }, [loaded, messages])
   return (
-    <section className="conversation" aria-label="Room">
+    <section className="conversation" aria-label={label}>
       <div
         ref={scroller}
         className="transcript"
@@ -121,15 +163,18 @@ export function Room({
       >
         {!loaded && <Skeleton lines={4} width="60%" />}
         {loaded && messages.length === 0 && (
-          <Empty title="Nothing here yet.">
-            Mention members with @name to ask each of them, or write without a
-            mention and the coordinator picks one owner.
-          </Empty>
+          <Empty title="Nothing here yet.">{empty}</Empty>
         )}
         {messages.map((message) => (
           <article className="exchange" key={message.id}>
-            <div className="msg msg--person">
-              <PersonAvatar login={message.author} className="msg__avatar" />
+            <div
+              className={
+                message.orchestrator || message.author_agent_id
+                  ? 'msg msg--agent'
+                  : 'msg msg--person'
+              }
+            >
+              <AuthorAvatar message={message} agents={agents.data} />
               <div className="msg__body">
                 <div className="msg__head">
                   <span className="msg__author">{message.author}</span>
@@ -141,9 +186,9 @@ export function Room({
                     steering.
                   </p>
                 )}
-                {ROUTING[message.routing] && (
+                {(task ? TASK_ROUTING : ROUTING)[message.routing] && (
                   <p className="small faint" role="status">
-                    {ROUTING[message.routing]}
+                    {(task ? TASK_ROUTING : ROUTING)[message.routing]}
                   </p>
                 )}
               </div>
@@ -174,7 +219,17 @@ export function Room({
                       · {DELIVERY[item.status] ?? item.status}
                     </span>
                   </div>
-                  {item.response && <Markdown text={item.response} />}
+                  {item.terminal.length > 0 && (
+                    <WorkLog
+                      tools={item.terminal}
+                      running={item.status === 'running'}
+                    >
+                      {item.terminal.map((tool) => (
+                        <WorkCard key={tool.id} tool={tool} />
+                      ))}
+                    </WorkLog>
+                  )}
+                  <Markdown text={item.response ?? item.partial ?? ''} />
                   <Attachments turn={item.turn} items={item.attachments} />
                   {item.status === 'failed' && item.error && (
                     <p className="small" style={{ color: 'var(--danger)' }}>
@@ -194,18 +249,19 @@ export function Room({
       </div>
       <Alert>{readError}</Alert>
       <Composer
-        draftKey={`cubebot:${session.id}:room:${room.id}`}
+        draftKey={draftKey}
         label="Message the room"
-        placeholder={`Message #${room.name} · @name addresses a member`}
-        note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
-        mentionables={room.members.map((member) => ({
-          ...member,
+        placeholder={placeholder}
+        note={note}
+        mentionables={(mentionable ?? agents.data ?? []).map((member) => ({
+          id: member.id,
+          name: member.name,
           avatar: agentOf(member.id)?.avatar ?? null,
         }))}
         send={async (request_id, message) => {
           const posted = await ok(
             api.POST('/api/rooms/{room}/messages', {
-              params: { path: { room: room.id } },
+              params: { path: { room: roomId } },
               body: { request_id, message },
             }),
           )
@@ -248,6 +304,28 @@ function DeliveryActions({
       />
     </div>
   )
+}
+
+/** A person's picture, the orchestrator's block, or the block of the agent that wrote. */
+function AuthorAvatar({
+  message,
+  agents,
+}: {
+  message: RoomMessage
+  agents: AgentSummary[] | undefined
+}) {
+  if (message.orchestrator)
+    return (
+      <Cube avatar={ORCHESTRATOR_AVATAR} size={32} className="msg__avatar" />
+    )
+  if (message.author_agent_id)
+    return (
+      <DeliveryAvatar
+        agent={agents?.find((agent) => agent.id === message.author_agent_id)}
+        name={message.author}
+      />
+    )
+  return <PersonAvatar login={message.author} className="msg__avatar" />
 }
 
 function DeliveryAvatar({

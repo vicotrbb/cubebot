@@ -80,3 +80,65 @@
 .hook__when {
   color: var(--ink-faint);
 }
+
+/* A routine's triggers: optional, independent and off until chosen. */
+.triggers {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.triggers legend {
+  padding: 0;
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+}
+.trigger {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: var(--t-sm);
+  cursor: pointer;
+}
+.trigger:has(input:checked) {
+  border-color: var(--orange);
+  background: var(--orange-wash);
+}
+.trigger > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--ink-soft);
+}
+.trigger > span {
+  display: grid;
+  gap: 1px;
+  font-weight: var(--w-label);
+}
+.trigger > span .small {
+  font-weight: 400;
+}
+.trigger input {
+  margin-top: 3px;
+}
+.trigger--static {
+  cursor: default;
+}
+.trigger__more {
+  display: grid;
+  gap: 8px;
+  padding: 0 0 4px 12px;
+}
+.trigger__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

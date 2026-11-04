@@ -24,6 +24,7 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
 
 /** Where an item leads: room work is answered in its room, not the agent's own conversation. */
 function destination(item: components['schemas']['ActivityItem']) {
+  if (item.task) return `/tasks/${item.task}`
   if (item.room) return `/rooms/${item.room}`
   if (!item.agent) return '/platform/people'
   if (item.kind === 'login_pending') return `/agents/${item.agent}/desktop`

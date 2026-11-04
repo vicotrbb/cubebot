@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1 FROM chat_turns c JOIN room_messages m ON m.id=c.room_message_id\n            JOIN agents g ON g.id=c.conversation_id AND g.desired_state<>'retired'\n            WHERE m.room_id=$1 AND c.status IN ('queued','running','waiting','delegated')\n        ) AS \"open!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "open!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c669cde36f013cc27c104e6479f8c7e359392a139a6a1d2ee53cb3d115426d58"
+}

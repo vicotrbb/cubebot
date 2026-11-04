@@ -10,8 +10,8 @@ use cubebot_protocol::{
     terminal::Outcome,
 };
 use cubebot_providers::{
-    Anthropic, Error, Event as ProviderEvent, FunctionCall, Limits, Message, OpenAi, OpenRouter,
-    Provider, Reply, Request, Usage,
+    Anthropic, Error, Event as ProviderEvent, FunctionCall, Gemini, Grok, Limits, Message, OpenAi,
+    OpenRouter, Provider, Reply, Request, Usage,
 };
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use std::{
@@ -143,6 +143,30 @@ pub(super) async fn run(
             )
             .await
         }
+        ProviderKind::Gemini => {
+            let provider = configured(Gemini::new, Gemini::for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
+        ProviderKind::Grok => {
+            let provider = configured(Grok::new, Grok::for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
     };
     run.emit(end, None);
 }
@@ -260,7 +284,11 @@ async fn start<P: Provider>(
         tools.extend(crate::knowledge_base::definitions(registry.is_some()));
     }
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
-    tools.extend(crate::collaboration::definitions(desktop, turn.broadcast));
+    tools.extend(crate::collaboration::definitions(
+        desktop,
+        turn.broadcast,
+        turn.in_task,
+    ));
     // A task lane never drives the shared desktop (docs/adr/agents.md#agent-execution-lanes); the main lane owns it.
     tools.extend(
         registry

@@ -193,3 +193,23 @@ The policy applies to goal outcomes. Human acceptance of every delegated child a
 **Open details.** Requirement and evidence schema; permitted acceptance-policy changes; reviewer assignment; configured checks; submission and revision behavior; changes-requested resumption; and final outcome labels. These will be proposed in the consolidated specification rather than extending the product-question sequence.
 
 **Validation scenarios.** Complete an ordinary goal with evidence; submit a review-required result without marking it accepted; review while the agent sleeps; request changes; reject acceptance of a stale revision; prevent policy downgrade by the agent; account for failed dependencies and missing requirements; and preserve cancellation during a completion race. Implementation remains pending.
+
+## Tasks and the task orchestrator
+
+Accepted 2026-11-04, as the user specified it that day.
+
+**Decision.** A task is something a person wants done, regardless of how or by whom. They say what they want on the Tasks page; the task orchestrator names the task, picks one or more agents and gives each a brief and items. Work and conversation happen in a room that exists only for that task and is reachable only from the Tasks page: it is on no room list, cannot be favorited or have its members edited, and its agents do not count as sharing a room for `delegate` or `send_message`.
+
+The task orchestrator is a platform agent in the sense of [Direct mentions and a tool-free room coordinator](#direct-mentions-and-a-tool-free-room-coordinator): one of the orchestrator's model duties, with its own prompt and optionally its own model, no sandbox, tools or memory. It acts when a person writes without mentioning anyone, or when every turn of the task has settled. It only proposes, as JSON naming agents by id; Rust checks that each is one the task's owner may use, applies the configured limits on agents per round and rounds of work, and refuses to finish a task with open work. Past the round limit, it asks the person. After three invalid answers it hands a task nobody has started to the first eligible agent, as a room does, and otherwise tells the person it could not decide.
+
+A task agent's turn is a fork: its context starts from its own conversation as it stands, with the room's recent history, and nothing returns. Task turns are room deliveries, so they stay out of the conversation, its unread count and its summaries ([Direct mentions and a tool-free room coordinator](#direct-mentions-and-a-tool-free-room-coordinator), amended 2026-11-04). Memory stays one pool per agent, so what it learns remains available; a fork of memory was not asked for. The turn still runs in the agent's main lane, so it queues behind what the agent is doing.
+
+In a task turn `delegate` and `send_message` are replaced by `task_message`, which posts in the room and starts a turn for each agent it names, because the other tools would put the work in the recipient's own conversation; and `task_item`, which marks the agent's own items. Agents can start at most 64 turns for each other in one task, which bounds a pair that keeps answering.
+
+A task belongs to the person who asked and is visible to administrators. The orchestrator may only choose agents that person can send to, and the work carries their authority. Writing in a finished or stopped task starts it again with fresh rounds. Stopping cancels its open turns; it does not undo what they did.
+
+**Rationale.** People should not have to know which agent to ask or how to split work. Building on rooms gives tasks the durable messages, deliveries, retries, cancellation and streaming that rooms already have, instead of a parallel system.
+
+**Open details.** Human acceptance of a task's result ([Agent completion with optional human acceptance](#agent-completion-with-optional-human-acceptance)) is not offered; the orchestrator's judgment closes a task. Sharing a task with other people; running a task turn beside the agent's main lane; a forked workspace or desktop, which agents share with their other work.
+
+**Validation scenarios.** Automated with the real agent binary and a scripted model: a task is planned, its agent works from its conversation, marks items and speaks in the room, and its next ordinary turn contains none of it; unknown agents, round limits, open work and garbled answers are overruled; a person's other tasks and rooms stay hidden from others. Not yet validated: a real model acting as orchestrator, and several agents working one task at once on real sandboxes.

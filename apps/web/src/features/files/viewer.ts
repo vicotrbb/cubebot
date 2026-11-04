@@ -8,6 +8,8 @@ export type Kind =
   | 'csv'
   | 'json'
   | 'html'
+  | 'mermaid'
+  | 'tsv'
   | 'text'
   | null
 
@@ -41,9 +43,11 @@ const VIDEO: Record<string, string> = {
   mov: 'video/quicktime',
 }
 const TEXT = new Set(
-  `txt log ini cfg conf env toml yaml yml xml tsv sql sh bash zsh fish ps1 bat c h cc cpp hpp cs go rs
+  `txt log ini cfg conf env toml yaml yml xml sql sh bash zsh fish ps1 bat c h cc cpp hpp cs go rs
   java kt kts swift rb py pyi php pl lua r scala dart js jsx mjs cjs ts tsx css scss less vue svelte
-  graphql proto dockerfile makefile justfile gitignore tex rst adoc diff patch`.split(
+  graphql proto dockerfile makefile justfile gitignore tex rst adoc diff patch tf hcl zig ex exs
+  erl hs clj rkt nim vb fs ml lock gradle properties editorconfig npmrc nvmrc pem csr ipynb
+  sass styl astro cmake nix bazel containerfile procfile license readme`.split(
     /\s+/,
   ),
 )
@@ -56,6 +60,9 @@ const NAMED: Record<string, Kind> = {
   pdf: 'pdf',
   html: 'html',
   htm: 'html',
+  mmd: 'mermaid',
+  mermaid: 'mermaid',
+  tsv: 'tsv',
 }
 
 function extension(name: string) {
@@ -98,23 +105,124 @@ export function blobType(name: string, type?: string | null) {
   return media ? (type?.split(';')[0]?.trim() ?? '') : 'text/plain'
 }
 
-/** Rows of comma-separated text, with quoted fields. */
-export function parseTable(text: string): string[][] {
+/** Rows of separated text, with quoted fields. */
+export function parseTable(
+  text: string,
+  separator: ',' | '\t' = ',',
+): string[][] {
   const rows: string[][] = []
   let row: string[] = []
-  for (const [, raw = '', end = ''] of text.matchAll(
-    /("(?:[^"]|"")*"|[^,\r\n]*)(,|\r?\n|$)/g,
-  )) {
+  const cell = new RegExp(
+    `("(?:[^"]|"")*"|[^${separator}\\r\\n]*)(${separator}|\\r?\\n|$)`,
+    'g',
+  )
+  for (const [, raw = '', end = ''] of text.matchAll(cell)) {
     if (raw === '' && end === '' && row.length === 0) break
     const quoted = raw.startsWith('"')
     row.push(quoted ? raw.slice(1, -1).replaceAll('""', '"') : raw)
-    if (end !== ',') {
+    if (end !== separator) {
       rows.push(row)
       row = []
     }
     if (end === '') break
   }
   return rows
+}
+
+/** Which grammar highlights a file. Files that name their format in full, such as `Dockerfile`, count. */
+const GRAMMARS: Record<string, string> = {
+  ts: 'typescript',
+  tsx: 'typescript',
+  mts: 'typescript',
+  cts: 'typescript',
+  js: 'javascript',
+  jsx: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  vue: 'xml',
+  svelte: 'xml',
+  astro: 'xml',
+  html: 'xml',
+  htm: 'xml',
+  svg: 'xml',
+  xml: 'xml',
+  py: 'python',
+  pyi: 'python',
+  rb: 'ruby',
+  rs: 'rust',
+  go: 'go',
+  java: 'java',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  swift: 'swift',
+  c: 'c',
+  h: 'c',
+  cc: 'cpp',
+  cpp: 'cpp',
+  hpp: 'cpp',
+  cs: 'csharp',
+  php: 'php',
+  pl: 'perl',
+  lua: 'lua',
+  r: 'r',
+  scala: 'scala',
+  dart: 'dart',
+  ex: 'elixir',
+  exs: 'elixir',
+  hs: 'haskell',
+  vb: 'vbnet',
+  sh: 'bash',
+  bash: 'bash',
+  zsh: 'bash',
+  fish: 'bash',
+  ps1: 'powershell',
+  bat: 'dos',
+  css: 'css',
+  scss: 'scss',
+  sass: 'scss',
+  less: 'less',
+  json: 'json',
+  jsonl: 'json',
+  ipynb: 'json',
+  yaml: 'yaml',
+  yml: 'yaml',
+  toml: 'ini',
+  ini: 'ini',
+  cfg: 'ini',
+  conf: 'ini',
+  env: 'ini',
+  properties: 'ini',
+  editorconfig: 'ini',
+  sql: 'sql',
+  graphql: 'graphql',
+  proto: 'protobuf',
+  dockerfile: 'dockerfile',
+  containerfile: 'dockerfile',
+  makefile: 'makefile',
+  justfile: 'makefile',
+  cmake: 'makefile',
+  md: 'markdown',
+  markdown: 'markdown',
+  tex: 'latex',
+  diff: 'diff',
+  patch: 'diff',
+}
+
+export function grammarOf(name: string): string | undefined {
+  return GRAMMARS[extension(name)]
+}
+
+/** Whether these bytes read as text, for a file whose name and type say nothing. */
+export function looksLikeText(bytes: Uint8Array) {
+  const sample = bytes.subarray(0, 8192)
+  if (sample.includes(0)) return false
+  try {
+    // A multi-byte character cut by the sample is not a fault.
+    new TextDecoder('utf-8', { fatal: true }).decode(sample, { stream: true })
+    return true
+  } catch {
+    return false
+  }
 }
 
 /** Agents' sent files carry a tag so names never collide: `chart-1f3a9c2e.png` shows as `chart.png`. */

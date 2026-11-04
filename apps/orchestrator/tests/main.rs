@@ -49,6 +49,7 @@ mod routines;
 mod runtime_identity;
 mod runtime_token_review;
 mod skills;
+mod tasks;
 mod vault;
 mod wallpaper;
 

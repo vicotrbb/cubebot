@@ -6,6 +6,7 @@ use super::{SendMessage, Work, access};
 use crate::identity::{Actor, IdentityError};
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
@@ -54,6 +55,10 @@ pub struct RoomMessage {
     pub id: Uuid,
     pub sequence: i64,
     pub author: String,
+    /// In a task's room: the task orchestrator wrote this.
+    pub orchestrator: bool,
+    /// In a task's room: the agent that wrote this.
+    pub author_agent_id: Option<Uuid>,
     pub message: String,
     /// `routing` until the coordinator settles it as `routed`, `continued` or `failed`;
     /// mentioned messages are `routed` at once. Messages from before 2026-11-03 may also be
@@ -69,6 +74,8 @@ struct MessageRow {
     id: Uuid,
     sequence: i64,
     author: String,
+    orchestrator: bool,
+    author_agent_id: Option<Uuid>,
     message: String,
     routing: String,
     note: Option<String>,
@@ -80,6 +87,8 @@ impl From<MessageRow> for RoomMessage {
             id: row.id,
             sequence: row.sequence,
             author: row.author,
+            orchestrator: row.orchestrator,
+            author_agent_id: row.author_agent_id,
             message: row.message,
             routing: row.routing,
             note: row.note,
@@ -100,6 +109,10 @@ pub struct Delivery {
     pub error: Option<String>,
     /// Files the agent sent with this reply.
     pub attachments: Vec<super::terminal::ReplyAttachment>,
+    /// What the agent has done so far, tool by tool.
+    pub terminal: Vec<super::terminal::Progress>,
+    /// The reply as far as it has been written, while there is no `response`.
+    pub partial: Option<String>,
 }
 
 impl RoomMessage {
@@ -159,8 +172,8 @@ impl Work {
             SELECT r.id
             FROM rooms r
             JOIN human_accounts a ON a.id=$1 AND a.active
-            WHERE a.role='administrator'
-                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read')
+            WHERE NOT r.task AND (a.role='administrator'
+                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read'))
             ORDER BY r.name, r.id
             ",
             actor.id,
@@ -185,8 +198,8 @@ impl Work {
             FROM rooms r
             JOIN human_accounts a ON a.id=$1 AND a.active
             LEFT JOIN room_messages m ON m.room_id=r.id
-            WHERE a.role='administrator'
-                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read')
+            WHERE NOT r.task AND (a.role='administrator'
+                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read'))
             GROUP BY r.id
             ORDER BY r.id
             "#,
@@ -215,6 +228,13 @@ impl Work {
             return Err(IdentityError::Forbidden);
         }
         lock(&mut tx, room).await?;
+        // A task's agents are the orchestrator's to choose.
+        let task = sqlx::query_scalar!("SELECT task FROM rooms WHERE id=$1", room)
+            .fetch_one(&mut *tx)
+            .await?;
+        if task {
+            return Err(IdentityError::Forbidden);
+        }
         sqlx::query!(
             "
             DELETE FROM room_members
@@ -255,21 +275,19 @@ impl Work {
         let mut messages: Vec<RoomMessage> = sqlx::query_as!(
             MessageRow,
             r#"
-            SELECT id AS "id!", sequence AS "sequence!", author AS "author!", message AS "message!", routing AS "routing!", note
+            SELECT id AS "id!", sequence AS "sequence!", author AS "author!", orchestrator AS "orchestrator!", author_agent_id, message AS "message!", routing AS "routing!", note
             FROM (
                 (
-                    SELECT m.id, m.sequence, a.login AS author, m.message, m.routing, m.note
+                    SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS author, m.orchestrator, m.author_agent_id, m.message, m.routing, m.note
                     FROM room_messages m
-                    JOIN human_accounts a ON a.id=m.actor_id
                     WHERE m.room_id=$1 AND m.sequence>$2
                     ORDER BY m.sequence
                     LIMIT 100
                 )
                 UNION
                 (
-                    SELECT m.id, m.sequence, a.login AS author, m.message, m.routing, m.note
+                    SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS author, m.orchestrator, m.author_agent_id, m.message, m.routing, m.note
                     FROM room_messages m
-                    JOIN human_accounts a ON a.id=m.actor_id
                     WHERE m.room_id=$1 AND m.id=ANY($3)
                 )
             ) messages
@@ -310,9 +328,8 @@ impl Work {
         let mut messages: Vec<RoomMessage> = sqlx::query_as!(
             MessageRow,
             r#"
-            SELECT m.id, m.sequence, a.login AS author, m.message, m.routing, m.note
+            SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS "author!", m.orchestrator, m.author_agent_id, m.message, m.routing, m.note
             FROM room_messages m
-            JOIN human_accounts a ON a.id=m.actor_id
             WHERE m.id=$1
             "#,
             id,
@@ -462,21 +479,46 @@ async fn room(
 
 /// Earlier room messages and the agents' replies to them, for a delivery's context. They are
 /// added when the turn is claimed, not stored with it, so the conversation keeps only the request.
-pub(super) async fn context(
+pub(super) async fn delivery_context(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
+    limit: i64,
+) -> Result<String, sqlx::Error> {
+    let room = sqlx::query!(
+        "SELECT room_id, sequence FROM room_messages WHERE id=$1",
+        message,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    lines(tx, room.room_id, room.sequence, limit).await
+}
+
+/// The room's whole recent history, for the task orchestrator.
+pub(super) async fn context(
+    tx: &mut Transaction<'_, Postgres>,
+    room: Uuid,
+    limit: i64,
+) -> Result<String, sqlx::Error> {
+    lines(tx, room, i64::MAX, limit).await
+}
+
+async fn lines(
+    tx: &mut Transaction<'_, Postgres>,
+    room: Uuid,
+    before: i64,
+    limit: i64,
 ) -> Result<String, sqlx::Error> {
     let lines = sqlx::query_scalar!(
         r#"
-        SELECT format('%s: %s%s',a.login,left(m.message,1000),COALESCE((SELECT string_agg(format(E'\n  %s replied: %s',g.name,left(t.response,1000)),'' ORDER BY t.sequence) FROM chat_turns t JOIN agents g ON g.id=t.conversation_id WHERE t.room_message_id=m.id AND t.status='complete'),'')) AS "line!"
+        SELECT format('%s: %s%s',room_message_author(m.orchestrator,m.author_agent_id,m.actor_id),left(m.message,1000),COALESCE((SELECT string_agg(format(E'\n  %s replied: %s',g.name,left(t.response,1000)),'' ORDER BY t.sequence) FROM chat_turns t JOIN agents g ON g.id=t.conversation_id WHERE t.room_message_id=m.id AND t.status='complete'),'')) AS "line!"
         FROM room_messages m
-        JOIN human_accounts a ON a.id=m.actor_id
-        JOIN room_messages c ON c.id=$1
-        WHERE m.room_id=c.room_id AND m.sequence<c.sequence
+        WHERE m.room_id=$1 AND m.sequence<$2
         ORDER BY m.sequence DESC
-        LIMIT 10
+        LIMIT $3
         "#,
-        message,
+        room,
+        before,
+        limit,
     )
     .fetch_all(&mut **tx)
     .await?;
@@ -509,8 +551,10 @@ async fn post(
     room: Uuid,
     input: &SendMessage,
 ) -> Result<Uuid, IdentityError> {
-    let members = members(tx, room).await?;
-    let mentioned = mentioned(&input.message, &members);
+    let mentioned = match super::tasks::person_wrote(tx, room, &input.message).await? {
+        Some(mentioned) => mentioned,
+        None => mentioned(&input.message, &members(tx, room).await?),
+    };
     let routing = if mentioned.is_empty() {
         "routing"
     } else {
@@ -546,7 +590,7 @@ pub(super) async fn deliver(
     sqlx::query!(
         r#"
         INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id)
-        SELECT $2, m.actor_id, gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\n\n',m.message), m.id
+        SELECT $2, COALESCE((SELECT k.created_by FROM tasks k WHERE k.room_id=m.room_id), m.actor_id), gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\n\n',m.message), m.id
         FROM room_messages m
         JOIN rooms r ON r.id=m.room_id
         JOIN human_accounts a ON a.id=m.actor_id
@@ -602,7 +646,9 @@ async fn allowed(
             FROM rooms r
             JOIN human_accounts a ON a.id=$1 AND a.active
             WHERE r.id=$2
-                AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability=$3))
+                AND (a.role='administrator'
+                    OR EXISTS(SELECT 1 FROM tasks t WHERE t.room_id=r.id AND t.created_by=a.id AND $3<>'room.manage')
+                    OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability=$3))
         ) AS "allowed!"
         "#,
         actor.id,
@@ -632,9 +678,13 @@ async fn attach(
     .await?;
     let turns: Vec<Uuid> = deliveries.iter().map(|delivery| delivery.turn).collect();
     let mut attachments = super::terminal::attachments(tx, &turns).await?;
+    let mut terminal = super::terminal::tool_progress(tx, &turns).await?;
+    let mut partial = partial_replies(tx, &turns).await?;
     for delivery in deliveries {
         let delivery = Delivery {
             attachments: attachments.remove(&delivery.turn).unwrap_or_default(),
+            terminal: terminal.remove(&delivery.turn).unwrap_or_default(),
+            partial: partial.remove(&delivery.turn),
             turn: delivery.turn,
             room_message_id: delivery.room_message_id,
             agent_id: delivery.agent_id,
@@ -651,6 +701,29 @@ async fn attach(
         }
     }
     Ok(())
+}
+
+/// Each unfinished turn's reply so far. Room followers poll, so the text arrives a little at a time.
+async fn partial_replies(
+    tx: &mut Transaction<'_, Postgres>,
+    turns: &[Uuid],
+) -> Result<HashMap<Uuid, String>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT e.turn_id, string_agg(e.payload->>'text','' ORDER BY e.sequence) AS "text!"
+        FROM turn_events e
+        JOIN chat_turns t ON t.id=e.turn_id
+        WHERE e.turn_id=ANY($1) AND t.status='running' AND e.payload->>'kind'='text_delta'
+        GROUP BY e.turn_id
+        "#,
+        turns,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.turn_id, row.text))
+        .collect())
 }
 
 #[cfg(test)]

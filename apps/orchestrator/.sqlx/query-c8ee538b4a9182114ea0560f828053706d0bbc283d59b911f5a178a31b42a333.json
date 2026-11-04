@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT format('- #%s %s (%s): %s%s',i.position,g.name,i.status,i.title,COALESCE(' — '||i.note,'')) AS \"line!\"\n        FROM task_items i\n        JOIN agents g ON g.id=i.agent_id\n        WHERE i.task_id=$1\n        ORDER BY i.position\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "line!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c8ee538b4a9182114ea0560f828053706d0bbc283d59b911f5a178a31b42a333"
+}

@@ -54,6 +54,11 @@ impl Work {
         let Some(human) = human else {
             return Ok(Err("this turn is no longer running".into()));
         };
+        if call.tool.starts_with("task_") {
+            let answer = crate::work::tasks::tool(&mut tx, actor, turn, call).await?;
+            tx.commit().await?;
+            return Ok(answer);
+        }
         let answer = match dispatch(&mut tx, actor, human, call).await {
             Err(IdentityError::InvalidInput) => Err(INVALID.into()),
             Err(IdentityError::NotFound) => Err("no routine of yours has this id".into()),

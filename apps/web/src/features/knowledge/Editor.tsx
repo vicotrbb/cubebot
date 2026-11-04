@@ -1,5 +1,6 @@
 import type { Editor as Tiptap } from '@tiptap/core'
-import CodeBlock from '@tiptap/extension-code-block'
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import { common, createLowlight } from 'lowlight'
 import Image from '@tiptap/extension-image'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -70,11 +71,11 @@ function extensions(
         HTMLAttributes: { rel: 'noopener noreferrer', target: null },
       },
     }),
-    CodeBlock.extend({
+    CodeBlockLowlight.extend({
       addNodeView() {
         return ReactNodeViewRenderer(CodeView)
       },
-    }),
+    }).configure({ lowlight: createLowlight(common) }),
     Image.configure({ allowBase64: false }),
     TaskList,
     TaskItem.configure({ nested: true }),

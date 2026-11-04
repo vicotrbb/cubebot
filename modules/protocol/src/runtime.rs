@@ -70,6 +70,8 @@ pub enum ProviderKind {
     Openai,
     Anthropic,
     Openrouter,
+    Gemini,
+    Grok,
 }
 impl ProviderKind {
     pub fn as_str(self) -> &'static str {
@@ -77,12 +79,20 @@ impl ProviderKind {
             Self::Openai => "openai",
             Self::Anthropic => "anthropic",
             Self::Openrouter => "openrouter",
+            Self::Gemini => "gemini",
+            Self::Grok => "grok",
         }
     }
     pub fn parse(value: &str) -> Option<Self> {
-        [Self::Openai, Self::Anthropic, Self::Openrouter]
-            .into_iter()
-            .find(|kind| kind.as_str() == value)
+        [
+            Self::Openai,
+            Self::Anthropic,
+            Self::Openrouter,
+            Self::Gemini,
+            Self::Grok,
+        ]
+        .into_iter()
+        .find(|kind| kind.as_str() == value)
     }
 }
 
@@ -106,6 +116,10 @@ pub struct Turn {
     pub history: Vec<Exchange>,
     /// Tool events from earlier runs of this turn.
     pub prior: Vec<TurnEvent>,
+    /// The turn belongs to a task's room (`task` below means a delegated lane): the agent talks
+    /// through the task's tools and its reply stays in that room.
+    #[serde(default)]
+    pub in_task: bool,
     /// Work this turn delegated, oldest first: settled children with their outcome, and open
     /// ones with their status only.
     #[serde(default)]
@@ -589,6 +603,7 @@ mod tests {
             }],
             broadcast: false,
             knowledge_base: false,
+            in_task: false,
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));
@@ -597,8 +612,14 @@ mod tests {
             Delivery::Turn(turn) if turn.sequence == 1 && turn.mcp_servers[0].name() == "docs"
         ));
         assert_eq!(ProviderKind::parse("openai"), Some(ProviderKind::Openai));
-        assert_eq!(ProviderKind::parse("gemini"), None);
         assert!(serde_json::from_str::<Report>(r#"{"type":"claim"}"#).is_err());
+    }
+
+    #[test]
+    fn gemini_and_grok_are_provider_kinds_and_others_are_not() {
+        assert_eq!(ProviderKind::parse("gemini"), Some(ProviderKind::Gemini));
+        assert_eq!(ProviderKind::parse("grok"), Some(ProviderKind::Grok));
+        assert_eq!(ProviderKind::parse("palm"), None);
     }
 
     #[test]

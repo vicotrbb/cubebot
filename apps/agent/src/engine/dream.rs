@@ -8,7 +8,8 @@ use cubebot_protocol::runtime::{
     TokenUsage,
 };
 use cubebot_providers::{
-    Anthropic, Error, Event, Limits, Message, OpenAi, OpenRouter, Provider, Request, Usage,
+    Anthropic, Error, Event, Gemini, Grok, Limits, Message, OpenAi, OpenRouter, Provider, Request,
+    Usage,
 };
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -122,6 +123,14 @@ async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
         }
         ProviderKind::Openrouter => {
             let provider = super::turn::configured(OpenRouter::new, OpenRouter::for_loopback_tests);
+            reply(provider, &request).await
+        }
+        ProviderKind::Gemini => {
+            let provider = super::turn::configured(Gemini::new, Gemini::for_loopback_tests);
+            reply(provider, &request).await
+        }
+        ProviderKind::Grok => {
+            let provider = super::turn::configured(Grok::new, Grok::for_loopback_tests);
             reply(provider, &request).await
         }
     };

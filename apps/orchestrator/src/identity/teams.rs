@@ -33,6 +33,8 @@ pub struct Team {
     pub name: String,
     pub revision: i64,
     pub active: bool,
+    /// The accounts in the team.
+    pub members: Vec<Uuid>,
 }
 
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
@@ -179,7 +181,8 @@ impl Identity {
         Ok(sqlx::query_as!(
             Team,
             r#"
-            SELECT id AS "id!: TeamId", name AS "name!", revision AS "revision!", active AS "active!"
+            SELECT id AS "id!: TeamId", name AS "name!", revision AS "revision!", active AS "active!",
+                COALESCE((SELECT array_agg(m.account_id) FROM human_team_members m WHERE m.team_id=human_teams.id),'{}') AS "members!"
             FROM human_teams
             WHERE $1::uuid IS NULL OR id > $1
             ORDER BY id

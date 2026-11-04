@@ -38,7 +38,10 @@ async function session(viewport, scheme, tag, extra = {}) {
     }
   }
   const errs = []
-  p.on('pageerror', (e) => errs.push(e.message))
+  // The seeded page reaches for its parent from its sandbox; being refused is the point.
+  p.on('pageerror', (e) => {
+    if (!/Blocked a frame/.test(e.message)) errs.push(e.message)
+  })
   p.on('console', (m) => {
     if (m.type() === 'error' && !/404|favicon|sandboxed/.test(m.text()))
       errs.push(m.text())
@@ -179,7 +182,7 @@ async function run(viewport, scheme, tag) {
     `${tag} no raw asterisks`,
   )
   ok((await p.locator('.md table').count()) >= 1, `${tag} table`)
-  ok((await p.locator('.md__code pre').count()) >= 1, `${tag} code`)
+  ok((await p.locator('.md .codeblock pre').count()) >= 1, `${tag} code`)
   ok(
     (await p.locator('.md input[type=checkbox]').count()) === 2,
     `${tag} task list`,
@@ -260,10 +263,10 @@ async function run(viewport, scheme, tag) {
   await p.getByText('notes.md').waitFor({ timeout: 10000 })
   await shot('files')
   for (const [name, sel] of [
-    ['a_small_map_of_home.txt', '.viewer__text'],
+    ['a_small_map_of_home.txt', '.codeblock pre'],
     ['notes.md', '.viewer__page .md h1'],
     ['orders.csv', '.viewer__table td'],
-    ['config.json', '.viewer__text'],
+    ['config.json', '.codeblock pre'],
     ['chart.png', '.viewer__picture img'],
     ['voice.wav', '.viewer__listen audio'],
     ['report.pdf', '.viewer__pdf canvas'],
@@ -286,7 +289,8 @@ async function run(viewport, scheme, tag) {
         .frameLocator('iframe.viewer__frame')
         .locator('h1')
         .innerText()
-      ok(inside === 'Page', `${tag} html script did not run`)
+      // It runs in a frame with no origin and no network; it only reaches its own page.
+      ok(inside === 'SCRIPT RAN', `${tag} html preview runs in its frame`)
     }
     if (
       [

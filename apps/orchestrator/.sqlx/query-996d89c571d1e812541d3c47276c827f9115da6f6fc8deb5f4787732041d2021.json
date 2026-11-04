@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT EXISTS(\n                SELECT 1 FROM chat_turns c\n                JOIN room_messages m ON m.id=c.room_message_id\n                JOIN rooms r ON r.id=m.room_id\n                WHERE c.id=$1 AND r.task\n            ) AS \"in_task!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "in_task!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "996d89c571d1e812541d3c47276c827f9115da6f6fc8deb5f4787732041d2021"
+}

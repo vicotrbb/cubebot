@@ -137,6 +137,13 @@ impl Controller {
             Mode::Docker(lifecycle) => lifecycle.runtime.connections.clone(),
             Mode::DatabaseOnly => None,
         };
+        let tasks = connections.clone().map(|connections| {
+            tokio::spawn(crate::work::tasks::orchestrate(
+                self.pool.clone(),
+                connections,
+                stop.clone(),
+            ))
+        });
         let coordinator = connections.map(|connections| {
             tokio::spawn(crate::work::coordinate(
                 self.pool.clone(),
@@ -152,6 +159,9 @@ impl Controller {
         let result = self.reconcile_all(stop).await;
         if let Some(coordinator) = coordinator {
             coordinator.abort();
+        }
+        if let Some(tasks) = tasks {
+            tasks.abort();
         }
         routines.abort();
         prices.abort();

@@ -37,7 +37,8 @@ impl Work {
         let pending = sqlx::query!(
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
-                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base
+                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base,
+                EXISTS(SELECT 1 FROM room_messages m JOIN rooms r ON r.id=m.room_id WHERE m.id=t.room_message_id AND r.task) AS "in_task!"
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -65,6 +66,7 @@ impl Work {
         let (command, command_only) = (pending.command, pending.command_only);
         let broadcast = pending.broadcast && !task;
         let knowledge_base = pending.knowledge_base;
+        let in_task = pending.in_task;
         if let Some(reason) = refused(tx, actor, turn, command_only).await? {
             wait(tx, turn, reason).await?;
             return Ok(None);
@@ -89,7 +91,7 @@ impl Work {
         let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
         let instructions =
             super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
-        let (summary, history, message) = context(tx, actor, task, room, message).await?;
+        let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let mcp_servers = mcp_servers(tx, connections, actor).await;
         Ok(Some(Turn {
@@ -111,6 +113,7 @@ impl Work {
             mcp_servers,
             broadcast,
             knowledge_base,
+            in_task,
         }))
     }
 
@@ -338,22 +341,31 @@ async fn earlier(
     Ok((prior, last, delegations))
 }
 
-/// A task's context is the task itself, not the main conversation. A room delivery's is the
-/// room's recent messages: rooms and the main conversation stay out of each other's context.
+/// A delegated task's context is the task itself, not the main conversation. A room delivery's is
+/// the room's recent messages: rooms and the main conversation stay out of each other's context.
+/// A task room's agent is a fork: it starts from its conversation as it stands and adds nothing
+/// back, since `history` never reads a room's turns or their summaries.
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
-    task: bool,
+    delegated: bool,
     room: Option<Uuid>,
+    in_task: bool,
     message: String,
 ) -> Result<(Option<String>, Vec<Exchange>, String), Error> {
-    let (summary, history) = if task || room.is_some() {
+    let (summary, history) = if !in_task && (delegated || room.is_some()) {
         (None, Vec::new())
     } else {
         history(tx, actor).await?
     };
     let message = match room {
-        Some(room) => in_room(&super::rooms::context(tx, room).await?, message),
+        Some(room) => {
+            let limit = if in_task { 30 } else { 10 };
+            in_room(
+                &super::rooms::delivery_context(tx, room, limit).await?,
+                message,
+            )
+        }
         None => message,
     };
     Ok((summary, history, message))

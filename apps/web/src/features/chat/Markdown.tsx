@@ -1,6 +1,10 @@
 import type { Token, Tokens } from 'marked'
 import { lazy, Suspense, useMemo, type ReactNode } from 'react'
-import { CopyButton } from '../../components/primitives'
+import { CodeBlock } from '../../components/CodeBlock'
+import { Frame } from '../../components/Frame'
+import { framed, framedSvg } from '../../components/framePage'
+import { TablePreview } from '../files/TablePreview'
+import { PreviewBlock } from './Preview'
 import { inlineImage, safeHref, tokensOf } from './tokens'
 import './markdown.css'
 
@@ -113,26 +117,93 @@ function List({ token }: { token: Tokens.List }) {
   )
 }
 
-function Code({ token }: { token: Tokens.Code }) {
-  const language = token.lang?.split(/\s/)[0]
-  if (language === 'mermaid')
-    return (
+/** Languages a message can draw, with the name its block goes by and how it draws. Everything else
+ *  is code. The fence's source shows beside the result. */
+const DRAWN: Record<
+  string,
+  {
+    label: string
+    hljs: string
+    draw: (source: string, full: boolean) => ReactNode
+  }
+> = {
+  html: {
+    label: 'HTML',
+    hljs: 'xml',
+    draw: (source, full) => (
+      <Frame page={framed(source)} title="Page preview" fill={full} />
+    ),
+  },
+  svg: {
+    label: 'SVG',
+    hljs: 'xml',
+    draw: (source, full) => (
+      <Frame page={framedSvg(source)} title="Drawing preview" fill={full} />
+    ),
+  },
+  mermaid: {
+    label: 'Diagram',
+    hljs: 'plaintext',
+    draw: (source) => (
       <Suspense fallback={<div className="skeleton kb-diagram__wait" />}>
         <div className="md__diagram">
-          <Diagram source={token.text} />
+          <Diagram source={source} />
         </div>
       </Suspense>
+    ),
+  },
+  markdown: {
+    label: 'Markdown',
+    hljs: 'markdown',
+    draw: (source) => (
+      <div className="preview__page">
+        <Markdown text={source} />
+      </div>
+    ),
+  },
+  csv: {
+    label: 'CSV',
+    hljs: 'plaintext',
+    draw: (source) => <TablePreview text={source} />,
+  },
+  tsv: {
+    label: 'TSV',
+    hljs: 'plaintext',
+    draw: (source) => <TablePreview text={source} separator={'\t'} />,
+  },
+  math: {
+    label: 'Formula',
+    hljs: 'latex',
+    draw: (source) => (
+      <div className="preview__page">
+        <Formula text={source} block />
+      </div>
+    ),
+  },
+}
+DRAWN.md = DRAWN.markdown as (typeof DRAWN)[string]
+DRAWN.katex = DRAWN.math as (typeof DRAWN)[string]
+
+function Code({ token }: { token: Tokens.Code }) {
+  const language = token.lang?.split(/\s/)[0]?.toLowerCase()
+  const drawn = language ? DRAWN[language] : undefined
+  if (drawn)
+    return (
+      <PreviewBlock
+        label={drawn.label}
+        language={drawn.hljs}
+        source={token.text}
+        closed={/(```|~~~)\s*$/.test(token.raw)}
+        preview={(full) => drawn.draw(token.text, full)}
+      />
     )
   return (
-    <div className="md__code">
-      <div className="md__code-head">
-        <span>{language || 'text'}</span>
-        <CopyButton text={token.text} label="Copy code" />
-      </div>
-      <pre tabIndex={0}>
-        <code>{token.text}</code>
-      </pre>
-    </div>
+    <CodeBlock
+      code={token.text}
+      language={language}
+      numbers={token.text.split('\n').length > 4}
+      maxHeight={560}
+    />
   )
 }
 

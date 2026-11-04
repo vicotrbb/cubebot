@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT e.turn_id, string_agg(e.payload->>'text','' ORDER BY e.sequence) AS \"text!\"\n        FROM turn_events e\n        JOIN chat_turns t ON t.id=e.turn_id\n        WHERE e.turn_id=ANY($1) AND t.status='running' AND e.payload->>'kind'='text_delta'\n        GROUP BY e.turn_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "text!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "81f5eb1b966e2863cde7063de0ebcc51f69febb5d250ce16acfe0f1dcb599b1b"
+}

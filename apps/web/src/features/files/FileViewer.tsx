@@ -1,10 +1,23 @@
 import { Download, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { CodeBlock } from '../../components/CodeBlock'
+import { Diagram } from '../../components/Diagram'
+import { Frame } from '../../components/Frame'
+import { framed, framedSvg } from '../../components/framePage'
 import { Alert, Skeleton } from '../../components/primitives'
 import { Markdown } from '../chat/Markdown'
+import { ViewSwitch } from '../chat/Preview'
 import '../chat/chat.css'
 import { PdfPages } from './PdfPages'
-import { blobType, fileSize, kindOf, parseTable, type Kind } from './viewer'
+import { TablePreview } from './TablePreview'
+import {
+  blobType,
+  fileSize,
+  grammarOf,
+  kindOf,
+  looksLikeText,
+  type Kind,
+} from './viewer'
 import './viewer.css'
 
 export type Viewable = {
@@ -17,7 +30,6 @@ export type Viewable = {
 /** Past this a preview would hold too much in memory; the download always works. */
 const MEDIA_BYTES = 512 * 1024 * 1024
 const TEXT_BYTES = 2 * 1024 * 1024
-const TABLE_ROWS = 2000
 
 /** The file's bytes as a blob and its URL. The server always answers with a download, which is
  *  what keeps a file from ever rendering in the console's origin; reading it here shows it safely. */
@@ -103,10 +115,12 @@ export function FileViewer({
           </button>
         </header>
         <div className="viewer__body" tabIndex={0}>
-          {kind && !tooBig ? (
+          {tooBig ? (
+            <Unavailable file={file} big />
+          ) : kind ? (
             <Preview file={file} kind={kind} />
           ) : (
-            <Unavailable file={file} big={tooBig} />
+            <Unknown file={file} />
           )}
         </div>
       </div>
@@ -130,6 +144,35 @@ function Unavailable({ file, big }: { file: Viewable; big: boolean }) {
   )
 }
 
+/** A name and type that say nothing: it still shows if its bytes read as text. */
+function Unknown({ file }: { file: Viewable }) {
+  const [text, setText] = useState<boolean | null>(
+    file.size > TEXT_BYTES ? false : null,
+  )
+  useEffect(() => {
+    if (text !== null) return
+    const abort = new AbortController()
+    fetch(file.url, { credentials: 'same-origin', signal: abort.signal })
+      .then((response) => response.arrayBuffer())
+      .then((bytes) => setText(looksLikeText(new Uint8Array(bytes))))
+      .catch(() => {
+        if (!abort.signal.aborted) setText(false)
+      })
+    return () => abort.abort()
+  }, [file.url, text])
+  if (text === null)
+    return (
+      <div className="viewer__wait" role="status" aria-label="Loading file">
+        <Skeleton lines={5} />
+      </div>
+    )
+  return text ? (
+    <Preview file={file} kind="text" />
+  ) : (
+    <Unavailable file={file} big={false} />
+  )
+}
+
 function Preview({ file, kind }: { file: Viewable; kind: NonNullable<Kind> }) {
   const { blob, url, failed } = useFileBlob(file)
   if (failed) return <Alert>This file could not be loaded. Try again.</Alert>
@@ -140,9 +183,11 @@ function Preview({ file, kind }: { file: Viewable; kind: NonNullable<Kind> }) {
       </div>
     )
   if (kind === 'pdf') return <PdfPages blob={blob} />
+  if (kind === 'image' && /\.svg$/i.test(file.name))
+    return <TextPreview blob={blob} kind="svg" name={file.name} />
   if (kind === 'image' || kind === 'audio' || kind === 'video')
     return <Media url={url} kind={kind} name={file.name} />
-  return <TextPreview blob={blob} kind={kind} />
+  return <TextPreview blob={blob} kind={kind} name={file.name} />
 }
 
 function Media({
@@ -176,9 +221,11 @@ function Media({
 function TextPreview({
   blob,
   kind,
+  name,
 }: {
   blob: Blob
-  kind: Exclude<NonNullable<Kind>, 'image' | 'audio' | 'video' | 'pdf'>
+  kind: string
+  name: string
 }) {
   const [text, setText] = useState<string | null>(null)
   const cut = blob.size > TEXT_BYTES
@@ -202,12 +249,13 @@ function TextPreview({
           Showing the first 2 MiB. Download the file for all of it.
         </p>
       )}
-      <Shown kind={kind} text={text} />
+      <Shown kind={kind} text={text} name={name} />
     </>
   )
 }
 
-function Shown({ kind, text }: { kind: string; text: string }) {
+/** What each drawable kind becomes; the rest is simply code. */
+function drawing(kind: string, text: string, name: string): ReactNode {
   if (kind === 'markdown')
     return (
       <div className="viewer__page">
@@ -215,20 +263,47 @@ function Shown({ kind, text }: { kind: string; text: string }) {
       </div>
     )
   if (kind === 'csv') return <TablePreview text={text} />
-  // Nothing in it runs: no scripts, forms, or same-origin access in this frame.
+  if (kind === 'tsv') return <TablePreview text={text} separator={'\t'} />
   if (kind === 'html')
+    return <Frame fill page={framed(text)} title={`${name}, previewed`} />
+  if (kind === 'svg')
+    return <Frame fill page={framedSvg(text)} title={`${name}, previewed`} />
+  if (kind === 'mermaid')
     return (
-      <iframe
-        className="viewer__frame"
-        title="Page preview, with scripts turned off"
-        sandbox=""
-        srcDoc={text}
-      />
+      <div className="viewer__page">
+        <Diagram source={text} />
+      </div>
     )
+  return null
+}
+
+function Shown({
+  kind,
+  text,
+  name,
+}: {
+  kind: string
+  text: string
+  name: string
+}) {
+  const [code, setCode] = useState(false)
+  const drawn = drawing(kind, text, name)
+  const source = (
+    <CodeBlock
+      bare
+      numbers
+      code={kind === 'json' ? pretty(text) : text}
+      language={grammarOf(name)}
+    />
+  )
+  if (!drawn) return source
   return (
-    <pre className="viewer__text">
-      <code>{kind === 'json' ? pretty(text) : text}</code>
-    </pre>
+    <>
+      <div className="viewer__views">
+        <ViewSwitch code={code} onChange={setCode} />
+      </div>
+      {code ? source : drawn}
+    </>
   )
 }
 
@@ -238,38 +313,4 @@ function pretty(text: string) {
   } catch {
     return text
   }
-}
-
-function TablePreview({ text }: { text: string }) {
-  const rows = parseTable(text)
-  const [head, ...body] = rows
-  if (!head) return <p className="viewer__cut">This table is empty.</p>
-  return (
-    <div className="viewer__table">
-      <table className="table">
-        <thead>
-          <tr>
-            {head.map((cell, index) => (
-              <th key={index}>{cell}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {body.slice(0, TABLE_ROWS).map((row, at) => (
-            <tr key={at}>
-              {row.map((cell, index) => (
-                <td key={index}>{cell}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {body.length > TABLE_ROWS && (
-        <p className="viewer__cut">
-          Showing {TABLE_ROWS.toLocaleString()} of{' '}
-          {body.length.toLocaleString()} rows.
-        </p>
-      )}
-    </div>
-  )
 }

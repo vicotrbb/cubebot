@@ -473,7 +473,7 @@ img.avatar-initial {
   height: calc(var(--bottombar-h) + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   background: var(--sidebar);
   border-top: 1px solid var(--line);
   z-index: 20;

@@ -67,6 +67,12 @@ export function CommandPalette({
         go: go('/activity'),
       },
       {
+        key: 'page:tasks',
+        label: 'Tasks',
+        hint: 'Page',
+        go: go('/tasks'),
+      },
+      {
         key: 'p:situation',
         label: 'Situation room',
         hint: 'Page',

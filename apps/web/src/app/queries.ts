@@ -30,6 +30,7 @@ export const keys = {
   activity: ['activity'] as const,
   avatars: ['avatars'] as const,
   broadcasts: ['broadcasts'] as const,
+  tasks: ['tasks'] as const,
 }
 
 export function useSession() {
@@ -96,6 +97,24 @@ export function useRooms() {
   return useQuery({
     queryKey: keys.rooms,
     queryFn: async (): Promise<RoomSummary[]> => ok(api.GET('/api/rooms')),
+  })
+}
+
+/** Polled rather than streamed: this is on every page, and an open stream per tab starves plain HTTP. */
+export function useTasks() {
+  return useQuery({
+    queryKey: keys.tasks,
+    queryFn: () => ok(api.GET('/api/tasks')),
+    refetchInterval: 4_000,
+  })
+}
+
+export function useTask(id: string) {
+  return useQuery({
+    queryKey: ['task', id],
+    queryFn: () =>
+      ok(api.GET('/api/tasks/{task}', { params: { path: { task: id } } })),
+    refetchInterval: 2_000,
   })
 }
 

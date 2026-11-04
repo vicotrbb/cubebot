@@ -427,6 +427,9 @@ async fn attach(
     for delivery in deliveries {
         let delivery = Delivery {
             attachments: attachments.remove(&delivery.turn).unwrap_or_default(),
+            // The Broadcast channel shows replies only.
+            terminal: Vec::new(),
+            partial: None,
             turn: delivery.turn,
             room_message_id: delivery.room_message_id,
             agent_id: delivery.agent_id,
