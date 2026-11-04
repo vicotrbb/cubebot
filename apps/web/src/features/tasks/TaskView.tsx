@@ -1,13 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import {
-  ChevronLeft,
-  ChevronRight,
-  Circle,
-  CircleCheck,
-  CircleMinus,
-  Loader,
-} from 'lucide-react'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { Session } from '../../api/types'
@@ -24,7 +17,7 @@ import {
   type Task,
   type TaskItem,
 } from './status'
-import { TaskMark } from './TaskMark'
+import { ItemMark, TaskMark } from './TaskMark'
 import './tasks.css'
 
 /** One task: its private room, with the plan beside it on a desk and above it on a phone. */
@@ -121,14 +114,6 @@ function TaskHead({ task }: { task: Task }) {
       <Alert>{error}</Alert>
     </>
   )
-}
-
-function ItemMark({ status }: { status: string }) {
-  if (status === 'done') return <CircleCheck aria-label="Done" />
-  if (status === 'doing')
-    return <Loader className="spin" aria-label="In progress" />
-  if (status === 'skipped') return <CircleMinus aria-label="Skipped" />
-  return <Circle aria-label="Not started" />
 }
 
 function Plan({ task, phone }: { task: Task; phone: boolean }) {

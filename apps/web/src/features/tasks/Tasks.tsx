@@ -4,12 +4,20 @@ import { useState } from 'react'
 import { api, ok } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { keys, useAgents, useSession, useTasks } from '../../app/queries'
+import { taskHover } from '../../components/agentHover'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Skeleton } from '../../components/primitives'
 import { Composer } from '../chat/Composer'
 import '../chat/chat.css'
 import { ORCHESTRATOR_AVATAR } from './orchestrator'
-import { piles, sentenceOf, titleOf, type Pile, type Task } from './status'
+import {
+  doneCount,
+  piles,
+  sentenceOf,
+  titleOf,
+  type Pile,
+  type Task,
+} from './status'
 import { TaskMark } from './TaskMark'
 import './tasks.css'
 
@@ -38,8 +46,8 @@ export function Tasks() {
           </span>
           <h1>What do you want done?</h1>
           <p>
-            Say it once. The orchestrator picks the right agents, gives each
-            their part and comes back when it is finished.
+            Say it once. The orchestrator picks the right agents and gives each
+            their part. They report back here as they work.
           </p>
         </header>
         <div className="tasks__ask">
@@ -158,6 +166,7 @@ function TaskRow({
       params={{ taskId: task.id }}
       className="task-row"
       data-pile={pile}
+      {...taskHover(task.id)}
     >
       <TaskMark task={task} />
       <span className="task-row__title">{titleOf(task)}</span>
@@ -175,6 +184,14 @@ function TaskRow({
           )
         })}
       </span>
+      {/* Touch has no hover card, so the row itself says how far the plan got. */}
+      {task.items.length > 0 && (
+        <span className="plan__meter task-row__meter" aria-hidden="true">
+          <span
+            style={{ width: `${(doneCount(task) / task.items.length) * 100}%` }}
+          />
+        </span>
+      )}
     </Link>
   )
 }

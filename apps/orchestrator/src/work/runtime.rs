@@ -1,5 +1,5 @@
 //! Lanes (docs/adr/agents.md#agent-execution-lanes): one main-lane turn per agent, for direct chat, room work and messages, beside
-//! up to `task_lanes` delegated tasks. The ledger delivers conversation records; the agent
+//! up to `task_lanes` delegated tasks and tasks' turns, one per task. The ledger delivers conversation records; the agent
 //! assembles its own context.
 use super::Work;
 use crate::{
@@ -37,14 +37,19 @@ impl Work {
         let pending = sqlx::query!(
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
-                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base,
-                EXISTS(SELECT 1 FROM room_messages m JOIN rooms r ON r.id=m.room_id WHERE m.id=t.room_message_id AND r.task) AS "in_task!"
+                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, t.in_task
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
-                AND CASE WHEN t.awaited
-                    THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND o.awaited AND o.status IN ('running','waiting'))<a.task_lanes
-                    ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND o.status IN ('running','waiting'))
+                AND CASE WHEN t.awaited OR t.in_task
+                    THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND (o.awaited OR o.in_task) AND o.status IN ('running','waiting'))<a.task_lanes
+                        AND NOT (t.in_task AND EXISTS(
+                            SELECT 1 FROM chat_turns o
+                            JOIN room_messages om ON om.id=o.room_message_id
+                            JOIN room_messages tm ON tm.id=t.room_message_id AND tm.room_id=om.room_id
+                            WHERE o.conversation_id=$1 AND o.status IN ('running','waiting')
+                        ))
+                    ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND NOT o.in_task AND o.status IN ('running','waiting'))
                 END
             ORDER BY t.sequence
             LIMIT 1

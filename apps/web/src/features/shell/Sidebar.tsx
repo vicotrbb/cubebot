@@ -35,7 +35,7 @@ import {
   useTasks,
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
-import { agentHover } from '../../components/agentHover'
+import { agentHover, taskHover } from '../../components/agentHover'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Menu } from '../../components/primitives'
@@ -215,6 +215,7 @@ function TasksRow() {
                 params={{ taskId: task.id }}
                 className="row row--page"
                 activeProps={{ 'aria-current': 'page' }}
+                {...taskHover(task.id)}
               >
                 <TaskMark task={task} />
                 <span className="row__label">{titleOf(task)}</span>

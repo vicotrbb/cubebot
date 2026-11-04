@@ -8,6 +8,7 @@ import {
 import { Cube, moodOf } from '../../components/Cube'
 import { useAgent } from '../../app/queries'
 import { ACTIVITY } from '../shell/Sidebar'
+import { TaskCard } from '../tasks/TaskCard'
 import { doingOf } from './doing'
 import './hover.css'
 
@@ -25,7 +26,7 @@ function place(card: HTMLElement, x: number, y: number) {
   card.style.transform = `translate(${Math.max(4, left)}px, ${Math.max(4, top)}px)`
 }
 
-/** The one small card for whatever agent the pointer is on, wherever that agent appears. */
+/** The one small card for whatever agent or task the pointer is on, wherever it appears. */
 export function AgentHoverCard() {
   const hovered = useSyncExternalStore(subscribeHover, currentHover, () => null)
   const card = useRef<HTMLDivElement>(null)
@@ -77,7 +78,15 @@ export function AgentHoverCard() {
     if (hovered && card.current) place(card.current, hovered.x, hovered.y)
   })
   if (!hovered) return null
-  return createPortal(<Card ref={card} id={hovered.id} />, document.body)
+  return createPortal(
+    hovered.kind === 'task' ? (
+      // Each task's card plays its entrance, so moving down the list reads as a new card.
+      <TaskCard key={hovered.id} ref={card} id={hovered.id} />
+    ) : (
+      <Card ref={card} id={hovered.id} />
+    ),
+    document.body,
+  )
 }
 
 function Card({ id, ref }: { id: string; ref: React.Ref<HTMLDivElement> }) {

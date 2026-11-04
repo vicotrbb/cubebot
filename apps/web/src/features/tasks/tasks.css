@@ -54,6 +54,8 @@
 }
 .tasks__pile {
   display: grid;
+  /* Without this a long sentence's unwrapped width pushes its row out of the column. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
 }
 .tasks__pile-head {
@@ -115,6 +117,21 @@
 .task-row__cubes > * + * {
   margin-left: -6px;
 }
+.task-row__meter {
+  display: none;
+}
+@media (hover: none) {
+  .task-row {
+    flex-wrap: wrap;
+  }
+  .task-row__meter {
+    display: block;
+    order: 4;
+    flex-basis: calc(100% - 26px);
+    height: 3px;
+    margin: 2px 0 2px 26px;
+  }
+}
 /* A task's mark: a ring turning, a ring asking, a tick or a stop. */
 .task-mark {
   flex: none;
@@ -163,7 +180,12 @@
   font-size: var(--t-xl);
 }
 .task__state {
-  flex: none;
+  flex: 0 1 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
   font-size: var(--t-sm);
   color: var(--ink-faint);
 }
@@ -316,6 +338,10 @@
   .task__head {
     padding-inline: 12px;
   }
+  /* The plan's summary beneath says the same, and the title needs the width. */
+  .task__state {
+    display: none;
+  }
   .tasks__column {
     padding-inline: 16px;
   }
@@ -387,7 +413,238 @@
   width: 13px;
   height: 13px;
 }
+
+/* The task card: the agent card's shell, with the plan's progress playing in once it opens. */
+.task-card {
+  width: 312px;
+  gap: 10px;
+}
+.task-card__head {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+}
+.task-card__head .task-mark {
+  margin-top: 2px;
+}
+.task-card__what {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.task-card__what strong {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--t-sm);
+  font-weight: var(--w-head);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.task-card__what span {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.task-card[data-pile='needs_you'] .task-card__what span {
+  color: var(--orange-deep);
+}
+.task-card__count {
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+.task-card__meter {
+  height: 4px;
+  margin: 0;
+}
+.task-card[data-pile='finished'] .task-card__meter span {
+  background: var(--success);
+}
+.task-card__items {
+  display: grid;
+  gap: 1px;
+  margin: 0 -6px;
+  padding: 0;
+  list-style: none;
+}
+.task-card__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  font-size: var(--t-xs);
+  overflow: hidden;
+}
+.task-card__item > svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-faint);
+}
+.task-card__item[data-status='doing'] {
+  font-weight: var(--w-label);
+}
+.task-card__item[data-status='doing'] > svg {
+  color: var(--orange-deep);
+}
+.task-card__item[data-status='done'] > svg {
+  color: var(--success);
+}
+.task-card__item[data-status='done'] .task-card__label,
+.task-card__item[data-status='skipped'] .task-card__label {
+  color: var(--ink-soft);
+}
+.task-card__item[data-status='skipped'] .task-card__label {
+  text-decoration: line-through;
+}
+.task-card__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-card__more {
+  padding: 2px 6px 2px 28px;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.task-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.task-card__crew {
+  flex: none;
+  display: inline-flex;
+  /* A cube draws past its box; this keeps it inside the card's padding. */
+  margin-left: 4px;
+}
+.task-card__crew > * + * {
+  margin-left: -5px;
+}
+.task-card__names {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.task-card time {
+  flex: none;
+}
+.task-card__planning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+.task-card__dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.task-card__dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--orange);
+}
+.task-card[data-open='true'] .task-card__dots i {
+  animation: task-card-think 1.2s ease-in-out infinite;
+}
+.task-card__dots i:nth-child(2) {
+  animation-delay: 160ms;
+}
+.task-card__dots i:nth-child(3) {
+  animation-delay: 320ms;
+}
+/* Everything waits for the opening, which comes after the card has mounted unseen. */
+.task-card[data-open='true'] .task-card__meter span {
+  animation: task-card-fill 640ms var(--settle) 60ms backwards;
+}
+.task-card[data-open='true'] .task-card__item {
+  animation: task-card-arrive 280ms var(--settle) backwards;
+  animation-delay: calc(var(--i) * 45ms + 40ms);
+}
+.task-card[data-open='true'] .task-card__item[data-status='done'] > svg path {
+  stroke-dasharray: 16;
+  animation: task-card-tick 320ms var(--settle) backwards;
+  animation-delay: calc(var(--i) * 45ms + 180ms);
+}
+/* The light that passes over what is being worked on now. */
+.task-card__item[data-status='doing']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    var(--orange-wash) 50%,
+    transparent 80%
+  );
+  background-size: 220% 100%;
+  animation: task-card-sweep 2.2s ease-in-out infinite;
+}
+.task-card__items {
+  isolation: isolate;
+}
+@keyframes task-card-fill {
+  from {
+    width: 0;
+  }
+}
+@keyframes task-card-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes task-card-tick {
+  from {
+    stroke-dashoffset: 16;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes task-card-sweep {
+  from {
+    background-position: 110% 0;
+  }
+  to {
+    background-position: -110% 0;
+  }
+}
+@keyframes task-card-think {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  .task-card[data-open='true'] *,
+  .task-card__item[data-status='doing']::before {
+    animation: none;
+  }
+  .task-card__item[data-status='doing']::before {
+    background-position: 50% 0;
+  }
   .task-row,
   .plan__meter span,
   .row-tree__toggle svg,

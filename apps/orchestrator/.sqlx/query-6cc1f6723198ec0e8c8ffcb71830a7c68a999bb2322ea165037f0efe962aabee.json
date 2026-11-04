@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id, in_task)\n        VALUES ($1, $2, gen_random_uuid(), $3, $4, true)\n        ON CONFLICT (room_message_id,conversation_id) WHERE room_message_id IS NOT NULL DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6cc1f6723198ec0e8c8ffcb71830a7c68a999bb2322ea165037f0efe962aabee"
+}

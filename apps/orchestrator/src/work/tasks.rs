@@ -416,8 +416,14 @@ pub(super) struct Eligible {
     pub id: Uuid,
     pub name: String,
     pub about: String,
+    pub skills: Vec<String>,
+    /// Turns it has open, in any lane.
+    pub open: i64,
+    /// Tasks it can work on at once; more than this wait.
+    pub lanes: i16,
 }
 
+/// Least busy first, ties in no fixed order, so neither the list nor a fallback favors a name.
 pub(super) async fn eligible(
     tx: &mut Transaction<'_, Postgres>,
     owner: Uuid,
@@ -425,12 +431,14 @@ pub(super) async fn eligible(
     sqlx::query_as!(
         Eligible,
         r#"
-        SELECT g.id, g.name, left(g.instructions,300) AS "about!"
+        SELECT g.id, g.name, left(g.instructions,300) AS "about!", g.task_lanes AS lanes,
+            ARRAY(SELECT s.name FROM skill_installations i JOIN skills s ON s.id=i.skill_id WHERE i.agent_id=g.id ORDER BY s.name) AS "skills!",
+            (SELECT count(*) FROM chat_turns c WHERE c.conversation_id=g.id AND c.status IN ('queued','running','waiting','delegated')) AS "open!"
         FROM agents g
         JOIN human_accounts a ON a.id=$1 AND a.active
         WHERE g.desired_state<>'retired'
             AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants e WHERE e.actor_id=a.id AND e.scope_kind='conversation' AND e.scope_id=g.id AND e.capability='conversation.send'))
-        ORDER BY g.name, g.id
+        ORDER BY "open!", random()
         "#,
         owner,
     )
@@ -533,8 +541,8 @@ async fn deliver(
     super::wake(tx, crate::agents::AgentId(agent)).await?;
     sqlx::query!(
         "
-        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id)
-        VALUES ($1, $2, gen_random_uuid(), $3, $4)
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id, in_task)
+        VALUES ($1, $2, gen_random_uuid(), $3, $4, true)
         ON CONFLICT (room_message_id,conversation_id) WHERE room_message_id IS NOT NULL DO NOTHING
         ",
         agent,

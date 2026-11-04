@@ -236,6 +236,8 @@ pub struct Registry {
     mcp: std::sync::RwLock<Mcp>,
     /// One reconnection at a time, so concurrent lanes never start a server twice.
     connecting: tokio::sync::Mutex<()>,
+    /// Lanes run at once but share one mouse and screen, so a turn holds this while it uses them.
+    desktop: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 #[derive(Default)]
@@ -276,6 +278,7 @@ impl Registry {
             definitions,
             mcp: std::sync::RwLock::default(),
             connecting: tokio::sync::Mutex::new(()),
+            desktop: std::sync::Arc::default(),
         }
     }
 
@@ -407,6 +410,16 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
         matches!(self.sandbox.wait(command, Some(image)).await, Ok(Some(0)))
     }
 
+    /// Waits until no other turn is using the desktop.
+    pub async fn desktop(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.desktop.clone().lock_owned().await
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_desktop() -> Self {
+        Self::new(tests::sandbox(), vec![computer::tool()])
+    }
+
     pub fn computer(&self, name: &str) -> bool {
         self.definitions
             .iter()
@@ -447,6 +460,22 @@ mod tests {
         assert_eq!(display(&sandbox).await, b"");
         sandbox.desktop = true;
         assert_eq!(display(&sandbox).await, b":1");
+    }
+
+    #[tokio::test]
+    async fn the_desktop_is_one_turn_at_a_time() {
+        let registry = Registry::with_desktop();
+        let held = registry.desktop().await;
+        let waiting = registry.desktop();
+        tokio::pin!(waiting);
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(50), &mut waiting)
+                .await
+                .is_err(),
+            "a second turn waits while the first holds it"
+        );
+        drop(held);
+        waiting.await;
     }
 
     fn output(outcome: Outcome) -> (Option<i32>, String) {
