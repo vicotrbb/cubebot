@@ -201,6 +201,72 @@ async function conversation(page, tag) {
   ok(await noOverflow(page), `conversation fits (${tag})`)
 }
 
+/** The hover card on a desk; on touch no card, and the row says how far the plan got. */
+async function taskCard(page, tag, phone) {
+  const row = page
+    .locator('.tasks__pile[data-pile="working"] .task-row')
+    .first()
+  const column = await page.locator('.tasks__column').boundingBox()
+  const box = await row.boundingBox()
+  ok(
+    box.x + box.width <= column.x + column.width,
+    `a task's row stays in its column (${tag})`,
+  )
+  const card = page.locator('.task-card[data-open="true"]')
+  if (phone) {
+    ok(
+      await row.locator('.task-row__meter').isVisible(),
+      'a phone row has a meter',
+    )
+    await page.touchscreen.tap(box.x + box.width / 2, box.y - 400)
+    ok((await card.count()) === 0, 'touch opens no card')
+    return
+  }
+  ok(
+    !(await row.locator('.task-row__meter').isVisible()),
+    `the row's meter is for touch (${tag})`,
+  )
+  await row.hover()
+  await card.waitFor()
+  const text = await card.innerText()
+  ok(/Compare subtitle services/.test(text), `the card names the task (${tag})`)
+  ok(
+    /Working/.test(text) && /\d\/\d/.test(text),
+    `the card has state and count (${tag})`,
+  )
+  ok(
+    (await card.locator('.task-card__item[data-status="doing"]').count()) > 0,
+    `the card shows what is in progress (${tag})`,
+  )
+  ok(
+    (await card.locator('.task-card__foot').innerText()).includes('Ayla'),
+    `the card says who (${tag})`,
+  )
+  await page.waitForTimeout(900)
+  await shot(page, `task-card-${tag}`)
+  const placed = await card.boundingBox()
+  await page.mouse.move(box.x + 40, box.y + 8)
+  const moved = await card.boundingBox()
+  ok(placed.x !== moved.x, `the card follows the pointer (${tag})`)
+  await page.mouse.move(column.x + 5, column.y + 5)
+  await card.waitFor({ state: 'detached' })
+  ok(true, `the card leaves with the pointer (${tag})`)
+  const tree = page.locator('#task-tree a').first()
+  await tree.hover()
+  await card.waitFor()
+  ok(true, `the sidebar's task has the card too (${tag})`)
+  await shot(page, `task-card-tree-${tag}`)
+  await page.mouse.move(column.x + 5, column.y + 5)
+  await card.waitFor({ state: 'detached' })
+  await row.focus()
+  await page.keyboard.press('Shift+Tab')
+  await page.keyboard.press('Tab')
+  await card.waitFor()
+  ok(true, `the keyboard opens the card (${tag})`)
+  await page.keyboard.press('Escape')
+  await card.waitFor({ state: 'detached' })
+}
+
 async function tasks(page, tag, phone) {
   await page.goto(`${B}/tasks`)
   await page.getByRole('heading', { name: 'What do you want done?' }).waitFor()
@@ -220,6 +286,7 @@ async function tasks(page, tag, phone) {
   )
   await shot(page, `tasks-${tag}`)
   ok(await noOverflow(page), `tasks page fits (${tag})`)
+  await taskCard(page, tag, phone)
   await page.goto(`${B}/tasks/${seed.working}`)
   await page
     .getByRole('heading', { name: 'Compare subtitle services' })

@@ -1,6 +1,7 @@
-/** Which agent the pointer or keyboard is on, for the one card the shell draws. Handlers only
- *  mark the start: the card follows the pointer itself and notices it has left. */
+/** Which agent or task the pointer or keyboard is on, for the one card the shell draws. Handlers
+ *  only mark the start: the card follows the pointer itself and notices it has left. */
 export type Hovered = {
+  kind: 'agent' | 'task'
   id: string
   anchor: Element
   /** Where the card goes first; the pointer moves it from there. */
@@ -27,12 +28,19 @@ export function subscribeHover(listener: () => void) {
   }
 }
 
-/** What goes on anything that stands for an agent. Touch has no hover, so it is left alone. */
-export function agentHover(id: string) {
+/** What goes on anything that stands for an agent. */
+export const agentHover = (id: string) => hoverable('agent', id)
+
+/** What goes on anything that stands for a task. */
+export const taskHover = (id: string) => hoverable('task', id)
+
+/** Touch has no hover, so it is left alone. */
+function hoverable(kind: Hovered['kind'], id: string) {
   return {
     onPointerEnter: (event: React.PointerEvent) => {
       if (event.pointerType !== 'mouse') return
       setHover({
+        kind,
         id,
         anchor: event.currentTarget,
         x: event.clientX,
@@ -44,6 +52,7 @@ export function agentHover(id: string) {
       if (!event.target.matches(':focus-visible')) return
       const box = event.currentTarget.getBoundingClientRect()
       setHover({
+        kind,
         id,
         anchor: event.currentTarget,
         x: box.right,

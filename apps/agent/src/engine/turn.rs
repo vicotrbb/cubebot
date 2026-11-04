@@ -323,6 +323,7 @@ async fn start<P: Provider>(
         skills,
         collaboration,
         cancel,
+        desktop: None,
     }
     .converse(&mut context)
     .await
@@ -339,6 +340,9 @@ struct Session<'a, P> {
     skills: &'a Skills,
     collaboration: &'a Collaboration,
     cancel: watch::Receiver<bool>,
+    /// Held from this turn's first desktop call to its end, so another lane cannot move the mouse
+    /// between the steps of what this one is doing there.
+    desktop: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
 impl<P: Provider> Session<'_, P> {
@@ -472,6 +476,7 @@ impl<P: Provider> Session<'_, P> {
         &mut self,
         calls: &[FunctionCall],
     ) -> Result<Vec<(String, Option<String>)>, &'static str> {
+        self.hold_desktop(calls).await?;
         let prepared = prepare(
             self.tools,
             (self.memories, self.skills, self.collaboration),
@@ -515,6 +520,25 @@ impl<P: Provider> Session<'_, P> {
             return Err("cancelled");
         }
         Ok(outputs)
+    }
+
+    async fn hold_desktop(&mut self, calls: &[FunctionCall]) -> Result<(), &'static str> {
+        let Some(tools) = self.tools else {
+            return Ok(());
+        };
+        // A delegated task is refused these calls, so it has nothing to wait for.
+        if self.desktop.is_some()
+            || self.turn.task
+            || !calls.iter().any(|call| on_desktop(tools, call))
+        {
+            return Ok(());
+        }
+        let mut cancel = self.cancel.clone();
+        tokio::select! {
+            held = tools.desktop() => self.desktop = Some(held),
+            _ = cancel.wait_for(|cancelled| *cancelled) => return Err("cancelled"),
+        }
+        Ok(())
     }
 
     fn journal(&mut self, event: TurnEvent) -> Result<(), &'static str> {
@@ -650,6 +674,15 @@ fn prepare<'a>(
         .collect()
 }
 
+/// The call uses what lanes share: the screen and input, or the browser session shown there.
+fn on_desktop(tools: &Registry, call: &FunctionCall) -> bool {
+    crate::collaboration::drives_desktop(&call.name)
+        || tools.computer(&call.name)
+        || (call.name.starts_with("browser_")
+            && serde_json::from_str::<serde_json::Value>(&call.arguments)
+                .is_ok_and(|input| input["session"] == "main"))
+}
+
 /// Why a task lane may not make this call: the desktop and the main browser session belong to
 /// the main lane (docs/adr/agents.md#agent-execution-lanes, docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions).
 fn lane(
@@ -688,6 +721,31 @@ fn failed(code: &str) -> TurnEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn calls_that_use_what_lanes_share_hold_the_desktop() {
+        let tools = Registry::with_desktop();
+        let call = |name: &str, arguments: &str| FunctionCall {
+            call_id: "call".into(),
+            name: name.into(),
+            arguments: arguments.into(),
+        };
+        for shared in [
+            call("computer", "{}"),
+            call("request_login", "{}"),
+            call("vault_fill", "{}"),
+            call("browser_read", r#"{"session":"main"}"#),
+        ] {
+            assert!(on_desktop(&tools, &shared), "{}", shared.name);
+        }
+        for own in [
+            call("bash", "{}"),
+            call("browser_read", r#"{"session":"research"}"#),
+            call("browser_read", "not json"),
+        ] {
+            assert!(!on_desktop(&tools, &own), "{}", own.name);
+        }
+    }
 
     #[tokio::test]
     async fn a_task_lane_cannot_ask_for_a_login() {

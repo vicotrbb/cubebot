@@ -14,6 +14,7 @@ import { Markdown } from '../chat/Markdown'
 import { WorkCard, WorkLog } from '../chat/WorkCard'
 import '../chat/chat.css'
 import { ORCHESTRATOR_AVATAR } from '../tasks/orchestrator'
+import { rounds } from './rounds'
 
 const FINISHED = ['complete', 'failed', 'cancelled']
 
@@ -165,7 +166,13 @@ export function RoomView({
         {loaded && messages.length === 0 && (
           <Empty title="Nothing here yet.">{empty}</Empty>
         )}
-        {messages.map((message) => (
+        {(task
+          ? rounds(messages)
+          : messages.map((message) => ({
+              message,
+              deliveries: message.deliveries,
+            }))
+        ).map(({ message, deliveries }) => (
           <article className="exchange" key={message.id}>
             <div
               className={
@@ -206,7 +213,7 @@ export function RoomView({
                 </div>
               </div>
             )}
-            {message.deliveries.map((item) => (
+            {deliveries.map((item) => (
               <div className="msg msg--agent agent-message" key={item.turn}>
                 <DeliveryAvatar
                   agent={agentOf(item.agent_id)}

@@ -4,6 +4,7 @@ import {
   doneCount,
   pileOf,
   piles,
+  planWindow,
   sentenceOf,
   titleOf,
   type Task,
@@ -57,4 +58,38 @@ test('the sentence says what is happening', () => {
     '1 of 2 done',
   )
   expect(doneCount(task({ items: [item('skipped'), item('todo')] }))).toBe(1)
+})
+
+test('the card shows the part of a long plan where the work is', () => {
+  const plan = (statuses: string[]) =>
+    statuses.map((status, index) => ({
+      id: String(index),
+      task_id: 't',
+      agent_id: 'a',
+      position: index,
+      title: `Item ${index}`,
+      status,
+      note: null,
+    }))
+  const short = planWindow(plan(['done', 'doing', 'todo']))
+  expect([short.shown.length, short.before, short.after]).toEqual([3, 0, 0])
+  const middle = planWindow(
+    plan([
+      'done',
+      'done',
+      'done',
+      'doing',
+      'todo',
+      'todo',
+      'todo',
+      'todo',
+      'todo',
+    ]),
+  )
+  expect(middle.shown[0]?.title).toBe('Item 2')
+  expect([middle.before, middle.after]).toEqual([2, 2])
+  const finished = planWindow(plan(Array(7).fill('done')))
+  expect([finished.before, finished.after]).toEqual([2, 0])
+  const fresh = planWindow(plan(Array(7).fill('todo')))
+  expect([fresh.before, fresh.after]).toEqual([0, 2])
 })

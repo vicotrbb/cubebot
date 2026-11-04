@@ -48,7 +48,7 @@ Migration: combine prior histories in their existing message sequence order with
 
 ## Agent execution lanes
 
-Accepted 2026-10-22. Amended 2026-10-26: task lanes use the agent's one permanent conversation rather than a separate conversation ([One permanent conversation per agent](#one-permanent-conversation-per-agent)). Amended 2026-10-27: lanes are a scheduling rule inside the agent loop, not an orchestrator admission rule, and the runtime and tools share one sandbox ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)).
+Accepted 2026-10-22. Amended 2026-10-26: task lanes use the agent's one permanent conversation rather than a separate conversation ([One permanent conversation per agent](#one-permanent-conversation-per-agent)). Amended 2026-10-27: lanes are a scheduling rule inside the agent loop, not an orchestrator admission rule, and the runtime and tools share one sandbox ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)). Amended 2026-11-04, at the user's direction: a turn of a task from the Tasks page ([Tasks and the task orchestrator](rooms.md#tasks-and-the-task-orchestrator)) runs in a task lane, one per task and counted within the agent's limit. Such a turn may use the desktop, one turn at a time: it holds the desktop from its first desktop call until it ends, and the main lane takes the same hold. A delegated task still never uses the desktop.
 
 **Decision.** Adopt the OpenBot-style hybrid execution model described in the architecture discussion. The user selected this model on 2026-10-22. Lanes are scheduled by the agent inside its own loop.
 

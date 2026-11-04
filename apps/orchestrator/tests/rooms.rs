@@ -10,7 +10,7 @@ use cubebot_orchestrator::{
 };
 use uuid::Uuid;
 
-async fn agent(pool: &sqlx::PgPool, admin: &Actor, name: &str) -> Uuid {
+pub(crate) async fn agent(pool: &sqlx::PgPool, admin: &Actor, name: &str) -> Uuid {
     Agents::new(pool.clone())
         .create(
             admin,

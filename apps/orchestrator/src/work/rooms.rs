@@ -589,8 +589,8 @@ pub(super) async fn deliver(
     super::wake(tx, crate::agents::AgentId(agent)).await?;
     sqlx::query!(
         r#"
-        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id)
-        SELECT $2, COALESCE((SELECT k.created_by FROM tasks k WHERE k.room_id=m.room_id), m.actor_id), gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\n\n',m.message), m.id
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id, in_task)
+        SELECT $2, COALESCE((SELECT k.created_by FROM tasks k WHERE k.room_id=m.room_id), m.actor_id), gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\n\n',m.message), m.id, r.task
         FROM room_messages m
         JOIN rooms r ON r.id=m.room_id
         JOIN human_accounts a ON a.id=m.actor_id

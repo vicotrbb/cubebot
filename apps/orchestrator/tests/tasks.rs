@@ -1,4 +1,4 @@
-//! A task from request to summary, with the real agent binary and a scripted model: the orchestrator
+//! A task from request to result, with the real agent binary and a scripted model: the orchestrator
 //! plans, the agent works from a fork of its conversation, and nothing reaches that conversation.
 use crate::{
     memory_agent::{Model, Step, call, respond, text},
@@ -10,7 +10,7 @@ use cubebot_orchestrator::{
     agents::AgentId,
     connections::{Connections, Credentials},
     identity::{
-        Identity, IdentityError,
+        Actor, Identity, IdentityError,
         access::{Capability, GrantRequest, Recipient, Scope},
     },
     work::{
@@ -29,7 +29,7 @@ fn message(text: &str) -> SendMessage {
     }
 }
 
-async fn settled_turn(work: &Work, admin: &cubebot_orchestrator::identity::Actor, room: Uuid) {
+async fn settled_turn(work: &Work, admin: &Actor, room: Uuid) {
     for _ in 0..200 {
         let messages = work.room_messages(admin, room, 0).await.unwrap();
         let open = messages
@@ -112,7 +112,7 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
         "a task's room stays off the room list"
     );
 
-    let plan = json!({"title":"Venue comparison","say":"Ayla takes this.","action":"assign","assignments":[
+    let plan = json!({"title":"Venue comparison","say":"The venues are in Lisbon and Porto.","action":"assign","assignments":[
         {"agent":agent,"brief":"Compare the venues.","items":["Find them","Write it up"]},
         {"agent":Uuid::new_v4(),"brief":"An agent that does not exist","items":["x"]},
     ]});
@@ -130,6 +130,11 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     settled_turn(&work, &admin, task.room_id).await;
     let messages = work.room_messages(&admin, task.room_id, 0).await.unwrap();
     assert!(messages[1].orchestrator && messages[1].author == "Orchestrator");
+    assert!(
+        messages[1].message.ends_with(" on it."),
+        "the orchestrator hands over, it does not answer: {}",
+        messages[1].message
+    );
     let delivery = &messages[1].deliveries[0];
     assert_eq!(delivery.response.as_deref(), Some("Task answer"));
     assert_eq!(delivery.terminal.len(), 3, "its work shows in the room");
@@ -181,6 +186,7 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     // Agents settled, so the orchestrator is due; it cannot finish past open work, and finishing
     // closes the items the agent left.
     let finish = json!({"say":"Done: two venues compared.","action":"finish"}).to_string();
+    let before = work.room_messages(&admin, task.room_id, 0).await.unwrap();
     assert!(
         advance_replying(&f.pool, &connections, &finish)
             .await
@@ -189,6 +195,14 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     let done: Task = work.task(&admin, task.id).await.unwrap();
     assert_eq!(done.status, "done");
     assert_eq!(done.items[1].status, "done");
+    assert_eq!(
+        work.room_messages(&admin, task.room_id, 0)
+            .await
+            .unwrap()
+            .len(),
+        before.len(),
+        "finishing says nothing: the agent's reply is the result"
+    );
     assert!(
         !advance_replying(&f.pool, &connections, &finish)
             .await
@@ -208,6 +222,8 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     let asked = work.task(&admin, task.id).await.unwrap();
     assert_eq!(asked.status, "needs_you");
     assert!(!asked.reading);
+    let question = work.room_messages(&admin, task.room_id, 0).await.unwrap();
+    assert_eq!(question.last().unwrap().message, "Which city?");
 
     // An answer the model garbles three times leaves the person told, not the task stuck.
     work.post_room_message(&admin, task.room_id, &message("Lisbon"))
@@ -232,6 +248,158 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     let stopped = work.stop_task(&admin, task.id).await.unwrap();
     assert_eq!(stopped.status, "stopped");
     assert!(!advance(&f.pool, &connections).await.unwrap());
+}
+
+/// Waits until the room's newest delivery has this status.
+async fn delivery_is(work: &Work, admin: &Actor, room: Uuid, status: &str) {
+    for _ in 0..200 {
+        let messages = work.room_messages(admin, room, 0).await.unwrap();
+        if messages
+            .iter()
+            .rev()
+            .flat_map(|message| &message.deliveries)
+            .next()
+            .is_some_and(|delivery| delivery.status == status)
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the delivery never became {status}");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_agent_works_on_several_tasks_and_its_chat_at_once() {
+    let f = fixture().await;
+    let (auth, work, admin, agent) = native_chat_setup(&f, "Main hello").await;
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let model = Arc::new(Model::default());
+    let replies = |answer: &str| (vec![Step::Reply(json!([text(answer)]))], json!([]));
+    let (steps, extracted) = replies("Main answer");
+    model.turn(steps, extracted);
+    model.turn(vec![Step::Gated(json!([text("First")]))], json!([]));
+    let (provider, _provider) = http_server(
+        Router::new()
+            .route("/responses", axum::routing::post(respond))
+            .with_state(model.clone()),
+    )
+    .await;
+    let (origin, _server) = runtime_server(auth).await;
+    let _child = spawn_native_text(&origin, &provider);
+    for _ in 0..200 {
+        let turns = work.history(&admin, agent, 0).await.unwrap();
+        if turns.last().is_some_and(|turn| turn.status == "complete") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    let start = async |request: &str| {
+        let task = work
+            .create_task(
+                &admin,
+                &CreateTask {
+                    request_id: Uuid::new_v4(),
+                    request: request.into(),
+                },
+            )
+            .await
+            .unwrap();
+        let plan = json!({"action":"assign","assignments":[{"agent":agent,"brief":request,"items":["Do it"]}]});
+        assert!(
+            advance_replying(&f.pool, &connections, &plan.to_string())
+                .await
+                .unwrap()
+        );
+        task
+    };
+
+    // The first task's model call never answers, so its lane stays taken.
+    let first = start("First task").await;
+    delivery_is(&work, &admin, first.room_id, "running").await;
+    tokio::time::timeout(Duration::from_secs(20), model.gated.notified())
+        .await
+        .expect("the first task reached its model");
+
+    // Its other work goes on beside it: a second task and the main conversation.
+    let (steps, extracted) = replies("Second answer");
+    model.turn(steps, extracted);
+    let second = start("Second task").await;
+    delivery_is(&work, &admin, second.room_id, "complete").await;
+    let finish = json!({"action":"finish"}).to_string();
+    assert!(
+        advance_replying(&f.pool, &connections, &finish)
+            .await
+            .unwrap()
+    );
+    let (steps, extracted) = replies("Chat answer");
+    model.turn(steps, extracted);
+    let conversation = work.conversation(&admin, AgentId(agent)).await.unwrap();
+    work.send(&admin, conversation.id, &message("Still there?"))
+        .await
+        .unwrap();
+    for _ in 0..200 {
+        let turns = work.history(&admin, agent, 0).await.unwrap();
+        if turns.last().is_some_and(|turn| turn.status == "complete") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let turns = work.history(&admin, agent, 0).await.unwrap();
+    assert_eq!(turns.last().unwrap().status, "complete", "chat is not held");
+
+    // A task keeps its own order: a second turn in the first task waits for the one running there.
+    let name = sqlx::query_scalar!("SELECT name FROM agents WHERE id=$1", agent)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    work.post_room_message(
+        &admin,
+        first.room_id,
+        &message(&format!("@{name} also this")),
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    let queued = work.room_messages(&admin, first.room_id, 0).await.unwrap();
+    let last = queued.last().unwrap().deliveries.first().unwrap();
+    assert_eq!(last.status, "queued", "one turn at a time within a task");
+    // The agent's `task_lanes` still bound it: with the second lane taken, a new task waits.
+    let (steps, extracted) = (vec![Step::Gated(json!([text("Third")]))], json!([]));
+    model.turn(steps, extracted);
+    let third = start("Third task").await;
+    delivery_is(&work, &admin, third.room_id, "running").await;
+    let fourth = start("Fourth task").await;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    delivery_is(&work, &admin, fourth.room_id, "queued").await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn when_the_model_fails_a_task_goes_to_the_least_busy_agent() {
+    let f = fixture().await;
+    // `native_chat_setup` leaves its agent with a turn open; no name makes the other a worse pick.
+    let (_auth, work, admin, _busy) = native_chat_setup(&f, "hello").await;
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let free = crate::rooms::agent(&f.pool, &admin, "Zed").await;
+    let task = work
+        .create_task(
+            &admin,
+            &CreateTask {
+                request_id: Uuid::new_v4(),
+                request: "Do this".into(),
+            },
+        )
+        .await
+        .unwrap();
+    for _ in 0..3 {
+        advance_replying(&f.pool, &connections, "not json")
+            .await
+            .unwrap();
+    }
+    let handed = work.task(&admin, task.id).await.unwrap();
+    assert_eq!(handed.items[0].agent_id, free);
 }
 
 #[tokio::test]

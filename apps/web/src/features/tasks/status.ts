@@ -31,6 +31,26 @@ export function sentenceOf(task: Task) {
     : `${doneCount(task)} of ${task.items.length} done`
 }
 
+/** The card's line under the title; its plan already says who is on what. */
+export function headlineOf(task: Task) {
+  return pileOf(task) === 'working' && task.items.length > 0 && !task.reading
+    ? 'Working'
+    : sentenceOf(task)
+}
+
+/** A short stretch of the plan around what is happening now; the counts say what it leaves out. */
+export function planWindow(items: TaskItem[], size = 5) {
+  const doing = items.findIndex((item) => item.status === 'doing')
+  const open = doing >= 0 ? doing : items.findIndex((i) => i.status === 'todo')
+  const from = open >= 0 ? open - 1 : items.length
+  const before = Math.max(0, Math.min(from, items.length - size))
+  return {
+    shown: items.slice(before, before + size),
+    before,
+    after: Math.max(0, items.length - before - size),
+  }
+}
+
 export function doneCount(task: Pick<Task, 'items'>) {
   return task.items.filter(
     (item) => item.status === 'done' || item.status === 'skipped',
