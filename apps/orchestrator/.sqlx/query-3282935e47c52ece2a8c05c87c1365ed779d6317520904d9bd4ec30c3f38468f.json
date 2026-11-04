@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1\n            FROM chat_turns c\n            JOIN room_messages m ON m.id=c.room_message_id\n            JOIN tasks t ON t.room_id=m.room_id\n            JOIN human_accounts a ON a.id=$1\n            WHERE c.id=$2 AND t.created_by<>a.id AND a.role<>'administrator'\n        ) AS \"refused!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "refused!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3282935e47c52ece2a8c05c87c1365ed779d6317520904d9bd4ec30c3f38468f"
+}

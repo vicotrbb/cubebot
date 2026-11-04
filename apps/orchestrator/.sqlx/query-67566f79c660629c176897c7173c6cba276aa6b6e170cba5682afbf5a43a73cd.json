@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT format('- %s is %s',g.name,c.status) AS \"line!\"\n        FROM chat_turns c\n        JOIN agents g ON g.id=c.conversation_id\n        JOIN room_messages m ON m.id=c.room_message_id\n        WHERE m.room_id=$1 AND c.status IN ('queued','running','waiting','delegated')\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "line!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "67566f79c660629c176897c7173c6cba276aa6b6e170cba5682afbf5a43a73cd"
+}

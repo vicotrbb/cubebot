@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT t.id, t.room_id AS room, t.created_by AS owner, t.title, t.request, t.rounds, t.attempts\n        FROM tasks t\n        WHERE EXISTS(SELECT 1 FROM room_messages m WHERE m.room_id=t.room_id AND m.routing='routing')\n            OR (t.status='working' AND NOT EXISTS(\n                SELECT 1 FROM chat_turns c JOIN room_messages m ON m.id=c.room_message_id\n                JOIN agents g ON g.id=c.conversation_id AND g.desired_state<>'retired'\n                WHERE m.room_id=t.room_id AND c.status IN ('queued','running','waiting','delegated')\n            ))\n        ORDER BY t.updated_at\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "room",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "request",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "rounds",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "attempts",
+        "type_info": "Int2"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "19786cacf913ebab08ccfae153f2f13cbdafa9eb2d4e5f2f18a15cfa077d212b"
+}

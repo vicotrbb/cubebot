@@ -59,6 +59,25 @@ impl Work {
         .fetch_optional(&mut *tx)
         .await?;
         let human = human.ok_or(Error::Conflict)?;
+        // Offered no such tool, a model may still name it; the work would land outside the room.
+        let in_task = sqlx::query_scalar!(
+            r#"
+            SELECT EXISTS(
+                SELECT 1 FROM chat_turns c
+                JOIN room_messages m ON m.id=c.room_message_id
+                JOIN rooms r ON r.id=m.room_id
+                WHERE c.id=$1 AND r.task
+            ) AS "in_task!"
+            "#,
+            turn,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if in_task {
+            return Ok(Err(
+                "in a task, use task_message to reach other agents".into()
+            ));
+        }
         let previous = sqlx::query!(
             "
             SELECT id, parent_turn_id
@@ -327,7 +346,7 @@ async fn create(
         SELECT a.id
         FROM agents a
         WHERE a.name=$2 AND a.id<>$1 AND a.desired_state<>'retired'
-            AND EXISTS(SELECT 1 FROM room_members m JOIN room_members n ON n.room_id=m.room_id WHERE m.agent_id=$1 AND n.agent_id=a.id)
+            AND EXISTS(SELECT 1 FROM room_members m JOIN room_members n ON n.room_id=m.room_id JOIN rooms r ON r.id=m.room_id WHERE m.agent_id=$1 AND n.agent_id=a.id AND NOT r.task)
         ",
         actor.agent.0,
         &input.agent,
@@ -517,7 +536,7 @@ pub(super) async fn with_peers(
         FROM room_members m
         JOIN room_members n ON n.room_id=m.room_id AND n.agent_id<>m.agent_id
         JOIN agents a ON a.id=n.agent_id AND a.desired_state<>'retired'
-        JOIN rooms r ON r.id=m.room_id
+        JOIN rooms r ON r.id=m.room_id AND NOT r.task
         WHERE m.agent_id=$1
         GROUP BY a.name
         ORDER BY a.name

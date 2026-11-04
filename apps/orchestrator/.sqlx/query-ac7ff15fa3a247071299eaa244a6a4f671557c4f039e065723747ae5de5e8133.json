@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT c.id, c.conversation_id\n            FROM chat_turns c\n            JOIN room_messages m ON m.id=c.room_message_id\n            WHERE m.room_id=$1 AND c.status=ANY($2)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "conversation_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ac7ff15fa3a247071299eaa244a6a4f671557c4f039e065723747ae5de5e8133"
+}

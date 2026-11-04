@@ -114,11 +114,12 @@ impl Work {
         let work = sqlx::query_as!(
             OpenWork,
             r#"
-            SELECT t.id AS turn, t.conversation_id AS agent, m.room_id AS "room?", t.status, t.error,
-                left(COALESCE(m.message, t.message), 160) AS "message!",
+            SELECT t.id AS turn, t.conversation_id AS agent, CASE WHEN r.task THEN NULL ELSE m.room_id END AS "room?", t.status, t.error,
+                CASE WHEN r.task THEN 'On a task' ELSE left(COALESCE(m.message, t.message), 160) END AS "message!",
                 (to_jsonb(t.status_at) #>> '{}') AS "since!"
             FROM chat_turns t
             LEFT JOIN room_messages m ON m.id=t.room_message_id
+            LEFT JOIN rooms r ON r.id=m.room_id
             WHERE t.conversation_id=ANY($1) AND t.status IN ('queued','running','delegated','waiting')
             ORDER BY t.status_at
             LIMIT 50
@@ -132,10 +133,12 @@ impl Work {
             r#"
             SELECT kind AS "kind!", agent AS "agent!", turn, room, text AS "text!", (to_jsonb(at) #>> '{}') AS "at!"
             FROM (
-                (SELECT 'turn_' || t.status AS kind, t.conversation_id AS agent, t.id AS turn, m.room_id AS room,
-                    left(COALESCE(m.message, t.message), 160) AS text, t.status_at AS at
+                (SELECT 'turn_' || t.status AS kind, t.conversation_id AS agent, t.id AS turn,
+                    CASE WHEN r.task THEN NULL ELSE m.room_id END AS room,
+                    CASE WHEN r.task THEN 'On a task' ELSE left(COALESCE(m.message, t.message), 160) END AS text, t.status_at AS at
                 FROM chat_turns t
                 LEFT JOIN room_messages m ON m.id=t.room_message_id
+                LEFT JOIN rooms r ON r.id=m.room_id
                 WHERE t.conversation_id=ANY($1) AND t.status IN ('complete','failed','cancelled')
                 ORDER BY t.status_at DESC
                 LIMIT 12)
@@ -169,7 +172,7 @@ impl Work {
                 (SELECT to_jsonb(max(fetched_at)) #>> '{}' FROM model_prices) AS prices_at,
                 COALESCE((SELECT sum(size) FROM blobs), 0)::int8 AS "stored!",
                 (SELECT count(*) FROM human_accounts WHERE active) AS "people!",
-                (SELECT count(*) FROM rooms) AS "rooms!"
+                (SELECT count(*) FROM rooms WHERE NOT task) AS "rooms!"
             "#
         )
         .fetch_one(&mut *tx)

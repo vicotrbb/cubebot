@@ -271,7 +271,8 @@
   position: fixed;
   left: 12px;
   right: 12px;
-  top: 12px;
+  /* Above the composer: the page's header and a task's plan must stay reachable. */
+  bottom: calc(var(--bottombar-h) + env(safe-area-inset-bottom) + 132px);
   z-index: 25;
   display: grid;
   gap: 6px;
@@ -313,4 +314,106 @@
     grid-column: 1 / -1;
     justify-content: flex-end;
   }
+}
+
+/* Several desktops stack: the front one is live, and the ones behind peek above it. */
+.pip__behind {
+  position: absolute;
+  left: 50%;
+  height: 16px;
+  border: 1px solid var(--line-strong);
+  border-bottom: 0;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: var(--raised);
+  transform: translateX(-50%);
+}
+.pip__behind--1 {
+  top: -8px;
+  width: 94%;
+  z-index: -1;
+}
+.pip__behind--2 {
+  top: -15px;
+  width: 88%;
+  z-index: -2;
+  opacity: 0.75;
+}
+.pip--stacked {
+  isolation: isolate;
+  overflow: visible;
+}
+.pip--stacked .pip__screen {
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  overflow: hidden;
+}
+.pip--stacked .pip__head {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  background: var(--raised);
+}
+.pip-pill--list {
+  padding: 0;
+  border-radius: var(--r-lg);
+}
+.pip-pill--list .pip__picker {
+  flex: 1;
+  border: 0;
+}
+.pip__count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  min-height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--orange-wash);
+  color: var(--orange-deep);
+  font: inherit;
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+}
+.pip__count svg {
+  width: 12px;
+  height: 12px;
+}
+.pip__picker {
+  display: grid;
+  gap: 1px;
+  padding: 4px;
+  border-bottom: 1px solid var(--line);
+  max-height: 220px;
+  overflow: auto;
+}
+.pip__choice {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--t-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.pip__choice:hover,
+.pip__choice:focus-visible {
+  background: var(--inset);
+}
+.pip__choice[aria-current='true'] {
+  font-weight: var(--w-strong);
+}
+.pip__choice span:last-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

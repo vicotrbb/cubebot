@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE room_messages SET routing='routed' WHERE room_id=$1 AND routing='routing' AND sequence<=$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2ce0bc14b58e9d1cde0fd74e4738d58104ec5a7ed0c3df571e1c4bf270bfe00c"
+}

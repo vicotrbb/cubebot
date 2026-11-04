@@ -100,6 +100,20 @@ pub struct RevokeGrant {
     pub expected_revision: i64,
 }
 
+/// A grant in force.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct GrantSummary {
+    pub id: Uuid,
+    pub revision: i64,
+    pub account_id: Option<Uuid>,
+    pub team_id: Option<Uuid>,
+    /// `agent`, `room` or `conversation`; an agent's conversation has the agent's id.
+    pub scope_kind: String,
+    pub scope_id: Uuid,
+    /// As in `Capability`, such as `conversation_send`.
+    pub capability: String,
+}
+
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct AccessSource {
     pub id: GrantId,
@@ -114,6 +128,23 @@ pub struct AccessExplanation {
 }
 
 impl Identity {
+    /// Every grant in force, for the screen that shows who can do what.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
+    pub async fn grants(&self, actor: &Actor) -> Result<Vec<GrantSummary>, IdentityError> {
+        self.require_administrator(actor).await?;
+        Ok(sqlx::query_as!(
+            GrantSummary,
+            r#"
+            SELECT id, revision, account_id, team_id, scope_kind, scope_id,
+                replace(capability,'.','_') AS "capability!"
+            FROM access_grants
+            WHERE revoked_at IS NULL
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     #[tracing::instrument(skip_all, fields(actor = %actor.id, request = %input.request_id))]
     pub async fn grant(
         &self,

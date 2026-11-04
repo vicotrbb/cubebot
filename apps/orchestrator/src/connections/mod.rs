@@ -316,6 +316,26 @@ impl Connections {
         self.connection(tx, None).await
     }
 
+    /// The task orchestrator's model: the one chosen for it, under its provider's saved key, or the
+    /// connection the agents use.
+    #[tracing::instrument(skip_all)]
+    pub(crate) async fn task_orchestrator(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        provider: Option<ProviderKind>,
+        model: Option<&str>,
+    ) -> Result<Inference, IdentityError> {
+        let (Some(provider), Some(model)) = (provider, model) else {
+            return self.coordinator(tx).await;
+        };
+        Ok(Inference {
+            provider,
+            model: model.to_owned(),
+            api_key: self.saved_key(tx, provider).await?,
+            context_window: None,
+        })
+    }
+
     async fn connection(
         &self,
         tx: &mut Transaction<'_, Postgres>,

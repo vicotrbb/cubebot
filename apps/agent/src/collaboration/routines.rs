@@ -76,7 +76,12 @@ impl Collaboration {
             tool: name.into(),
             input,
         };
-        Some(Ok(Box::pin(async move {
+        Some(Ok(self.forward(call)))
+    }
+
+    /// Sends one tool call to the orchestrator, whose answer is what the model reads.
+    pub(super) fn forward(&self, call: RoutineCall) -> Running<'_> {
+        Box::pin(async move {
             let sent = match &self.client {
                 Some(client) => client.routine(self.turn, &call).await,
                 None => Err(crate::control::Error::Unavailable(None)),
@@ -90,6 +95,6 @@ impl Collaboration {
                 ),
             };
             Outcome::Exited { code, output }
-        })))
+        })
     }
 }

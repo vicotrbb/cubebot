@@ -111,3 +111,11 @@ Device subscriptions are associated with the correct installation and user. Logo
 **Open details.** Event taxonomy and categories; recipient rules; inbox retention and read state; preference defaults; aggregation, rate limits and quiet times; payload privacy; device lifecycle; push infrastructure and browser qualification; and delivery retry policy.
 
 **Validation scenarios.** Create an authorized inbox notification; deliver optional push; respect opt-out; keep the inbox entry after push failure; suppress unauthorized content; enforce access when a link opens; handle duplicate delivery attempts; and prevent subscriptions from crossing user accounts.
+
+## Drawn content runs in a sandbox with no network
+
+Accepted 2026-11-04, from the user's request that everything that can be rendered is rendered.
+
+**Decision.** A message's `html`, `svg`, `mermaid`, `markdown`, `csv`, `tsv` and `math` fences, and files of those kinds, show their result with their source one click away. HTML and SVG run in an iframe sandboxed with `allow-scripts` alone, whose page starts with a Content-Security-Policy that blocks every network request. The frame has an opaque origin, so it cannot reach the console, its cookies or the API; the policy keeps it from calling out or loading anything. This replaces the HTML file viewer's earlier `sandbox=""` with scripts off, since a page without its scripts is often not the page; external images staying off remains the rule, as in [Markdown messages](#conversation-first-workspace).
+
+**Consequences.** Previews that need a CDN, a font service or an API do not work, and agents are told to inline everything. A framed page can still navigate itself, which no policy prevents; what it could send is only its own source. JSX and other source needing a build shows as code.

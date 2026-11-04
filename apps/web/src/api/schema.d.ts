@@ -851,7 +851,8 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    get?: never
+    /** Every grant in force; administrators only. */
+    get: operations['list_grants']
     put?: never
     post: operations['grant']
     delete?: never
@@ -1686,6 +1687,78 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/tasks': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The caller's tasks, or every task for an administrator, most recently active first. */
+    get: operations['list_tasks']
+    put?: never
+    /**
+     * Records what the person wants; the orchestrator picks it up. Repeating `request_id` returns the
+     *     same task. 409 when the caller has no agent to hand it to.
+     */
+    post: operations['create_task']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Administrators only. */
+    get: operations['task_settings']
+    /** Administrators only; 409 when `revision` is not the current one. */
+    put: operations['save_task_settings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/{task}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['get_task']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tasks/{task}/stop': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Cancels the task's open turns. Writing in its room starts it again. */
+    post: operations['stop_task']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/vault': {
     parameters: {
       query?: never
@@ -1769,6 +1842,11 @@ export interface components {
       kind: string
       /** Format: uuid */
       room?: string | null
+      /**
+       * Format: uuid
+       * @description The task whose room this is; such work is answered on the Tasks page.
+       */
+      task?: string | null
       text: string
       /** Format: uuid */
       turn?: string | null
@@ -2074,6 +2152,11 @@ export interface components {
       /** @description Makes a webhook secret, returned once. */
       webhook?: boolean
     }
+    CreateTask: {
+      request: string
+      /** Format: uuid */
+      request_id: string
+    }
     CreateTeam: {
       name: string
       /** Format: uuid */
@@ -2126,8 +2209,12 @@ export interface components {
       /** @description Files the agent sent with this reply. */
       attachments: components['schemas']['ReplyAttachment'][]
       error?: string | null
+      /** @description The reply as far as it has been written, while there is no `response`. */
+      partial?: string | null
       response?: string | null
       status: string
+      /** @description What the agent has done so far, tool by tool. */
+      terminal: components['schemas']['Progress'][]
       /** Format: uuid */
       turn: string
     }
@@ -2251,6 +2338,23 @@ export interface components {
       /** Format: uuid */
       request_id: string
       scope: components['schemas']['Scope']
+    }
+    /** @description A grant in force. */
+    GrantSummary: {
+      /** Format: uuid */
+      account_id?: string | null
+      /** @description As in `Capability`, such as `conversation_send`. */
+      capability: string
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      revision: number
+      /** Format: uuid */
+      scope_id: string
+      /** @description `agent`, `room` or `conversation`; an agent's conversation has the agent's id. */
+      scope_kind: string
+      /** Format: uuid */
+      team_id?: string | null
     }
     /**
      * @description One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:
@@ -2646,7 +2750,7 @@ export interface components {
           mode: 'explicit_grants'
         }
     /** @enum {string} */
-    ProviderKind: 'openai' | 'anthropic' | 'openrouter'
+    ProviderKind: 'openai' | 'anthropic' | 'openrouter' | 'gemini' | 'grok'
     ProviderSummary: {
       access: components['schemas']['ProviderAccess']
       /** Format: int64 */
@@ -2776,12 +2880,19 @@ export interface components {
     }
     RoomMessage: {
       author: string
+      /**
+       * Format: uuid
+       * @description In a task's room: the agent that wrote this.
+       */
+      author_agent_id?: string | null
       deliveries: components['schemas']['Delivery'][]
       /** Format: uuid */
       id: string
       message: string
       /** @description The coordinator's question, the continued task's agent, or the failure reason. */
       note?: string | null
+      /** @description In a task's room: the task orchestrator wrote this. */
+      orchestrator: boolean
       /**
        * @description `routing` until the coordinator settles it as `routed`, `continued` or `failed`;
        *     mentioned messages are `routed` at once. Messages from before 2026-11-03 may also be
@@ -3021,9 +3132,68 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    Task: {
+      agents: components['schemas']['Member'][]
+      /** @description A turn of this task waits for a person: to retry it, raise a budget or stop it. */
+      blocked: boolean
+      created_at: string
+      /** Format: uuid */
+      id: string
+      items: components['schemas']['TaskItem'][]
+      /** @description The login of the person it belongs to. */
+      owner: string
+      /** @description A person's message waits for the orchestrator. */
+      reading: boolean
+      request: string
+      /**
+       * Format: uuid
+       * @description The room whose messages and events carry the task's conversation.
+       */
+      room_id: string
+      /** @description `working`, `needs_you`, `done` or `stopped`. */
+      status: string
+      /** @description The orchestrator's name for the task; `None` until its first answer. */
+      title?: string | null
+      updated_at: string
+    }
+    TaskItem: {
+      /** Format: uuid */
+      agent_id: string
+      /** Format: uuid */
+      id: string
+      note?: string | null
+      /**
+       * Format: int32
+       * @description The number the agent knows it by.
+       */
+      position: number
+      /** @description `todo`, `doing`, `done` or `skipped`. */
+      status: string
+      title: string
+    }
+    TaskSettings: {
+      /** @description Added to the orchestrator's own instructions. */
+      instructions: string
+      /**
+       * Format: int32
+       * @description Most agents one round of work may involve.
+       */
+      max_agents: number
+      /**
+       * Format: int32
+       * @description Rounds of follow-up work the orchestrator may start before it asks the person.
+       */
+      max_rounds: number
+      model?: string | null
+      provider?: null | components['schemas']['ProviderKind']
+      /** Format: int64 */
+      revision: number
+    }
     Team: {
       active: boolean
       id: components['schemas']['TeamId']
+      /** @description The accounts in the team. */
+      members: string[]
       name: string
       /** Format: int64 */
       revision: number
@@ -4635,6 +4805,25 @@ export interface operations {
       }
     }
   }
+  list_grants: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['GrantSummary'][]
+        }
+      }
+    }
+  }
   grant: {
     parameters: {
       query?: never
@@ -6132,6 +6321,132 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['SkillRevision']
+        }
+      }
+    }
+  }
+  list_tasks: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task'][]
+        }
+      }
+    }
+  }
+  create_task: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateTask']
+      }
+    }
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task']
+        }
+      }
+    }
+  }
+  task_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TaskSettings']
+        }
+      }
+    }
+  }
+  save_task_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskSettings']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TaskSettings']
+        }
+      }
+    }
+  }
+  get_task: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task']
+        }
+      }
+    }
+  }
+  stop_task: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        task: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Task']
         }
       }
     }

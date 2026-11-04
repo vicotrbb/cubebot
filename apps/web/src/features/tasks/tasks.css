@@ -1,0 +1,397 @@
+/* Tasks: a quiet page with one question, and what you asked for underneath. */
+.tasks {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.tasks__column {
+  width: min(720px, 100%);
+  margin-inline: auto;
+  padding: clamp(32px, 9vh, 88px) 20px 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+}
+.tasks__hello {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.tasks__hello h1 {
+  font-size: clamp(1.625rem, 4vw, 2.125rem);
+  font-weight: var(--w-head);
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.tasks__hello p {
+  max-width: 46ch;
+  color: var(--ink-soft);
+  text-wrap: balance;
+}
+.tasks__stack {
+  display: inline-flex;
+  margin-bottom: 8px;
+}
+.tasks__ask .composer {
+  border-top: 0;
+  padding: 0;
+  background: none;
+}
+.tasks__crew {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.tasks__crew-cubes {
+  display: inline-flex;
+}
+.tasks__crew-cubes > * + * {
+  margin-left: -6px;
+}
+.tasks__pile {
+  display: grid;
+  gap: 2px;
+}
+.tasks__pile-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 10px 4px;
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  color: var(--ink-faint);
+}
+.tasks__pile[data-pile='needs_you'] .tasks__pile-head {
+  color: var(--orange-deep);
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: var(--r-md);
+  color: inherit;
+  text-decoration: none;
+  transition: background var(--quick) var(--settle);
+}
+.task-row:hover {
+  background: var(--inset);
+}
+.task-row:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+.task-row__title {
+  flex: 1 1 40%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--w-label);
+}
+.task-row[data-pile='finished'] .task-row__title {
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.task-row__sentence {
+  flex: 0 1 45%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+}
+.task-row__cubes {
+  flex: none;
+  display: inline-flex;
+}
+.task-row__cubes > * + * {
+  margin-left: -6px;
+}
+/* A task's mark: a ring turning, a ring asking, a tick or a stop. */
+.task-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.task-mark[data-state='working'] {
+  color: var(--orange-deep);
+}
+.task-mark[data-state='needs_you'] {
+  color: var(--orange-deep);
+}
+.task-mark[data-state='done'] {
+  color: var(--success);
+}
+.task-mark[data-state='stopped'] {
+  color: var(--ink-faint);
+}
+.tasks__older {
+  justify-self: start;
+  margin-left: 10px;
+}
+
+/* One task: its room, with the plan beside it. */
+.task {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.task__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--header-h);
+  padding: 7px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.task__head h1 {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-xl);
+}
+.task__state {
+  flex: none;
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+}
+.task__body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+.task__room {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.task__plan {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  border-left: 1px solid var(--line);
+  background: var(--ground);
+}
+.task__plan > summary {
+  display: none;
+}
+.plan__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+}
+.plan__meter {
+  height: 4px;
+  margin-bottom: 16px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.plan__meter span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--orange);
+  transition: width 240ms var(--settle);
+}
+.plan__agent {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.plan__who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+}
+.plan__items {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.plan__item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 8px;
+  padding: 3px 0;
+  font-size: var(--t-sm);
+  line-height: 1.35;
+}
+.plan__item svg {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  color: var(--ink-faint);
+}
+.plan__item[data-status='doing'] svg {
+  color: var(--orange-deep);
+}
+.plan__item[data-status='done'] svg {
+  color: var(--success);
+}
+.plan__item[data-status='done'] > span,
+.plan__item[data-status='skipped'] > span {
+  color: var(--ink-soft);
+}
+.plan__item[data-status='skipped'] > span {
+  text-decoration: line-through;
+}
+.plan__note {
+  display: block;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  text-decoration: none;
+}
+.plan__empty {
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+}
+@media (max-width: 900px) {
+  .task__body {
+    display: flex;
+    flex-direction: column;
+  }
+  .task__room {
+    flex: 1;
+    order: 2;
+  }
+  .task__plan {
+    flex: none;
+    order: 1;
+    max-height: 45dvh;
+    padding: 0;
+    border-left: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .task__plan > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 16px;
+    list-style: none;
+    font-size: var(--t-sm);
+    font-weight: var(--w-strong);
+    cursor: pointer;
+  }
+  .task__plan > summary::-webkit-details-marker {
+    display: none;
+  }
+  .task__plan > summary svg {
+    width: 14px;
+    height: 14px;
+    transition: transform var(--quick) var(--settle);
+  }
+  .task__plan[open] > summary svg {
+    transform: rotate(90deg);
+  }
+  .plan__body {
+    padding: 0 16px 8px;
+  }
+  .plan__title {
+    display: none;
+  }
+  .task__head {
+    padding-inline: 12px;
+  }
+  .tasks__column {
+    padding-inline: 16px;
+  }
+  .task-row {
+    flex-wrap: wrap;
+  }
+  .task-row__title {
+    flex-basis: calc(100% - 90px);
+  }
+  .task-row__sentence {
+    order: 3;
+    flex-basis: 100%;
+    padding-left: 26px;
+    text-align: left;
+  }
+}
+
+/* Tasks in the sidebar: the row opens to a tree of what is running. */
+.row-tree {
+  display: flex;
+  align-items: center;
+}
+.row-tree > .row {
+  flex: 1;
+  min-width: 0;
+}
+.row-tree__toggle {
+  appearance: none;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: 2px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.row-tree__toggle:hover {
+  background: var(--inset);
+  color: var(--ink);
+}
+.row-tree__toggle:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+.row-tree__toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--quick) var(--settle);
+}
+.row-tree__toggle[aria-expanded='false'] svg {
+  transform: rotate(-90deg);
+}
+.task-tree {
+  margin: 1px 0 4px 15px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--line-strong);
+  list-style: none;
+}
+.task-tree .row {
+  gap: 7px;
+  min-height: 28px;
+  font-size: var(--t-sm);
+}
+.task-tree .task-mark {
+  width: 13px;
+  height: 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-row,
+  .plan__meter span,
+  .row-tree__toggle svg,
+  .task__plan > summary svg {
+    transition: none;
+  }
+}

@@ -57,6 +57,14 @@ The contract the console needs beyond what the orchestrator serves today. Runtim
 
 `/sign-in`, `/` (redirects to the first favorite or agent), `/activity`, `/agents/$agentId` with child tabs `/about`, `/memories`, `/dreams`, `/skills`, `/routines`, `/vault`, `/files`, `/access`, `/status`, and `/desktop`; `/rooms/$roomId` with `/members`; `/files` and `/files/$folderId`; `/skills` and `/skills/$skillId`; `/platform/people`, `/teams`, `/access`, `/sign-in`, `/providers`, `/vault`, `/audit`, `/health`; `/you`.
 
+## Tasks (2026-11-04)
+
+`/tasks` asks one question, "What do you want done?", above the person's tasks grouped as Needs you, Working and Finished. `/tasks/$taskId` is the task's room with its plan beside it, above it on a phone. The sidebar's Tasks row gains a chevron while tasks run, opening to a tree of them; the choice is kept in preferences. Platform › Tasks chooses the orchestrator's model, its limits and its house rules. The orchestrator wears the brand's orange block with an antenna, the only cube not chosen by a person. See [Tasks and the task orchestrator](../adr/rooms.md#tasks-and-the-task-orchestrator).
+
+Live desktops stack into one floating window with the others peeking behind it, and its counter opens a list to choose which to watch; only the front one holds a connection. A phone shows one line with the same list.
+
+Work reads as a rail of sentences ("Wrote subtitles.ts in finder"), each opening to highlighted code, a diff or a terminal, which stays dark in either theme.
+
 ## Situation room (2026-11-04)
 
 `/situation`, below Broadcast in the sidebar and on a phone's Home page: everything happening on the installation for the agents the viewer may read. It is the one screen that is an overview rather than a conversation, so it is a ruled ledger, not a wall of tiles: one sentence on what needs a person, or that nothing does; Spend (today, 7 days, this month, 30 daily bars, models); Agents, each with what it is doing and its month against its budget; and a rail of Now and Latest. The page itself never scrolls: it fills the pane and each list (Agents, Now, Latest, Models) scrolls in its own space, with Platform a one-line strip at the bottom. A pane too short to hold that scrolls as a whole rather than crushing the lists. Too narrow for the sections side by side, it shows the sentence and one view at a time: Now, Agents or Spend. Colour stays for what wants attention, and state is always in words too. An agent's Usage tab reuses the same meter and bars and holds the budget.

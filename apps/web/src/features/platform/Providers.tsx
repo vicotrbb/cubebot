@@ -28,6 +28,16 @@ const PROVIDERS: { id: Provider; name: string; note: string }[] = [
     name: 'OpenRouter',
     note: 'Hundreds of models from many labs, on one key.',
   },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    note: 'A key from Google AI Studio. Each model reports its own window.',
+  },
+  {
+    id: 'grok',
+    name: 'xAI Grok',
+    note: 'A key from the xAI console. Each model reports its own window and cost.',
+  },
 ]
 const NAMES = Object.fromEntries(
   PROVIDERS.map(({ id, name }) => [id, name]),
@@ -178,7 +188,7 @@ function ProviderCard({
 
 /** Lists the models a key can use: the saved key's on their own whenever it applies, a
  *  pasted key's once asked. */
-function useModels(provider: Provider, key: string, saved: boolean) {
+export function useModels(provider: Provider, key: string, saved: boolean) {
   // The pasted key a person asked to list with.
   const [asked, setAsked] = useState<string | null>(null)
   // '' lists with the saved key; null lists nothing yet.
@@ -452,7 +462,7 @@ function KeyField({
 }
 
 /** A list you can search: OpenRouter alone returns hundreds, past what a select can browse. */
-function ModelField({
+export function ModelField({
   models,
   typed,
   value,

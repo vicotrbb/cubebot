@@ -25,6 +25,7 @@ impl Work {
         access::lock_actor(&mut tx, actor).await?;
         let agent = access::conversation(&mut tx, actor, conversation, "conversation.send").await?;
         let conversation = agent.0;
+        super::tasks::guard(&mut tx, actor, turn).await?;
         sqlx::query!(
             "
             SELECT id

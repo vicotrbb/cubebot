@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::identity::{
     Identity, IdentityError, Receipt,
-    access::{AccessExplanation, Capability, GrantRequest, RevokeGrant, Scope},
+    access::{AccessExplanation, Capability, GrantRequest, GrantSummary, RevokeGrant, Scope},
     teams::{CreateTeam, DeleteTeam, MembershipChange, TeamId},
 };
 
@@ -20,6 +20,7 @@ use crate::identity::{
     create_team,
     membership,
     delete_team,
+    grants,
     grant,
     revoke,
     explain,
@@ -34,7 +35,7 @@ pub fn router(identity: Identity) -> Router {
         .route("/api/identity/teams", get(teams).post(create_team))
         .route("/api/identity/teams/membership", post(membership))
         .route("/api/identity/teams/delete", post(delete_team))
-        .route("/api/identity/access/grants", post(grant))
+        .route("/api/identity/access/grants", get(grants).post(grant))
         .route("/api/identity/access/revoke", post(revoke))
         .route("/api/identity/access/explain", post(explain))
         .route("/api/identity/access/events", get(events))
@@ -90,6 +91,16 @@ async fn delete_team(
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
     Ok(no_store(identity.delete_team(&actor, &input).await?))
+}
+
+/// Every grant in force; administrators only.
+#[utoipa::path(get, path = "/api/identity/access/grants", operation_id = "list_grants", responses((status = 200, body = Vec<GrantSummary>)))]
+async fn grants(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&identity, &headers).await?;
+    Ok(no_store(identity.grants(&actor).await?))
 }
 
 #[utoipa::path(post, path = "/api/identity/access/grants", request_body = GrantRequest, responses((status = 201, body = Receipt)))]

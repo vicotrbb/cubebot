@@ -2233,6 +2233,26 @@
       }
     },
     "/api/identity/access/grants": {
+      "get": {
+        "tags": [],
+        "summary": "Every grant in force; administrators only.",
+        "operationId": "list_grants",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GrantSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [],
         "operationId": "grant",
@@ -4154,6 +4174,160 @@
         }
       }
     },
+    "/api/tasks": {
+      "get": {
+        "tags": [],
+        "summary": "The caller's tasks, or every task for an administrator, most recently active first.",
+        "operationId": "list_tasks",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Task"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "Records what the person wants; the orchestrator picks it up. Repeating `request_id` returns the\nsame task. 409 when the caller has no agent to hand it to.",
+        "operationId": "create_task",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/settings": {
+      "get": {
+        "tags": [],
+        "summary": "Administrators only.",
+        "operationId": "task_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Administrators only; 409 when `revision` is not the current one.",
+        "operationId": "save_task_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task}": {
+      "get": {
+        "tags": [],
+        "operationId": "get_task",
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task}/stop": {
+      "post": {
+        "tags": [],
+        "summary": "Cancels the task's open turns. Writing in its room starts it again.",
+        "operationId": "stop_task",
+        "parameters": [
+          {
+            "name": "task",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vault": {
       "get": {
         "tags": [],
@@ -4384,6 +4558,11 @@
           "room": {
             "type": ["string", "null"],
             "format": "uuid"
+          },
+          "task": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The task whose room this is; such work is answered on the Tasks page."
           },
           "text": {
             "type": "string"
@@ -5123,6 +5302,20 @@
         },
         "additionalProperties": false
       },
+      "CreateTask": {
+        "type": "object",
+        "required": ["request_id", "request"],
+        "properties": {
+          "request": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateTeam": {
         "type": "object",
         "required": ["request_id", "name"],
@@ -5246,7 +5439,14 @@
       },
       "Delivery": {
         "type": "object",
-        "required": ["turn", "agent_id", "agent", "status", "attachments"],
+        "required": [
+          "turn",
+          "agent_id",
+          "agent",
+          "status",
+          "attachments",
+          "terminal"
+        ],
         "properties": {
           "agent": {
             "type": "string"
@@ -5265,11 +5465,22 @@
           "error": {
             "type": ["string", "null"]
           },
+          "partial": {
+            "type": ["string", "null"],
+            "description": "The reply as far as it has been written, while there is no `response`."
+          },
           "response": {
             "type": ["string", "null"]
           },
           "status": {
             "type": "string"
+          },
+          "terminal": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Progress"
+            },
+            "description": "What the agent has done so far, tool by tool."
           },
           "turn": {
             "type": "string",
@@ -5537,6 +5748,41 @@
           }
         },
         "additionalProperties": false
+      },
+      "GrantSummary": {
+        "type": "object",
+        "description": "A grant in force.",
+        "required": ["id", "revision", "scope_kind", "scope_id", "capability"],
+        "properties": {
+          "account_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "capability": {
+            "type": "string",
+            "description": "As in `Capability`, such as `conversation_send`."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "scope_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scope_kind": {
+            "type": "string",
+            "description": "`agent`, `room` or `conversation`; an agent's conversation has the agent's id."
+          },
+          "team_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          }
+        }
       },
       "HookDelivery": {
         "type": "object",
@@ -6517,7 +6763,7 @@
       },
       "ProviderKind": {
         "type": "string",
-        "enum": ["openai", "anthropic", "openrouter"]
+        "enum": ["openai", "anthropic", "openrouter", "gemini", "grok"]
       },
       "ProviderSummary": {
         "type": "object",
@@ -6837,6 +7083,7 @@
           "id",
           "sequence",
           "author",
+          "orchestrator",
           "message",
           "routing",
           "deliveries"
@@ -6844,6 +7091,11 @@
         "properties": {
           "author": {
             "type": "string"
+          },
+          "author_agent_id": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "In a task's room: the agent that wrote this."
           },
           "deliveries": {
             "type": "array",
@@ -6861,6 +7113,10 @@
           "note": {
             "type": ["string", "null"],
             "description": "The coordinator's question, the continued task's agent, or the failure reason."
+          },
+          "orchestrator": {
+            "type": "boolean",
+            "description": "In a task's room: the task orchestrator wrote this."
           },
           "routing": {
             "type": "string",
@@ -7453,15 +7709,158 @@
         },
         "additionalProperties": false
       },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "room_id",
+          "request",
+          "status",
+          "blocked",
+          "reading",
+          "owner",
+          "created_at",
+          "updated_at",
+          "agents",
+          "items"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
+          },
+          "blocked": {
+            "type": "boolean",
+            "description": "A turn of this task waits for a person: to retry it, raise a budget or stop it."
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskItem"
+            }
+          },
+          "owner": {
+            "type": "string",
+            "description": "The login of the person it belongs to."
+          },
+          "reading": {
+            "type": "boolean",
+            "description": "A person's message waits for the orchestrator."
+          },
+          "request": {
+            "type": "string"
+          },
+          "room_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The room whose messages and events carry the task's conversation."
+          },
+          "status": {
+            "type": "string",
+            "description": "`working`, `needs_you`, `done` or `stopped`."
+          },
+          "title": {
+            "type": ["string", "null"],
+            "description": "The orchestrator's name for the task; `None` until its first answer."
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskItem": {
+        "type": "object",
+        "required": ["id", "agent_id", "position", "title", "status"],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": ["string", "null"]
+          },
+          "position": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The number the agent knows it by."
+          },
+          "status": {
+            "type": "string",
+            "description": "`todo`, `doing`, `done` or `skipped`."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "TaskSettings": {
+        "type": "object",
+        "required": ["max_agents", "max_rounds", "instructions", "revision"],
+        "properties": {
+          "instructions": {
+            "type": "string",
+            "description": "Added to the orchestrator's own instructions."
+          },
+          "max_agents": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Most agents one round of work may involve."
+          },
+          "max_rounds": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Rounds of follow-up work the orchestrator may start before it asks the person."
+          },
+          "model": {
+            "type": ["string", "null"]
+          },
+          "provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderKind",
+                "description": "With `model`, what the orchestrator thinks with; empty means the connection agents use."
+              }
+            ]
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Team": {
         "type": "object",
-        "required": ["id", "name", "revision", "active"],
+        "required": ["id", "name", "revision", "active", "members"],
         "properties": {
           "active": {
             "type": "boolean"
           },
           "id": {
             "$ref": "#/components/schemas/TeamId"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The accounts in the team."
           },
           "name": {
             "type": "string"

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE task_items i\n        SET status=CASE WHEN EXISTS(\n                SELECT 1 FROM chat_turns c JOIN room_messages m ON m.id=c.room_message_id\n                WHERE m.room_id=$2 AND c.conversation_id=i.agent_id AND c.status='complete'\n            ) THEN 'done' ELSE 'skipped' END\n        WHERE i.task_id=$1 AND i.status IN ('todo','doing')\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ed781f892d3a077d500a1cdf55193fac09b2e6e84067991e376ed85ee5d7a72"
+}

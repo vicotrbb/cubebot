@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use cubebot_protocol::runtime::ProviderKind;
-use cubebot_providers::{Anthropic, Error, OpenAi, OpenRouter, Price};
+use cubebot_providers::{Anthropic, Error, Gemini, OpenAi, OpenRouter, Price};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Transaction};
 use std::time::Duration;
@@ -431,6 +431,9 @@ async fn listed(provider: &str) -> Result<Vec<Price>, Error> {
         Some(ProviderKind::Openai) => OpenAi::new()?.prices().await,
         Some(ProviderKind::Anthropic) => Anthropic::new()?.prices().await,
         Some(ProviderKind::Openrouter) => OpenRouter::new()?.prices().await,
+        Some(ProviderKind::Gemini) => Gemini::new()?.prices().await,
+        // Grok states each response's cost, so nothing is estimated from a price.
+        Some(ProviderKind::Grok) => Ok(Vec::new()),
         None => Err(Error::Unavailable),
     }
 }

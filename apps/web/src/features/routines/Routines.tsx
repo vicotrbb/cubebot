@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Play, Webhook } from 'lucide-react'
+import { CalendarClock, Play, Webhook } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   api,
@@ -19,6 +19,14 @@ import {
   when,
 } from '../../components/primitives'
 import './routines.css'
+
+/** Common cron lines, so nobody has to write one to start. */
+const SCHEDULES = [
+  ['Weekdays at 09:00', '0 9 * * 1-5'],
+  ['Every day at 09:00', '0 9 * * *'],
+  ['Every hour', '0 * * * *'],
+  ['Mondays at 09:00', '0 9 * * 1'],
+] as const
 
 const ORIGINS: Record<string, string> = {
   person: 'Run by a person',
@@ -122,8 +130,8 @@ export function Routines({
       <section className="panel__section">
         <h2>Routines</h2>
         <p className="panel__lead">
-          A routine is a stored prompt or command. Run it by hand, on a schedule
-          or from a webhook; each run is a message in the conversation.
+          A routine is a stored prompt or command, run by hand, on a schedule or
+          from a webhook. Each run is a message in the conversation.
         </p>
         {editable && !editing && (
           <div className="actions">
@@ -238,7 +246,9 @@ function describe(routine: Routine) {
       : 'Managed by a person'
   const schedule = routine.schedule
     ? `next ${routine.next_at ? when(routine.next_at) : 'never'}`
-    : 'On demand'
+    : routine.webhook
+      ? 'Runs from its webhook or by hand'
+      : 'Runs by hand'
   const last = routine.last_run_at
     ? `, last run ${when(routine.last_run_at)}`
     : ''
@@ -489,17 +499,18 @@ function RoutineForm({
           defaultValue={existing?.command ?? ''}
         />
       </Field>
-      <Field
-        label="Schedule"
-        hint="Five-field cron, UTC; empty runs only on demand"
-      >
+      <Triggers existing={existing} />
+      <label className="check">
         <input
-          name="schedule"
-          maxLength={128}
-          placeholder="0 9 * * 1-5"
-          defaultValue={existing?.schedule ?? ''}
+          type="checkbox"
+          name="enabled"
+          defaultChecked={existing?.enabled ?? true}
         />
-      </Field>
+        Active
+        <span className="small faint">
+          While paused, its schedule and webhook do nothing
+        </span>
+      </label>
       <label className="check">
         <input
           type="checkbox"
@@ -508,20 +519,6 @@ function RoutineForm({
         />
         Skip a run while another is still waiting
       </label>
-      <label className="check">
-        <input
-          type="checkbox"
-          name="enabled"
-          defaultChecked={existing?.enabled ?? true}
-        />
-        Enabled; a paused routine runs only by hand
-      </label>
-      {!existing && (
-        <label className="check">
-          <input type="checkbox" name="webhook" /> Give it a webhook, so another
-          system can run it
-        </label>
-      )}
       <Alert>{error}</Alert>
       <div className="actions">
         <button className="btn btn--primary btn--sm" disabled={busy}>
@@ -536,6 +533,90 @@ function RoutineForm({
         </button>
       </div>
     </form>
+  )
+}
+
+/** When a routine runs, beyond by hand: neither, either or both. */
+function Triggers({ existing }: { existing: Routine | undefined }) {
+  const [scheduled, setScheduled] = useState(Boolean(existing?.schedule))
+  const [cron, setCron] = useState<string>(
+    existing?.schedule ?? SCHEDULES[0][1],
+  )
+  return (
+    <fieldset className="triggers">
+      <legend>When it runs</legend>
+      <p className="small faint">
+        You can always run it by hand. Add a schedule, a webhook, both or
+        neither.
+      </p>
+      <label className="trigger">
+        <input
+          type="checkbox"
+          checked={scheduled}
+          onChange={(event) => setScheduled(event.target.checked)}
+        />
+        <CalendarClock aria-hidden="true" />
+        <span>
+          On a schedule
+          <span className="small faint">Repeats at the times you set</span>
+        </span>
+      </label>
+      {scheduled && (
+        <div className="trigger__more">
+          <Field label="Cron" hint="Five fields, in UTC">
+            <input
+              name="schedule"
+              required
+              maxLength={128}
+              placeholder="0 9 * * 1-5"
+              value={cron}
+              onChange={(event) => setCron(event.target.value)}
+            />
+          </Field>
+          <div
+            className="trigger__presets"
+            role="group"
+            aria-label="Common schedules"
+          >
+            {SCHEDULES.map(([label, value]) => (
+              <button
+                key={value}
+                type="button"
+                className="chip provider-size"
+                aria-pressed={cron === value}
+                onClick={() => setCron(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {existing?.webhook ? (
+        <p className="trigger trigger--static">
+          <Webhook aria-hidden="true" />
+          <span>
+            From its webhook
+            <span className="small faint">Manage it on the routine below</span>
+          </span>
+        </p>
+      ) : existing ? (
+        <p className="small faint trigger--hint">
+          Add a webhook with the button on the routine.
+        </p>
+      ) : (
+        <label className="trigger">
+          <input type="checkbox" name="webhook" />
+          <Webhook aria-hidden="true" />
+          <span>
+            From a webhook
+            <span className="small faint">
+              Another system runs it by calling a private URL
+            </span>
+          </span>
+        </label>
+      )}
+    </fieldset>
   )
 }
 

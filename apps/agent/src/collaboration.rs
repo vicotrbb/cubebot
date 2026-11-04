@@ -5,6 +5,7 @@
 //! person to log in through the desktop; their hand-back or refusal arrives as a new message.
 //! The vault tools (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) are in [`vault`], the routine tools (docs/adr/agents.md#routines) in [`routines`].
 mod routines;
+mod tasks;
 mod vault;
 pub use vault::redacted;
 
@@ -49,8 +50,10 @@ pub fn drives_desktop(name: &str) -> bool {
 }
 
 /// `desktop` offers `request_login` and `vault_fill`, which only a lane that controls the
-/// desktop can use; `broadcast` offers `broadcast` when the turn may send one.
-pub fn definitions(desktop: bool, broadcast: bool) -> Vec<cubebot_providers::Tool> {
+/// desktop can use; `broadcast` offers `broadcast` when the turn may send one. A task's turn talks
+/// through the task's tools instead of `delegate` and `send_message`, whose work would land in the
+/// other agent's own conversation.
+pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot_providers::Tool> {
     let tool = |name: &str, description: &str, reply: bool| {
         let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":"Self-contained instructions or information; the recipient sees nothing else of this conversation."}});
         if reply {
@@ -75,6 +78,9 @@ pub fn definitions(desktop: bool, broadcast: bool) -> Vec<cubebot_providers::Too
             true,
         ),
     ];
+    if in_task {
+        tools = tasks::definitions();
+    }
     tools.extend(desktop.then_some(login));
     tools.extend(broadcast.then(|| {
         cubebot_providers::Tool::strict(
@@ -113,7 +119,8 @@ impl Collaboration {
             _ => {
                 return self
                     .vault(name, input)
-                    .or_else(|| self.routine(name, id, input));
+                    .or_else(|| self.routine(name, id, input))
+                    .or_else(|| self.task(name, id, input));
             }
         };
         let parsed = Send::deserialize(input)
@@ -206,17 +213,29 @@ mod tests {
     #[test]
     fn broadcast_is_offered_only_to_a_turn_that_may_broadcast() {
         let names = |broadcast| -> Vec<String> {
-            super::definitions(false, broadcast)
+            super::definitions(false, broadcast, false)
                 .into_iter()
                 .map(|tool| tool.name)
                 .collect()
         };
         assert!(names(true).contains(&"broadcast".to_owned()));
         assert!(!names(false).contains(&"broadcast".to_owned()));
-        let login = super::definitions(true, false)
+        let login = super::definitions(true, false, false)
             .into_iter()
             .find(|tool| tool.name == "request_login")
             .unwrap();
         assert!(login.description.contains("First call vault_list"));
+    }
+
+    #[test]
+    fn a_task_turn_talks_in_its_room_instead_of_other_agents_conversations() {
+        let names: Vec<String> = super::definitions(false, false, true)
+            .into_iter()
+            .map(|tool| tool.name)
+            .collect();
+        assert!(names.contains(&"task_message".to_owned()));
+        assert!(names.contains(&"task_item".to_owned()));
+        assert!(!names.contains(&"delegate".to_owned()));
+        assert!(!names.contains(&"send_message".to_owned()));
     }
 }

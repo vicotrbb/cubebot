@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO task_items (task_id, agent_id, position, title)\n            SELECT $1, $2, COALESCE(max(position),0)+1, $3 FROM task_items WHERE task_id=$1\n            RETURNING position\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6f5fef50448fda354a5babcac0221a5cc12d503d7c570f7428bf952117d683a0"
+}

@@ -96,58 +96,85 @@
   color: var(--orange-deep);
 }
 
-/* Work cards */
+/* Work: a rail of plain sentences, each opening to the file, diff or terminal behind it. */
 .work {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--inset);
-  max-width: 78ch;
-  overflow: hidden;
+  position: relative;
+  min-width: 0;
 }
 .work__summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  min-height: 30px;
+  padding: 3px 6px 3px 0;
+  border-radius: var(--r-sm);
   cursor: pointer;
   list-style: none;
   font-size: var(--t-sm);
+  transition: background var(--quick) var(--settle);
 }
 .work__summary::-webkit-details-marker {
   display: none;
 }
+.work__summary:hover {
+  background: var(--inset);
+}
+.work__summary:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+/* The icon sits on the rail, its ground interrupting the line. */
 .work__icon {
   display: grid;
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: var(--raised);
+  margin-left: -11px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
   color: var(--ink-soft);
   flex: none;
 }
 .work__icon svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
-.work__title {
-  font-weight: 700;
-  text-transform: capitalize;
-  flex: none;
+.work[data-status='running'] .work__icon {
+  background: var(--orange-wash);
+  box-shadow: 0 0 0 1px var(--orange);
+  color: var(--orange-deep);
 }
-.work__cmd {
+.work__line {
   flex: 1;
   min-width: 0;
-  font-family: var(--mono);
-  font-size: var(--t-xs);
-  color: var(--ink-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.work__verb {
+  color: var(--ink-soft);
+}
+.work__object {
+  font-weight: var(--w-label);
+}
+.work__object--code {
+  font-family: var(--mono);
+  font-size: var(--t-xs);
+}
+.work__where {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+}
+.work__stat {
+  flex: none;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
 .work__mark svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   display: block;
 }
 .work__mark .ok {
@@ -164,21 +191,129 @@
 }
 .work__body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  padding: 0 10px 10px;
+  padding: 4px 0 10px 19px;
 }
 .work__pre {
   background: var(--code-bg);
   border: 1px solid var(--line);
 }
+.work__fields {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: var(--t-sm);
+}
+.work__fields > div {
+  display: grid;
+  grid-template-columns: minmax(0, 7rem) minmax(0, 1fr);
+  gap: 8px;
+}
+.work__fields dt {
+  color: var(--ink-faint);
+}
+.work__fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* A terminal stays a terminal whichever theme the console is in. */
+.term {
+  --term-ground: #1a1512;
+  --term-ink: #f3ece2;
+  --term-faint: #a3968b;
+  border-radius: var(--r-md);
+  background: var(--term-ground);
+  color: var(--term-ink);
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  line-height: 1.5;
+}
+.term pre {
+  margin: 0;
+  background: none;
+  color: inherit;
+  border-radius: 0;
+  font: inherit;
+}
+.term__command {
+  padding: 10px 12px 6px;
+  font-weight: var(--w-label);
+  max-height: 14rem;
+}
+.term__command span {
+  color: var(--orange-top);
+}
+.term__output {
+  padding: 0 12px 10px;
+  color: var(--term-faint);
+  max-height: 22rem;
+}
+.term__cursor {
+  display: block;
+  width: 8px;
+  height: 14px;
+  margin: 0 12px 10px;
+  background: var(--orange-top);
+  animation: term-blink 1.1s steps(2) infinite;
+}
+@keyframes term-blink {
+  to {
+    opacity: 0;
+  }
+}
+.term__exit {
+  margin: 0;
+  padding: 6px 12px 8px;
+  border-top: 1px solid rgb(255 240 225 / 0.1);
+  color: #e86a52;
+  font-size: var(--t-xs);
+}
+.diff {
+  overflow: auto;
+  max-height: 420px;
+  padding: 6px 0;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+}
+.diff__line {
+  display: flex;
+  gap: 8px;
+  width: max-content;
+  min-width: 100%;
+  padding: 0 12px;
+}
+.diff__line[data-sign='+'] {
+  background: var(--hl-add);
+}
+.diff__line[data-sign='-'] {
+  background: var(--hl-del);
+}
+.diff__line span {
+  flex: none;
+  color: var(--ink-faint);
+  user-select: none;
+}
+.diff__line code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  white-space: pre;
+}
 
 .worklog {
-  max-width: 78ch;
+  min-width: 0;
 }
 .worklog__summary {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-width: 100%;
   padding: 4px 10px 4px 6px;
   border-radius: var(--r-md);
   cursor: pointer;
@@ -207,21 +342,25 @@
 .worklog[open] > .worklog__summary .worklog__chevron {
   transform: rotate(90deg);
 }
+.worklog__spin {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--orange-deep);
+}
 .worklog__label {
   font-weight: 600;
 }
-.worklog__kinds {
-  display: inline-flex;
-  gap: 2px;
+.worklog__now {
+  min-width: 0;
+  max-width: 52ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.worklog__kinds .work__icon {
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--line);
-}
-.worklog__kinds .work__icon svg {
-  width: 12px;
-  height: 12px;
+.worklog__digest {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
 }
 .worklog__failed {
   color: var(--danger);
@@ -233,16 +372,18 @@
 }
 .worklog__list {
   display: grid;
-  gap: 6px;
-  margin-top: 6px;
-  padding-left: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 2px 0 6px 14px;
   border-left: 1px solid var(--line-strong);
-  margin-left: 13px;
 }
 @media (prefers-reduced-motion: reduce) {
   .worklog__chevron,
-  .worklog__summary {
+  .worklog__summary,
+  .work__summary {
     transition: none;
+  }
+  .term__cursor {
+    animation: none;
   }
 }
 

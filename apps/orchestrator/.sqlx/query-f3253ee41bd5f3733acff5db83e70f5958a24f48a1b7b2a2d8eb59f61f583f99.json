@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id)\n        SELECT $2, COALESCE((SELECT k.created_by FROM tasks k WHERE k.room_id=m.room_id), m.actor_id), gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\\n\\n',m.message), m.id\n        FROM room_messages m\n        JOIN rooms r ON r.id=m.room_id\n        JOIN human_accounts a ON a.id=m.actor_id\n        WHERE m.id=$1\n        ON CONFLICT (room_message_id,conversation_id) WHERE room_message_id IS NOT NULL DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f3253ee41bd5f3733acff5db83e70f5958a24f48a1b7b2a2d8eb59f61f583f99"
+}

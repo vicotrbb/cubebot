@@ -1,0 +1,57 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE task_settings\n            SET provider=$1, model=$2, max_agents=$3, max_rounds=$4, instructions=$5, revision=revision+1\n            WHERE revision=$6\n            RETURNING provider, model, max_agents, max_rounds, instructions, revision\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "max_agents",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "max_rounds",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9baf87ab68abfe9306746213e91506b852309c0cd733c09b4b0e43e74a5dd96b"
+}

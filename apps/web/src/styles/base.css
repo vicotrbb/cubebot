@@ -161,3 +161,185 @@ kbd {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Highlighted code: the desk's paints, darkened or lightened until they read on the code ground. */
+:root {
+  --hl-keyword: #a6420a;
+  --hl-string: #4a6b56;
+  --hl-number: #6f5d8f;
+  --hl-title: #2f6a8f;
+  --hl-attr: #9a4560;
+  --hl-comment: #6f6258;
+  --hl-add: #dfeadf;
+  --hl-del: #f6dcd6;
+}
+:root[data-theme='dark'] {
+  --hl-keyword: #ff8a3d;
+  --hl-string: #b4cbbb;
+  --hl-number: #b6a6cd;
+  --hl-title: #a9cde3;
+  --hl-attr: #f0bccb;
+  --hl-comment: #a3968b;
+  --hl-add: #24332a;
+  --hl-del: #3b1f19;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --hl-keyword: #ff8a3d;
+    --hl-string: #b4cbbb;
+    --hl-number: #b6a6cd;
+    --hl-title: #a9cde3;
+    --hl-attr: #f0bccb;
+    --hl-comment: #a3968b;
+    --hl-add: #24332a;
+    --hl-del: #3b1f19;
+  }
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-doctag,
+.hljs-meta .hljs-keyword {
+  color: var(--hl-keyword);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-template-tag,
+.hljs-meta .hljs-string {
+  color: var(--hl-string);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-variable.constant_,
+.hljs-symbol,
+.hljs-bullet {
+  color: var(--hl-number);
+}
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--hl-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-property,
+.hljs-type,
+.hljs-params,
+.hljs-tag,
+.hljs-link,
+.hljs-variable {
+  color: var(--hl-attr);
+}
+.hljs-tag .hljs-name {
+  color: var(--hl-title);
+}
+.hljs-tag .hljs-attr {
+  color: var(--hl-attr);
+}
+.hljs-comment,
+.hljs-quote,
+.hljs-meta,
+.hljs-deletion {
+  color: var(--hl-comment);
+}
+.hljs-comment,
+.hljs-quote {
+  font-style: italic;
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: var(--w-strong);
+}
+
+.codeblock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--code-bg);
+  overflow: hidden;
+}
+.codeblock--bare {
+  flex: 1 0 auto;
+  border: 0;
+  border-radius: 0;
+}
+.codeblock__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.codeblock__name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  color: var(--ink-soft);
+}
+.codeblock__head .btn {
+  flex: none;
+  min-height: 26px;
+  height: 26px;
+  width: 30px;
+  padding: 0;
+}
+.codeblock__scroll {
+  display: flex;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  tab-size: 2;
+}
+.codeblock__scroll:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+}
+/* Numbers stay put while the code scrolls; they are not selectable, so copying takes only code. */
+.codeblock__gutter {
+  position: sticky;
+  left: 0;
+  flex: none;
+  padding: 10px 10px 10px 12px;
+  background: var(--code-bg);
+  color: var(--ink-faint);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  white-space: pre;
+}
+.codeblock__scroll pre {
+  flex: 1 0 auto;
+  margin: 0;
+  padding: 10px 12px;
+  max-height: none;
+  overflow: visible;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  white-space: pre;
+}
+.codeblock__scroll code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+  white-space: pre;
+  overflow-wrap: normal;
+}

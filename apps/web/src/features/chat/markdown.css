@@ -113,42 +113,6 @@
   max-height: 420px;
   border-radius: var(--r-md);
 }
-.md__code {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  background: var(--code-bg);
-  overflow: hidden;
-}
-.md__code-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 30px;
-  padding: 0 2px 0 10px;
-  border-bottom: 1px solid var(--line);
-  font-size: var(--t-xs);
-  color: var(--ink-faint);
-}
-.md__code-head .btn {
-  min-height: 26px;
-  height: 26px;
-  width: 30px;
-  padding: 0;
-}
-.md__code pre {
-  margin: 0;
-  padding: 10px 12px;
-  overflow-x: auto;
-  font-size: var(--t-sm);
-  line-height: 1.5;
-}
-.md__code code {
-  padding: 0;
-  background: none;
-  font-size: inherit;
-  overflow-wrap: normal;
-  white-space: pre;
-}
 .md__table {
   overflow-x: auto;
   border: 1px solid var(--line);

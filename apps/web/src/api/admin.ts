@@ -91,6 +91,7 @@ export const admin = {
         body: { request_id: id(), team, expected_revision },
       }),
     ),
+  grants: () => ok(api.GET('/api/identity/access/grants')),
   grant: (
     recipient: Schemas['Recipient'],
     scope: Schemas['Scope'],

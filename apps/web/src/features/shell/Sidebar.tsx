@@ -6,6 +6,7 @@ import {
   Hash,
   Inbox,
   Library,
+  ListChecks,
   LogOut,
   Megaphone,
   Moon,
@@ -31,6 +32,7 @@ import {
   useRooms,
   useSavePreferences,
   useSession,
+  useTasks,
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
 import { agentHover } from '../../components/agentHover'
@@ -38,6 +40,11 @@ import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Menu } from '../../components/primitives'
 import { doingOf } from '../agent/doing'
+import { isRunning, pileOf, titleOf } from '../tasks/status'
+import { TaskMark } from '../tasks/TaskMark'
+import '../tasks/tasks.css'
+
+const TASK_TREE = 'task-tree'
 
 export const ACTIVITY: Record<string, string> = {
   working: 'Working',
@@ -53,6 +60,7 @@ export const PLATFORM = [
   ['/platform/teams', 'Teams and access'],
   ['/platform/sign-in', 'Sign-in'],
   ['/platform/providers', 'AI providers'],
+  ['/platform/tasks', 'Tasks'],
   ['/platform/mcp', 'MCP servers'],
   ['/platform/vault', 'Vault'],
   ['/platform/audit', 'Audit log'],
@@ -103,6 +111,7 @@ export function Sidebar({
           <span className="row__label">Activity</span>
           {attention > 0 && <span className="row__badge">{attention}</span>}
         </Link>
+        <TasksRow />
         {administrator && <BroadcastRow />}
         <Link
           to="/situation"
@@ -147,6 +156,74 @@ export function Sidebar({
         {administrator && <PlatformGear />}
       </footer>
     </aside>
+  )
+}
+
+/** Tasks, opening to a tree of the ones running while there are any. */
+function TasksRow() {
+  const tasks = useTasks()
+  const preferences = usePreferences()
+  const save = useSavePreferences()
+  const running = tasks.data?.filter(isRunning) ?? []
+  const waiting = running.filter((task) => pileOf(task) === 'needs_you').length
+  const collapsed = preferences.data?.collapsed.includes(TASK_TREE) ?? false
+  return (
+    <>
+      <div className="row-tree">
+        <Link
+          to="/tasks"
+          className="row row--page"
+          activeOptions={{ exact: true }}
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <ListChecks className="row__icon" />
+          <span className="row__label">Tasks</span>
+          {waiting > 0 && (
+            <span className="row__badge" title="Tasks that need you">
+              {waiting}
+            </span>
+          )}
+        </Link>
+        {running.length > 0 && (
+          <button
+            type="button"
+            className="row-tree__toggle"
+            aria-expanded={!collapsed}
+            aria-controls="task-tree"
+            aria-label={`${collapsed ? 'Show' : 'Hide'} ${running.length} running ${running.length === 1 ? 'task' : 'tasks'}`}
+            onClick={() => {
+              const current = preferences.data
+              if (!current) return
+              save.mutate({
+                ...current,
+                collapsed: collapsed
+                  ? current.collapsed.filter((item) => item !== TASK_TREE)
+                  : [...current.collapsed, TASK_TREE],
+              })
+            }}
+          >
+            <ChevronDown />
+          </button>
+        )}
+      </div>
+      {running.length > 0 && !collapsed && (
+        <ul id="task-tree" className="task-tree">
+          {running.map((task) => (
+            <li key={task.id}>
+              <Link
+                to="/tasks/$taskId"
+                params={{ taskId: task.id }}
+                className="row row--page"
+                activeProps={{ 'aria-current': 'page' }}
+              >
+                <TaskMark task={task} />
+                <span className="row__label">{titleOf(task)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   )
 }
 

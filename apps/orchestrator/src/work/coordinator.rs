@@ -9,7 +9,9 @@ use crate::{
     connections::{Connections, configured},
 };
 use cubebot_protocol::runtime::{ProviderKind, TokenUsage};
-use cubebot_providers::{Anthropic, Event, Message, OpenAi, OpenRouter, Provider, Request, Usage};
+use cubebot_providers::{
+    Anthropic, Event, Gemini, Grok, Message, OpenAi, OpenRouter, Provider, Request, Usage,
+};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -74,7 +76,7 @@ async fn dispatch(
     inference: Option<crate::connections::Inference>,
 ) -> Result<bool, Error> {
     let reply = match inference {
-        Some(inference) => ask(pool, &inference, &pending.prompt).await,
+        Some(inference) => ask(pool, &inference, SYSTEM, &pending.prompt, 512).await,
         None => Err("provider_unavailable"),
     };
     let decision = reply.and_then(|text| decision(&text).ok_or("invalid_coordinator_result"));
@@ -87,7 +89,7 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
         SELECT m.id, m.room_id, r.name, m.message, m.sequence
         FROM room_messages m
         JOIN rooms r ON r.id=m.room_id
-        WHERE m.routing='routing'
+        WHERE m.routing='routing' AND NOT r.task
         ORDER BY m.sequence
         LIMIT 1
         "
@@ -157,48 +159,26 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
 }
 
 /// Asks the model and records what the coordinator spent; a lost record never loses the answer.
-async fn ask(
+pub(super) async fn ask(
     pool: &PgPool,
     inference: &crate::connections::Inference,
+    system: &str,
     prompt: &str,
+    max_output_tokens: u64,
 ) -> Result<String, &'static str> {
     let messages = [Message::User(prompt.into())];
     let request = Request {
         model: &inference.model,
         key: &inference.api_key,
-        system: SYSTEM,
+        system,
         messages: &messages,
         tools: &[],
         tools_disabled: false,
-        max_output_tokens: Some(512),
+        max_output_tokens: Some(max_output_tokens),
     };
-    let reply = match inference.provider {
-        ProviderKind::Openai => {
-            complete(
-                configured(OpenAi::new, OpenAi::for_loopback_tests)
-                    .map_err(|error| error.code())?,
-                &request,
-            )
-            .await
-        }
-        ProviderKind::Anthropic => {
-            complete(
-                configured(Anthropic::new, Anthropic::for_loopback_tests)
-                    .map_err(|error| error.code())?,
-                &request,
-            )
-            .await
-        }
-        ProviderKind::Openrouter => {
-            complete(
-                configured(OpenRouter::new, OpenRouter::for_loopback_tests)
-                    .map_err(|error| error.code())?,
-                &request,
-            )
-            .await
-        }
-    };
-    let (text, usage) = reply.map_err(|error| error.code())?;
+    let (text, usage) = through(inference.provider, &request)
+        .await
+        .map_err(|error| error.code())?;
     if let Some(usage) = usage {
         let usage = TokenUsage {
             input_tokens: usage.input_tokens,
@@ -212,6 +192,46 @@ async fn ask(
         }
     }
     Ok(text)
+}
+
+/// The request through the named provider's adapter.
+async fn through(
+    provider: ProviderKind,
+    request: &Request<'_>,
+) -> Result<(String, Option<Usage>), cubebot_providers::Error> {
+    match provider {
+        ProviderKind::Openai => {
+            complete(
+                configured(OpenAi::new, OpenAi::for_loopback_tests)?,
+                request,
+            )
+            .await
+        }
+        ProviderKind::Anthropic => {
+            complete(
+                configured(Anthropic::new, Anthropic::for_loopback_tests)?,
+                request,
+            )
+            .await
+        }
+        ProviderKind::Openrouter => {
+            complete(
+                configured(OpenRouter::new, OpenRouter::for_loopback_tests)?,
+                request,
+            )
+            .await
+        }
+        ProviderKind::Gemini => {
+            complete(
+                configured(Gemini::new, Gemini::for_loopback_tests)?,
+                request,
+            )
+            .await
+        }
+        ProviderKind::Grok => {
+            complete(configured(Grok::new, Grok::for_loopback_tests)?, request).await
+        }
+    }
 }
 
 async fn complete<P: Provider>(

@@ -2,7 +2,7 @@
 use super::{Connections, administrator, key_valid};
 use crate::identity::{Actor, IdentityError};
 use cubebot_protocol::runtime::ProviderKind;
-use cubebot_providers::{Anthropic, OpenAi, OpenRouter, Provider};
+use cubebot_providers::{Anthropic, Gemini, Grok, OpenAi, OpenRouter, Provider};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -69,6 +69,18 @@ impl Connections {
             }
             ProviderKind::Openrouter => {
                 configured(OpenRouter::new, OpenRouter::for_loopback_tests)
+                    .map_err(ModelsError::Provider)?
+                    .models(&key)
+                    .await
+            }
+            ProviderKind::Gemini => {
+                configured(Gemini::new, Gemini::for_loopback_tests)
+                    .map_err(ModelsError::Provider)?
+                    .models(&key)
+                    .await
+            }
+            ProviderKind::Grok => {
+                configured(Grok::new, Grok::for_loopback_tests)
                     .map_err(ModelsError::Provider)?
                     .models(&key)
                     .await

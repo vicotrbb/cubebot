@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO room_messages (room_id, actor_id, request_id, message, routing) VALUES ($1, $2, $3, $4, 'routing')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c04c81ca964c3a06f4b09d5481ca6c9d2c3d85fcbe97e01b642543b8cfbabecf"
+}

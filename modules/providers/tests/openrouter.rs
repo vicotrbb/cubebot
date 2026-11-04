@@ -280,3 +280,127 @@ async fn prices_come_from_the_public_listing_without_a_key_and_skip_routers() {
     assert!((prices[0].cached_per_token - 0.0000005).abs() < 1e-12);
     assert_eq!(prices[1].cached_per_token, prices[1].input_per_token);
 }
+
+mod other_completions_providers {
+    use super::*;
+    use cubebot_providers::{Gemini, Grok, Usage};
+
+    async fn origin(router: Router) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("http://{}/", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        (origin, task)
+    }
+
+    async fn done<P: Provider>(provider: &P, request: &Request<'_>) -> (Reply, Option<Usage>) {
+        let stream = provider.stream(request);
+        let mut stream = std::pin::pin!(stream);
+        while let Some(event) = stream.next().await {
+            if let Event::Done { reply, usage } = event.unwrap() {
+                return (reply, usage);
+            }
+        }
+        panic!("no final event");
+    }
+
+    /// Parallel calls with index 0 each and no id on one, as Gemini sends, with a thought signature.
+    async fn gemini_turn(headers: HeaderMap, Json(body): Json<Value>) -> Response {
+        assert_eq!(headers["authorization"], "Bearer controlled-key");
+        assert_eq!(body["stream_options"]["include_usage"], true);
+        let declared = &body["tools"][0]["function"];
+        assert!(declared["parameters"].get("additionalProperties").is_none());
+        sse(
+            &[
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","type":"function","function":{"name":"read","arguments":"{\"path\":\"x\"}"},"extra_content":{"google":{"thought_signature":"sig"}}}]},"finish_reason":null}]}),
+                json!({"choices":[{"delta":{"tool_calls":[{"index":0,"id":"b","type":"function","function":{"name":"read","arguments":"{\"path\":\"y\"}"}}]},"finish_reason":null}]}),
+                json!({"choices":[{"delta":{"tool_calls":[{"id":"","type":"function","function":{"name":"read","arguments":"{}"}}]},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":2}}),
+            ],
+            true,
+        )
+    }
+
+    #[tokio::test]
+    async fn gemini_tool_calls_stay_apart_and_keep_their_thought_signature() {
+        let router = Router::new().route("/openai/chat/completions", post(gemini_turn));
+        let (origin, _server) = origin(router).await;
+        let gemini = Gemini::for_loopback_tests(&origin).unwrap();
+        let messages = [Message::User("go".into())];
+        let tools = [Tool::strict(
+            "read",
+            "Reads.",
+            json!({"path":{"type":"string"}}),
+        )];
+        let (reply, usage) = done(&gemini, &request(&messages, &tools)).await;
+        assert_eq!(reply.calls.len(), 3);
+        assert_eq!(reply.calls[0].call_id, "a");
+        assert_eq!(reply.calls[1].call_id, "b");
+        assert_eq!(reply.calls[2].call_id, "call_2", "an empty id is filled in");
+        assert_eq!(
+            reply.native["tool_calls"][0]["extra_content"]["google"]["thought_signature"],
+            "sig"
+        );
+        assert!(reply.native["tool_calls"][1].get("extra_content").is_none());
+        assert_eq!(usage.unwrap().input_tokens, 10);
+    }
+
+    async fn grok_turn(Json(body): Json<Value>) -> Response {
+        assert_eq!(body["stream_options"]["include_usage"], true);
+        sse(
+            &[
+                json!({"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}),
+                json!({"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":2,"cost_in_usd_ticks":5_000_000_000u64}}),
+            ],
+            true,
+        )
+    }
+
+    #[tokio::test]
+    async fn grok_reports_each_responses_cost_in_ticks() {
+        let router = Router::new().route("/chat/completions", post(grok_turn));
+        let (origin, _server) = origin(router).await;
+        let grok = Grok::for_loopback_tests(&origin).unwrap();
+        let messages = [Message::User("go".into())];
+        let (reply, usage) = done(&grok, &request(&messages, &[])).await;
+        assert_eq!(reply.text, "Hi");
+        assert_eq!(usage.unwrap().cost_usd, Some(0.5));
+    }
+
+    #[tokio::test]
+    async fn listings_report_windows_and_keep_only_what_converses() {
+        let router = Router::new()
+            .route(
+                "/models",
+                get(|headers: HeaderMap| async move {
+                    if headers.get("x-goog-api-key").is_some() {
+                        return Json(json!({"models":[
+                            {"name":"models/gemini-3.8-flash","inputTokenLimit":1048576,"supportedGenerationMethods":["generateContent"]},
+                            {"name":"models/embedding-1","inputTokenLimit":2048,"supportedGenerationMethods":["embedContent"]},
+                        ]}));
+                    }
+                    Json(json!({"data":[
+                        {"id":"grok-4.7","created":2,"context_length":2000000,"completion_text_token_price":60000},
+                        {"id":"grok-imagine","created":3,"completion_text_token_price":0},
+                    ]}))
+                }),
+            );
+        let (origin, _server) = origin(router).await;
+        let gemini = Gemini::for_loopback_tests(&origin).unwrap();
+        assert_eq!(
+            gemini.models("key").await.unwrap(),
+            [Model {
+                id: "gemini-3.8-flash".into(),
+                context_window: Some(1048576),
+                tools: true
+            }]
+        );
+        let grok = Grok::for_loopback_tests(&origin).unwrap();
+        assert_eq!(
+            grok.models("key").await.unwrap(),
+            [Model {
+                id: "grok-4.7".into(),
+                context_window: Some(2000000),
+                tools: true
+            }]
+        );
+    }
+}

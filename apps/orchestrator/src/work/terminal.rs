@@ -100,6 +100,38 @@ pub(super) async fn attachments(
     Ok(grouped)
 }
 
+/// Each turn's tool calls so far, in order.
+pub(super) async fn tool_progress(
+    tx: &mut Transaction<'_, Postgres>,
+    ids: &[Uuid],
+) -> Result<HashMap<Uuid, Vec<Progress>>, sqlx::Error> {
+    let rows = sqlx::query_as!(
+        Progress,
+        r#"
+        SELECT (c.payload->>'id')::uuid AS "id!",
+            c.turn_id,
+            c.payload->>'name' AS "name!",
+            CASE WHEN c.payload->>'name' IN ('bash','terminal') THEN c.payload->'input'->>'command' ELSE (c.payload->>'name')||' '||(c.payload->'input')::text END AS "command!",
+            CASE WHEN r.outcome IS NOT NULL THEN r.outcome->>'status' WHEN t.status='running' THEN 'running' ELSE 'uncertain' END AS "status!",
+            r.outcome - 'image' AS "outcome?",
+            EXISTS(SELECT 1 FROM desktop_reobservations o WHERE o.agent_id=t.conversation_id AND o.turn_id=c.turn_id AND o.call_id=c.payload->>'id') AS "reobserved!"
+        FROM turn_events c
+        JOIN chat_turns t ON t.id=c.turn_id
+        LEFT JOIN LATERAL (SELECT e.payload->'outcome' AS outcome FROM turn_events e WHERE e.turn_id=c.turn_id AND e.payload->>'kind'='tool_result' AND e.payload->>'id'=c.payload->>'id' ORDER BY e.sequence LIMIT 1) r ON true
+        WHERE c.turn_id=ANY($1) AND c.payload->>'kind'='tool_call'
+        ORDER BY c.turn_id, c.sequence
+        "#,
+        ids,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut grouped = HashMap::<Uuid, Vec<Progress>>::new();
+    for row in rows {
+        grouped.entry(row.turn_id).or_default().push(row);
+    }
+    Ok(grouped)
+}
+
 impl Work {
     /// Sends one of the agent's own files with its running turn's reply. The inner error is the
     /// refusal the model reads.
@@ -179,9 +211,12 @@ impl Work {
             FROM turn_attachments x
             JOIN chat_turns t ON t.id=x.turn_id
             LEFT JOIN room_messages m ON m.id=t.room_message_id
+            LEFT JOIN tasks k ON k.room_id=m.room_id
             JOIN human_accounts a ON a.id=$1 AND a.active
             WHERE x.turn_id=$2 AND x.file_id=$3
-                AND (a.role='administrator' OR EXISTS(
+                AND (a.role='administrator'
+                    OR k.created_by=a.id
+                    OR k.id IS NULL AND EXISTS(
                     SELECT 1 FROM effective_human_grants g
                     WHERE g.actor_id=a.id AND g.capability='conversation.read'
                         AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id)
@@ -207,6 +242,7 @@ impl Work {
         let mut tx = self.pool.begin().await?;
         let canonical =
             super::access::conversation(&mut tx, actor, conversation, "conversation.send").await?;
+        super::tasks::guard(&mut tx, actor, turn).await?;
         super::collaboration::cancel_subtree(&mut tx, canonical, turn).await?;
         tx.commit().await?;
         Ok(())
@@ -216,30 +252,7 @@ impl Work {
         turns: &mut [super::Turn],
     ) -> Result<(), IdentityError> {
         let ids: Vec<_> = turns.iter().map(|turn| turn.id).collect();
-        let rows = sqlx::query_as!(
-            Progress,
-            r#"
-            SELECT (c.payload->>'id')::uuid AS "id!",
-                c.turn_id,
-                c.payload->>'name' AS "name!",
-                CASE WHEN c.payload->>'name' IN ('bash','terminal') THEN c.payload->'input'->>'command' ELSE (c.payload->>'name')||' '||(c.payload->'input')::text END AS "command!",
-                CASE WHEN r.outcome IS NOT NULL THEN r.outcome->>'status' WHEN t.status='running' THEN 'running' ELSE 'uncertain' END AS "status!",
-                r.outcome - 'image' AS "outcome?",
-                EXISTS(SELECT 1 FROM desktop_reobservations o WHERE o.agent_id=t.conversation_id AND o.turn_id=c.turn_id AND o.call_id=c.payload->>'id') AS "reobserved!"
-            FROM turn_events c
-            JOIN chat_turns t ON t.id=c.turn_id
-            LEFT JOIN LATERAL (SELECT e.payload->'outcome' AS outcome FROM turn_events e WHERE e.turn_id=c.turn_id AND e.payload->>'kind'='tool_result' AND e.payload->>'id'=c.payload->>'id' ORDER BY e.sequence LIMIT 1) r ON true
-            WHERE c.turn_id=ANY($1) AND c.payload->>'kind'='tool_call'
-            ORDER BY c.turn_id, c.sequence
-            "#,
-            &ids,
-        )
-        .fetch_all(&mut **tx)
-        .await?;
-        let mut grouped = std::collections::HashMap::<Uuid, Vec<Progress>>::new();
-        for row in rows {
-            grouped.entry(row.turn_id).or_default().push(row);
-        }
+        let mut grouped = tool_progress(tx, &ids).await?;
         let mut attachments = attachments(tx, &ids).await?;
         for turn in turns.iter_mut() {
             turn.terminal = grouped.remove(&turn.id).unwrap_or_default();

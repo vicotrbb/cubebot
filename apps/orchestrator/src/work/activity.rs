@@ -11,6 +11,8 @@ pub struct ActivityItem {
     pub kind: String,
     pub agent: Option<Uuid>,
     pub room: Option<Uuid>,
+    /// The task whose room this is; such work is answered on the Tasks page.
+    pub task: Option<Uuid>,
     pub turn: Option<Uuid>,
     /// RFC 3339.
     pub at: String,
@@ -28,7 +30,8 @@ impl Work {
         Ok(sqlx::query_as!(
             ActivityItem,
             r#"
-            SELECT i.kind AS "kind!", i.agent AS "agent?", i.room AS "room?", i.turn AS "turn?",
+            SELECT i.kind AS "kind!", i.agent AS "agent?", i.room AS "room?",
+                   (SELECT k.id FROM tasks k WHERE k.room_id=i.room) AS "task?", i.turn AS "turn?",
                    (to_jsonb(i.at) #>> '{}') AS "at!", i.text AS "text!",
                    i.at > COALESCE(a.activity_read_at, '-infinity') AS "unread!"
             FROM human_accounts a
@@ -50,8 +53,9 @@ impl Work {
                 FROM chat_turns t
                 JOIN agents g ON g.id=t.conversation_id
                 LEFT JOIN room_messages m ON m.id=t.room_message_id
+                LEFT JOIN tasks k ON k.room_id=m.room_id
                 WHERE t.status IN ('waiting','failed')
-                  AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read'))
+                  AND (a.role='administrator' OR k.created_by=a.id OR (k.id IS NULL AND EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read')))
                 UNION ALL
                 SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login)
                 FROM invitations v

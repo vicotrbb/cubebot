@@ -4,32 +4,36 @@ import {
   CircleAlert,
   CircleCheck,
   CircleX,
+  FilePen,
+  FilePlus2,
+  FileText,
   Globe,
   KeyRound,
+  Library,
   Loader,
   Monitor,
   Terminal,
   Wrench,
 } from 'lucide-react'
 import type { Turn } from '../../api/client'
+import { CodeBlock } from '../../components/CodeBlock'
+import { CopyButton } from '../../components/primitives'
+import { diffLines, workDigest, workView, type WorkView } from './work'
 
 type Progress = Turn['terminal'][number]
 type Outcome = NonNullable<Progress['outcome']>
 
-const DESKTOP = ['computer', 'screenshot', 'vault_fill', 'request_login']
-function Icon({ name }: { name: string }) {
-  if (['bash', 'terminal'].includes(name)) return <Terminal />
-  if (name.startsWith('browser_')) return <Globe />
+function Icon({ family, name }: { family: WorkView['family']; name: string }) {
   if (name === 'vault_fill' || name === 'request_login') return <KeyRound />
   if (name === 'screenshot') return <Camera />
-  if (DESKTOP.includes(name)) return <Monitor />
+  if (name === 'write_file') return <FilePlus2 />
+  if (name === 'edit_file') return <FilePen />
+  if (family === 'file') return <FileText />
+  if (family === 'shell') return <Terminal />
+  if (family === 'browser') return <Globe />
+  if (family === 'desktop') return <Monitor />
+  if (family === 'knowledge') return <Library />
   return <Wrench />
-}
-
-function title(tool: Progress) {
-  if (['bash', 'terminal'].includes(tool.name)) return 'Terminal'
-  if (tool.name === 'computer') return 'Computer'
-  return tool.name.replaceAll('_', ' ')
 }
 
 /** The card's overall mark: the tool's status, sharpened by a non-zero exit or a stop. */
@@ -54,32 +58,152 @@ function Mark({ status }: { status: string }) {
   return <CircleCheck className="ok" />
 }
 
-/** One tool call: collapsed to a line, expanded to its command, output and outcome. */
+/** One tool call on the work log's rail: a sentence, opening to the file, diff or terminal behind
+ *  it. A write in progress stays open, so people can read along. */
 export function WorkCard({ tool }: { tool: Progress }) {
   const status = statusOf(tool)
+  const view = workView(tool)
   return (
-    <details className="work" open={tool.status === 'running'}>
+    <details
+      className="work"
+      data-status={status}
+      open={tool.status === 'running'}
+    >
       <summary className="work__summary">
         <span className="work__icon">
-          <Icon name={tool.name} />
+          <Icon family={view.family} name={tool.name} />
         </span>
-        <span className="work__title">{title(tool)}</span>
-        <span className="work__cmd">{brief(tool)}</span>
+        <span className="work__line">
+          <span className="work__verb">{view.verb}</span>{' '}
+          <span
+            className={
+              view.family === 'shell' || view.family === 'file'
+                ? 'work__object work__object--code'
+                : 'work__object'
+            }
+          >
+            {view.object}
+          </span>
+          {view.where && <span className="work__where"> in {view.where}</span>}
+        </span>
+        {view.stat && <span className="work__stat">{view.stat}</span>}
         <span className="work__mark" title={status}>
           <Mark status={status} />
         </span>
       </summary>
       <div className="work__body">
-        <pre className="work__pre">{tool.command}</pre>
+        <WorkBody tool={tool} view={view} />
         {tool.status === 'uncertain' && (
           <p className="notice notice--danger small">
             Effects are uncertain. This command will not be repeated
             automatically. Inspect the workspace before continuing.
           </p>
         )}
-        {tool.outcome && <OutcomeView outcome={tool.outcome} />}
       </div>
     </details>
+  )
+}
+
+function WorkBody({ tool, view }: { tool: Progress; view: WorkView }) {
+  const body = view.body
+  if (body.kind === 'shell')
+    return <TerminalView tool={tool} command={body.command} />
+  if (body.kind === 'file')
+    return (
+      <>
+        {body.code && (
+          <CodeBlock
+            code={body.code}
+            language={body.language}
+            name={body.path}
+            numbers
+            maxHeight={420}
+          />
+        )}
+        {tool.outcome && !body.code && <OutcomeView outcome={tool.outcome} />}
+      </>
+    )
+  if (body.kind === 'diff')
+    return (
+      <>
+        <DiffView path={body.path} before={body.before} after={body.after} />
+        {tool.outcome && failedOutcome(tool) && (
+          <OutcomeView outcome={tool.outcome} />
+        )}
+      </>
+    )
+  return (
+    <>
+      {body.kind === 'fields' && body.fields.length > 0 && (
+        <dl className="work__fields">
+          {body.fields.map(([key, value]) => (
+            <div key={key}>
+              <dt>{key}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {tool.outcome && <OutcomeView outcome={tool.outcome} />}
+    </>
+  )
+}
+
+const failedOutcome = (tool: Progress) =>
+  tool.outcome?.status !== 'exited' || tool.outcome.code !== 0
+
+/** A command and what it printed, as the terminal it ran in looks: dark in either theme. */
+function TerminalView({ tool, command }: { tool: Progress; command: string }) {
+  const outcome = tool.outcome
+  const printed = outcome && 'output' in outcome ? outcome.output : ''
+  return (
+    <div className="term">
+      <pre className="term__command">
+        <span aria-hidden="true">$ </span>
+        {command}
+      </pre>
+      {printed && <pre className="term__output">{printed}</pre>}
+      {tool.status === 'running' && (
+        <span className="term__cursor" aria-label="Still running" />
+      )}
+      {outcome?.status === 'exited' && outcome.code !== 0 && (
+        <p className="term__exit">
+          Exit status {outcome.code ?? 'terminated by signal'}
+        </p>
+      )}
+      {outcome?.status === 'stopped' && (
+        <p className="term__exit">
+          Stopped: {outcome.reason.replaceAll('_', ' ')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function DiffView({
+  path,
+  before,
+  after,
+}: {
+  path: string
+  before: string
+  after: string
+}) {
+  return (
+    <div className="codeblock">
+      <div className="codeblock__head">
+        <span className="codeblock__name">{path}</span>
+        <CopyButton text={after} label="Copy new text" />
+      </div>
+      <div className="diff" tabIndex={0}>
+        {diffLines(before, after).map((line, index) => (
+          <div key={index} className="diff__line" data-sign={line.sign}>
+            <span aria-hidden="true">{line.sign === '+' ? '+' : '−'}</span>
+            <code>{line.line || ' '}</code>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -126,24 +250,25 @@ export function WorkLog({
   const failed = count(['failed', 'stopped'])
   // Uncertain is not failed: the effect may have happened.
   const uncertain = count(['uncertain'])
-  const kinds = [...new Set(tools.map((tool) => kindOf(tool.name)))]
   const actions = `${tools.length} ${tools.length === 1 ? 'action' : 'actions'}`
+  const digest = workDigest(tools)
+  const last = tools.at(-1)
+  const now = last && workView(last)
   return (
     <details className="worklog" open={running}>
       <summary className="worklog__summary">
         <ChevronRight className="worklog__chevron" aria-hidden="true" />
-        <span className="worklog__label">
-          {running
-            ? `Working · ${actions} so far`
-            : `Worked through ${actions}`}
-        </span>
-        <span className="worklog__kinds" aria-hidden="true">
-          {kinds.map((kind) => (
-            <span key={kind} className="work__icon">
-              <Icon name={kind} />
+        {running ? (
+          <>
+            <Loader className="spin worklog__spin" aria-hidden="true" />
+            <span className="worklog__label worklog__now">
+              {now ? `${now.verb} ${now.object}` : 'Working'}
             </span>
-          ))}
-        </span>
+          </>
+        ) : (
+          <span className="worklog__label">Worked through {actions}</span>
+        )}
+        {digest && <span className="worklog__digest">{digest}</span>}
         {failed > 0 && <span className="worklog__failed">{failed} failed</span>}
         {uncertain > 0 && (
           <span className="worklog__uncertain">{uncertain} uncertain</span>
@@ -152,50 +277,4 @@ export function WorkLog({
       <div className="worklog__list">{children}</div>
     </details>
   )
-}
-
-/** Collapses tools to the icon families the log shows. */
-function kindOf(name: string) {
-  if (name.startsWith('browser_')) return 'browser_navigate'
-  return name
-}
-
-/** The call in a few words: its command line, or the gist of its JSON arguments. */
-function brief(tool: Progress) {
-  const command = tool.command.startsWith(`${tool.name} {`)
-    ? tool.command.slice(tool.name.length + 1)
-    : tool.command
-  return clip(gist(command) ?? command.split('\n')[0] ?? '')
-}
-
-function gist(command: string): string | null {
-  let input: unknown
-  try {
-    input = JSON.parse(command)
-  } catch {
-    return null
-  }
-  if (typeof input !== 'object' || input === null) return null
-  const args = input as Record<string, unknown>
-  if (Array.isArray(args.actions))
-    return args.actions.map(action).join(' · ') || 'screenshot'
-  if (typeof args.action === 'string') return action(args)
-  for (const key of ['url', 'text', 'path', 'name', 'query'])
-    if (typeof args[key] === 'string') return args[key] as string
-  return JSON.stringify(args)
-}
-
-/** One computer-use step: "click 412, 80", "type “hello”", "keypress CTRL+L". */
-function action(step: unknown) {
-  const item = (step ?? {}) as Record<string, unknown>
-  const kind = String(item.type ?? item.action ?? 'action')
-  if (typeof item.text === 'string') return `${kind} “${item.text}”`
-  if (Array.isArray(item.keys)) return `${kind} ${item.keys.join('+')}`
-  if (typeof item.x === 'number' && typeof item.y === 'number')
-    return `${kind} ${item.x}, ${item.y}`
-  return kind
-}
-
-function clip(line: string) {
-  return line.length > 120 ? `${line.slice(0, 120)}…` : line
 }

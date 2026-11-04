@@ -67,6 +67,9 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
       : 'took an agent off the MCP server',
   'provider.configure': (detail) =>
     `configured the AI provider: ${text(detail.provider)} · ${text(detail.model)}${detail.key_changed ? ' with a new key' : ''}`,
+  'task.create': () => 'started a task',
+  'task.stop': () => 'stopped a task',
+  'task.settings': () => 'changed the task orchestrator’s settings',
   'room.create': () => 'created the room',
   'room.members': () => 'changed the members of',
   'desktop.take_control': (detail) =>

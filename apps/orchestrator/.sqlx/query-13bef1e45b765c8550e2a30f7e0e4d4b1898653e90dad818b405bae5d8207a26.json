@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"count!\"\n        FROM chat_turns c\n        JOIN room_messages m ON m.id=c.room_message_id\n        WHERE m.room_id=$1 AND m.author_agent_id IS NOT NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "13bef1e45b765c8550e2a30f7e0e4d4b1898653e90dad818b405bae5d8207a26"
+}
