@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH anchor AS (\n                SELECT position FROM kb_pages\n                WHERE id = $3 AND parent_id IS NOT DISTINCT FROM $2 AND id <> $1\n            ), next AS (\n                SELECT min(position) AS position FROM kb_pages\n                WHERE parent_id IS NOT DISTINCT FROM $2 AND id <> $1\n                  AND position > COALESCE((SELECT position FROM anchor), '-Infinity'::float8)\n            )\n            UPDATE kb_pages\n            SET parent_id = $2,\n                position = CASE\n                    WHEN (SELECT position FROM anchor) IS NULL\n                        THEN COALESCE((SELECT position FROM next), 1) - 1\n                    WHEN (SELECT position FROM next) IS NULL\n                        THEN (SELECT position FROM anchor) + 1\n                    ELSE ((SELECT position FROM anchor) + (SELECT position FROM next)) / 2\n                END\n            WHERE id = $1 AND trashed_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "52a938a177f975003b9d11e05d82ea3914a46b306dcf053594caa38345e8935b"
+}

@@ -1,12 +1,14 @@
 /* Files: a toolbar row, the path inside a folder, then entry rows; the pane takes drops */
 .file-drop {
   position: relative;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-content: start;
   container-type: inline-size;
-  max-width: 1100px;
+  width: 100%;
+  max-width: 960px;
   min-height: 100%;
+  margin-inline: auto;
 }
 .file-drop.dragging::after {
   content: 'Drop to upload into ' attr(data-folder);
@@ -108,17 +110,15 @@
   min-height: 34px;
 }
 .files-empty {
+  flex: 1;
   display: grid;
   justify-items: center;
+  align-content: center;
   gap: 8px;
-  padding: 48px 24px;
+  /* Optically above center, where the eye expects an empty page's one thing to be. */
+  padding: 32px 24px 12vh;
   text-align: center;
   color: var(--ink-soft);
-}
-.files-empty--drop {
-  border: 2px dashed var(--line-strong);
-  border-radius: var(--r-lg);
-  background: var(--inset);
 }
 .files-empty h3 {
   color: var(--ink);

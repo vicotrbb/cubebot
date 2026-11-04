@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.login\n        FROM chat_turns t\n        JOIN human_accounts a ON a.id=t.actor_id\n        WHERE t.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2ae8acd35d8322e8bd7bf4641ea3b9da417440a39f9f99a7bc474f92d20b73cf"
+}

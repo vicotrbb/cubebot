@@ -115,7 +115,7 @@ async fn installation(
 }
 
 /// Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary
-/// whenever its activity, desktop, pending login or last turn changed, and every visible
+/// whenever its activity, current tool, desktop, pending login or last turn changed, and every visible
 /// agent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest
 /// message changed. Polled once a second.
 #[utoipa::path(get, path = "/api/events", operation_id = "installation_events", responses((status = 200, content_type = "text/event-stream", body = Agent)))]
@@ -149,11 +149,13 @@ async fn events(
     ))
 }
 
+type AgentFrame = (String, bool, bool, i64, Option<String>, Option<String>);
+
 struct Follow {
     api: Api,
     headers: HeaderMap,
-    /// What each agent last looked like: activity, desktop, pending login, last sequence.
-    agents: HashMap<AgentId, (String, bool, bool, i64)>,
+    /// What each agent last looked like, down to the tool it is in.
+    agents: HashMap<AgentId, AgentFrame>,
     rooms: HashMap<Uuid, i64>,
     /// The newest broadcast's sequence, for administrators.
     broadcast: Option<i64>,
@@ -170,6 +172,8 @@ impl Follow {
                 agent.desktop_active,
                 agent.pending_login,
                 agent.last_sequence,
+                agent.current_tool.clone(),
+                agent.current_target.clone(),
             );
             if self.agents.insert(agent.id, state.clone()) != Some(state) {
                 frames.push(frame("agent", &agent));

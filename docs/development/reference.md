@@ -158,6 +158,15 @@ Each agent has one memory pool in `memories`, with every revision in `memory_rev
 - Agents: `GET /api/runtime/files` (`parent`, `shared`), `POST /api/runtime/files`, `GET /api/runtime/files/{file}/content` and `POST /api/runtime/files/{file}/shares` (one share), behind the tools `files_list`, `files_put` (a workspace file read as the tool user, the call id as `request_id`), `files_get` (written as the tool user, replacing the file only once complete) and `files_share`.
 - The console's Files page lists your files and what is shared with you, uploads by picking or dropping files, downloads, renames, moves by dragging onto a folder or breadcrumb, deletes, and edits shares.
 
+### Knowledge base
+
+[One knowledge base for the installation, in Markdown](../adr/memory.md#one-knowledge-base-for-the-installation-in-markdown).
+
+- People: `GET|POST /api/kb/pages` (the outline without bodies; `request_id`, `parent`, `kind` of `page` or `folder`, `title`, `body`, `icon`), `GET|PATCH|DELETE /api/kb/pages/{id}`, `POST .../place` (`parent`, `after`), `.../restore`, `.../purge`, `GET .../versions`, `.../versions/{revision}`, `POST .../attachments?name=&request_id=` with the raw bytes, `GET /api/kb/search?q=`, `GET /api/kb/trash`, `GET|DELETE /api/kb/attachments/{id}`.
+- `PATCH` takes `title`, `icon` (empty removes it), and either `body` with `expected_revision`, or `replace` with `old_text` and `new_text`, the first of which must occur exactly once. A stale `expected_revision` is 409 with the current `revision`.
+- Agents: the same under `/api/runtime/kb`, refused with 403 while `agents.knowledge_base` is off, and without `purge`. Tools: `kb_search`, `kb_outline`, `kb_read`, `kb_create`, `kb_edit`, `kb_write`, `kb_move`, `kb_delete`, and with a workspace `kb_attach` and `kb_fetch`.
+- The capability is `knowledge_base` on `POST /api/agents/{id}/definition`, and the switch under an agent's About, Capabilities.
+
 ### Routines
 
 [Routines](../adr/agents.md#routines). `routines` holds each agent's routines; every run is a `chat_turns` row with `routine_id`, `origin` (`person`, `agent`, `schedule`, `webhook`) and the routine's `command` copied in, and `routine_hooks` keeps a day of webhook deliveries for replay and the rate window.

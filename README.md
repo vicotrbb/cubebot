@@ -84,7 +84,7 @@ cargo run --locked -p cubebot-orchestrator
 | `apps/sandbox`      | `cubebot-sandbox`: in-house KVM VMM and dev process backend ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) |
 | `apps/web`          | TanStack Start frontend and future PWA                                                                                                                   |
 | `modules/protocol`  | Shared communication contracts                                                                                                                           |
-| `modules/providers` | Bounded native OpenAI text and function-call adapter                                                                                                     |
+| `modules/providers` | Native OpenAI, Anthropic and OpenRouter adapters                                                                                                         |
 | `tooling/quality`   | Complexity gate, regression tests, and Python development environment                                                                                    |
 | `tests/system`      | Smoke checks spanning built application processes                                                                                                        |
 | `deploy`            | Installation packaging; Dockerfiles live with their apps                                                                                                 |

@@ -447,7 +447,7 @@ fn unavailable(error: sqlx::Error) -> Failure {
 fn bearer(headers: &HeaderMap) -> Result<&str, Failure> {
     super::bearer(headers).ok_or(Failure(StatusCode::UNAUTHORIZED))
 }
-struct Failure(StatusCode);
+pub(super) struct Failure(pub(super) StatusCode);
 impl From<Error> for Failure {
     fn from(error: Error) -> Self {
         Self(match error {

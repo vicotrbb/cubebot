@@ -49,7 +49,9 @@ impl Skills {
         tools: Option<&'a Registry>,
     ) -> Option<Result<Running<'a>, &'static str>> {
         if name != "load_skill" {
-            return crate::files::call(self.client.as_ref(), name, id, input, tools);
+            return crate::files::call(self.client.as_ref(), name, id, input, tools).or_else(
+                || crate::knowledge_base::call(self.client.as_ref(), name, id, input, tools),
+            );
         }
         let load = Load::deserialize(input)
             .ok()

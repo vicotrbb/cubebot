@@ -45,6 +45,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         dreaming_model: Some("dream-model".into()),
         task_lanes: Some(3),
         broadcast: Some(true),
+        knowledge_base: Some(false),
         avatar: None,
     };
     let receipt = agents.update(&actor, id, &update).await.unwrap();
@@ -61,6 +62,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         (900, Some("dream-model"), 3)
     );
     assert!(definition.broadcast);
+    assert!(!definition.knowledge_base);
     let invalid = UpdateAgent {
         request_id: Uuid::new_v4(),
         expected_revision: 2,
@@ -255,6 +257,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         dreaming_model: None,
         task_lanes: None,
         broadcast: None,
+        knowledge_base: None,
         avatar: None,
     };
     let second = UpdateAgent {
@@ -267,6 +270,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         dreaming_model: None,
         task_lanes: None,
         broadcast: None,
+        knowledge_base: None,
         avatar: None,
     };
     let (first, second) = tokio::join!(

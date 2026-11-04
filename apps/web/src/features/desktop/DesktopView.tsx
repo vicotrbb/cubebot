@@ -132,7 +132,12 @@ function Head({
       >
         <ChevronLeft />
       </Link>
-      <Cube avatar={agent.avatar} mood={moodOf(agent)} size={28} />
+      <Cube
+        agentId={agent.id}
+        avatar={agent.avatar}
+        mood={moodOf(agent)}
+        size={28}
+      />
       <div className="agent-head__title">
         <h1>
           {agent.name} <span className="faint">· Desktop</span>

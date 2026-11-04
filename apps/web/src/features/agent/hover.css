@@ -1,0 +1,60 @@
+/* The agent card: follows the pointer and never takes it, so it cannot steal a hover. */
+.agent-card {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+  width: 248px;
+  /* Portaled into the body, where app-level sizing would otherwise stretch it. */
+  height: auto;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow: var(--float);
+  outline: 1px solid var(--line);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 110ms ease-out;
+}
+.agent-card[data-open='true'] {
+  opacity: 1;
+}
+.agent-card__head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+.agent-card__who {
+  display: grid;
+  min-width: 0;
+}
+.agent-card__who strong {
+  font-weight: var(--w-head);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-card__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.agent-card__doing {
+  font-size: var(--t-sm);
+  font-weight: var(--w-label);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.agent-card__role {
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}

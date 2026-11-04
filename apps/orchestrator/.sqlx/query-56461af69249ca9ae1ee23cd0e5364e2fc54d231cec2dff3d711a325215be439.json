@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE root AS (\n                SELECT id, trashed_at FROM kb_pages WHERE id = $1 AND trashed_at IS NOT NULL\n            ), tree AS (\n                SELECT p.id FROM kb_pages p JOIN root r ON p.id = r.id\n                UNION ALL\n                SELECT p.id FROM kb_pages p JOIN tree t ON p.parent_id = t.id\n                JOIN root r ON p.trashed_at = r.trashed_at\n            )\n            UPDATE kb_pages p\n            SET trashed_at = NULL,\n                parent_id = CASE\n                    WHEN p.id = $1 AND EXISTS(\n                        SELECT 1 FROM kb_pages up\n                        WHERE up.id = p.parent_id AND up.trashed_at IS NOT NULL\n                    ) THEN NULL\n                    ELSE p.parent_id\n                END\n            WHERE p.id IN (SELECT id FROM tree)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "56461af69249ca9ae1ee23cd0e5364e2fc54d231cec2dff3d711a325215be439"
+}

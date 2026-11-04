@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { agentHover } from './agentHover'
 import './cube.css'
 
 export const PAINTS = [
@@ -49,26 +50,13 @@ export function moodOf(agent: {
   return 'idle'
 }
 
-export function Cube({
-  avatar = DEFAULT_AVATAR,
-  mood = 'idle',
-  size = 36,
-  follow = false,
-  className,
-}: {
-  avatar?: Avatar | null
-  mood?: Mood
-  size?: number
-  /** Turns toward the pointer; for the one large block on a page. */
-  follow?: boolean
-  className?: string
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  useFollow(ref, follow)
-  const look = avatar ?? DEFAULT_AVATAR
-  const paint = mood === 'retired' ? 'wood' : look.paint
-  const eyes = mood === 'retired' ? null : look.eyes
-  const classes = [
+function cubeClasses(
+  paint: Paint,
+  mood: Mood,
+  follow: boolean,
+  className: string | undefined,
+) {
+  return [
     'cube',
     `cube--${paint}`,
     `cube--${mood}`,
@@ -77,12 +65,38 @@ export function Cube({
   ]
     .filter(Boolean)
     .join(' ')
+}
+
+export function Cube({
+  avatar = DEFAULT_AVATAR,
+  mood = 'idle',
+  size = 36,
+  follow = false,
+  className,
+  agentId,
+}: {
+  avatar?: Avatar | null
+  mood?: Mood
+  size?: number
+  /** Turns toward the pointer; for the one large block on a page. */
+  follow?: boolean
+  className?: string
+  /** The agent this cube stands for, whose card opens on hover. */
+  agentId?: string | undefined
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  useFollow(ref, follow)
+  const look = avatar ?? DEFAULT_AVATAR
+  const paint = mood === 'retired' ? 'wood' : look.paint
+  const eyes = mood === 'retired' ? null : look.eyes
+  const classes = cubeClasses(paint, mood, follow, className)
   return (
     <div
       ref={ref}
       className={classes}
       style={{ '--size': `${size}px` } as React.CSSProperties}
       aria-hidden="true"
+      {...(agentId ? agentHover(agentId) : {})}
     >
       <div className="cube__body">
         <div className="cube__face cube__face--front">

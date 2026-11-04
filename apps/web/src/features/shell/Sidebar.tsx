@@ -5,6 +5,7 @@ import {
   Folder,
   Hash,
   Inbox,
+  Library,
   LogOut,
   Megaphone,
   Moon,
@@ -31,9 +32,11 @@ import {
   useSession,
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
+import { agentHover } from '../../components/agentHover'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Menu } from '../../components/primitives'
+import { doingOf } from '../agent/doing'
 
 export const ACTIVITY: Record<string, string> = {
   working: 'Working',
@@ -120,6 +123,14 @@ export function Sidebar({
           >
             <BookOpen className="row__icon" />
             <span className="row__label">Skills</span>
+          </Link>
+          <Link
+            to="/kb"
+            className="row row--page"
+            activeProps={{ 'aria-current': 'page' }}
+          >
+            <Library className="row__icon" />
+            <span className="row__label">Knowledge base</span>
           </Link>
         </Section>
       </nav>
@@ -264,9 +275,14 @@ function AgentRow({ agent }: { agent: AgentSummary }) {
       params={{ agentId: agent.id }}
       className={fresh ? 'row row--agent unread' : 'row row--agent'}
       activeProps={{ 'aria-current': 'page' }}
+      {...agentHover(agent.id)}
     >
       <Cube avatar={agent.avatar} mood={mood} size={22} />
-      <span className="row__label">{agent.name}</span>
+      <span className="row__text">
+        <span className="row__label">{agent.name}</span>
+        {/* Phones have no hover, so their Home page says it on the row. */}
+        <span className="row__doing">{doingOf(agent)}</span>
+      </span>
       {agent.pending_login && <span className="row__flag">Needs you</span>}
       <span
         className={`dot dot--${agent.activity}`}

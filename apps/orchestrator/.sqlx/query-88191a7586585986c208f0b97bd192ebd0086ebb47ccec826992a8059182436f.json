@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT p.id, p.parent_id, p.kind, p.title, p.icon, p.revision,\n                (to_jsonb(p.updated_at) #>> '{}') AS \"updated_at!\",\n                p.updated_by_account, p.updated_by_agent,\n                COALESCE(h.login, a.name) AS \"author!\"\n            FROM kb_pages p\n            LEFT JOIN human_accounts h ON h.id = p.updated_by_account\n            LEFT JOIN agents a ON a.id = p.updated_by_agent\n            LEFT JOIN kb_pages up ON up.id = p.parent_id\n            WHERE ($2::uuid IS NOT NULL AND p.id = $2 AND p.trashed_at IS NULL)\n               OR ($2::uuid IS NULL AND (CASE WHEN $1\n                    THEN p.trashed_at IS NOT NULL AND up.trashed_at IS DISTINCT FROM p.trashed_at\n                    ELSE p.trashed_at IS NULL END))\n            ORDER BY CASE WHEN $1 THEN p.trashed_at END DESC, p.position, p.title\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "parent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_by_account",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "updated_by_agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "author!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      null,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "88191a7586585986c208f0b97bd192ebd0086ebb47ccec826992a8059182436f"
+}

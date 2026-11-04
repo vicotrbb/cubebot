@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE tree AS (\n                SELECT id FROM kb_pages WHERE id = $1 AND trashed_at IS NOT NULL\n                UNION ALL\n                SELECT p.id FROM kb_pages p JOIN tree t ON p.parent_id = t.id\n            )\n            SELECT x.blob_id\n            FROM kb_attachments x\n            WHERE x.page_id IN (SELECT id FROM tree)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "blob_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "26bea0ea9fbc632a360befaa0209afe2bef713c109e57178a6e06a0451e3cf94"
+}

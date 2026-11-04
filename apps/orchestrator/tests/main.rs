@@ -29,6 +29,7 @@ mod identity;
 mod identity_http;
 mod identity_requests;
 mod invitations;
+mod knowledge_base;
 mod kubernetes_http;
 mod kubernetes_policy;
 mod mcp;

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE agents SET knowledge_base = false",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "ecbdf9338a131a6882f16672c242f2ddee87b0f9174084f64116d7464d356a33"
+}

@@ -224,6 +224,7 @@ function DeliveryAvatar({
   if (agent)
     return (
       <Cube
+        agentId={agent.id}
         avatar={agent.avatar}
         mood={moodOf(agent)}
         size={32}

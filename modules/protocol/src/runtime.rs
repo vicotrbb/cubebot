@@ -69,16 +69,18 @@ pub const EVENT_BYTES: usize = 8 * 1024 * 1024;
 pub enum ProviderKind {
     Openai,
     Anthropic,
+    Openrouter,
 }
 impl ProviderKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Openai => "openai",
             Self::Anthropic => "anthropic",
+            Self::Openrouter => "openrouter",
         }
     }
     pub fn parse(value: &str) -> Option<Self> {
-        [Self::Openai, Self::Anthropic]
+        [Self::Openai, Self::Anthropic, Self::Openrouter]
             .into_iter()
             .find(|kind| kind.as_str() == value)
     }
@@ -126,6 +128,9 @@ pub struct Turn {
     /// and the turn is not itself a broadcast, so broadcasts never answer each other.
     #[serde(default)]
     pub broadcast: bool,
+    /// The agent's knowledge base capability is on, so it gets those tools.
+    #[serde(default)]
+    pub knowledge_base: bool,
 }
 
 /// One MCP server (docs/adr/agents.md#local-and-remote-mcp-server-support) as the agent connects it: a local
@@ -546,6 +551,7 @@ mod tests {
                 headers: [("Authorization".into(), "Bearer k".into())].into(),
             }],
             broadcast: false,
+            knowledge_base: false,
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));
@@ -556,5 +562,14 @@ mod tests {
         assert_eq!(ProviderKind::parse("openai"), Some(ProviderKind::Openai));
         assert_eq!(ProviderKind::parse("gemini"), None);
         assert!(serde_json::from_str::<Report>(r#"{"type":"claim"}"#).is_err());
+    }
+
+    #[test]
+    fn openrouter_is_a_provider_kind() {
+        assert_eq!(
+            ProviderKind::parse("openrouter"),
+            Some(ProviderKind::Openrouter)
+        );
+        assert_eq!(ProviderKind::Openrouter.as_str(), "openrouter");
     }
 }

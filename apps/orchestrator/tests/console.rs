@@ -228,6 +228,32 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
             .unwrap()
             .desktop_active
     );
+
+    // What it is doing: the tool it is in and on what, for those who may read the conversation.
+    let step = |sequence: i32, payload: Value| {
+        sqlx::query("INSERT INTO turn_events (turn_id, sequence, payload) VALUES ($1, $2, $3)")
+            .bind(turn)
+            .bind(i64::from(sequence))
+            .bind(payload)
+            .execute(&f.pool)
+    };
+    step(
+        2,
+        json!({"kind":"tool_call","id":"c2","name":"write_file","input":{"path":"docs/poem.txt"}}),
+    )
+    .await
+    .unwrap();
+    let ada = agents.get(&f.admin, AgentId(f.ada)).await.unwrap();
+    assert_eq!(ada.current_tool.as_deref(), Some("write_file"));
+    assert_eq!(ada.current_target.as_deref(), Some("docs/poem.txt"));
+    let seen = agents.get(&f.member, AgentId(f.ada)).await.unwrap();
+    assert_eq!((seen.current_tool, seen.current_target), (None, None));
+    // A result means the tool is done, so the agent is thinking again.
+    step(3, json!({"kind":"tool_result","id":"c2","outcome":{}}))
+        .await
+        .unwrap();
+    let ada = agents.get(&f.admin, AgentId(f.ada)).await.unwrap();
+    assert_eq!((ada.current_tool, ada.current_target), (None, None));
 }
 
 #[tokio::test]

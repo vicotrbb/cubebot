@@ -268,7 +268,7 @@ async fn a_broadcast_reaches_every_agent_that_is_not_retired_once() {
             .unwrap();
     assert_eq!(
         text,
-        "Broadcast to every agent from admin:\n\nRelease freeze starts at noon."
+        "Broadcast received from admin. Every agent already has it, so do not forward or rebroadcast it; respond only for yourself:\n\nRelease freeze starts at noon."
     );
     let feed = work.broadcasts(&admin, 0).await.unwrap();
     assert_eq!((feed.messages.len(), feed.read_sequence), (1, 0));

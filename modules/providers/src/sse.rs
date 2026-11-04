@@ -5,6 +5,8 @@ use serde_json::Value;
 
 /// Bounds one event, not a response: OpenAI repeats the whole output in its final event.
 const EVENT_BYTES: usize = 16 * 1024 * 1024;
+/// What [`Reader::next`] returns for Chat Completions' `data: [DONE]`, which is not JSON.
+pub(crate) const DONE: &str = "[DONE]";
 
 pub(crate) struct Reader {
     response: Response,
@@ -64,7 +66,11 @@ fn data(event: &[u8]) -> Result<Option<Value>, Error> {
     if data.is_empty() {
         return Ok(None);
     }
-    serde_json::from_str(&data.join("\n"))
+    let data = data.join("\n");
+    if data == DONE {
+        return Ok(Some(Value::from(DONE)));
+    }
+    serde_json::from_str(&data)
         .map(Some)
         .map_err(|error| Error::InvalidResponse(Some(error.into())))
 }
@@ -81,5 +87,6 @@ mod tests {
         );
         assert_eq!(data(b": keep-alive\n\n").unwrap(), None);
         assert!(data(b"data: not json\n\n").is_err());
+        assert_eq!(data(b"data: [DONE]\n\n").unwrap(), Some(super::DONE.into()));
     }
 }

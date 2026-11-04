@@ -8,9 +8,6 @@ function FilesPage() {
     <div className="page">
       <header className="page__head">
         <h1>Files</h1>
-        <span className="faint small">
-          Shared files stay available while agents sleep.
-        </span>
       </header>
       <div className="page__body page__body--list">
         <Files />

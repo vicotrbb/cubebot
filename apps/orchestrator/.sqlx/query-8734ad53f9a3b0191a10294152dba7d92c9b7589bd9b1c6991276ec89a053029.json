@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE kb_pages\n        SET title=$2, body=$3, icon=$4, revision=$5, updated_by_account=$6,\n            updated_by_agent=$7, updated_at=clock_timestamp()\n        WHERE id=$1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8734ad53f9a3b0191a10294152dba7d92c9b7589bd9b1c6991276ec89a053029"
+}

@@ -1,3 +1,15 @@
 # The sandbox is the agent's computer and the boundary: user namespaces are not available
 # inside it, so Chromium's own sandbox cannot start (docs/adr/sandbox.md#desktop-as-a-vmm-device).
 export CHROMIUM_FLAGS="$CHROMIUM_FLAGS --no-sandbox --test-type --disable-gpu --no-first-run --hide-crash-restore-bubble --password-store=basic"
+# The profile outlives the container on the workspace volume, but each container gets a new
+# hostname, and Chromium answers another host's SingletonLock with a modal dialog instead of
+# starting. A lock from this host stays: Chromium tells a live process from a dead one itself.
+# This runs for every launch as the profile's owner: $HOME for the agent's own browser, ~/.config
+# for the taskbar's.
+for profile in "$HOME" "$HOME/.config/chromium"; do
+  lock=$(readlink "$profile/SingletonLock" 2>/dev/null) || continue
+  case "$lock" in
+    "$(hostname)"-*) ;;
+    *) rm -f "$profile/SingletonLock" "$profile/SingletonCookie" "$profile/SingletonSocket" ;;
+  esac
+done

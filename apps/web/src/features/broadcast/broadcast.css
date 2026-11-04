@@ -35,7 +35,7 @@
   border-left: 1px solid var(--line-strong);
 }
 .broadcast-replies .msg {
-  grid-template-columns: 28px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   padding: 5px 8px;
 }
 .broadcast-replies .msg__author {

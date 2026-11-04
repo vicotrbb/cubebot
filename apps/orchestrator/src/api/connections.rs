@@ -5,10 +5,10 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, State},
+    extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde_json::json;
 
@@ -19,13 +19,15 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(inspect, configure, models))]
+#[openapi(paths(inspect, configure, models, saved, forget))]
 pub(super) struct Doc;
 
 pub(super) fn router(identity: Identity, connections: Connections) -> Router {
     Router::new()
         .route("/api/provider", get(inspect).post(configure))
         .route("/api/provider/models", post(models))
+        .route("/api/provider/saved", get(saved))
+        .route("/api/provider/saved/{provider}", delete(forget))
         .layer(DefaultBodyLimit::max(8192))
         .with_state(Api {
             identity,
@@ -62,6 +64,32 @@ async fn configure(
     let event = Event::by(actor.id, "provider.configure").detail(detail);
     api.identity.audit(event).await;
     Ok(([("cache-control", "no-store")], Json(summary)))
+}
+
+#[utoipa::path(get, path = "/api/provider/saved", responses((status = 200, body = Vec<crate::connections::SavedProvider>)))]
+async fn saved(
+    State(api): State<Api>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.connections.saved(&actor).await?),
+    ))
+}
+
+/// Forgets the key saved for a provider that is not in use; 404 when none is saved.
+#[utoipa::path(delete, path = "/api/provider/saved/{provider}", params(("provider" = cubebot_protocol::runtime::ProviderKind, Path)), responses((status = 204), (status = 404)))]
+async fn forget(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(provider): Path<cubebot_protocol::runtime::ProviderKind>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.connections.forget(&actor, provider).await?;
+    let event = Event::by(actor.id, "provider.forget").detail(json!({"provider": provider}));
+    api.identity.audit(event).await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// The models a key can use, newest first: 422 when the provider rejects the key, 502 when it

@@ -42,6 +42,9 @@ pub struct UpdateAgent {
     /// Whether the agent may broadcast to every agent; `None` keeps the current setting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub broadcast: Option<bool>,
+    /// Whether the agent may use the knowledge base; `None` keeps the current setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub knowledge_base: Option<bool>,
     /// `None` keeps the current cube; not part of the revision history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<super::Avatar>,
@@ -102,6 +105,7 @@ impl Agents {
                 task_lanes = COALESCE($8, task_lanes),
                 avatar = COALESCE($9, avatar),
                 broadcast = COALESCE($10, broadcast),
+                knowledge_base = COALESCE($11, knowledge_base),
                 revision = revision + 1
             WHERE id = $1
               AND revision = $5
@@ -118,6 +122,7 @@ impl Agents {
             input.task_lanes,
             input.avatar.map(sqlx::types::Json) as Option<sqlx::types::Json<super::Avatar>>,
             input.broadcast,
+            input.knowledge_base,
         )
         .fetch_optional(&mut *transaction)
         .await?

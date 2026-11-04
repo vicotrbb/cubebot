@@ -366,20 +366,18 @@ components:
     rounded: '{rounded.console-sm}'
     size: '28px'
   console-tabs:
-    backgroundColor: '{colors.console-inset}'
     rounded: '{rounded.console-md}'
-    padding: '2px'
   console-tab:
     textColor: '{colors.ink-soft}'
     typography: '{typography.console-label}'
-    rounded: '5px'
-    padding: '4px 10px'
+    rounded: '{rounded.console-sm}'
+    padding: '5px 10px'
   console-tab-selected:
     backgroundColor: '{colors.console-raised}'
     textColor: '{colors.ink}'
     typography: '{typography.console-label}'
-    rounded: '5px'
-    padding: '4px 10px'
+    rounded: '{rounded.console-sm}'
+    padding: '5px 10px'
   console-panel:
     backgroundColor: '{colors.console-ground}'
     padding: '16px'
@@ -698,7 +696,7 @@ The site palette plus a plane system and a small set of status tints. Light valu
 - **Sidebar** (`console-sidebar`, the site's Desk Deep): the sidebar and the phone bottom bar.
 - **Surface** (`console-surface`, the site's Paper): the conversation column, dialogs, the desktop page's head and the audit log's sticky day separators.
 - **Raised** (`console-raised`): buttons, fields, the composer, menus, the floating preview, the selected tab, the thread line and root, the login banner, the switch thumb, work-card icon wells.
-- **Inset** (`console-inset`): chips, the tabs tray, notices, work cards, the desktop page behind the stage, the broadcast mark, entry icon wells, the audit detail, `kbd`, the avatar preview and `console-code-bg` for `pre`.
+- **Inset** (`console-inset`): chips, notices, work cards, the desktop page behind the stage, the broadcast mark, entry icon wells, the audit detail, `kbd`, the avatar preview and `console-code-bg` for `pre`.
 - **Ink** (`ink`), **Ink Soft** (`ink-soft`), **Ink Faint** (`console-ink-faint`): text; sidebar rows at rest, secondary text and audit sentences; captions, section heads, icons, table heads, times, placeholders and bottom-bar labels.
 - **Line** (`console-line`, warm ink at 0.12) for every 1px divider, border and control ring; **Line Strong** (0.22) for field and composer borders, the switch track, the steering, work-log and broadcast-reply rules and an expanded thread line. Hover washes are the warm shadow color at 0.025–0.07.
 - **Button edge** (`console-btn-edge`, Paper Deep; `console-btn-edge-dark`, black at 0.4): the default button's 2px inset edge.

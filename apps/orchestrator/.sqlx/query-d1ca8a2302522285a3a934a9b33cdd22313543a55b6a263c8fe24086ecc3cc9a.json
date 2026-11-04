@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE tree AS (\n                SELECT id FROM kb_pages WHERE id = $1 AND trashed_at IS NULL\n                UNION ALL\n                SELECT p.id FROM kb_pages p JOIN tree t ON p.parent_id = t.id\n                WHERE p.trashed_at IS NULL\n            ), now AS (SELECT clock_timestamp() AS at)\n            UPDATE kb_pages SET trashed_at = (SELECT at FROM now)\n            WHERE id IN (SELECT id FROM tree)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d1ca8a2302522285a3a934a9b33cdd22313543a55b6a263c8fe24086ecc3cc9a"
+}

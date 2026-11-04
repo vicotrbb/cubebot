@@ -34,7 +34,7 @@ impl Work {
         let pending = sqlx::query!(
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
-                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!"
+                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -61,6 +61,7 @@ impl Work {
         );
         let (command, command_only) = (pending.command, pending.command_only);
         let broadcast = pending.broadcast && !task;
+        let knowledge_base = pending.knowledge_base;
         if !sender_allowed(tx, turn).await? {
             wait(tx, turn, "sender_access_revoked").await?;
             return Ok(None);
@@ -80,7 +81,8 @@ impl Work {
         .execute(&mut **tx)
         .await?;
         let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
-        let instructions = super::collaboration::with_peers(tx, actor.agent, instructions).await?;
+        let instructions =
+            super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
         let (summary, history, message) = context(tx, actor, task, room, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         // An unreadable server configuration leaves the turn without MCP rather than stuck.
@@ -112,6 +114,7 @@ impl Work {
             command_only,
             mcp_servers,
             broadcast,
+            knowledge_base,
         }))
     }
 

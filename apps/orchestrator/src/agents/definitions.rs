@@ -75,6 +75,8 @@ pub struct Agent {
     pub task_lanes: i16,
     /// The agent may broadcast to every agent (migrations/0046_broadcasts.sql).
     pub broadcast: bool,
+    /// The agent may use the knowledge base (migrations/0048_knowledge_base.sql), on by default.
+    pub knowledge_base: bool,
     /// `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
     /// otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
     /// still holds its credential.
@@ -88,6 +90,11 @@ pub struct Agent {
     pub desktop_active: bool,
     /// The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
     pub pending_login: bool,
+    /// The tool its running turn is in now; `None` while it thinks, works on nothing, or the
+    /// caller cannot read its conversation.
+    pub current_tool: Option<String>,
+    /// What that tool is working on, such as a file or a URL.
+    pub current_target: Option<String>,
     /// The highest turn sequence in the agent's conversation, 0 without turns.
     pub last_sequence: i64,
     /// The caller's read cursor in that conversation, 0 until set.
@@ -177,7 +184,7 @@ impl Agents {
                CASE WHEN 'agent_manage' = ANY(c.names) THEN g.instructions END AS instructions,
                g.revision, g.instructions_revision, g.desired_state,
                g.idle_policy AS "idle_policy: IdlePolicy", g.restart_generation,
-               g.idle_delay_seconds, g.dreaming_model, g.task_lanes, g.broadcast,
+               g.idle_delay_seconds, g.dreaming_model, g.task_lanes, g.broadcast, g.knowledge_base,
                CASE
                    WHEN g.desired_state <> 'running' THEN g.desired_state
                    WHEN EXISTS(
@@ -225,6 +232,8 @@ impl Agents {
                    WHERE h.agent_id = g.id
                      AND h.status = 'pending'
                ) AS "pending_login!",
+               CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.name END AS "current_tool?",
+               CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.target END AS "current_target?",
                COALESCE((SELECT max(t.sequence) FROM chat_turns t WHERE t.conversation_id = g.id), 0)
                    AS "last_sequence!",
                COALESCE((
@@ -251,6 +260,21 @@ impl Agents {
                 ), '{}')
             END AS names
         ) c
+        LEFT JOIN LATERAL (
+            -- The latest step of the running turn: a result means the tool has finished.
+            SELECT CASE WHEN e.payload->>'kind' = 'tool_call' THEN e.payload->>'name' END AS name,
+                   CASE WHEN e.payload->>'kind' = 'tool_call' THEN left(COALESCE(
+                       e.payload->'input'->>'path', e.payload->'input'->>'url',
+                       e.payload->'input'->>'name', e.payload->'input'->>'query',
+                       e.payload->'input'->>'title'), 120) END AS target
+            FROM chat_turns t
+            JOIN turn_events e ON e.turn_id = t.id
+            WHERE t.conversation_id = g.id
+              AND t.status = 'running'
+              AND e.payload->>'kind' IN ('tool_call', 'tool_result')
+            ORDER BY e.id DESC
+            LIMIT 1
+        ) tool ON true
         WHERE ($2::uuid IS NULL OR g.id > $2)
           AND ($3::uuid IS NULL OR g.id = $3)
           AND cardinality(c.names) > 0

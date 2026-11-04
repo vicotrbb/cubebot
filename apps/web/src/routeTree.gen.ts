@@ -15,10 +15,13 @@ import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
 import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
+import { Route as AppKbRouteImport } from './routes/_app.kb'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppYouRouteImport } from './routes/_app.you'
 import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agentId'
 import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
+import { Route as AppKbIndexRouteImport } from './routes/_app.kb.index'
+import { Route as AppKbPageIdRouteImport } from './routes/_app.kb.$pageId'
 import { Route as AppPlatformAuditRouteImport } from './routes/_app.platform.audit'
 import { Route as AppPlatformHealthRouteImport } from './routes/_app.platform.health'
 import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
@@ -74,6 +77,11 @@ const AppFilesRoute = AppFilesRouteImport.update({
   path: '/files',
   getParentRoute: () => AppRoute,
 } as any)
+const AppKbRoute = AppKbRouteImport.update({
+  id: '/kb',
+  path: '/kb',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppPlatformRoute = AppPlatformRouteImport.update({
   id: '/platform',
   path: '/platform',
@@ -93,6 +101,16 @@ const AppAgentsNewRoute = AppAgentsNewRouteImport.update({
   id: '/agents/new',
   path: '/agents/new',
   getParentRoute: () => AppRoute,
+} as any)
+const AppKbIndexRoute = AppKbIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppKbRoute,
+} as any)
+const AppKbPageIdRoute = AppKbPageIdRouteImport.update({
+  id: '/$pageId',
+  path: '/$pageId',
+  getParentRoute: () => AppKbRoute,
 } as any)
 const AppPlatformAuditRoute = AppPlatformAuditRouteImport.update({
   id: '/audit',
@@ -230,10 +248,12 @@ export interface FileRoutesByFullPath {
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
   '/files': typeof AppFilesRoute
+  '/kb': typeof AppKbRouteWithChildren
   '/platform': typeof AppPlatformRouteWithChildren
   '/you': typeof AppYouRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
+  '/kb/$pageId': typeof AppKbPageIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
@@ -245,6 +265,7 @@ export interface FileRoutesByFullPath {
   '/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
   '/rooms/new': typeof AppRoomsNewRoute
   '/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/kb/': typeof AppKbIndexRoute
   '/skills/': typeof AppSkillsIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
@@ -270,6 +291,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
+  '/kb/$pageId': typeof AppKbPageIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
@@ -281,6 +303,7 @@ export interface FileRoutesByTo {
   '/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
   '/rooms/new': typeof AppRoomsNewRoute
   '/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/kb': typeof AppKbIndexRoute
   '/skills': typeof AppSkillsIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
@@ -303,11 +326,13 @@ export interface FileRoutesById {
   '/_app/activity': typeof AppActivityRoute
   '/_app/broadcast': typeof AppBroadcastRoute
   '/_app/files': typeof AppFilesRoute
+  '/_app/kb': typeof AppKbRouteWithChildren
   '/_app/platform': typeof AppPlatformRouteWithChildren
   '/_app/you': typeof AppYouRoute
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/_app/agents/new': typeof AppAgentsNewRoute
+  '/_app/kb/$pageId': typeof AppKbPageIdRoute
   '/_app/platform/audit': typeof AppPlatformAuditRoute
   '/_app/platform/health': typeof AppPlatformHealthRoute
   '/_app/platform/mcp': typeof AppPlatformMcpRoute
@@ -319,6 +344,7 @@ export interface FileRoutesById {
   '/_app/rooms/$roomId': typeof AppRoomsRoomIdRouteWithChildren
   '/_app/rooms/new': typeof AppRoomsNewRoute
   '/_app/skills/$skillId': typeof AppSkillsSkillIdRoute
+  '/_app/kb/': typeof AppKbIndexRoute
   '/_app/skills/': typeof AppSkillsIndexRoute
   '/_app/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/_app/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
@@ -342,10 +368,12 @@ export interface FileRouteTypes {
     | '/activity'
     | '/broadcast'
     | '/files'
+    | '/kb'
     | '/platform'
     | '/you'
     | '/agents/$agentId'
     | '/agents/new'
+    | '/kb/$pageId'
     | '/platform/audit'
     | '/platform/health'
     | '/platform/mcp'
@@ -357,6 +385,7 @@ export interface FileRouteTypes {
     | '/rooms/$roomId'
     | '/rooms/new'
     | '/skills/$skillId'
+    | '/kb/'
     | '/skills/'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
@@ -382,6 +411,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$agentId'
     | '/agents/new'
+    | '/kb/$pageId'
     | '/platform/audit'
     | '/platform/health'
     | '/platform/mcp'
@@ -393,6 +423,7 @@ export interface FileRouteTypes {
     | '/rooms/$roomId'
     | '/rooms/new'
     | '/skills/$skillId'
+    | '/kb'
     | '/skills'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
@@ -414,11 +445,13 @@ export interface FileRouteTypes {
     | '/_app/activity'
     | '/_app/broadcast'
     | '/_app/files'
+    | '/_app/kb'
     | '/_app/platform'
     | '/_app/you'
     | '/_app/'
     | '/_app/agents/$agentId'
     | '/_app/agents/new'
+    | '/_app/kb/$pageId'
     | '/_app/platform/audit'
     | '/_app/platform/health'
     | '/_app/platform/mcp'
@@ -430,6 +463,7 @@ export interface FileRouteTypes {
     | '/_app/rooms/$roomId'
     | '/_app/rooms/new'
     | '/_app/skills/$skillId'
+    | '/_app/kb/'
     | '/_app/skills/'
     | '/_app/agents/$agentId/about'
     | '/_app/agents/$agentId/access'
@@ -495,6 +529,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFilesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/kb': {
+      id: '/_app/kb'
+      path: '/kb'
+      fullPath: '/kb'
+      preLoaderRoute: typeof AppKbRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/platform': {
       id: '/_app/platform'
       path: '/platform'
@@ -522,6 +563,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/agents/new'
       preLoaderRoute: typeof AppAgentsNewRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/kb/': {
+      id: '/_app/kb/'
+      path: '/'
+      fullPath: '/kb/'
+      preLoaderRoute: typeof AppKbIndexRouteImport
+      parentRoute: typeof AppKbRoute
+    }
+    '/_app/kb/$pageId': {
+      id: '/_app/kb/$pageId'
+      path: '/$pageId'
+      fullPath: '/kb/$pageId'
+      preLoaderRoute: typeof AppKbPageIdRouteImport
+      parentRoute: typeof AppKbRoute
     }
     '/_app/platform/audit': {
       id: '/_app/platform/audit'
@@ -701,6 +756,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppKbRouteChildren {
+  AppKbPageIdRoute: typeof AppKbPageIdRoute
+  AppKbIndexRoute: typeof AppKbIndexRoute
+}
+
+const AppKbRouteChildren: AppKbRouteChildren = {
+  AppKbPageIdRoute: AppKbPageIdRoute,
+  AppKbIndexRoute: AppKbIndexRoute,
+}
+
+const AppKbRouteWithChildren = AppKbRoute._addFileChildren(AppKbRouteChildren)
+
 interface AppPlatformRouteChildren {
   AppPlatformAuditRoute: typeof AppPlatformAuditRoute
   AppPlatformHealthRoute: typeof AppPlatformHealthRoute
@@ -774,6 +841,7 @@ interface AppRouteChildren {
   AppActivityRoute: typeof AppActivityRoute
   AppBroadcastRoute: typeof AppBroadcastRoute
   AppFilesRoute: typeof AppFilesRoute
+  AppKbRoute: typeof AppKbRouteWithChildren
   AppPlatformRoute: typeof AppPlatformRouteWithChildren
   AppYouRoute: typeof AppYouRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -790,6 +858,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppActivityRoute: AppActivityRoute,
   AppBroadcastRoute: AppBroadcastRoute,
   AppFilesRoute: AppFilesRoute,
+  AppKbRoute: AppKbRouteWithChildren,
   AppPlatformRoute: AppPlatformRouteWithChildren,
   AppYouRoute: AppYouRoute,
   AppIndexRoute: AppIndexRoute,

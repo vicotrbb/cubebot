@@ -331,11 +331,13 @@ async fn lists_models_with_their_reported_context_windows() {
         [
             Model {
                 id: "claude-new".into(),
-                context_window: Some(1_000_000)
+                context_window: Some(1_000_000),
+                tools: true,
             },
             Model {
                 id: "claude-old".into(),
-                context_window: None
+                context_window: None,
+                tools: true,
             },
         ]
     );

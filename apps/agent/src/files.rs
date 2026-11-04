@@ -63,11 +63,11 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
         ),
         tool(
             "files_share",
-            "Share one of your files or folders, and everything under a folder, with a person by login, a team or an agent by name. Sharing again changes the permission.",
+            "Share one of your files or folders, and everything under a folder, with a person by login, a team or an agent by name, so it appears under Files, Shared with me in their console. Sharing again changes the permission.",
             json!({
                 "file":text("The id from files_list or files_put."),
                 "kind":{"type":"string","enum":["user","team","agent"]},
-                "name":text("The person's login, or the team's or agent's exact name."),
+                "name":text("The person's login, never their display name: your instructions list logins. For a team or agent, its exact name."),
                 "permission":{"type":"string","enum":["read","write"],"description":"write also allows uploading into, renaming, moving and deleting."},
             }),
         ),
@@ -132,7 +132,7 @@ fn share<'a>(client: &'a MemoryClient, input: &Value) -> Result<Running<'a>, &'s
     };
     Ok(Box::pin(async move {
         let shared = client.share_file(file, &share).await;
-        reported(shared.map(|shared| shared.map(|()| format!("Shared with {}.", share.name))))
+        reported(shared.map(|shared| shared.map(|()| format!("Shared with {}. They find it in the console under Files, Shared with me; there is no link to give them.", share.name))))
     }))
 }
 
@@ -199,16 +199,24 @@ async fn upload(
     put: &Put,
 ) -> Result<Result<String, String>, Error> {
     let unreadable = || Ok(Err(format!("{} cannot be read as the tool user", put.path)));
-    let Ok(mut reader) = tools.reader(&put.path) else {
+    let Ok(reader) = tools.reader(&put.path) else {
         return unreadable();
     };
-    let Some(mut stdout) = reader.stdout.take() else {
+    let Ok(body) = tool_user_body(reader).await else {
         return unreadable();
     };
-    // A missing or unreadable file fails here, before anything is sent.
-    let Ok(first) = next_chunk(&mut stdout, &mut reader).await else {
-        return unreadable();
-    };
+    let stored = client.put_file(parent, &put.name, id, body).await?;
+    Ok(stored.map(|entry| format!("Uploaded: {}", json!(entry))))
+}
+
+/// A file the tool user reads as a request body. A missing or unreadable file fails here, before
+/// anything is sent; one that fails later ends the body in an error, so nothing is stored.
+pub(crate) async fn tool_user_body(mut reader: Child) -> io::Result<reqwest::Body> {
+    let mut stdout = reader
+        .stdout
+        .take()
+        .ok_or_else(|| io::Error::other("the reader has no output"))?;
+    let first = next_chunk(&mut stdout, &mut reader).await?;
     let rest = first.is_some().then_some((stdout, reader));
     let chunks = futures_util::stream::unfold((first, rest), |(pending, rest)| async move {
         if let Some(chunk) = pending {
@@ -218,13 +226,10 @@ async fn upload(
         match next_chunk(&mut stdout, &mut reader).await {
             Ok(Some(chunk)) => Some((Ok(chunk), (None, Some((stdout, reader))))),
             Ok(None) => None,
-            // The body ends in an error, so the orchestrator stores nothing.
             Err(error) => Some((Err(error), (None, None))),
         }
     });
-    let body = reqwest::Body::wrap_stream(chunks);
-    let stored = client.put_file(parent, &put.name, id, body).await?;
-    Ok(stored.map(|entry| format!("Uploaded: {}", json!(entry))))
+    Ok(reqwest::Body::wrap_stream(chunks))
 }
 
 /// The next chunk the tool user read, `None` once it read the whole file, or an error when it
@@ -250,10 +255,18 @@ async fn download(
     file: Uuid,
     path: &str,
 ) -> Result<Result<String, String>, Error> {
-    let mut response = match client.file_content(file).await? {
-        Ok(response) => response,
-        Err(reason) => return Ok(Err(reason)),
-    };
+    match client.file_content(file).await? {
+        Ok(response) => written(response, tools, path).await,
+        Err(reason) => Ok(Err(reason)),
+    }
+}
+
+/// Writes a download as the tool user.
+pub(crate) async fn written(
+    mut response: reqwest::Response,
+    tools: &Registry,
+    path: &str,
+) -> Result<Result<String, String>, Error> {
     let unwritable = || Ok(Err(format!("{path} cannot be written as the tool user")));
     let Ok(mut writer) = tools.writer(path) else {
         return unwritable();

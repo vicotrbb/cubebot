@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { KeyRound, RefreshCw } from 'lucide-react'
-import { useState } from 'react'
+import { Check, ChevronDown, KeyRound, RefreshCw, Search } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
@@ -10,73 +10,168 @@ import './platform.css'
 type Provider = components['schemas']['ProviderKind']
 type Current = components['schemas']['ProviderSummary']
 type Choice = components['schemas']['ModelChoice']
+type Saved = components['schemas']['SavedProvider']
 
 const PROVIDERS: { id: Provider; name: string; note: string }[] = [
   {
     id: 'openai',
     name: 'OpenAI',
-    note: 'Responses API. You set the context window.',
+    note: 'The Responses API. You set each model’s context window.',
   },
   {
     id: 'anthropic',
     name: 'Anthropic',
-    note: 'Messages API. Each model reports its own window.',
+    note: 'The Messages API. Each model reports its own window.',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    note: 'Hundreds of models from many labs, on one key.',
   },
 ]
-const NAMES: Record<Provider, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
+const NAMES = Object.fromEntries(
+  PROVIDERS.map(({ id, name }) => [id, name]),
+) as Record<Provider, string>
+
+/** Where a provider stands: the one agents think with, holding a key, or untouched. */
+type Standing = 'active' | 'saved' | 'none'
+const STANDING: Record<Standing, string> = {
+  active: 'In use',
+  saved: 'Key saved',
+  none: 'Not configured',
 }
 
-/** One installation-managed provider connection (docs/adr/identity.md#installation-managed-provider-connections and docs/adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support):
- *  the provider, then its key, then a model the key lists, then that model's window. */
+/** One card per provider (docs/adr/identity.md#installation-managed-provider-connections and docs/adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support):
+ *  agents think with one connection, and a provider stepping aside keeps its key. */
 export function Providers() {
   const client = useQueryClient()
   const current = useQuery({
     queryKey: ['provider'],
     queryFn: () => ok(api.GET('/api/provider')),
   })
-  // Here, not in the form, which starts over on the revision a save makes.
+  const saved = useQuery({
+    queryKey: ['provider-saved'],
+    queryFn: () => ok(api.GET('/api/provider/saved')),
+  })
+  const [open, setOpen] = useState<Provider | null>(null)
+  // Here, not in a form, which starts over on the revision a save makes.
   const [notice, setNotice] = useState('')
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({ queryKey: ['provider'] }),
+      client.invalidateQueries({ queryKey: ['provider-saved'] }),
+    ])
+  if (current.isPending || saved.isPending)
+    return <Skeleton lines={4} width="62ch" />
+  if (current.isError || saved.isError)
+    return <Alert>The providers could not be read. Retry shortly.</Alert>
   return (
     <div className="provider-page">
       <p className="platform__lead">
-        Every eligible agent thinks with this connection. The key is encrypted
+        Every eligible agent thinks with the provider in use. Keys are encrypted
         on the server and never shown again.
       </p>
-      {current.isPending && <Skeleton lines={4} width="62ch" />}
-      {current.data && <Connection current={current.data} />}
       <Status>{notice}</Status>
-      {current.isSuccess && (
-        <ProviderForm
-          key={current.data?.revision ?? 0}
-          current={current.data ?? null}
-          onEdit={() => setNotice('')}
-          onSaved={async () => {
-            setNotice('Connection saved. Agents use it from their next turn.')
-            await client.invalidateQueries({ queryKey: ['provider'] })
-          }}
-        />
-      )}
+      <div className="provider-list">
+        {PROVIDERS.map((provider) => (
+          <ProviderCard
+            key={provider.id}
+            {...provider}
+            current={current.data ?? null}
+            saved={saved.data.find((item) => item.provider === provider.id)}
+            open={open === provider.id}
+            onToggle={() => {
+              setNotice('')
+              setOpen(open === provider.id ? null : provider.id)
+            }}
+            onDone={async (message) => {
+              setNotice(message)
+              setOpen(null)
+              await refresh()
+            }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
 
-function Connection({ current }: { current: Current }) {
+function ProviderCard({
+  id,
+  name,
+  note,
+  current,
+  saved,
+  open,
+  onToggle,
+  onDone,
+}: {
+  id: Provider
+  name: string
+  note: string
+  current: Current | null
+  saved: Saved | undefined
+  open: boolean
+  onToggle: () => void
+  onDone: (message: string) => Promise<unknown>
+}) {
+  const active = current?.provider === id ? current : null
+  const standing: Standing = active ? 'active' : saved ? 'saved' : 'none'
+  const choice = active ?? saved
+  const panel = `provider-${id}`
   return (
-    <section className="provider-current" aria-label="Current connection">
-      <span className="dot dot--idle" aria-hidden="true" />
-      <div>
-        <p className="provider-current__title">
-          {NAMES[current.provider]} · <code>{current.model}</code>
-        </p>
-        <p className="small faint">
-          {current.context_window
-            ? `${tokens(current.context_window)} token window`
-            : 'Window reported by the provider'}{' '}
-          · revision {current.revision}
-        </p>
-      </div>
+    <section
+      className="provider-card"
+      data-open={open}
+      data-standing={standing}
+    >
+      <h2>
+        <button
+          type="button"
+          className="provider-card__head"
+          aria-expanded={open}
+          aria-controls={panel}
+          onClick={onToggle}
+        >
+          <span className="provider-card__name">
+            <strong>{name}</strong>
+            <span className="small faint">{note}</span>
+          </span>
+          {choice && (
+            <span className="provider-card__choice">
+              <code>{choice.model}</code>
+              {choice.context_window && (
+                <span className="small faint">
+                  {tokens(choice.context_window)} window
+                </span>
+              )}
+            </span>
+          )}
+          <span className="provider-card__standing">
+            <span className="provider-mark" aria-hidden="true" />
+            {STANDING[standing]}
+          </span>
+          <ChevronDown className="provider-card__chevron" aria-hidden="true" />
+        </button>
+      </h2>
+      {open && (
+        <div id={panel} className="provider-card__body">
+          <ProviderForm
+            key={current?.revision ?? 0}
+            provider={id}
+            current={current}
+            saved={saved}
+            onSaved={() =>
+              onDone(
+                active
+                  ? `${name} saved. Agents use it from their next turn.`
+                  : `Agents now use ${name}, from their next turn.`,
+              )
+            }
+            onForgotten={() => onDone(`The ${name} key is gone.`)}
+          />
+        </div>
+      )}
     </section>
   )
 }
@@ -121,13 +216,11 @@ function useModels(provider: Provider, key: string, saved: boolean) {
   }
 }
 
-/** What the form starts from for `provider`: the saved model and window when it is the
- *  saved provider, nothing otherwise. */
-function draftFor(current: Current | null, provider: Provider) {
-  if (current?.provider !== provider) return { model: '', window: '' }
+/** What the form starts from: what this provider last used, or nothing. */
+function draftFor(choice: Current | Saved | null | undefined) {
   return {
-    model: current.model,
-    window: current.context_window ? String(current.context_window) : '',
+    model: choice?.model ?? '',
+    window: choice?.context_window ? String(choice.context_window) : '',
   }
 }
 
@@ -184,30 +277,36 @@ function listProblem(status: number | undefined, provider: Provider) {
 }
 
 function ProviderForm({
+  provider,
   current,
-  onEdit,
+  saved,
   onSaved,
+  onForgotten,
 }: {
+  provider: Provider
   current: Current | null
-  onEdit: () => void
+  saved: Saved | undefined
   onSaved: () => Promise<unknown>
+  onForgotten: () => Promise<unknown>
 }) {
-  const [provider, setProvider] = useState<Provider>(
-    current?.provider ?? 'openai',
-  )
+  const active = current?.provider === provider
+  const hasKey = active || Boolean(saved)
   const [key, setKey] = useState('')
-  const [draft, setDraft] = useState(() => draftFor(current, provider))
-  // A saved key lists and saves without being pasted again, for the same provider only.
-  const saved = current?.provider === provider
-  const list = useModels(provider, key, saved)
+  const [draft, setDraft] = useState(() => draftFor(active ? current : saved))
+  const list = useModels(provider, key, hasKey)
   const connection = useSaveConnection(current, onSaved)
+  const forget = useForget(provider, onForgotten)
   const choose = (id: string) => {
     const reported = list.models?.find((choice) => choice.id === id)
     const suggestion = suggestedWindow(id, reported?.context_window)
     setDraft({ model: id, window: suggestion ? String(suggestion.tokens) : '' })
-    onEdit()
   }
-  const ready = Boolean(draft.model) && (Boolean(key) || saved)
+  const ready = [
+    draft.model,
+    key || hasKey,
+    provider === 'anthropic' || draft.window,
+  ].every(Boolean)
+  const name = NAMES[provider]
   return (
     <form
       className="form provider-form"
@@ -216,21 +315,10 @@ function ProviderForm({
         void connection.save({ provider, key, ...draft })
       }}
     >
-      <h2>{current ? 'Change the connection' : 'Connect a provider'}</h2>
-      <ProviderChoice
-        value={provider}
-        onPick={(next) => {
-          setProvider(next)
-          setKey('')
-          list.reset()
-          setDraft(draftFor(current, next))
-          onEdit()
-        }}
-      />
       <KeyField
         provider={provider}
         value={key}
-        saved={saved}
+        saved={hasKey}
         loading={list.loading}
         onChange={(value) => {
           setKey(value)
@@ -259,44 +347,54 @@ function ProviderForm({
         value={draft.window}
         onChange={(window) => setDraft({ ...draft, window })}
       />
-      <Alert>{connection.error}</Alert>
+      <Alert>{connection.error || forget.error}</Alert>
       <div className="actions">
         <button
           className="btn btn--primary"
           disabled={connection.busy || !ready}
         >
-          {connection.busy ? 'Saving…' : 'Save connection'}
+          {connection.busy ? 'Saving…' : saveLabel(active, current, name)}
         </button>
+        {saved && (
+          <button
+            type="button"
+            className="btn btn--ghost"
+            disabled={forget.busy}
+            onClick={() => void forget.run()}
+          >
+            Forget this key
+          </button>
+        )}
       </div>
     </form>
   )
 }
 
-function ProviderChoice({
-  value,
-  onPick,
-}: {
-  value: Provider
-  onPick: (provider: Provider) => void
-}) {
-  return (
-    <fieldset className="provider-choice">
-      <legend>Provider</legend>
-      {PROVIDERS.map((option) => (
-        <label key={option.id} className="provider-choice__option">
-          <input
-            type="radio"
-            name="provider"
-            value={option.id}
-            checked={value === option.id}
-            onChange={() => onPick(option.id)}
-          />
-          <span className="provider-choice__name">{option.name}</span>
-          <span className="provider-choice__note">{option.note}</span>
-        </label>
-      ))}
-    </fieldset>
-  )
+function saveLabel(active: boolean, current: Current | null, name: string) {
+  if (active) return 'Save changes'
+  return current ? `Switch agents to ${name}` : `Use ${name}`
+}
+
+function useForget(provider: Provider, onDone: () => Promise<unknown>) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    setBusy(true)
+    setError('')
+    try {
+      await ok(
+        api.DELETE('/api/provider/saved/{provider}', {
+          params: { path: { provider } },
+        }),
+      )
+      await onDone()
+    } catch (error) {
+      setError(failure(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return { run, error, busy }
 }
 
 function KeyField({
@@ -353,6 +451,7 @@ function KeyField({
   )
 }
 
+/** A list you can search: OpenRouter alone returns hundreds, past what a select can browse. */
 function ModelField({
   models,
   typed,
@@ -365,7 +464,13 @@ function ModelField({
   value: string
   onPick: (id: string) => void
 }) {
-  const locked = !models
+  const [search, setSearch] = useState('')
+  const matching = useMemo(() => {
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean)
+    return (models ?? []).filter((choice) =>
+      words.every((word) => choice.id.toLowerCase().includes(word)),
+    )
+  }, [models, search])
   if (typed)
     return (
       <Field label="Model">
@@ -378,29 +483,80 @@ function ModelField({
         />
       </Field>
     )
-  const ids = models?.map((choice) => choice.id) ?? []
-  const options = value && !ids.includes(value) ? [value, ...ids] : ids
+  if (!models)
+    return (
+      <Field label="Model">
+        <input
+          disabled
+          value={value}
+          placeholder="Enter the key to list its models"
+        />
+      </Field>
+    )
+  const chosen = models.find((choice) => choice.id === value)
   return (
-    <Field
-      label="Model"
-      hint={models ? `${models.length} available, newest first` : undefined}
-    >
-      <select
-        required
-        disabled={locked}
-        value={value}
-        onChange={(event) => onPick(event.target.value)}
+    <fieldset className="provider-models">
+      <legend>
+        Model
+        <span className="hint">{models.length} available, newest first</span>
+      </legend>
+      <div className="provider-models__search">
+        <Search aria-hidden="true" />
+        <input
+          className="input"
+          type="search"
+          aria-label="Search models"
+          placeholder="Search models"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          // Enter picks the only match rather than saving the form.
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter') return
+            event.preventDefault()
+            if (matching[0]) onPick(matching[0].id)
+          }}
+        />
+      </div>
+      <div
+        className="provider-models__list"
+        role="radiogroup"
+        aria-label="Model"
       >
-        <option value="" disabled>
-          {locked ? 'Enter the key to list its models' : 'Choose a model'}
-        </option>
-        {options.map((id) => (
-          <option key={id} value={id}>
-            {id}
-          </option>
+        {matching.map((choice) => (
+          <label key={choice.id} className="provider-model">
+            <input
+              type="radio"
+              name="model"
+              checked={choice.id === value}
+              onChange={() => onPick(choice.id)}
+            />
+            <Check className="provider-model__mark" aria-hidden="true" />
+            <code>{choice.id}</code>
+            {!choice.tools && <span className="chip">No tools</span>}
+            {choice.context_window && (
+              <span className="small faint tabular">
+                {tokens(choice.context_window)}
+              </span>
+            )}
+          </label>
         ))}
-      </select>
-    </Field>
+        {matching.length === 0 && (
+          <p className="small faint provider-models__none">
+            No model matches that.
+          </p>
+        )}
+      </div>
+      {value && !chosen && (
+        <p className="small faint">
+          In use: <code>{value}</code>, which this key no longer lists.
+        </p>
+      )}
+      {chosen && !chosen.tools && (
+        <p className="small provider-problem" role="status">
+          This model cannot call tools, so an agent on it can only talk.
+        </p>
+      )}
+    </fieldset>
   )
 }
 
@@ -429,7 +585,7 @@ function WindowField({
           inputMode="numeric"
           min={1024}
           max={100000000}
-          required={provider === 'openai'}
+          required={provider !== 'anthropic'}
           value={value}
           placeholder={
             provider === 'anthropic' ? 'Reported by Anthropic' : 'Tokens'

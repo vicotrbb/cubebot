@@ -225,9 +225,9 @@ pub(super) async fn snapshot(
         "
         INSERT INTO agent_definition_revisions
             (agent_id, revision, instructions_revision, name, instructions, idle_policy,
-             idle_delay_seconds, dreaming_model, task_lanes, broadcast, actor_id)
+             idle_delay_seconds, dreaming_model, task_lanes, broadcast, knowledge_base, actor_id)
         SELECT id, revision, instructions_revision, name, instructions, idle_policy,
-               idle_delay_seconds, dreaming_model, task_lanes, broadcast, $2
+               idle_delay_seconds, dreaming_model, task_lanes, broadcast, knowledge_base, $2
         FROM agents
         WHERE id = $1
         ",

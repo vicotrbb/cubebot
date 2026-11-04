@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '../../api/types'
+import { AgentHoverCard } from '../agent/AgentHoverCard'
 import { FloatingPreviews } from '../desktop/FloatingPreview'
 import { CommandPalette } from './CommandPalette'
 import { MobileBar } from './MobileBar'
@@ -31,6 +32,7 @@ export function Shell({
       {!phone && <Sidebar onSearch={() => setPalette(true)} />}
       <main className="shell__main">{children}</main>
       <FloatingPreviews session={session} />
+      <AgentHoverCard />
       {phone && <MobileBar />}
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
     </div>
