@@ -598,6 +598,32 @@ impl Drop for Cdp {
 mod tests {
     use super::*;
 
+    /// Sources the launch flags as Debian's chromium wrapper does, with `lock` as the profile's.
+    fn locked_after_launch(lock: &str) -> bool {
+        let home = std::env::temp_dir().join(format!("cubebot-lock-{}", Uuid::new_v4()));
+        let profile = home.join(".config/chromium");
+        std::fs::create_dir_all(&profile).unwrap();
+        std::os::unix::fs::symlink(lock, profile.join("SingletonLock")).unwrap();
+        let flags = concat!(env!("CARGO_MANIFEST_DIR"), "/desktop/chromium-flags");
+        let status = std::process::Command::new("/bin/sh")
+            .args(["-c", &format!(". {flags}")])
+            .env("HOME", &home)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let locked = profile.join("SingletonLock").symlink_metadata().is_ok();
+        std::fs::remove_dir_all(home).unwrap();
+        locked
+    }
+
+    #[test]
+    fn a_launch_removes_only_another_hosts_profile_lock() {
+        let output = std::process::Command::new("hostname").output().unwrap();
+        let host = String::from_utf8(output.stdout).unwrap();
+        assert!(locked_after_launch(&format!("{}-49", host.trim())));
+        assert!(!locked_after_launch("b04dbf04675a-49"));
+    }
+
     #[test]
     fn calls_need_a_session_and_their_arguments() {
         let main = json!({"session":"main","node":7,"text":"hi","url":"https://example.com"});

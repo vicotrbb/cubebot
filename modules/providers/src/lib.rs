@@ -8,9 +8,11 @@ use std::{collections::VecDeque, time::Duration};
 
 mod anthropic;
 mod openai;
+mod openrouter;
 mod sse;
 pub use anthropic::Anthropic;
 pub use openai::OpenAi;
+pub use openrouter::OpenRouter;
 
 type Source = Box<dyn std::error::Error + Send + Sync>;
 
@@ -194,6 +196,8 @@ pub struct Capabilities {
 pub struct Model {
     pub id: String,
     pub context_window: Option<u64>,
+    /// Whether it can call tools, which an agent needs to do anything but talk.
+    pub tools: bool,
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -282,11 +286,11 @@ fn retry_after(response: &Response) -> Option<Duration> {
     Duration::try_from_secs_f64(seconds).ok()
 }
 
-/// A small non-streaming JSON body, such as model metadata.
+/// A non-streaming JSON body, such as model metadata. OpenRouter's listing alone is about 1 MiB.
 async fn json(mut response: Response) -> Result<Value, Error> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(unavailable)? {
-        if bytes.len() + chunk.len() > 64 * 1024 {
+        if bytes.len() + chunk.len() > 8 * 1024 * 1024 {
             return Err(Error::InvalidResponse(None));
         }
         bytes.extend_from_slice(&chunk);
@@ -307,6 +311,7 @@ fn models(body: &Value, window: impl Fn(&Value) -> Option<u64>) -> Result<Vec<Mo
                     .ok_or(Error::InvalidResponse(None))?
                     .to_owned(),
                 context_window: window(entry),
+                tools: true,
             })
         })
         .collect()

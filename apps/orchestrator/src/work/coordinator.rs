@@ -9,7 +9,7 @@ use crate::{
     connections::{Connections, configured},
 };
 use cubebot_protocol::runtime::ProviderKind;
-use cubebot_providers::{Anthropic, Event, Message, OpenAi, Provider, Request};
+use cubebot_providers::{Anthropic, Event, Message, OpenAi, OpenRouter, Provider, Request};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use sqlx::PgPool;
@@ -182,6 +182,14 @@ async fn ask(
         ProviderKind::Anthropic => {
             complete(
                 configured(Anthropic::new, Anthropic::for_loopback_tests)
+                    .map_err(|error| error.code())?,
+                &request,
+            )
+            .await
+        }
+        ProviderKind::Openrouter => {
+            complete(
+                configured(OpenRouter::new, OpenRouter::for_loopback_tests)
                     .map_err(|error| error.code())?,
                 &request,
             )

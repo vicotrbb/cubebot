@@ -2,7 +2,7 @@
 use super::{Connections, administrator, key_valid};
 use crate::identity::{Actor, IdentityError};
 use cubebot_protocol::runtime::ProviderKind;
-use cubebot_providers::{Anthropic, OpenAi, Provider};
+use cubebot_providers::{Anthropic, OpenAi, OpenRouter, Provider};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -19,6 +19,8 @@ pub struct ModelChoice {
     pub id: String,
     /// Reported by the provider; OpenAI reports none.
     pub context_window: Option<u64>,
+    /// Whether it can call tools; a model that cannot only talks.
+    pub tools: bool,
 }
 
 pub enum ModelsError {
@@ -65,6 +67,12 @@ impl Connections {
                     .models(&key)
                     .await
             }
+            ProviderKind::Openrouter => {
+                configured(OpenRouter::new, OpenRouter::for_loopback_tests)
+                    .map_err(ModelsError::Provider)?
+                    .models(&key)
+                    .await
+            }
         }
         .map_err(ModelsError::Provider)?;
         Ok(models
@@ -72,6 +80,7 @@ impl Connections {
             .map(|model| ModelChoice {
                 id: model.id,
                 context_window: model.context_window,
+                tools: model.tools,
             })
             .collect())
     }
@@ -91,16 +100,13 @@ impl Connections {
             };
         }
         let saved = self
-            .coordinator(&mut tx)
+            .saved_key(&mut tx, input.provider)
             .await
             .map_err(|error| match error {
-                IdentityError::CredentialUnavailable(None) => IdentityError::NotFound,
+                IdentityError::InvalidInput => IdentityError::NotFound,
                 error => error,
             })?;
         tx.commit().await?;
-        if saved.provider != input.provider {
-            return Err(IdentityError::NotFound);
-        }
-        Ok(saved.api_key)
+        Ok(saved)
     }
 }

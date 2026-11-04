@@ -10,6 +10,7 @@ mod files;
 mod identity;
 mod installation;
 mod invitations;
+mod knowledge_base;
 mod mcp;
 mod memories;
 mod oidc;
@@ -79,6 +80,7 @@ pub fn openapi() -> String {
     doc.merge(vault::Doc::openapi());
     doc.merge(mcp::Doc::openapi());
     doc.merge(files::Doc::openapi());
+    doc.merge(knowledge_base::Doc::openapi());
     doc.merge(routines::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
@@ -112,6 +114,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(memories::router(pool.clone(), identity.clone()))
         .merge(skills::router(pool.clone(), identity.clone()))
         .merge(files::router(identity.clone()))
+        .merge(knowledge_base::router(identity.clone(), pool.clone()))
         .merge(identity::router(identity.clone()))
         .merge(invitations::router(identity.clone()))
         .merge(access::router(identity))
@@ -187,7 +190,8 @@ async fn readiness(
 
 /// Explicit runtime routes. Normal startup does not discover a Kubernetes configuration.
 pub fn runtime_router(identity: crate::agents::runtime::RuntimeIdentity) -> Router {
-    runtime::router(identity)
+    let pool = identity.pool.clone();
+    runtime::router(identity.clone()).merge(knowledge_base::runtime_router(identity, pool))
 }
 
 #[cfg(test)]

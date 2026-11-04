@@ -1348,6 +1348,13 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     assert_eq!(first["message"], "First");
     assert_eq!(first["sequence"], 1);
     assert_eq!(first["provider"], "openai");
+    // The turn says who it serves, by the login a file share needs.
+    assert!(
+        first["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("comes from the person with the login admin")
+    );
     assert_eq!(first["model"], "controlled-model");
     assert_eq!(first["context_window"], 128_000);
     assert_eq!(first["summary"], Value::Null);

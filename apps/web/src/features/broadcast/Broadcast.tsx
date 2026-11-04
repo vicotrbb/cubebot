@@ -166,6 +166,7 @@ function BroadcastMessage({
       <div className={message.agent ? 'msg msg--agent' : 'msg msg--person'}>
         {message.agent ? (
           <Cube
+            agentId={sender?.id}
             avatar={sender?.avatar ?? null}
             mood={sender ? moodOf(sender) : 'idle'}
             size={32}
@@ -244,7 +245,14 @@ function Face({
   agents: AgentSummary[]
 }) {
   const agent = agents.find((item) => item.id === delivery.agent_id)
-  return <Cube avatar={agent?.avatar ?? null} mood="idle" size={18} />
+  return (
+    <Cube
+      agentId={agent?.id}
+      avatar={agent?.avatar ?? null}
+      mood="idle"
+      size={18}
+    />
+  )
 }
 
 function Reply({
@@ -258,6 +266,7 @@ function Reply({
   return (
     <li className="msg msg--agent">
       <Cube
+        agentId={agent?.id}
         avatar={agent?.avatar ?? null}
         mood={agent ? moodOf(agent) : 'idle'}
         size={28}

@@ -1588,7 +1588,7 @@
     "/api/events": {
       "get": {
         "tags": [],
-        "summary": "Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary\nwhenever its activity, desktop, pending login or last turn changed, and every visible\nagent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest\nmessage changed. Polled once a second.",
+        "summary": "Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary\nwhenever its activity, current tool, desktop, pending login or last turn changed, and every visible\nagent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest\nmessage changed. Polled once a second.",
         "operationId": "installation_events",
         "responses": {
           "200": {
@@ -2823,6 +2823,489 @@
         }
       }
     },
+    "/api/kb/attachments/{id}": {
+      "get": {
+        "tags": [],
+        "summary": "The bytes, with the same headers as a shared file: an `<img>` shows them, a tab downloads them.",
+        "operationId": "kb_attachment",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "206": {
+            "description": ""
+          },
+          "416": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "kb_detach",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/kb/pages": {
+      "get": {
+        "tags": [],
+        "summary": "Every page and folder outside the trash, in reading order, without bodies.",
+        "operationId": "kb_tree",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "kb_create",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}": {
+      "get": {
+        "tags": [],
+        "operationId": "kb_page",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Into the trash, with everything under it.",
+        "operationId": "kb_throw_away",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [],
+        "summary": "409 with the current revision when the page moved on from `expected_revision`.",
+        "operationId": "kb_update",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PageChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}/attachments": {
+      "post": {
+        "tags": [],
+        "summary": "The body is the attachment's bytes and its content type the attachment's.",
+        "operationId": "kb_attach",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "description": "The folder; your own top level when absent.",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "description": "Your id for this upload: a retry with it returns the file the first attempt made.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}/place": {
+      "post": {
+        "tags": [],
+        "operationId": "kb_place",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MovePage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}/purge": {
+      "post": {
+        "tags": [],
+        "summary": "Deletes something in the trash for good. People only: an agent can only throw things away.",
+        "operationId": "kb_purge",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}/restore": {
+      "post": {
+        "tags": [],
+        "operationId": "kb_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}/versions": {
+      "get": {
+        "tags": [],
+        "operationId": "kb_versions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageVersion"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kb/pages/{id}/versions/{revision}": {
+      "get": {
+        "tags": [],
+        "operationId": "kb_version",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "revision",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageVersionBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kb/search": {
+      "get": {
+        "tags": [],
+        "operationId": "kb_search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SearchHit"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/kb/trash": {
+      "get": {
+        "tags": [],
+        "summary": "What was thrown away on its own, newest first.",
+        "operationId": "kb_trash",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PageSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mcp-servers": {
       "get": {
         "tags": [],
@@ -3021,6 +3504,52 @@
             "description": ""
           },
           "502": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/provider/saved": {
+      "get": {
+        "tags": [],
+        "operationId": "saved",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SavedProvider"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/provider/saved/{provider}": {
+      "delete": {
+        "tags": [],
+        "summary": "Forgets the key saved for a provider that is not in use; 404 when none is saved.",
+        "operationId": "forget",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderKind"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
             "description": ""
           }
         }
@@ -3662,6 +4191,7 @@
           "idle_delay_seconds",
           "task_lanes",
           "broadcast",
+          "knowledge_base",
           "activity",
           "capabilities",
           "avatar",
@@ -3688,6 +4218,14 @@
               "type": "string"
             },
             "description": "The caller's capabilities on this agent and its conversation as grant names, such as\n`conversation_send`."
+          },
+          "current_target": {
+            "type": ["string", "null"],
+            "description": "What that tool is working on, such as a file or a URL."
+          },
+          "current_tool": {
+            "type": ["string", "null"],
+            "description": "The tool its running turn is in now; `None` while it thinks, works on nothing, or the\ncaller cannot read its conversation."
           },
           "desired_state": {
             "type": "string"
@@ -3718,6 +4256,10 @@
           "instructions_revision": {
             "type": "integer",
             "format": "int64"
+          },
+          "knowledge_base": {
+            "type": "boolean",
+            "description": "The agent may use the knowledge base (migrations/0048_knowledge_base.sql), on by default."
           },
           "last_sequence": {
             "type": "integer",
@@ -3896,6 +4438,33 @@
                 "$ref": "#/components/schemas/Phase"
               }
             ]
+          }
+        }
+      },
+      "Attachment": {
+        "type": "object",
+        "required": ["id", "page", "name", "size", "created_at"],
+        "properties": {
+          "content_type": {
+            "type": ["string", "null"]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -4157,7 +4726,7 @@
           },
           "api_key": {
             "type": ["string", "null"],
-            "description": "`None` keeps the saved key, which must belong to the same provider."
+            "description": "`None` keeps the key saved for this provider."
           },
           "context_window": {
             "type": ["integer", "null"],
@@ -5122,7 +5691,7 @@
       },
       "ModelChoice": {
         "type": "object",
-        "required": ["id"],
+        "required": ["id", "tools"],
         "properties": {
           "context_window": {
             "type": ["integer", "null"],
@@ -5132,8 +5701,57 @@
           },
           "id": {
             "type": "string"
+          },
+          "tools": {
+            "type": "boolean",
+            "description": "Whether it can call tools; a model that cannot only talks."
           }
         }
+      },
+      "MovePage": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The sibling it goes after; null puts it first."
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The new parent; null is the top level."
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewPage": {
+        "type": "object",
+        "required": ["request_id", "kind", "title"],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "icon": {
+            "type": ["string", "null"]
+          },
+          "kind": {
+            "type": "string",
+            "description": "`page` or `folder`."
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Your id for this creation: a retry with it returns the page the first attempt made."
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "Occurrence": {
         "type": "object",
@@ -5240,6 +5858,154 @@
             }
           }
         ]
+      },
+      "Page": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PageSummary"
+          },
+          {
+            "type": "object",
+            "required": ["body", "attachments"],
+            "properties": {
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Attachment"
+                }
+              },
+              "body": {
+                "type": "string",
+                "description": "Markdown."
+              }
+            }
+          }
+        ]
+      },
+      "PageAuthor": {
+        "type": "object",
+        "description": "A person's or agent's name on a page or version.",
+        "required": ["name"],
+        "properties": {
+          "account": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PageChange": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": ["string", "null"]
+          },
+          "expected_revision": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "The revision the change was made from; required with `body`."
+          },
+          "icon": {
+            "type": ["string", "null"],
+            "description": "An empty icon removes it."
+          },
+          "replace": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Replace"
+              }
+            ]
+          },
+          "title": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PageSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "revision",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "icon": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`page` or `folder`."
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "updated_by": {
+            "$ref": "#/components/schemas/PageAuthor"
+          }
+        }
+      },
+      "PageVersion": {
+        "type": "object",
+        "required": ["revision", "title", "saved_at", "by"],
+        "properties": {
+          "by": {
+            "$ref": "#/components/schemas/PageAuthor"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "saved_at": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "PageVersionBody": {
+        "type": "object",
+        "required": ["revision", "title", "body"],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "Paint": {
         "type": "string",
@@ -5373,7 +6139,7 @@
       },
       "ProviderKind": {
         "type": "string",
-        "enum": ["openai", "anthropic"]
+        "enum": ["openai", "anthropic", "openrouter"]
       },
       "ProviderSummary": {
         "type": "object",
@@ -5473,6 +6239,20 @@
             }
           }
         ]
+      },
+      "Replace": {
+        "type": "object",
+        "description": "Replaces one exact passage, which must occur once, so it needs no revision to be safe.",
+        "required": ["old_text", "new_text"],
+        "properties": {
+          "new_text": {
+            "type": "string"
+          },
+          "old_text": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "RetryMessage": {
         "type": "object",
@@ -5848,6 +6628,23 @@
         },
         "additionalProperties": false
       },
+      "SavedProvider": {
+        "type": "object",
+        "description": "A provider that holds a key without being the one agents use.",
+        "required": ["provider", "model"],
+        "properties": {
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          }
+        }
+      },
       "Scope": {
         "oneOf": [
           {
@@ -5893,6 +6690,29 @@
             }
           }
         ]
+      },
+      "SearchHit": {
+        "type": "object",
+        "required": ["id", "kind", "title", "snippet"],
+        "properties": {
+          "icon": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "snippet": {
+            "type": "string",
+            "description": "The matching text around the query."
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "SendMessage": {
         "type": "object",
@@ -6312,6 +7132,10 @@
           },
           "instructions": {
             "type": "string"
+          },
+          "knowledge_base": {
+            "type": ["boolean", "null"],
+            "description": "Whether the agent may use the knowledge base; `None` keeps the current setting."
           },
           "name": {
             "type": "string"

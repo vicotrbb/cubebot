@@ -77,6 +77,7 @@ function Health() {
                 <td>
                   <span className="actions" style={{ gap: 8 }}>
                     <Cube
+                      agentId={agent.id}
                       avatar={agent.avatar}
                       mood={moodOf(agent)}
                       size={20}

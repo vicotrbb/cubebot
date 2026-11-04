@@ -486,6 +486,66 @@ impl MemoryClient {
         Ok(request.timeout(Duration::from_secs(30 * 60)))
     }
 
+    /// A knowledge base read, as the orchestrator's JSON text, or why it was refused.
+    pub async fn kb_get(
+        &self,
+        path: &str,
+        query: &[(&str, &str)],
+    ) -> Result<Result<String, String>, Error> {
+        let request = self.files_request(reqwest::Method::GET, path)?.query(query);
+        Self::kb_text(request).await
+    }
+
+    /// A knowledge base write; `Null` sends no body.
+    pub async fn kb_send(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<Result<String, String>, Error> {
+        let mut request = self.files_request(method, path)?;
+        if !body.is_null() {
+            request = request.json(body);
+        }
+        Self::kb_text(request).await
+    }
+
+    /// Streams `body` into a new attachment; `request` makes a resent upload find the first.
+    pub async fn kb_attach(
+        &self,
+        page: Uuid,
+        name: &str,
+        request: Uuid,
+        body: reqwest::Body,
+    ) -> Result<Result<String, String>, Error> {
+        let builder = self
+            .files_request(
+                reqwest::Method::POST,
+                &format!("kb/pages/{page}/attachments"),
+            )?
+            .query(&[("name", name), ("request_id", &request.to_string())])
+            .body(body);
+        Self::kb_text(builder).await
+    }
+
+    pub async fn kb_attachment(
+        &self,
+        id: Uuid,
+    ) -> Result<Result<reqwest::Response, String>, Error> {
+        let request = self.files_request(reqwest::Method::GET, &format!("kb/attachments/{id}"))?;
+        refused(request).await
+    }
+
+    async fn kb_text(request: reqwest::RequestBuilder) -> Result<Result<String, String>, Error> {
+        match refused(request).await? {
+            Ok(response) => {
+                let bytes = transport::bytes(response, 8 * 1024 * 1024).await?;
+                Ok(Ok(String::from_utf8_lossy(&bytes).into_owned()))
+            }
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
     /// The response to a runtime request, or the reason of a 409 refusal.
     async fn post(
         &self,

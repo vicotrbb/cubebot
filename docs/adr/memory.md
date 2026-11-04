@@ -484,3 +484,23 @@ Deletion in the active installation does not by itself establish erasure from ba
 **Open details.** Deletion permissions and scope; derived-data propagation and suppression; workspace access for retired agents; backup-copy handling; optional policy interfaces; quotas and capacity-pressure behavior; physical reclamation; and temporary-data cleanup periods. These mechanics will be proposed in the consolidated specification.
 
 **Validation scenarios.** Retain old conversations and retired workspaces; consolidate without source deletion; enforce current access to retained records; report capacity pressure without silent eviction; distinguish cache cleanup from durable-data removal; perform scoped authorized deletion; reconcile concurrent extraction and references; and restore without misrepresenting deleted data or backup-copy erasure. Implementation remains pending.
+
+## One knowledge base for the installation, in Markdown
+
+Accepted 2026-11-04. The user asked for a Notion-inspired wiki that people and agents both write, global by default, with a per-agent capability to turn it off, and asked for the format to be researched.
+
+**Decision.** The installation has one knowledge base: a tree of pages and folders (`kb_pages`, migrations/0048_knowledge_base.sql). Every active person reads and writes all of it without a grant; every agent does while its `knowledge_base` capability is on, which is the default, and the orchestrator checks that capability on each runtime call, not only when it offers the tools.
+
+A page's body is **Markdown** (GitHub-flavored), and that text is the stored truth. Agents read and edit it as text through `kb_read`, `kb_edit`, `kb_write` and `kb_create`; the console edits the same text as blocks with TipTap and its Markdown extension. Diagrams are ` ```mermaid ` fences, which the console draws and an agent writes like any code. Images and attachments are blobs on the storage volume, linked from the body by URL.
+
+Concurrent writers are handled by revision: a whole-body save names the revision it read and is refused when the page moved on, and the console then asks the person which version to keep. An agent's `kb_edit` replaces one exact passage, so it needs no revision and cannot overwrite what it did not read. Opening a page never saves it, so what an agent wrote stays byte for byte until someone changes it.
+
+Deleting moves a page and everything under it to the trash; anyone can restore it. Only a person can delete from the trash for good, so an agent's mistake is always recoverable. One author's saves within five minutes share one row of version history.
+
+**Rationale.** The format is what both audiences touch, and the two pull apart. Block JSON, as Notion, BlockNote and raw ProseMirror documents store it, is exact for a block editor but expensive and error-prone for a model: every edit has to reproduce a nested schema, and search, diffs and history all need a renderer. Markdown is what models read and write best, is greppable by PostgreSQL full-text search as it stands, diffs line by line, and outlives any editor. The cost is that the editor can only offer what Markdown can say: table cells hold one paragraph, and there are no merged cells or columns. That was accepted, and those limits are enforced in the editor's schema so nothing is silently lost on save.
+
+TipTap was chosen over BlockNote and Lexical because its core and Markdown extension are MIT-licensed and maintained together, tables and task lists round-trip, and its block handle, slash menu and bubble menu are small to build on the house controls so the page keeps the console's design. Its drag-handle extension requires collaboration packages as peers, so the block handle is a few lines on ProseMirror's own drag support. Mermaid was chosen for diagrams over a canvas format such as Excalidraw because an agent can write it and a text diff can show it.
+
+Real-time co-editing (CRDT, such as Yjs) was considered and left out: it would make a binary document the source of truth, or need a server-side bridge to Markdown, for a case the revision check handles honestly. An open page polls every 5 seconds, so another author's save appears while nobody is typing there.
+
+**Scope.** No per-page permissions, comments, databases, public links or backlinks. Without `CUBEBOT_STORAGE_DIRECTORY` pages work and attachments are refused.

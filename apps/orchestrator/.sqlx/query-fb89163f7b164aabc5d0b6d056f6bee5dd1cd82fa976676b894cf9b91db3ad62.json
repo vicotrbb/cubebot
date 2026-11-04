@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT trashed_at IS NULL AS \"alive!\"\n            FROM kb_pages\n            WHERE id=$1\n            FOR SHARE\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "alive!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fb89163f7b164aabc5d0b6d056f6bee5dd1cd82fa976676b894cf9b91db3ad62"
+}

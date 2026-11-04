@@ -36,7 +36,7 @@ pub struct ConfigureProvider {
     /// reports its own when this is absent.
     #[serde(default)]
     pub context_window: Option<i64>,
-    /// `None` keeps the saved key, which must belong to the same provider.
+    /// `None` keeps the key saved for this provider.
     #[serde(default)]
     pub api_key: Option<String>,
     #[serde(default)]
@@ -55,6 +55,14 @@ pub struct ProviderSummary {
     #[schema(value_type = ProviderAccess)]
     pub access: sqlx::types::Json<ProviderAccess>,
 }
+/// A provider that holds a key without being the one agents use.
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct SavedProvider {
+    pub provider: ProviderKind,
+    pub model: String,
+    pub context_window: Option<i64>,
+}
+
 type Access = sqlx::types::Json<ProviderAccess>;
 type SummaryRow = (String, String, Option<i64>, i64, Access);
 fn summary(
@@ -153,6 +161,7 @@ impl Connections {
             .await?;
         let access = selected_access(&mut transaction, input.access.as_ref()).await?;
         let encrypted = self.credential(&mut transaction, input, revision).await?;
+        self.set_aside(&mut transaction, input.provider).await?;
         sqlx::query!(
             "
             INSERT INTO provider_connection
@@ -204,6 +213,54 @@ impl Connections {
             access: sqlx::types::Json(access),
         })
     }
+    /// The providers holding a key other than the one in use.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
+    pub async fn saved(&self, actor: &Actor) -> Result<Vec<SavedProvider>, IdentityError> {
+        let mut transaction = self.pool.begin().await?;
+        administrator(&mut transaction, actor).await?;
+        let rows = sqlx::query!(
+            "
+            SELECT provider, model, context_window
+            FROM provider_saved
+            ORDER BY provider
+            ",
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        rows.into_iter()
+            .map(|row| {
+                Ok(SavedProvider {
+                    provider: ProviderKind::parse(&row.provider)
+                        .ok_or(IdentityError::InvalidInput)?,
+                    model: row.model,
+                    context_window: row.context_window,
+                })
+            })
+            .collect()
+    }
+
+    /// Forgets a saved key. The provider in use is replaced, never removed, so agents keep working.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id))]
+    pub async fn forget(&self, actor: &Actor, provider: ProviderKind) -> Result<(), IdentityError> {
+        let mut transaction = self.pool.begin().await?;
+        administrator(&mut transaction, actor).await?;
+        let removed = sqlx::query!(
+            "
+            DELETE FROM provider_saved
+            WHERE provider = $1
+            ",
+            provider.as_str(),
+        )
+        .execute(&mut *transaction)
+        .await?;
+        if removed.rows_affected() == 0 {
+            return Err(IdentityError::NotFound);
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
     /// Whether the key decrypts the first stored provider credential or vault item; true when
     /// none is stored.
     #[tracing::instrument(skip_all)]
@@ -323,6 +380,26 @@ impl Connections {
         transaction: &mut Transaction<'_, Postgres>,
         provider: ProviderKind,
     ) -> Result<String, IdentityError> {
+        let aside = sqlx::query_scalar!(
+            "
+            SELECT credential
+            FROM provider_saved
+            WHERE provider = $1
+            ",
+            provider.as_str(),
+        )
+        .fetch_optional(&mut **transaction)
+        .await?;
+        if let Some(credential) = aside {
+            let context = saved_context(transaction, provider).await?;
+            let secret = self
+                .credentials
+                .decrypt(&credential, &context)
+                .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+            return String::from_utf8(secret).map_err(|error| {
+                IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
+            });
+        }
         let saved = self
             .connection(transaction, None)
             .await
@@ -334,6 +411,47 @@ impl Connections {
             return Err(IdentityError::InvalidInput);
         }
         Ok(saved.api_key)
+    }
+
+    /// Before `next` replaces the connection: keeps the outgoing provider's key and choices so
+    /// switching back needs no pasting, and drops `next`'s now that it is in use.
+    async fn set_aside(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        next: ProviderKind,
+    ) -> Result<(), IdentityError> {
+        sqlx::query!(
+            "
+            DELETE FROM provider_saved
+            WHERE provider = $1
+            ",
+            next.as_str(),
+        )
+        .execute(&mut **transaction)
+        .await?;
+        let outgoing = match self.connection(transaction, None).await {
+            Ok(outgoing) if outgoing.provider != next => outgoing,
+            Ok(_) | Err(IdentityError::CredentialUnavailable(None)) => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let context = saved_context(transaction, outgoing.provider).await?;
+        let credential = self
+            .credentials
+            .encrypt(outgoing.api_key.as_bytes(), &context)
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+        sqlx::query!(
+            "
+            INSERT INTO provider_saved (provider, model, context_window, credential)
+            VALUES ($1, $2, $3, $4)
+            ",
+            outgoing.provider.as_str(),
+            outgoing.model,
+            outgoing.context_window.map(|window| window as i64),
+            credential,
+        )
+        .execute(&mut **transaction)
+        .await?;
+        Ok(())
     }
 
     async fn next_revision(
@@ -402,6 +520,25 @@ async fn credential_context(
     Ok(format!("cubebot:{installation}:provider:openai:key:1:revision:{revision}").into_bytes())
 }
 
+async fn saved_context(
+    transaction: &mut Transaction<'_, Postgres>,
+    provider: ProviderKind,
+) -> Result<Vec<u8>, IdentityError> {
+    let installation = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id!"
+        FROM installation
+        "#,
+    )
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(format!(
+        "cubebot:{installation}:provider:{}:saved",
+        provider.as_str()
+    )
+    .into_bytes())
+}
+
 fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
     if input.request_id.is_nil()
         || input.expected_revision < 0
@@ -419,7 +556,7 @@ fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
     if !input
         .model
         .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || b"-._:/".contains(&byte))
+        .all(|byte| byte.is_ascii_alphanumeric() || b"-._:/~".contains(&byte))
     {
         return Err(IdentityError::InvalidInput);
     }

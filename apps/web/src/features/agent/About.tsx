@@ -397,6 +397,34 @@ function Capabilities({
           }
         />
       </div>
+      <div className="capability">
+        <div>
+          <p className="capability__name">Knowledge base</p>
+          <p className="faint small">
+            Lets {agent.name} search, read and write the wiki every person and
+            agent shares. Off, it keeps nothing from there and cannot reach it.
+          </p>
+        </div>
+        <Switch
+          checked={agent.knowledge_base}
+          label={`${agent.name} may use the knowledge base`}
+          disabled={busy || agent.desired_state === 'retired'}
+          onChange={(knowledge_base) =>
+            void save(() =>
+              ok(
+                api.POST('/api/agents/{id}/definition', {
+                  params: { path: { id: agent.id } },
+                  body: {
+                    request_id: crypto.randomUUID(),
+                    ...definition(agent),
+                    knowledge_base,
+                  },
+                }),
+              ),
+            )
+          }
+        />
+      </div>
       <Alert>{error}</Alert>
     </section>
   )

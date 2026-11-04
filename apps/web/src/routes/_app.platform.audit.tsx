@@ -192,6 +192,7 @@ function Actor({ entry }: { entry: AuditEntry }) {
     const agent = agents.data?.find((item) => item.id === entry.agent)
     return (
       <Cube
+        agentId={agent?.id}
         avatar={agent?.avatar ?? null}
         mood={agent ? moodOf(agent) : 'idle'}
         size={24}

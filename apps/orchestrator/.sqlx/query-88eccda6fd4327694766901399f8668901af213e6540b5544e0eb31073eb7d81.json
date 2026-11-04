@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT x.id, x.page_id, x.name, x.content_type, b.size, x.blob_id,\n                (to_jsonb(x.created_at) #>> '{}') AS \"created_at!\"\n            FROM kb_attachments x\n            JOIN blobs b ON b.id = x.blob_id\n            JOIN kb_pages p ON p.id = x.page_id AND p.trashed_at IS NULL\n            WHERE x.id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "page_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "content_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "blob_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "88eccda6fd4327694766901399f8668901af213e6540b5544e0eb31073eb7d81"
+}

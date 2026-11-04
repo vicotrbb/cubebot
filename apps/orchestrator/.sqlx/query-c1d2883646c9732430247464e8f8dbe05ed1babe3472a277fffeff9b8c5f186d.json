@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.revision, r.title, (to_jsonb(r.saved_at) #>> '{}') AS \"saved_at!\",\n                r.account_id, r.agent_id, COALESCE(h.login, a.name, 'Someone') AS \"author!\"\n            FROM kb_revisions r\n            LEFT JOIN human_accounts h ON h.id = r.account_id\n            LEFT JOIN agents a ON a.id = r.agent_id\n            WHERE r.page_id=$1\n            ORDER BY r.revision DESC\n            LIMIT 200\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "saved_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "account_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "author!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "c1d2883646c9732430247464e8f8dbe05ed1babe3472a277fffeff9b8c5f186d"
+}

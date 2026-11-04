@@ -568,7 +568,7 @@ export interface paths {
     }
     /**
      * Follows every agent and room the caller may see: `agent` frames carry an `Agent` summary
-     *     whenever its activity, desktop, pending login or last turn changed, and every visible
+     *     whenever its activity, current tool, desktop, pending login or last turn changed, and every visible
      *     agent once at the start; `room` frames carry `{id, last_sequence}` when a room's newest
      *     message changed. Polled once a second.
      */
@@ -1151,6 +1151,189 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/kb/attachments/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The bytes, with the same headers as a shared file: an `<img>` shows them, a tab downloads them. */
+    get: operations['kb_attachment']
+    put?: never
+    post?: never
+    delete: operations['kb_detach']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Every page and folder outside the trash, in reading order, without bodies. */
+    get: operations['kb_tree']
+    put?: never
+    post: operations['kb_create']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['kb_page']
+    put?: never
+    post?: never
+    /** Into the trash, with everything under it. */
+    delete: operations['kb_throw_away']
+    options?: never
+    head?: never
+    /** 409 with the current revision when the page moved on from `expected_revision`. */
+    patch: operations['kb_update']
+    trace?: never
+  }
+  '/api/kb/pages/{id}/attachments': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** The body is the attachment's bytes and its content type the attachment's. */
+    post: operations['kb_attach']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages/{id}/place': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['kb_place']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages/{id}/purge': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Deletes something in the trash for good. People only: an agent can only throw things away. */
+    post: operations['kb_purge']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages/{id}/restore': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['kb_restore']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages/{id}/versions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['kb_versions']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/pages/{id}/versions/{revision}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['kb_version']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/search': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['kb_search']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/kb/trash': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** What was thrown away on its own, newest first. */
+    get: operations['kb_trash']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/mcp-servers': {
     parameters: {
       query?: never
@@ -1216,6 +1399,39 @@ export interface paths {
      */
     post: operations['models']
     delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/saved': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['saved']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/saved/{provider}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Forgets the key saved for a provider that is not in use; 404 when none is saved. */
+    delete: operations['forget']
     options?: never
     head?: never
     patch?: never
@@ -1470,6 +1686,13 @@ export interface components {
        *     `conversation_send`.
        */
       capabilities: string[]
+      /** @description What that tool is working on, such as a file or a URL. */
+      current_target?: string | null
+      /**
+       * @description The tool its running turn is in now; `None` while it thinks, works on nothing, or the
+       *     caller cannot read its conversation.
+       */
+      current_tool?: string | null
       desired_state: string
       /** @description A running turn called a desktop tool in the last 120 seconds. */
       desktop_active: boolean
@@ -1486,6 +1709,8 @@ export interface components {
       instructions?: string | null
       /** Format: int64 */
       instructions_revision: number
+      /** @description The agent may use the knowledge base (migrations/0048_knowledge_base.sql), on by default. */
+      knowledge_base: boolean
       /**
        * Format: int64
        * @description The highest turn sequence in the agent's conversation, 0 without turns.
@@ -1552,6 +1777,17 @@ export interface components {
       workspace_attempt?: null | components['schemas']['AttemptId']
       workspace_blocked_reason?: string | null
       workspace_resource_phase?: null | components['schemas']['Phase']
+    }
+    Attachment: {
+      content_type?: string | null
+      created_at: string
+      /** Format: uuid */
+      id: string
+      name: string
+      /** Format: uuid */
+      page: string
+      /** Format: int64 */
+      size: number
     }
     /** Format: uuid */
     AttemptId: string
@@ -1663,7 +1899,7 @@ export interface components {
     }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
-      /** @description `None` keeps the saved key, which must belong to the same provider. */
+      /** @description `None` keeps the key saved for this provider. */
       api_key?: string | null
       /**
        * Format: int64
@@ -2067,6 +2303,34 @@ export interface components {
        */
       context_window?: number | null
       id: string
+      /** @description Whether it can call tools; a model that cannot only talks. */
+      tools: boolean
+    }
+    MovePage: {
+      /**
+       * Format: uuid
+       * @description The sibling it goes after; null puts it first.
+       */
+      after?: string | null
+      /**
+       * Format: uuid
+       * @description The new parent; null is the top level.
+       */
+      parent?: string | null
+    }
+    NewPage: {
+      body?: string
+      icon?: string | null
+      /** @description `page` or `folder`. */
+      kind: string
+      /** Format: uuid */
+      parent?: string | null
+      /**
+       * Format: uuid
+       * @description Your id for this creation: a retry with it returns the page the first attempt made.
+       */
+      request_id: string
+      title: string
     }
     /** @description One occurrence that made a turn: its origin and the turn's outcome so far. */
     Occurrence: {
@@ -2110,6 +2374,58 @@ export interface components {
           /** @enum {string} */
           status: 'uncertain'
         }
+    Page: components['schemas']['PageSummary'] & {
+      attachments: components['schemas']['Attachment'][]
+      /** @description Markdown. */
+      body: string
+    }
+    /** @description A person's or agent's name on a page or version. */
+    PageAuthor: {
+      /** Format: uuid */
+      account?: string | null
+      /** Format: uuid */
+      agent?: string | null
+      name: string
+    }
+    PageChange: {
+      body?: string | null
+      /**
+       * Format: int64
+       * @description The revision the change was made from; required with `body`.
+       */
+      expected_revision?: number | null
+      /** @description An empty icon removes it. */
+      icon?: string | null
+      replace?: null | components['schemas']['Replace']
+      title?: string | null
+    }
+    PageSummary: {
+      icon?: string | null
+      /** Format: uuid */
+      id: string
+      /** @description `page` or `folder`. */
+      kind: string
+      /** Format: uuid */
+      parent?: string | null
+      /** Format: int64 */
+      revision: number
+      title: string
+      updated_at: string
+      updated_by: components['schemas']['PageAuthor']
+    }
+    PageVersion: {
+      by: components['schemas']['PageAuthor']
+      /** Format: int64 */
+      revision: number
+      saved_at: string
+      title: string
+    }
+    PageVersionBody: {
+      body: string
+      /** Format: int64 */
+      revision: number
+      title: string
+    }
     /** @enum {string} */
     Paint:
       'orange' | 'sage' | 'paper' | 'wood' | 'sky' | 'rose' | 'lemon' | 'plum'
@@ -2151,7 +2467,7 @@ export interface components {
           mode: 'explicit_grants'
         }
     /** @enum {string} */
-    ProviderKind: 'openai' | 'anthropic'
+    ProviderKind: 'openai' | 'anthropic' | 'openrouter'
     ProviderSummary: {
       access: components['schemas']['ProviderAccess']
       /** Format: int64 */
@@ -2191,6 +2507,11 @@ export interface components {
           /** @enum {string} */
           kind: 'team'
         }
+    /** @description Replaces one exact passage, which must occur once, so it needs no revision to be safe. */
+    Replace: {
+      new_text: string
+      old_text: string
+    }
     RetryMessage: {
       /** Format: uuid */
       request_id: string
@@ -2336,6 +2657,13 @@ export interface components {
       site?: string | null
       username?: string | null
     }
+    /** @description A provider that holds a key without being the one agents use. */
+    SavedProvider: {
+      /** Format: int64 */
+      context_window?: number | null
+      model: string
+      provider: components['schemas']['ProviderKind']
+    }
     Scope:
       | {
           /** Format: uuid */
@@ -2355,6 +2683,15 @@ export interface components {
           /** @enum {string} */
           kind: 'conversation'
         }
+    SearchHit: {
+      icon?: string | null
+      /** Format: uuid */
+      id: string
+      kind: string
+      /** @description The matching text around the query. */
+      snippet: string
+      title: string
+    }
     SendMessage: {
       message: string
       /** Format: uuid */
@@ -2507,6 +2844,8 @@ export interface components {
       idle_delay_seconds: number
       idle_policy: components['schemas']['IdlePolicy']
       instructions: string
+      /** @description Whether the agent may use the knowledge base; `None` keeps the current setting. */
+      knowledge_base?: boolean | null
       name: string
       /** Format: uuid */
       request_id: string
@@ -4554,6 +4893,354 @@ export interface operations {
       }
     }
   }
+  kb_attachment: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/octet-stream': number[]
+        }
+      }
+      206: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      416: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_detach: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_tree: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PageSummary'][]
+        }
+      }
+    }
+  }
+  kb_create: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewPage']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Page']
+        }
+      }
+    }
+  }
+  kb_page: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Page']
+        }
+      }
+    }
+  }
+  kb_throw_away: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_update: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PageChange']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Page']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_attach: {
+    parameters: {
+      query: {
+        /** @description The folder; your own top level when absent. */
+        parent?: string
+        name: string
+        /** @description Your id for this upload: a retry with it returns the file the first attempt made. */
+        request_id: string
+      }
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/octet-stream': number[]
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Attachment']
+        }
+      }
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Attachment']
+        }
+      }
+    }
+  }
+  kb_place: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MovePage']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_purge: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_restore: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  kb_versions: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PageVersion'][]
+        }
+      }
+    }
+  }
+  kb_version: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        revision: number
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PageVersionBody']
+        }
+      }
+    }
+  }
+  kb_search: {
+    parameters: {
+      query: {
+        q: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SearchHit'][]
+        }
+      }
+    }
+  }
+  kb_trash: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PageSummary'][]
+        }
+      }
+    }
+  }
   list_mcp_servers: {
     parameters: {
       query?: never
@@ -4722,6 +5409,50 @@ export interface operations {
         content?: never
       }
       502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  saved: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SavedProvider'][]
+        }
+      }
+    }
+  }
+  forget: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        provider: components['schemas']['ProviderKind']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

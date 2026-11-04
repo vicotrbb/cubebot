@@ -6,7 +6,9 @@ use crate::control::MemoryClient;
 use cubebot_protocol::runtime::{
     Dream, DreamEnd, DreamOutcome, MemoryChange, ProviderKind, REPORT_BYTES, SkillChange,
 };
-use cubebot_providers::{Anthropic, Error, Event, Limits, Message, OpenAi, Provider, Request};
+use cubebot_providers::{
+    Anthropic, Error, Event, Limits, Message, OpenAi, OpenRouter, Provider, Request,
+};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use tokio::sync::watch;
@@ -107,6 +109,10 @@ async fn plan(dream: &Dream) -> Result<Plan, String> {
         }
         ProviderKind::Anthropic => {
             let provider = super::turn::configured(Anthropic::new, Anthropic::for_loopback_tests);
+            reply(provider, &request).await
+        }
+        ProviderKind::Openrouter => {
+            let provider = super::turn::configured(OpenRouter::new, OpenRouter::for_loopback_tests);
             reply(provider, &request).await
         }
     };

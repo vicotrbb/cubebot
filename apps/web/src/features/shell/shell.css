@@ -152,6 +152,22 @@
 .row--agent .cube {
   margin: -2px 0;
 }
+.row__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.row__doing {
+  display: none;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar--page .row__doing {
+  display: block;
+}
 .row--page .row__label {
   font-weight: var(--w-label);
 }

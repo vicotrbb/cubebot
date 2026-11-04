@@ -12,6 +12,8 @@ const DRIVE: &str = "You are an autonomous agent with your own persistent comput
 const TERMINAL: &str = "Your terminal is a Linux shell in your workspace, which is your home directory and keeps everything across restarts. Python 3 with pip and venv, Node.js with npm, git, curl, wget, build tools, jq, ripgrep and sqlite3 are installed. You are not root and there is no sudo: install whatever else you need yourself with pip install, npm install -g, pipx, or by downloading a program into ~/.local/bin, which is on your PATH.";
 /// The desktop, offered when the agent has the computer or browser tools.
 const DESKTOP: &str = "You also have a graphical desktop that the people you work with can watch live. A taskbar along its bottom edge opens Chromium, a terminal, a file manager and a text editor, and lists open windows; graphical programs you start from your terminal appear on it too. Use your browser tools to open and work with websites, and the computer tool for anything else on the screen. Take a screenshot to see the screen before acting on it.";
+/// The knowledge base, offered while the agent's capability is on.
+const KNOWLEDGE_BASE: &str = "This installation has a knowledge base: one wiki that every person and agent here reads and writes. Search it before answering questions about how things work here, and write down what others will need later: decisions, how-tos and findings. Your memory is yours alone; the knowledge base is everyone's.";
 
 const SUMMARIZE: &str = "Write a structured summary of this conversation so far so you can continue the work without it. Include the objective; constraints and corrections; decisions; completed actions and their outcomes, which must never be repeated; unresolved work; and evidence references such as file paths and commands. Reply with the summary only and do not call tools.";
 
@@ -97,6 +99,9 @@ fn system(tools: &[Tool], instructions: &str) -> String {
     if has(|name| name == "computer" || name.starts_with("browser_")) {
         system = format!("{system}\n\n{DESKTOP}");
     }
+    if has(|name| name == "kb_search") {
+        system = format!("{system}\n\n{KNOWLEDGE_BASE}");
+    }
     format!("{system}\n\n{instructions}")
 }
 
@@ -135,6 +140,7 @@ mod tests {
             command_only: false,
             mcp_servers: Vec::new(),
             broadcast: false,
+            knowledge_base: false,
         }
     }
     fn text(message: &Message) -> &str {

@@ -448,6 +448,53 @@ async fn lineage(
 
 /// States the agent's own name, so a mention or a message addressed to it reads as its own,
 /// and names the agents sharing a room with it, which its collaboration tools can reach.
+/// The instructions with who the agent is and who it can reach.
+pub(super) async fn briefed(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    turn: Uuid,
+    instructions: String,
+) -> Result<String, sqlx::Error> {
+    let instructions = with_peers(tx, agent, instructions).await?;
+    with_people(tx, turn, instructions).await
+}
+
+/// Who the turn serves and everyone it can name, because a file share takes a login and a model
+/// otherwise only has whatever name a person signs with.
+async fn with_people(
+    tx: &mut Transaction<'_, Postgres>,
+    turn: Uuid,
+    instructions: String,
+) -> Result<String, sqlx::Error> {
+    let requester = sqlx::query_scalar!(
+        "
+        SELECT a.login
+        FROM chat_turns t
+        JOIN human_accounts a ON a.id=t.actor_id
+        WHERE t.id=$1
+        ",
+        turn,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    // shortcut: only the first 50 logins; add a directory tool if installations outgrow that.
+    let logins = sqlx::query_scalar!(
+        "
+        SELECT login
+        FROM human_accounts
+        WHERE active
+        ORDER BY login
+        LIMIT 50
+        ",
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(format!(
+        "{instructions}\n\nThis request comes from the person with the login {requester}. People on this installation, by login: {}.",
+        logins.join(", ")
+    ))
+}
+
 pub(super) async fn with_peers(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,

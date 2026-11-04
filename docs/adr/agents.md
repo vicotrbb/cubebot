@@ -399,7 +399,7 @@ Scope: this decision governs agent inference and provider authentication. It doe
 
 ## Initial OpenAI, Anthropic, and compatible-endpoint support
 
-Accepted 2026-10-24.
+Accepted 2026-10-24. Amended 2026-11-04: OpenRouter joins as a named provider with its own adapter on Chat Completions, listing every model it returns, including those that cannot call tools, which the console marks. Agents still think with one connection; a provider that stops being it keeps its encrypted key (`provider_saved`, migrations/0047) until someone forgets it, so switching back needs no pasting.
 
 **Decision.** Target native OpenAI and Anthropic provider adapters, plus an adapter for configurable OpenAI-compatible endpoints, in the first release. The user selected this scope on 2026-10-24. Native Google Gemini support is outside the initial adapter scope. Cubebot retains its own Rust agent loop under [Native Rust agent engine](#native-rust-agent-engine).
 

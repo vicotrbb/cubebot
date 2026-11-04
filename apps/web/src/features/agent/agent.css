@@ -61,13 +61,14 @@
 .panel__tabs {
   flex: 1;
   min-width: 0;
-  background: transparent;
-  padding: 0 0 2px;
-  gap: 0;
-  /* The row scrolls in a narrow panel; a thin bar shows there is more. */
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
-  scroll-padding-inline: 8px;
+  /* The row scrolls in a narrow panel; its fading edge shows there is more. */
+  scrollbar-width: none;
+  scroll-padding-inline: 8px 24px;
+  padding-right: 24px;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.panel__tabs::-webkit-scrollbar {
+  display: none;
 }
 .panel__tabs > * {
   padding: 5px 8px;

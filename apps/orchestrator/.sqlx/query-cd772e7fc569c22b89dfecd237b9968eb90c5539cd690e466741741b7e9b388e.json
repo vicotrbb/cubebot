@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT provider, model, context_window\n            FROM provider_saved\n            ORDER BY provider\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "model",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "context_window",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "cd772e7fc569c22b89dfecd237b9968eb90c5539cd690e466741741b7e9b388e"
+}

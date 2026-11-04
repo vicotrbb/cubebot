@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n                SELECT id\n                FROM human_accounts\n                WHERE login=$1 AND active\n                ",
+  "query": "\n                SELECT id\n                FROM human_accounts\n                WHERE login=lower($1) AND active\n                ",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "556422b974a0af8743d520a45a5e0182acbfe06440b9b5f36a41f602a24ac229"
+  "hash": "85ab62aa525d010ad0d4948e41f6b9012a188f09fce8d47d0d4be741920de2f6"
 }

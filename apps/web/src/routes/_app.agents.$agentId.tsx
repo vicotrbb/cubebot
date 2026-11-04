@@ -20,7 +20,8 @@ import { AgentProvider } from '../features/agent/context'
 import { Conversation } from '../features/chat/Conversation'
 import { useConversation } from '../features/chat/useConversation'
 import { LoginBanner } from '../features/desktop/LoginBanner'
-import { ACTIVITY, FavoriteButton } from '../features/shell/Sidebar'
+import { doingOf } from '../features/agent/doing'
+import { FavoriteButton } from '../features/shell/Sidebar'
 import { useIsPhone } from '../features/shell/viewport'
 import '../features/agent/agent.css'
 
@@ -189,13 +190,11 @@ function AgentHeader({
           <ChevronLeft />
         </Link>
       )}
-      <Cube avatar={agent.avatar} mood={mood} size={28} />
+      <Cube agentId={agent.id} avatar={agent.avatar} mood={mood} size={28} />
       <div className="agent-head__title">
         <h1>{agent.name}</h1>
-        <p className="faint small">
-          <span className={`dot dot--${agent.activity}`} />{' '}
-          {ACTIVITY[agent.activity] ?? agent.activity}
-          {agent.desktop_active && ' · using its desktop'}
+        <p className="faint small agent-head__doing">
+          <span className={`dot dot--${agent.activity}`} /> {doingOf(agent)}
         </p>
       </div>
       <div className="agent-head__actions">

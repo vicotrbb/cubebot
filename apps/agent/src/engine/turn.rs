@@ -10,8 +10,8 @@ use cubebot_protocol::{
     terminal::Outcome,
 };
 use cubebot_providers::{
-    Anthropic, Error, Event as ProviderEvent, FunctionCall, Limits, Message, OpenAi, Provider,
-    Reply, Request, Usage,
+    Anthropic, Error, Event as ProviderEvent, FunctionCall, Limits, Message, OpenAi, OpenRouter,
+    Provider, Reply, Request, Usage,
 };
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use std::{
@@ -121,6 +121,18 @@ pub(super) async fn run(
         }
         ProviderKind::Anthropic => {
             let provider = configured(Anthropic::new, Anthropic::for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
+        ProviderKind::Openrouter => {
+            let provider = configured(OpenRouter::new, OpenRouter::for_loopback_tests);
             start(
                 provider,
                 &turn,
@@ -244,6 +256,9 @@ async fn start<P: Provider>(
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
     tools.extend(crate::files::definitions(registry.is_some()));
+    if turn.knowledge_base {
+        tools.extend(crate::knowledge_base::definitions(registry.is_some()));
+    }
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
     tools.extend(crate::collaboration::definitions(desktop, turn.broadcast));
     // A task lane never drives the shared desktop (docs/adr/agents.md#agent-execution-lanes); the main lane owns it.

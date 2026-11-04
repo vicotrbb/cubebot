@@ -35,7 +35,7 @@ pub enum Principal {
 }
 
 impl Principal {
-    fn parts(self) -> (Option<Uuid>, Option<Uuid>) {
+    pub(crate) fn parts(self) -> (Option<Uuid>, Option<Uuid>) {
         match self {
             Self::Person(id) => (Some(id), None),
             Self::Agent(id) => (None, Some(id.0)),
@@ -604,6 +604,82 @@ impl Storage {
         self.entry(file, who).await
     }
 
+    /// Keeps a stream as a new blob no file names, for another table to refer to.
+    #[tracing::instrument(skip_all)]
+    pub async fn keep<S, E>(&self, body: S) -> Result<crate::knowledge::KeptBlob, StorageError>
+    where
+        S: Stream<Item = Result<Bytes, E>> + Unpin,
+        E: Into<Source>,
+    {
+        let _transfer = self.transfer()?;
+        let id = Uuid::new_v4();
+        let mut reserved = 0;
+        let received = self
+            .0
+            .volume
+            .receive(id, body, |bytes| {
+                let admitted = self.reserve(bytes);
+                if admitted {
+                    reserved += bytes;
+                }
+                admitted
+            })
+            .await;
+        let recorded = match received {
+            Ok(published) => sqlx::query!(
+                "
+                INSERT INTO blobs (id, size, sha256)
+                VALUES ($1, $2, $3)
+                ",
+                id,
+                published.size as i64,
+                &published.sha256[..],
+            )
+            .execute(&self.0.pool)
+            .await
+            .map(|_| published.size as i64)
+            .map_err(StorageError::from),
+            Err(error) => Err(error),
+        };
+        match recorded {
+            Ok(size) => Ok(crate::knowledge::KeptBlob { blob: id, size }),
+            Err(error) => {
+                self.0.volume.remove(id).await;
+                self.release(reserved);
+                Err(error)
+            }
+        }
+    }
+
+    /// A kept blob's bytes, holding a transfer slot until they are served.
+    pub async fn read(
+        &self,
+        blob: Uuid,
+        size: i64,
+    ) -> Result<(tokio::fs::File, OwnedSemaphorePermit), StorageError> {
+        let transfer = self.transfer()?;
+        Ok((self.0.volume.open(blob, size).await?, transfer))
+    }
+
+    /// Deletes kept blobs nothing refers to any more.
+    pub async fn discard(&self, blobs: &[Uuid]) -> Result<(), StorageError> {
+        let gone = sqlx::query!(
+            "
+            DELETE FROM blobs
+            WHERE id = ANY($1)
+            RETURNING id, size
+            ",
+            blobs,
+        )
+        .fetch_all(&self.0.pool)
+        .await?;
+        for blob in gone {
+            self.0.volume.remove(blob.id).await;
+            self.release(blob.size as u64);
+        }
+        Ok(())
+    }
+
     /// Deletes a file, or a folder with everything under it, then unlinks the bytes.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn delete(&self, who: Principal, file: Uuid) -> Result<(), StorageError> {
@@ -734,7 +810,7 @@ async fn recipient(
                 "
                 SELECT id
                 FROM human_accounts
-                WHERE login=$1 AND active
+                WHERE login=lower($1) AND active
                 ",
                 name,
             )
@@ -768,7 +844,7 @@ async fn recipient(
     };
     let [id] = ids[..] else {
         return Err(StorageError::Invalid(
-            "a share names exactly one active user by login, team or agent",
+            "a share names one active person by login (not their name), one team or one agent",
         ));
     };
     Ok(match share.kind {
@@ -778,7 +854,7 @@ async fn recipient(
     })
 }
 
-fn named(name: &str) -> Result<(), StorageError> {
+pub(crate) fn named(name: &str) -> Result<(), StorageError> {
     let valid = (1..=255).contains(&name.len())
         && !matches!(name, "." | "..")
         && name.trim() == name
@@ -793,7 +869,7 @@ fn named(name: &str) -> Result<(), StorageError> {
 }
 
 /// The bare `type/subtype` of a declared content type; anything else is served as octets.
-fn media_type(declared: Option<&str>) -> Option<String> {
+pub(crate) fn media_type(declared: Option<&str>) -> Option<String> {
     let essence = declared?.split(';').next()?.trim().to_ascii_lowercase();
     let token = |part: &str| {
         !part.is_empty()

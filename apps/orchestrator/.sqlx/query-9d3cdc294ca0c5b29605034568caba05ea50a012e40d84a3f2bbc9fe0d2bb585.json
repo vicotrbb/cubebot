@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH RECURSIVE chain AS (\n                SELECT id, parent_id FROM kb_pages WHERE id = $1\n                UNION ALL\n                SELECT p.id, p.parent_id FROM kb_pages p JOIN chain c ON p.id = c.parent_id\n            )\n            SELECT EXISTS (SELECT 1 FROM chain WHERE id = $2) AS \"cycle!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cycle!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9d3cdc294ca0c5b29605034568caba05ea50a012e40d84a3f2bbc9fe0d2bb585"
+}

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO kb_pages (parent_id, kind, title, body, icon, position, request_id,\n                created_by_account, created_by_agent, updated_by_account, updated_by_agent)\n            VALUES ($1, $2, $3, $4, $5,\n                COALESCE((SELECT max(position) FROM kb_pages\n                          WHERE parent_id IS NOT DISTINCT FROM $1), 0) + 1,\n                $6, $7, $8, $7, $8)\n            ON CONFLICT (request_id) DO UPDATE SET request_id = EXCLUDED.request_id\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2ab7b4a3f2da027f5982cfba607e8ab635581c54948d14654bf39d131719bf90"
+}

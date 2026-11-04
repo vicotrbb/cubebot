@@ -185,6 +185,7 @@ function Exchange({
       <PersonMessage turn={turn} you={you} />
       <div className="msg msg--agent agent-message">
         <Cube
+          agentId={agent.id}
           avatar={agent.avatar}
           mood={turn.status === 'running' ? 'working' : 'idle'}
           size={32}

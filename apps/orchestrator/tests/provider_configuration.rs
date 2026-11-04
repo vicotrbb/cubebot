@@ -121,12 +121,77 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
     let switched = ConfigureProvider {
         request_id: Uuid::new_v4(),
         expected_revision: 3,
-        provider: cubebot_protocol::runtime::ProviderKind::Openai,
+        provider: cubebot_protocol::runtime::ProviderKind::Openrouter,
         context_window: Some(200_000),
         ..model_only
     };
     assert!(matches!(
         restarted.configure(&admin, &switched).await,
+        Err(IdentityError::InvalidInput)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn switching_providers_keeps_each_key_until_it_is_forgotten() {
+    use cubebot_protocol::runtime::ProviderKind::{Openai, Openrouter};
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let connections = Connections::new(pool.clone(), Credentials::new([7; 32]));
+    let configure = |revision, provider, model: &str, key: Option<&str>| ConfigureProvider {
+        request_id: Uuid::new_v4(),
+        expected_revision: revision,
+        provider,
+        model: model.into(),
+        context_window: Some(200_000),
+        api_key: key.map(Into::into),
+        access: None,
+    };
+    let input = configure(0, Openai, "gpt", Some("openai-key"));
+    connections.configure(&admin, &input).await.unwrap();
+    assert!(connections.saved(&admin).await.unwrap().is_empty());
+    // A provider without a key cannot be chosen.
+    let input = configure(1, Openrouter, "vendor/model:free", None);
+    assert!(matches!(
+        connections.configure(&admin, &input).await,
+        Err(IdentityError::InvalidInput)
+    ));
+    // OpenRouter's model IDs hold characters OpenAI's do not.
+    let input = configure(1, Openrouter, "~vendor/model:free", Some("router-key"));
+    connections.configure(&admin, &input).await.unwrap();
+    let saved = connections.saved(&admin).await.unwrap();
+    assert_eq!(saved.len(), 1);
+    assert_eq!(saved[0].provider, Openai);
+    assert_eq!(saved[0].model, "gpt");
+    let stored: Vec<u8> = sqlx::query_scalar!("SELECT credential FROM provider_saved")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(!stored.windows(10).any(|bytes| bytes == b"openai-key"));
+    // Back to OpenAI with its saved key; OpenRouter's is now the one set aside.
+    let input = configure(2, Openai, "gpt", None);
+    connections.configure(&admin, &input).await.unwrap();
+    assert!(connections.key_matches().await.unwrap());
+    let saved = connections.saved(&admin).await.unwrap();
+    assert_eq!(saved[0].provider, Openrouter);
+    connections.forget(&admin, Openrouter).await.unwrap();
+    assert!(connections.saved(&admin).await.unwrap().is_empty());
+    assert!(matches!(
+        connections.forget(&admin, Openrouter).await,
+        Err(IdentityError::NotFound)
+    ));
+    let input = configure(3, Openrouter, "vendor/model:free", None);
+    assert!(matches!(
+        connections.configure(&admin, &input).await,
         Err(IdentityError::InvalidInput)
     ));
 }

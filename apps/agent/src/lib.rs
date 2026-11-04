@@ -12,6 +12,7 @@ pub mod files;
 pub mod guest;
 #[cfg(target_os = "linux")]
 mod init;
+pub mod knowledge_base;
 pub mod memory;
 pub mod skills;
 pub mod tools;

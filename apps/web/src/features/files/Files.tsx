@@ -375,7 +375,7 @@ function EmptyFolder({
       </div>
     )
   return (
-    <div className="files-empty files-empty--drop">
+    <div className="files-empty">
       <Upload className="files-empty__icon" />
       <h3>{inFolder ? 'This folder is empty.' : 'No files yet.'}</h3>
       <p>

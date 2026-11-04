@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE kb_revisions\n        SET revision=$2, title=$3, body=$4, saved_at=clock_timestamp()\n        WHERE page_id=$1\n          AND revision=(SELECT max(revision) FROM kb_revisions WHERE page_id=$1)\n          AND account_id IS NOT DISTINCT FROM $5\n          AND agent_id IS NOT DISTINCT FROM $6\n          AND started_at > clock_timestamp() - make_interval(secs => $7)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "086537d107802530ef4348cd4d1f0cbcf7e8bef2a810459131743f803ecac4d9"
+}

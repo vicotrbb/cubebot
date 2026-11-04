@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            DELETE FROM kb_pages\n            WHERE id = $1 AND trashed_at IS NOT NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "28e35a74b63710a9673db3da051f1683c07c8d150859a391b4c5e527fa5e4ad2"
+}

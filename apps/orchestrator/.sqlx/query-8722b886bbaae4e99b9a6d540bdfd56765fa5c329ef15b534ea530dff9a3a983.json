@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH q AS (SELECT websearch_to_tsquery('simple', $1) AS ts)\n            SELECT p.id, p.kind, p.title, p.icon,\n                ts_headline('simple', p.body, q.ts,\n                    'StartSel=\"\",StopSel=\"\",MaxWords=24,MinWords=8,MaxFragments=1') AS \"snippet!\"\n            FROM kb_pages p, q\n            WHERE p.trashed_at IS NULL\n              AND (p.search @@ q.ts OR p.title ILIKE '%' || $2 || '%')\n            ORDER BY (p.title ILIKE '%' || $2 || '%') DESC, ts_rank(p.search, q.ts) DESC, p.title\n            LIMIT $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "snippet!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "8722b886bbaae4e99b9a6d540bdfd56765fa5c329ef15b534ea530dff9a3a983"
+}
