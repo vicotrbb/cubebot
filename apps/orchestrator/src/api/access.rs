@@ -24,7 +24,8 @@ use crate::identity::{
     revoke,
     explain,
     receipt,
-    events
+    events,
+    audit_log
 ))]
 pub(super) struct Doc;
 
@@ -37,6 +38,7 @@ pub fn router(identity: Identity) -> Router {
         .route("/api/identity/access/revoke", post(revoke))
         .route("/api/identity/access/explain", post(explain))
         .route("/api/identity/access/events", get(events))
+        .route("/api/audit", get(audit_log))
         .route("/api/identity/commands/{kind}/{request_id}", get(receipt))
         .with_state(identity)
 }
@@ -162,6 +164,17 @@ async fn events(
     Ok(no_store(
         identity.access_events(&actor, cursor.after).await?,
     ))
+}
+
+/// The installation audit log, newest first; administrators only.
+#[utoipa::path(get, path = "/api/audit", operation_id = "audit_log", params(crate::identity::audit::AuditQuery), responses((status = 200, body = Vec<crate::identity::audit::AuditEntry>)))]
+async fn audit_log(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Query(query): Query<crate::identity::audit::AuditQuery>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&identity, &headers).await?;
+    Ok(no_store(identity.audit_log(&actor, &query).await?))
 }
 
 fn no_store(value: impl serde::Serialize) -> impl IntoResponse {

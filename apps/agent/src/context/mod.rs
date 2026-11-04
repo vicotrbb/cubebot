@@ -134,6 +134,7 @@ mod tests {
             command: None,
             command_only: false,
             mcp_servers: Vec::new(),
+            broadcast: false,
         }
     }
     fn text(message: &Message) -> &str {

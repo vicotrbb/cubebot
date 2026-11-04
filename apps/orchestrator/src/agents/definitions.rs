@@ -73,6 +73,8 @@ pub struct Agent {
     pub dreaming_model: Option<String>,
     /// Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four.
     pub task_lanes: i16,
+    /// The agent may broadcast to every agent (migrations/0046_broadcasts.sql).
+    pub broadcast: bool,
     /// `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
     /// otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
     /// still holds its credential.
@@ -175,7 +177,7 @@ impl Agents {
                CASE WHEN 'agent_manage' = ANY(c.names) THEN g.instructions END AS instructions,
                g.revision, g.instructions_revision, g.desired_state,
                g.idle_policy AS "idle_policy: IdlePolicy", g.restart_generation,
-               g.idle_delay_seconds, g.dreaming_model, g.task_lanes,
+               g.idle_delay_seconds, g.dreaming_model, g.task_lanes, g.broadcast,
                CASE
                    WHEN g.desired_state <> 'running' THEN g.desired_state
                    WHEN EXISTS(

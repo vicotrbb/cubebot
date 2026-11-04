@@ -12,6 +12,7 @@ mod tls;
 mod access;
 mod agent_lifecycle;
 mod agents;
+mod audit;
 mod authentication_limits;
 mod chat;
 mod collaboration;

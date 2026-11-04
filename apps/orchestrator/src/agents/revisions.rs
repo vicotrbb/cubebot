@@ -39,6 +39,9 @@ pub struct UpdateAgent {
     /// Concurrent delegated tasks, one to four; `None` keeps the current setting.
     #[serde(default)]
     pub task_lanes: Option<i16>,
+    /// Whether the agent may broadcast to every agent; `None` keeps the current setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub broadcast: Option<bool>,
     /// `None` keeps the current cube; not part of the revision history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<super::Avatar>,
@@ -98,6 +101,7 @@ impl Agents {
                 dreaming_model = $7,
                 task_lanes = COALESCE($8, task_lanes),
                 avatar = COALESCE($9, avatar),
+                broadcast = COALESCE($10, broadcast),
                 revision = revision + 1
             WHERE id = $1
               AND revision = $5
@@ -113,6 +117,7 @@ impl Agents {
             input.dreaming_model,
             input.task_lanes,
             input.avatar.map(sqlx::types::Json) as Option<sqlx::types::Json<super::Avatar>>,
+            input.broadcast,
         )
         .fetch_optional(&mut *transaction)
         .await?

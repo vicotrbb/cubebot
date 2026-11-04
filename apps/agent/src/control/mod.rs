@@ -346,6 +346,26 @@ impl MemoryClient {
         accepted(self.post(&format!("turns/{turn}/logins"), request).await?)
     }
 
+    /// Delivers the broadcast and returns how many agents it reached, or the orchestrator's
+    /// reason for refusing it.
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
+    pub async fn broadcast(
+        &self,
+        turn: Uuid,
+        request: &runtime::Broadcast,
+    ) -> Result<Result<u32, String>, Error> {
+        match self
+            .post(&format!("turns/{turn}/broadcasts"), request)
+            .await?
+        {
+            Ok(response) => {
+                let sent: runtime::Broadcasted = transport::decode(response, 1024).await?;
+                Ok(Ok(sent.agents))
+            }
+            Err(reason) => Ok(Err(reason)),
+        }
+    }
+
     /// The answer to one routine tool call (docs/adr/agents.md#routines), or the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn routine(

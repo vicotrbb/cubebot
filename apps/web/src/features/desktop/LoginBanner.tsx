@@ -10,17 +10,18 @@ import './desktop.css'
 export function LoginBanner({
   agent,
   holding = false,
+  canTake = true,
+  takeLabel = 'Take control',
   onTake,
 }: {
   agent: AgentSummary
   holding?: boolean
+  /** False where control cannot be taken here, such as on a phone's desktop page. */
+  canTake?: boolean
+  takeLabel?: string
   onTake: () => void
 }) {
   const [handoff, setHandoff] = useState<LoginHandoff | null>(null)
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [saving, setSaving] = useState(false)
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET('/api/agents/{id}/login', {
       params: { path: { id: agent.id } },
@@ -39,6 +40,64 @@ export function LoginBanner({
     return () => clearInterval(timer)
   }, [refresh, pending])
   if (!handoff || !pending) return null
+  return (
+    <section
+      className={
+        holding ? 'login-handoff login-handoff--holding' : 'login-handoff'
+      }
+      aria-label="Login request"
+    >
+      <span className="login-handoff__icon" aria-hidden="true">
+        <KeyRound />
+      </span>
+      <div className="login-handoff__body">
+        <p className="login-handoff__title">
+          {holding
+            ? `Log in to ${handoff.site}, then hand back control`
+            : `${agent.name} needs you to log in to ${handoff.site}`}
+        </p>
+        {holding ? (
+          <p className="login-handoff__reason">
+            Type the password and any code on the desktop yourself; {agent.name}{' '}
+            continues when you hand back. Save the login to the vault so it can
+            sign in alone next time.
+          </p>
+        ) : (
+          <p className="login-handoff__reason">{handoff.reason}</p>
+        )}
+      </div>
+      {holding ? (
+        <SaveLogin agent={agent} site={handoff.site} />
+      ) : (
+        <Respond
+          agent={agent}
+          canTake={canTake}
+          takeLabel={takeLabel}
+          onTake={onTake}
+          onDeclined={() => setHandoff(null)}
+        />
+      )}
+    </section>
+  )
+}
+
+function Respond({
+  agent,
+  canTake,
+  takeLabel,
+  onTake,
+  onDeclined,
+}: {
+  agent: AgentSummary
+  canTake: boolean
+  takeLabel: string
+  onTake: () => void
+  onDeclined: () => void
+}) {
+  const [declining, setDeclining] = useState(false)
+  const [reason, setReason] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   async function decline() {
     setBusy(true)
     setError('')
@@ -49,81 +108,95 @@ export function LoginBanner({
           body: { reason },
         }),
       )
-      setHandoff(null)
-      setReason('')
+      onDeclined()
     } catch (error) {
       setError(failure(error))
     } finally {
       setBusy(false)
     }
   }
-  return (
-    <section className="login-handoff" aria-label="Login request">
-      <KeyRound className="login-handoff__icon" />
-      <div className="login-handoff__body">
-        <p>
-          <strong>
-            {agent.name} asks you to log in on {handoff.site}.
-          </strong>{' '}
-          {handoff.reason}
-        </p>
-        {holding ? (
-          <>
-            <p className="small muted">
-              Log in on the desktop, then hand back control to let the agent
-              continue. To let the agent log in itself next time, save the login
-              to its vault; Save and fill types the password where the cursor
-              is.
-            </p>
-            {saving ? (
-              <ItemForm
-                agent={agent}
-                site={handoff.site}
-                fill
-                onDone={() => setSaving(false)}
-              />
-            ) : (
-              <div className="actions">
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  onClick={() => setSaving(true)}
-                >
-                  Save login
-                </button>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="actions">
-            <button
-              type="button"
-              className="btn btn--primary btn--sm"
-              onClick={onTake}
-            >
-              Take control
-            </button>
-            <input
-              className="input"
-              aria-label="Reason for declining"
-              value={reason}
-              maxLength={2048}
-              placeholder="Reason for declining (optional, sent to the agent)"
-              onChange={(event) => setReason(event.target.value)}
-              style={{ flex: 1, minWidth: 200 }}
-            />
-            <button
-              type="button"
-              className="btn btn--sm"
-              disabled={busy}
-              onClick={decline}
-            >
-              {busy ? 'Declining…' : 'Decline'}
-            </button>
-          </div>
-        )}
+  if (declining)
+    return (
+      <form
+        className="login-handoff__decline"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void decline()
+        }}
+      >
+        <input
+          className="input"
+          aria-label="Reason for declining, sent to the agent"
+          value={reason}
+          maxLength={2048}
+          // Focus follows the person's own click on Decline.
+          autoFocus
+          placeholder={`Tell ${agent.name} why (optional)`}
+          onChange={(event) => setReason(event.target.value)}
+        />
+        <button
+          type="submit"
+          className="btn btn--sm btn--danger"
+          disabled={busy}
+        >
+          {busy ? 'Declining…' : 'Decline'}
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost btn--sm"
+          onClick={() => setDeclining(false)}
+        >
+          Cancel
+        </button>
         <Alert>{error}</Alert>
+      </form>
+    )
+  return (
+    <div className="login-handoff__actions">
+      <button
+        type="button"
+        className="btn btn--ghost btn--sm"
+        onClick={() => setDeclining(true)}
+      >
+        Decline
+      </button>
+      {canTake ? (
+        <button
+          type="button"
+          className="btn btn--primary btn--sm"
+          onClick={onTake}
+        >
+          {takeLabel}
+        </button>
+      ) : (
+        <span className="faint small">Take control from a computer.</span>
+      )}
+    </div>
+  )
+}
+
+function SaveLogin({ agent, site }: { agent: AgentSummary; site: string }) {
+  const [saving, setSaving] = useState(false)
+  if (!saving)
+    return (
+      <div className="login-handoff__actions">
+        <button
+          type="button"
+          className="btn btn--sm"
+          onClick={() => setSaving(true)}
+        >
+          Save login to vault
+        </button>
       </div>
-    </section>
+    )
+  return (
+    <div className="login-handoff__form">
+      <ItemForm
+        agent={agent}
+        site={site}
+        fill
+        onDone={() => setSaving(false)}
+      />
+    </div>
   )
 }

@@ -27,6 +27,8 @@ export const keys = {
   agents: ['agents'] as const,
   rooms: ['rooms'] as const,
   activity: ['activity'] as const,
+  avatars: ['avatars'] as const,
+  broadcasts: ['broadcasts'] as const,
 }
 
 export function useSession() {
@@ -101,6 +103,27 @@ export function useActivity() {
     queryKey: keys.activity,
     queryFn: () => ok(api.GET('/api/activity')),
     refetchInterval: 30_000,
+  })
+}
+
+/** People's profile picture revisions; a new picture is a new URL. */
+export function useAvatars() {
+  return useQuery({
+    queryKey: keys.avatars,
+    queryFn: () => ok(api.GET('/api/identity/avatars')),
+    staleTime: 5 * 60_000,
+  })
+}
+
+/** The Broadcast channel, for administrators: the newest 100 broadcasts and the read cursor. */
+export function useBroadcasts(enabled: boolean, live = false) {
+  return useQuery({
+    queryKey: keys.broadcasts,
+    queryFn: () =>
+      ok(api.GET('/api/broadcasts', { params: { query: { after: 0 } } })),
+    enabled,
+    // Deliveries change as agents answer; the stream only says a new broadcast arrived.
+    refetchInterval: live ? 3000 : false,
   })
 }
 

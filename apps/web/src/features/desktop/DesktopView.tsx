@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ChevronLeft, Hand, Pause, Play, Power } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { ChevronLeft, Hand, Pause, Play, Power, Undo2 } from 'lucide-react'
+import { useRef, useState, type ReactNode } from 'react'
 import { admin } from '../../api/admin'
 import { failure } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
@@ -46,42 +46,41 @@ export function DesktopView({
     canvas,
     Boolean(take),
   )
+  const takeable = canControl && !phone
   const takeControl = () => {
     if (desk.takeControl()) setWatching(true)
   }
   return (
     <section className="desktop" aria-label="Agent desktop">
-      <header className="agent-head">
-        <Link
-          to="/agents/$agentId"
-          params={{ agentId: agent.id }}
-          className="btn btn--ghost btn--icon"
-          aria-label="Back to conversation"
-        >
-          <ChevronLeft />
-        </Link>
-        <Cube avatar={agent.avatar} mood={moodOf(agent)} size={32} />
-        <div className="agent-head__title">
-          <h1>{agent.name}: desktop</h1>
-          <p className="faint small" role="status">
-            {running
-              ? desk.status || modeLabel(watching, desk.mode, desk.holding)
-              : 'Computer off'}
-          </p>
-        </div>
+      <Head
+        agent={agent}
+        status={
+          running
+            ? desk.status || modeLabel(watching, desk.mode, desk.holding)
+            : 'Computer off'
+        }
+      >
         <Controls
           watching={watching}
           mode={desk.mode}
           holding={desk.holding}
-          canTake={canControl && !phone}
+          // A pending login's banner owns the one Take control.
+          canTake={takeable && !agent.pending_login}
           onWatch={() => setWatching(!watching)}
           onTake={takeControl}
           onHandBack={desk.handBack}
         />
-      </header>
-      <LoginBanner agent={agent} holding={desk.holding} onTake={takeControl} />
-      <FillPicker agent={agent} holding={desk.holding} />
-      <Alert>{desk.error}</Alert>
+      </Head>
+      <div className="desktop-notices">
+        <LoginBanner
+          agent={agent}
+          holding={desk.holding}
+          canTake={takeable && watching}
+          onTake={takeControl}
+        />
+        <FillPicker agent={agent} holding={desk.holding} />
+        <Alert>{desk.error}</Alert>
+      </div>
       <div className="desktop-stage">
         <div className="desktop-screen">
           <canvas
@@ -93,27 +92,97 @@ export function DesktopView({
             aria-label={`Agent desktop${desk.holding ? '. You have control: mouse and keyboard go to the agent.' : ''}`}
             className={desk.holding ? 'controlling' : undefined}
           />
-          {desk.pointer && watching && (
-            <PointerMark pointer={desk.pointer} accountId={accountId} />
-          )}
-          {watching && !desk.live && (
-            <ScreenCover
+          {watching && (
+            <Overlay
               agent={agent}
+              desk={desk}
+              accountId={accountId}
               running={running}
-              reason={desk.status}
               canManage={canManage}
             />
           )}
         </div>
       </div>
-      {watching && <Latency samples={desk.latency} updates={desk.updates} />}
-      {phone && canControl && (
-        <p className="faint small" style={{ padding: '0 16px 12px' }}>
-          Taking control needs a mouse and keyboard; watch here and take over
-          from a desktop.
-        </p>
-      )}
+      <footer className="desktop-foot">
+        {watching && desk.live && (
+          <Latency samples={desk.latency} updates={desk.updates} />
+        )}
+        {phone && canControl && <PhoneNote />}
+      </footer>
     </section>
+  )
+}
+
+function Head({
+  agent,
+  status,
+  children,
+}: {
+  agent: AgentSummary
+  status: string
+  children: ReactNode
+}) {
+  return (
+    <header className="agent-head">
+      <Link
+        to="/agents/$agentId"
+        params={{ agentId: agent.id }}
+        className="btn btn--ghost btn--icon"
+        aria-label="Back to conversation"
+      >
+        <ChevronLeft />
+      </Link>
+      <Cube avatar={agent.avatar} mood={moodOf(agent)} size={28} />
+      <div className="agent-head__title">
+        <h1>
+          {agent.name} <span className="faint">· Desktop</span>
+        </h1>
+        <p className="faint small" role="status">
+          {status}
+        </p>
+      </div>
+      {children}
+    </header>
+  )
+}
+
+/** What lies over the screen while watching: pointer tags, or the cover before a frame. */
+function Overlay({
+  agent,
+  desk,
+  accountId,
+  running,
+  canManage,
+}: {
+  agent: AgentSummary
+  desk: ReturnType<typeof useDesktopSocket>
+  accountId: string
+  running: boolean
+  canManage: boolean
+}) {
+  return (
+    <>
+      {desk.pointer && (
+        <PointerMark pointer={desk.pointer} accountId={accountId} />
+      )}
+      {!desk.live && (
+        <ScreenCover
+          agent={agent}
+          running={running}
+          reason={desk.status}
+          canManage={canManage}
+        />
+      )}
+    </>
+  )
+}
+
+function PhoneNote() {
+  return (
+    <p className="faint small">
+      Taking control needs a mouse and keyboard; watch here and take over from a
+      computer.
+    </p>
   )
 }
 
@@ -136,9 +205,15 @@ function Controls({
 }) {
   return (
     <div className="agent-head__actions">
-      <button type="button" className="btn btn--sm" onClick={onWatch}>
+      <button
+        type="button"
+        className={holding ? 'btn btn--ghost btn--sm' : 'btn btn--sm'}
+        onClick={onWatch}
+      >
         {watching ? <Pause /> : <Play />}
-        {watching ? 'Stop watching' : 'Watch'}
+        <span className="agent-head__word">
+          {watching ? 'Stop watching' : 'Watch'}
+        </span>
       </button>
       {canTake && watching && !holding && (
         <button
@@ -157,6 +232,7 @@ function Controls({
           className="btn btn--primary btn--sm"
           onClick={onHandBack}
         >
+          <Undo2 />
           Hand back
         </button>
       )}
@@ -245,12 +321,16 @@ function Latency({ samples, updates }: { samples: number[]; updates: number }) {
   const sorted = [...samples].sort((a, b) => a - b)
   const middle = sorted[Math.floor(sorted.length / 2)]
   return (
-    <p className="faint small desktop-latency tabular">
-      Input round trip:{' '}
-      {last === undefined || middle === undefined
-        ? 'not measured yet'
-        : `${Math.round(last)} ms (median ${Math.round(middle)} ms of ${samples.length})`}{' '}
-      · Screen updates: {updates}/s
+    <p className="desktop-latency tabular" role="status">
+      <span className="desktop-latency__live" aria-hidden="true" />
+      Live · {updates} {updates === 1 ? 'update' : 'updates'}/s
+      {last !== undefined && middle !== undefined && (
+        <>
+          {' '}
+          · input {Math.round(last)} ms
+          <span className="faint"> (median {Math.round(middle)} ms)</span>
+        </>
+      )}
     </p>
   )
 }

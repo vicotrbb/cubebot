@@ -19,7 +19,7 @@
   border: 2px dashed var(--orange);
   background: color-mix(in srgb, var(--orange-wash) 90%, transparent);
   color: var(--orange-base);
-  font-weight: 800;
+  font-weight: var(--w-head);
   pointer-events: none;
 }
 .files-bar {

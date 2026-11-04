@@ -1,5 +1,5 @@
 use crate::{
-    identity::{Identity, IdentityError},
+    identity::{Actor, Identity, IdentityError, audit::Event},
     work::{CreateRoom, RoomMembers, SendMessage, Work},
 };
 use axum::{
@@ -31,7 +31,10 @@ struct Api {
     room_messages,
     post_room_message,
     room_events,
-    read
+    read,
+    broadcasts,
+    broadcast,
+    read_broadcasts
 ))]
 pub(super) struct Doc;
 
@@ -45,6 +48,8 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
             "/api/rooms/{room}/messages",
             get(room_messages).post(post_room_message),
         )
+        .route("/api/broadcasts", get(broadcasts).post(broadcast))
+        .route("/api/broadcasts/read", put(read_broadcasts))
         .layer(DefaultBodyLimit::max(72 * 1024))
         .with_state(Api {
             identity,
@@ -72,11 +77,20 @@ async fn create_room(
     Json(input): Json<CreateRoom>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
+    let room = api.work.create_room(&actor, &input).await?;
+    audit(&api, &actor, "room.create", &room).await;
     Ok((
         StatusCode::CREATED,
         [("cache-control", "no-store")],
-        Json(api.work.create_room(&actor, &input).await?),
+        Json(room),
     ))
+}
+
+async fn audit(api: &Api, actor: &Actor, kind: &'static str, room: &crate::work::Room) {
+    let members: Vec<_> = room.members.iter().map(|member| &member.name).collect();
+    let detail = serde_json::json!({ "name": room.name, "members": members });
+    let event = Event::by(actor.id, kind).on(room.id).detail(detail);
+    api.identity.audit(event).await;
 }
 
 /// Replaces the member set; administrators and `room.manage` holders only.
@@ -88,10 +102,9 @@ async fn set_members(
     Json(input): Json<RoomMembers>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
-    Ok((
-        [("cache-control", "no-store")],
-        Json(api.work.set_room_members(&actor, room, &input).await?),
-    ))
+    let room = api.work.set_room_members(&actor, room, &input).await?;
+    audit(&api, &actor, "room.members", &room).await;
+    Ok(([("cache-control", "no-store")], Json(room)))
 }
 
 /// Moves the caller's read cursor forward; a lower `sequence` keeps the stored one. Responds
@@ -107,6 +120,48 @@ async fn read(
     Ok((
         [("cache-control", "no-store")],
         Json(api.work.read_room(&actor, room, input.sequence).await?),
+    ))
+}
+
+/// The Broadcast channel, administrators only: up to 100 broadcasts after `after`, oldest first.
+#[utoipa::path(get, path = "/api/broadcasts", params(("after" = Option<i64>, Query)), responses((status = 200, body = crate::work::BroadcastFeed)))]
+async fn broadcasts(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Query(cursor): Query<Cursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.work.broadcasts(&actor, cursor.after).await?),
+    ))
+}
+
+/// Sends one message to every agent that is not retired; administrators only.
+#[utoipa::path(post, path = "/api/broadcasts", request_body = SendMessage, responses((status = 202, body = crate::work::BroadcastMessage)))]
+async fn broadcast(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Json(input): Json<SendMessage>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        StatusCode::ACCEPTED,
+        [("cache-control", "no-store")],
+        Json(api.work.broadcast(&actor, &input).await?),
+    ))
+}
+
+#[utoipa::path(put, path = "/api/broadcasts/read", operation_id = "read_broadcasts", request_body = crate::work::ReadCursor, responses((status = 200, body = crate::work::ReadCursor)))]
+async fn read_broadcasts(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Json(input): Json<crate::work::ReadCursor>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.work.read_broadcasts(&actor, input.sequence).await?),
     ))
 }
 

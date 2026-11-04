@@ -49,3 +49,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+.capability {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.capability__name {
+  font-weight: var(--w-label);
+}
+.capability .switch {
+  margin-top: 2px;
+}

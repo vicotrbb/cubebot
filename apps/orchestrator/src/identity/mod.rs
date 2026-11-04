@@ -2,6 +2,9 @@
 
 pub mod access;
 mod accounts;
+pub mod audit;
+mod avatars;
+pub use avatars::{AVATAR_BYTES, AvatarRevision};
 pub mod oidc;
 pub use accounts::AccountSummary;
 mod commands;

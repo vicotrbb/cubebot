@@ -245,7 +245,7 @@ async fn start<P: Provider>(
     tools.extend(crate::skills::definitions());
     tools.extend(crate::files::definitions(registry.is_some()));
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
-    tools.extend(crate::collaboration::definitions(desktop));
+    tools.extend(crate::collaboration::definitions(desktop, turn.broadcast));
     // A task lane never drives the shared desktop (docs/adr/agents.md#agent-execution-lanes); the main lane owns it.
     tools.extend(
         registry

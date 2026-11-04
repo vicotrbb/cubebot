@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT avatar FROM human_accounts WHERE id = $1 AND active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "avatar",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "245ee44d2ec8d498284a7afcb7b3c0529a26d7aa762dd7806140b37c29b5ae29"
+}

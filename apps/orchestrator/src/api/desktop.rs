@@ -13,6 +13,7 @@ use crate::{
     identity::{
         Actor, Identity, IdentityError,
         access::{Capability, Scope},
+        audit::Event,
     },
     work::{DeclineLogin, LoginHandoff, Work},
 };
@@ -139,6 +140,10 @@ async fn decline_login(
         reason
     };
     if api.work.settle_login(agent, actor.id, Some(reason)).await? {
+        let event = Event::by(actor.id, "login.decline").on(agent.0);
+        api.identity
+            .audit(event.detail(json!({ "reason": reason })))
+            .await;
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(IdentityError::NotFound)
@@ -330,18 +335,39 @@ impl Session {
                 .await
                 .map_err(|_| Closing::NotRecorded)?;
         }
+        if self.holding {
+            let site = handoff.map(|handoff| handoff.site);
+            self.audit("desktop.take_control", json!({ "login": site }))
+                .await;
+        }
         Ok(line)
+    }
+
+    /// Clones what it records, since the session itself is not `Sync`.
+    fn audit(
+        &self,
+        kind: &'static str,
+        detail: serde_json::Value,
+    ) -> impl Future<Output = ()> + Send + use<> {
+        let event = Event::by(self.actor.id, kind)
+            .on(self.agent.0)
+            .detail(detail);
+        let identity = self.api.identity.clone();
+        async move { identity.audit(event).await }
     }
 
     /// Hands control back and completes a pending login handoff, which tells the agent.
     async fn hand_back(&mut self) -> Result<String, Closing> {
         let line = self.mode(Mode::Watch, Some(self.actor.id), false).await?;
         if !self.holding {
-            self.api
+            let settled = self
+                .api
                 .work
                 .settle_login(self.agent, self.actor.id, None)
                 .await
                 .map_err(|_| Closing::NotRecorded)?;
+            self.audit("desktop.hand_back", json!({ "login_completed": settled }))
+                .await;
         }
         Ok(line)
     }

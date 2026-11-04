@@ -6,6 +6,7 @@ import {
   Hash,
   Inbox,
   LogOut,
+  Megaphone,
   Moon,
   Plus,
   Search,
@@ -22,6 +23,7 @@ import {
   unread,
   useActivity,
   useAgents,
+  useBroadcasts,
   useInstallation,
   usePreferences,
   useRooms,
@@ -30,6 +32,7 @@ import {
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
 import { Cube, moodOf } from '../../components/Cube'
+import { PersonAvatar } from '../../components/PersonAvatar'
 import { Menu } from '../../components/primitives'
 
 export const ACTIVITY: Record<string, string> = {
@@ -68,8 +71,11 @@ export function Sidebar({
   return (
     <aside className={page ? 'sidebar sidebar--page' : 'sidebar'}>
       <header className="sidebar__head">
-        <span className="sidebar__name">
-          {installation.data?.name ?? 'Cubebot'}
+        <span className="sidebar__brand">
+          <Cube size={20} />
+          <span className="sidebar__name">
+            {installation.data?.name ?? 'Cubebot'}
+          </span>
         </span>
         {onSearch && (
           <button
@@ -94,6 +100,7 @@ export function Sidebar({
           <span className="row__label">Activity</span>
           {attention > 0 && <span className="row__badge">{attention}</span>}
         </Link>
+        {administrator && <BroadcastRow />}
         <Favorites />
         <AgentsSection administrator={administrator} />
         <RoomsSection />
@@ -121,6 +128,24 @@ export function Sidebar({
         {administrator && <PlatformGear />}
       </footer>
     </aside>
+  )
+}
+
+/** Every agent at once (migrations/0046_broadcasts.sql); administrators only. */
+export function BroadcastRow() {
+  const feed = useBroadcasts(true)
+  const last = feed.data?.messages.at(-1)?.sequence ?? 0
+  const fresh = last > (feed.data?.read_sequence ?? 0)
+  return (
+    <Link
+      to="/broadcast"
+      className={fresh ? 'row row--page unread' : 'row row--page'}
+      activeProps={{ 'aria-current': 'page' }}
+    >
+      <Megaphone className="row__icon" />
+      <span className="row__label">Broadcast</span>
+      {fresh && <span className="row__dot" aria-label="New broadcasts" />}
+    </Link>
   )
 }
 
@@ -330,18 +355,18 @@ function AccountMenu() {
       triggerClassName="row row--account"
       trigger={
         <>
-          <span className="avatar-initial" aria-hidden="true">
-            {name.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="row__label">{name}</span>
-          <span className="faint small">
-            {session.data?.administrator ? 'Administrator' : 'Member'}
+          <PersonAvatar account={session.data?.id} name={name} />
+          <span className="account__who">
+            <span className="row__label">{name}</span>
+            <span className="faint">
+              {session.data?.administrator ? 'Administrator' : 'Member'}
+            </span>
           </span>
         </>
       }
     >
       <Link to="/you" className="menu__item">
-        <UserRound /> You
+        <UserRound /> Profile and preferences
       </Link>
       <button
         type="button"
@@ -353,8 +378,9 @@ function AccountMenu() {
             save.mutate({ ...preferences.data, theme: next })
         }}
       >
-        <ThemeIcon /> Theme: {theme}
+        <ThemeIcon /> Theme: {THEMES[theme]}
       </button>
+      <div className="menu__sep" role="separator" />
       <button
         type="button"
         className="menu__item"
@@ -367,6 +393,12 @@ function AccountMenu() {
       </button>
     </Menu>
   )
+}
+
+const THEMES: Record<Theme, string> = {
+  system: 'Match system',
+  light: 'Light',
+  dark: 'Dark',
 }
 
 export function FavoriteButton({

@@ -48,6 +48,10 @@ export function useInstallationStream(enabled: boolean) {
           ),
         )
       })
+      // Only administrators get these; the feed itself carries the deliveries.
+      source.addEventListener('broadcast', () => {
+        void client.invalidateQueries({ queryKey: keys.broadcasts })
+      })
       source.onerror = () => {
         if (source.readyState !== EventSource.CLOSED || fallback) return
         // A closed stream (a lost session or a restart) falls back to polling.

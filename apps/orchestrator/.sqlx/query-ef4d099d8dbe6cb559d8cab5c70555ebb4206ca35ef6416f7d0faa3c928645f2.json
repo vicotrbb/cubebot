@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id AS \"id!\", sequence AS \"sequence!\", author AS \"author!\", account AS \"account!\",\n                agent, message AS \"message!\", at AS \"at!\"\n            FROM (\n                SELECT b.id, b.sequence, COALESCE(g.name, h.login) AS author, b.actor_id AS account,\n                    b.agent_id AS agent, b.message, (to_jsonb(b.created_at) #>> '{}') AS at\n                FROM broadcasts b\n                JOIN human_accounts h ON h.id = b.actor_id\n                LEFT JOIN agents g ON g.id = b.agent_id\n                WHERE b.sequence > $1\n                ORDER BY b.sequence DESC\n                LIMIT 100\n            ) newest\n            ORDER BY sequence\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "author!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "account!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "message!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "ef4d099d8dbe6cb559d8cab5c70555ebb4206ca35ef6416f7d0faa3c928645f2"
+}

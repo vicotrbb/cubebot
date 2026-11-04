@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE vault_items\n            SET last_used_at=clock_timestamp()\n            WHERE id=$2 AND (agent_id=$1\n                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'\n                    OR access->'agents' @> jsonb_build_array($1::uuid))))\n            RETURNING username, ciphertext, name, site\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "ciphertext",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "site",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c0f289b04ab3d1c806ac087401b91c756056b7d44be4b1078a60d5ff58a1326b"
+}

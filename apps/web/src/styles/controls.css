@@ -2,26 +2,27 @@
 
 .btn {
   --face: var(--raised);
-  --edge: var(--paper-deep);
+  --edge: var(--btn-edge);
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 7px 14px 9px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 12px 6px;
   border: 0;
   border-radius: var(--r-md);
   background: var(--face);
   color: var(--ink);
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--w-label);
   font-size: var(--t-sm);
   line-height: 1.2;
   cursor: pointer;
   box-shadow:
-    inset 0 -3px 0 var(--edge),
-    0 1px 0 rgb(var(--shadow) / 0.08);
+    inset 0 0 0 1px var(--line),
+    inset 0 -2px 0 var(--edge),
+    0 1px 1px rgb(var(--shadow) / 0.06);
   transition:
     transform var(--quick) var(--settle),
     box-shadow var(--quick) var(--settle),
@@ -32,27 +33,35 @@
 .btn:hover {
   transform: translateY(-1px);
   box-shadow:
-    inset 0 -3px 0 var(--edge),
-    0 6px 14px -6px rgb(var(--shadow) / 0.35);
+    inset 0 0 0 1px var(--line),
+    inset 0 -2px 0 var(--edge),
+    0 5px 12px -6px rgb(var(--shadow) / 0.3);
 }
 .btn:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 -1px 0 var(--edge);
+  transform: translateY(0.5px);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    inset 0 -1px 0 var(--edge);
 }
 .btn:disabled {
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.5;
   transform: none;
-  box-shadow: inset 0 -3px 0 var(--edge);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    inset 0 -2px 0 var(--edge);
 }
 .btn--primary {
   --face: var(--orange);
   --edge: var(--orange-deep);
+  --line: transparent;
   color: var(--on-paint);
+  font-weight: var(--w-strong);
 }
 .btn--danger {
   --face: var(--danger-wash);
-  --edge: var(--danger);
+  --edge: rgb(194 59 34 / 0.45);
+  --line: transparent;
   color: var(--danger);
 }
 .btn--ghost {
@@ -69,29 +78,26 @@
   box-shadow: none;
 }
 .btn--sm {
-  min-height: 30px;
-  padding: 4px 10px 6px;
-  font-size: var(--t-xs);
+  min-height: 28px;
+  padding: 4px 10px 5px;
+  font-size: var(--t-sm);
 }
 .btn--icon {
-  width: 36px;
+  width: 32px;
   padding: 0;
 }
 .btn--icon.btn--sm {
-  width: 30px;
+  width: 28px;
 }
 .btn svg {
-  width: 18px;
-  height: 18px;
-  flex: none;
-}
-.btn--sm svg {
   width: 16px;
   height: 16px;
+  flex: none;
+  stroke-width: 1.75;
 }
-[data-theme='dark'] .btn,
-.dark .btn {
-  --edge: rgb(0 0 0 / 0.35);
+.btn--sm svg {
+  width: 15px;
+  height: 15px;
 }
 
 .link-btn {
@@ -103,17 +109,20 @@
   color: var(--ink);
   cursor: pointer;
   text-decoration: underline;
-  text-decoration-color: var(--orange);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 0.18em;
+  text-decoration-color: rgb(242 106 27 / 0.6);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+.link-btn:hover {
+  text-decoration-color: currentColor;
 }
 
 /* Fields */
 .field {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   font-size: var(--t-sm);
-  font-weight: 600;
+  font-weight: var(--w-label);
   color: var(--ink-soft);
 }
 .field > span:first-child {
@@ -131,8 +140,8 @@
 .field textarea,
 .field select {
   width: 100%;
-  min-height: 38px;
-  padding: 8px 12px;
+  min-height: 34px;
+  padding: 6px 10px;
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
   background: var(--raised);
@@ -140,9 +149,16 @@
   font: inherit;
   font-size: var(--t-md);
   font-weight: 400;
+  box-shadow: var(--hairline);
   transition:
     border-color var(--quick),
     box-shadow var(--quick);
+}
+.input:hover,
+.field input:hover,
+.field textarea:hover,
+.field select:hover {
+  border-color: rgb(var(--shadow) / 0.32);
 }
 .field textarea {
   resize: vertical;
@@ -155,7 +171,7 @@
 .field select:focus {
   outline: none;
   border-color: var(--orange);
-  box-shadow: 0 0 0 3px rgb(242 106 27 / 0.25);
+  box-shadow: 0 0 0 3px rgb(242 106 27 / 0.18);
 }
 .input::placeholder,
 .field input::placeholder,
@@ -174,8 +190,8 @@
   cursor: pointer;
 }
 .check input {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   accent-color: var(--orange);
   margin: 0;
 }
@@ -211,10 +227,11 @@
   margin-top: 8px;
 }
 .notice {
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: var(--r-md);
   background: var(--inset);
   font-size: var(--t-sm);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .notice--danger {
   background: var(--danger-wash);
@@ -274,25 +291,31 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 9px 3px;
-  border-radius: var(--r-sm);
+  gap: 5px;
+  padding: 1px 7px 2px;
+  border-radius: var(--r-xs);
   background: var(--inset);
   color: var(--ink-soft);
   font-size: var(--t-xs);
-  font-weight: 700;
+  font-weight: var(--w-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
   line-height: 1.4;
   white-space: nowrap;
 }
 .chip--paint {
   background: var(--orange);
   color: var(--on-paint);
-  box-shadow: inset 0 -2px 0 var(--orange-deep);
+  box-shadow: none;
 }
 .chip--sage {
   background: var(--sage);
   color: #2b2420;
-  box-shadow: inset 0 -2px 0 var(--sage-deep);
+  box-shadow: none;
+}
+.chip--danger {
+  background: var(--danger-wash);
+  color: var(--danger);
+  box-shadow: none;
 }
 .chip svg {
   width: 12px;
@@ -350,14 +373,15 @@
 }
 .table th {
   text-align: left;
-  font-weight: 600;
+  font-weight: var(--w-label);
+  font-size: var(--t-xs);
   color: var(--ink-faint);
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 .table td {
-  padding: 9px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
@@ -387,7 +411,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 600;
+  font-weight: var(--w-label);
 }
 
 /* Entry rows: an icon well, the name over its detail, meta, then the row's menu */
@@ -400,7 +424,7 @@
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 52px;
+  min-height: 48px;
   padding: 8px 6px 8px 8px;
   border-bottom: 1px solid var(--line);
 }
@@ -432,7 +456,7 @@
   white-space: nowrap;
 }
 .entry__name {
-  font-weight: 600;
+  font-weight: var(--w-label);
 }
 .entry__detail {
   font-size: var(--t-sm);
@@ -453,13 +477,19 @@
   display: grid;
   justify-items: center;
   text-align: center;
-  gap: 8px;
-  padding: 40px 24px;
+  gap: 6px;
+  padding: 56px 24px;
   color: var(--ink-soft);
+  font-size: var(--t-md);
 }
 .empty h2,
 .empty h3 {
   color: var(--ink);
+  font-size: var(--t-lg);
+  font-weight: var(--w-strong);
+}
+.empty > .cube {
+  margin-bottom: 10px;
 }
 .empty p {
   max-width: 44ch;
@@ -497,13 +527,16 @@ dialog.dialog {
   max-height: calc(100vh - 32px);
 }
 dialog.dialog::backdrop {
-  background: rgb(43 36 32 / 0.4);
-  backdrop-filter: blur(2px);
+  background: rgb(18 14 11 / 0.45);
+  backdrop-filter: blur(3px);
 }
 .dialog__body {
-  padding: 20px 22px 22px;
+  padding: 18px 20px 20px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
+}
+.dialog__head h2 {
+  font-size: var(--t-xl);
 }
 .dialog__head {
   display: flex;
@@ -521,7 +554,7 @@ dialog.dialog::backdrop {
 }
 .kv dt {
   color: var(--ink-faint);
-  font-weight: 600;
+  font-weight: var(--w-label);
 }
 .kv dd {
   margin: 0;
@@ -532,9 +565,10 @@ dialog.dialog::backdrop {
 .tabs {
   display: flex;
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   border-radius: var(--r-md);
   background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
   width: max-content;
   max-width: 100%;
   overflow: auto;
@@ -543,26 +577,31 @@ dialog.dialog::backdrop {
   appearance: none;
   border: 0;
   background: none;
-  padding: 5px 12px;
-  border-radius: 6px;
+  padding: 4px 10px;
+  border-radius: 5px;
   font: inherit;
   font-size: var(--t-sm);
-  font-weight: 600;
+  font-weight: var(--w-label);
   color: var(--ink-soft);
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
 }
+.tabs > :hover {
+  color: var(--ink);
+}
 .tabs > [aria-current='page'],
 .tabs > [aria-selected='true'] {
   background: var(--raised);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgb(var(--shadow) / 0.15);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 1px 2px rgb(var(--shadow) / 0.12);
 }
 
 details.disclosure > summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--w-label);
   font-size: var(--t-sm);
   color: var(--ink-soft);
   list-style: none;

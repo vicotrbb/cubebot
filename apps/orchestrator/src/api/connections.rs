@@ -1,7 +1,7 @@
 //! Human administration never returns recoverable provider credentials.
 use crate::{
     connections::{ConfigureProvider, Connections, ListModels, ModelsError},
-    identity::{Identity, IdentityError},
+    identity::{Identity, IdentityError, audit::Event},
 };
 use axum::{
     Json, Router,
@@ -52,10 +52,16 @@ async fn configure(
     Json(input): Json<ConfigureProvider>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
-    Ok((
-        [("cache-control", "no-store")],
-        Json(api.connections.configure(&actor, &input).await?),
-    ))
+    let summary = api.connections.configure(&actor, &input).await?;
+    let detail = json!({
+        "provider": summary.provider,
+        "model": summary.model,
+        "key_changed": input.api_key.is_some(),
+        "revision": summary.revision,
+    });
+    let event = Event::by(actor.id, "provider.configure").detail(detail);
+    api.identity.audit(event).await;
+    Ok(([("cache-control", "no-store")], Json(summary)))
 }
 
 /// The models a key can use, newest first: 422 when the provider rejects the key, 502 when it

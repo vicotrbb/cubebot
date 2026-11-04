@@ -4,6 +4,7 @@ import type { RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
 import { followWhileVisible } from '../../app/stream'
 import { Cube, moodOf } from '../../components/Cube'
+import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Empty, Skeleton } from '../../components/primitives'
 import { Composer } from '../chat/Composer'
 import '../chat/chat.css'
@@ -124,9 +125,7 @@ export function Room({
         {messages.map((message) => (
           <article className="exchange" key={message.id}>
             <div className="msg msg--person">
-              <span className="avatar-initial msg__avatar" aria-hidden="true">
-                {message.author.slice(0, 1).toUpperCase()}
-              </span>
+              <PersonAvatar login={message.author} className="msg__avatar" />
               <div className="msg__body">
                 <div className="msg__head">
                   <span className="msg__author">{message.author}</span>

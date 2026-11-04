@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT v.id, v.name, v.site AS \"site!\",\n            COALESCE(v.last_used_at >= t.created_at, false) AS \"filled!\"\n        FROM vault_items v, chat_turns t\n        WHERE t.id=$2 AND v.kind='login'\n            AND (v.agent_id=$1\n                OR (v.agent_id IS NULL AND (v.access->>'mode' = 'all_agents'\n                    OR v.access->'agents' @> jsonb_build_array($1::uuid))))\n        ORDER BY v.agent_id IS NULL, v.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "site!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "filled!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "0ef6fd16341319b880739c8238935410f62c0933684293370465c539bdd045e0"
+}

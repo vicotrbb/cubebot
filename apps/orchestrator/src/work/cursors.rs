@@ -45,7 +45,7 @@ impl Work {
     }
 }
 
-async fn store(
+pub(super) async fn store(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
     kind: &str,

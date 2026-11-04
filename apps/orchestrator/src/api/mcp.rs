@@ -7,6 +7,7 @@ use crate::{
     identity::{
         Actor, Identity, IdentityError,
         access::{Capability, Scope},
+        audit::Event,
     },
 };
 use axum::{
@@ -16,6 +17,7 @@ use axum::{
     routing::{get, put},
 };
 use serde::Deserialize;
+use serde_json::json;
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -73,9 +75,16 @@ async fn create(
     Json(input): Json<SaveMcpServer>,
 ) -> Result<Json<McpServerSummary>, IdentityError> {
     let actor = administrator(&api, &headers).await?;
-    Ok(Json(
-        api.connections.create_mcp_server(actor.id, &input).await?,
-    ))
+    let server = api.connections.create_mcp_server(actor.id, &input).await?;
+    audit(&api, &actor, "mcp.create", &server).await;
+    Ok(Json(server))
+}
+
+/// Names and transports only: a command line or URL may carry a token.
+async fn audit(api: &Api, actor: &Actor, kind: &'static str, server: &McpServerSummary) {
+    let detail = json!({"name": server.name, "transport": server.transport});
+    let event = Event::by(actor.id, kind).on(server.id).detail(detail);
+    api.identity.audit(event).await;
 }
 
 /// 409 when another server has the name.
@@ -86,10 +95,10 @@ async fn update(
     Path(server): Path<Uuid>,
     Json(input): Json<SaveMcpServer>,
 ) -> Result<Json<McpServerSummary>, IdentityError> {
-    administrator(&api, &headers).await?;
-    Ok(Json(
-        api.connections.update_mcp_server(server, &input).await?,
-    ))
+    let actor = administrator(&api, &headers).await?;
+    let server = api.connections.update_mcp_server(server, &input).await?;
+    audit(&api, &actor, "mcp.update", &server).await;
+    Ok(Json(server))
 }
 
 #[utoipa::path(delete, path = "/api/mcp-servers/{server}", operation_id = "delete_mcp_server", params(("server" = Uuid, Path)), responses((status = 204)))]
@@ -98,8 +107,12 @@ async fn delete(
     headers: HeaderMap,
     Path(server): Path<Uuid>,
 ) -> Result<StatusCode, IdentityError> {
-    administrator(&api, &headers).await?;
-    api.connections.delete_mcp_server(server).await?;
+    let actor = administrator(&api, &headers).await?;
+    let name = api.connections.delete_mcp_server(server).await?;
+    let event = Event::by(actor.id, "mcp.delete").on(server);
+    api.identity
+        .audit(event.detail(json!({"name": name})))
+        .await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -127,9 +140,12 @@ async fn grant(
     Path((agent, server)): Path<(AgentId, Uuid)>,
     Json(input): Json<McpGrant>,
 ) -> Result<StatusCode, IdentityError> {
-    administrator(&api, &headers).await?;
+    let actor = administrator(&api, &headers).await?;
     api.connections
         .grant_mcp_server(server, agent, input.enabled)
         .await?;
+    let detail = json!({"agent": agent.0, "enabled": input.enabled});
+    let event = Event::by(actor.id, "mcp.grant").on(server).detail(detail);
+    api.identity.audit(event).await;
     Ok(StatusCode::NO_CONTENT)
 }

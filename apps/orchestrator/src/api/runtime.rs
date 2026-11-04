@@ -13,9 +13,9 @@ use axum::{
     routing::{get, post},
 };
 use cubebot_protocol::runtime::{
-    Bootstrap, Collaborate, Collaborated, Dream, DreamEnd, FileShare, Memory, MemoryChange,
-    REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeActor, RuntimeSession,
-    SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
+    Bootstrap, Broadcast, Broadcasted, Collaborate, Collaborated, Dream, DreamEnd, FileShare,
+    Memory, MemoryChange, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeActor,
+    RuntimeSession, SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
 };
 use uuid::Uuid;
 
@@ -34,6 +34,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
+        .route("/api/runtime/turns/{turn}/broadcasts", post(broadcast))
         .route("/api/runtime/turns/{turn}/routines", post(routine))
         .route("/api/runtime/vault", get(vault).post(vault_put))
         .route("/api/runtime/vault/fills", post(vault_fill))
@@ -238,6 +239,24 @@ async fn request_login(
         Err(reason) => refused(&reason),
     })
 }
+/// Sends a message from the agent's running turn to every other agent; a refusal is 409 with
+/// the reason the model reads.
+async fn broadcast(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(turn): Path<Uuid>,
+    Json(input): Json<Broadcast>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let sent = crate::work::Work::new(identity.pool.clone())
+        .agent_broadcast(&actor, turn, &input)
+        .await
+        .map_err(Failure::from)?;
+    Ok(match sent {
+        Ok(agents) => Json(Broadcasted { agents }).into_response(),
+        Err(reason) => refused(&reason),
+    })
+}
 /// One routine tool call (docs/adr/agents.md#routines) for the agent's running turn; a refusal is 409 with the
 /// reason the model reads.
 async fn routine(
@@ -302,7 +321,7 @@ async fn vault_fill(
 ) -> Result<Response, Failure> {
     let actor = active(&identity, &headers).await?;
     let text = vault_of(&identity)?
-        .vault_fill_text(actor.agent, input.item, input.field)
+        .vault_fill_text(actor.agent, None, input.item, input.field)
         .await
         .map_err(vault_unavailable)?;
     let Some(text) = text else {

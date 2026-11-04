@@ -141,6 +141,14 @@ impl Command {
         )
         .execute(&mut *transaction)
         .await?;
+        let detail = match &self.body["input"] {
+            input @ serde_json::Value::Object(_) => input.clone(),
+            input => serde_json::json!({ "input": input }),
+        };
+        let event = crate::identity::audit::Event::by(self.actor, self.kind)
+            .on(receipt.id)
+            .detail(detail);
+        crate::identity::audit::record(&mut *transaction, &event).await?;
         transaction.commit().await?;
         Ok(receipt)
     }
@@ -217,9 +225,9 @@ pub(super) async fn snapshot(
         "
         INSERT INTO agent_definition_revisions
             (agent_id, revision, instructions_revision, name, instructions, idle_policy,
-             idle_delay_seconds, dreaming_model, task_lanes, actor_id)
+             idle_delay_seconds, dreaming_model, task_lanes, broadcast, actor_id)
         SELECT id, revision, instructions_revision, name, instructions, idle_policy,
-               idle_delay_seconds, dreaming_model, task_lanes, $2
+               idle_delay_seconds, dreaming_model, task_lanes, broadcast, $2
         FROM agents
         WHERE id = $1
         ",
