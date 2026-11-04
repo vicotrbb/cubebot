@@ -11,7 +11,9 @@ mod retry;
 mod rooms;
 pub mod routines;
 mod runtime;
+mod situation;
 pub(crate) mod terminal;
+pub(crate) mod usage;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
@@ -26,7 +28,11 @@ pub use handoffs::{DeclineLogin, LoginHandoff};
 pub use retry::RetryMessage;
 pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage, RoomSequence};
 use serde::{Deserialize, Serialize};
+pub use situation::{OpenWork, RecentEvent, Situation, SituationAgent};
 use sqlx::PgPool;
+pub use usage::{
+    AgentUsage, DaySpend, ModelSpend, SetBudget, Spend, keep_prices, prices_due, store_prices,
+};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -62,6 +68,8 @@ pub struct Turn {
     /// Work this turn delegated or sent to other agents.
     pub children: Vec<terminal::Child>,
     pub steering: Vec<Steering>,
+    /// Files the agent sent with this reply.
+    pub attachments: Vec<terminal::ReplyAttachment>,
 }
 
 /// A turn's own columns; its progress, origin, children and steering are attached after.
@@ -87,6 +95,7 @@ impl From<TurnRow> for Turn {
             origin: None,
             children: Vec::new(),
             steering: Vec::new(),
+            attachments: Vec::new(),
         }
     }
 }
@@ -137,7 +146,7 @@ impl Work {
             "
             SELECT id, sequence, message, status, response, error
             FROM chat_turns
-            WHERE conversation_id=$1 AND sequence>$2
+            WHERE conversation_id=$1 AND room_message_id IS NULL AND sequence>$2
             ORDER BY sequence
             LIMIT 100
             ",

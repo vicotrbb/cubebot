@@ -134,6 +134,9 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                     "configured database connection or migration failed",
                 ))?;
             credential_key(&pool).await?;
+            cubebot_orchestrator::knowledge::Knowledge::seed_shipped_skills(&pool)
+                .await
+                .map_err(failure("shipped skills could not be seeded"))?;
             let config = cubebot_orchestrator::identity::oidc::environment()
                 .map_err(failure("invalid OIDC configuration"))?;
             let origin = match std::env::var("CUBEBOT_PUBLIC_ORIGIN") {

@@ -699,3 +699,19 @@ Preserved progress means durable task state, recorded outputs, context checkpoin
 **Open details.** Exact supported dimensions; limit-state schema; pause acknowledgement and draining; notification aggregation; manual versus automatic eligibility after adjustment; idle lifecycle integration; and recovery of individual tool types.
 
 **Validation scenarios.** Pause a goal and delegates at an enabled aggregate limit; pause only a child at its tighter limit; retain partial results across restart; reconcile an in-flight side effect; respect offline allocations; resume without duplicate work after adjustment; preserve cancellation; and never pause for an unset monetary limit.
+
+## Agent usage and monthly budgets
+
+Accepted 2026-11-04.
+
+**Decision.** Record what every model response used, per agent, and let a person cap what one agent may spend in a calendar month. The user asked on 2026-11-04 for visibility and some level of governance over agents' spending. This is the first concrete limit under [Shared goal budgets with optional cost limits](#shared-goal-budgets-with-optional-cost-limits) and follows [Preserve progress and pause on configured budget exhaustion](#preserve-progress-and-pause-on-configured-budget-exhaustion); it limits an agent, not a goal, and goal budgets stay unbuilt.
+
+- **Ledger.** `usage_events` holds one row per response a provider reported: a turn's, a dream's, or the room coordinator's (no agent). Tokens are what the provider said; usage it did not report stays unrecorded and is never guessed.
+- **Cost.** A provider's own figure wins, which today is only OpenRouter's. Otherwise cost is an estimate from the model's price as that provider publishes it. The user decided on 2026-11-04 that prices come from each provider, not from one aggregator. OpenAI and Anthropic have no price API and their Models APIs carry no price, so their adapters read the Markdown their pricing pages serve; OpenRouter's public model listing has prices of its own. The orchestrator asks only providers with a saved connection, at most daily, sending no key. A page it cannot read leaves the last good prices in place and logs a warning. Offline or for an unlisted model the cost stays NULL, the console says so, and the row is priced if a price arrives later. Standard-tier short-context rates apply; long-context, batch and regional rates and Anthropic cache writes are not modelled, so an estimate can run under the bill.
+- **Budget.** `agents.monthly_budget_usd`, unset by default, is set with `agent.manage` and recorded in the audit log. Past it, a new turn waits as `budget_exhausted` without calling the model, a running turn stops at its next response through the ordinary cancellation channel, and dreams are not admitted. A command-only routine still runs: it calls no model. An unpriced response cannot exhaust a budget.
+- **Resuming.** Raising or removing the budget requeues the paused turns, except those with tool effects of unknown outcome, which stay waiting for a person as any interrupted turn does.
+- **Visibility.** People read an agent's usage with `conversation.read`. The Situation room shows each person the agents they may read; only administrators see the coordinator's spend, the provider and installation totals.
+
+**Rationale.** A shipped price table goes stale silently and would be wrong for any new model; a provider's own page is current and an absent price is visible. Reading a documentation page is more fragile than an API, so a page that yields nothing is an error rather than an empty price list. Stopping a running turn at its next response bounds overspend to the responses already in flight, which an already-issued request can always exceed.
+
+**Open details.** Budgets for an installation, team or goal; alerts outside the console; retention of usage rows; a person overriding a price; switching to a price API if a provider offers one.

@@ -36,6 +36,12 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
         .route("/api/runtime/turns/{turn}/broadcasts", post(broadcast))
         .route("/api/runtime/turns/{turn}/routines", post(routine))
+        .route("/api/runtime/turns/{turn}/attachments", post(attach))
+        // A package of at most 64 KiB, JSON-escaped.
+        .route(
+            "/api/runtime/turns/{turn}/skills",
+            post(skill_tool).layer(DefaultBodyLimit::max(160 * 1024)),
+        )
         .route("/api/runtime/vault", get(vault).post(vault_put))
         .route("/api/runtime/vault/fills", post(vault_fill))
         .route("/api/runtime/files", get(files).post(upload_file))
@@ -278,6 +284,49 @@ async fn routine(
         Err(reason) => refused(&reason),
     })
 }
+/// One skill tool call (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming)
+/// for the agent's running turn; a refusal is 409 with the reason the model reads.
+async fn skill_tool(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(turn): Path<Uuid>,
+    Json(input): Json<RoutineCall>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let answer = crate::knowledge::Knowledge::new(identity.pool.clone())
+        .skill_tool(&actor, turn, &input)
+        .await
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime skill request failed");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })?;
+    Ok(match answer {
+        Ok(output) => Json(RoutineAnswer { output }).into_response(),
+        Err(reason) => refused(&reason),
+    })
+}
+
+/// Sends one of the agent's files with its running turn's reply.
+async fn attach(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(turn): Path<Uuid>,
+    Json(input): Json<cubebot_protocol::runtime::AttachFile>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let answer = crate::work::Work::new(identity.pool.clone())
+        .attach_file(&actor, turn, input.file)
+        .await
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime attachment request failed");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })?;
+    Ok(match answer {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(reason) => refused(&reason),
+    })
+}
+
 fn vault_of(identity: &RuntimeIdentity) -> Result<&crate::connections::Connections, Failure> {
     identity
         .connections

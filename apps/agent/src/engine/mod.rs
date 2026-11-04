@@ -302,7 +302,7 @@ impl Agent {
         let steering = crate::collaboration::Steering::default();
         let knowledge = (
             crate::memory::Memories::new(self.memory.clone()),
-            crate::skills::Skills::new(self.memory.clone()),
+            crate::skills::Skills::new(self.memory.clone(), turn),
             crate::collaboration::Collaboration::new(self.memory.clone(), turn, steering.clone()),
         );
         let task = tokio::spawn(turn::run(

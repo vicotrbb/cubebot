@@ -1,12 +1,14 @@
 import { Link } from '@tanstack/react-router'
-import { Hash, Megaphone, Repeat } from 'lucide-react'
+import { Megaphone, Repeat } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok, type Turn } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Skeleton } from '../../components/primitives'
+import { Attachments } from './Attachments'
 import { Composer } from './Composer'
+import { Markdown } from './Markdown'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
 import { WorkCard, WorkLog } from './WorkCard'
 import './chat.css'
@@ -144,6 +146,8 @@ function stateLabel(turn: Turn, activity: string) {
     turn.terminal.some((t) => t.status === 'uncertain')
   )
     return 'Terminal effects are uncertain. Stop this turn, then ask the agent to inspect the workspace in a new message.'
+  if (turn.status === 'waiting' && turn.error === 'budget_exhausted')
+    return 'Paused: this agent spent its monthly budget. It continues when someone raises the budget under Usage.'
   if (turn.status === 'waiting')
     return `Waiting: ${(turn.error ?? 'execution interrupted').replaceAll('_', ' ')}. Retry when ready.`
   return ''
@@ -161,7 +165,6 @@ function origin(turn: Turn) {
   const from = turn.origin
   if (!from) return null
   if (from.kind === 'broadcast') return `broadcast from ${from.name}`
-  if (from.kind === 'room') return `via room ${from.name}`
   if (from.kind === 'routine') return `via routine ${from.name}`
   if (from.kind === 'delegation') return `delegated by ${from.name}`
   return `message from ${from.name}`
@@ -213,10 +216,11 @@ function Exchange({
             </WorkLog>
           )}
           {turn.response ? (
-            <p className="msg__text">{turn.response}</p>
+            <Markdown text={turn.response} />
           ) : (
-            streaming && <p className="msg__text">{streaming}</p>
+            streaming && <Markdown text={streaming} />
           )}
+          <Attachments turn={turn.id} items={turn.attachments} />
           {turn.children.length > 0 && (
             <ThreadLine turn={turn} onOpen={onOpenThread} />
           )}
@@ -228,6 +232,16 @@ function Exchange({
   )
 }
 
+/** The request without the framing the agent reads: its author line already says where it came
+ *  from. */
+function shownRequest(turn: Turn) {
+  if (turn.origin?.kind === 'broadcast')
+    return turn.message.replace(/^Broadcast [^\n]*:\n\n/, '')
+  if (turn.origin?.kind === 'routine')
+    return turn.message.replace(/^Routine [^\n]*:\n\n/, '')
+  return turn.message
+}
+
 /** The request as a person's message, or as the room, routine or agent it came from. */
 function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
   const via = origin(turn)
@@ -236,7 +250,6 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
     <div className="msg msg--person">
       {from ? (
         <span className="avatar-initial msg__avatar" aria-hidden="true">
-          {from.kind === 'room' && <Hash size={16} />}
           {from.kind === 'routine' && <Repeat size={16} />}
           {from.kind === 'broadcast' && <Megaphone size={16} />}
           {(from.kind === 'delegation' || from.kind === 'message') &&
@@ -248,17 +261,8 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
       <div className="msg__body">
         <div className="msg__head">
           <span className="msg__author">{via ? capital(via) : you}</span>
-          {from && (from.kind === 'routine' || from.kind === 'room') && (
-            <span className="chip">
-              {CHIPS[from.kind]} · {from.name}
-            </span>
-          )}
         </div>
-        <p className="msg__text">
-          {from?.kind === 'broadcast'
-            ? turn.message.replace(/^Broadcast [^\n]*:\n\n/, '')
-            : turn.message}
-        </p>
+        <Markdown text={shownRequest(turn)} />
       </div>
     </div>
   )
@@ -302,9 +306,9 @@ function TurnActions({
   const uncertain = turn.terminal.some((tool) => tool.status === 'uncertain')
   return (
     <div className="msg__actions">
-      {turn.status === 'waiting' && !uncertain && (
-        <Retry conversation={agent.id} turn={turn} />
-      )}
+      {turn.status === 'waiting' &&
+        turn.error !== 'budget_exhausted' &&
+        !uncertain && <Retry conversation={agent.id} turn={turn} />}
       {isOpen(turn) && (
         <button type="button" className="link-btn small" onClick={onOpenThread}>
           Steer this work
@@ -326,11 +330,6 @@ function TurnActions({
       </Link>
     </div>
   )
-}
-
-const CHIPS: Record<string, string> = {
-  routine: 'Routine',
-  room: 'Room',
 }
 
 function capital(text: string) {
@@ -361,7 +360,13 @@ export function Steering({ turn }: { turn: Turn }) {
   )
 }
 
-function Retry({ conversation, turn }: { conversation: string; turn: Turn }) {
+export function Retry({
+  conversation,
+  turn,
+}: {
+  conversation: string
+  turn: Pick<Turn, 'id'>
+}) {
   const [attempt, setAttempt] = useState<{ request_id: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -408,7 +413,7 @@ export function Stop({
   label = 'Stop',
 }: {
   conversation: string
-  turn: Turn
+  turn: Pick<Turn, 'id' | 'status'>
   label?: string
 }) {
   const [busy, setBusy] = useState(false)

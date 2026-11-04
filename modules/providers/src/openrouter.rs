@@ -40,6 +40,17 @@ impl OpenRouter {
             .map_err(|error| Error::Configuration(Some(error.into())))
     }
 
+    /// What every model on OpenRouter costs per token, from its public listing.
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "openrouter"))]
+    pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
+        let response = crate::send(self.http.get(self.url("models")?)).await?;
+        let body = crate::json(response).await?;
+        let entries = body["data"]
+            .as_array()
+            .ok_or(Error::InvalidResponse(None))?;
+        Ok(entries.iter().filter_map(price).collect())
+    }
+
     /// Names the app on OpenRouter's own usage pages.
     fn authorized(&self, request: RequestBuilder, key: &str) -> RequestBuilder {
         request.bearer_auth(key).header("x-title", "Cubebot")
@@ -276,10 +287,27 @@ impl Completions {
     }
 }
 
+/// One listing entry's rates, written as decimal strings; an entry without them has no price.
+fn price(entry: &Value) -> Option<crate::Price> {
+    let rate = |name: &str| entry["pricing"][name].as_str()?.parse::<f64>().ok();
+    let (input, output) = (rate("prompt")?, rate("completion")?);
+    // A negative rate is OpenRouter's marker for a router with no fixed price.
+    (input >= 0.0 && output >= 0.0).then_some(crate::Price {
+        model: entry["id"].as_str()?.to_owned(),
+        input_per_token: input,
+        cached_per_token: rate("input_cache_read").unwrap_or(input),
+        output_per_token: output,
+    })
+}
+
 fn usage(value: &Value) -> Option<Usage> {
     Some(Usage {
         input_tokens: value["prompt_tokens"].as_u64()?,
         output_tokens: value["completion_tokens"].as_u64()?,
+        cached_input_tokens: value["prompt_tokens_details"]["cached_tokens"]
+            .as_u64()
+            .unwrap_or(0),
+        cost_usd: value["cost"].as_f64(),
     })
 }
 

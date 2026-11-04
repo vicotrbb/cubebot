@@ -35,3 +35,19 @@ ENV CUBEBOT_GUEST_KERNEL=/usr/share/cubebot/guest/bzImage \
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/cubebot-sandbox"]
 CMD ["run"]
+# Release builds pass these (.github/workflows/release.yml); last, so they never invalidate a cached layer.
+ARG CUBEBOT_VERSION=dev
+ARG CUBEBOT_REVISION=unknown
+ARG CUBEBOT_CREATED=unknown
+LABEL org.opencontainers.image.title="Cubebot sandbox" \
+      org.opencontainers.image.description="The Cubebot in-house VMM, which runs one agent in a KVM guest." \
+      org.opencontainers.image.url="https://cubebot.io" \
+      org.opencontainers.image.source="https://github.com/vicotrbb/cubebot" \
+      org.opencontainers.image.documentation="https://github.com/vicotrbb/cubebot/blob/main/README.md" \
+      org.opencontainers.image.vendor="Cubebot" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.base.name="docker.io/library/debian:bookworm-slim" \
+      org.opencontainers.image.version="$CUBEBOT_VERSION" \
+      org.opencontainers.image.revision="$CUBEBOT_REVISION" \
+      org.opencontainers.image.created="$CUBEBOT_CREATED" \
+      dev.orbstack.icon="https://raw.githubusercontent.com/vicotrbb/cubebot/main/apps/web/public/icons/icon-512.png"

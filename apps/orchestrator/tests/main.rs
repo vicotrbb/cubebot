@@ -39,6 +39,7 @@ mod memory_http;
 mod oidc_config;
 mod orchestrator_owner;
 mod persistence;
+mod platform;
 mod pod_specification;
 mod provider_configuration;
 mod reconciliation;

@@ -25,3 +25,7 @@ FIRST VIEWPORT: 1440×900. Left, the 260 px sidebar with Activity, Favorites, Ag
 FORM: the category canon (Slack), user-pinned in the brief on 2026-11-01; no concept roll was run because the direction was pinned. Linear is the second reference for management density.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+
+## Situation room (2026-11-04)
+
+The user asked for one overview screen, so the thesis's refusal of a dashboard-first console still holds: the console opens on conversations, and this is one page you go to. It keeps the refusal's spirit by being a ruled ledger with one sentence on top, not tiles. No hero metrics, no cards, no sparklines; colour only for what wants attention, always with words.

@@ -139,6 +139,18 @@ impl Agents {
         )
         .fetch_one(&mut *transaction)
         .await?;
+        // Skills that ship with the platform come with every new agent.
+        sqlx::query!(
+            "
+            INSERT INTO skill_installations (agent_id, skill_id, revision)
+            SELECT $1, id, revision
+            FROM skills
+            WHERE installs_by_default
+            ",
+            id,
+        )
+        .execute(&mut *transaction)
+        .await?;
         snapshot(&mut transaction, actor.id, AgentId(id)).await?;
         command
             .commit(transaction, Receipt { id, revision: 1 })
@@ -234,7 +246,7 @@ impl Agents {
                ) AS "pending_login!",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.name END AS "current_tool?",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.target END AS "current_target?",
-               COALESCE((SELECT max(t.sequence) FROM chat_turns t WHERE t.conversation_id = g.id), 0)
+               COALESCE((SELECT max(t.sequence) FROM chat_turns t WHERE t.conversation_id = g.id AND t.room_message_id IS NULL), 0)
                    AS "last_sequence!",
                COALESCE((
                    SELECT r.sequence

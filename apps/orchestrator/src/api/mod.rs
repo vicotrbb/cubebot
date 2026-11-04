@@ -18,6 +18,7 @@ mod rooms;
 mod routines;
 mod runtime;
 mod skills;
+mod usage;
 mod vault;
 mod work;
 
@@ -82,6 +83,7 @@ pub fn openapi() -> String {
     doc.merge(files::Doc::openapi());
     doc.merge(knowledge_base::Doc::openapi());
     doc.merge(routines::Doc::openapi());
+    doc.merge(usage::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
 
@@ -111,6 +113,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(work::router(pool.clone(), identity.clone()))
         .merge(rooms::router(pool.clone(), identity.clone()))
         .merge(routines::router(pool.clone(), identity.clone()))
+        .merge(usage::router(pool.clone(), identity.clone()))
         .merge(memories::router(pool.clone(), identity.clone()))
         .merge(skills::router(pool.clone(), identity.clone()))
         .merge(files::router(identity.clone()))

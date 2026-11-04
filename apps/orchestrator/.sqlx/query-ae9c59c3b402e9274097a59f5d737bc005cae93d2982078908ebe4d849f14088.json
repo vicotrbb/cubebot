@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT s.name, s.revision, r.description, i.revision AS \"installed?\"\n        FROM skills s\n        JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision\n        LEFT JOIN skill_installations i ON i.skill_id=s.id AND i.agent_id=$1\n        ORDER BY s.name\n        LIMIT 200\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "installed?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ae9c59c3b402e9274097a59f5d737bc005cae93d2982078908ebe4d849f14088"
+}

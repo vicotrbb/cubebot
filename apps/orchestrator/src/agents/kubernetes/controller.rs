@@ -148,11 +148,13 @@ impl Controller {
             self.pool.clone(),
             stop.clone(),
         ));
+        let prices = tokio::spawn(crate::work::keep_prices(self.pool.clone(), stop.clone()));
         let result = self.reconcile_all(stop).await;
         if let Some(coordinator) = coordinator {
             coordinator.abort();
         }
         routines.abort();
+        prices.abort();
         result
     }
     async fn reconcile_all(&mut self, mut stop: watch::Receiver<bool>) -> Result<(), Error> {

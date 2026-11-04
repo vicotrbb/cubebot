@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"recent!\"\n        FROM routine_hooks\n        WHERE routine_id=$1 AND outcome IN ('accepted', 'coalesced')\n            AND received_at > clock_timestamp() - interval '1 minute'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recent!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5b5cab97dac0cfd223577ecce087e9340250234b6deaf8e96c3d21151311e3a7"
+}

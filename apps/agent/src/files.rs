@@ -43,6 +43,13 @@ struct Put {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Attach {
+    path: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Share {
     file: String,
     kind: ShareKind,
@@ -74,6 +81,11 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
     ];
     if workspace {
         tools.push(tool(
+            "send_attachment",
+            "Send a workspace file with your reply, so it appears under your message in this conversation or room: an image shows inline, audio and video get a player, and anything else opens from the message. Use it whenever seeing or hearing the file would serve the person better than describing it. Never write Markdown image links to workspace files; they do not load.",
+            json!({"path":text("The workspace file."),"name":text("The name people see, such as chart.png or summary.mp3; the extension decides how it is shown.")}),
+        ));
+        tools.push(tool(
             "files_put",
             "Upload a workspace file as a new shared file, to hand a deliverable to people or agents. Returns its id; share it with files_share. Re-upload to publish a new version.",
             json!({"path":text("The workspace file."),"name":text("The shared file's name, such as report.pdf."),"parent":folder}),
@@ -90,6 +102,7 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
 /// `None` when `name` is not a files tool.
 pub fn call<'a>(
     client: Option<&'a MemoryClient>,
+    turn: Uuid,
     name: &str,
     id: Uuid,
     input: &Value,
@@ -97,7 +110,7 @@ pub fn call<'a>(
 ) -> Option<Result<Running<'a>, &'static str>> {
     if !matches!(
         name,
-        "files_list" | "files_get" | "files_put" | "files_share"
+        "files_list" | "files_get" | "files_put" | "files_share" | "send_attachment"
     ) {
         return None;
     }
@@ -109,6 +122,7 @@ pub fn call<'a>(
         "files_list" => list(client, input),
         "files_share" => share(client, input),
         "files_put" => workspace().and_then(|tools| put(client, id, input, tools)),
+        "send_attachment" => workspace().and_then(|tools| attach(client, turn, id, input, tools)),
         _ => workspace().and_then(|tools| get(client, input, tools)),
     })
 }
@@ -148,6 +162,65 @@ fn put<'a>(
     Ok(Box::pin(async move {
         reported(upload(client, tools, id, parent, &put).await)
     }))
+}
+
+fn attach<'a>(
+    client: &'a MemoryClient,
+    turn: Uuid,
+    id: Uuid,
+    input: &Value,
+    tools: &'a Registry,
+) -> Result<Running<'a>, &'static str> {
+    let attach: Attach = parse(input)?;
+    path(&attach.path)?;
+    Ok(Box::pin(async move {
+        reported(sent(client, tools, turn, id, &attach).await)
+    }))
+}
+
+/// Uploads, then attaches. The call's id names the upload, so a resent call attaches the same
+/// file.
+async fn sent(
+    client: &MemoryClient,
+    tools: &Registry,
+    turn: Uuid,
+    id: Uuid,
+    attach: &Attach,
+) -> Result<Result<String, String>, Error> {
+    let unreadable = || {
+        Ok(Err(format!(
+            "{} cannot be read as the tool user",
+            attach.path
+        )))
+    };
+    let Ok(reader) = tools.reader(&attach.path) else {
+        return unreadable();
+    };
+    let Ok(body) = tool_user_body(reader).await else {
+        return unreadable();
+    };
+    // A same-named earlier file must not refuse the send, so each upload gets a unique name.
+    let name = unique_name(&attach.name, id);
+    let entry = match client.put_file(None, &name, id, body).await? {
+        Ok(entry) => entry,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    let attached = client.attach_file(turn, entry.id).await?;
+    Ok(attached.map(|()| {
+        format!(
+            "Sent {} with your reply. People see it under your message; you do not need to link it.",
+            attach.name
+        )
+    }))
+}
+
+/// `chart.png` as `chart-1f3a9c2e.png`, keeping the extension that decides how it is shown.
+fn unique_name(name: &str, id: Uuid) -> String {
+    let tag = &id.simple().to_string()[..8];
+    match name.rsplit_once('.') {
+        Some((stem, extension)) if !stem.is_empty() => format!("{stem}-{tag}.{extension}"),
+        _ => format!("{name}-{tag}"),
+    }
 }
 
 fn get<'a>(

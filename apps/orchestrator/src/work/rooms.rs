@@ -1,6 +1,7 @@
 //! Rooms (docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator and docs/adr/rooms.md#independent-assignments-for-multiple-room-mentions). A message mentioning members delivers one turn to each, without a
-//! model call; any other message waits for the coordinator. Deliveries are turns in each
-//! recipient's permanent conversation, unique per message and recipient.
+//! model call; any other message waits for the coordinator. A delivery is a turn on the recipient's
+//! ledger, unique per message and recipient, that belongs to the room: its answer shows only in
+//! the room, and it is neither shown in the agent's own conversation nor part of its context.
 use super::{SendMessage, Work, access};
 use crate::identity::{Actor, IdentityError};
 use serde::{Deserialize, Serialize};
@@ -97,6 +98,8 @@ pub struct Delivery {
     pub status: String,
     pub response: Option<String>,
     pub error: Option<String>,
+    /// Files the agent sent with this reply.
+    pub attachments: Vec<super::terminal::ReplyAttachment>,
 }
 
 impl RoomMessage {
@@ -615,8 +618,7 @@ async fn attach(
     messages: &mut [RoomMessage],
 ) -> Result<(), IdentityError> {
     let ids: Vec<Uuid> = messages.iter().map(|message| message.id).collect();
-    let deliveries = sqlx::query_as!(
-        Delivery,
+    let deliveries = sqlx::query!(
         r#"
         SELECT t.id AS turn, t.room_message_id AS "room_message_id!", t.conversation_id AS agent_id, a.name AS agent, t.status, t.response, t.error
         FROM chat_turns t
@@ -628,7 +630,19 @@ async fn attach(
     )
     .fetch_all(&mut **tx)
     .await?;
+    let turns: Vec<Uuid> = deliveries.iter().map(|delivery| delivery.turn).collect();
+    let mut attachments = super::terminal::attachments(tx, &turns).await?;
     for delivery in deliveries {
+        let delivery = Delivery {
+            attachments: attachments.remove(&delivery.turn).unwrap_or_default(),
+            turn: delivery.turn,
+            room_message_id: delivery.room_message_id,
+            agent_id: delivery.agent_id,
+            agent: delivery.agent,
+            status: delivery.status,
+            response: delivery.response,
+            error: delivery.error,
+        };
         if let Some(message) = messages
             .iter_mut()
             .find(|message| message.id == delivery.room_message_id)

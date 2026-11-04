@@ -32,6 +32,7 @@ export const Route = createFileRoute('/_app/agents/$agentId')({
 /** The panel tabs, each a child route; the viewer sees the ones their grants allow. */
 const TABS: { to: string; label: string; needs: Capability }[] = [
   { to: '/agents/$agentId/about', label: 'About', needs: 'agent_manage' },
+  { to: '/agents/$agentId/usage', label: 'Usage', needs: 'conversation_read' },
   { to: '/agents/$agentId/memories', label: 'Memories', needs: 'memory_read' },
   { to: '/agents/$agentId/dreams', label: 'Dreams', needs: 'memory_read' },
   { to: '/agents/$agentId/skills', label: 'Skills', needs: 'agent_manage' },

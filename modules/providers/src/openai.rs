@@ -24,32 +24,50 @@ const NOT_CONVERSATIONAL: [&str; 12] = [
     "babbage",
 ];
 
+/// The standard rates: batch, flex and fast tiers sit under their own headings.
+const PRICES: crate::prices::Columns = crate::prices::Columns {
+    input: &["Short context input", "Input"],
+    cached: &["Short context cached input", "Cached input"],
+    output: &["Short context output", "Output"],
+};
+
 pub struct OpenAi {
     http: Client,
     endpoint: Url,
+    pricing: Url,
 }
 
 impl OpenAi {
     pub fn new() -> Result<Self, Error> {
+        let parse = |url| Url::parse(url).map_err(|error| Error::Configuration(Some(error.into())));
         Self::endpoint(
-            Url::parse("https://api.openai.com/v1/responses")
-                .map_err(|error| Error::Configuration(Some(error.into())))?,
+            parse("https://api.openai.com/v1/responses")?,
+            parse("https://developers.openai.com/api/docs/pricing.md")?,
         )
     }
 
     pub fn for_loopback_tests(origin: &str) -> Result<Self, Error> {
-        Self::endpoint(
+        let join = |path| {
             crate::loopback(origin)?
-                .join("responses")
-                .map_err(|error| Error::Configuration(Some(error.into())))?,
-        )
+                .join(path)
+                .map_err(|error| Error::Configuration(Some(error.into())))
+        };
+        Self::endpoint(join("responses")?, join("pricing.md")?)
     }
 
-    fn endpoint(endpoint: Url) -> Result<Self, Error> {
+    fn endpoint(endpoint: Url, pricing: Url) -> Result<Self, Error> {
         Ok(Self {
             http: crate::client()?,
             endpoint,
+            pricing,
         })
+    }
+
+    /// The standard-tier prices on OpenAI's pricing page.
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "openai"))]
+    pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
+        let page = crate::prices::page(&self.http, self.pricing.clone()).await?;
+        crate::prices::from_markdown(&page, "### Standard pricing data", &PRICES, str::to_owned)
     }
 }
 
@@ -223,6 +241,10 @@ fn completed(response: &Value) -> Result<Event, Error> {
         .map(|(input_tokens, output_tokens)| Usage {
             input_tokens,
             output_tokens,
+            cached_input_tokens: usage["input_tokens_details"]["cached_tokens"]
+                .as_u64()
+                .unwrap_or(0),
+            cost_usd: None,
         });
     Ok(Event::Done {
         reply: reply(text, calls, Value::Array(output.clone()))?,

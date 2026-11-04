@@ -1,3 +1,5 @@
+import { Attachments } from '../chat/Attachments'
+import { Markdown } from '../chat/Markdown'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { ChevronLeft, Megaphone } from 'lucide-react'
@@ -187,7 +189,7 @@ function BroadcastMessage({
               {when(message.at)}
             </time>
           </div>
-          <p className="msg__text">{message.message}</p>
+          <Markdown text={message.message} />
           {message.deliveries.length > 0 && (
             <button
               type="button"
@@ -285,7 +287,8 @@ function Reply({
             {STATUS[delivery.status] ?? delivery.status}
           </span>
         </div>
-        {delivery.response && <p className="msg__text">{delivery.response}</p>}
+        {delivery.response && <Markdown text={delivery.response} />}
+        <Attachments turn={delivery.turn} items={delivery.attachments} />
         {delivery.status === 'failed' && delivery.error && (
           <p className="small" role="status" style={{ color: 'var(--danger)' }}>
             {delivery.error.replaceAll('_', ' ')}

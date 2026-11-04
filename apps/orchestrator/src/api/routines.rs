@@ -6,8 +6,8 @@ use crate::{
     work::{
         Work,
         routines::{
-            CreateRoutine, CreatedRoutine, HOOK_BODY, Hooked, Occurrence, Ran, Routine, RunRoutine,
-            UpdateRoutine, WebhookSecret,
+            CreateRoutine, CreatedRoutine, HOOK_BODY, HookDelivery, Hooked, Occurrence, Ran,
+            Routine, RunRoutine, UpdateRoutine, WebhookSecret,
         },
     },
 };
@@ -27,7 +27,17 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(list, create, update, delete, rotate, run, occurrences))]
+#[openapi(paths(
+    list,
+    create,
+    update,
+    delete,
+    rotate,
+    remove_secret,
+    run,
+    occurrences,
+    deliveries
+))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -43,11 +53,15 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         )
         .route(
             "/api/agents/{agent}/routines/{routine}/secret",
-            post(rotate),
+            post(rotate).delete(remove_secret),
         )
         .route(
             "/api/agents/{agent}/routines/{routine}/runs",
             get(occurrences).post(run),
+        )
+        .route(
+            "/api/agents/{agent}/routines/{routine}/deliveries",
+            get(deliveries),
         )
         .layer(DefaultBodyLimit::max(32 * 1024))
         .with_state(Api {
@@ -120,6 +134,32 @@ async fn rotate(
         .rotate_routine_secret(&actor, agent, routine)
         .await?;
     Ok(([("cache-control", "no-store")], Json(secret)))
+}
+
+/// Stops the webhook; its URL answers 401 and the routine keeps its other triggers.
+#[utoipa::path(delete, path = "/api/agents/{agent}/routines/{routine}/secret", operation_id = "remove_routine_secret", params(("agent" = Uuid, Path), ("routine" = Uuid, Path)), responses((status = 204)))]
+async fn remove_secret(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((agent, routine)): Path<(AgentId, Uuid)>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.work
+        .remove_routine_secret(&actor, agent, routine)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The webhook's authenticated deliveries of the last 30 days, newest first.
+#[utoipa::path(get, path = "/api/agents/{agent}/routines/{routine}/deliveries", operation_id = "routine_deliveries", params(("agent" = Uuid, Path), ("routine" = Uuid, Path)), responses((status = 200, body = Vec<HookDelivery>)))]
+async fn deliveries(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((agent, routine)): Path<(AgentId, Uuid)>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let deliveries = api.work.routine_deliveries(&actor, agent, routine).await?;
+    Ok(([("cache-control", "no-store")], Json(deliveries)))
 }
 
 #[utoipa::path(post, path = "/api/agents/{agent}/routines/{routine}/runs", operation_id = "run_routine", params(("agent" = Uuid, Path), ("routine" = Uuid, Path)), request_body = RunRoutine, responses((status = 202, body = Ran)))]

@@ -31,6 +31,18 @@
         }
       }
     },
+    "/api/activity/read": {
+      "put": {
+        "tags": [],
+        "summary": "Marks the caller's inbox as seen, on every device; its items stay until they are dealt with.",
+        "operationId": "read_activity",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents": {
       "get": {
         "tags": [],
@@ -82,6 +94,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/budget": {
+      "put": {
+        "tags": [],
+        "summary": "Needs `agent.manage`. Room to spend requeues the work the old limit paused.",
+        "operationId": "set_agent_budget",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetBudget"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentUsage"
                 }
               }
             }
@@ -435,6 +487,48 @@
         }
       }
     },
+    "/api/agents/{agent}/routines/{routine}/deliveries": {
+      "get": {
+        "tags": [],
+        "summary": "The webhook's authenticated deliveries of the last 30 days, newest first.",
+        "operationId": "routine_deliveries",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HookDelivery"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{agent}/routines/{routine}/runs": {
       "get": {
         "tags": [],
@@ -559,6 +653,36 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Stops the webhook; its URL answers 401 and the routine keeps its other triggers.",
+        "operationId": "remove_routine_secret",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "routine",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/agents/{agent}/skills": {
@@ -661,6 +785,36 @@
         "responses": {
           "204": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/usage": {
+      "get": {
+        "tags": [],
+        "summary": "Needs `conversation.read` on the agent.",
+        "operationId": "agent_usage",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentUsage"
+                }
+              }
+            }
           }
         }
       }
@@ -1158,6 +1312,50 @@
         "responses": {
           "204": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/attachments/{turn}/{file}/content": {
+      "get": {
+        "tags": [],
+        "summary": "A file an agent sent with a reply; reading the reply is what allows it. As ever a download\nthe browser does not render itself: the console reads the bytes and shows them.",
+        "operationId": "attachment_content",
+        "parameters": [
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -3810,6 +4008,25 @@
         }
       }
     },
+    "/api/situation": {
+      "get": {
+        "tags": [],
+        "summary": "The agents the caller may read: their spend, open work and latest events.",
+        "operationId": "situation",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Situation"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/skills": {
       "get": {
         "tags": [],
@@ -4150,7 +4367,7 @@
       },
       "ActivityItem": {
         "type": "object",
-        "required": ["kind", "at", "text"],
+        "required": ["kind", "at", "text", "unread"],
         "properties": {
           "agent": {
             "type": ["string", "null"],
@@ -4162,7 +4379,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending` or\n`dream_published_skill`."
+            "description": "`login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending`,\n`dream_published_skill` or `agent_published_skill`."
           },
           "room": {
             "type": ["string", "null"],
@@ -4174,6 +4391,10 @@
           "turn": {
             "type": ["string", "null"],
             "format": "uuid"
+          },
+          "unread": {
+            "type": "boolean",
+            "description": "It reached the inbox after the caller last opened it."
           }
         }
       },
@@ -4438,6 +4659,61 @@
                 "$ref": "#/components/schemas/Phase"
               }
             ]
+          }
+        }
+      },
+      "AgentUsage": {
+        "type": "object",
+        "description": "One agent's usage: its windows, this month against its budget, the last 30 days by day.",
+        "required": [
+          "today",
+          "week",
+          "month",
+          "days",
+          "models",
+          "paused_turns",
+          "turns",
+          "failed_turns"
+        ],
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DaySpend"
+            }
+          },
+          "failed_turns": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelSpend"
+            }
+          },
+          "month": {
+            "$ref": "#/components/schemas/Spend"
+          },
+          "monthly_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
+          "paused_turns": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Turns paused because this agent's budget ran out."
+          },
+          "today": {
+            "$ref": "#/components/schemas/Spend"
+          },
+          "turns": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The share of the agent's responses that failed or waited for a person, last 30 days."
+          },
+          "week": {
+            "$ref": "#/components/schemas/Spend"
           }
         }
       },
@@ -4874,6 +5150,24 @@
           }
         }
       },
+      "DaySpend": {
+        "type": "object",
+        "required": ["day", "tokens", "cost_usd"],
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "day": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`, UTC."
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "DeclineLogin": {
         "type": "object",
         "required": ["reason"],
@@ -4952,7 +5246,7 @@
       },
       "Delivery": {
         "type": "object",
-        "required": ["turn", "agent_id", "agent", "status"],
+        "required": ["turn", "agent_id", "agent", "status", "attachments"],
         "properties": {
           "agent": {
             "type": "string"
@@ -4960,6 +5254,13 @@
           "agent_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReplyAttachment"
+            },
+            "description": "Files the agent sent with this reply."
           },
           "error": {
             "type": ["string", "null"]
@@ -5236,6 +5537,32 @@
           }
         },
         "additionalProperties": false
+      },
+      "HookDelivery": {
+        "type": "object",
+        "description": "One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:\nit never reached the routine.",
+        "required": ["received_at", "outcome", "bytes"],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`accepted` made a turn, `coalesced` joined a pending one, `replayed` repeated an\nIdempotency-Key and `paused` reached a disabled routine."
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "status": {
+            "type": ["string", "null"],
+            "description": "The turn's status so far."
+          },
+          "turn": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          }
+        }
       },
       "IdentityEvent": {
         "type": "object",
@@ -5708,6 +6035,26 @@
           }
         }
       },
+      "ModelSpend": {
+        "type": "object",
+        "required": ["provider", "model", "tokens", "cost_usd"],
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "MovePage": {
         "type": "object",
         "properties": {
@@ -5767,6 +6114,37 @@
           "origin": {
             "type": "string",
             "description": "`person`, `agent`, `schedule` or `webhook`."
+          },
+          "status": {
+            "type": "string"
+          },
+          "turn": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "OpenWork": {
+        "type": "object",
+        "required": ["turn", "agent", "status", "message", "since"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "message": {
+            "type": "string",
+            "description": "The start of the request."
+          },
+          "room": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "since": {
+            "type": "string"
           },
           "status": {
             "type": "string"
@@ -6209,6 +6587,34 @@
           }
         }
       },
+      "RecentEvent": {
+        "type": "object",
+        "required": ["kind", "agent", "text", "at"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`turn_complete`, `turn_failed`, `turn_cancelled`, `dream` or `skill`."
+          },
+          "room": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string"
+          },
+          "turn": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          }
+        }
+      },
       "Recipient": {
         "oneOf": [
           {
@@ -6253,6 +6659,27 @@
           }
         },
         "additionalProperties": false
+      },
+      "ReplyAttachment": {
+        "type": "object",
+        "description": "A file the agent sent with its reply. Its bytes are at\n`GET /api/attachments/{turn}/{file}/content`, for whoever may read the reply.",
+        "required": ["file", "name", "size"],
+        "properties": {
+          "content_type": {
+            "type": ["string", "null"]
+          },
+          "file": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "RetryMessage": {
         "type": "object",
@@ -6469,6 +6896,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "last_delivery_at": {
+            "type": ["string", "null"],
+            "description": "When the webhook last received an authenticated delivery."
           },
           "last_run_at": {
             "type": ["string", "null"]
@@ -6728,6 +7159,17 @@
         },
         "additionalProperties": false
       },
+      "SetBudget": {
+        "type": "object",
+        "properties": {
+          "monthly_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double",
+            "description": "US dollars per calendar month in UTC; `null` removes the limit."
+          }
+        },
+        "additionalProperties": false
+      },
       "Setup": {
         "type": "object",
         "required": ["open"],
@@ -6744,6 +7186,137 @@
       "SharePermission": {
         "type": "string",
         "enum": ["read", "write"]
+      },
+      "Situation": {
+        "type": "object",
+        "required": [
+          "today",
+          "week",
+          "month",
+          "days",
+          "models",
+          "agents",
+          "work",
+          "recent",
+          "stored_bytes",
+          "people",
+          "rooms"
+        ],
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SituationAgent"
+            }
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DaySpend"
+            }
+          },
+          "model": {
+            "type": ["string", "null"]
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelSpend"
+            }
+          },
+          "month": {
+            "$ref": "#/components/schemas/Spend"
+          },
+          "people": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "prices_at": {
+            "type": ["string", "null"],
+            "description": "When prices last refreshed, RFC 3339; `None` means every cost is unknown."
+          },
+          "provider": {
+            "type": ["string", "null"],
+            "description": "The provider and model in use; administrators only."
+          },
+          "recent": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecentEvent"
+            },
+            "description": "The latest settled turns, dreams and published skills, newest first."
+          },
+          "rooms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "stored_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "today": {
+            "$ref": "#/components/schemas/Spend"
+          },
+          "week": {
+            "$ref": "#/components/schemas/Spend"
+          },
+          "work": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenWork"
+            },
+            "description": "Queued, running, delegated and waiting turns, oldest first, at most 50."
+          }
+        }
+      },
+      "SituationAgent": {
+        "type": "object",
+        "required": [
+          "id",
+          "open_turns",
+          "failed_today",
+          "turns_week",
+          "tokens_week",
+          "cost_week_usd",
+          "cost_month_usd"
+        ],
+        "properties": {
+          "cost_month_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "cost_week_usd": {
+            "type": "number",
+            "format": "double"
+          },
+          "failed_today": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_turn_at": {
+            "type": ["string", "null"]
+          },
+          "monthly_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
+          "open_turns": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tokens_week": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "turns_week": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
       },
       "Skill": {
         "type": "object",
@@ -6780,6 +7353,10 @@
           "created_at"
         ],
         "properties": {
+          "agent": {
+            "type": ["string", "null"],
+            "description": "The agent that wrote this revision during its work."
+          },
           "created_at": {
             "type": "string"
           },
@@ -6809,6 +7386,30 @@
           "skill": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "Spend": {
+        "type": "object",
+        "description": "Tokens and estimated cost over a period. `unpriced` responses are in the tokens, not the cost.",
+        "required": ["input_tokens", "output_tokens", "cost_usd", "unpriced"],
+        "properties": {
+          "cost_usd": {
+            "type": "number",
+            "format": "double",
+            "description": "Estimated from the model's listed price, or as the provider reported it."
+          },
+          "input_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unpriced": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -6897,9 +7498,17 @@
           "status",
           "terminal",
           "children",
-          "steering"
+          "steering",
+          "attachments"
         ],
         "properties": {
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReplyAttachment"
+            },
+            "description": "Files the agent sent with this reply."
+          },
           "children": {
             "type": "array",
             "items": {
@@ -7006,6 +7615,15 @@
             "type": "object",
             "required": ["input_tokens", "output_tokens", "kind"],
             "properties": {
+              "cached_input_tokens": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "cost_usd": {
+                "type": ["number", "null"],
+                "format": "double"
+              },
               "input_tokens": {
                 "type": "integer",
                 "format": "int64",

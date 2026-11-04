@@ -5,6 +5,7 @@ import { can } from '../api/types'
 import { Alert, Empty } from '../components/primitives'
 import { useAgentScreen } from '../features/agent/context'
 import { Steering, Stop } from '../features/chat/Conversation'
+import { Markdown } from '../features/chat/Markdown'
 import { isOpen, isUnsettled } from '../features/chat/useConversation'
 
 export const Route = createFileRoute('/_app/agents/$agentId/thread/$turnId')({
@@ -36,7 +37,7 @@ function Thread() {
     <>
       <div className="thread__root">
         <p className="small faint">Message #{turn.sequence}</p>
-        <p style={{ whiteSpace: 'pre-wrap' }}>{turn.message}</p>
+        <Markdown text={turn.message} />
       </div>
       <section className="panel__section">
         <h2>Delegated work</h2>
@@ -60,7 +61,7 @@ function Thread() {
                   {child.error.replaceAll('_', ' ')}
                 </p>
               )}
-              {child.response && <p>{child.response}</p>}
+              {child.response && <Markdown text={child.response} />}
             </li>
           ))}
         </ul>

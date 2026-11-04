@@ -73,7 +73,7 @@ async fn tool_turn(headers: HeaderMap, Json(body): Json<Value>) -> Response {
             delta(json!({"tool_calls":[{"index":0,"function":{"arguments":"th\":\"a\"}"}}]})),
             delta(json!({"tool_calls":[{"index":1,"id":"c2","function":{"name":"computer"}}]})),
             json!({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}),
-            json!({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":9,"completion_tokens":4}}),
+            json!({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":9,"completion_tokens":4,"cost":0.0012,"prompt_tokens_details":{"cached_tokens":3}}}),
         ],
         true,
     )
@@ -112,7 +112,10 @@ async fn pieced_tool_calls_become_a_reply_that_replays_its_reasoning() {
     assert_eq!(reply.calls[0].arguments, "{\"path\":\"a\"}");
     // A call that streamed no arguments still parses.
     assert_eq!(reply.calls[1].arguments, "{}");
-    assert_eq!(usage.unwrap().input_tokens, 9);
+    let usage = usage.unwrap();
+    assert_eq!(usage.input_tokens, 9);
+    assert_eq!(usage.cached_input_tokens, 3);
+    assert_eq!(usage.cost_usd, Some(0.0012));
     assert_eq!(
         reply.native["reasoning_details"],
         json!([{"type":"reasoning.encrypted","data":"abc"}])
@@ -253,4 +256,27 @@ async fn every_model_is_listed_newest_first_after_the_key_is_checked() {
         Err(Error::Rejected)
     ));
     task.abort();
+}
+
+#[tokio::test]
+async fn prices_come_from_the_public_listing_without_a_key_and_skip_routers() {
+    let router = Router::new().route(
+        "/models",
+        get(|headers: HeaderMap| async move {
+            assert!(!headers.contains_key("authorization"));
+            Json(json!({"data":[
+                {"id":"openai/gpt-x","pricing":{"prompt":"0.000005","completion":"0.000015","input_cache_read":"0.0000005"}},
+                {"id":"vendor/no-cache","pricing":{"prompt":"0.000001","completion":"0.000002"}},
+                {"id":"openrouter/auto","pricing":{"prompt":"-1","completion":"-1"}},
+                {"id":"vendor/unpriced"},
+            ]}))
+        }),
+    );
+    let (provider, task) = serve(router).await;
+    let prices = provider.prices().await.unwrap();
+    task.abort();
+    assert_eq!(prices.len(), 2, "{prices:?}");
+    assert_eq!(prices[0].model, "openai/gpt-x");
+    assert!((prices[0].cached_per_token - 0.0000005).abs() < 1e-12);
+    assert_eq!(prices[1].cached_per_token, prices[1].input_per_token);
 }

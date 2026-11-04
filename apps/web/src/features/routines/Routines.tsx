@@ -1,4 +1,5 @@
-import { Play } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { Play, Webhook } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   api,
@@ -7,8 +8,17 @@ import {
   type Occurrence,
   type Routine,
 } from '../../api/client'
+import type { components } from '../../api/schema'
 import type { AgentSummary } from '../../api/types'
-import { Alert, Empty, Field, Status, when } from '../../components/primitives'
+import {
+  Alert,
+  CopyButton,
+  Empty,
+  Field,
+  Status,
+  when,
+} from '../../components/primitives'
+import './routines.css'
 
 const ORIGINS: Record<string, string> = {
   person: 'Run by a person',
@@ -17,6 +27,7 @@ const ORIGINS: Record<string, string> = {
   webhook: 'Webhook',
 }
 type Secret = { id: string; secret: string }
+type HookDelivery = components['schemas']['HookDelivery']
 
 /** Stored prompts and commands the agent runs by hand, on a schedule or by webhook (docs/adr/agents.md#routines). */
 export function Routines({
@@ -66,8 +77,16 @@ export function Routines({
           : `A run of ${routine.name} is already waiting; nothing new was queued.`,
       )
     })
-  const rotate = (routine: Routine) =>
-    act(async () => {
+  const rotate = (routine: Routine) => {
+    // A live secret stops working the moment it is replaced.
+    if (
+      routine.webhook &&
+      !window.confirm(
+        `Replace the webhook secret of ${routine.name}? Whatever sends to it stops working until it has the new one.`,
+      )
+    )
+      return
+    void act(async () => {
       const made = await ok(
         api.POST(
           '/api/agents/{agent}/routines/{routine}/secret',
@@ -76,6 +95,24 @@ export function Routines({
       )
       setSecret({ id: routine.id, secret: made.secret })
     })
+  }
+  const removeHook = (routine: Routine) => {
+    if (
+      !window.confirm(
+        `Remove the webhook of ${routine.name}? Its URL stops working; the routine stays.`,
+      )
+    )
+      return
+    void act(async () => {
+      await ok(
+        api.DELETE(
+          '/api/agents/{agent}/routines/{routine}/secret',
+          path(routine),
+        ),
+      )
+      setSecret(null)
+    })
+  }
   const remove = (routine: Routine) =>
     act(() =>
       ok(api.DELETE('/api/agents/{agent}/routines/{routine}', path(routine))),
@@ -85,9 +122,8 @@ export function Routines({
       <section className="panel__section">
         <h2>Routines</h2>
         <p className="panel__lead">
-          Each run is a message in the conversation. A command runs before the
-          prompt; without a prompt its result is the answer. Schedules are
-          five-field cron in UTC.
+          A routine is a stored prompt or command. Run it by hand, on a schedule
+          or from a webhook; each run is a message in the conversation.
         </p>
         {editable && !editing && (
           <div className="actions">
@@ -117,8 +153,8 @@ export function Routines({
       <section className="panel__section">
         {routines.length === 0 && (
           <Empty title="No routines yet.">
-            A routine runs a prompt or a command by hand, on a schedule or from
-            a webhook.
+            Create one to run a prompt or a command by hand, on a schedule, or
+            whenever another system calls its webhook.
           </Empty>
         )}
         <ul className="list">
@@ -130,7 +166,6 @@ export function Routines({
                 {routine.schedule && (
                   <span className="chip chip--sage">{routine.schedule}</span>
                 )}
-                {routine.webhook && <span className="chip">webhook</span>}
               </div>
               {routine.prompt && (
                 <p className="small" style={{ whiteSpace: 'pre-wrap' }}>
@@ -144,15 +179,14 @@ export function Routines({
               )}
               <p className="small faint">{describe(routine)}</p>
               {routine.webhook && (
-                <p className="small faint">
-                  Webhook: POST <code>{hookUrl(routine)}</code> with{' '}
-                  <code>Authorization: Bearer</code> and the secret
-                </p>
-              )}
-              {secret?.id === routine.id && (
-                <p role="status" className="notice notice--paint small">
-                  Secret, shown only now: <code>{secret.secret}</code>
-                </p>
+                <WebhookDetails
+                  agent={agent.id}
+                  routine={routine}
+                  secret={secret?.id === routine.id ? secret.secret : null}
+                  editable={editable}
+                  onRotate={() => rotate(routine)}
+                  onRemove={() => removeHook(routine)}
+                />
               )}
               {editable && (
                 <div className="actions" style={{ marginTop: 6 }}>
@@ -170,13 +204,15 @@ export function Routines({
                   >
                     Edit
                   </button>
-                  <button
-                    type="button"
-                    className="link-btn small"
-                    onClick={() => void rotate(routine)}
-                  >
-                    {routine.webhook ? 'New webhook secret' : 'Add webhook'}
-                  </button>
+                  {!routine.webhook && (
+                    <button
+                      type="button"
+                      className="link-btn small"
+                      onClick={() => rotate(routine)}
+                    >
+                      Add webhook
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="link-btn small"
@@ -212,6 +248,147 @@ function describe(routine: Routine) {
 
 function hookUrl(routine: Routine) {
   return `${window.location.origin}/api/hooks/${routine.id}`
+}
+
+const OUTCOMES: Record<string, string> = {
+  accepted: 'Started a run',
+  coalesced: 'Joined the waiting run',
+  replayed: 'Repeat of an earlier delivery',
+  paused: 'Refused: the routine is paused',
+}
+
+/** A webhook is one way to trigger its routine, so it lives on the routine: where to send, how to
+ *  authenticate, and what arrived. */
+function WebhookDetails({
+  agent,
+  routine,
+  secret,
+  editable,
+  onRotate,
+  onRemove,
+}: {
+  agent: string
+  routine: Routine
+  secret: string | null
+  editable: boolean
+  onRotate: () => void
+  onRemove: () => void
+}) {
+  const url = hookUrl(routine)
+  const example = `curl -X POST ${url} \\
+  -H "Authorization: Bearer ${secret ?? '$WEBHOOK_SECRET'}" \\
+  -H "Idempotency-Key: $(uuidgen)" \\
+  -d '{"event":"test"}'`
+  return (
+    <div className="hook">
+      <div className="hook__title">
+        <Webhook aria-hidden="true" />
+        <strong>Webhook</strong>
+        <span className="faint small">
+          {!routine.enabled
+            ? 'Paused; deliveries are refused'
+            : routine.last_delivery_at
+              ? `Last delivery ${when(routine.last_delivery_at)}`
+              : 'No deliveries yet'}
+        </span>
+      </div>
+      <div className="hook__line">
+        <code>{url}</code>
+        <CopyButton text={url} label="Copy webhook URL" />
+      </div>
+      {secret && (
+        <div className="hook__secret" role="status">
+          <p className="small">
+            Copy this secret now. It is shown only once and stored only as a
+            digest.
+          </p>
+          <div className="hook__line">
+            <code>{secret}</code>
+            <CopyButton text={secret} label="Copy webhook secret" />
+          </div>
+        </div>
+      )}
+      <details className="disclosure">
+        <summary>How to call it</summary>
+        <div className="hook__how small">
+          <p>
+            Send a POST with the secret as a bearer token. The body, up to 8
+            KiB, reaches the agent as untrusted data it can read but never takes
+            instructions from. An Idempotency-Key makes a retry safe for a day.
+            Each routine takes 60 deliveries a minute.
+          </p>
+          <div className="hook__line hook__line--block">
+            <pre>
+              <code>{example}</code>
+            </pre>
+            <CopyButton text={example} label="Copy example command" />
+          </div>
+        </div>
+      </details>
+      <Deliveries agent={agent} routine={routine.id} />
+      {editable && (
+        <div className="actions">
+          <button type="button" className="link-btn small" onClick={onRotate}>
+            New secret
+          </button>
+          <button type="button" className="link-btn small" onClick={onRemove}>
+            Remove webhook
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** What reached the webhook in the last 30 days, loaded when opened. A delivery with a wrong
+ *  secret never reached the routine: the caller gets the 401 and it is not listed. */
+function Deliveries({ agent, routine }: { agent: string; routine: string }) {
+  const [rows, setRows] = useState<HookDelivery[] | null>(null)
+  const [error, setError] = useState('')
+  function load() {
+    setError('')
+    void ok(
+      api.GET('/api/agents/{agent}/routines/{routine}/deliveries', {
+        params: { path: { agent, routine } },
+      }),
+    )
+      .then(setRows)
+      .catch((error) => setError(failure(error)))
+  }
+  return (
+    <details
+      className="disclosure"
+      onToggle={(event) => event.currentTarget.open && load()}
+    >
+      <summary>Deliveries</summary>
+      <Alert>{error}</Alert>
+      {rows?.length === 0 && (
+        <p className="small faint">Nothing has reached this webhook yet.</p>
+      )}
+      <ul className="hook__deliveries">
+        {rows?.map((row, index) => (
+          <li key={`${row.received_at}:${index}`} className="small">
+            <span className="hook__when">{when(row.received_at)}</span>
+            <span>
+              {OUTCOMES[row.outcome] ?? row.outcome}
+              {row.turn && row.status && (
+                <>
+                  {' · '}
+                  <Link
+                    to="/agents/$agentId/thread/$turnId"
+                    params={{ agentId: agent, turnId: row.turn }}
+                  >
+                    {row.status}
+                  </Link>
+                </>
+              )}
+            </span>
+            <span className="faint hook__bytes">{row.bytes} B</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
 }
 
 /** The routine's latest runs, loaded when opened. */
@@ -341,7 +518,8 @@ function RoutineForm({
       </label>
       {!existing && (
         <label className="check">
-          <input type="checkbox" name="webhook" /> Make a webhook
+          <input type="checkbox" name="webhook" /> Give it a webhook, so another
+          system can run it
         </label>
       )}
       <Alert>{error}</Alert>

@@ -66,6 +66,12 @@ export function CommandPalette({
         hint: 'Page',
         go: go('/activity'),
       },
+      {
+        key: 'p:situation',
+        label: 'Situation room',
+        hint: 'Page',
+        go: go('/situation'),
+      },
       { key: 'p:files', label: 'Files', hint: 'Page', go: go('/files') },
       { key: 'p:skills', label: 'Skills', hint: 'Page', go: go('/skills') },
       { key: 'p:kb', label: 'Knowledge base', hint: 'Page', go: go('/kb') },

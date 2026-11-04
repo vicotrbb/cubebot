@@ -19,3 +19,19 @@ USER 65532:65532
 ENV CUBEBOT_BIND_ADDR=0.0.0.0:8080
 EXPOSE 8080
 ENTRYPOINT ["cubebot-orchestrator"]
+# Release builds pass these (.github/workflows/release.yml); last, so they never invalidate a cached layer.
+ARG CUBEBOT_VERSION=dev
+ARG CUBEBOT_REVISION=unknown
+ARG CUBEBOT_CREATED=unknown
+LABEL org.opencontainers.image.title="Cubebot orchestrator" \
+      org.opencontainers.image.description="The Cubebot control plane: agents, conversations, rooms, routines, files and the HTTP API, with PostgreSQL as its source of truth." \
+      org.opencontainers.image.url="https://cubebot.io" \
+      org.opencontainers.image.source="https://github.com/vicotrbb/cubebot" \
+      org.opencontainers.image.documentation="https://github.com/vicotrbb/cubebot/blob/main/README.md" \
+      org.opencontainers.image.vendor="Cubebot" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.base.name="docker.io/library/debian:bookworm-slim" \
+      org.opencontainers.image.version="$CUBEBOT_VERSION" \
+      org.opencontainers.image.revision="$CUBEBOT_REVISION" \
+      org.opencontainers.image.created="$CUBEBOT_CREATED" \
+      dev.orbstack.icon="https://raw.githubusercontent.com/vicotrbb/cubebot/main/apps/web/public/icons/container-orchestrator.png"

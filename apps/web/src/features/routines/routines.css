@@ -1,0 +1,82 @@
+/* A routine's webhook: one quiet block under its description, not a second list. */
+.hook {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+.hook__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--t-sm);
+}
+.hook__title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--ink-faint);
+}
+.hook__title strong {
+  font-weight: var(--w-head);
+}
+.hook__line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.hook__line code {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--t-xs);
+}
+.hook__line--block {
+  align-items: flex-start;
+}
+.hook__line pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-x: auto;
+}
+.hook__line pre code {
+  overflow-wrap: normal;
+  white-space: pre;
+}
+.hook__secret {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--orange-wash);
+}
+.hook__how {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+}
+.hook__deliveries {
+  display: grid;
+  margin-top: 6px;
+}
+.hook__deliveries li {
+  display: grid;
+  grid-template-columns: minmax(84px, auto) minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+.hook__when,
+.hook__bytes {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hook__when {
+  color: var(--ink-faint);
+}

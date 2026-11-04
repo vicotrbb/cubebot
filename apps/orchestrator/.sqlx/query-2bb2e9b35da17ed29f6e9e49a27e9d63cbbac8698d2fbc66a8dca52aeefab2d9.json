@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT turn_id\n        FROM routine_hooks\n        WHERE routine_id=$1 AND key=$2 AND received_at > clock_timestamp() - interval '1 day'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "2bb2e9b35da17ed29f6e9e49a27e9d63cbbac8698d2fbc66a8dca52aeefab2d9"
+}

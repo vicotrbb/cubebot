@@ -1,0 +1,419 @@
+/* The Situation room: a ledger on the desk, not a wall of tiles. One sentence says what needs a
+   person, ruled sections carry the rest, and colour is kept for what wants attention. */
+.situation .page__head {
+  flex-wrap: nowrap;
+}
+.situation .page__head h1 {
+  flex-basis: auto;
+}
+.situation__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.situation__body {
+  container-type: inline-size;
+}
+.situation__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-areas:
+    'brief brief'
+    'main rail';
+  gap: 28px 48px;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-bottom: 32px;
+}
+.brief {
+  grid-area: brief;
+  display: grid;
+  gap: 4px;
+  padding-block: 8px 4px;
+}
+.brief h2 {
+  font-size: clamp(1.375rem, 1.1rem + 1.1cqi, 1.875rem);
+  font-weight: var(--w-head);
+  line-height: 1.2;
+  letter-spacing: -0.018em;
+  text-wrap: balance;
+  max-width: 34ch;
+}
+.brief[data-calm='false'] h2 {
+  color: var(--warn);
+}
+.brief p {
+  color: var(--ink-soft);
+}
+.situation__main,
+.situation__rail {
+  display: grid;
+  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  min-width: 0;
+}
+.situation__main {
+  grid-area: main;
+}
+.situation__rail {
+  grid-area: rail;
+}
+.board-section {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+.board-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+  border-bottom: 1px solid var(--line-strong);
+  padding-bottom: 6px;
+}
+.board-section__head h3 {
+  font-size: var(--t-md);
+  font-weight: var(--w-head);
+}
+.board-section__count {
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.board-section__note {
+  font-size: var(--t-xs);
+  line-height: 1.45;
+  color: var(--ink-faint);
+  max-width: 70ch;
+}
+.board-section__head .tabs button {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-sm);
+  font-weight: var(--w-label);
+  padding: 3px 9px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+.board-section__head .tabs button[aria-pressed='true'] {
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--hairline);
+}
+.figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+.figures > div {
+  display: grid;
+  gap: 2px;
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+.figures > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.figures dt {
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.figures dd {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+}
+.figures strong {
+  font-size: var(--t-2xl);
+  font-weight: var(--w-head);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.012em;
+  line-height: 1.2;
+}
+.figures span {
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.bars {
+  position: relative;
+  margin: 0;
+}
+.bars__read {
+  min-height: 18px;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.bars__read strong {
+  color: var(--ink);
+  font-weight: var(--w-strong);
+}
+.bars svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+}
+.bars__bar {
+  fill: var(--orange);
+}
+.bars__bar.is-on {
+  fill: var(--orange-deep);
+}
+.bars__base {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.bars__ticks {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: var(--t-xs);
+  color: var(--ink-faint);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.models th:first-child,
+.models td:first-child,
+.ledger th:first-child,
+.ledger td:first-child {
+  padding-left: 0;
+}
+.models th:last-child,
+.models td:last-child,
+.ledger th:last-child,
+.ledger td:last-child {
+  padding-right: 0;
+}
+.models__name {
+  overflow-wrap: anywhere;
+}
+.ledger td {
+  vertical-align: middle;
+}
+.ledger tr:hover td {
+  background: none;
+}
+.ledger small {
+  display: block;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+}
+.ledger__agent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  min-height: 40px;
+  min-width: 0;
+}
+.ledger__agent > span:last-child {
+  min-width: 0;
+}
+.ledger__agent strong {
+  font-weight: var(--w-strong);
+}
+.ledger__agent:hover strong {
+  text-decoration: underline;
+  text-decoration-color: var(--orange);
+  text-underline-offset: 2px;
+}
+.ledger__agent em {
+  font-style: normal;
+  color: var(--danger);
+}
+.ledger__money {
+  width: 150px;
+}
+.meter {
+  display: grid;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.meter strong {
+  font-weight: var(--w-strong);
+}
+.meter__track {
+  display: block;
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.meter__track span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--sage-deep);
+  transition: width 400ms var(--settle);
+}
+.meter[data-state='near'] .meter__track span {
+  background: var(--orange);
+}
+.meter[data-state='over'] .meter__track span {
+  background: var(--danger);
+}
+.meter[data-state='over'] small {
+  color: var(--danger);
+}
+.feed {
+  display: grid;
+}
+.feed li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-sm);
+}
+.feed li:last-child {
+  border-bottom: 0;
+}
+.feed li:first-child {
+  padding-top: 0;
+}
+.feed a {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.feed a:hover .feed__line strong {
+  text-decoration: underline;
+  text-decoration-color: var(--orange);
+  text-underline-offset: 2px;
+}
+.feed time {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.feed__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 5px;
+}
+.feed__line svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-faint);
+}
+.feed__line strong {
+  font-weight: var(--w-strong);
+}
+.feed li[data-kind='turn_failed'] svg,
+.feed li[data-status='waiting'] .feed__state {
+  color: var(--danger);
+}
+.feed li[data-status='running'] .feed__state {
+  color: var(--orange-base);
+}
+.feed__state {
+  color: var(--ink-soft);
+}
+.feed__text {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+  font-size: var(--t-sm);
+}
+.facts dt {
+  color: var(--ink-faint);
+}
+.facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.facts__wrap {
+  overflow-wrap: anywhere;
+}
+.facts dd[data-bad='true'] {
+  color: var(--danger);
+  font-weight: var(--w-strong);
+}
+
+/* One column once the rail would crowd the ledger: the sentence, then what is happening. */
+@container (max-width: 860px) {
+  .situation__grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'brief'
+      'rail'
+      'main';
+    gap: 24px;
+  }
+}
+@container (max-width: 520px) {
+  .ledger__wide {
+    display: none;
+  }
+  .ledger__money {
+    width: 104px;
+  }
+  .figures strong {
+    font-size: var(--t-xl);
+  }
+  .figures > div {
+    padding-left: 10px;
+  }
+}
+
+/* An agent's Usage tab: the same parts, in a panel's width. */
+.usage {
+  display: grid;
+  gap: 12px;
+  container-type: inline-size;
+}
+.usage__month {
+  display: grid;
+  gap: 4px;
+}
+.usage__month strong {
+  font-size: var(--t-2xl);
+}
+.usage__budget {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.usage__budget .field {
+  flex: 1;
+  min-width: 120px;
+}
+.usage__budgetform {
+  display: grid;
+  gap: 6px;
+}

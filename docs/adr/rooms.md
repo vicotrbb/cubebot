@@ -26,6 +26,8 @@ Alternatives considered: mention-only participation would leave unaddressed requ
 
 **Validation scenarios.** One valid mention bypasses LLM routing; unaddressed work, chatter included, selects one owner; unavailable or malformed coordinator output; revoked membership during routing; a busy selected agent queues work; and the owner delegates while remaining responsible for integration.
 
+**Amended 2026-11-04 by the user: room work stays in the room.** A delivery is still a turn on the recipient's ledger, in its main lane, with retries and cancellation unchanged, but it belongs to the room. Its request and answer show only in the room; they are not part of the agent's own conversation, its unread count or its working context. A delivery's context is the room's recent messages, and the agent's own conversation never sees it. Memory stays one pool per agent ([Unified memory per agent](memory.md#unified-memory-per-agent)), so what it learned in a room is still available elsewhere. Retrying or stopping a delivery happens in the room, for someone with `conversation.send` on the agent.
+
 ## Independent assignments for multiple room mentions
 
 Accepted 2026-10-23.

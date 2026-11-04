@@ -7,7 +7,7 @@ use cubebot_orchestrator::{
     identity::{Actor, Identity},
     work::{
         Work,
-        routines::{self, CreateRoutine, RunRoutine, SaveRoutine},
+        routines::{self, CreateRoutine, RunRoutine, SaveRoutine, UpdateRoutine},
     },
 };
 use http_body_util::BodyExt;
@@ -220,6 +220,46 @@ async fn a_webhook_needs_its_secret_and_a_replayed_key_makes_no_second_turn() {
         .secret;
     assert_eq!(hook(&secret, "b").await.0, 401);
     assert_eq!(hook(&rotated, "b").await.0, 202);
+    // The history holds what reached the routine, newest first: never the rejected ones.
+    let deliveries = work.routine_deliveries(&admin, agent, id).await.unwrap();
+    let outcomes: Vec<&str> = deliveries.iter().map(|d| d.outcome.as_str()).collect();
+    assert_eq!(outcomes, ["accepted", "replayed", "accepted"]);
+    assert_eq!(deliveries[2].bytes, 25);
+    assert!(deliveries[2].turn.is_some() && deliveries[2].status.is_some());
+    let listed = work.routines(&admin, agent).await.unwrap();
+    assert!(listed[0].last_delivery_at.is_some());
+    // A paused routine says so to the caller and in the history.
+    let current = listed[0].revision;
+    let mut paused = routine(None, false).routine;
+    paused.enabled = false;
+    let change = UpdateRoutine {
+        expected_revision: current,
+        routine: paused,
+    };
+    work.update_routine(&admin, agent, id, &change)
+        .await
+        .unwrap();
+    assert_eq!(hook(&rotated, "c").await.0, 409);
+    let deliveries = work.routine_deliveries(&admin, agent, id).await.unwrap();
+    assert_eq!(deliveries[0].outcome, "paused");
+    // A key replays for a day; after that it can arrive again as a new delivery.
+    sqlx::query("UPDATE routine_hooks SET received_at=received_at - interval '2 days'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    routines::tick(&pool).await.unwrap();
+    assert_eq!(
+        work.routine_deliveries(&admin, agent, id)
+            .await
+            .unwrap()
+            .len(),
+        4,
+        "history outlives the replay window"
+    );
+    // Removing the webhook stops it; the routine stays and can run by hand.
+    work.remove_routine_secret(&admin, agent, id).await.unwrap();
+    assert_eq!(hook(&rotated, "d").await.0, 401);
+    assert!(!work.routines(&admin, agent).await.unwrap()[0].webhook);
 }
 
 #[tokio::test]

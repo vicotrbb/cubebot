@@ -1,0 +1,192 @@
+/* Opening a file: the sheet stays out of the file's way. Full screen on a phone, respecting the
+   installed app's safe areas. */
+dialog.viewer {
+  width: min(1120px, calc(100vw - 48px));
+  height: calc(100dvh - 48px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--float);
+  overflow: hidden;
+}
+dialog.viewer::backdrop {
+  background: rgb(18 14 11 / 0.55);
+}
+.viewer__sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.viewer__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--header-h);
+  padding: 7px 10px 7px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.viewer__title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.viewer__title h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-lg);
+  font-weight: var(--w-head);
+}
+.viewer__title span {
+  flex: none;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+.viewer__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior: contain;
+  outline-offset: -2px;
+}
+.viewer__wait {
+  padding: 24px;
+}
+.viewer__picture {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--inset);
+}
+.viewer__picture img,
+.viewer__picture video {
+  max-width: 100%;
+  max-height: calc(100dvh - var(--header-h) - 80px);
+  border-radius: var(--r-sm);
+  background: var(--paper);
+}
+.viewer__listen {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.viewer__listen audio {
+  width: min(100%, 520px);
+}
+.viewer__page {
+  width: 100%;
+  max-width: calc(78ch + 48px);
+  margin-inline: auto;
+  padding: 24px;
+}
+.viewer__text {
+  margin: 0;
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: var(--t-sm);
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.viewer__table {
+  padding: 8px;
+  overflow: auto;
+}
+.viewer__table td {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.viewer__frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  /* A page without its own background must stay readable in the dark theme. */
+  background: #fff;
+}
+.viewer__pdf {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--inset);
+}
+.viewer__pdf:empty {
+  display: none;
+}
+.viewer__pdf canvas {
+  max-width: 100%;
+  box-shadow: var(--hairline);
+  background: #fff;
+}
+.viewer__cut {
+  padding: 8px 16px;
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+}
+.viewer__none {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  padding: 32px 20px;
+  text-align: center;
+}
+.viewer__none h3 {
+  font-size: var(--t-lg);
+  font-weight: var(--w-head);
+}
+.viewer__none p {
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+}
+.viewer__none .btn {
+  margin-top: 8px;
+}
+@media (max-width: 640px) {
+  dialog.viewer {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+  }
+  .viewer__head {
+    padding-top: calc(7px + env(safe-area-inset-top));
+    padding-left: calc(14px + env(safe-area-inset-left));
+    padding-right: calc(6px + env(safe-area-inset-right));
+  }
+  .viewer__body {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .viewer__word {
+    display: none;
+  }
+  .viewer__title {
+    flex-direction: column;
+    gap: 0;
+  }
+  .viewer__title h2 {
+    max-width: 100%;
+  }
+  .viewer__head .btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}

@@ -101,7 +101,9 @@ async fn streams_text_deltas_then_the_completed_reply_without_an_output_cap() {
         *usage,
         Some(Usage {
             input_tokens: 5,
-            output_tokens: 2
+            output_tokens: 2,
+            cached_input_tokens: 0,
+            cost_usd: None,
         })
     );
     assert!(OpenAi::for_loopback_tests("https://elsewhere.example/").is_err());
@@ -372,4 +374,66 @@ async fn a_rejected_key_lists_no_models() {
         Err(cubebot_providers::Error::Rejected)
     ));
     task.abort();
+}
+
+/// The two table shapes OpenAI's pricing page used on 2026-11-04.
+const PRICING: &str = "# Pricing\n\n### Standard pricing data\n\n\
+| Model | Short context input | Short context output | Short context cached input | Short context 30m write | Long context input |\n\
+| --- | --- | --- | --- | --- | --- |\n\
+| gpt-5.5 (<272K context length) | $5.00 | $30.00 | $0.50 | - | $10.00 |\n\
+| gpt-5.5-pro (<272K context length) | $30.00 | $180.00 | - | - | $60.00 |\n\n\
+| Model | Input | Output | Cached input |\n| --- | --- | --- | --- |\n\
+| gpt-4.1-mini | $0.40 | $1.60 | $0.10 |\n\n\
+### Batch pricing data\n\n#### Batch\n\n\
+| Model | Input | Output | Cached input |\n| --- | --- | --- | --- |\n\
+| gpt-4.1-mini | $0.20 | $0.80 | - |\n";
+
+#[tokio::test]
+async fn prices_come_from_the_standard_tier_of_its_own_page_without_a_key() {
+    let router = axum::Router::new().route(
+        "/pricing.md",
+        axum::routing::get(|headers: axum::http::HeaderMap| async move {
+            assert!(!headers.contains_key("authorization"));
+            PRICING
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}/", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let prices = cubebot_providers::OpenAi::for_loopback_tests(&origin)
+        .unwrap()
+        .prices()
+        .await
+        .unwrap();
+    server.abort();
+    let names: Vec<&str> = prices.iter().map(|price| price.model.as_str()).collect();
+    assert_eq!(names, ["gpt-5.5", "gpt-5.5-pro", "gpt-4.1-mini"]);
+    assert!((prices[0].input_per_token - 5e-6).abs() < 1e-12);
+    assert!((prices[0].cached_per_token - 0.5e-6).abs() < 1e-12);
+    assert!((prices[0].output_per_token - 30e-6).abs() < 1e-12);
+    assert!(
+        (prices[1].cached_per_token - 30e-6).abs() < 1e-12,
+        "no cached rate bills as input"
+    );
+    assert!(
+        (prices[2].output_per_token - 1.6e-6).abs() < 1e-12,
+        "standard, not batch"
+    );
+}
+
+/// Reads the real page; `cargo test -- --ignored live_page` tells whether the parser still fits.
+#[tokio::test]
+#[ignore = "reaches developers.openai.com"]
+async fn live_page_still_parses() {
+    let prices = cubebot_providers::OpenAi::new()
+        .unwrap()
+        .prices()
+        .await
+        .unwrap();
+    println!("{} OpenAI prices, e.g. {:?}", prices.len(), prices.first());
+    assert!(prices.len() >= 5, "{prices:?}");
+    assert!(
+        prices.iter().all(|p| p.output_per_token > 0.0),
+        "{prices:?}"
+    );
 }

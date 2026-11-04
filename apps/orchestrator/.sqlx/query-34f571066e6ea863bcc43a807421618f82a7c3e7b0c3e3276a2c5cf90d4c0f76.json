@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE skills\n                    SET installs_by_default=true\n                    WHERE id=$1\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "34f571066e6ea863bcc43a807421618f82a7c3e7b0c3e3276a2c5cf90d4c0f76"
+}

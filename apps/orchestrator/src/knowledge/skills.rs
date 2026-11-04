@@ -4,12 +4,14 @@
 //! another agent's installation. Storing a package never runs its scripts.
 use super::{Knowledge, authorize};
 use crate::{
-    agents::AgentId,
+    agents::{AgentId, runtime::RuntimeActor},
     identity::{Actor, IdentityError},
 };
-use cubebot_protocol::runtime::{SKILL_BYTES, SkillChange, SkillPackage};
+use cubebot_protocol::runtime::{
+    LibrarySkill, RoutineCall, SKILL_BYTES, SkillChange, SkillPackage,
+};
 use serde::{Deserialize, Serialize};
-use sqlx::{Postgres, Transaction, types::Json};
+use sqlx::{PgPool, Postgres, Transaction, types::Json};
 use std::collections::BTreeMap;
 use uuid::Uuid;
 
@@ -19,6 +21,12 @@ pub type Files = BTreeMap<String, String>;
 /// shortcut: the first 20 by name, which bounds the dream's prompt; select by relevance once
 /// agents install more.
 pub(super) const DREAM_SKILLS: i64 = 20;
+
+/// Skills that ship with the platform, each one `SKILL.md`. People edit them like any other.
+const SHIPPED: [&str; 2] = [
+    include_str!("../../skills/coding/SKILL.md"),
+    include_str!("../../skills/design/SKILL.md"),
+];
 
 /// A library entry at its current revision.
 #[derive(Serialize, utoipa::ToSchema)]
@@ -41,6 +49,8 @@ pub struct SkillRevision {
     pub human: Option<Uuid>,
     /// The dream run that proposed this revision.
     pub dream_run: Option<Uuid>,
+    /// The agent that wrote this revision during its work.
+    pub agent: Option<String>,
     pub created_at: String,
 }
 
@@ -99,9 +109,11 @@ impl Knowledge {
     ) -> Result<SkillRevision, IdentityError> {
         let found = sqlx::query!(
             r#"
-            SELECT s.id AS skill, s.name, r.revision, r.description, r.files AS "files: Json<Files>", r.human_id AS human, r.dream_run_id AS dream_run, (to_jsonb(r.created_at) #>> '{}') AS "created_at!"
+            SELECT s.id AS skill, s.name, r.revision, r.description, r.files AS "files: Json<Files>", r.human_id AS human, r.dream_run_id AS dream_run, g.name AS "agent?", (to_jsonb(r.created_at) #>> '{}') AS "created_at!"
             FROM skill_revisions r
             JOIN skills s ON s.id=r.skill_id
+            LEFT JOIN chat_turns t ON t.id=r.turn_id
+            LEFT JOIN agents g ON g.id=t.conversation_id
             WHERE r.skill_id=$1 AND r.revision=$2
             "#,
             skill,
@@ -118,6 +130,7 @@ impl Knowledge {
             files: found.files.0,
             human: found.human,
             dream_run: found.dream_run,
+            agent: found.agent,
             created_at: found.created_at,
         })
     }
@@ -170,7 +183,10 @@ impl Knowledge {
                 return Err(IdentityError::InvalidInput);
             }
         }
-        let author = (Some(actor.id), None);
+        let author = Author {
+            human: Some(actor.id),
+            ..Author::default()
+        };
         let (id, _) = write(&mut tx, skill, expected, &metadata, files, author)
             .await?
             .ok_or(IdentityError::Conflict)?;
@@ -282,69 +298,100 @@ pub(super) async fn install(
     Ok(installed.rows_affected() == 1)
 }
 
+/// Who wrote a revision. Nobody: it shipped with the platform.
+#[derive(Clone, Copy, Default)]
+pub(super) struct Author {
+    pub human: Option<Uuid>,
+    pub dream: Option<Uuid>,
+    pub turn: Option<Uuid>,
+}
+
 /// Creates a skill, or adds a revision on top of `expected`. `None` when the name is taken or
-/// `expected` is not current. `author` is a person or a dream run.
+/// `expected` is not current.
 pub(super) async fn write(
     tx: &mut Transaction<'_, Postgres>,
     skill: Option<Uuid>,
     expected: Option<i64>,
+    metadata: &(String, String),
+    files: &Files,
+    author: Author,
+) -> Result<Option<(Uuid, i64)>, sqlx::Error> {
+    match skill {
+        None => register(tx, metadata, files, author).await,
+        Some(skill) => add_revision(tx, skill, expected, metadata, files, author).await,
+    }
+}
+
+/// A new skill with its first revision; `None` when the name is taken.
+async fn register(
+    tx: &mut Transaction<'_, Postgres>,
     (name, description): &(String, String),
     files: &Files,
-    (human, dream): (Option<Uuid>, Option<Uuid>),
+    author: Author,
 ) -> Result<Option<(Uuid, i64)>, sqlx::Error> {
-    let written = match skill {
-        None => sqlx::query!(
-            "
-            WITH s AS (
-                INSERT INTO skills (name)
-                VALUES ($1)
-                ON CONFLICT (name) DO NOTHING
-                RETURNING id, revision
-            )
-            INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id)
-            SELECT id, revision, $2, $3, $4, $5
-            FROM s
-            RETURNING skill_id, revision
-            ",
-            name,
-            description,
-            Json(files) as _,
-            human,
-            dream,
+    let written = sqlx::query!(
+        "
+        WITH s AS (
+            INSERT INTO skills (name)
+            VALUES ($1)
+            ON CONFLICT (name) DO NOTHING
+            RETURNING id, revision
         )
-        .fetch_optional(&mut **tx)
-        .await?
-        .map(|row| (row.skill_id, row.revision)),
-        Some(skill) => sqlx::query!(
-            "
-            WITH s AS (
-                UPDATE skills
-                SET revision=revision+1
-                WHERE id=$1 AND name=$2 AND revision=$3
-                RETURNING id, revision
-            )
-            INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id)
-            SELECT id, revision, $4, $5, $6, $7
-            FROM s
-            RETURNING skill_id, revision
-            ",
-            skill,
-            name,
-            expected,
-            description,
-            Json(files) as _,
-            human,
-            dream,
+        INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id, turn_id)
+        SELECT id, revision, $2, $3, $4, $5, $6
+        FROM s
+        RETURNING skill_id, revision
+        ",
+        name,
+        description,
+        Json(files) as _,
+        author.human,
+        author.dream,
+        author.turn,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(written.map(|row| (row.skill_id, row.revision)))
+}
+
+/// A revision on top of `expected`; `None` when that is not current.
+async fn add_revision(
+    tx: &mut Transaction<'_, Postgres>,
+    skill: Uuid,
+    expected: Option<i64>,
+    (name, description): &(String, String),
+    files: &Files,
+    author: Author,
+) -> Result<Option<(Uuid, i64)>, sqlx::Error> {
+    let written = sqlx::query!(
+        "
+        WITH s AS (
+            UPDATE skills
+            SET revision=revision+1
+            WHERE id=$1 AND name=$2 AND revision=$3
+            RETURNING id, revision
         )
-        .fetch_optional(&mut **tx)
-        .await?
-        .map(|row| (row.skill_id, row.revision)),
-    };
-    Ok(written)
+        INSERT INTO skill_revisions (skill_id, revision, description, files, human_id, dream_run_id, turn_id)
+        SELECT id, revision, $4, $5, $6, $7, $8
+        FROM s
+        RETURNING skill_id, revision
+        ",
+        skill,
+        name,
+        expected,
+        description,
+        Json(files) as _,
+        author.human,
+        author.dream,
+        author.turn,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(written.map(|row| (row.skill_id, row.revision)))
 }
 
 /// Publishes a dream's proposed package and installs it for the agent. A revision of an unknown
-/// skill, a stale revision or a taken name is dropped.
+/// skill, a stale revision, a taken name or a package identical to the current one is dropped.
 pub(super) async fn propose(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -352,32 +399,404 @@ pub(super) async fn propose(
     change: &SkillChange,
     metadata: &(String, String),
 ) -> Result<(), sqlx::Error> {
-    let skill = sqlx::query_scalar!(
-        "
-        SELECT id
-        FROM skills
-        WHERE name=$1
-        ",
-        &metadata.0,
+    match proposed(tx, run, change, metadata).await? {
+        // The revision was just written, so it exists.
+        Some((skill, revision)) => install(tx, agent, skill, revision).await.map(|_| ()),
+        None => {
+            dropped(&metadata.0);
+            Ok(())
+        }
+    }
+}
+
+fn dropped(name: &str) {
+    tracing::info!(name, "dream skill dropped");
+}
+
+async fn proposed(
+    tx: &mut Transaction<'_, Postgres>,
+    run: Uuid,
+    change: &SkillChange,
+    metadata: &(String, String),
+) -> Result<Option<(Uuid, i64)>, sqlx::Error> {
+    let known = current(tx, &metadata.0).await?;
+    if known
+        .as_ref()
+        .is_some_and(|known| known.files == change.files)
+    {
+        return Ok(None);
+    }
+    let skill = known.map(|known| known.id);
+    let expected = change.expected_revision;
+    let author = Author {
+        dream: Some(run),
+        ..Author::default()
+    };
+    match (skill, expected) {
+        (None, Some(_)) => Ok(None),
+        // A new package under a taken name inserts nothing.
+        (_, None) => write(tx, None, None, metadata, &change.files, author).await,
+        (Some(_), Some(_)) => write(tx, skill, expected, metadata, &change.files, author).await,
+    }
+}
+
+struct Current {
+    id: Uuid,
+    revision: i64,
+    description: String,
+    files: Files,
+}
+
+/// The library's skill called `name`, at its current revision.
+async fn current(
+    tx: &mut Transaction<'_, Postgres>,
+    name: &str,
+) -> Result<Option<Current>, sqlx::Error> {
+    let found = sqlx::query!(
+        r#"
+        SELECT s.id, s.revision, r.description, r.files AS "files: Json<Files>"
+        FROM skills s
+        JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision
+        WHERE s.name=$1
+        "#,
+        name,
     )
     .fetch_optional(&mut **tx)
     .await?;
-    let expected = change.expected_revision;
-    let author = (None, Some(run));
-    let written = match (skill, expected) {
-        (None, Some(_)) => None,
-        // A new package under a taken name inserts nothing.
-        (_, None) => write(tx, None, None, metadata, &change.files, author).await?,
-        (Some(_), Some(_)) => write(tx, skill, expected, metadata, &change.files, author).await?,
-    };
-    match written {
-        // The revision was just written, so it exists.
-        Some((skill, revision)) => {
-            install(tx, agent, skill, revision).await?;
-        }
-        None => tracing::info!(name = metadata.0, ?expected, "dream skill dropped"),
+    Ok(found.map(|found| Current {
+        id: found.id,
+        revision: found.revision,
+        description: found.description,
+        files: found.files.0,
+    }))
+}
+
+/// Every skill in the library, for a dream to improve rather than duplicate.
+/// shortcut: names and descriptions only, 200 at most; rank by relevance once libraries grow.
+pub(super) async fn catalog(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<LibrarySkill>, sqlx::Error> {
+    sqlx::query_as!(
+        LibrarySkill,
+        "
+        SELECT s.name, r.description
+        FROM skills s
+        JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision
+        ORDER BY s.name
+        LIMIT 200
+        "
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SupportFile {
+    path: String,
+    content: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Create {
+    name: String,
+    description: String,
+    instructions: String,
+    #[serde(default)]
+    files: Vec<SupportFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Update {
+    name: String,
+    expected_revision: i64,
+    description: String,
+    instructions: String,
+    #[serde(default)]
+    files: Vec<SupportFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Install {
+    name: String,
+}
+
+const INVALID_PACKAGE: &str = "name is lowercase words joined by single hyphens, up to 64 characters; description is 1 to 1024 characters; instructions are not empty; files are under references/, scripts/ or assets/ with plain names; the whole package is text and at most 64 KiB";
+
+/// Builds a package from a tool call: the description becomes one line of front matter.
+fn compose(
+    name: &str,
+    description: &str,
+    instructions: &str,
+    extra: Vec<SupportFile>,
+) -> Option<(Files, (String, String))> {
+    if instructions.trim().is_empty() {
+        return None;
     }
-    Ok(())
+    let description = description.split_whitespace().collect::<Vec<_>>().join(" ");
+    let entry = format!(
+        "---\nname: {name}\ndescription: {description}\n---\n\n{}\n",
+        instructions.trim()
+    );
+    let mut files: Files = extra
+        .into_iter()
+        .map(|file| (file.path, file.content))
+        .collect();
+    files.insert("SKILL.md".into(), entry);
+    let metadata = package(&files)?;
+    // A description that looked like a block or a quote must not rename the package.
+    (metadata.0 == name).then_some((files, metadata))
+}
+
+type Answer = Result<String, String>;
+
+impl Knowledge {
+    /// The `skill_*` tools of a running turn. `Err` is the refusal the model reads; the outer
+    /// error is the orchestrator's own. The turn is the revision's author.
+    #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn, tool = %call.tool))]
+    pub(crate) async fn skill_tool(
+        &self,
+        actor: &RuntimeActor,
+        turn: Uuid,
+        call: &RoutineCall,
+    ) -> Result<Answer, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        let running = sqlx::query_scalar!(
+            "
+            SELECT id
+            FROM chat_turns
+            WHERE id=$1 AND conversation_id=$2 AND status='running' AND attempt_id=$3
+            FOR UPDATE
+            ",
+            turn,
+            actor.agent.0,
+            actor.attempt.0,
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if running.is_none() {
+            return Ok(Err("this turn is no longer running".into()));
+        }
+        let answer = match call.tool.as_str() {
+            "skill_list" => list_library(&mut tx, actor.agent).await?,
+            "skill_create" => create_skill(&mut tx, actor.agent, turn, &call.input).await?,
+            "skill_update" => update_skill(&mut tx, actor.agent, turn, &call.input).await?,
+            "skill_install" => install_named(&mut tx, actor.agent, &call.input).await?,
+            _ => Err("no skill tool has this name".into()),
+        };
+        // A refused call changed nothing, so its transaction has nothing to keep.
+        tx.commit().await?;
+        Ok(answer)
+    }
+
+    /// Adds the skills that ship with the platform and installs each on every agent, the once:
+    /// a skill already called that stays as it is, and uninstalling one from an agent sticks.
+    #[tracing::instrument(skip_all)]
+    pub async fn seed_shipped_skills(pool: &PgPool) -> Result<(), sqlx::Error> {
+        for entry in SHIPPED {
+            let files: Files = [("SKILL.md".to_owned(), (*entry).to_owned())].into();
+            let Some(metadata) = package(&files) else {
+                tracing::error!("a shipped skill is not a valid package");
+                continue;
+            };
+            let mut tx = pool.begin().await?;
+            let written = write(&mut tx, None, None, &metadata, &files, Author::default()).await?;
+            if let Some((skill, revision)) = written {
+                sqlx::query!(
+                    "
+                    UPDATE skills
+                    SET installs_by_default=true
+                    WHERE id=$1
+                    ",
+                    skill,
+                )
+                .execute(&mut *tx)
+                .await?;
+                sqlx::query!(
+                    "
+                    INSERT INTO skill_installations (agent_id, skill_id, revision)
+                    SELECT id, $1, $2
+                    FROM agents
+                    WHERE desired_state<>'retired'
+                    ",
+                    skill,
+                    revision,
+                )
+                .execute(&mut *tx)
+                .await?;
+            }
+            tx.commit().await?;
+        }
+        Ok(())
+    }
+}
+
+async fn list_library(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+) -> Result<Answer, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT s.name, s.revision, r.description, i.revision AS "installed?"
+        FROM skills s
+        JOIN skill_revisions r ON r.skill_id=s.id AND r.revision=s.revision
+        LEFT JOIN skill_installations i ON i.skill_id=s.id AND i.agent_id=$1
+        ORDER BY s.name
+        LIMIT 200
+        "#,
+        agent.0,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let listed: Vec<_> = rows
+        .iter()
+        .map(|row| {
+            serde_json::json!({
+                "name": row.name,
+                "revision": row.revision,
+                "description": row.description,
+                "installed_revision": row.installed,
+            })
+        })
+        .collect();
+    Ok(Ok(serde_json::Value::Array(listed).to_string()))
+}
+
+async fn create_skill(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    turn: Uuid,
+    input: &serde_json::Value,
+) -> Result<Answer, IdentityError> {
+    let Ok(create) = Create::deserialize(input) else {
+        return Ok(Err(INVALID_PACKAGE.into()));
+    };
+    let name = create.name.clone();
+    let composed = compose(
+        &name,
+        &create.description,
+        &create.instructions,
+        create.files,
+    );
+    let Some((files, metadata)) = composed else {
+        return Ok(Err(INVALID_PACKAGE.into()));
+    };
+    if let Some(known) = current(tx, &name).await? {
+        // A resent call, whose first answer was lost, finds its own package.
+        if known.files == files {
+            install(tx, agent, known.id, known.revision).await?;
+            return Ok(Ok(format!("Skill {name} is saved and installed.")));
+        }
+        return Ok(Err(format!(
+            "the library already has a skill called {name}, revision {}: {}. Use skill_update to improve it, or skill_install to use it as it is",
+            known.revision, known.description
+        )));
+    }
+    if at_turn_limit(tx, turn).await? {
+        return Ok(Err(TURN_LIMIT.into()));
+    }
+    let author = Author {
+        turn: Some(turn),
+        ..Author::default()
+    };
+    let written = write(tx, None, None, &metadata, &files, author).await?;
+    let (skill, revision) = written.ok_or(IdentityError::Conflict)?;
+    install(tx, agent, skill, revision).await?;
+    Ok(Ok(format!(
+        "Published skill {name}, revision {revision}, to the shared library and installed it for you. People find it under Skills and you load it with load_skill."
+    )))
+}
+
+async fn update_skill(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    turn: Uuid,
+    input: &serde_json::Value,
+) -> Result<Answer, IdentityError> {
+    let Ok(update) = Update::deserialize(input) else {
+        return Ok(Err(INVALID_PACKAGE.into()));
+    };
+    let name = update.name.clone();
+    let composed = compose(
+        &name,
+        &update.description,
+        &update.instructions,
+        update.files,
+    );
+    let Some((files, metadata)) = composed else {
+        return Ok(Err(INVALID_PACKAGE.into()));
+    };
+    let Some(known) = current(tx, &name).await? else {
+        return Ok(Err(format!(
+            "the library has no skill called {name}; use skill_create"
+        )));
+    };
+    if known.files == files {
+        install(tx, agent, known.id, known.revision).await?;
+        return Ok(Ok(format!(
+            "Skill {name} already says this at revision {}; nothing new was written.",
+            known.revision
+        )));
+    }
+    if known.revision != update.expected_revision {
+        return Ok(Err(format!(
+            "{name} is at revision {}, not {}; someone changed it, so load it again and rework your change",
+            known.revision, update.expected_revision
+        )));
+    }
+    if at_turn_limit(tx, turn).await? {
+        return Ok(Err(TURN_LIMIT.into()));
+    }
+    let author = Author {
+        turn: Some(turn),
+        ..Author::default()
+    };
+    let expected = Some(update.expected_revision);
+    let written = write(tx, Some(known.id), expected, &metadata, &files, author).await?;
+    let (skill, revision) = written.ok_or(IdentityError::Conflict)?;
+    install(tx, agent, skill, revision).await?;
+    Ok(Ok(format!(
+        "Published {name} revision {revision} and moved your installation to it. Other agents stay on their revisions until someone updates them."
+    )))
+}
+
+async fn install_named(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    input: &serde_json::Value,
+) -> Result<Answer, IdentityError> {
+    let Ok(Install { name }) = Install::deserialize(input) else {
+        return Ok(Err("name is a skill from skill_list".into()));
+    };
+    let Some(known) = current(tx, &name).await? else {
+        return Ok(Err(format!("the library has no skill called {name}")));
+    };
+    install(tx, agent, known.id, known.revision).await?;
+    Ok(Ok(format!(
+        "Installed {name} at revision {}. Load it with load_skill.",
+        known.revision
+    )))
+}
+
+/// Skill revisions one turn may publish, so a confused model cannot flood the shared library.
+const TURN_SKILLS: i64 = 3;
+const TURN_LIMIT: &str =
+    "one turn publishes at most 3 skill revisions; that is plenty, so finish with what you have";
+
+async fn at_turn_limit(
+    tx: &mut Transaction<'_, Postgres>,
+    turn: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let written = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "written!" FROM skill_revisions WHERE turn_id=$1"#,
+        turn,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(written >= TURN_SKILLS)
 }
 
 /// The agent's installed packages, or only the one called `name`.
@@ -534,6 +953,36 @@ mod tests {
             .iter()
             .map(|(path, text)| (path.to_string(), text.to_string()))
             .collect()
+    }
+
+    #[test]
+    fn shipped_skills_are_valid_packages() {
+        for entry in SHIPPED {
+            let package = package(&files(&[("SKILL.md", entry)]));
+            let (name, description) = package.expect("a shipped skill must validate");
+            assert!(["coding", "design"].contains(&name.as_str()), "{name}");
+            assert!(description.len() > 80, "{description}");
+        }
+    }
+
+    #[test]
+    fn a_tool_call_composes_a_package_with_one_line_of_front_matter() {
+        let (files, metadata) = compose(
+            "disk-triage",
+            "Find what\n fills a disk.",
+            "Run du.",
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(metadata.1, "Find what fills a disk.");
+        assert!(files["SKILL.md"].ends_with("---\n\nRun du.\n"));
+        assert!(compose("Disk Triage", "x", "y", vec![]).is_none());
+        assert!(compose("disk-triage", "x", " ", vec![]).is_none());
+        let escaping = vec![SupportFile {
+            path: "../x".into(),
+            content: "x".into(),
+        }];
+        assert!(compose("disk-triage", "x", "y", escaping).is_none());
     }
 
     #[test]

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT i.kind AS \"kind!\", i.agent AS \"agent?\", i.room AS \"room?\", i.turn AS \"turn?\",\n                   (to_jsonb(i.at) #>> '{}') AS \"at!\", i.text AS \"text!\",\n                   i.at > COALESCE(a.activity_read_at, '-infinity') AS \"unread!\"\n            FROM human_accounts a\n            CROSS JOIN LATERAL (\n                SELECT 'login_pending' AS kind, g.id AS agent, NULL::uuid AS room, h.turn_id AS turn,\n                       h.created_at AS at, format('%s asks you to log in on %s', g.name, h.site) AS text\n                FROM login_handoffs h\n                JOIN agents g ON g.id=h.agent_id\n                WHERE h.status='pending'\n                  AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_id=g.id AND p.scope_kind IN ('agent','conversation')))\n                UNION ALL\n                SELECT CASE t.status WHEN 'waiting' THEN 'turn_waiting' ELSE 'turn_failed' END, g.id, m.room_id, t.id,\n                       t.status_at,\n                       CASE\n                           WHEN t.error='budget_exhausted' THEN format('%s spent its monthly budget; work is paused', g.name)\n                           WHEN t.status='waiting' THEN format('%s is waiting for your reply', g.name)\n                           ELSE format('%s failed: %s', g.name, left(COALESCE(t.error, ''), 200))\n                       END\n                FROM chat_turns t\n                JOIN agents g ON g.id=t.conversation_id\n                LEFT JOIN room_messages m ON m.id=t.room_message_id\n                WHERE t.status IN ('waiting','failed')\n                  AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read'))\n                UNION ALL\n                SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login)\n                FROM invitations v\n                WHERE a.role='administrator' AND v.accepted_by IS NULL AND v.revoked_by IS NULL AND v.expires_at > clock_timestamp()\n                UNION ALL\n                SELECT CASE WHEN r.turn_id IS NULL THEN 'dream_published_skill' ELSE 'agent_published_skill' END,\n                       g.id, NULL, r.turn_id, r.created_at,\n                       format('%s %s skill %s', g.name, CASE WHEN r.revision=1 THEN 'published' ELSE 'improved' END, s.name)\n                FROM skill_revisions r\n                LEFT JOIN dream_runs d ON d.id=r.dream_run_id\n                LEFT JOIN chat_turns t ON t.id=r.turn_id\n                JOIN agents g ON g.id=COALESCE(d.agent_id, t.conversation_id)\n                JOIN skills s ON s.id=r.skill_id\n                WHERE a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability IN ('memory.read','agent.manage'))\n            ) i\n            WHERE a.id=$1 AND a.active\n            ORDER BY i.at DESC\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "room?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "turn?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "text!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "unread!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "a29f5f0624cc8daf08ad6d74dd0abf4054977dabdf5a350e078e4cbeac22d4f3"
+}

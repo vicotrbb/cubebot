@@ -79,8 +79,7 @@ pub(crate) async fn respond(
             return (axum::http::StatusCode::UNAUTHORIZED, "controlled rejection").into_response();
         }
     };
-    let completed =
-        json!({"type":"response.completed","response":{"status":"completed","output":output}});
+    let completed = json!({"type":"response.completed","response":{"status":"completed","output":output,"usage":{"input_tokens":100,"output_tokens":20,"input_tokens_details":{"cached_tokens":40}}}});
     (
         [("content-type", "text/event-stream")],
         format!("data: {completed}\n\n"),

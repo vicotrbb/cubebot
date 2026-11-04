@@ -41,9 +41,7 @@ export function SkillEditor({
             content,
           })),
         )
-        setAuthor(
-          found.dream_run ? 'proposed by a dream' : 'written by a person',
-        )
+        setAuthor(authorOf(found))
       })
       .catch((error) => setError(failure(error)))
   }, [skill, revision])
@@ -164,4 +162,14 @@ export function SkillEditor({
       </div>
     </form>
   )
+}
+
+function authorOf(revision: {
+  dream_run?: string | null
+  agent?: string | null
+  human?: string | null
+}) {
+  if (revision.dream_run) return 'proposed by a dream'
+  if (revision.agent) return `written by ${revision.agent}`
+  return revision.human ? 'written by a person' : 'ships with Cubebot'
 }
