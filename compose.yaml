@@ -2,6 +2,11 @@
 # adding compose.domain.yaml, compose.agents.yaml and compose.control.yaml as .env asks; in a checkout
 # `just up` adds compose.dev.yaml, which builds the same services from source.
 name: cubebot
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
 services:
   postgres:
     image: postgres:18-bookworm
@@ -12,8 +17,6 @@ services:
       POSTGRES_DB: cubebot
       POSTGRES_USER: cubebot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    ports:
-      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -21,6 +24,8 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
 
@@ -57,6 +62,7 @@ services:
       credential-key:
         condition: service_completed_successfully
     restart: unless-stopped
+    logging: *logging
     # Time for its handlers and the controller to stop and for it to release ownership.
     stop_grace_period: 30s
     security_opt:
@@ -65,6 +71,7 @@ services:
   web:
     image: ${CUBEBOT_REGISTRY:-ghcr.io/vicotrbb}/cubebot-web:${CUBEBOT_VERSION:-local}
     restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
 
@@ -81,6 +88,7 @@ services:
       - orchestrator
       - web
     restart: unless-stopped
+    logging: *logging
 
 configs:
   # The console and its API on one origin, as an ingress serves them: /api to the orchestrator,

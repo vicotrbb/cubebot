@@ -36,7 +36,13 @@ impl Store {
         {
             image.clear();
         }
-        self.journal.append(&fit(&mut entry)?)
+        let payload = fit(&mut entry)?;
+        // A full journal stops new calls starting, never the report of what earlier ones did.
+        if matches!(entry.event, TurnEvent::ToolCall { .. }) {
+            self.journal.append(&payload)
+        } else {
+            self.journal.append_outcome(&payload)
+        }
     }
     /// Called once the ledger has the entry and everything before it. A call stays journaled
     /// until its result is acknowledged too, so a crash while it runs still reports it.
@@ -90,9 +96,10 @@ const TRUNCATED: &str = "\n[truncated]";
 
 /// Serializes `entry`, cutting its one large text until the record fits the journal.
 fn fit(entry: &mut Entry) -> io::Result<Vec<u8>> {
+    let oversized = serde_json::to_vec(entry)?.len() > MAX_PAYLOAD;
     if let TurnEvent::ToolCall { input, .. } = &mut entry.event
         && !input.is_string()
-        && input.to_string().len() > MAX_PAYLOAD
+        && oversized
     {
         *input = Value::String(input.to_string());
     }
@@ -268,6 +275,89 @@ mod tests {
                 if output.ends_with(TRUNCATED)
         ));
         store.acknowledge(done).unwrap();
+        assert!(store.pending().unwrap().is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_call_just_under_the_record_limit_is_journaled_truncated() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let mut store = Store::open(&root).unwrap();
+        let mut entry = call(Uuid::new_v4(), 1);
+        let TurnEvent::ToolCall { input, .. } = &mut entry.event else {
+            unreachable!()
+        };
+        // The input alone fits; with the entry around it the record does not.
+        *input = serde_json::json!({"content": "x".repeat(MAX_PAYLOAD - 32)});
+        store.record(&entry).unwrap();
+        let [(recorded, _)] = &store.entries().unwrap()[..] else {
+            panic!("expected one entry");
+        };
+        assert!(matches!(
+            &recorded.event,
+            TurnEvent::ToolCall { input: Value::String(text), .. } if text.ends_with(TRUNCATED)
+        ));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_full_journal_holding_open_calls_reopens_and_reports_them() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let turn = Uuid::new_v4();
+        let mut store = Store::open(&root).unwrap();
+        let large = || {
+            let mut entry = call(turn, 1);
+            let TurnEvent::ToolCall { input, .. } = &mut entry.event else {
+                unreachable!()
+            };
+            *input = serde_json::json!({"content": "x".repeat(MAX_PAYLOAD)});
+            entry
+        };
+        let first = large();
+        store.record(&first).unwrap();
+        let mut calls = 1;
+        while store.record(&large()).is_ok() {
+            calls += 1;
+        }
+        // A result still goes in, at its full size, past the capacity that refused the call.
+        let TurnEvent::ToolCall { id, .. } = first.event else {
+            unreachable!()
+        };
+        let result = Entry {
+            turn,
+            sequence: 2,
+            event: TurnEvent::ToolResult {
+                id,
+                outcome: Outcome::Exited {
+                    code: Some(0),
+                    output: "x".repeat(MAX_PAYLOAD),
+                },
+            },
+        };
+        store.record(&result).unwrap();
+        drop(store);
+
+        let mut store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
+        // Every other call gets its uncertain result.
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 2 * calls);
+        assert!(matches!(
+            pending.last().unwrap().0.event,
+            TurnEvent::ToolResult {
+                outcome: Outcome::Uncertain,
+                ..
+            }
+        ));
+        drop(store);
+        // And again, now that it holds more than a full journal's records and bytes.
+        let mut store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 2 * calls);
+        store.acknowledge(pending.last().unwrap().1).unwrap();
         assert!(store.pending().unwrap().is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }

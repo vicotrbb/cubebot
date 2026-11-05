@@ -360,7 +360,8 @@ ask_all() {
     local count i var when choices default title text
     [ -z "${CUBEBOT_DOMAIN:-}" ] || CUBEBOT_ACCESS=${CUBEBOT_ACCESS:-domain}
     [ -z "${CUBEBOT_PORT:-}" ] || CUBEBOT_ACCESS=${CUBEBOT_ACCESS:-local}
-    # Running it again updates the installation already there; CUBEBOT_HOME installs another.
+    # Running it again updates the installation already there; CUBEBOT_HOME installs another, with
+    # its own Compose project and data. Pick its CUBEBOT_PORT; without a domain, agents need 8443.
     fresh || CUBEBOT_HOME=${CUBEBOT_HOME:-$HOME/.cubebot}
     count=$(questions | wc -l)
     for ((i = 1; i <= count; i++)); do
@@ -440,8 +441,11 @@ summary() {
     local admin="the first account created at the console" kept=""
     [ "${CUBEBOT_ADMIN:-}" != now ] || admin="created now as ${CUBEBOT_BOOTSTRAP_LOGIN:-admin}"
     fresh || kept=" (keeps its .env and data)" admin="unchanged"
+    local network=""
+    [ "$(setting CUBEBOT_RUNTIME)" = off ] || network="Agent network  no firewall: agents can reach this machine's private networks and cloud metadata; only the Helm chart blocks them"
     card "${bold}Cubebot $release$reset" \
         "Agents         $(setting CUBEBOT_RUNTIME)" \
+        ${network:+"$network"} \
         "Console        $(console_url)" \
         "Directory      ${home/#$HOME/\~}$kept" \
         "Administrator  $admin"
@@ -462,6 +466,8 @@ start() {
             {
                 echo "POSTGRES_PASSWORD=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
                 echo "CUBEBOT_RUNTIME=$CUBEBOT_RUNTIME"
+                # Compose names a project's volumes after it, so another directory needs its own.
+                [ "$home" = "$HOME/.cubebot" ] || echo "COMPOSE_PROJECT_NAME=cubebot-$(printf %s "$home" | cksum | cut -d' ' -f1)"
                 for name in CUBEBOT_DOMAIN CUBEBOT_PORT CUBEBOT_REGISTRY CUBEBOT_SOURCE; do
                     [ -z "${!name:-}" ] || echo "$name=${!name}"
                 done

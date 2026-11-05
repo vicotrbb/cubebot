@@ -83,14 +83,24 @@ impl Journal {
         &self.records
     }
 
-    /// Returns only after the record and checkpoint have been synchronized.
+    /// Refuses a record once the journal is full; see [`Self::append_outcome`] for what is not.
     pub fn append(&mut self, payload: &[u8]) -> io::Result<u64> {
-        self.healthy()?;
-        if payload.len() > MAX_PAYLOAD
-            || self.records.len() >= MAX_RECORDS
+        if self.records.len() >= MAX_RECORDS
             || self.bytes + payload.len() + RECORD_HEADER > MAX_BYTES
         {
             return Err(io::Error::other("journal capacity exhausted"));
+        }
+        self.append_outcome(payload)
+    }
+
+    /// Records what became of an appended call even when the journal is full, since refusing it
+    /// would leave the call open for good and stop the agent reopening its journal. Each call has
+    /// one outcome, so this at most doubles the records. Returns only after the record and
+    /// checkpoint have been synchronized.
+    pub fn append_outcome(&mut self, payload: &[u8]) -> io::Result<u64> {
+        self.healthy()?;
+        if payload.len() > MAX_PAYLOAD {
+            return Err(io::Error::other("journal record too large"));
         }
         let sequence = self
             .state
@@ -180,7 +190,9 @@ impl Journal {
     fn recover(&mut self) -> io::Result<()> {
         // Validate all committed evidence before removing any disposable files.
         let count = self.state.committed - self.state.acknowledged;
-        if count > MAX_RECORDS as u64 {
+        // Outcomes may double a full journal. Their bytes are bounded by this count and the read
+        // limit below; a tighter byte limit could refuse a journal this process wrote.
+        if count > 2 * MAX_RECORDS as u64 {
             return Err(corrupt());
         }
         for offset in 0..count {
@@ -191,9 +203,6 @@ impl Journal {
             )?;
             let record = decode_record(sequence, &data)?;
             self.bytes += data.len();
-            if self.bytes > MAX_BYTES {
-                return Err(corrupt());
-            }
             self.records.push(record);
         }
         self.cleanup()?;

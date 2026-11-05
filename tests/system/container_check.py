@@ -29,6 +29,7 @@ from pathlib import Path
 from cluster_chat_setup import wait_for
 from docker_desktop import Desktop, container
 from docker_sandbox import (
+    IMAGES,
     INSTRUCTIONS,
     ROOT,
     Api,
@@ -286,15 +287,57 @@ def host_channel(address, ca, token, identity, name):
         desktop.close()
 
 
-def qualify(directory: Path):
+def isolated(name, network):
+    """The sandbox joined only its network, where a neighbour cannot be reached."""
+    joined = subprocess.run(
+        ["docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", name],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert list(json.loads(joined)) == [network], joined
+    print("PASS the sandbox is on its network only")
+    daemon = subprocess.run(
+        ["docker", "info", "--format", "{{.OperatingSystem}}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    # Docker installs its rule there, but the VM's bridge traffic does not meet it.
+    if daemon == "OrbStack":
+        print("SKIP inter-container traffic: OrbStack does not enforce it")
+        return
+    peer = f"{network}-peer"
+    subprocess.run(
+        ["docker", "run", "--detach", "--rm", "--name", peer, "--network", network]
+        + ["--entrypoint", "python3", IMAGES["container"]]
+        + ["-m", "http.server", "9000"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    try:
+        probe = f"import socket; socket.create_connection(('{peer}', 9000), 3)"
+        reached = subprocess.run(
+            ["docker", "exec", name, "python3", "-c", probe],
+            capture_output=True,
+            text=True,
+        )
+        assert "timed out" in reached.stderr, reached
+        print("PASS a neighbour on the sandbox network was unreachable")
+    finally:
+        subprocess.run(
+            ["docker", "rm", "--force", peer], check=False, stdout=subprocess.DEVNULL
+        )
+
+
+def qualify(directory: Path, network):
     with socket.socket() as probe:
         probe.bind((bridge(), 0))
         address = f"{bridge()}:{probe.getsockname()[1]}"
     environment = configure(directory, address, "container")
     config = directory / "docker.json"
-    config.write_text(
-        json.dumps(json.loads(config.read_text()) | {"computer_use_enabled": True})
-    )
+    settings = {"computer_use_enabled": True, "network": network}
+    config.write_text(json.dumps(json.loads(config.read_text()) | settings))
     environment["CUBEBOT_STORAGE_DIRECTORY"] = str(directory / "storage")
     # Forwarded to each sandbox; the stand-in listens there.
     environment["CUBEBOT_TEST_PROVIDER_ORIGIN"] = f"http://127.0.0.1:{PORT}/"
@@ -331,6 +374,7 @@ def qualify(directory: Path):
                 stand_in(name, marker)
                 bash_turn(api, postgres, identity, marker)
                 print("PASS one agent booted in a container and ran one bash tool call")
+                isolated(name, network)
                 host_channel(address, ca, api.token, identity, name)
                 shared_and_written(api, postgres, identity, marker)
                 print(
@@ -357,8 +401,18 @@ def qualify(directory: Path):
 def main():
     started = time.monotonic()
     build("container")
-    with tempfile.TemporaryDirectory() as directory:
-        qualify(Path(directory))
+    network = f"cubebot-check-{uuid.uuid4().hex[:12]}"
+    subprocess.run(
+        ["docker", "network", "create", "--opt"]
+        + ["com.docker.network.bridge.enable_icc=false", network],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            qualify(Path(directory), network)
+    finally:
+        subprocess.run(["docker", "network", "rm", network], check=False)
     print(f"container-check passed in {time.monotonic() - started:.0f}s")
     return 0
 

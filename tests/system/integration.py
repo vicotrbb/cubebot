@@ -33,10 +33,6 @@ def wait_ready(name):
 
 def main():
     run("cargo", "build", "--workspace", "--locked")
-    container = development_container()
-    if container:
-        run_shared(container)
-        return
     name = f"cubebot-test-{uuid.uuid4().hex}"
     password = secrets.token_hex(24)
     env = os.environ | {"POSTGRES_PASSWORD": password}
@@ -106,21 +102,6 @@ def cleanup_database(name, data):
     return failures
 
 
-def development_container():
-    # Reuse `just db-up` when it runs; never touch its application database.
-    if not os.path.exists(".env"):
-        return None
-    result = subprocess.run(
-        ["docker", "compose", "-f", "compose.yaml", "-f", "compose.dev.yaml"]
-        + ["--env-file", ".env", "ps", "--status", "running"]
-        + ["--quiet", "postgres"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return result.stdout.strip() or None
-
-
 def read_env_file():
     values = {}
     with open(".env") as file:
@@ -129,36 +110,6 @@ def read_env_file():
             if separator and not key.startswith("#"):
                 values[key] = value
     return values
-
-
-def run_shared(container):
-    settings = read_env_file()
-    database = f"cubebot_it_{secrets.token_hex(4)}"
-    run("docker", "exec", container, "createdb", "-U", "cubebot", database)
-    port = settings.get("POSTGRES_PORT", "5432")
-    env = os.environ | {
-        "CUBEBOT_TEST_DATABASE_URL": f"postgres://cubebot:{settings['POSTGRES_PASSWORD']}"
-        f"@127.0.0.1:{port}/{database}"
-    }
-    try:
-        verify(container, env)
-    finally:
-        # Each test database carries this run's prefix; the shared template stays.
-        run(
-            "docker",
-            "exec",
-            "-i",
-            container,
-            "psql",
-            "-U",
-            "cubebot",
-            "-d",
-            "postgres",
-            "-q",
-            input="SELECT format('DROP DATABASE %I WITH (FORCE)', datname) "
-            f"FROM pg_database WHERE starts_with(datname, '{database}') \\gexec\n",
-            stdout=subprocess.DEVNULL,
-        )
 
 
 def test_binaries():

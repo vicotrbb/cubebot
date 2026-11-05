@@ -169,7 +169,12 @@ fn devices(vm: RawFd) -> io::Result<Devices> {
         vm,
         line: IRQS[index],
     };
-    let net = Net::new(network.tap.try_clone()?, network.mac, network.mtu);
+    let net = Net::new(
+        network.tap.try_clone()?,
+        network.mac,
+        network.address,
+        network.mtu,
+    );
     let net = Arc::new(Slot::new(net, irq(2)));
     let (offered, spares) = mpsc::sync_channel(virtio::vsock::DESKTOP_STREAMS);
     let vsock = Arc::new(Slot::new(Vsock::new(encoded, offered), irq(3)));

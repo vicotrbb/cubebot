@@ -31,6 +31,9 @@ pub struct DockerConfig {
     /// Host path of a PEM bundle the guest trusts for `orchestrator_origin`, e.g. from `just dev-ca`.
     #[serde(default)]
     control_ca_file: Option<String>,
+    /// The Docker network sandboxes join, which must exist; otherwise Docker's default bridge.
+    #[serde(default)]
+    network: Option<String>,
 }
 const CONTROL_CA: &str = "/run/cubebot/control-ca/ca.crt";
 impl DockerConfig {
@@ -55,6 +58,10 @@ impl DockerConfig {
             || origin.scheme() != "https"
             || loopback(&origin)
             || config.runtime.validate().is_err()
+            || config
+                .network
+                .as_deref()
+                .is_some_and(|name| !argument(name))
             || config.control_ca_file.as_deref().is_some_and(|path| {
                 // `--mount` is CSV: a comma or quote would end the source and start another option.
                 !argument(path) || !path.starts_with('/') || path.contains([',', '"'])
@@ -288,6 +295,12 @@ impl Docker {
             "ALL",
             "--security-opt",
             "no-new-privileges",
+            "--log-driver",
+            "json-file",
+            "--log-opt",
+            "max-size=10m",
+            "--log-opt",
+            "max-file=3",
             "--mount",
             &mount,
             "--env",
@@ -299,6 +312,9 @@ impl Docker {
             "--env",
             "CUBEBOT_WORKSPACE_DIRECTORY=/var/lib/cubebot/workspace",
         ];
+        if let Some(network) = &self.config.network {
+            args.extend(["--network", network]);
+        }
         let ca_mount = self
             .config
             .control_ca_file
@@ -437,6 +453,10 @@ fn runtime_arguments(runtime: &Runtime) -> Vec<&str> {
         // Container init runs the desktop as root and drops to the tool and browser users.
         Runtime::Container { class } => {
             let mut args = vec![
+                "--memory",
+                "3g",
+                "--pids-limit",
+                "1024",
                 "--tmpfs",
                 "/tmp:exec",
                 "--shm-size",
@@ -643,6 +663,7 @@ mod tests {
             ),
             ("control_ca_file", serde_json::json!("ca.crt")),
             ("control_ca_file", serde_json::json!("/a,target=/etc")),
+            ("network", serde_json::json!("--privileged")),
             ("unexpected", serde_json::json!(true)),
             ("backend", serde_json::json!("kvm")),
         ] {

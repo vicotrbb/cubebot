@@ -37,6 +37,7 @@ ioctl_write_ptr_bad!(
 pub struct Network {
     pub tap: File,
     pub mac: [u8; 6],
+    pub address: Ipv4Addr,
     pub mtu: u16,
     /// The kernel `ip=` parameter that configures the guest's interface before init runs.
     pub cmdline: String,
@@ -77,6 +78,7 @@ pub fn attach() -> io::Result<Network> {
     Ok(Network {
         tap,
         mac,
+        address,
         mtu,
         cmdline: kernel_ip(address, gateway, netmask, &nameservers(&resolver)),
     })
@@ -136,13 +138,21 @@ fn mac(text: &str) -> io::Result<[u8; 6]> {
         .ok_or_else(|| invalid("unreadable interface MAC address"))
 }
 
-/// The first two IPv4 nameservers, which the guest kernel publishes in `/proc/net/pnp`.
+/// The first two IPv4 nameservers, which the guest kernel publishes in `/proc/net/pnp`. A loopback
+/// one, as Docker's embedded resolver on a user-defined network, answers only in this namespace
+/// and not on the guest's own loopback; with no other, public resolvers stand in, as Docker's
+/// default bridge does for a host with only loopback ones.
 fn nameservers(resolver: &str) -> Vec<Ipv4Addr> {
-    resolver
+    let found: Vec<Ipv4Addr> = resolver
         .lines()
         .filter_map(|line| line.strip_prefix("nameserver")?.trim().parse().ok())
+        .filter(|address: &Ipv4Addr| !address.is_loopback())
         .take(2)
-        .collect()
+        .collect();
+    if found.is_empty() {
+        return vec![Ipv4Addr::new(1, 1, 1, 1), Ipv4Addr::new(8, 8, 8, 8)];
+    }
+    found
 }
 
 /// Kernel `ip=` adds the default route only through a gateway inside the subnet; for a /32 pod
@@ -234,6 +244,11 @@ mod tests {
         assert_eq!(
             dns,
             [Ipv4Addr::new(10, 96, 0, 10), Ipv4Addr::new(1, 1, 1, 1)]
+        );
+        let docker = "nameserver 127.0.0.11\noptions ndots:0\n";
+        assert_eq!(
+            nameservers(docker),
+            [Ipv4Addr::new(1, 1, 1, 1), Ipv4Addr::new(8, 8, 8, 8)]
         );
         let address = Ipv4Addr::new(10, 200, 0, 2);
         let netmask = Ipv4Addr::new(255, 255, 255, 0);
