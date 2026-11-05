@@ -414,7 +414,7 @@ const timeline = [
           </div>
         </div>
         <p class="status__note">
-          Everything above is covered by automated tests and real installs.
+          Everything above has run in automated tests or real installs.
           Cluster security, failover, and scale are not qualified yet, and this
           page will say when they are.
         </p>
@@ -617,7 +617,8 @@ const timeline = [
     margin: 28px 0 0;
     padding: 12px 16px;
     max-width: 100%;
-    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     border-radius: var(--radius);
     background: var(--ink);
     color: var(--paper);
@@ -1506,7 +1507,12 @@ const timeline = [
     .how__head,
     .status__head,
     .closing__grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* The desk runs past the viewport edge on purpose. */
+    .hero,
+    .closing {
+      overflow-x: clip;
     }
     .how__head p {
       margin-top: 20px;
