@@ -792,6 +792,58 @@ async fn retained_terminal_proof_does_not_allow_finalizing_a_replaced_or_changed
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_changed_image_drains_the_old_pod_then_starts_a_new_epoch_from_the_new_spec() {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    let reconciler =
+        Reconciler::new(pool.clone(), config.clone(), "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    start_session(&pool, pod).await;
+    // The same generation and agent, after a Helm upgrade.
+    let image = "registry.test/agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let upgraded = Layout::new(
+        image,
+        "cubebot-runtime",
+        "https://cubebot.test",
+        cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap(),
+    )
+    .unwrap();
+    let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", upgraded).unwrap();
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
+    );
+    acknowledge(&pool, pod).await;
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
+    );
+    complete_pod(&state);
+    let mut replacement = None;
+    for _ in 0..4 {
+        if let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+        {
+            replacement = Some(pod);
+            break;
+        }
+    }
+    let replacement = replacement.expect("a new epoch");
+    assert_ne!(replacement, pod);
+    let cubebot_orchestrator::agents::kubernetes::ResourceObject::Pod(next) =
+        registry.attempt(replacement).await.unwrap().intent
+    else {
+        panic!("pod expected")
+    };
+    assert_eq!(
+        next.spec.unwrap().containers[0].image.as_deref(),
+        Some(image)
+    );
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn a_pod_whose_agent_never_started_stops_without_a_drain() {
     let (pool, _, agent) = registry_support::setup().await;
     let (client, state, task) = server().await;
