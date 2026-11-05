@@ -65,6 +65,11 @@ const NAMED: Record<string, Kind> = {
   tsv: 'tsv',
 }
 
+/** A lookup by a name from outside: `constructor` must not find what every object inherits. */
+function own<T>(map: Record<string, T>, key: string) {
+  return Object.hasOwn(map, key) ? map[key] : undefined
+}
+
 function extension(name: string) {
   const last = name.toLowerCase().split('/').pop() ?? ''
   return last.includes('.') ? (last.split('.').pop() ?? '') : last
@@ -85,10 +90,11 @@ function kindOfType(type: string | null | undefined): Kind {
 
 export function kindOf(name: string, type?: string | null): Kind {
   const ext = extension(name)
-  if (ext in IMAGES) return 'image'
-  if (ext in AUDIO) return 'audio'
-  if (ext in VIDEO) return 'video'
-  if (ext in NAMED) return NAMED[ext] ?? null
+  if (own(IMAGES, ext)) return 'image'
+  if (own(AUDIO, ext)) return 'audio'
+  if (own(VIDEO, ext)) return 'video'
+  const named = own(NAMED, ext)
+  if (named) return named
   if (TEXT.has(ext)) return 'text'
   return kindOfType(type)
 }
@@ -97,7 +103,7 @@ export function kindOf(name: string, type?: string | null): Kind {
  *  be HTML that runs in the console's origin; HTML shows in a sandboxed frame instead. */
 export function blobType(name: string, type?: string | null) {
   const ext = extension(name)
-  const known = IMAGES[ext] ?? AUDIO[ext] ?? VIDEO[ext]
+  const known = own(IMAGES, ext) ?? own(AUDIO, ext) ?? own(VIDEO, ext)
   if (known) return known
   const kind = kindOf(name, type)
   if (kind === 'pdf') return 'application/pdf'
@@ -209,7 +215,7 @@ const GRAMMARS: Record<string, string> = {
 }
 
 export function grammarOf(name: string): string | undefined {
-  return GRAMMARS[extension(name)]
+  return own(GRAMMARS, extension(name))
 }
 
 /** Whether these bytes read as text, for a file whose name and type say nothing. */

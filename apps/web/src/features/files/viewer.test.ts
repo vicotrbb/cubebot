@@ -1,6 +1,13 @@
 // @ts-expect-error bun provides this at test time
 import { describe, expect, test } from 'bun:test'
-import { blobType, fileSize, kindOf, parseTable, shownName } from './viewer'
+import {
+  blobType,
+  fileSize,
+  grammarOf,
+  kindOf,
+  parseTable,
+  shownName,
+} from './viewer'
 
 describe('kindOf', () => {
   test('goes by the name first, since agents upload without a type', () => {
@@ -15,6 +22,13 @@ describe('kindOf', () => {
     expect(kindOf('blob', 'text/plain; charset=utf-8')).toBe('text')
     expect(kindOf('archive.zip', 'application/zip')).toBeNull()
     expect(kindOf('data.bin')).toBeNull()
+  })
+  test('a name like an inherited property is only a name', () => {
+    for (const name of ['a.constructor', 'a.__proto__', 'toString']) {
+      expect(kindOf(name)).toBeNull()
+      expect(blobType(name)).toBe('text/plain')
+      expect(grammarOf(name)).toBeUndefined()
+    }
   })
 })
 
