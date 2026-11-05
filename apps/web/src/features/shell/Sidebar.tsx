@@ -230,7 +230,7 @@ function TasksRow() {
 }
 
 /** Every agent at once (migrations/0046_broadcasts.sql); administrators only. */
-export function BroadcastRow() {
+function BroadcastRow() {
   const feed = useBroadcasts(true)
   const last = feed.data?.messages.at(-1)?.sequence ?? 0
   const fresh = last > (feed.data?.read_sequence ?? 0)

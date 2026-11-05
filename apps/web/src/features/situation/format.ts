@@ -13,7 +13,7 @@ export function count(tokens: number) {
   return `${Number((tokens / 1_000_000).toFixed(1))}M`
 }
 
-export type Pace = 'none' | 'fine' | 'near' | 'over'
+type Pace = 'none' | 'fine' | 'near' | 'over'
 
 /** Where a month's spend stands against its budget. */
 export function pace(spent: number, budget: number | null | undefined): Pace {

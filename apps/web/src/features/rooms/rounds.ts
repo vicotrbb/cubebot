@@ -1,7 +1,7 @@
 import type { RoomMessage } from '../../api/client'
 
 /** A row of a task's room: a message and the agents' replies shown beneath it. */
-export type Round = {
+type Round = {
   message: RoomMessage
   deliveries: RoomMessage['deliveries']
 }
