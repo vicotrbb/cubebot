@@ -11,21 +11,27 @@ die() {
     exit 1
 }
 
-# A self-signed control CA and a server certificate for `names`; kept once made, remove the directory to reissue.
+# A self-signed control CA and a server certificate for `names`. Each is kept while it has 30 days
+# left, and the server certificate while it also names the same `names`; a new one keeps a good CA.
 dev_ca() {
     local directory="$1" names="$2"
     command -v openssl >/dev/null || die "the development control CA needs openssl"
     (
         umask 077
         mkdir -p "$directory" && cd "$directory"
-        [ -f server.crt ] && exit 0
+        lasting() { openssl x509 -in "$1" -noout -checkend 2592000; }
         key=(-newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes)
-        # Strict verifiers (Python 3.13+, for one) need key usage on both certificates.
-        openssl req -x509 "${key[@]}" -keyout ca.key -out ca.crt -days 825 -subj "/CN=cubebot development control CA" \
-            -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+        if [ ! -f ca.key ] || ! lasting ca.crt; then
+            # Strict verifiers (Python 3.13+, for one) need key usage on both certificates.
+            openssl req -x509 "${key[@]}" -keyout ca.key -out ca.crt -days 825 -subj "/CN=cubebot development control CA" \
+                -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
+            rm -f server.crt
+        fi
+        [ -f server.crt ] && lasting server.crt && [ "$(cat server.names 2>/dev/null)" = "$names" ] && exit 0
         openssl req "${key[@]}" -keyout server.key -out server.csr -subj "/CN=cubebot development control"
         printf 'subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' "$names" >server.ext
-        openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -extfile server.ext
+        openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 825 -extfile server.ext &&
+            printf %s "$names" >server.names
         rm server.csr server.ext
         # Sandbox containers run as root without CAP_DAC_OVERRIDE; the certificate is public.
         chmod 644 ca.crt
@@ -51,6 +57,8 @@ if [ -f compose.dev.yaml ]; then
     dev=1
     files+=(-f compose.dev.yaml)
 fi
+# One per Compose project, so no other installation's agents hold it or lose it.
+export CUBEBOT_SANDBOX_NETWORK="${COMPOSE_PROJECT_NAME:-cubebot${dev:+-dev}}-sandboxes"
 if [ -n "${CUBEBOT_DOMAIN:-}" ]; then
     origin="https://$CUBEBOT_DOMAIN"
 else
@@ -74,6 +82,10 @@ agents() {
     # The socket's group as containers see it, which on macOS is inside Docker's VM.
     CUBEBOT_DOCKER_GID=$(docker run --rm --entrypoint stat -v /var/run/docker.sock:/socket caddy:2.10.2-alpine -c %g /socket)
     export CUBEBOT_DOCKER_GID
+    # Sandboxes reach the internet and the control address but not each other or Cubebot's
+    # services. Nothing here stops them reaching this host's private networks; see docs/reference.md.
+    docker network inspect "$CUBEBOT_SANDBOX_NETWORK" >/dev/null 2>&1 ||
+        docker network create --opt com.docker.network.bridge.enable_icc=false "$CUBEBOT_SANDBOX_NETWORK" >/dev/null
     files+=(-f compose.agents.yaml)
     if [ -n "${CUBEBOT_DOMAIN:-}" ]; then
         export CUBEBOT_CONTROL_ORIGIN="$origin"
@@ -89,7 +101,12 @@ agents() {
         host="$CUBEBOT_CONTROL_ADDRESS" names="IP:$CUBEBOT_CONTROL_ADDRESS"
     fi
     export CUBEBOT_CONTROL_ADDRESS CUBEBOT_DEV_CA="${CUBEBOT_DEV_CA:-$home/dev-ca}"
+    local ca=""
+    [ ! -f "$CUBEBOT_DEV_CA/ca.crt" ] || ca=$(cksum <"$CUBEBOT_DEV_CA/ca.crt")
     dev_ca "$CUBEBOT_DEV_CA" "$names"
+    [ -z "$ca" ] || [ "$ca" = "$(cksum <"$CUBEBOT_DEV_CA/ca.crt")" ] || ca_replaced=1
+    CUBEBOT_CONTROL_CERT=$(cksum <"$CUBEBOT_DEV_CA/server.crt")
+    export CUBEBOT_CONTROL_CERT
     export CUBEBOT_CONTROL_ORIGIN="https://$host:8443"
     files+=(-f compose.control.yaml)
 }
@@ -111,6 +128,8 @@ up() {
     local build=()
     [ -z "$dev" ] || build=(--build)
     docker compose "${files[@]}" up -d ${build[@]+"${build[@]}"} --remove-orphans
+    # An agent reads its trust once; the orchestrator replaces a stopped one, which reads the new CA.
+    [ -z "${ca_replaced:-}" ] || stop_agents
     # With a domain, ask this host directly rather than trust DNS or hairpin routing.
     local resolve=()
     [ -z "${CUBEBOT_DOMAIN:-}" ] || resolve=(--resolve "$CUBEBOT_DOMAIN:443:127.0.0.1")
@@ -126,11 +145,16 @@ up() {
     die "no answer at $origin within 3 minutes; the logs above say why"
 }
 
-down() {
+# This installation's running agents, by the network only they are on.
+stop_agents() {
     local running
-    running=$(docker ps -q --filter label=cubebot.dev/agent)
+    running=$(docker ps -q --filter label=cubebot.dev/agent --filter "network=$CUBEBOT_SANDBOX_NETWORK")
     # shellcheck disable=SC2086 # one container ID per word
     [ -z "$running" ] || docker stop $running >/dev/null
+}
+
+down() {
+    stop_agents
     docker compose "${files[@]}" down
 }
 
@@ -225,6 +249,7 @@ uninstall() {
     for agent in $agents; do
         remove_agent "$agent"
     done
+    docker network rm "$CUBEBOT_SANDBOX_NETWORK" >/dev/null 2>&1 || true
     # Every release this installation pulled, not only the current one.
     # Matched here, not with a reference filter, which containerd image stores ignore.
     for image in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "^$registry/cubebot-(orchestrator|web|agent|sandbox):" || true); do

@@ -144,7 +144,7 @@ down:
 admin login="admin":
     CUBEBOT_HOME="$PWD" deploy/cubebot admin "{{ login }}"
 
-# Reuses a running `just db-up` server, else a disposable one; never an application DB.
+# Always its own disposable PostgreSQL container, never `just db-up`'s or an installation's.
 integration:
     uv run --project tooling/quality --locked python tests/system/integration.py
 
@@ -166,7 +166,7 @@ cluster-chat:
 cluster-sandbox:
     uv run --project tooling/quality --locked python tests/system/cluster_sandbox.py
 
-# A self-signed control CA and a certificate for `names` (default: the docker0 address); kept once made, remove the directory to reissue.
+# A self-signed control CA and a certificate for `names` (default: the docker0 address); reissued when near expiry or when `names` changes.
 dev-ca directory=".cubebot/dev-ca" names="":
     #!/usr/bin/env bash
     set -euo pipefail

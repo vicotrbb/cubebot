@@ -3,6 +3,9 @@
 # orchestrator itself serves plain HTTP behind this proxy.
 services:
   proxy:
+    environment:
+      # Its fingerprint, so a reissued certificate recreates this container, which reads it once.
+      CUBEBOT_CONTROL_CERT: ${CUBEBOT_CONTROL_CERT:?set by deploy/cubebot}
     ports:
       - '${CUBEBOT_CONTROL_ADDRESS:?set by deploy/cubebot}:8443:8443'
     volumes:
