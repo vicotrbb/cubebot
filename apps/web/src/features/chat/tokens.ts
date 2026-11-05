@@ -43,9 +43,13 @@ export function tokensOf(text: string): Token[] {
   return parser.lexer(text)
 }
 
+/** A path on this origin. Browsers read `\` as `/` and drop tabs and line breaks, so each of
+ *  those after the first slash can make a path that leaves it. */
+const LOCAL_PATH = /^\/(?![\\/\t\n\r])/
+
 /** A link's target when it may open: web, mail, or a path in this console. */
 export function safeHref(href: string): string | null {
-  if (href.startsWith('#') || /^\/(?!\/)/.test(href)) return href
+  if (href.startsWith('#') || LOCAL_PATH.test(href)) return href
   try {
     const { protocol } = new URL(href)
     return ['http:', 'https:', 'mailto:'].includes(protocol) ? href : null
@@ -58,6 +62,6 @@ export function safeHref(href: string): string | null {
  *  untrusted pages could be tricked into writing an image URL that carries data out, and
  *  loading it would send that data with nobody clicking anything. */
 export function inlineImage(href: string): string | null {
-  if (/^\/(?!\/)/.test(href)) return href
+  if (LOCAL_PATH.test(href)) return href
   return /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(href) ? href : null
 }
