@@ -25,7 +25,9 @@ mock.module('./api', () => ({
       })
     }),
 }))
-const { useSave } = await import('./useSave')
+// Named apart from a hook's name: `mount` below is React here, not a component calling a hook.
+const { useSave: runSave } = await import('./useSave')
+type Effect = () => (() => void) | undefined
 
 const settle = () => new Promise((resolve) => setTimeout(resolve))
 const internals = (React as never as Record<string, { H: unknown }>)
@@ -40,22 +42,22 @@ let flushed: { expected_revision: number; body?: string }[] = []
 
 /** No DOM to mount in here, so this stands in for React: one render, its effects, their cleanup. */
 function mount() {
-  const effects: (() => void | (() => void))[] = []
+  const effects: Effect[] = []
   internals.H = {
     useContext: () => ({ setQueryData: () => {} }),
     useState: (first: unknown) => [first, () => {}],
     useRef: (current: unknown) => ({ current }),
     useCallback: (callback: unknown) => callback,
-    useEffect: (effect: () => void | (() => void)) => effects.push(effect),
+    useEffect: (effect: Effect) => effects.push(effect),
   }
-  const save = useSave({ id: 'p', revision: 1 } as never, () => {})
+  const save = runSave({ id: 'p', revision: 1 } as never, () => {})
   internals.H = null
   const cleanups = effects.map((effect) => effect())
   return { save, unmount: () => cleanups.forEach((cleanup) => cleanup?.()) }
 }
 
 /** Types `body` and lets the quiet period pass. */
-function typed(save: ReturnType<typeof useSave>, body: string) {
+function typed(save: ReturnType<typeof runSave>, body: string) {
   save.change({ body })
   timers.splice(0).forEach((run) => run())
 }
