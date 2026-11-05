@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react'
-import { useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import type { Turn } from '../../api/client'
 import { Alert } from '../../components/primitives'
 import { FileViewer, useFileBlob, type Viewable } from '../files/FileViewer'
@@ -41,9 +41,18 @@ export function Attachments({
 function Item({ file, onOpen }: { file: Viewable; onOpen: () => void }) {
   const kind = kindOf(file.name, file.content_type)
   if (file.size <= INLINE_BYTES) {
-    if (kind === 'image') return <Picture file={file} onOpen={onOpen} />
+    if (kind === 'image')
+      return (
+        <Near>
+          <Picture file={file} onOpen={onOpen} />
+        </Near>
+      )
     if (kind === 'audio' || kind === 'video')
-      return <Player file={file} kind={kind} />
+      return (
+        <Near>
+          <Player file={file} kind={kind} />
+        </Near>
+      )
   }
   return (
     <button type="button" className="attachment-file" onClick={onOpen}>
@@ -51,6 +60,30 @@ function Item({ file, onOpen }: { file: Viewable; onOpen: () => void }) {
       <span>{file.name}</span>
       <small>{fileSize(file.size)}</small>
     </button>
+  )
+}
+
+/** Holds back media, which downloads whole, until it nears the reader: a history holds a lot. */
+function Near({ children }: { children: ReactNode }) {
+  const [near, setNear] = useState(false)
+  const spot = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const element = spot.current
+    if (!element) return
+    const watch = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) setNear(true)
+      },
+      { root: element.closest('.transcript'), rootMargin: '600px' },
+    )
+    watch.observe(element)
+    return () => watch.disconnect()
+  }, [near])
+  if (near) return children
+  return (
+    <span ref={spot} className="attachment-image">
+      <span className="skeleton" aria-hidden="true" />
+    </span>
   )
 }
 

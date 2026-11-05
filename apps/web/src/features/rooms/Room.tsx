@@ -23,6 +23,7 @@ import '../chat/chat.css'
 import { ORCHESTRATOR_AVATAR } from '../tasks/orchestrator'
 import { rounds } from './rounds'
 
+const PAGE = 60
 const FINISHED = ['complete', 'failed', 'cancelled']
 
 /** Applies message snapshots by id, in room order; a finished delivery never goes back. */
@@ -114,6 +115,7 @@ export function RoomView({
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [loaded, setLoaded] = useState(false)
   const [readError, setReadError] = useState('')
+  const [shown, setShown] = useState(PAGE)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
   const agents = useAgents()
@@ -177,6 +179,12 @@ export function RoomView({
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
   }, [loaded, messages])
+  const rows = task
+    ? rounds(messages)
+    : messages.map((message) => ({
+        message,
+        deliveries: message.deliveries,
+      }))
   return (
     <section className="conversation" aria-label={label}>
       <div
@@ -194,93 +202,104 @@ export function RoomView({
         {loaded && messages.length === 0 && (
           <Empty title="Nothing here yet.">{empty}</Empty>
         )}
-        {(task
-          ? rounds(messages)
-          : messages.map((message) => ({
-              message,
-              deliveries: message.deliveries,
-            }))
-        ).map(({ message, deliveries }) => (
-          <article className="exchange" key={message.id}>
-            <div
-              className={
-                message.orchestrator || message.author_agent_id
-                  ? 'msg msg--agent'
-                  : 'msg msg--person'
-              }
-            >
-              <AuthorAvatar message={message} agents={agents.data} />
-              <div className="msg__body">
-                <div className="msg__head">
-                  <span className="msg__author">{message.author}</span>
-                </div>
-                <Markdown text={message.message} />
-                {message.routing === 'continued' && (
-                  <p className="small faint" role="status">
-                    Coordinator added this to {message.note}’s open task as
-                    steering.
-                  </p>
-                )}
-                {(task ? TASK_ROUTING : ROUTING)[message.routing] && (
-                  <p className="small faint" role="status">
-                    {(task ? TASK_ROUTING : ROUTING)[message.routing]}
-                  </p>
-                )}
-              </div>
-            </div>
-            {message.routing === 'clarify' && (
-              <div className="msg msg--agent">
-                <span className="avatar-initial msg__avatar" aria-hidden="true">
-                  C
-                </span>
+        {loaded && rows.length > shown && (
+          <button
+            type="button"
+            className="btn btn--sm transcript__earlier"
+            onClick={() => {
+              pinned.current = false
+              setShown((count) => count + PAGE)
+            }}
+          >
+            Show earlier messages
+          </button>
+        )}
+        {rows
+          .slice(Math.max(0, rows.length - shown))
+          .map(({ message, deliveries }) => (
+            <article className="exchange" key={message.id}>
+              <div
+                className={
+                  message.orchestrator || message.author_agent_id
+                    ? 'msg msg--agent'
+                    : 'msg msg--person'
+                }
+              >
+                <AuthorAvatar message={message} agents={agents.data} />
                 <div className="msg__body">
                   <div className="msg__head">
-                    <span className="msg__author">Coordinator</span>
+                    <span className="msg__author">{message.author}</span>
                   </div>
-                  <Markdown text={message.note ?? ''} />
-                </div>
-              </div>
-            )}
-            {deliveries.map((item) => (
-              <div className="msg msg--agent agent-message" key={item.turn}>
-                <DeliveryAvatar
-                  agent={agentOf(item.agent_id)}
-                  name={item.agent}
-                />
-                <div className="msg__body">
-                  <div className="msg__head">
-                    <span className="msg__author">{item.agent}</span>
-                    <span className="faint small">
-                      · {DELIVERY[item.status] ?? item.status}
-                    </span>
-                  </div>
-                  {item.terminal.length > 0 && (
-                    <WorkLog
-                      tools={item.terminal}
-                      running={item.status === 'running'}
-                    >
-                      {item.terminal.map((tool) => (
-                        <WorkCard key={tool.id} tool={tool} />
-                      ))}
-                    </WorkLog>
-                  )}
-                  <Markdown text={item.response ?? item.partial ?? ''} />
-                  <Attachments turn={item.turn} items={item.attachments} />
-                  {item.status === 'failed' && item.error && (
-                    <p className="small" style={{ color: 'var(--danger)' }}>
-                      {item.error.replaceAll('_', ' ')}
+                  <Markdown text={message.message} />
+                  {message.routing === 'continued' && (
+                    <p className="small faint" role="status">
+                      Coordinator added this to {message.note}’s open task as
+                      steering.
                     </p>
                   )}
-                  <DeliveryActions
-                    item={item}
-                    agent={agentOf(item.agent_id)}
-                    session={session}
-                  />
+                  {(task ? TASK_ROUTING : ROUTING)[message.routing] && (
+                    <p className="small faint" role="status">
+                      {(task ? TASK_ROUTING : ROUTING)[message.routing]}
+                    </p>
+                  )}
                 </div>
               </div>
-            ))}
-          </article>
-        ))}
+              {message.routing === 'clarify' && (
+                <div className="msg msg--agent">
+                  <span
+                    className="avatar-initial msg__avatar"
+                    aria-hidden="true"
+                  >
+                    C
+                  </span>
+                  <div className="msg__body">
+                    <div className="msg__head">
+                      <span className="msg__author">Coordinator</span>
+                    </div>
+                    <Markdown text={message.note ?? ''} />
+                  </div>
+                </div>
+              )}
+              {deliveries.map((item) => (
+                <div className="msg msg--agent agent-message" key={item.turn}>
+                  <DeliveryAvatar
+                    agent={agentOf(item.agent_id)}
+                    name={item.agent}
+                  />
+                  <div className="msg__body">
+                    <div className="msg__head">
+                      <span className="msg__author">{item.agent}</span>
+                      <span className="faint small">
+                        · {DELIVERY[item.status] ?? item.status}
+                      </span>
+                    </div>
+                    {item.terminal.length > 0 && (
+                      <WorkLog
+                        tools={item.terminal}
+                        running={item.status === 'running'}
+                      >
+                        {item.terminal.map((tool) => (
+                          <WorkCard key={tool.id} tool={tool} />
+                        ))}
+                      </WorkLog>
+                    )}
+                    <Markdown text={item.response ?? item.partial ?? ''} />
+                    <Attachments turn={item.turn} items={item.attachments} />
+                    {item.status === 'failed' && item.error && (
+                      <p className="small" style={{ color: 'var(--danger)' }}>
+                        {item.error.replaceAll('_', ' ')}
+                      </p>
+                    )}
+                    <DeliveryActions
+                      item={item}
+                      agent={agentOf(item.agent_id)}
+                      session={session}
+                    />
+                  </div>
+                </div>
+              ))}
+            </article>
+          ))}
       </div>
       <Alert>{readError}</Alert>
       <Composer
