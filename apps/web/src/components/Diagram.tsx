@@ -22,6 +22,7 @@ function useDiagram(source: string) {
         library.initialize({
           startOnLoad: false,
           securityLevel: 'strict',
+          suppressErrorRendering: true,
           theme: dark() ? 'dark' : 'neutral',
           fontFamily: 'Rubik, system-ui, sans-serif',
         })
