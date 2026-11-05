@@ -1,14 +1,8 @@
-"""docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary's sandbox scenarios
-on the kvm backend, in an owned kind cluster.
+"""Sandbox scenarios on the kvm backend, in an owned kind cluster.
 
-Needs x86_64 Linux with /dev/kvm, the kernel build tools of tooling/guest, the
-cluster-chat prerequisites (Docker, the pinned kind, kubectl, OpenSSL), a fresh
-CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
-
-The chart installs the sandboxes' egress and ingress NetworkPolicy. A real model chooses
-when to run the commands it is given inside each guest; every assertion reads the
-ledger's tool calls and results, Kubernetes or the node, never the model's reply.
-Evidence goes to cluster-sandbox.json in the qualification directory.
+Needs x86_64 Linux with /dev/kvm, tooling/guest's kernel build tools, Docker, the pinned
+kind, kubectl, OpenSSL, a fresh CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and
+OPENAI_API_KEY_FILE.
 """
 
 import base64
@@ -68,7 +62,6 @@ def operator(f, name, instructions=INSTRUCTIONS):
 
 
 def tools(f, turn):
-    """The turn's tool calls in order, with command and outcome (None if unreported)."""
     rows = f.sql(
         "SELECT payload::text FROM turn_events WHERE turn_id='{}' AND payload->>'kind' "
         "IN ('tool_call','tool_result') ORDER BY sequence".format(turn["id"])
@@ -86,7 +79,6 @@ def tools(f, turn):
 
 
 def called(f, turn, text, finished=None):
-    """The one call whose command contains `text`, once it has (or lacks) an outcome."""
     matching = [call for call in tools(f, turn) if text in call["command"]]
     assert len(matching) <= 1, f"{text!r} ran {len(matching)} times"
     if not matching or (
@@ -103,7 +95,6 @@ def node(f, script):
 
 
 def vms(f, container=""):
-    """Node PIDs holding a KVM VM, limited to one container's cgroup when given."""
     return set(
         node(
             f,
@@ -135,7 +126,6 @@ def address(f, kind, name, namespace=None):
 
 
 def probes(targets):
-    """One bash command; each line says whether a TCP connection opened in 5s."""
     pairs = " ".join(f"{name}={target}" for name, target in targets.items())
     return (
         f"for t in {pairs}; do "
@@ -160,7 +150,6 @@ def blocked(result):
 
 
 def vm(f, current, evidence):
-    """The sandbox holds a KVM VM and no agent runs in the pod itself."""
     limits = current["spec"]["containers"][0]["resources"]["limits"]
     assert limits["devices.kubevirt.io/kvm"] == "1"
     assert current["spec"]["containers"][0]["args"] == ["run"]
@@ -322,7 +311,6 @@ def lost_sandbox(f, identity, current, evidence):
     assert duplicates == "0", duplicates
     waiting = outcome(f, identity, turn, ("waiting",))
     assert waiting["error"] == "execution_interrupted", waiting
-    # An uncertain effect is never replayed, even on request.
     path = f"/api/conversations/{identity}/messages/{turn['id']}/retry"
     f.request(path, command(), expected=409)
     effects = f.k(
@@ -349,12 +337,7 @@ def lost_sandbox(f, identity, current, evidence):
 
 
 def computer_use(f, evidence):
-    """The model opens Chromium and navigates; the ledger holds screenshots and clicks.
-
-    Computer use is an installation setting, so it is switched on last: the controller
-    configuration gains `computer_use_enabled`, the orchestrator restarts with it, and
-    the provider moves to a model with the computer tool.
-    """
+    """Computer use is an installation setting, so it is switched on last."""
     stored = json.loads(f.k("get", "configmap", "controller", "-o", "json"))
     settings = json.loads(stored["data"]["config.json"]) | {
         "computer_use_enabled": True
@@ -398,7 +381,6 @@ def computer_use(f, evidence):
         "AND payload->>'kind'='done'"
     )
     assert "Example Domain" in done, done
-    # The arbiter logged each call's input with its source and the call's ledger id.
     log = f.k("logs", name, "-c", "sandbox")
     events = [
         json.loads(line.split("Desktop event ", 1)[1])
@@ -407,7 +389,6 @@ def computer_use(f, evidence):
     ]
     tagged = {event["call"] for event in events if event["source"] == "agent"}
     assert {call["id"] for call in calls} <= tagged, (calls, events)
-    # The host channel, through the exec the orchestrator uses, serves the same screen.
     request = {
         "input": {
             "account": "00000000-0000-0000-0000-000000000001",
@@ -458,7 +439,6 @@ def computer_use(f, evidence):
 
 
 def ledger(f, turn):
-    """The turn's computer calls in order, and their outcomes by call id."""
     rows = f.sql(
         "SELECT payload::text FROM turn_events WHERE turn_id='{}' AND payload->>'kind' "
         "IN ('tool_call','tool_result') ORDER BY sequence".format(turn["id"])

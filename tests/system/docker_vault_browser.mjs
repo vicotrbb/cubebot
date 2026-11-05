@@ -1,7 +1,4 @@
-// The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) in real Chromium against the built console behind Caddy: during a
-// login handoff the administrator takes control from the chat's banner, saves the login
-// to Keeper's vault with Save and fill, sees the fill picker and hands back, then finds
-// the items on the Vault tab with no secret anywhere on it.
+// The vault in real Chromium against the built console behind Caddy.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -37,7 +34,6 @@ try {
   await banner
     .getByText(`Keeper asks you to log in on ${site}.`)
     .waitFor({ timeout: 15000 })
-  // Take control moves to the Desktop route, where the banner shows again.
   await banner
     .getByRole('button', { name: 'Take control', exact: true })
     .click()

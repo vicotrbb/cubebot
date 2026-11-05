@@ -1,9 +1,6 @@
-"""Build the kvm guest: a kernel and a read-only ext4 root image with the agent as init.
+"""Build the kvm guest into target/guest: a kernel and a read-only ext4 root image.
 
-Writes only target/guest/bzImage and target/guest/root.ext4, the sandbox image's `guest`
-build context; sources and intermediate files go to target/guest-build. Needs x86_64
-Linux with make, a C compiler, flex, bison, bc and libelf headers for the kernel, and
-Docker for the root image, which is apps/agent/Dockerfile exported to ext4.
+Needs x86_64 Linux with make, a C compiler, flex, bison, bc, libelf headers and Docker.
 """
 
 import hashlib

@@ -1,6 +1,4 @@
-# One Cubebot installation from the release images (ghcr.io, CUBEBOT_VERSION). deploy/cubebot runs it,
-# adding compose.domain.yaml, compose.agents.yaml and compose.control.yaml as .env asks; in a checkout
-# `just up` adds compose.dev.yaml, which builds the same services from source.
+# One installation from the release images; deploy/cubebot runs it and adds the overlays .env asks for.
 name: cubebot
 x-logging: &logging
   driver: json-file
@@ -10,8 +8,7 @@ x-logging: &logging
 services:
   postgres:
     image: postgres:18-bookworm
-    # An init reaps a health check docker killed on timeout; as PID 1 the postmaster would take
-    # its exit for a crashed backend and restart every connection.
+    # An init reaps health checks docker kills; as PID 1 the postmaster would restart every connection.
     init: true
     environment:
       POSTGRES_DB: cubebot
@@ -54,7 +51,7 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - orchestrator-state:/state:ro
-      # Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume): only this one orchestrator mounts it.
+      # Shared files: only this one orchestrator mounts it.
       - shared-files:/var/lib/cubebot/files
     depends_on:
       postgres:
@@ -91,8 +88,7 @@ services:
     logging: *logging
 
 configs:
-  # The console and its API on one origin, as an ingress serves them: /api to the orchestrator,
-  # everything else to the web server. With CUBEBOT_DOMAIN, Caddy obtains a public certificate for it.
+  # The console and its API on one origin, as an ingress serves them.
   caddyfile:
     content: |
       ${CUBEBOT_DOMAIN:-http://:3000} {

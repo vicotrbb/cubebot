@@ -8,8 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  # The cluster suites run the kvm runtime: GitHub's x86_64 Ubuntu runners expose /dev/kvm,
-  # and kind's privileged node hands it to the device plugin.
+  # GitHub's x86_64 Ubuntu runners expose /dev/kvm; kind's privileged node hands it to the device plugin.
   cluster:
     runs-on: ubuntu-24.04
     timeout-minutes: 240
@@ -62,8 +61,7 @@ jobs:
           CUBEBOT_QUALIFICATION_DIRECTORY: ${{ runner.temp }}/cluster-sandbox
           OPENAI_API_KEY_FILE: ${{ runner.temp }}/openai-key
 
-  # The real-model docker-* suites in the container runtime; the homelab host runs them in
-  # the kvm runtime.
+  # In the container runtime; the homelab host runs them in the kvm runtime.
   docker-container:
     runs-on: ubuntu-24.04
     timeout-minutes: 240

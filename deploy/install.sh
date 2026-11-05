@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # Installs Cubebot with Docker Compose on Linux or macOS:
 #   curl -fsSL https://cubebot.io/install.sh | bash
-# It asks the questions in `questions` below, skipping any whose variable is already set; CUBEBOT_YES=1, or no
-# terminal, takes every default. Other environment: CUBEBOT_VERSION (a release tag; default the latest),
-# CUBEBOT_PORT (default 3000), CUBEBOT_REGISTRY and CUBEBOT_SOURCE (where images and files come from), NO_COLOR.
-# Written for bash 3.2, macOS's /bin/bash; /bin/sh is dash on Debian and bash in POSIX mode on macOS.
+# Setting a question's variable skips it; CUBEBOT_YES=1, or no terminal, takes every default.
+# Also: CUBEBOT_VERSION (default latest), CUBEBOT_PORT (3000), CUBEBOT_REGISTRY, CUBEBOT_SOURCE, NO_COLOR.
+# Written for bash 3.2, macOS's /bin/bash; /bin/sh is not bash everywhere.
 case "${BASH_VERSION:-}:${SHELLOPTS:-}" in
     :* | *posix*)
         echo "cubebot: run the installer with bash: curl -fsSL https://cubebot.io/install.sh | bash" >&2
@@ -13,9 +12,8 @@ case "${BASH_VERSION:-}:${SHELLOPTS:-}" in
 esac
 set -euo pipefail
 
-# One row per question, asked in this order: variable|asked when|choices|default|question|explanation.
-# Choices are value=label pairs split by ";", where a leading "!" marks one this machine cannot run, or "text"
-# or "secret" for a typed answer. Rows expand again before each question, so a default can follow an answer.
+# Rows: variable|asked when|choices|default|question|explanation. Choices are value=label pairs split by ";", a
+# leading "!" marking one this machine cannot run, or "text" or "secret". Rows re-expand so a default can follow an answer.
 questions() {
     cat <<EOF
 CUBEBOT_RUNTIME|fresh|${kvm_mark}kvm=KVM guests;container=Containers;off=No agents|$runtime_default|Where should agents run?|KVM gives every agent its own virtual machine and needs x86_64 Linux with /dev/kvm and /dev/net/tun; $kvm_here. Containers run every agent as a Docker container, a weaker boundary that works on any machine. No agents runs only the console. Agents start through the Docker socket, which makes Cubebot root on this machine.
@@ -33,10 +31,7 @@ die() {
     exit 1
 }
 
-# --- Terminal
-
-# The cube as the site draws it: t top, f front, s side. Strokes paint the front, then the side, then the top,
-# each bottom-up: 13 in all, then eyes.
+# t top, f front, s side. Strokes paint the front, then the side, then the top, each bottom-up, then eyes.
 CUBE=(
     "    tttttttttt"
     "  ttttttttttss"
@@ -74,7 +69,6 @@ cleanup() {
     [ -z "$work" ] || rm -rf "$work"
 }
 
-# Draws the cube with `painted` strokes and the notes beside it, over the last drawing.
 draw_cube() {
     local r i cell stroke color line right
     [ -z "$drawn" ] || printf '\033[7A'
@@ -106,15 +100,12 @@ draw_cube() {
     done
 }
 
-# Records a passed check beside the cube and paints it up to `target` strokes.
 note() {
     notes+=("$1")
     painted=$2
     [ -z "$fancy" ] || draw_cube
 }
 
-# Runs a slow check in the background with its output in $work/out, painting one stroke a tenth of a second
-# towards `target` while it runs.
 step() {
     local target=$1 pid
     shift
@@ -134,7 +125,6 @@ step() {
     wait "$pid"
 }
 
-# Prints lines beside a bar in the brand's orange.
 card() {
     local line
     echo
@@ -144,14 +134,10 @@ card() {
     echo
 }
 
-# --- Widgets
-
-# Wraps a paragraph to the terminal, indented under its question.
 paragraph() {
     fold -s -w $((cols - 6)) <<<"$1" | sed "s/^/    $dim/;s/\$/$reset/"
 }
 
-# Moves the picker's selection by $1, passing over choices this machine cannot run.
 pick_move() {
     local i=$((selected + $1))
     while [ "$i" -ge 0 ] && [ "$i" -lt "$n" ]; do
@@ -180,7 +166,6 @@ pick_draw() {
     printf '    %s↑↓ or j k, 1-%d, Enter%s\n' "$dim" "$n" "$reset"
 }
 
-# Sets `var` to one of `choices` (see `questions`), chosen with arrows, j and k, or digits, and Enter.
 pick() {
     local var=$1 title=$2 default=$3 text=$4 item key rest lines n=0 selected=0
     local -a items values labels
@@ -220,7 +205,6 @@ pick() {
     printf -v "$var" %s "${values[selected]}"
 }
 
-# The picker without colors or cursor movement: a numbered list and a typed number.
 pick_plain() {
     local i answer
     printf '%s\n' "$title" "$text"
@@ -242,7 +226,6 @@ pick_plain() {
     printf -v "$var" %s "${values[answer - 1]}"
 }
 
-# Sets `var` to a typed answer, Enter taking `default`; a `secret` is typed twice and not shown.
 ask() {
     local var=$1 title=$2 default=$3 text=$4 secret=${5:-} answer again lines
     printf '  %s?%s %s%s%s\n' "$orange" "$reset" "$bold" "$title" "$reset"
@@ -279,14 +262,12 @@ ask() {
     }
 }
 
-# Asks a yes or no question, Enter taking `default` (y or n); returns 1 for no.
 confirm() {
     local key
     [ -n "$interactive" ] || {
         [ "$2" = y ]
         return
     }
-    # Without echo from before the prompt, so a key pressed early does not show.
     stty -echo <&3
     printf '  %s?%s %s%s%s %s ' "$orange" "$reset" "$bold" "$1" "$reset" "$([ "$2" = y ] && echo "[Y/n]" || echo "[y/N]")"
     while :; do
@@ -306,8 +287,7 @@ confirm() {
     esac
 }
 
-# Turns a small cube beside `label` until the background job `pid` exits or a line of $work/log starts with
-# `marker`; returns non-zero, keeping it in `status`, when the job failed.
+# Spins beside `label` until job `pid` exits or $work/log has a `marker` line; non-zero, in `status`, if it failed.
 spinner() {
     local label=$1 marker=${2:-} frame=0
     while [ -z "$status" ] && ! { [ -n "$marker" ] && grep -qs "^$marker" "$work/log"; }; do
@@ -329,8 +309,6 @@ spinner() {
     fi
 }
 
-# --- Questions
-
 fresh() {
     [ ! -f "${CUBEBOT_HOME:-$HOME/.cubebot}/.env" ]
 }
@@ -343,7 +321,6 @@ admin_default() {
     fi
 }
 
-# Dies unless `var`'s value is one of `choices`.
 valid() {
     local item
     local -a items
@@ -360,8 +337,7 @@ ask_all() {
     local count i var when choices default title text
     [ -z "${CUBEBOT_DOMAIN:-}" ] || CUBEBOT_ACCESS=${CUBEBOT_ACCESS:-domain}
     [ -z "${CUBEBOT_PORT:-}" ] || CUBEBOT_ACCESS=${CUBEBOT_ACCESS:-local}
-    # Running it again updates the installation already there; CUBEBOT_HOME installs another, with
-    # its own Compose project and data. Pick its CUBEBOT_PORT; without a domain, agents need 8443.
+    # CUBEBOT_HOME installs another installation; pick its CUBEBOT_PORT. Without a domain, agents need 8443.
     fresh || CUBEBOT_HOME=${CUBEBOT_HOME:-$HOME/.cubebot}
     count=$(questions | wc -l)
     for ((i = 1; i <= count; i++)); do
@@ -381,8 +357,6 @@ ask_all() {
         [ -n "${!var}" ] || die "set $var"
     done
 }
-
-# --- Install
 
 checks() {
     local version major minor
@@ -422,7 +396,6 @@ checks() {
     note "release $release" 13
 }
 
-# A setting as .env has it, or before a fresh install as answered.
 setting() {
     if [ -f "$home/.env" ]; then
         sed -n "s/^$1=//p" "$home/.env"
@@ -451,7 +424,6 @@ summary() {
         "Administrator  $admin"
 }
 
-# Downloads the cubebot command, writes .env and hands off to `cubebot update`, each phase beside a spinner.
 start() {
     local source=${CUBEBOT_SOURCE:-https://raw.githubusercontent.com/vicotrbb/cubebot/$release} name
     umask 077

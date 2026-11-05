@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Runs one Cubebot installation with Docker Compose: the one deploy/install.sh made in ~/.cubebot,
-# or with CUBEBOT_HOME a checkout, where compose.dev.yaml builds it from source (`just up`).
+# Runs one installation with Docker Compose: ~/.cubebot, or with CUBEBOT_HOME a checkout built from source.
 set -euo pipefail
 
 usage="usage: cubebot up | down | update [version] | logs [compose logs options] | admin [login] | uninstall [--yes]"
@@ -11,8 +10,7 @@ die() {
     exit 1
 }
 
-# A self-signed control CA and a server certificate for `names`. Each is kept while it has 30 days
-# left, and the server certificate while it also names the same `names`; a new one keeps a good CA.
+# Each certificate is kept while it has 30 days left, the server's while it also names the same `names`.
 dev_ca() {
     local directory="$1" names="$2"
     command -v openssl >/dev/null || die "the development control CA needs openssl"
@@ -65,7 +63,6 @@ else
     origin="http://localhost:${CUBEBOT_PORT:-3000}"
 fi
 
-# Adds the agent overlays and exports what they interpolate.
 agents() {
     local image=cubebot-agent
     if [ "$CUBEBOT_RUNTIME" = kvm ]; then
@@ -111,7 +108,6 @@ agents() {
     files+=(-f compose.control.yaml)
 }
 
-# Adds the files `up` starts with.
 overlays() {
     case "${CUBEBOT_RUNTIME:-}" in
         off) echo "Agents off (CUBEBOT_RUNTIME=off)." ;;
@@ -145,7 +141,6 @@ up() {
     die "no answer at $origin within 3 minutes; the logs above say why"
 }
 
-# This installation's running agents, by the network only they are on.
 stop_agents() {
     local running
     running=$(docker ps -q --filter label=cubebot.dev/agent --filter "network=$CUBEBOT_SANDBOX_NETWORK")
@@ -158,7 +153,6 @@ down() {
     docker compose "${files[@]}" down
 }
 
-# Replaces the compose files and this script with `version`'s (default: the latest release), then pulls and starts it.
 update() {
     [ -z "$dev" ] || die "this is a checkout; update it with git"
     local version="${1:-}"
@@ -204,13 +198,11 @@ admin() {
     echo "Sign in at $origin as $login."
 }
 
-# This installation's agents, as its own database lists them; fails when it cannot be read.
 installation_agents() {
     docker compose "${files[@]}" up -d --wait postgres >/dev/null 2>&1 || return 1
     docker compose "${files[@]}" exec -T postgres psql -U cubebot -d cubebot -Atc 'SELECT id FROM agents' 2>/dev/null
 }
 
-# Removes an agent's containers and its workspace volume.
 remove_agent() {
     local container
     for container in $(docker ps -aq --filter "label=cubebot.dev/agent=$1"); do
@@ -221,8 +213,7 @@ remove_agent() {
     fi
 }
 
-# Removes the installation: every agent it created, its containers, volumes and the images of
-# every release it ran, and this directory. Other installations on this machine are untouched.
+# Removes everything this installation made and this directory; other installations are untouched.
 uninstall() {
     [ -z "$dev" ] || die "this is a checkout; stop it with \`just down\`"
     if [ "${1:-}" != --yes ] && [ "${CUBEBOT_YES:-}" != 1 ]; then
@@ -250,7 +241,6 @@ uninstall() {
         remove_agent "$agent"
     done
     docker network rm "$CUBEBOT_SANDBOX_NETWORK" >/dev/null 2>&1 || true
-    # Every release this installation pulled, not only the current one.
     # Matched here, not with a reference filter, which containerd image stores ignore.
     for image in $(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E "^$registry/cubebot-(orchestrator|web|agent|sandbox):" || true); do
         docker image rm "$image" >/dev/null 2>&1 && echo "Removed image $image."

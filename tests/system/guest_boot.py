@@ -1,25 +1,7 @@
-"""Acceptance for the kvm backend
-(docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): x86_64 Linux, /dev/kvm, Docker
-and sudo.
+"""Acceptance for the kvm backend: x86_64 Linux, /dev/kvm, Docker and sudo.
 
-A network namespace with a veth pair stands in for an agent pod, shaped as Calico
-gives one: a /32 address behind a link-local gateway that the host answers by proxy
-ARP. In it the sandbox boots the guest twice on one workspace disk. Each boot must
-reach a stand-in orchestrator at the pod's address over TLS with the forwarded
-bootstrap token, report liveness over vsock, and on SIGTERM exit with the agent's
-status 0, leaving the workspace filesystem clean.
-The second boot must reopen the journal lock file the first one created, and runs with
-computer use on: a person takes control and closes the maximized Chromium until the host
-channel's screenshot shows the wallpaper. Before both,
-the sandbox must refuse to start in the host's own network namespace. A third boot
-runs guest_desktop.py as init around the real one
-(docs/adr/sandbox.md#desktop-as-a-vmm-device): as the tool user it must
-find the outer display, the arbiter's socket and the host channel out of reach and no
-XTEST on its own display; through the host channel (`cubebot-sandbox desktop`) a
-screenshot must show the wallpaper, a person's key must be refused until that person
-takes control and then reach a window on the tool user's display, and the agent's key
-request on the arbiter's socket must then be refused as agent input. The stand-in only
-records the bootstrap request, so this is not agent qualification.
+The stand-in orchestrator only records the bootstrap request, so this is not agent
+qualification.
 """
 
 import base64
@@ -126,7 +108,6 @@ def acceptance(directory: Path, requests: queue.Queue) -> int:
 
 
 def host_refusal(directory: Path, workspace: Path):
-    """In the host's network namespace `run` refuses before touching an interface."""
     result = subprocess.run(
         ["sudo", "env"]
         + [
@@ -149,7 +130,6 @@ def host_refusal(directory: Path, workspace: Path):
 
 
 def run_guest(directory: Path, workspace: Path, requests: queue.Queue, computer: dict):
-    """Returns why a boot failed, or None."""
     sandbox = launch(environment(directory, workspace) | computer)
     try:
         console = Console(sandbox.stdout)
@@ -160,7 +140,6 @@ def run_guest(directory: Path, workspace: Path, requests: queue.Queue, computer:
 
 
 def drawn(directory: Path, console: Console):
-    """Returns why the desktop never showed the wallpaper, or None."""
     deadline = time.monotonic() + DEADLINE
     if not until(lambda: b"Sandbox desktop started" in console.output, deadline):
         return "the guest desktop did not start"
@@ -190,15 +169,12 @@ def drawn(directory: Path, console: Console):
 
 
 def photograph(screen: dict) -> bool:
-    """Whether the screen shows the wallpaper: X's root, openbox and Chromium have a few
-    hundred colors, the photograph thousands."""
+    """X, openbox and Chromium have a few hundred colors, the photograph thousands."""
     pixels = rgb(screen.get("png", ""))
     return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)}) > 4096
 
 
 def desktop(directory: Path, workspace: Path):
-    """Boots a root image copy with guest_desktop.py around the real init; returns why
-    it failed."""
     root = directory / "desktop.ext4"
     subprocess.run(["cp", "--reflink=auto", GUEST / "root.ext4", root], check=True)
     script = Path(__file__).with_name("guest_desktop.py")
@@ -253,7 +229,6 @@ def person(action: dict) -> dict:
 
 
 def host(directory: Path, request: dict) -> dict:
-    """One request over its own host channel connection."""
     relay = connect(directory)
     try:
         return ask(relay, request)
@@ -263,7 +238,6 @@ def host(directory: Path, request: dict) -> dict:
 
 
 def connect(directory: Path) -> subprocess.Popen:
-    """A host channel connection, as the orchestrator opens one through exec."""
     return subprocess.Popen(
         ["sudo", "env", f"CUBEBOT_GUEST_DESKTOP_SOCKET={directory / 'desktop.sock'}"]
         + [ROOT / "target/debug/cubebot-sandbox", "desktop"],
@@ -304,7 +278,6 @@ def rgb(encoded: str) -> bytes:
 
 
 def launch(variables: dict) -> subprocess.Popen:
-    """Starts the sandbox in the pod namespace; sudo relays signals sent to it."""
     return subprocess.Popen(
         ["sudo", "ip", "netns", "exec", NAMESPACE, "env"]
         + [f"{name}={value}" for name, value in variables.items()]
@@ -411,7 +384,6 @@ def pod():
 
 
 def orchestrator(directory: Path) -> queue.Queue:
-    """A TLS listener on HOST that records each bootstrap's source address and token."""
     certificates(directory)
     requests = queue.Queue()
 

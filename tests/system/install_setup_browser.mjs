@@ -1,5 +1,4 @@
-// A fresh installation's console offers the setup form, and creating the administrator
-// there lands in the console. CUBEBOT_CONSOLE is the installation's origin.
+// A fresh installation's setup form lands in the console. CUBEBOT_CONSOLE is its origin.
 import console from 'node:console'
 import process from 'node:process'
 import { createRequire } from 'node:module'

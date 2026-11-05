@@ -1,6 +1,4 @@
-# Agents without CUBEBOT_DOMAIN: sandboxes reach the orchestrator over HTTPS on the Docker bridge (on
-# macOS on loopback, as host.docker.internal), with a development CA their sandboxes trust; the
-# orchestrator itself serves plain HTTP behind this proxy.
+# Agents without CUBEBOT_DOMAIN: HTTPS on the Docker bridge (macOS: loopback) with a development CA.
 services:
   proxy:
     environment:

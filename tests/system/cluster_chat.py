@@ -1,12 +1,9 @@
 """Repeatable real cluster text-chat qualification, with evidence outside the repo.
 
-Supply CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
-Installs deploy/chart with Helm. CUBEBOT_SANDBOX_RUNTIME picks the sandbox runtime:
-kvm (the default where /dev/kvm exists) needs x86_64 Linux and the kernel build tools
-of tooling/guest; container runs the agent image on any Docker host.
-Images are built from this checkout. An explicitly supplied disposable, caller-owned
-CUBEBOT_QUALIFICATION_BUILDER can reuse its cache; otherwise a new builder is removed.
-Only a fresh owned kind cluster is used; finally removes it even on failure.
+Needs CUBEBOT_QUALIFICATION_DIRECTORY outside the checkout and OPENAI_API_KEY_FILE.
+CUBEBOT_SANDBOX_RUNTIME: kvm (default with /dev/kvm; x86_64 Linux, tooling/guest's
+kernel build tools) or container. CUBEBOT_QUALIFICATION_BUILDER reuses a disposable
+builder.
 """
 
 import json
@@ -88,9 +85,7 @@ def workflow(
     if qualify is None:
         from cluster_chat_flow import qualify
 
-    # A kvm sandbox runs as root with NET_ADMIN
-    # (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): only privileged admits
-    # it.
+    # A kvm sandbox runs as root with NET_ADMIN: only privileged admits it.
     policy = "privileged" if RUNTIME == "kvm" else "baseline"
     admission.namespaces(config, fixture, ((NAMESPACE, policy),), runtime_account=False)
     references = startup.load_images(name, images)
@@ -132,7 +127,6 @@ def workflow(
 
 
 def main(prefix="cubebot-chat-", **options):
-    """`options` go to workflow."""
     artifacts = evidence_directory(os.environ["CUBEBOT_QUALIFICATION_DIRECTORY"])
     name = prefix + uuid.uuid4().hex[:12]
     config = artifacts / "kubeconfig"
@@ -175,7 +169,6 @@ def main(prefix="cubebot-chat-", **options):
     print("Owned qualification and cluster cleanup completed", flush=True)
 
 
-# The kvm runtime runs the VMM's image, the container runtime the agent image itself.
 ROLES = ("sandbox" if RUNTIME == "kvm" else "agent", "orchestrator", "web")
 
 

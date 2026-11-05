@@ -1,6 +1,5 @@
 {{- if eq .Values.sandbox.runtime "kvm" }}
-# Hands /dev/kvm and /dev/net/tun to sandbox pods under the KubeVirt resource names the
-# orchestrator requests.
+# Hands /dev/kvm and /dev/net/tun to sandbox pods under the KubeVirt resource names.
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
