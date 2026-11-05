@@ -1115,6 +1115,39 @@
         }
       }
     },
+    "/api/agents/{id}/speech": {
+      "put": {
+        "tags": [],
+        "summary": "Sets this agent's overrides; needs `agent.manage`.",
+        "operationId": "save_agent",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentSpeech"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/status": {
       "get": {
         "tags": [],
@@ -4174,6 +4207,45 @@
         }
       }
     },
+    "/api/speech": {
+      "get": {
+        "tags": [],
+        "summary": "The installation's speech settings, without any key.",
+        "operationId": "read_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeechSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Administrators only. A key is stored encrypted and never returned.",
+        "operationId": "save_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSpeech"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/tasks": {
       "get": {
         "tags": [],
@@ -4686,10 +4758,41 @@
             "type": "integer",
             "format": "int64"
           },
+          "stt_provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Provider",
+                "description": "`None` inherits the installation's speech settings."
+              }
+            ]
+          },
           "task_lanes": {
             "type": "integer",
             "format": "int32",
             "description": "Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four."
+          },
+          "tts_provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Provider"
+              }
+            ]
+          },
+          "voice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Voice"
+              }
+            ]
           }
         }
       },
@@ -4721,6 +4824,43 @@
             "$ref": "#/components/schemas/McpTransport"
           }
         }
+      },
+      "AgentSpeech": {
+        "type": "object",
+        "description": "An agent's overrides; `None` inherits the installation's setting.",
+        "properties": {
+          "stt_provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Provider"
+              }
+            ]
+          },
+          "tts_provider": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Provider"
+              }
+            ]
+          },
+          "voice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Voice"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "AgentStatus": {
         "type": "object",
@@ -5120,6 +5260,45 @@
           }
         }
       },
+      "CallRecord": {
+        "type": "object",
+        "description": "What a voice call's message shows.",
+        "required": [
+          "started_at",
+          "stt_provider",
+          "tts_provider",
+          "voice",
+          "turns"
+        ],
+        "properties": {
+          "duration_seconds": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "Seconds; `None` while the call is live."
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds."
+          },
+          "stt_provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "tts_provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            },
+            "description": "The transcript: each turn's message is what the person said, its response the agent's reply."
+          },
+          "voice": {
+            "$ref": "#/components/schemas/Voice"
+          }
+        }
+      },
       "Capability": {
         "type": "string",
         "enum": [
@@ -5249,6 +5428,17 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "voice": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Voice",
+                "description": "Left out, the agent speaks in the installation's voice. Absent from the digest when\n`None`, like the avatar."
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -6730,6 +6920,10 @@
           }
         }
       },
+      "Provider": {
+        "type": "string",
+        "enum": ["embedded", "openai", "elevenlabs"]
+      },
       "ProviderAccess": {
         "oneOf": [
           {
@@ -7276,6 +7470,30 @@
         },
         "additionalProperties": false
       },
+      "SaveSpeech": {
+        "type": "object",
+        "required": ["stt_provider", "tts_provider", "voice"],
+        "properties": {
+          "elevenlabs_key": {
+            "type": ["string", "null"],
+            "description": "`None` keeps the stored ElevenLabs key."
+          },
+          "forget_elevenlabs_key": {
+            "type": "boolean",
+            "description": "Removes the stored ElevenLabs key."
+          },
+          "stt_provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "tts_provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/Voice"
+          }
+        },
+        "additionalProperties": false
+      },
       "SaveVaultItem": {
         "type": "object",
         "required": ["kind", "name"],
@@ -7645,6 +7863,30 @@
           }
         }
       },
+      "SpeechSettings": {
+        "type": "object",
+        "description": "The installation's speech settings; the key itself is never returned.",
+        "required": [
+          "stt_provider",
+          "tts_provider",
+          "voice",
+          "elevenlabs_configured"
+        ],
+        "properties": {
+          "elevenlabs_configured": {
+            "type": "boolean"
+          },
+          "stt_provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "tts_provider": {
+            "$ref": "#/components/schemas/Provider"
+          },
+          "voice": {
+            "$ref": "#/components/schemas/Voice"
+          }
+        }
+      },
       "Spend": {
         "type": "object",
         "description": "Tokens and estimated cost over a period. `unpriced` responses are in the tokens, not the cost.",
@@ -7907,6 +8149,17 @@
               "$ref": "#/components/schemas/ReplyAttachment"
             },
             "description": "Files the agent sent with this reply."
+          },
+          "call": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CallRecord",
+                "description": "Set when this message is a whole voice call, whose turns it holds."
+              }
+            ]
           },
           "children": {
             "type": "array",
@@ -8223,6 +8476,10 @@
             "type": ["string", "null"]
           }
         }
+      },
+      "Voice": {
+        "type": "string",
+        "enum": ["male", "female"]
       },
       "WebhookSecret": {
         "type": "object",

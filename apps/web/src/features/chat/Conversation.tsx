@@ -6,6 +6,7 @@ import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Skeleton } from '../../components/primitives'
+import { CallMessage } from '../call/CallMessage'
 import { Attachments } from './Attachments'
 import { Composer } from './Composer'
 import { Markdown } from './Markdown'
@@ -88,16 +89,31 @@ export function Conversation({
             Show earlier messages
           </button>
         )}
-        {visible.map((turn) => (
-          <Exchange
-            key={turn.id}
-            agent={agent}
-            turn={turn}
-            streaming={streaming[turn.id]}
-            you={you}
-            onOpenThread={() => onOpenThread(turn)}
-          />
-        ))}
+        {visible.map((turn) =>
+          turn.call ? (
+            <CallMessage key={turn.id} call={turn.call}>
+              {turn.call.turns.map((said) => (
+                <Exchange
+                  key={said.id}
+                  agent={agent}
+                  turn={said}
+                  streaming={undefined}
+                  you={you}
+                  onOpenThread={() => onOpenThread(said)}
+                />
+              ))}
+            </CallMessage>
+          ) : (
+            <Exchange
+              key={turn.id}
+              agent={agent}
+              turn={turn}
+              streaming={streaming[turn.id]}
+              you={you}
+              onOpenThread={() => onOpenThread(turn)}
+            />
+          ),
+        )}
       </div>
       <Alert>{readError}</Alert>
       {canSend ? (
@@ -106,7 +122,7 @@ export function Conversation({
           label="Send message"
           placeholder={`Message ${agent.name}`}
           note={
-            last && isOpen(last)
+            last && !last.call && isOpen(last)
               ? queuedLabel(agent.activity).replace(
                   'Queued',
                   'Your message queues',

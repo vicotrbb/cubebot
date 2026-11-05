@@ -11,6 +11,7 @@ import type { AgentSummary } from '../../api/types'
 import { keys, useInstallation } from '../../app/queries'
 import { moodOf, type Avatar } from '../../components/Cube'
 import { Alert, Field, Status, Switch } from '../../components/primitives'
+import { AgentSpeechSection } from '../call/SpeechSettings'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
 
@@ -24,6 +25,7 @@ export function About({ agent }: { agent: AgentSummary }) {
       <Instructions agent={agent} onSaved={refresh} />
       <Behaviour agent={agent} onSaved={refresh} />
       <Capabilities agent={agent} onSaved={refresh} />
+      <AgentSpeechSection agent={agent} />
       <Lifecycle agent={agent} onChanged={refresh} />
       <Tools agentId={agent.id} />
     </>

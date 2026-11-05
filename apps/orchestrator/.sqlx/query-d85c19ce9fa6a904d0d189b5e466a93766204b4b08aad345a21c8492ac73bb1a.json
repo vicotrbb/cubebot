@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE speech_settings SET elevenlabs_credential=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d85c19ce9fa6a904d0d189b5e466a93766204b4b08aad345a21c8492ac73bb1a"
+}

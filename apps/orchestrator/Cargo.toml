@@ -43,6 +43,11 @@ openidconnect = { version = "4.0.1", default-features = false, features = ["reqw
 kube = { version = "4.2.0", default-features = false, features = ["client", "rustls-tls", "ring", "ws"] }
 k8s-openapi = { version = "0.28.0", features = ["v1_36"] }
 aes-gcm = "0.10"
+bzip2 = "0.4"
+reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "stream", "json"] }
+# 2.0 ships without the espeak-ng frontend and cannot run Piper.
+sherpa-onnx = "=1.13.8"
+tar = "0.4"
 utoipa = { version = "5.5", features = ["uuid"] }
 
 [dev-dependencies]

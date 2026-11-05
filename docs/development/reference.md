@@ -169,6 +169,12 @@ Each agent has one memory pool in `memories`, with every revision in `memory_rev
 - Agents: the same under `/api/runtime/kb`, refused with 403 while `agents.knowledge_base` is off, and without `purge`. Tools: `kb_search`, `kb_outline`, `kb_read`, `kb_create`, `kb_edit`, `kb_write`, `kb_move`, `kb_delete`, and with a workspace `kb_attach` and `kb_fetch`.
 - The capability is `knowledge_base` on `POST /api/agents/{id}/definition`, and the switch under an agent's About, Capabilities.
 
+### Voice calls
+
+`GET /api/agents/{id}/call` upgrades to the call WebSocket and needs `conversation.send`; a cookie is accepted only from the console's origin. The page sends 16 kHz mono PCM16 as binary frames. The server's binary frames are a 4-byte little-endian sample rate followed by PCM16, and its text frames are JSON with a `kind`: `preparing`, `ready`, `interrupt`, `partial`, `user`, `agent`, `tool`, `queued`, `answered`, `unanswered` and `notice`. A close frame's reason says why a call could not go on.
+
+`GET /api/speech` reads the installation's settings, without any key, and `PUT /api/speech` changes them for administrators. `PUT /api/agents/{id}/speech` sets an agent's overrides and needs `agent.manage`. A call's turns are `chat_turns` rows with `call_id`; `GET /api/conversations/{id}/messages` returns them inside one message whose `call` field is set. Embedded models download into `speech-models` under `CUBEBOT_STORAGE_DIRECTORY`; a call without that directory can only fail on the Silero model, which every provider needs. `just speech-check` runs the embedded models on real audio, and `just call-check` runs a whole call in a browser. See [the decision](../adr/console.md#voice-calls-over-the-chat-pipeline).
+
 ### Routines
 
 [Routines](../adr/agents.md#routines). `routines` holds each agent's routines; every run is a `chat_turns` row with `routine_id`, `origin` (`person`, `agent`, `schedule`, `webhook`) and the routine's `command` copied in, and `routine_hooks` keeps a day of webhook deliveries for replay and the rate window.

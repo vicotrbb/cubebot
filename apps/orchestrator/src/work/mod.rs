@@ -2,6 +2,7 @@
 mod access;
 mod activity;
 mod broadcasts;
+mod calls;
 mod collaboration;
 mod coordinator;
 mod cursors;
@@ -21,6 +22,7 @@ use crate::{
 };
 pub use activity::ActivityItem;
 pub use broadcasts::{BroadcastFeed, BroadcastMessage};
+pub use calls::{CallRecord, Reply, ReplyEvent};
 pub use collaboration::Steering;
 pub use coordinator::{coordinate, route};
 pub use cursors::ReadCursor;
@@ -71,6 +73,8 @@ pub struct Turn {
     pub steering: Vec<Steering>,
     /// Files the agent sent with this reply.
     pub attachments: Vec<terminal::ReplyAttachment>,
+    /// Set when this message is a whole voice call, whose turns it holds.
+    pub call: Option<CallRecord>,
 }
 
 /// A turn's own columns; its progress, origin, children and steering are attached after.
@@ -97,6 +101,7 @@ impl From<TurnRow> for Turn {
             children: Vec::new(),
             steering: Vec::new(),
             attachments: Vec::new(),
+            call: None,
         }
     }
 }
@@ -147,7 +152,7 @@ impl Work {
             "
             SELECT id, sequence, message, status, response, error
             FROM chat_turns
-            WHERE conversation_id=$1 AND room_message_id IS NULL AND sequence>$2
+            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND sequence>$2
             ORDER BY sequence
             LIMIT 100
             ",
@@ -160,6 +165,9 @@ impl Work {
         .map(Turn::from)
         .collect();
         Self::progress(&mut tx, &mut turns).await?;
+        turns.extend(Self::calls_after(&mut tx, canonical.0, after).await?);
+        turns.sort_by_key(|turn| turn.sequence);
+        turns.truncate(100);
         tx.commit().await?;
         Ok(turns)
     }
@@ -170,6 +178,17 @@ impl Work {
         actor: &Actor,
         conversation: Uuid,
         input: &SendMessage,
+    ) -> Result<Turn, IdentityError> {
+        self.send_in(actor, conversation, input, None).await
+    }
+
+    /// Sends a message, as part of a voice call when `call` names one.
+    async fn send_in(
+        &self,
+        actor: &Actor,
+        conversation: Uuid,
+        input: &SendMessage,
+        call: Option<Uuid>,
     ) -> Result<Turn, IdentityError> {
         validate(input)?;
         let mut tx = self.pool.begin().await?;
@@ -187,52 +206,66 @@ impl Work {
         )
         .fetch_all(&mut *tx)
         .await?;
-        let previous = sqlx::query!(
-            "
-            SELECT conversation_id, message, id
-            FROM chat_turns
-            WHERE actor_id=$1 AND request_id=$2
-            ",
-            actor.id,
-            input.request_id,
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        if let Some(previous) = previous {
-            if previous.conversation_id != conversation || previous.message != input.message {
-                return Err(IdentityError::Conflict);
-            }
-            return Ok(sqlx::query_as!(
-                TurnRow,
-                "
-                SELECT id, sequence, message, status, response, error
-                FROM chat_turns
-                WHERE id=$1
-                ",
-                previous.id,
-            )
-            .fetch_one(&mut *tx)
-            .await?
-            .into());
+        if let Some(previous) = replayed(&mut tx, actor, conversation, input).await? {
+            return Ok(previous);
         }
         wake(&mut tx, agent).await?;
         let turn = sqlx::query_as!(
             TurnRow,
             "
-            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id)
+            VALUES ($1, $2, $3, $4, $5)
             RETURNING id, sequence, message, status, response, error
             ",
             conversation,
             actor.id,
             input.request_id,
             &input.message,
+            call,
         )
         .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
         Ok(turn.into())
     }
+}
+
+/// The turn an earlier send with this request id made; a different message under it is refused.
+async fn replayed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &Actor,
+    conversation: Uuid,
+    input: &SendMessage,
+) -> Result<Option<Turn>, IdentityError> {
+    let previous = sqlx::query!(
+        "
+        SELECT conversation_id, message, id
+        FROM chat_turns
+        WHERE actor_id=$1 AND request_id=$2
+        ",
+        actor.id,
+        input.request_id,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(previous) = previous else {
+        return Ok(None);
+    };
+    if previous.conversation_id != conversation || previous.message != input.message {
+        return Err(IdentityError::Conflict);
+    }
+    let turn = sqlx::query_as!(
+        TurnRow,
+        "
+        SELECT id, sequence, message, status, response, error
+        FROM chat_turns
+        WHERE id=$1
+        ",
+        previous.id,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(Some(turn.into()))
 }
 
 pub(super) async fn wake(

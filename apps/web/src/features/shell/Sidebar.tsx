@@ -60,6 +60,7 @@ export const PLATFORM = [
   ['/platform/teams', 'Teams and access'],
   ['/platform/sign-in', 'Sign-in'],
   ['/platform/providers', 'AI providers'],
+  ['/platform/speech', 'Speech'],
   ['/platform/tasks', 'Tasks'],
   ['/platform/mcp', 'MCP servers'],
   ['/platform/vault', 'Vault'],

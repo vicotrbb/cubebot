@@ -6,6 +6,8 @@ import { keys } from '../app/queries'
 import { DEFAULT_AVATAR, type Avatar } from '../components/Cube'
 import { Alert, Field } from '../components/primitives'
 import { AvatarBuilder } from '../features/agent/AvatarBuilder'
+import { VoiceChoice } from '../features/call/SpeechFields'
+import '../features/call/call.css'
 import '../features/agent/about.css'
 
 export const Route = createFileRoute('/_app/agents/new')({
@@ -16,6 +18,7 @@ function NewAgent() {
   const navigate = useNavigate()
   const client = useQueryClient()
   const [avatar, setAvatar] = useState<Avatar>(DEFAULT_AVATAR)
+  const [voice, setVoice] = useState<'male' | 'female'>('female')
   const [requestId] = useState(() => crypto.randomUUID())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -40,6 +43,7 @@ function NewAgent() {
                     name: String(data.get('name')),
                     instructions: String(data.get('instructions')),
                     avatar,
+                    voice,
                   },
                 }),
               )
@@ -65,6 +69,10 @@ function NewAgent() {
           >
             <textarea name="instructions" rows={8} maxLength={65536} />
           </Field>
+          <VoiceChoice
+            value={voice}
+            onChange={(chosen) => chosen && setVoice(chosen)}
+          />
           <p className="small faint">
             The agent starts asleep. Wake it from its Status tab once it has a
             provider; its conversation, memory and workspace persist from here

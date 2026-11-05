@@ -28,6 +28,7 @@ async fn accepted_messages_survive_reconnect_and_concurrent_retries_are_unique()
                 name: "Writer".into(),
                 instructions: "Be brief".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await
@@ -94,6 +95,7 @@ async fn ordinary_members_cannot_read_or_send_to_another_conversation() {
                 name: "Writer".into(),
                 instructions: "Be brief".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await
@@ -141,6 +143,7 @@ async fn every_agent_has_exactly_one_conversation_even_before_it_is_opened() {
                 name: "Single stream".into(),
                 instructions: "Continue this context".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await
@@ -473,6 +476,7 @@ async fn cancelling_an_unknown_turn_is_a_conflict_not_a_fault() {
                 name: "Writer".into(),
                 instructions: "Be brief".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

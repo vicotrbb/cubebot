@@ -394,6 +394,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/speech': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Sets this agent's overrides; needs `agent.manage`. */
+    put: operations['save_agent']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/status': {
     parameters: {
       query?: never
@@ -1687,6 +1704,24 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/speech': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The installation's speech settings, without any key. */
+    get: operations['read_settings']
+    /** Administrators only. A key is stored encrypted and never returned. */
+    put: operations['save_settings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/tasks': {
     parameters: {
       query?: never
@@ -1914,11 +1949,14 @@ export interface components {
       restart_generation: number
       /** Format: int64 */
       revision: number
+      stt_provider?: null | components['schemas']['Provider']
       /**
        * Format: int32
        * @description Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four.
        */
       task_lanes: number
+      tts_provider?: null | components['schemas']['Provider']
+      voice?: null | components['schemas']['Voice']
     }
     /** Format: uuid */
     AgentId: string
@@ -1932,6 +1970,12 @@ export interface components {
       id: string
       name: string
       transport: components['schemas']['McpTransport']
+    }
+    /** @description An agent's overrides; `None` inherits the installation's setting. */
+    AgentSpeech: {
+      stt_provider?: null | components['schemas']['Provider']
+      tts_provider?: null | components['schemas']['Provider']
+      voice?: null | components['schemas']['Voice']
     }
     AgentStatus: {
       blocked_reason?: string | null
@@ -2081,6 +2125,24 @@ export interface components {
       /** Format: int64 */
       sequence: number
     }
+    /** @description What a voice call's message shows. */
+    CallRecord: {
+      /**
+       * Format: int64
+       * @description Seconds; `None` while the call is live.
+       */
+      duration_seconds?: number | null
+      /**
+       * Format: int64
+       * @description Unix seconds.
+       */
+      started_at: number
+      stt_provider: components['schemas']['Provider']
+      tts_provider: components['schemas']['Provider']
+      /** @description The transcript: each turn's message is what the person said, its response the agent's reply. */
+      turns: components['schemas']['Turn'][]
+      voice: components['schemas']['Voice']
+    }
     /** @enum {string} */
     Capability:
       | 'agent_manage'
@@ -2135,6 +2197,7 @@ export interface components {
       name: string
       /** Format: uuid */
       request_id: string
+      voice?: null | components['schemas']['Voice']
     }
     CreateMemory: {
       content: string
@@ -2739,6 +2802,8 @@ export interface components {
       /** Format: uuid */
       turn_id: string
     }
+    /** @enum {string} */
+    Provider: 'embedded' | 'openai' | 'elevenlabs'
     ProviderAccess:
       | {
           /** @enum {string} */
@@ -2958,6 +3023,15 @@ export interface components {
       /** @description Five-field cron in UTC; `null` runs only by hand or webhook. */
       schedule?: string | null
     }
+    SaveSpeech: {
+      /** @description `None` keeps the stored ElevenLabs key. */
+      elevenlabs_key?: string | null
+      /** @description Removes the stored ElevenLabs key. */
+      forget_elevenlabs_key?: boolean
+      stt_provider: components['schemas']['Provider']
+      tts_provider: components['schemas']['Provider']
+      voice: components['schemas']['Voice']
+    }
     SaveVaultItem: {
       access?: null | components['schemas']['ProviderAccess']
       /**
@@ -3101,6 +3175,13 @@ export interface components {
       /** Format: uuid */
       skill: string
     }
+    /** @description The installation's speech settings; the key itself is never returned. */
+    SpeechSettings: {
+      elevenlabs_configured: boolean
+      stt_provider: components['schemas']['Provider']
+      tts_provider: components['schemas']['Provider']
+      voice: components['schemas']['Voice']
+    }
     /** @description Tokens and estimated cost over a period. `unpriced` responses are in the tokens, not the cost. */
     Spend: {
       /**
@@ -3208,6 +3289,7 @@ export interface components {
     Turn: {
       /** @description Files the agent sent with this reply. */
       attachments: components['schemas']['ReplyAttachment'][]
+      call?: null | components['schemas']['CallRecord']
       /** @description Work this turn delegated or sent to other agents. */
       children: components['schemas']['Child'][]
       error?: string | null
@@ -3325,6 +3407,8 @@ export interface components {
       site?: string | null
       username?: string | null
     }
+    /** @enum {string} */
+    Voice: 'male' | 'female'
     WebhookSecret: {
       secret: string
     }
@@ -4047,6 +4131,29 @@ export interface operations {
         content: {
           'application/json': components['schemas']['DefinitionRevision'][]
         }
+      }
+    }
+  }
+  save_agent: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AgentSpeech']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }
@@ -6322,6 +6429,46 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SkillRevision']
         }
+      }
+    }
+  }
+  read_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SpeechSettings']
+        }
+      }
+    }
+  }
+  save_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveSpeech']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

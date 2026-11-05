@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT stt_provider AS \"stt_provider: Provider\", tts_provider AS \"tts_provider: Provider\",\n            voice AS \"voice: Voice\", elevenlabs_credential IS NOT NULL AS \"elevenlabs_configured!\"\n        FROM speech_settings\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stt_provider: Provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "tts_provider: Provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "voice: Voice",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "elevenlabs_configured!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "61376753e1df3a669abe731b9569a53e144fc2da53801003e1cf415052bafede"
+}

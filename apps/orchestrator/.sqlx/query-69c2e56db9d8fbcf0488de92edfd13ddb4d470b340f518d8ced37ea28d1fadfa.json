@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE agents SET stt_provider=$2, tts_provider=$3, voice=$4 WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69c2e56db9d8fbcf0488de92edfd13ddb4d470b340f518d8ced37ea28d1fadfa"
+}

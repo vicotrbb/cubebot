@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE calls c\n            SET ended_at=GREATEST(c.started_at, COALESCE(\n                (SELECT max(COALESCE(t.completed_at, t.created_at)) FROM chat_turns t WHERE t.call_id=c.id),\n                c.started_at))\n            WHERE c.ended_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "6e0b29766112339d51405530f833461c7a604344c2aa7ae231fe865a5cf2a034"
+}

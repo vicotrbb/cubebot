@@ -14,6 +14,7 @@ mod agent_lifecycle;
 mod agents;
 mod audit;
 mod authentication_limits;
+mod calls;
 mod chat;
 mod collaboration;
 mod console;

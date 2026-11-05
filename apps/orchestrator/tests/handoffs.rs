@@ -199,6 +199,7 @@ async fn an_agent_with_the_capability_broadcasts_once_to_every_other_agent() {
                 name: "Peer".into(),
                 instructions: String::new(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

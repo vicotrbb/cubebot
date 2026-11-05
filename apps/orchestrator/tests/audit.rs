@@ -52,6 +52,7 @@ async fn the_audit_log_records_sign_ins_and_changes_for_administrators_only() {
                 name: "Scout".into(),
                 instructions: "Look around".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await
@@ -215,6 +216,7 @@ async fn a_broadcast_reaches_every_agent_that_is_not_retired_once() {
             name: name.into(),
             instructions: String::new(),
             avatar: None,
+            voice: None,
         };
         ids.push(agents.create(&admin, &input).await.unwrap());
     }

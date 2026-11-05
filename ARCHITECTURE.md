@@ -69,6 +69,7 @@ The backend is a modular monolith. Modules own rules and transactions; they are 
 | Knowledge | Durable memory revisions, human edits, dream reports, skill library and installations; no memory policy | read_memory(...); commit_changes(...); publish_skill(...) |
 | Connections and tools | Provider and integration registry, credential refresh, per-agent eligibility and tool configuration | resolve_connection(...); sandbox_credentials(agent) |
 | Storage | Upload lifecycle, immutable blobs, domain references, integrity, controlled reclamation | publish(...); read(reference); reconcile_upload(...) |
+| Speech | Voice calls: one STT and one TTS trait, embedded and external providers, turn-taking; no audio reaches an agent | Stt::finish(...); Tts::speak(...) |
 | Operations | Maintenance, backup/restore, upgrades, health, audit and user notifications | enter_maintenance(...); capture_backup(...); restore(...) |
 
 Keep task scheduling, messaging, triggers, and budgets inside Work initially because they must agree on admission and root-goal identity. Knowledge can contain private memory and skill submodules with distinct permissions. Extract a new module only when it has an independent invariant or demonstrated implementation variation.
@@ -166,6 +167,8 @@ Use typed HTTP/JSON commands, OpenAPI-generated TypeScript contracts, SSE for us
 Use route-based SSR, TanStack Query for request state, bounded conversation rendering, local stream updates, and lazy heavy viewers. Choose one coherent accessible component system during UI work. Proposed visual direction is a calm conversation workspace with readable typography, restrained status colors, and dedicated work/evidence panels; final styling requires concrete desktop/mobile designs. Bun and TanStack document deployment and selective rendering mechanisms, which still require a pinned integration test. [Bun guide](https://bun.sh/guides/ecosystem/tanstack-start), [Selective SSR](https://tanstack.com/start/latest/docs/framework/react/guide/selective-ssr).
 
 PWA use is online, with local drafts and optional push. Cache the application shell deliberately, not authenticated histories by accident. Reconnect fetches authoritative state before replaying observations; it never submits drafts automatically.
+
+A person can also call an agent ([Voice calls over the chat pipeline](docs/adr/console.md#voice-calls-over-the-chat-pipeline)). The browser streams 16 kHz PCM over a WebSocket to the orchestrator, whose speech module turns finished sentences into ordinary chat turns and the agent's streamed text into audio. The agent sees text only, and the conversation shows the whole call as one message. Embedded models download on first use into the orchestrator's data directory.
 
 ## Operations and simplicity choices
 

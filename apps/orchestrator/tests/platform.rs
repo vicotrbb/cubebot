@@ -290,6 +290,7 @@ async fn shipped_skills_reach_every_agent_once_and_uninstalling_one_sticks() {
                 name: "Later".into(),
                 instructions: "x".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

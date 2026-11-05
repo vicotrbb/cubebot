@@ -76,6 +76,7 @@ impl Agents {
             name: input.name.clone(),
             instructions: input.instructions.clone(),
             avatar: None,
+            voice: None,
         })?;
         if !(60..=86400).contains(&input.idle_delay_seconds)
             || input

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE conversation_id=$1 AND room_message_id IS NULL AND sequence>$2\n            ORDER BY sequence\n            LIMIT 100\n            ",
+  "query": "\n            SELECT id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND (status IN ('queued','running','waiting','delegated') OR id=ANY($2))\n            ORDER BY sequence\n            ",
   "describe": {
     "columns": [
       {
@@ -37,7 +37,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Int8"
+        "UuidArray"
       ]
     },
     "nullable": [
@@ -49,5 +49,5 @@
       true
     ]
   },
-  "hash": "f368ab910364d11ac186d12bdad58513defe265518348927478ff46f241c6299"
+  "hash": "26bd5a0b285117d1dffca3428bf4c0d4fbff04624fc04a924843113f11c7448d"
 }

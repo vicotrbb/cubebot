@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT c.id, c.sequence,\n                c.stt_provider AS \"stt_provider: Provider\", c.tts_provider AS \"tts_provider: Provider\",\n                c.voice AS \"voice: Voice\",\n                extract(epoch FROM c.started_at)::int8 AS \"started_at!\",\n                extract(epoch FROM c.ended_at - c.started_at)::int8 AS duration_seconds\n            FROM calls c\n            WHERE c.conversation_id=$1 AND (\n                c.ended_at IS NULL OR c.id=ANY($2) OR EXISTS(\n                    SELECT 1 FROM chat_turns t\n                    WHERE t.call_id=c.id AND t.status IN ('queued','running','waiting','delegated')\n                ))\n            ORDER BY c.sequence\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "stt_provider: Provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tts_provider: Provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "voice: Voice",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "started_at!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "duration_seconds",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "a04994b485f4a7bdaf3ebbc336777e3a5c3753665e9c6c93e688372e4757af3e"
+}
