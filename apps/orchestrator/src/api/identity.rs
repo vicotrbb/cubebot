@@ -95,8 +95,10 @@ async fn login(
 ) -> Result<impl IntoResponse, IdentityError> {
     let session = match identity.login(&input.login, &input.password).await {
         Err(IdentityError::Unauthorized) => {
+            // Anyone can post this, so what it stores stays bounded; no real login is longer.
+            let login: String = input.login.chars().take(64).collect();
             let event = Event::anonymous("session.sign_in_failed")
-                .detail(serde_json::json!({"login": input.login, "method": "password"}));
+                .detail(serde_json::json!({"login": login, "method": "password"}));
             identity.audit(event).await;
             return Err(IdentityError::Unauthorized);
         }
