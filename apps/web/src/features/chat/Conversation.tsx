@@ -163,7 +163,7 @@ function stateLabel(turn: Turn, activity: string) {
   )
     return 'Terminal effects are uncertain. Stop this turn, then ask the agent to inspect the workspace in a new message.'
   if (turn.status === 'waiting' && turn.error === 'budget_exhausted')
-    return 'Paused: this agent spent its monthly budget. It continues when someone raises the budget under Usage.'
+    return 'Paused: this agent spent its monthly budget. It continues next month, or when someone raises the budget under Usage.'
   if (turn.status === 'waiting')
     return `Waiting: ${(turn.error ?? 'execution interrupted').replaceAll('_', ' ')}. Retry when ready.`
   return ''
