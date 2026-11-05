@@ -80,9 +80,9 @@ cargo run --locked -p cubebot-orchestrator
 | `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown                                                                                      |
 | `apps/agent`        | Agent runtime; runs its own tools inside its sandbox                                                                                                     |
 | `apps/sandbox`      | `cubebot-sandbox`: in-house KVM VMM and dev process backend ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) |
-| `apps/web`          | TanStack Start console and PWA                                                                                                                   |
+| `apps/web`          | TanStack Start console and PWA                                                                                                                           |
 | `modules/protocol`  | Shared communication contracts                                                                                                                           |
-| `modules/providers` | Native model provider adapters                                                                                                         |
+| `modules/providers` | Native model provider adapters                                                                                                                           |
 | `tooling/quality`   | Complexity gate, regression tests, and Python development environment                                                                                    |
 | `tests/system`      | System tests spanning built application processes                                                                                                        |
 | `deploy`            | Installation packaging; Dockerfiles live with their apps                                                                                                 |
