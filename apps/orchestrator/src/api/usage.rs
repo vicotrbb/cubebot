@@ -1,4 +1,3 @@
-//! What agents spend, one agent's budget, and the Situation room.
 use crate::{
     agents::AgentId,
     identity::{Identity, IdentityError},

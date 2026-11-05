@@ -1,4 +1,3 @@
-//! What the console knows about the installation, and its one stream per browser session.
 use crate::{
     agents::{Agent, AgentId, Agents},
     identity::{Identity, IdentityError},
@@ -47,14 +46,11 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         })
 }
 
-/// The sandbox flags of the active controller; the controller attaches it to the router.
 #[derive(Debug, Clone)]
 pub struct Installation {
-    /// `kubernetes`, `docker` or `database_only`.
     pub controller: &'static str,
     pub terminal_enabled: bool,
     pub computer_use_enabled: bool,
-    /// None without a controller that runs agents.
     pub runtime: Option<crate::agents::sandbox::Runtime>,
 }
 
@@ -154,10 +150,8 @@ type AgentFrame = (String, bool, bool, i64, Option<String>, Option<String>);
 struct Follow {
     api: Api,
     headers: HeaderMap,
-    /// What each agent last looked like, down to the tool it is in.
     agents: HashMap<AgentId, AgentFrame>,
     rooms: HashMap<Uuid, i64>,
-    /// The newest broadcast's sequence, for administrators.
     broadcast: Option<i64>,
 }
 

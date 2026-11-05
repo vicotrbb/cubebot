@@ -1,4 +1,3 @@
-//! Fixed sandbox pod and workspace shape. Network enforcement is a separate qualification gate.
 use super::{Error, client::validate_namespace};
 use crate::agents::sandbox::{Runtime, subdomain};
 use cubebot_protocol::network::NetworkPolicy;
@@ -65,7 +64,6 @@ impl Layout {
         self.terminal = enabled;
         self
     }
-    /// Computer use needs the tool user, so it takes effect only with the terminal.
     pub fn with_computer_use(mut self, enabled: bool) -> Self {
         self.computer_use = enabled;
         self
@@ -93,8 +91,6 @@ impl Layout {
         }
     }
 
-    /// One container per agent (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): `cubebot-sandbox` with the agent in its guest, or the
-    /// agent image itself.
     pub fn pod(&self, claim_name: &str) -> Result<PodSpec, Error> {
         validate_namespace(claim_name)?;
         let mut env = Vec::new();
@@ -113,7 +109,6 @@ impl Layout {
             json!({"name":"identity","projected":{"defaultMode":288,"sources":[{"serviceAccountToken":{"audience":super::authentication::RUNTIME_AUDIENCE,"expirationSeconds":600,"path":"token"}}]}}),
             json!({"name":"tmp","emptyDir":{"sizeLimit":"1Gi"}}),
         ];
-        // Chromium's shared memory; a kvm guest mounts its own.
         if matches!(self.runtime, Runtime::Container { .. }) {
             mounts.push(json!({"name":"shm","mountPath":"/dev/shm"}));
             volumes.push(json!({"name":"shm","emptyDir":{"medium":"Memory","sizeLimit":"1Gi"}}));
@@ -142,8 +137,6 @@ impl Layout {
         serde_json::from_value(value).map_err(|error| Error::Configuration(error.into()))
     }
 
-    /// The memory limit holds the guest's default 2 GiB (docs/adr/sandbox.md#desktop-as-a-vmm-device) and the VMM around it, or the
-    /// same for a container; `env` and `mounts` follow the fixed entries.
     fn sandbox(&self, extra_env: Vec<Value>, extra_mounts: Vec<Value>) -> Value {
         let mut env = vec![
             json!({"name":"CUBEBOT_ORCHESTRATOR_ORIGIN","value":self.origin}),
@@ -178,20 +171,14 @@ impl Layout {
             "env":env,"volumeMounts":mounts})
     }
 }
-/// The sandbox creates the guest's tap and its tc redirects in the pod network namespace, which
-/// takes root with NET_ADMIN and no other capability; the namespace's Pod Security level must be
-/// privileged. fsGroup still lets it write the workspace volume.
+/// Tap and tc setup in the pod netns takes root with only NET_ADMIN: Pod Security privileged.
 fn kvm_security() -> Value {
     json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":true,"capabilities":{"drop":["ALL"],"add":["NET_ADMIN"]}})
 }
-/// Container init runs the arbiter and both X servers as root and drops to the tool and browser
-/// users, which takes only SETUID, SETGID and CHOWN: baseline Pod Security. The root filesystem is
-/// writable, as in any container; agents still install into the workspace (docs/adr/sandbox.md#agent-directed-software-installation-within-grants).
+/// Init drops from root to the tool and browser users, needing only SETUID, SETGID, CHOWN: baseline.
 fn container_security() -> Value {
     json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID","CHOWN"]}})
 }
-/// The API server copies extended-resource limits into requests; stating both keeps the prepared
-/// preview equal to the intent.
 fn kvm_resources() -> Value {
     json!({"requests":{"cpu":"100m","memory":"256Mi","ephemeral-storage":"64Mi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"},"limits":{"cpu":"2","memory":"3Gi","ephemeral-storage":"1Gi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"}})
 }

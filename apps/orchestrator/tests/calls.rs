@@ -1,5 +1,3 @@
-//! The call socket and the Call message on stand-in engines and a hand-driven turn. This exercises
-//! the session and the ledger; only `just speech-check` and `just call-check` exercise speech.
 use crate::{desktop_http::ORIGIN, runtime_identity::http_server, support};
 use cubebot_orchestrator::{
     agents::{AgentId, Agents, CreateAgent},
@@ -16,7 +14,6 @@ use std::sync::Arc;
 use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
 use uuid::Uuid;
 
-/// Loud samples are speech; the first quiet window after them ends it.
 struct Loud(bool);
 impl Vad for Loud {
     fn accept(&mut self, window: &[f32]) -> Activity {
@@ -156,7 +153,6 @@ fn pcm(sample: i16, windows: usize) -> Message {
     Message::Binary(frame.into())
 }
 
-/// What the agent's runtime records: a reply streamed in two parts, then its settlement.
 async fn replies(pool: &sqlx::PgPool, turn: Uuid, parts: &[&str]) {
     sqlx::query!("UPDATE chat_turns SET status='running' WHERE id=$1", turn)
         .execute(pool)
@@ -230,7 +226,6 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
         "{ready}"
     );
 
-    // First speech: the page is told to stop playback, then sees a partial and the sentence.
     call.send(pcm(16384, 1)).await.unwrap();
     assert_eq!(next_json(&mut call).await["kind"], "interrupt");
     assert_eq!(next_json(&mut call).await["text"], "what");
@@ -239,7 +234,6 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
     assert_eq!(said["text"], "what time is it");
     let first = turn_of(&said);
 
-    // The reply is spoken sentence by sentence as it streams; the rest waits for its end.
     replies(&world.pool, first, &["It is noon. ", "**Enjoy** lunch"]).await;
     let audio = next_audio(&mut call).await;
     assert_eq!(&audio[..4], 22050u32.to_le_bytes());
@@ -247,7 +241,6 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
     completes(&world.pool, first, "It is noon. **Enjoy** lunch").await;
     assert_eq!(&next_audio(&mut call).await[4..], b"Enjoy lunch");
 
-    // Speaking over the second reply mutes it: its words reach the transcript, not the speaker.
     call.send(pcm(16384, 1)).await.unwrap();
     call.send(pcm(0, 1)).await.unwrap();
     let second = turn_of(&until(&mut call, "user").await);
@@ -266,7 +259,6 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
         .unwrap();
     completes(&world.pool, after.id, "ok").await;
 
-    // The conversation has three messages, the call among them once, in the order they happened.
     let messages = async {
         for _ in 0..50 {
             let history = work.history(&world.admin, world.agent, 0).await.unwrap();
@@ -300,7 +292,6 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
         Some("It is noon. **Enjoy** lunch")
     );
 
-    // Paging past the call neither repeats it nor loses what follows.
     let later = work
         .history(&world.admin, world.agent, messages[1].sequence)
         .await
@@ -308,7 +299,6 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
     assert_eq!(later.len(), 1);
     assert_eq!(later[0].message, "typed after");
 
-    // The turns are ordinary turns: same table, same conversation, in the agent's history.
     let on_call = sqlx::query_scalar!(
         r#"SELECT count(*) AS "count!" FROM chat_turns WHERE conversation_id=$1 AND call_id IS NOT NULL AND actor_id=$2"#,
         world.agent,
@@ -355,7 +345,6 @@ async fn work_that_outlives_a_call_keeps_the_message_open() {
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].status, "running", "its turn is unsettled");
     assert_eq!(history[0].call.as_ref().unwrap().turns[0].id, turn);
-    // Stop, as in any conversation, reaches the turn inside the call.
     work.cancel(&world.admin, world.agent, turn).await.unwrap();
     let history = work.history(&world.admin, world.agent, 0).await.unwrap();
     assert_eq!(history[0].status, "complete");

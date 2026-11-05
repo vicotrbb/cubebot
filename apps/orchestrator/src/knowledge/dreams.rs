@@ -1,8 +1,3 @@
-//! Dream runs (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results). The agent decides when it is idle enough to dream; the ledger admits a
-//! run only while no turn is queued, running or waiting, tags every revision the run commits and
-//! keeps its report. Commits go through the same stale-write and human-rejection checks as a turn,
-//! so rerunning a dream over changes already made adds nothing. A run may also publish a new or
-//! revised skill from past turns, which it installs for its own agent.
 use super::{Author, Knowledge, authorize, commit_change, search, skills};
 use crate::{
     agents::{AgentId, runtime::RuntimeActor},
@@ -19,12 +14,8 @@ use uuid::Uuid;
 /// shortcut: a run sees the 50 most recently changed memories, which bounds its prompt; page
 /// through older memories once agents hold more than a run can consolidate.
 const DREAM_MEMORIES: i64 = 50;
-/// Latest completed exchanges a run sees, for skills worth writing down.
 const DREAM_TURNS: i64 = 20;
-/// Completed turns that earn a dream without any new memory, so procedures worth a skill get
-/// looked at; fewer would spend tokens on too little to learn from.
 const DREAM_NEW_TURNS: i64 = 5;
-/// Runs the console lists, newest first.
 const LISTED_RUNS: i64 = 50;
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -70,7 +61,6 @@ pub struct DreamRevision {
 }
 
 impl Knowledge {
-    /// The agent's latest runs with the revisions each committed.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn dreams(
         &self,
@@ -148,9 +138,6 @@ impl Knowledge {
     }
 }
 
-/// Admits run `run` for the authenticated agent, or `None` when it may not dream now: work is
-/// queued, running or waiting on an outcome, nothing changed since the last finished run, the id
-/// was used, or no model is available. An unfinished earlier run is closed as failed.
 #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, run = %run))]
 pub(crate) async fn start_dream(
     pool: &PgPool,
@@ -228,7 +215,6 @@ pub(crate) async fn start_dream(
     }))
 }
 
-/// Closes an unfinished earlier run as failed and opens this one.
 async fn begin_run(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -260,7 +246,6 @@ async fn begin_run(
     Ok(())
 }
 
-/// Commits one change of this attempt's running run. `false` once the run has ended.
 #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, run = %run))]
 pub(crate) async fn commit_dream(
     pool: &PgPool,
@@ -277,8 +262,6 @@ pub(crate) async fn commit_dream(
     Ok(true)
 }
 
-/// Publishes one skill of this attempt's running run and installs that revision for the agent.
-/// `metadata` is the package's validated name and description. `false` once the run has ended.
 #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, run = %run))]
 pub(crate) async fn commit_dream_skill(
     pool: &PgPool,
@@ -296,7 +279,6 @@ pub(crate) async fn commit_dream_skill(
     Ok(true)
 }
 
-/// Locks this attempt's run while it is running.
 async fn open(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -318,7 +300,6 @@ async fn open(
     Ok(open.is_some())
 }
 
-/// Ends this attempt's running run. `false` when it already ended.
 #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, run = %run))]
 pub(crate) async fn finish_dream(
     pool: &PgPool,
@@ -366,7 +347,6 @@ pub(crate) async fn finish_dream(
     Ok(finished)
 }
 
-/// A run whose sandbox lost its credential cannot report; it failed.
 #[tracing::instrument(skip_all)]
 pub(crate) async fn recover_dreams(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query!(

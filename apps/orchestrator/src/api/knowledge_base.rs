@@ -1,5 +1,3 @@
-//! The knowledge base for people and, under `/api/runtime/kb`, for agents whose capability is on.
-//! One set of handlers: [`Gate`] says who is calling and they share everything after that.
 use super::files::{self, UploadQuery};
 use crate::{
     agents::runtime::{RuntimeAccess, RuntimeIdentity},
@@ -39,9 +37,7 @@ enum Failure {
     Identity(IdentityError),
     Base(BaseError),
     Storage(StorageError),
-    /// A bearer that is not an active runtime.
     Runtime(StatusCode),
-    /// The agent's knowledge base capability is off.
     Disabled,
 }
 
@@ -121,7 +117,6 @@ impl Api {
         }
     }
 
-    /// Records what people do; an agent's work is on the page as its author.
     async fn audit(&self, who: Principal, kind: &'static str, page: Uuid) {
         if let (Gate::People(identity), Principal::Person(id)) = (&self.gate, who) {
             let event = Event::by(id, kind).detail(json!({ "page": page }));
@@ -352,7 +347,6 @@ async fn attach(
     match attached {
         Ok(attachment) => Ok((StatusCode::CREATED, Json(attachment)).into_response()),
         Err(error) => {
-            // A row never came to name these bytes.
             storage.discard(&[kept.blob]).await?;
             Err(error.into())
         }
@@ -401,7 +395,6 @@ async fn detach(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// A JSON body that is never cached, since every save changes it.
 fn fresh(body: impl serde::Serialize) -> Response {
     ([(header::CACHE_CONTROL, "no-store")], Json(body)).into_response()
 }

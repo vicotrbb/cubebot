@@ -84,7 +84,6 @@ async fn server(
     )
 }
 
-/// The pod as the reconciler reads it before stopping or finalizing.
 async fn observed(client: &Kubernetes, identity: &Identity) -> Option<Pod> {
     let expected = ResourceObject::Pod(Box::new(fixtures::pod(identity)));
     match client.fetch_candidate(&expected).await.unwrap()? {

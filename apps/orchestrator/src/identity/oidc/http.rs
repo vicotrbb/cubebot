@@ -8,7 +8,6 @@ pub(super) struct Http {
     local_http: bool,
 }
 
-/// `None` when the response body exceeded its limit.
 #[derive(Debug)]
 pub(super) struct TransportError(Option<Source>);
 impl fmt::Display for TransportError {

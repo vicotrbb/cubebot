@@ -1,5 +1,3 @@
-//! Where a person has read to in a conversation or room: one cursor per account and scope that
-//! only moves forward.
 use super::{Work, access, rooms};
 use crate::identity::{Actor, IdentityError};
 use serde::{Deserialize, Serialize};
@@ -13,8 +11,6 @@ pub struct ReadCursor {
 }
 
 impl Work {
-    /// Moves the cursor forward to `sequence`; a lower value leaves the stored one, which is
-    /// returned either way. Needs `conversation.read` on the conversation.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation))]
     pub async fn read_conversation(
         &self,
@@ -29,7 +25,6 @@ impl Work {
         Ok(cursor)
     }
 
-    /// As `read_conversation`, for a room.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn read_room(
         &self,

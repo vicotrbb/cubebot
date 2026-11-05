@@ -43,7 +43,6 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
             "/api/agents/{agent}/skills/{skill}",
             put(install_skill).delete(uninstall_skill),
         )
-        // A package of at most 64 KiB, JSON-escaped.
         .layer(DefaultBodyLimit::max(160 * 1024))
         .with_state(Api {
             identity,

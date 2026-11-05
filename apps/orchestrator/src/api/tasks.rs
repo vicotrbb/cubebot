@@ -1,5 +1,3 @@
-//! Tasks for people: what they asked for, how far it got and the orchestrator's settings. A task's
-//! conversation goes through its room's messages and events.
 use crate::{
     identity::{Identity, IdentityError, audit::Event},
     work::{

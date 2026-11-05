@@ -1,6 +1,3 @@
-//! The knowledge base against real PostgreSQL and a temporary volume: people and agents share one
-//! wiki, a stale save is refused, the trash brings things back, and an agent's capability is
-//! enforced on every call rather than only by which tools it was offered.
 use crate::runtime_support::fixture;
 use axum::{Extension, Router, body::Body, http::Request};
 use cubebot_orchestrator::{identity::Identity, storage::Storage};
@@ -82,7 +79,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
         )
         .await
         .unwrap();
-    // Any person may write, with no grant at all.
     let member = identity
         .login("member", "member password")
         .await
@@ -109,7 +105,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
         401
     );
 
-    // A person's page reaches the agent, and a resent creation finds the same page.
     let folder = call(
         &console,
         &member,
@@ -138,7 +133,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
     assert_eq!(outline.as_array().unwrap().len(), 3);
     assert!(outline[0].get("body").is_none());
 
-    // A passage is replaced only when it occurs once; a stale whole-body save is refused.
     let path = format!("/api/runtime/kb/pages/{page}");
     let replaced = call(
         &runtime,
@@ -191,7 +185,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
     assert_eq!(saved.status, 200);
     assert!(saved.json()["updated_by"]["account"].is_string());
 
-    // Search finds words in bodies and part of a title being typed; the trash hides it.
     let hits = get(&console, &member, "/api/kb/search?q=last").await.json();
     assert_eq!(hits[0]["id"], json!(page));
     let hits = get(&console, &member, "/api/kb/search?q=Deplo")
@@ -201,7 +194,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
     let wild = get(&console, &member, "/api/kb/search?q=%25").await.json();
     assert_eq!(wild, json!([]));
 
-    // Each author's edits are a version that can be read back.
     let versions = get(&console, &member, &format!("{console_path}/versions"))
         .await
         .json();
@@ -217,7 +209,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
     .json();
     assert_eq!(old["body"], "# Start\n\nagent words");
 
-    // A page cannot move inside itself; a child goes between its siblings.
     let child = new_page(&console, &member, "/api/kb", "Child", json!(page)).await;
     let cycle = call(
         &console,
@@ -249,7 +240,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
         .collect();
     assert_eq!(order, [child.as_str(), last.as_str(), other.as_str()]);
 
-    // An attachment's bytes round-trip for both, and an image can be shown.
     let attach = |prefix: &str, name: &str| {
         format!(
             "{prefix}/pages/{page}/attachments?name={name}&request_id={}",
@@ -278,7 +268,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
     let page_read = get(&runtime, &token, &path).await.json();
     assert_eq!(page_read["attachments"][0]["content_type"], "image/png");
 
-    // Trash takes the children along; restoring brings them back. Agents cannot purge.
     let gone = call(&runtime, &token, "DELETE", &path, Value::Null).await;
     assert_eq!(gone.status, 204);
     assert_eq!(get(&console, &member, &console_path).await.status, 404);
@@ -315,7 +304,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
         200
     );
 
-    // Purging removes the attachment's blob too.
     call(&console, &member, "DELETE", &console_path, Value::Null).await;
     let purge = format!("{console_path}/purge");
     assert_eq!(
@@ -330,7 +318,6 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
         .unwrap();
     assert_eq!(blobs, 0);
 
-    // With the capability off the agent is refused, whatever tools it still believes it has.
     sqlx::query!("UPDATE agents SET knowledge_base = false")
         .execute(&f.pool)
         .await

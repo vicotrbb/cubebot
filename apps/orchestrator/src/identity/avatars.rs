@@ -1,5 +1,3 @@
-//! Profile pictures (migrations/0045_account_avatars.sql): each person sets their own; every
-//! signed-in person may see them, as they see each other's names in rooms.
 use super::{
     Actor, Identity, IdentityError,
     audit::{Event, record},
@@ -7,7 +5,6 @@ use super::{
 use serde::Serialize;
 use uuid::Uuid;
 
-/// The largest picture accepted; the console sends a 256 px square well under it.
 pub const AVATAR_BYTES: usize = 1024 * 1024;
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -19,7 +16,6 @@ pub struct AvatarRevision {
 }
 
 impl Identity {
-    /// Replaces the actor's picture, or removes it for `None`; returns the new revision.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn set_avatar(
         &self,
@@ -52,7 +48,6 @@ impl Identity {
         Ok(revision)
     }
 
-    /// Active accounts with a picture; the caller is signed in.
     pub async fn avatars(&self) -> Result<Vec<AvatarRevision>, IdentityError> {
         Ok(sqlx::query_as!(
             AvatarRevision,
@@ -66,7 +61,6 @@ impl Identity {
         .await?)
     }
 
-    /// One account's picture; the caller is signed in.
     pub async fn avatar(&self, account: Uuid) -> Result<Option<Vec<u8>>, IdentityError> {
         Ok(sqlx::query_scalar!(
             "SELECT avatar FROM human_accounts WHERE id = $1 AND active",

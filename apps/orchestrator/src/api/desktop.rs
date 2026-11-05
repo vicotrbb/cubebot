@@ -1,10 +1,4 @@
-//! A person's view of an agent's desktop (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device): a WebSocket proxied to the
-//! sandbox's host channel. Frames go to the page as the sandbox encoded them; the orchestrator
-//! never decodes or keeps them. Watching takes `browser.view` and taking control
-//! `browser.control`, and the session rechecks the viewer's credential and access while it runs.
-//! A pending login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) is shown with `browser.view` and declined with
-//! `browser.control`; taking control while it is pending takes it for the handoff, and handing
-//! control back completes it.
+//! Frames reach the page as the sandbox encoded them; the session rechecks credential and access.
 use crate::{
     agents::{
         AgentId, Agents,
@@ -34,21 +28,15 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use uuid::Uuid;
 
-/// The shortest time between frame requests; the next is asked only once the last is sent, so a
-/// slow page slows its own frames.
 const FRAME_INTERVAL: Duration = Duration::from_millis(50);
 const RECHECK: Duration = Duration::from_secs(30);
-/// Bounds one sandbox response: a connection's first frame holds the whole screen.
 const RESPONSE_LIMIT: u64 = 32 << 20;
 
-/// Why a session ends; the Display text is the close reason the page shows.
 #[derive(Debug)]
 enum Closing {
     InvalidMessage(serde_json::Error),
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
-    /// The sandbox closed the channel or sent a line without its end.
     Truncated,
-    // IdentityError has no std::error::Error impl to carry as a source.
     NotRecorded,
     AccessEnded,
     Disconnected(axum::Error),
@@ -150,7 +138,6 @@ async fn decline_login(
     }
 }
 
-/// From the page. `t` comes back as `ack` on the answer, so the page times the round trip.
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Viewer {
@@ -215,7 +202,6 @@ struct Session {
     token: String,
     actor: Actor,
     session: Uuid,
-    /// Whether this viewer took control and has not handed it back.
     holding: bool,
     channel: Channel,
 }
@@ -224,7 +210,6 @@ impl Session {
     #[tracing::instrument(skip_all, fields(agent = %self.agent.0, session = %self.session))]
     async fn run(mut self, mut socket: WebSocket) {
         *self.viewers().entry(self.agent).or_default() += 1;
-        // Without an account this never takes control from a person who holds it.
         let _ = self.mode(Mode::Watch, None, false).await;
         if let Err(reason) = self.serve(&mut socket).await {
             let close = CloseFrame {
@@ -243,8 +228,6 @@ impl Session {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Hands back control this viewer still holds, and the desktop to the agent alone when no
-    /// one else is watching.
     async fn leave(&mut self) {
         let remaining = {
             let mut viewers = self.viewers();
@@ -262,7 +245,6 @@ impl Session {
             Mode::Watch
         };
         let account = self.holding.then_some(self.actor.id);
-        // A lost connection is not a hand-back, so a login handoff stays pending.
         if account.is_some() || remaining == 0 {
             let _ = self.mode(mode, account, false).await;
         }
@@ -343,7 +325,6 @@ impl Session {
         Ok(line)
     }
 
-    /// Clones what it records, since the session itself is not `Sync`.
     fn audit(
         &self,
         kind: &'static str,
@@ -356,7 +337,6 @@ impl Session {
         async move { identity.audit(event).await }
     }
 
-    /// Hands control back and completes a pending login handoff, which tells the agent.
     async fn hand_back(&mut self) -> Result<String, Closing> {
         let line = self.mode(Mode::Watch, Some(self.actor.id), false).await?;
         if !self.holding {
@@ -372,7 +352,6 @@ impl Session {
         Ok(line)
     }
 
-    /// Records the changes the viewer makes to their own control.
     async fn mode(
         &mut self,
         mode: Mode,
@@ -428,8 +407,6 @@ async fn send(socket: &mut WebSocket, text: String) -> Result<(), Closing> {
         .map_err(Closing::Disconnected)
 }
 
-/// Types a vault item's text on the agent's desktop (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) over a host channel of its own,
-/// for `account` or, when `None`, for the agent. The inner error is the arbiter's refusal.
 pub(super) async fn fill(
     desktop: &Desktop,
     agent: AgentId,
@@ -448,7 +425,6 @@ pub(super) async fn fill(
     Ok(response.error.map_or(Ok(()), Err))
 }
 
-/// One request line to the sandbox's arbiter and its response line, in order.
 struct Channel {
     input: Box<dyn AsyncWrite + Send + Unpin>,
     output: BufReader<Box<dyn AsyncRead + Send + Unpin>>,

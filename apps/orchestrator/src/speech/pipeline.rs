@@ -1,4 +1,3 @@
-//! Turn-taking and sentence splitting: what a call does, whichever providers it uses.
 use super::{Audio, SpeechError, Stt, Tts};
 use std::collections::VecDeque;
 use std::sync::{
@@ -7,36 +6,27 @@ use std::sync::{
 };
 use tokio::sync::mpsc;
 
-/// Audio kept before speech is detected, so a sentence's first sound reaches the STT.
 const PREROLL: usize = 8_000;
 const WINDOW: usize = super::embedded::WINDOW;
-/// A sentence is spoken once it is this long even without punctuation, so a long one cannot
-/// hold back the first audio.
 const LONGEST_SENTENCE: usize = 280;
 
-/// What the voice activity detector said about one window.
 pub struct Activity {
     pub speaking: bool,
-    /// A stretch of speech just ended.
     pub ended: bool,
 }
 
-/// Endpointing, behind a seam so turn-taking can be tested without a model.
 pub trait Vad: Send {
     fn accept(&mut self, window: &[f32]) -> Activity;
 }
 
 #[derive(Debug)]
 pub enum Heard {
-    /// The person started talking; any playback must stop.
     Speech,
     Partial(String),
-    /// A finished sentence.
     Utterance(String),
     Failed(SpeechError),
 }
 
-/// Follows one person's audio from the first sample of a call to the last.
 pub struct Listener {
     vad: Box<dyn Vad>,
     stt: Box<dyn Stt>,
@@ -103,7 +93,6 @@ impl Listener {
     }
 }
 
-/// The listening thread; it ends when the call drops its audio sender.
 pub(super) fn listen(
     mut listener: Listener,
     mut audio: mpsc::Receiver<Vec<f32>>,
@@ -118,8 +107,6 @@ pub(super) fn listen(
     }
 }
 
-/// The speaking thread. `epoch` moves on when the person interrupts, which skips sentences queued
-/// before that and stops the one being spoken.
 pub(super) fn speak(
     tts: Box<dyn Tts>,
     mut sentences: mpsc::UnboundedReceiver<(u64, String)>,
@@ -142,7 +129,6 @@ pub(super) fn speak(
     }
 }
 
-/// Cuts a streamed reply into sentences fit to say aloud. Code is not read out.
 #[derive(Default)]
 pub struct Sentences {
     buffer: String,
@@ -160,7 +146,6 @@ impl Sentences {
         sentences
     }
 
-    /// Whatever remains when the reply ends.
     pub fn finish(&mut self) -> Vec<String> {
         let rest = std::mem::take(&mut self.buffer);
         let mut sentences = Vec::new();
@@ -180,7 +165,6 @@ impl Sentences {
         }
     }
 
-    /// The byte offset after the next complete piece: a line, or a sentence outside a fence.
     fn boundary(&self) -> Option<usize> {
         let mut characters = self.buffer.char_indices().peekable();
         while let Some((at, character)) = characters.next() {
@@ -204,7 +188,6 @@ impl Sentences {
     }
 }
 
-/// Markdown as it should sound: no markup, and a link is its label.
 fn plain(line: &str) -> String {
     let line = line.trim_start_matches(['#', '>', ' ']);
     let line = line
@@ -234,7 +217,6 @@ mod tests {
     use super::*;
     use std::collections::VecDeque;
 
-    /// Speech while the samples are loud, ending at the first quiet window after it.
     struct Loud(bool);
     impl Vad for Loud {
         fn accept(&mut self, window: &[f32]) -> Activity {
@@ -271,12 +253,10 @@ mod tests {
     #[test]
     fn speech_interrupts_then_gives_partials_and_one_utterance() {
         let mut listener = listener(vec![Ok("hello".to_owned())]);
-        // Quiet first: it becomes the preroll, not a turn.
         assert!(listener.hear(&[0.0; WINDOW]).is_empty());
         let heard = listener.hear(&[0.5; WINDOW]);
         assert!(matches!(heard[0], Heard::Speech));
         assert!(matches!(&heard[1], Heard::Partial(text) if text == &format!("{WINDOW} heard")));
-        // The window that started speech follows its preroll into the STT.
         assert!(
             matches!(&heard[2], Heard::Partial(text) if text == &format!("{} heard", 2 * WINDOW))
         );
@@ -342,7 +322,6 @@ mod tests {
     struct Count(Arc<AtomicU64>);
     impl Tts for Count {
         fn speak(&self, _: &str, sink: &mut dyn FnMut(Audio) -> bool) -> Result<(), SpeechError> {
-            // The person interrupts after each sentence's first chunk.
             sink(Audio {
                 rate: 1,
                 pcm: vec![0],
@@ -377,8 +356,6 @@ mod tests {
         while let Ok(chunk) = chunks.try_recv() {
             heard.push(chunk.pcm[0]);
         }
-        // "one" stops after its first chunk, "two" never starts, and "after", said in the new
-        // epoch, starts and is interrupted in turn.
         assert_eq!(heard, [0, 0]);
     }
 }

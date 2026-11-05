@@ -8,8 +8,6 @@ use cubebot_orchestrator::agents::{
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 use uuid::Uuid;
 
-// Keeps each container's status in a file named after it; records create arguments. A
-// container's image is the configured one unless a test writes `<name>.image`.
 const FAKE: &str = r#"#!/bin/sh
 state="$(dirname "$0")/state"; mkdir -p "$state"; echo "$1 $2" >> "$state/calls"
 name() { while [ "$#" -gt 1 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
@@ -57,7 +55,6 @@ impl Fixture {
     fn container(&self, epoch: i64) -> String {
         format!("cubebot-agent-{}-{epoch}", self.agent.0)
     }
-    /// The token reaches the CLI through its environment, never its arguments.
     fn token(&self, epoch: i64) -> String {
         let state = self.root.join("state");
         let read = |suffix: &str| {
@@ -100,19 +97,16 @@ async fn a_crash_loop_waits_longer_between_epochs_until_a_person_restarts_it() {
     let crash = |epoch| f.set(epoch, "exited");
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     crash(1);
-    // Retires epoch 1; one crash restarts at once.
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.phases().await.len(), 2);
     crash(2);
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
-    // Two recent failures: no third epoch yet.
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.phases().await.len(), 2);
     tokio::time::sleep(std::time::Duration::from_millis(2100)).await;
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert_eq!(f.phases().await.len(), 3);
-    // A person's restart is a new generation, which starts without the wait.
     crash(3);
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     sqlx::query!(
@@ -155,7 +149,6 @@ async fn container_token_authenticates_only_its_own_running_epoch() {
         identity.bootstrap(&forged, Uuid::new_v4()).await,
         Err(Error::Unauthorized)
     ));
-    // A crashed container is retired with its final state before a new epoch starts.
     f.set(1, "exited");
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     assert!(
@@ -198,7 +191,6 @@ async fn a_running_agent_costs_one_inspect_per_pass() {
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn a_sandbox_on_an_older_image_is_drained_and_replaced() {
-    // After `cubebot update` the configured image is new; running sandboxes still have the old.
     let f = fixture().await;
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
     let state = f.root.join("state");
@@ -242,7 +234,6 @@ async fn a_sandbox_on_an_older_image_is_drained_and_replaced() {
 async fn sleep_and_restart_wait_for_drain_before_stopping_a_running_agent() {
     let f = fixture().await;
     drive(&f.docker, &f.pool, f.agent).await.unwrap();
-    // Restart: lifecycle bumps the generation and requests a drain of the old epoch.
     sqlx::query!(
         "
         UPDATE agents
@@ -274,7 +265,6 @@ async fn sleep_and_restart_wait_for_drain_before_stopping_a_running_agent() {
         f.phases().await,
         vec![(1, "stopped".into()), (2, "bound".into())]
     );
-    // Sleep keeps the workspace and leaves no running container once drained.
     sqlx::query!(
         "
         UPDATE agents
@@ -320,7 +310,6 @@ async fn a_revoked_credential_authorizes_nothing_and_cannot_be_reissued() {
             .await,
         Err(Error::Unauthorized)
     ));
-    // The same container cannot exchange its bootstrap token for a fresh credential.
     assert!(identity.bootstrap(&f.token(1), instance).await.is_err());
     assert_eq!(runtime::revoke(&f.pool, f.agent).await.unwrap(), 0);
     std::fs::remove_dir_all(&f.root).unwrap();

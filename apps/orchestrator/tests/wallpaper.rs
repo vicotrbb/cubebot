@@ -1,5 +1,3 @@
-//! A manager sets and resets an agent's wallpaper; the agent fetches its own, against real
-//! PostgreSQL.
 use crate::runtime_support::fixture;
 use axum::{Router, body::Body, http::Request};
 use cubebot_orchestrator::{
@@ -81,7 +79,6 @@ async fn a_manager_sets_the_wallpaper_the_agent_fetches_it_and_a_reset_falls_bac
             .unwrap()
     };
 
-    // No wallpaper means the default; only JPEG and PNG bytes are accepted.
     assert_eq!(call(&runtime, fetch()).await.0, 404);
     assert_eq!(call(&console, write("PUT", b"GIF89a")).await.0, 400);
     let oversized = [PNG, &vec![0; 4 * 1024 * 1024]].concat();

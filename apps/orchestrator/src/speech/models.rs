@@ -1,5 +1,3 @@
-//! Embedded models: downloaded on first use, checked against a pinned digest, never baked into
-//! an image.
 use super::SpeechError;
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
@@ -8,14 +6,11 @@ use tokio::io::AsyncWriteExt;
 
 const RELEASES: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download";
 
-/// One downloadable model. A `keep` list marks a `.tar.bz2` holding a directory called `name`;
-/// without one, the download is a single file stored as `name/file`.
 pub struct Asset {
     pub name: &'static str,
     pub url: &'static str,
     pub sha256: &'static str,
     pub file: &'static str,
-    /// Archive members to extract, by path suffix or contained directory.
     pub keep: &'static [&'static str],
 }
 
@@ -31,7 +26,6 @@ pub const ZIPFORMER: Asset = Asset {
     url: "asr-models/sherpa-onnx-streaming-zipformer-en-2023-06-26.tar.bz2",
     sha256: "639e25b578e9e997131402199419c13a941f8e4e198e2da1ce57dbf5cf401282",
     file: "",
-    // The bundled recordings are what `just speech-check` hears.
     keep: &[".int8.onnx", "tokens.txt", "/test_wavs/"],
 };
 pub const LESSAC: Asset = Asset {
@@ -49,7 +43,6 @@ pub const RYAN: Asset = Asset {
     keep: &[".onnx", "tokens.txt", "/espeak-ng-data/"],
 };
 
-/// The directory holding the models. One download runs at a time, so two first calls share it.
 pub struct Models {
     root: PathBuf,
     releases: String,
@@ -61,7 +54,6 @@ impl Models {
         Self::from(root, RELEASES.to_owned())
     }
 
-    /// `releases` is the URL each asset's path is relative to.
     pub fn from(root: PathBuf, releases: String) -> Self {
         Self {
             root,
@@ -70,7 +62,6 @@ impl Models {
         }
     }
 
-    /// The asset's directory, fetched first when absent.
     #[tracing::instrument(skip_all, fields(asset = asset.name))]
     pub async fn ensure(
         &self,
@@ -121,7 +112,6 @@ impl Models {
         Ok(())
     }
 
-    /// Streams to `part`, hashing as it goes. A wrong digest fails before anything is extracted.
     async fn download(
         &self,
         asset: &Asset,
@@ -237,7 +227,6 @@ mod tests {
         let path = models.ensure(&asset, &|_, _, _| {}).await.unwrap();
         assert_eq!(std::fs::read(path.join("a.int8.onnx")).unwrap(), b"kept");
         assert!(!path.join("a.onnx").exists());
-        // An unreachable origin proves the second call stays on disk.
         let offline = Models::from(root.clone(), "http://127.0.0.1:9".to_owned());
         offline.ensure(&asset, &|_, _, _| {}).await.unwrap();
         std::fs::remove_dir_all(root).unwrap();

@@ -1,7 +1,3 @@
-//! Rooms (docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator and docs/adr/rooms.md#independent-assignments-for-multiple-room-mentions). A message mentioning members delivers one turn to each, without a
-//! model call; any other message waits for the coordinator. A delivery is a turn on the recipient's
-//! ledger, unique per message and recipient, that belongs to the room: its answer shows only in
-//! the room, and it is neither shown in the agent's own conversation nor part of its context.
 use super::{SendMessage, Work, access};
 use crate::identity::{Actor, IdentityError};
 use serde::{Deserialize, Serialize};
@@ -69,7 +65,6 @@ pub struct RoomMessage {
     pub deliveries: Vec<Delivery>,
 }
 
-/// A room message's own columns; its deliveries are attached after.
 struct MessageRow {
     id: Uuid,
     sequence: i64,
@@ -116,7 +111,6 @@ pub struct Delivery {
 }
 
 impl RoomMessage {
-    /// Nothing about the message can change any more.
     pub fn settled(&self) -> bool {
         self.routing != "routing"
             && self.deliveries.iter().all(|delivery| {
@@ -163,7 +157,6 @@ impl Work {
         Ok(room)
     }
 
-    /// Rooms the person may read.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn rooms(&self, actor: &Actor) -> Result<Vec<Room>, IdentityError> {
         let mut tx = self.pool.begin().await?;
@@ -188,7 +181,6 @@ impl Work {
         Ok(rooms)
     }
 
-    /// Every visible room's newest message, in one query.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn room_sequences(&self, actor: &Actor) -> Result<Vec<RoomSequence>, IdentityError> {
         Ok(sqlx::query_as!(
@@ -209,8 +201,6 @@ impl Work {
         .await?)
     }
 
-    /// Administrators and `room.manage` holders replace the member set. Removed members keep
-    /// the work already delivered to them.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn set_room_members(
         &self,
@@ -228,7 +218,6 @@ impl Work {
             return Err(IdentityError::Forbidden);
         }
         lock(&mut tx, room).await?;
-        // A task's agents are the orchestrator's to choose.
         let task = sqlx::query_scalar!("SELECT task FROM rooms WHERE id=$1", room)
             .fetch_one(&mut *tx)
             .await?;
@@ -260,8 +249,6 @@ impl Work {
         self.room_feed(actor, room, after, &[]).await
     }
 
-    /// Messages after the cursor plus the touched ones whose last state the caller holds.
-    /// Rechecks access on every call.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn room_feed(
         &self,
@@ -307,7 +294,6 @@ impl Work {
         Ok(messages)
     }
 
-    /// Mentions of members deliver at once; otherwise the coordinator routes it later.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn post_room_message(
         &self,
@@ -360,7 +346,6 @@ async fn lock(tx: &mut Transaction<'_, Postgres>, room: Uuid) -> Result<(), sqlx
     Ok(())
 }
 
-/// The message this request already posted; a different message under it is a conflict.
 async fn previous(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
@@ -413,7 +398,6 @@ fn sized(agents: &[Uuid]) -> bool {
     (1..=32).contains(&agents.len())
 }
 
-/// Adds the agents not yet members; every one must exist and not be retired.
 async fn add_members(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -477,8 +461,6 @@ async fn room(
     })
 }
 
-/// Earlier room messages and the agents' replies to them, for a delivery's context. They are
-/// added when the turn is claimed, not stored with it, so the conversation keeps only the request.
 pub(super) async fn delivery_context(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
@@ -493,7 +475,6 @@ pub(super) async fn delivery_context(
     lines(tx, room.room_id, room.sequence, limit).await
 }
 
-/// The room's whole recent history, for the task orchestrator.
 pub(super) async fn context(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -525,7 +506,6 @@ async fn lines(
     Ok(lines.into_iter().rev().collect::<Vec<_>>().join("\n"))
 }
 
-/// Current members that can still take work.
 pub(super) async fn members(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -580,7 +560,6 @@ async fn post(
     Ok(id)
 }
 
-/// One turn for `agent` from the room message, at most once per message and agent.
 pub(super) async fn deliver(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
@@ -605,7 +584,6 @@ pub(super) async fn deliver(
     Ok(())
 }
 
-/// Members named as `@name`, case-insensitively, not inside a word or an address.
 pub(super) fn mentioned(message: &str, members: &[Member]) -> Vec<Uuid> {
     let text = message.to_lowercase();
     let word = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
@@ -703,7 +681,6 @@ async fn attach(
     Ok(())
 }
 
-/// Each unfinished turn's reply so far. Room followers poll, so the text arrives a little at a time.
 async fn partial_replies(
     tx: &mut Transaction<'_, Postgres>,
     turns: &[Uuid],

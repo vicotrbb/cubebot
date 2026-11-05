@@ -164,7 +164,6 @@ impl Identity {
         )
         .fetch_one(&mut *transaction)
         .await?;
-        // Fresh clock evaluation after the row lock, including after a competing redemption.
         let invitation = load(&mut *transaction, token).await?;
         if let Some(account) = invitation.previous(request_id)? {
             transaction.rollback().await?;

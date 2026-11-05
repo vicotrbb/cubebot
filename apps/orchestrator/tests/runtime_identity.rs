@@ -57,7 +57,6 @@ async fn runtime_sessions_last_for_the_incarnation_rotate_and_stay_separate_from
             .is_err()
     );
     assert_eq!(second.version, first.version + 1);
-    // No clock ends the credential; only the incarnation ending revokes it.
     sqlx::query!(
         "
         UPDATE agent_runtime_sessions
@@ -487,7 +486,6 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
     .await
     .unwrap();
     assert_eq!(phase, "bound");
-    // Even an accidentally restored generation cannot reopen a latched incarnation.
     sqlx::query!(
         "
         UPDATE agents
@@ -885,7 +883,6 @@ async fn text_reply(
     axum::Json(body): axum::Json<Value>,
 ) -> axum::response::Response {
     use axum::{http::StatusCode, response::IntoResponse};
-    // An immediate retry-after keeps bounded retries fast without changing their count.
     let failure = |status| (status, [("retry-after", "0")], "controlled failure").into_response();
     assert_eq!(body["model"], "controlled-model");
     assert_eq!(body["store"], false);
@@ -959,7 +956,6 @@ async fn native_text(first_failure: bool) {
     wait_native_response(&work, &admin, conversation).await;
     assert_eq!(
         state.calls.load(std::sync::atomic::Ordering::SeqCst),
-        // The reply, any retry, and a memory extraction that found nothing.
         2 + usize::from(first_failure)
     );
     drop(child);
@@ -967,7 +963,6 @@ async fn native_text(first_failure: bool) {
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].response.as_deref(), Some("Durable native reply"));
     let kinds = event_kinds(&f.pool, history[0].id).await;
-    // The fixture reports no usage, which is never recorded as zero.
     assert_eq!(kinds, ["text_delta", "done"]);
     server.abort();
     provider.abort();
@@ -1286,7 +1281,6 @@ pub(crate) async fn report(channel: &mut Socket, value: Value) {
         .await
         .unwrap();
 }
-/// The next delivery, or `null` once the orchestrator closes the channel.
 pub(crate) async fn delivery(channel: &mut Socket) -> Value {
     use futures_util::StreamExt;
     use tokio_tungstenite::tungstenite::Message;
@@ -1349,7 +1343,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     assert_eq!(first["message"], "First");
     assert_eq!(first["sequence"], 1);
     assert_eq!(first["provider"], "openai");
-    // The turn says who it serves, by the login a file share needs.
     assert!(
         first["instructions"]
             .as_str()
@@ -1374,7 +1367,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     .await
     .unwrap();
     assert_eq!(attempt, Some(f.attempt.0));
-    // A second pull while a turn is active is not another turn.
     report(&mut channel, json!({"type":"pull"})).await;
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     assert_eq!(
@@ -1414,7 +1406,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
         json!({"kind":"done","response":"Answer"}),
     )
     .await;
-    // The pull still pending from earlier now receives the next turn.
     let second = delivery(&mut channel).await;
     assert_eq!(second["message"], "Second");
     assert_eq!(
@@ -1431,7 +1422,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     let settled = work.history(&admin, conversation, 0).await.unwrap();
     assert_eq!(settled[0].status, "complete");
     assert_eq!(settled[0].response.as_deref(), Some("Answer"));
-    // The run ended without the call's result, so its effects are uncertain.
     assert_eq!(settled[0].terminal[0].status, "uncertain");
     let delta: Value = sqlx::query_scalar!(
         "
@@ -1445,7 +1435,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     .await
     .unwrap();
     assert_eq!(delta["text"], "Ans");
-    // An event for a turn this agent does not own closes the channel.
     report(
         &mut channel,
         json!({"type":"event","turn":Uuid::new_v4(),"sequence":1,"event":{"kind":"done","response":"x"}}),
@@ -1497,7 +1486,6 @@ async fn nul_bytes_are_stripped_and_a_refused_event_fails_the_turn_without_closi
         work.history(&admin, conversation, 0).await.unwrap()[0].status,
         "running"
     );
-    // Stripping cannot save this one: no such stop reason exists.
     event(
         &mut channel,
         &turn,
@@ -1511,7 +1499,6 @@ async fn nul_bytes_are_stripped_and_a_refused_event_fails_the_turn_without_closi
         ("failed", Some("invalid_event"))
     );
     assert_eq!(event_kinds(&f.pool, id).await, ["tool_call", "tool_result"]);
-    // The agent still running it hears to stop, on the same channel.
     assert_eq!(
         delivery(&mut channel).await,
         json!({"type":"cancel","turn":turn})
@@ -1520,7 +1507,6 @@ async fn nul_bytes_are_stripped_and_a_refused_event_fails_the_turn_without_closi
     f.task.abort();
 }
 
-/// The next turn this channel is offered, past any idle notices.
 async fn next_turn(channel: &mut Socket) -> Value {
     loop {
         let next = delivery(channel).await;
@@ -1705,7 +1691,6 @@ async fn conversation_events_replay_after_a_cursor_and_then_follow_live() {
         )
         .await;
     }
-    // Without a cursor, replay starts at the running turn's first event.
     let start = work.event_cursor(&admin, conversation).await.unwrap();
     let page = work.events(&admin, conversation, start, &[]).await.unwrap();
     let replayed: String = page
@@ -1755,7 +1740,6 @@ async fn conversation_events_replay_after_a_cursor_and_then_follow_live() {
     )
     .await;
     until("\"status\":\"complete\"").await;
-    // Resuming after the first delta skips it, and the live completion arrives as a snapshot.
     assert!(!received.contains("Hel\""));
     assert!(received.contains("event: turn_event"));
     assert!(received.contains("\"text\":\"lo\""));
@@ -1801,7 +1785,6 @@ async fn uncertain_tool_effects_block_retry_until_an_outcome_is_reported() {
         request_id: Uuid::new_v4(),
     };
     assert!(work.retry(&admin, conversation, id, &retry).await.is_err());
-    // A recovered sandbox reports the outcome it journaled before the crash.
     let outcome = json!({"status":"exited","code":0,"output":"removed"});
     event(
         &mut channel,

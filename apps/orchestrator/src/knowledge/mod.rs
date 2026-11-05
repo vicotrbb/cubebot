@@ -1,6 +1,4 @@
-//! Owns persisted memory revisions and source links. People edit through the console; the agent's
-//! staged changes commit with the turn that made them. Every write names the revision it read, so
-//! a stale write never overwrites a newer one. The shared skill library lives in `skills`.
+//! Every write names the revision it read, so a stale write never overwrites a newer one.
 mod base;
 mod dreams;
 mod skills;
@@ -25,7 +23,6 @@ pub(crate) use skills::{instructions, packages as skill_packages};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-/// Search results an agent receives per query.
 pub const AGENT_RESULTS: i64 = 10;
 /// shortcut: the console sees the 200 most relevant or recent memories; page once agents hold more.
 const CONSOLE_RESULTS: i64 = 200;
@@ -60,7 +57,6 @@ pub struct ReviseMemory {
     pub expected_revision: i64,
 }
 
-/// Who wrote a revision: a person, the agent through the turn it completed, or a dream run.
 #[derive(Clone, Copy, Debug)]
 enum Author {
     Human(Uuid),
@@ -73,7 +69,6 @@ impl Knowledge {
         Self { pool }
     }
 
-    /// Most relevant first for a query, most recent first without one.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn search(
         &self,
@@ -117,7 +112,6 @@ impl Knowledge {
         .await
     }
 
-    /// Hides the memory from retrieval; its revisions remain.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, memory = %memory))]
     pub async fn delete(
         &self,
@@ -184,8 +178,7 @@ impl Knowledge {
     }
 }
 
-/// Commits a completed turn's staged changes in its settling transaction. A change against a
-/// revision that is no longer current is dropped: whatever replaced it, often a human edit, wins.
+/// A change against a revision no longer current is dropped: what replaced it, often a human edit, wins.
 pub async fn commit_turn(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -218,7 +211,6 @@ async fn commit_change(
     Ok(())
 }
 
-/// The memory a change targets, the revision it read, and its content; `None` content removes.
 fn parts(change: &MemoryChange) -> (Option<Uuid>, Option<i64>, Option<&str>) {
     match change {
         MemoryChange::Remember { content } => (None, None, Some(content)),
@@ -234,8 +226,6 @@ fn parts(change: &MemoryChange) -> (Option<Uuid>, Option<i64>, Option<&str>) {
     }
 }
 
-/// Content a person replaced or removed is not brought back verbatim by the agent (docs/adr/memory.md#direct-memory-editing-and-conversational-correction),
-/// and a new memory the agent already holds verbatim is not saved twice.
 /// shortcut: exact text only; paraphrases pass, and the scan is unindexed per agent. Compare
 /// normalized or embedded text once duplicates or slow commits show up.
 async fn unwanted(
@@ -297,8 +287,6 @@ async fn authorize(
     Ok(())
 }
 
-/// Creates a memory, or revises or removes (`content` of `None`) the current revision
-/// `expected` of an agent's live memory. `None` when that revision is not current.
 async fn write(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -318,7 +306,6 @@ async fn write(
     }
 }
 
-/// The revision's human, turn and dream run; exactly one is set.
 type By = (Option<Uuid>, Option<Uuid>, Option<Uuid>);
 
 async fn insert(
@@ -382,7 +369,6 @@ async fn update(
     .await
 }
 
-/// Any query word matches, ranked by how well; stop words alone match nothing.
 async fn search(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -390,7 +376,6 @@ async fn search(
     limit: i64,
 ) -> Result<Vec<Memory>, sqlx::Error> {
     let query = query.map(str::trim).filter(|query| !query.is_empty());
-    // The `s` subquery: normalized lexemes, quoted with tsquery's own doubling, joined by OR.
     sqlx::query_as!(
         Memory,
         r#"

@@ -1,4 +1,3 @@
-//! A person's console preferences: one JSON document per account, last write wins.
 use super::{Actor, Identity, IdentityError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -39,7 +38,6 @@ pub enum Theme {
 }
 
 impl Identity {
-    /// The stored document, or the defaults before the first write.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn preferences(&self, actor: &Actor) -> Result<Preferences, IdentityError> {
         Ok(sqlx::query_scalar!(

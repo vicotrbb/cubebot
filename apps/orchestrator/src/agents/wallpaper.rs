@@ -1,11 +1,9 @@
-//! Per-agent desktop wallpaper: a JPEG or PNG a manager sets, which the agent draws on its desktop.
 use super::{AgentId, Agents};
 use crate::identity::{Actor, IdentityError};
 
 pub const WALLPAPER_BYTES: usize = 4 * 1024 * 1024;
 
 impl Agents {
-    /// Sets the wallpaper, or resets it to the default with `None`; needs `agent.manage`.
     #[tracing::instrument(skip_all, fields(agent = %id.0))]
     pub async fn set_wallpaper(
         &self,
@@ -51,7 +49,6 @@ impl Agents {
 }
 
 impl Agents {
-    /// The wallpaper for anyone who may see the agent.
     #[tracing::instrument(skip_all, fields(agent = %id.0))]
     pub async fn wallpaper(
         &self,
@@ -75,7 +72,6 @@ pub async fn wallpaper(
     )
 }
 
-/// The image type by its magic bytes; anything else is refused.
 pub fn content_type(image: &[u8]) -> Option<&'static str> {
     if image.starts_with(&[0xff, 0xd8, 0xff]) {
         Some("image/jpeg")

@@ -1,4 +1,3 @@
-//! Dream admission, commits and reports through the runtime routes, against real PostgreSQL.
 use crate::runtime_support::fixture;
 use axum::{Router, body::Body, http::Request};
 use cubebot_orchestrator::{
@@ -88,7 +87,6 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     };
     let knowledge = Knowledge::new(f.pool.clone());
 
-    // Nothing to consolidate yet.
     assert_eq!(runtime.start(Uuid::new_v4()).await.0, 409);
     let memory = |content: &str| CreateMemory {
         content: content.into(),
@@ -102,7 +100,6 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
         .await
         .unwrap();
 
-    // Queued work wins over dreaming.
     let work = Work::new(f.pool.clone());
     let conversation = work.conversation(&admin, f.agent).await.unwrap();
     let message = SendMessage {
@@ -146,7 +143,6 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     assert_eq!(runtime.commit(run, merge.clone()).await, 409);
     assert_eq!(agents.get(&admin, f.agent).await.unwrap().activity, "idle");
 
-    // Only a change from outside dreaming makes the agent eligible again.
     assert_eq!(runtime.start(Uuid::new_v4()).await.0, 409);
     knowledge
         .revise(
@@ -175,7 +171,6 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
         (status, dream["model"].as_str()),
         (200, Some("dream-model"))
     );
-    // Replaying the first run's changes and re-adding a held fact commits nothing.
     assert_eq!(runtime.commit(retry, merge).await, 204);
     assert_eq!(runtime.commit(retry, drop).await, 204);
     let again = json!({"op":"remember","content":"The deadline is November 22, 2026, at noon"});
@@ -199,7 +194,6 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     assert_eq!(revised.previous.as_deref(), Some("Deadline is Nov 22"));
     assert_eq!(revised.content, "The deadline is November 22, 2026");
     assert!(runs[1].revisions[1].deleted);
-    // Source records stay: the forgotten memory keeps both revisions.
     let kept: i64 = sqlx::query_scalar!(
         r#"
         SELECT count(*) AS "count!"

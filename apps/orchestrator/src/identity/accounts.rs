@@ -54,7 +54,6 @@ impl Identity {
         .await?)
     }
 
-    /// Whether the installation still has no administrator, so its first account may be created.
     pub async fn setup_open(&self) -> Result<bool, IdentityError> {
         let bootstrapped = sqlx::query_scalar!(
             r#"
@@ -244,7 +243,6 @@ pub(super) async fn insert_account(
     .await?)
 }
 
-/// Commands record themselves; this is for identity changes that are not commands.
 pub(super) async fn audit(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: Uuid,

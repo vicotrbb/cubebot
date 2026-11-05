@@ -1,6 +1,4 @@
-//! Local operator commands: bootstrap, agent credential revocation, and the browser API document.
-//! No public registration
-//! endpoint is exposed.
+//! Local operator commands; no public registration endpoint is exposed.
 
 use cubebot_orchestrator::{
     agents::{AgentId, runtime},
@@ -10,7 +8,6 @@ use cubebot_orchestrator::{
 
 const USAGE: &str = "usage: cubebot-admin bootstrap | cubebot-admin revoke-runtime <agent-id> | cubebot-admin openapi";
 
-/// A command failure that reads, and prints from `main`, as its message alone.
 struct Failure {
     message: &'static str,
     source: Option<Box<dyn std::error::Error + Send + Sync>>,
@@ -75,7 +72,6 @@ async fn bootstrap(url: &str) -> Result<(), Failure> {
     let pool = database::connect(url)
         .await
         .map_err(failure("database unavailable"))?;
-    // IdentityError has no std::error::Error impl to carry as a source.
     let id = Identity::new(pool)
         .bootstrap(&login, &password)
         .await

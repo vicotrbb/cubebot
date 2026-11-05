@@ -1,6 +1,3 @@
-//! Lanes (docs/adr/agents.md#agent-execution-lanes): one main-lane turn per agent, for direct chat, room work and messages, beside
-//! up to `task_lanes` delegated tasks and tasks' turns, one per task. The ledger delivers conversation records; the agent
-//! assembles its own context.
 use super::Work;
 use crate::{
     agents::{kubernetes::Error, runtime::RuntimeActor},
@@ -9,7 +6,6 @@ use crate::{
 use cubebot_protocol::runtime::{EVENT_BYTES, Exchange, Turn, TurnEvent};
 use uuid::Uuid;
 
-/// Why a turn waits when its agent spent its monthly budget; raising the budget requeues it.
 const BUDGET_EXHAUSTED: &str = "budget_exhausted";
 
 impl Work {
@@ -124,9 +120,7 @@ impl Work {
         }))
     }
 
-    /// Appends an event idempotently. Only the running attempt's done or error settles the turn;
-    /// late events remain evidence. Returns whether this attempt still owns the turn's run,
-    /// including a cancelled run that has not stopped yet.
+    /// Only the running attempt's done or error settles the turn; late events remain evidence.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, turn = %turn))]
     pub(crate) async fn record(
         &self,
@@ -170,7 +164,6 @@ impl Work {
         if accepted {
             append(&mut tx, actor, turn, sequence, event, &payload, live).await?;
         } else if live {
-            // Resending cannot change the verdict, so the agent gets its ack and the turn ends.
             tracing::warn!(sequence, "refused an invalid turn event");
             failed(&mut tx, turn, "invalid_event").await?;
         }
@@ -210,7 +203,6 @@ impl Work {
     }
 }
 
-/// A resent event keeps its first recorded form.
 async fn append(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -240,7 +232,6 @@ async fn append(
     Ok(())
 }
 
-/// Steering the running work took in is incorporated.
 async fn incorporated(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
@@ -263,9 +254,7 @@ async fn incorporated(
     Ok(())
 }
 
-/// Settles a turn that may not start now and says so. A revoked sender's turn fails: waiting would
-/// hold the lane, freezing the agent for everyone over one person's access. A command-only routine
-/// calls no model, so it spends nothing.
+/// A revoked sender's turn fails: waiting would hold the lane, freezing the agent for everyone.
 async fn refused(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -283,7 +272,6 @@ async fn refused(
     Ok(spent)
 }
 
-/// An unreadable server configuration leaves the turn without MCP rather than stuck.
 async fn mcp_servers(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,
@@ -301,8 +289,6 @@ async fn mcp_servers(
         })
 }
 
-/// Records a usage event and pauses the running turn once it spends the budget; `cancelled` then
-/// tells the agent to stop at its next safe point.
 async fn account(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -332,8 +318,6 @@ async fn account(
     Ok(())
 }
 
-/// What earlier runs of the turn left: their tool and steering events, the last event sequence,
-/// and the outcomes of its settled children.
 async fn earlier(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
@@ -374,10 +358,8 @@ async fn earlier(
     Ok((prior, last, delegations))
 }
 
-/// A delegated task's context is the task itself, not the main conversation. A room delivery's is
-/// the room's recent messages: rooms and the main conversation stay out of each other's context.
-/// A task room's agent is a fork: it starts from its conversation as it stands and adds nothing
-/// back, since `history` never reads a room's turns or their summaries.
+/// Rooms and the main conversation stay out of each other's context; a task room's agent is a fork
+/// that adds nothing back, since `history` never reads a room's turns or their summaries.
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -458,7 +440,6 @@ async fn settle(
 ) -> Result<(), Error> {
     match event {
         TurnEvent::Done { response, memories } => {
-            // A parent with open or unseen children yields instead of completing.
             match super::collaboration::after_run(tx, turn).await? {
                 "complete" => {
                     sqlx::query!(
@@ -497,15 +478,13 @@ async fn settle(
     Ok(())
 }
 
-/// Agent-originated work settles as failed so its parent gets the evidence; a person's own
-/// request waits for them to retry.
 async fn fail(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
     code: &str,
 ) -> Result<(), Error> {
-    // shortcut: a child's provider outage fails it rather than waiting (docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt keeps them
-    // distinct); give children a provider wait if parents re-delegate needlessly.
+    // shortcut: a child's provider outage fails it rather than waiting; give children a provider
+    // wait if parents re-delegate needlessly.
     let failed = sqlx::query!(
         "
         UPDATE chat_turns
@@ -524,7 +503,6 @@ async fn fail(
 }
 
 fn valid(event: &TurnEvent) -> bool {
-    // Length is bounded by the encoded event as a whole.
     let text = |value: &str| !value.contains('\0');
     match event {
         TurnEvent::TextDelta { text: delta } => text(delta),
@@ -549,7 +527,6 @@ fn valid(event: &TurnEvent) -> bool {
     }
 }
 
-/// Ends a turn that retrying cannot save, freeing its lane; `cancelled` then stops a run in progress.
 async fn failed(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
@@ -611,8 +588,6 @@ async fn sender_allowed(
     .await?)
 }
 
-/// The latest summary and every completed exchange from the turn it was written in onward,
-/// since a summary can precede its own turn's response.
 async fn history(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -649,8 +624,6 @@ async fn history(
     Ok((summary.map(|summary| summary.text), history))
 }
 
-/// The provider for the turn, or `None` once it waits for one. A routine's command alone needs
-/// no model (docs/adr/agents.md#routines).
 async fn inference(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,

@@ -1,6 +1,3 @@
-//! Routines (docs/adr/agents.md#routines): a stored prompt and/or shell command for one agent. Every occurrence, by
-//! hand, schedule or webhook, is a turn in the agent's conversation, inserted and woken like a
-//! message; a coalescing routine keeps at most one of its turns pending.
 mod agent;
 mod cron;
 
@@ -17,10 +14,8 @@ use std::{fmt::Write, time::Duration};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Routines one agent holds, however they were made.
 const PER_AGENT: i64 = 32;
 const HOOKS_PER_MINUTE: i64 = 60;
-/// Largest webhook body quoted into a message.
 pub const HOOK_BODY: usize = 8 * 1024;
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -126,12 +121,10 @@ pub struct HookDelivery {
 
 pub enum Hooked {
     Accepted(Option<Uuid>),
-    /// The Idempotency-Key was seen; the first delivery's turn.
     Replayed(Option<Uuid>),
     Limited,
 }
 
-/// The routine row an occurrence or change works from, locked for its transaction.
 struct Locked {
     id: Uuid,
     agent: AgentId,
@@ -173,7 +166,6 @@ impl Work {
         let made = (actor.id, "person", input.request_id);
         let inserted = insert(&mut tx, agent, made, &input.routine).await?;
         let (id, new) = inserted.map_err(|_| IdentityError::Conflict)?;
-        // A replayed create cannot show the secret again.
         let secret = (input.webhook && new).then(crate::identity::token);
         if let Some(secret) = &secret {
             set_secret(&mut tx, id, secret).await?;
@@ -183,7 +175,6 @@ impl Work {
         Ok(CreatedRoutine { routine, secret })
     }
 
-    /// Replaces what the routine does; a person's edit makes the routine theirs.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
     pub async fn update_routine(
         &self,
@@ -220,7 +211,6 @@ impl Work {
         Ok(())
     }
 
-    /// Makes or replaces the webhook's secret; the old one stops working.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
     pub async fn rotate_routine_secret(
         &self,
@@ -238,7 +228,6 @@ impl Work {
         Ok(WebhookSecret { secret })
     }
 
-    /// Runs the routine now as the person; retrying the same `request_id` returns the same turn.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
     pub async fn run_routine(
         &self,
@@ -256,7 +245,6 @@ impl Work {
         Ok(Ran { turn })
     }
 
-    /// The routine's latest occurrences, newest first.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
     pub async fn routine_occurrences(
         &self,
@@ -285,7 +273,6 @@ impl Work {
         Ok(occurrences)
     }
 
-    /// Stops the webhook: its URL answers 401 from now on. The routine keeps its other triggers.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
     pub async fn remove_routine_secret(
         &self,
@@ -311,7 +298,6 @@ impl Work {
         Ok(())
     }
 
-    /// The webhook's latest deliveries, newest first.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, routine = %routine))]
     pub async fn routine_deliveries(
         &self,
@@ -341,7 +327,6 @@ impl Work {
         Ok(deliveries)
     }
 
-    /// A webhook delivery: `secret` is the bearer token, `key` the Idempotency-Key.
     #[tracing::instrument(skip_all, fields(routine = %routine))]
     pub async fn hook(
         &self,
@@ -397,7 +382,6 @@ async fn delivered(
     Ok(Ok(Hooked::Accepted(turn)))
 }
 
-/// Runs due schedules every 30 seconds until stopped.
 pub async fn schedule(pool: PgPool, mut stop: watch::Receiver<bool>) {
     loop {
         if let Err(error) = tick(&pool).await {
@@ -410,8 +394,6 @@ pub async fn schedule(pool: PgPool, mut stop: watch::Receiver<bool>) {
     }
 }
 
-/// Makes one occurrence of every due routine and moves it to its next time after now, so a
-/// routine overdue after downtime runs once. Returns how many were due.
 #[tracing::instrument(skip_all)]
 pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     let mut tx = pool.begin().await?;
@@ -423,7 +405,6 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     )
     .execute(&mut *tx)
     .await?;
-    // A key replays for one day; the row stays as history.
     sqlx::query!(
         "
         UPDATE routine_hooks
@@ -466,7 +447,6 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
         };
         let creator = locked.created_by;
         match occur(&mut tx, &locked, "schedule", creator, Uuid::new_v4(), None).await {
-            // A retired agent does not wake; its schedule keeps moving.
             Ok(_) | Err(IdentityError::Conflict) => (),
             Err(error) => return Err(error),
         }
@@ -475,8 +455,6 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     Ok(due.len())
 }
 
-/// Makes the occurrence a turn, or nothing when the routine coalesces into a pending one. A
-/// repeated `request_id` from the same person returns the turn it made.
 async fn occur(
     tx: &mut Transaction<'_, Postgres>,
     routine: &Locked,
@@ -498,7 +476,6 @@ async fn occur(
     ))
 }
 
-/// The turn a person's earlier `request_id` made for this routine; another routine's is a conflict.
 async fn repeated(
     tx: &mut Transaction<'_, Postgres>,
     routine: Uuid,
@@ -572,8 +549,6 @@ async fn pending(tx: &mut Transaction<'_, Postgres>, routine: Uuid) -> Result<bo
     .await
 }
 
-/// The turn's request: the prompt, or the command when there is none, and a webhook body
-/// quoted as a JSON string. `None` past the turn's size bound.
 fn message(routine: &Locked, origin: &str, body: Option<&str>) -> Option<String> {
     let name = &routine.name;
     let mut message = match (&routine.prompt, &routine.command) {
@@ -635,7 +610,6 @@ async fn locked(
     .await
 }
 
-/// The schedule's next time after now, or the input's error.
 async fn next_at(
     tx: &mut Transaction<'_, Postgres>,
     input: &SaveRoutine,
@@ -670,8 +644,6 @@ async fn now(tx: &mut Transaction<'_, Postgres>) -> Result<i64, sqlx::Error> {
         .await
 }
 
-/// A new routine and `true`, or the one a repeated `request_id` made; `Err` when the agent
-/// holds its limit.
 async fn insert(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -707,8 +679,6 @@ async fn insert(
     Ok(Ok((id, true)))
 }
 
-/// The routine a repeated `request_id` made, `Err` when the agent holds its limit, or `None` to
-/// make one.
 async fn admit(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -769,7 +739,6 @@ async fn update(
     Ok(())
 }
 
-/// Cancels the routine's queued and waiting turns and deletes it; its history stays.
 async fn remove(tx: &mut Transaction<'_, Postgres>, routine: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "
@@ -823,7 +792,6 @@ async fn set_secret(
     Ok(())
 }
 
-/// Records one authenticated delivery, in the history and the rate window.
 async fn remember(
     tx: &mut Transaction<'_, Postgres>,
     routine: Uuid,

@@ -1,4 +1,3 @@
-//! Browser view of a conversation's turn events: replay after a cursor, then follow live.
 use super::{Turn, TurnRow, Work, access};
 use crate::identity::{Actor, IdentityError};
 use cubebot_protocol::runtime::TurnEvent;
@@ -14,15 +13,12 @@ pub struct Event {
     pub payload: serde_json::Value,
 }
 
-/// One poll of a conversation: events after the cursor and the turns that may have changed.
 pub struct Page {
     pub events: Vec<Event>,
     pub turns: Vec<Turn>,
 }
 
 impl Work {
-    /// Without a cursor, replay starts at the running turn's events so its partial text shows,
-    /// otherwise at the latest event.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation))]
     pub async fn event_cursor(
         &self,
@@ -48,7 +44,6 @@ impl Work {
         Ok(cursor)
     }
 
-    /// Rechecks access on every poll. `touched` names turns whose last state the caller holds.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation))]
     pub async fn events(
         &self,

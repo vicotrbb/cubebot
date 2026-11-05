@@ -1,7 +1,3 @@
-//! The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) end to end: a person saves a login through the console, the real agent
-//! binary lists and fills it and saves a secret of its own with a scripted model, and a
-//! recording stand-in arbiter receives the fill. Neither secret is in the turn ledger, the
-//! model's requests or the desktop records; only the arbiter's line holds what it types.
 use crate::{
     memory_agent::{Model, Step, call, respond, text},
     runtime_identity::{http_server, native_chat_setup, spawn_native_text},
@@ -29,7 +25,6 @@ use uuid::Uuid;
 const PASSWORD: &str = "correct horse 9!";
 const MADE: &str = "agent-made S3cret";
 
-/// Answers every host channel line as an arbiter in `agent` mode would, and keeps the lines.
 #[derive(Clone, Default)]
 struct Recording(Arc<Mutex<Vec<Value>>>);
 
@@ -192,7 +187,6 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
     .unwrap();
     assert!(!records.join("\n").contains(PASSWORD));
 
-    // The agent's own item is listed for the console without its secret, and fills for a person.
     let listed = http
         .get(format!("{console}/api/agents/{agent}/vault"))
         .bearer_auth(&token)
@@ -317,7 +311,6 @@ async fn a_login_the_vault_holds_is_filled_before_a_person_is_asked() {
                 "vault_fill",
                 json!({"item":item,"field":"secret"})
             )])),
-            // After a fill the person is asked anyway, as for a one-time code.
             Step::Reply(json!([call("request_login", login)])),
             Step::Reply(json!([text("Waiting for the code.")])),
         ],

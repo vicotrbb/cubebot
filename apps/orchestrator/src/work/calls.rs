@@ -1,5 +1,3 @@
-//! A voice call in the ledger (docs/adr/console.md#voice-calls-over-the-chat-pipeline). Its turns are
-//! ordinary chat turns; the conversation shows one `calls` row in their place.
 use super::{SendMessage, Turn, TurnRow, Work, access};
 use crate::{
     agents::AgentId,
@@ -26,7 +24,6 @@ pub struct CallRecord {
     pub turns: Vec<Turn>,
 }
 
-/// New progress on a turn a call is waiting for.
 pub struct Reply {
     pub events: Vec<ReplyEvent>,
     pub status: String,
@@ -39,7 +36,6 @@ pub enum ReplyEvent {
     Tool(String),
 }
 
-/// A reply is heard, not read.
 const SPOKEN: &str = "\n\nYou are on a voice call. What you write is read aloud and what you receive was transcribed from speech, so it may contain mistakes. Answer briefly in plain spoken sentences, without markdown, lists or code. Use your tools as usual, and say what you are doing before long work.";
 
 pub(super) fn spoken(instructions: String, on_call: bool) -> String {
@@ -61,7 +57,6 @@ struct CallRow {
 }
 
 impl Work {
-    /// Whether the actor may speak in this agent's conversation, and so call it.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn may_call(&self, actor: &Actor, agent: AgentId) -> Result<(), IdentityError> {
         let mut tx = self.pool.begin().await?;
@@ -108,8 +103,6 @@ impl Work {
         Ok(())
     }
 
-    /// Runs at startup: one orchestrator is active, so a call still open lost its socket when
-    /// the last one stopped. It ends at the last thing said.
     #[tracing::instrument(skip_all)]
     pub async fn close_open_calls(&self) -> Result<(), IdentityError> {
         sqlx::query!(
@@ -126,7 +119,6 @@ impl Work {
         Ok(())
     }
 
-    /// A finished sentence, sent as any message is: the same access check, wake and queue.
     pub async fn say_in_call(
         &self,
         actor: &Actor,
@@ -142,7 +134,6 @@ impl Work {
         Ok(turn.id)
     }
 
-    /// The turn's state and its events after `after`, which moves past them.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn reply(&self, turn: Uuid, after: &mut i64) -> Result<Reply, IdentityError> {
         let mut tx = self.pool.begin().await?;
@@ -183,7 +174,6 @@ impl Work {
         })
     }
 
-    /// Calls as messages, after a history cursor.
     pub(super) async fn calls_after(
         tx: &mut Transaction<'_, Postgres>,
         conversation: Uuid,
@@ -210,8 +200,6 @@ impl Work {
         Self::assemble(tx, rows).await
     }
 
-    /// Calls whose message may have changed: live ones, those with unsettled work, and any the
-    /// stream last sent as unfinished.
     pub(super) async fn calls_changing(
         tx: &mut Transaction<'_, Postgres>,
         conversation: Uuid,
@@ -286,7 +274,6 @@ impl Work {
     }
 }
 
-/// One conversation message for a whole call, unfinished while it is live or its work is.
 fn message(row: CallRow, turns: Vec<Turn>) -> Turn {
     let settled = turns
         .iter()

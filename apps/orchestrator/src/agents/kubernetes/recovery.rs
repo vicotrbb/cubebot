@@ -1,4 +1,3 @@
-//! Inspect a physical attempt once before provisioning or recovery decisions.
 use super::{
     Attempt, AttemptId, Error, Phase, ReconcileResult, Reconciler, ResourceKind, ResourceSpec,
 };
@@ -33,8 +32,6 @@ impl Reconciler {
         }
         self.inspect_dispatched(attempt, current).await
     }
-    /// The attempt was made from another pod spec than the configured one, as after a Helm image
-    /// change; the next epoch takes the new spec, and the workspace carries over.
     async fn drifted(&self, agent: AgentId, attempt: &Attempt) -> Result<bool, Error> {
         let Some(workspace) = self
             .registry

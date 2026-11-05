@@ -1,4 +1,3 @@
-//! Actual API-server/defaulting fixture. Never discovers a developer's Kubernetes context.
 #[path = "../tests/support/registry.rs"]
 mod registry_support;
 #[path = "../tests/support/mod.rs"]
@@ -11,14 +10,12 @@ use cubebot_protocol::network::NetworkPolicy;
 mod cluster;
 use cluster::{configuration, required, verify_namespace};
 use serde_json::{Value, json};
-/// Fixture failures end the run with their cause.
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = configuration().await?;
-    // docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox: the sandbox pod runs as root with NET_ADMIN, which baseline forbids, so it needs
-    // a privileged namespace.
+    // The sandbox pod runs as root with NET_ADMIN, which baseline forbids: privileged namespace.
     let kvm = verify(&config, "cubebot-admission", true).await?;
     let kvm_baseline = verify(&config, "cubebot-admission-baseline", false).await?;
     println!(

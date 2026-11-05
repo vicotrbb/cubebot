@@ -148,7 +148,6 @@ impl Agents {
         )
         .fetch_one(&mut *transaction)
         .await?;
-        // Skills that ship with the platform come with every new agent.
         sqlx::query!(
             "
             INSERT INTO skill_installations (agent_id, skill_id, revision)
@@ -175,7 +174,6 @@ impl Agents {
         self.summaries(actor, after, None, 100).await
     }
 
-    /// Every agent the caller may see, for the installation stream.
     #[tracing::instrument(skip_all)]
     pub async fn visible(&self, actor: &Actor) -> Result<Vec<Agent>, IdentityError> {
         // shortcut: one page of 1000; page by id if an installation grows past it.
@@ -190,7 +188,6 @@ impl Agents {
             .ok_or(IdentityError::NotFound)
     }
 
-    /// One query: visibility, the caller's capabilities and the live flags per agent.
     async fn summaries(
         &self,
         actor: &Actor,

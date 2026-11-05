@@ -1,6 +1,3 @@
-//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) against real PostgreSQL and a temporary volume: bytes
-//! round-trip through the console and the runtime API, access stays inside its scope, and
-//! startup reconciles what a crash between publication and commit leaves.
 use crate::runtime_support::fixture;
 use axum::{
     Extension, Router,
@@ -127,7 +124,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
         .unwrap();
     let router = console(&f.pool, storage.clone()).await;
 
-    // Larger than any JSON body limit, and not a multiple of the read buffer.
     let report: Vec<u8> = (0..3_000_017u32).map(|i| (i * 31 % 251) as u8).collect();
     let request = Uuid::new_v4();
     let query = format!("name=report.pdf&request_id={request}");
@@ -136,7 +132,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let file = id(&created);
     assert_eq!(created.json()["size"], report.len());
     assert_eq!(created.json()["access"], "manage");
-    // A retry after a lost response returns the same file and stores nothing new.
     let retried = upload(&router, &alice, "/api/files", &query, b"other bytes").await;
     assert_eq!((retried.status, id(&retried)), (200, file.clone()));
     assert_eq!(blobs(&directory), 1);
@@ -165,7 +160,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let past = send(&router, &alice, "GET", &content, &past, Body::empty()).await;
     assert_eq!(past.status, 416);
 
-    // Another person's file is out of scope until it is shared.
     assert_eq!(get(&router, &bob, &content).await.status, 403);
     let renamed = json(
         &router,
@@ -180,7 +174,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let unknown = format!("/api/files/{}/content", Uuid::new_v4());
     assert_eq!(get(&router, &bob, &unknown).await.status, 404);
 
-    // A read share on a folder reaches what is inside it, and only for reading.
     let folder = json(
         &router,
         &alice,
@@ -267,7 +260,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     .await;
     assert_eq!(delete.status, 403);
 
-    // An agent publishes through the runtime API and shares with a person, who downloads it.
     let token = f
         .auth
         .bootstrap("projected-token", Uuid::new_v4())
@@ -315,8 +307,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     assert_eq!(listed[0]["id"], summary.as_str());
     assert_eq!(blobs(&directory), 2);
 
-    // A crash after the blob is linked but before its rows commit leaves bytes with no row and
-    // a staged upload; startup removes both and keeps every committed file.
     drop((router, runtime, storage));
     let orphan = directory.join("blobs").join(Uuid::new_v4().to_string());
     std::fs::write(&orphan, vec![0; 1 << 20]).unwrap();
@@ -330,7 +320,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let router = console(&f.pool, storage).await;
     assert!(get(&router, &alice, &content).await.body == report);
 
-    // The quota counts only committed bytes, so ten more fit and eleven do not.
     let query = |name: &str| format!("name={name}&request_id={}", Uuid::new_v4());
     let full = upload(&router, &alice, "/api/files", &query("big"), &[1; 11]).await;
     assert_eq!(full.status, 507);
@@ -343,7 +332,6 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let fits = upload(&router, &alice, "/api/files", &query("fits"), &[1; 10]).await;
     assert_eq!(fits.status, 201);
 
-    // Deleting a folder removes what is under it, bytes included, and frees its quota.
     let removed = send(
         &router,
         &alice,

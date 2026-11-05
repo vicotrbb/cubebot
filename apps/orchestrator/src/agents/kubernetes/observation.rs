@@ -1,4 +1,3 @@
-//! Kubernetes readiness is a reported condition, not native execution qualification.
 use super::ResourceObject;
 use k8s_openapi::api::core::v1::Pod;
 
@@ -60,7 +59,6 @@ impl<'a> Observation<'a> {
         }
     }
 }
-/// The sandbox refused a workspace volume the other runtime laid out.
 fn refused(pod: &Pod) -> Option<&'static str> {
     pod.status
         .as_ref()?

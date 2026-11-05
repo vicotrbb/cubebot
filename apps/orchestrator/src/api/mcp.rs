@@ -1,6 +1,4 @@
-//! MCP servers (docs/adr/agents.md#local-and-remote-mcp-server-support) for people: administrators add, change and remove them and
-//! choose which agents may use them; no response carries an environment or header value. An
-//! agent's Connections tab lists them for anyone who may manage that agent.
+//! No response carries an environment or header value.
 use crate::{
     agents::AgentId,
     connections::{AgentMcpServer, Connections, McpServerSummary, SaveMcpServer},

@@ -1,5 +1,3 @@
-//! Usage and budgets, the activity inbox's read state, attachments and agent-written skills:
-//! the real agent binary with a scripted model where a turn matters, real PostgreSQL throughout.
 use crate::{
     memory_agent::{Model, Step, call, respond, text},
     runtime_identity::{http_server, native_chat_setup, runtime_server, spawn_native_text},
@@ -78,7 +76,6 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     model.turn(
         vec![
             Step::Reply(json!([call("skill_create", create.clone())])),
-            // A retried call finds its own package; another package under the name is refused.
             Step::Reply(json!([
                 call("skill_create", create.clone()),
                 call(
@@ -145,7 +142,6 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
             .contains("A skill exists only once it is published with skill_create")
     );
 
-    // Three responses, unpriced until the price list arrives; a provider's cost is never guessed.
     let usage = work.agent_usage(&admin, AgentId(agent)).await.unwrap();
     assert!(
         usage.month.input_tokens >= 300,
@@ -153,7 +149,6 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
         usage.month.input_tokens
     );
     assert!(usage.month.unpriced > 0 && usage.month.cost_usd == 0.0);
-    // Only the provider in use is asked, and only once its prices are a day old.
     assert_eq!(prices_due(&f.pool).await.unwrap(), ["openai"]);
     store_prices(&f.pool, "openai", &prices()).await.unwrap();
     assert!(prices_due(&f.pool).await.unwrap().is_empty());
@@ -163,7 +158,6 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     let each = 60.0 * 1e-6 + 40.0 * 1e-7 + 20.0 * 2e-6;
     assert!((usage.month.cost_usd - responses * each).abs() < 1e-9);
     assert_eq!(usage.models[0].model, "controlled-model");
-    // Another provider's price for the same model name is not this provider's.
     let other = work.agent_usage(&admin, AgentId(agent)).await.unwrap();
     store_prices(
         &f.pool,
@@ -178,7 +172,6 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     let after = work.agent_usage(&admin, AgentId(agent)).await.unwrap();
     assert_eq!(after.month.cost_usd, other.month.cost_usd);
 
-    // Past the budget a new message pauses without calling the model, and raising it resumes.
     let limited = SetBudget {
         monthly_budget_usd: Some(1e-6),
     };
@@ -226,7 +219,6 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
     let f = fixture().await;
     let (auth, work, admin, agent) = native_chat_setup(&f, "A long job").await;
     store_prices(&f.pool, "openai", &prices()).await.unwrap();
-    // One scripted response costs about $0.0001, so the first spends this.
     let limited = SetBudget {
         monthly_budget_usd: Some(5e-5),
     };
@@ -248,7 +240,6 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
     let paused = reaches(&work, &admin, agent, "waiting").await;
     assert_eq!(paused.error.as_deref(), Some("budget_exhausted"));
     assert!(paused.response.is_none());
-    // The running work is told to stop, so the model is not called again and again.
     tokio::time::sleep(Duration::from_secs(4)).await;
     let settled = model.requests().len();
     assert!(settled < 40, "the agent kept spending: {settled} requests");
@@ -308,7 +299,6 @@ async fn shipped_skills_reach_every_agent_once_and_uninstalling_one_sticks() {
     assert_eq!(names(&knowledge, &admin, existing).await, ["coding"]);
     assert_eq!(knowledge.skills(&admin).await.unwrap().len(), 2);
 
-    // A person's edit is a revision like any other; seeding again never overwrites it.
     let shipped = knowledge
         .skill_revision(&admin, design.id, 1)
         .await
@@ -405,7 +395,6 @@ async fn opening_activity_clears_the_badge_until_something_new_arrives() {
     let items = work.activity(&admin).await.unwrap();
     assert_eq!((items.len(), unread(&items)), (1, 0), "seen, not dismissed");
 
-    // A turn created before the read but failing after it is news: it counts when it failed.
     let old = work.send(&admin, agent, &send("Second")).await.unwrap();
     work.read_activity(&admin).await.unwrap();
     wait("waiting").await;
@@ -536,7 +525,6 @@ async fn an_attachment_is_read_through_the_reply_and_only_by_who_may_read_it() {
         response.into_body().collect().await.unwrap().to_bytes(),
         "png bytes"
     );
-    // Someone with no access to the conversation or a room cannot reach it.
     identity
         .create_account(
             &admin,
