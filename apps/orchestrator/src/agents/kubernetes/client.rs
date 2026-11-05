@@ -63,7 +63,6 @@ impl Kubernetes {
         super::authentication::verify(reviewed.status.ok_or(Error::Unauthorized)?, &self.namespace)
     }
 
-    /// Server defaulting/admission preview, never evidence of a physical object.
     #[tracing::instrument(skip_all)]
     pub async fn prepare(&self, object: &ResourceObject) -> Result<ResourceObject, Error> {
         self.validate_target(object.metadata())?;
@@ -118,7 +117,6 @@ impl Kubernetes {
         }
     }
 
-    /// Attaches a command inside the agent's sandbox container.
     #[tracing::instrument(skip_all, fields(name = %name))]
     pub async fn exec(
         &self,

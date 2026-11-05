@@ -11,12 +11,6 @@ import './desktop.css'
 const PIP_W = 320
 const GAP = 12
 
-/**
- * A small live window of the agents on their desktops that the viewer may watch, wherever they are
- * in the console. Several stack on top of each other with one live at the front; opening the stack
- * picks which to watch. Dismissing one hides it until that agent's next session; the agent's own
- * Desktop route shows no preview of itself.
- */
 export function FloatingPreviews({ session }: { session: Session }) {
   const agents = useAgents()
   const location = useLocation()
@@ -26,7 +20,6 @@ export function FloatingPreviews({ session }: { session: Session }) {
   const active = (agents.data ?? []).filter(
     (agent) => agent.desktop_active && can(agent, 'browser_view', session),
   )
-  // A dismissal ends with the session it dismissed: prune ids no longer active.
   const live = new Set(active.map((agent) => agent.id))
   const kept = new Set([...dismissed].filter((id) => live.has(id)))
   if (kept.size !== dismissed.size) setDismissed(kept)
@@ -59,7 +52,6 @@ export function FloatingPreviews({ session }: { session: Session }) {
   )
 }
 
-/** The agent's desktop page. */
 function useOpenDesktop() {
   const navigate = useNavigate()
   return (agent: AgentSummary) =>
@@ -70,7 +62,6 @@ function useOpenDesktop() {
     })
 }
 
-/** Everyone in the stack, to pick from. */
 function Picker({
   agents,
   current,
@@ -101,7 +92,6 @@ function Picker({
   )
 }
 
-/** A phone has no room for a window: one line, opening to the list when there are several. */
 function PhoneStack({
   current,
   agents,

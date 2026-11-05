@@ -6,7 +6,6 @@ import { keys } from '../../app/queries'
 import { Alert, Skeleton, when } from '../../components/primitives'
 import { Lifecycle } from './About'
 
-/** Desired state beside what the cluster or Docker actually reports. */
 export function StatusTab({ agent }: { agent: AgentSummary }) {
   const client = useQueryClient()
   const status = useQuery({

@@ -137,11 +137,7 @@ def retry(f, identity, turn):
 
 @contextmanager
 def partition(f, current, provider=False):
-    """Actual node packet drops, without changing the compiled workload spec.
-
-    A control partition cuts both directions and returns once the orchestrator must
-    have closed a channel open through it, so no turn can be offered on that channel.
-    """
+    """Node packet drops; returns once the orchestrator must have closed the channel."""
     gateway = f.controller()
     source = current["status"]["podIP"]
     if provider:
@@ -282,7 +278,6 @@ def in_flight_control_crash(f):
             outcome(f, identity, turn, ("running",))
             signal(f, controller, "SIGSTOP")
             stopped = True
-        # The reply arrives during the outage and waits in the agent's outbox.
         time.sleep(20)
     finally:
         if stopped:
@@ -477,8 +472,8 @@ def permissions(f):
                 command(id=grant["id"], expected_revision=grant["revision"]),
             )
         f.request(f"/api/conversations/{identity}/messages", token=token, expected=404)
-    waiting = outcome(f, identity, turn, ("waiting",))
-    assert waiting["error"] == "sender_access_revoked"
+    refused = outcome(f, identity, turn, ("failed",))
+    assert refused["error"] == "sender_access_revoked"
     print("PASS revoked sender cannot read or start accepted queued work", flush=True)
 
 

@@ -1,6 +1,4 @@
-//! The agent's tools. Model arguments are data; every tool runs as a child process of the agent
-//! under the sandbox's unprivileged tool user, so the kernel, not path checks, bounds what a call
-//! can touch. Full output stays in the workspace and the model sees a head-and-tail preview.
+//! Every tool runs as a child under the sandbox's unprivileged tool user, so the kernel, not path checks, bounds what a call can touch.
 mod browser;
 mod builtin;
 mod computer;
@@ -20,13 +18,11 @@ use std::{
 use tokio::{io::AsyncWriteExt, process::Command};
 use uuid::Uuid;
 
-/// Callers waiting for a reply by request id, shared with the task that routes replies.
 type Waiting = std::sync::Arc<
     std::sync::Mutex<std::collections::HashMap<u64, tokio::sync::oneshot::Sender<Value>>>,
 >;
 
-/// The waiting callers. A panic while one held the map leaves it consistent: every change is
-/// a single insert, remove or clear.
+/// A panic while one held the map leaves it consistent: every change is a single insert, remove or clear.
 fn lock(
     waiting: &Waiting,
 ) -> std::sync::MutexGuard<'_, std::collections::HashMap<u64, tokio::sync::oneshot::Sender<Value>>>
@@ -36,23 +32,21 @@ fn lock(
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The tool user's search path: its own `~/.local/bin` first, then the system's.
 pub(crate) fn user_path(home: &std::path::Path) -> String {
     format!("{}/.local/bin:/usr/local/bin:/usr/bin:/bin", home.display())
 }
 
-/// A `uid:gid` tool user, never root.
 pub(crate) fn tool_user(user: &str) -> Option<(u32, u32)> {
     user.split_once(':')
         .and_then(|(uid, gid)| Some((uid.parse().ok()?, gid.parse().ok()?)))
         .filter(|&(uid, gid)| uid != 0 && gid != 0)
 }
 
-/// Output shown from each end of a longer result.
 const HEAD: u64 = 8 * 1024;
 const TAIL: u64 = 8 * 1024;
 const OUTPUT: &str = ".cubebot-tool-output";
-/// The guest image's default desktop wallpaper.
+const OUTPUT_MINUTES: &str = "+10080";
+const CALL_LIMIT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 pub const WALLPAPER: &str = "/usr/share/cubebot/wallpaper.jpg";
 /// Guest init creates this once it has drawn the default, in `/run`, which only root writes.
 pub const DESKTOP_READY: &str = "/run/cubebot-desktop";
@@ -71,7 +65,6 @@ pub trait Tool: Send + Sync {
     ) -> Result<Running<'a>, &'static str>;
 }
 
-/// Program arguments and optional standard input for one call.
 pub struct Job {
     pub argv: Vec<String>,
     pub stdin: Option<Vec<u8>>,
@@ -81,7 +74,6 @@ pub struct Sandbox {
     workspace: PathBuf,
     uid: u32,
     gid: u32,
-    /// The desktop is on, so programs a tool starts open their windows on it.
     desktop: bool,
 }
 
@@ -103,14 +95,12 @@ impl Sandbox {
         })
     }
 
-    /// A child as the tool user in its own process group, in the workspace, without the agent's
-    /// environment. Standard library spawning drops supplementary groups when the agent is root.
+    /// Standard library spawning drops supplementary groups when the agent is root.
     pub fn command(&self, program: &str) -> Command {
         let mut command = Command::new(program);
         command
             .env_clear()
             .env("HOME", &self.workspace)
-            // Software the tool user installs with pip, npm or by hand lands in ~/.local/bin.
             .env("PATH", user_path(&self.workspace))
             .env("LANG", "C.UTF-8")
             .current_dir(&self.workspace)
@@ -118,7 +108,6 @@ impl Sandbox {
             .gid(self.gid)
             .process_group(0)
             .kill_on_drop(true);
-        // `:1` is the tool user's display (docs/adr/sandbox.md#desktop-as-a-vmm-device).
         if self.desktop {
             command.env("DISPLAY", ":1");
         }
@@ -129,8 +118,24 @@ impl Sandbox {
         self.workspace.join(OUTPUT).join(format!("{id}.log"))
     }
 
-    /// Runs a job with its combined output written by the tool user to the workspace.
+    async fn prune_output(&self) {
+        let mut command = self.command("find");
+        command
+            .args([OUTPUT, "-maxdepth", "1", "-type", "f", "-name", "*.log"])
+            .args(["-mmin", OUTPUT_MINUTES, "-delete"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Err(error) = command.status().await {
+            eprintln!("tool output not pruned: {error}");
+        }
+    }
+
     pub async fn run(&self, id: Uuid, job: Job) -> Outcome {
+        self.run_within(CALL_LIMIT, id, job).await
+    }
+
+    async fn run_within(&self, limit: std::time::Duration, id: Uuid, job: Job) -> Outcome {
         let mut command = self.command("/bin/sh");
         command
             .args([
@@ -146,9 +151,16 @@ impl Sandbox {
             })
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        let code = match self.wait(command, job.stdin).await {
-            Ok(code) => code,
-            Err(error) => {
+        // Dropping the wait kills the process group before the output is read.
+        let code = match tokio::time::timeout(limit, self.wait(command, job.stdin)).await {
+            Err(_) => {
+                return Outcome::Stopped {
+                    reason: "timed out".into(),
+                    output: self.preview(id),
+                };
+            }
+            Ok(Ok(code)) => code,
+            Ok(Err(error)) => {
                 return Outcome::Exited {
                     code: None,
                     output: format!("The tool did not start: {error}"),
@@ -171,8 +183,6 @@ impl Sandbox {
         Ok(child.wait().await?.code())
     }
 
-    /// The shared truncation policy: the whole result when short, otherwise its head and tail
-    /// with the omitted size, always followed by the retained file.
     pub fn preview(&self, id: Uuid) -> String {
         let path = self.output(id);
         let shown = self.read_preview(&path).unwrap_or_else(|_| {
@@ -181,8 +191,7 @@ impl Sandbox {
         format!("{shown}\n\nFull output: {}", path.display())
     }
 
-    /// Opens only a regular file the tool user owns, so a planted link or hard link cannot make
-    /// the agent read its own state.
+    /// Opens only a regular file the tool user owns, so a planted link or hard link cannot make the agent read its own state.
     fn read_preview(&self, path: &std::path::Path) -> io::Result<String> {
         let mut file = std::fs::OpenOptions::new()
             .read(true)
@@ -212,9 +221,7 @@ impl Sandbox {
     }
 }
 
-/// Stops a call's whole process group, including background jobs, when the call ends or is
-/// cancelled. shortcut: a descendant that calls setsid survives until the sandbox stops; kill
-/// the tool user's processes once the kvm guest owns the session.
+/// shortcut: a descendant that calls setsid survives until the sandbox stops; kill the tool user's processes once the kvm guest owns the session.
 struct Group(Option<u32>);
 impl Drop for Group {
     fn drop(&mut self) {
@@ -227,12 +234,10 @@ impl Drop for Group {
     }
 }
 
-/// Built-in tools followed by the tools of each configured MCP server.
 pub struct Registry {
     sandbox: Sandbox,
     tools: Vec<Box<dyn Tool>>,
     definitions: Vec<cubebot_providers::Tool>,
-    /// The MCP servers the last turn named and their tools, swapped whole when that changes.
     mcp: std::sync::RwLock<Mcp>,
     /// One reconnection at a time, so concurrent lanes never start a server twice.
     connecting: tokio::sync::Mutex<()>,
@@ -244,25 +249,21 @@ pub struct Registry {
 struct Mcp {
     servers: Vec<cubebot_protocol::runtime::McpServer>,
     tools: Vec<std::sync::Arc<dyn Tool>>,
-    /// When a server last failed to connect; it is tried again after [`MCP_RETRY`].
     failed: Option<std::time::Instant>,
 }
 
-/// How long a turn goes without retrying an MCP server that failed to connect, so an
-/// unreachable server does not hold up every turn for its connection timeout.
+/// So an unreachable server does not hold up every turn for its connection timeout.
 const MCP_RETRY: std::time::Duration = std::time::Duration::from_secs(300);
 
 impl Registry {
-    /// `None` when tools are disabled. An enabled but invalid configuration is an error, never
-    /// a fallback to running tools as the agent.
+    /// An enabled but invalid configuration is an error, never a fallback to running tools as the agent.
     pub async fn load() -> Result<Option<Self>, crate::Caused> {
         if std::env::var("CUBEBOT_TERMINAL_ENABLED").as_deref() != Ok("1") {
             return Ok(None);
         }
         let sandbox = Sandbox::from_environment()?;
+        sandbox.prune_output().await;
         let mut tools = builtin::tools();
-        // The provider's computer-use tool, for models that support it (docs/adr/sandbox.md#desktop-as-a-vmm-device), and the
-        // browser tools on the desktop's Chromium (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction and docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions).
         if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() == Ok("1") {
             tools.push(computer::tool());
             tools.extend(browser::tools());
@@ -288,8 +289,6 @@ impl Registry {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    /// Connects the MCP servers a turn names when they differ from the connected ones, or
-    /// when one failed and its retry delay has passed. Servers dropped from the list stop.
     pub async fn connect_mcp(&self, servers: &[cubebot_protocol::runtime::McpServer]) {
         let _one = self.connecting.lock().await;
         let current = |mcp: &Mcp| {
@@ -314,7 +313,6 @@ impl Registry {
         };
     }
 
-    /// Built-in tools, then the connected MCP servers' tools.
     pub fn definitions(&self) -> Vec<cubebot_providers::Tool> {
         let mcp = self.mcp();
         let servers = mcp.tools.iter().map(|tool| tool.definition().clone());
@@ -336,8 +334,7 @@ impl Registry {
             .find(|tool| tool.definition().name == name)
             .cloned()
             .ok_or("no tool has this name")?;
-        // Calls start when polled, so validating here runs nothing; the future then owns its
-        // tool, which a reconnection may drop from the registry while the call runs.
+        // Calls start when polled, so validating here runs nothing; the future owns its tool, which a reconnection may drop while it runs.
         drop(tool.call(&self.sandbox, id, input)?);
         let input = input.clone();
         Ok(Box::pin(async move {
@@ -351,8 +348,7 @@ impl Registry {
         }))
     }
 
-    /// Writes a workspace file as the tool user, creating parent directories, so the agent's
-    /// own writes have the same reach as a tool call's.
+    /// As the tool user, so the agent's own writes have the same reach as a tool call's.
     pub async fn write(&self, path: &str, content: &str) -> bool {
         let job = builtin::write(path, content.as_bytes().to_vec());
         let mut command = self.sandbox.command(&job.argv[0]);
@@ -364,8 +360,6 @@ impl Registry {
         matches!(self.sandbox.wait(command, job.stdin).await, Ok(Some(0)))
     }
 
-    /// A workspace file as the tool user reads it, on the child's standard output; its exit
-    /// status says whether it was read whole.
     pub fn reader(&self, path: &str) -> io::Result<tokio::process::Child> {
         let mut command = self.sandbox.command("cat");
         command
@@ -376,8 +370,6 @@ impl Registry {
         command.spawn()
     }
 
-    /// Writes its standard input to a workspace file as the tool user, creating parent
-    /// directories, and replaces the file only once the input has ended. Kill it to abandon.
     pub fn writer(&self, path: &str) -> io::Result<tokio::process::Child> {
         const REPLACE: &str = r#"mkdir -p -- "$(dirname -- "$1")" && cat > "$1.cubebot-part" && mv -f -- "$1.cubebot-part" "$1""#;
         let mut command = self.sandbox.command("/bin/sh");
@@ -389,8 +381,6 @@ impl Registry {
         command.spawn()
     }
 
-    /// Draws `image` on the desktop as the tool user, or the default with `None`. True when
-    /// there is no desktop to draw on.
     pub async fn wallpaper(&self, image: Option<Vec<u8>>) -> bool {
         if std::env::var("CUBEBOT_COMPUTER_ENABLED").as_deref() != Ok("1") {
             return true;
@@ -410,7 +400,6 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
         matches!(self.sandbox.wait(command, Some(image)).await, Ok(Some(0)))
     }
 
-    /// Waits until no other turn is using the desktop.
     pub async fn desktop(&self) -> tokio::sync::OwnedMutexGuard<()> {
         self.desktop.clone().lock_owned().await
     }
@@ -426,7 +415,6 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
             .any(|tool| tool.computer && tool.name == name)
     }
 
-    /// What a stopped call left in its retained output.
     pub fn preview(&self, id: Uuid) -> String {
         self.sandbox.preview(id)
     }
@@ -436,7 +424,6 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
 mod tests {
     use super::*;
 
-    /// A sandbox whose tool user is the test's own user, as on the development backend.
     pub(super) fn sandbox() -> Sandbox {
         let workspace = std::env::temp_dir().join(format!("cubebot-tools-{}", Uuid::new_v4()));
         std::fs::create_dir(&workspace).unwrap();
@@ -447,6 +434,54 @@ mod tests {
             gid: owner.gid(),
             desktop: false,
         }
+    }
+
+    #[tokio::test]
+    async fn a_call_past_its_limit_stops_with_its_output_and_process_group() {
+        let sandbox = sandbox();
+        let id = Uuid::new_v4();
+        let script = "echo started; sleep 30 & echo $! > sleeper; wait";
+        let job = Job {
+            argv: vec!["/bin/sh".into(), "-c".into(), script.into()],
+            stdin: None,
+        };
+        let limit = std::time::Duration::from_millis(500);
+        let outcome = sandbox.run_within(limit, id, job).await;
+        assert!(outcome.validate().is_ok());
+        let Outcome::Stopped { reason, output } = outcome else {
+            panic!("unexpected outcome {outcome:?}");
+        };
+        assert_eq!(reason, "timed out");
+        assert!(output.contains("started"), "{output}");
+        let sleeper = std::fs::read_to_string(sandbox.workspace.join("sleeper")).unwrap();
+        let sleeper = nix::unistd::Pid::from_raw(sleeper.trim().parse().unwrap());
+        let gone = || nix::sys::signal::kill(sleeper, None).is_err();
+        for _ in 0..200 {
+            if gone() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(gone());
+        std::fs::remove_dir_all(&sandbox.workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn pruning_deletes_only_old_output() {
+        let sandbox = sandbox();
+        let directory = sandbox.workspace.join(OUTPUT);
+        std::fs::create_dir(&directory).unwrap();
+        let now = std::time::SystemTime::now();
+        for (name, days) in [("old.log", 8), ("recent.log", 6), ("old.keep", 8)] {
+            let file = std::fs::File::create(directory.join(name)).unwrap();
+            file.set_modified(now - std::time::Duration::from_secs(days * 86400))
+                .unwrap();
+        }
+        sandbox.prune_output().await;
+        assert!(!directory.join("old.log").exists());
+        assert!(directory.join("recent.log").exists());
+        assert!(directory.join("old.keep").exists());
+        std::fs::remove_dir_all(&sandbox.workspace).unwrap();
     }
 
     #[tokio::test]

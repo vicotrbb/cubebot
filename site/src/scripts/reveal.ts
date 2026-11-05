@@ -1,5 +1,3 @@
-// Blocks land once, when their group scrolls into view.
-
 function reveal(
   entries: IntersectionObserverEntry[],
   observer: IntersectionObserver,

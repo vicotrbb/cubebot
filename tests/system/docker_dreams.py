@@ -1,11 +1,6 @@
-"""Dreaming (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results) on
-real agents through the Docker sandbox backend.
+"""Dreaming on real agents through the Docker sandbox backend.
 
-Same host needs as docker_sandbox.py. Three agents with a 60-second idle delay and a
-real OpenAI model: one consolidates seeded duplicates and contradictions, is refused a
-rerun without new outside changes and yields to a chat message mid-run; one dreams with
-the dreaming_model override; one has an unknown dreaming model and fails. Assertions
-read the ledger (runs, tagged revisions, kept history), never the model's report.
+Same host needs as docker_sandbox.py.
 """
 
 import json
@@ -58,8 +53,6 @@ def psql(postgres, query):
 
 
 class Watch:
-    """Polls one agent's runs and records every activity it reports."""
-
     def __init__(self, api, identity):
         self.api, self.identity, self.activities = api, identity, set()
 
@@ -100,7 +93,6 @@ def chat(api, identity, message):
 
 
 def ledger(postgres, identity, run):
-    """Revisions tagged with the run, and whether any belongs to another agent."""
     tagged = psql(
         postgres,
         f"SELECT count(*) FROM memory_revisions WHERE dream_run_id='{run}'",
@@ -179,7 +171,6 @@ def overrides(api, nano, broken):
 
 
 def dream_log(identity):
-    """The agent's dream lines, kept as evidence before its container goes."""
     label = f"label=cubebot.dev/agent={identity}"
     ids = subprocess.run(
         ["docker", "ps", "--all", "--quiet", "--filter", label],

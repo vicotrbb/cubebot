@@ -1,8 +1,9 @@
-# Agents without CUBEBOT_DOMAIN: sandboxes reach the orchestrator over HTTPS on the Docker bridge (on
-# macOS on loopback, as host.docker.internal), with a development CA their sandboxes trust; the
-# orchestrator itself serves plain HTTP behind this proxy.
+# Agents without CUBEBOT_DOMAIN: HTTPS on the Docker bridge (macOS: loopback) with a development CA.
 services:
   proxy:
+    environment:
+      # Its fingerprint, so a reissued certificate recreates this container, which reads it once.
+      CUBEBOT_CONTROL_CERT: ${CUBEBOT_CONTROL_CERT:?set by deploy/cubebot}
     ports:
       - '${CUBEBOT_CONTROL_ADDRESS:?set by deploy/cubebot}:8443:8443'
     volumes:

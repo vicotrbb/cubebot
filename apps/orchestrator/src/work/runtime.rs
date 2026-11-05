@@ -1,6 +1,3 @@
-//! Lanes (docs/adr/agents.md#agent-execution-lanes): one main-lane turn per agent, for direct chat, room work and messages, beside
-//! up to `task_lanes` delegated tasks and tasks' turns, one per task. The ledger delivers conversation records; the agent
-//! assembles its own context.
 use super::Work;
 use crate::{
     agents::{kubernetes::Error, runtime::RuntimeActor},
@@ -9,7 +6,6 @@ use crate::{
 use cubebot_protocol::runtime::{EVENT_BYTES, Exchange, Turn, TurnEvent};
 use uuid::Uuid;
 
-/// Why a turn waits when its agent spent its monthly budget; raising the budget requeues it.
 const BUDGET_EXHAUSTED: &str = "budget_exhausted";
 
 impl Work {
@@ -74,8 +70,7 @@ impl Work {
         let knowledge_base = pending.knowledge_base;
         let in_task = pending.in_task;
         let on_call = pending.on_call;
-        if let Some(reason) = refused(tx, actor, turn, command_only).await? {
-            wait(tx, turn, reason).await?;
+        if refused(tx, actor, turn, command_only).await? {
             return Ok(None);
         }
         let Some(inference) = inference(tx, connections, actor, turn, command_only).await? else {
@@ -125,9 +120,7 @@ impl Work {
         }))
     }
 
-    /// Appends an event idempotently. Only the running attempt's done or error settles the turn;
-    /// late events remain evidence. Returns whether this attempt still owns the turn's run,
-    /// including a cancelled run that has not stopped yet.
+    /// Only the running attempt's done or error settles the turn; late events remain evidence.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, turn = %turn))]
     pub(crate) async fn record(
         &self,
@@ -136,7 +129,9 @@ impl Work {
         sequence: u64,
         event: &TurnEvent,
     ) -> Result<bool, Error> {
-        let payload = payload(sequence, event)?;
+        let (event, payload) = stored(event)?;
+        let event = &event;
+        let accepted = accepted(sequence, event, &payload);
         let mut tx = self.pool.begin().await?;
         // Serializes event ids per conversation so a browser cursor never skips a late commit.
         sqlx::query!(
@@ -164,35 +159,23 @@ impl Work {
         .await?
         .ok_or(Error::Conflict)?;
         let (status, attempt) = (current.status, current.attempt_id);
-        // A resent event keeps its first recorded form.
-        sqlx::query!(
-            "
-            INSERT INTO turn_events (turn_id, sequence, payload)
-            VALUES ($1, $2, $3)
-            ON CONFLICT DO NOTHING
-            ",
-            turn,
-            sequence as i64,
-            &payload,
-        )
-        .execute(&mut *tx)
-        .await?;
-        incorporated(&mut tx, turn, event).await?;
         let owned = attempt == Some(actor.attempt.0);
         let live = status == "running" && owned;
-        account(&mut tx, actor, turn, sequence, live, event).await?;
-        if live {
-            settle(&mut tx, actor, turn, event).await?;
+        if accepted {
+            append(&mut tx, actor, turn, sequence, event, &payload, live).await?;
+        } else if live {
+            tracing::warn!(sequence, "refused an invalid turn event");
+            failed(&mut tx, turn, "invalid_event").await?;
         }
         tx.commit().await?;
-        Ok(owned && matches!(status.as_str(), "running" | "cancelled"))
+        Ok(owned && matches!(status.as_str(), "running" | "cancelled" | "failed"))
     }
 
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub(crate) async fn cancelled(&self, turn: Uuid) -> Result<bool, Error> {
         Ok(sqlx::query_scalar!(
             r#"
-            SELECT status='cancelled' OR (status='waiting' AND error='budget_exhausted') AS "cancelled!"
+            SELECT status IN ('cancelled','failed') OR (status='waiting' AND error='budget_exhausted') AS "cancelled!"
             FROM chat_turns
             WHERE id=$1
             "#,
@@ -220,7 +203,35 @@ impl Work {
     }
 }
 
-/// Steering the running work took in is incorporated.
+async fn append(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    turn: Uuid,
+    sequence: u64,
+    event: &TurnEvent,
+    payload: &serde_json::Value,
+    live: bool,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        INSERT INTO turn_events (turn_id, sequence, payload)
+        VALUES ($1, $2, $3)
+        ON CONFLICT DO NOTHING
+        ",
+        turn,
+        sequence as i64,
+        payload,
+    )
+    .execute(&mut **tx)
+    .await?;
+    incorporated(tx, turn, event).await?;
+    account(tx, actor, turn, sequence, live, event).await?;
+    if live {
+        settle(tx, actor, turn, event).await?;
+    }
+    Ok(())
+}
+
 async fn incorporated(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
@@ -243,22 +254,24 @@ async fn incorporated(
     Ok(())
 }
 
-/// Why this turn may not start now, if so. A command-only routine calls no model, so it spends
-/// nothing.
+/// A revoked sender's turn fails: waiting would hold the lane, freezing the agent for everyone.
 async fn refused(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
     turn: Uuid,
     command_only: bool,
-) -> Result<Option<&'static str>, Error> {
+) -> Result<bool, Error> {
     if !sender_allowed(tx, turn).await? {
-        return Ok(Some("sender_access_revoked"));
+        failed(tx, turn, "sender_access_revoked").await?;
+        return Ok(true);
     }
     let spent = !command_only && super::usage::exhausted(tx, actor.agent).await?;
-    Ok(spent.then_some(BUDGET_EXHAUSTED))
+    if spent {
+        wait(tx, turn, BUDGET_EXHAUSTED).await?;
+    }
+    Ok(spent)
 }
 
-/// An unreadable server configuration leaves the turn without MCP rather than stuck.
 async fn mcp_servers(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,
@@ -276,8 +289,6 @@ async fn mcp_servers(
         })
 }
 
-/// Records a usage event and pauses the running turn once it spends the budget; `cancelled` then
-/// tells the agent to stop at its next safe point.
 async fn account(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -307,8 +318,6 @@ async fn account(
     Ok(())
 }
 
-/// What earlier runs of the turn left: their tool and steering events, the last event sequence,
-/// and the outcomes of its settled children.
 async fn earlier(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
@@ -349,10 +358,8 @@ async fn earlier(
     Ok((prior, last, delegations))
 }
 
-/// A delegated task's context is the task itself, not the main conversation. A room delivery's is
-/// the room's recent messages: rooms and the main conversation stay out of each other's context.
-/// A task room's agent is a fork: it starts from its conversation as it stands and adds nothing
-/// back, since `history` never reads a room's turns or their summaries.
+/// Rooms and the main conversation stay out of each other's context; a task room's agent is a fork
+/// that adds nothing back, since `history` never reads a room's turns or their summaries.
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -388,17 +395,41 @@ fn in_room(context: &str, message: String) -> String {
     )
 }
 
-fn payload(sequence: u64, event: &TurnEvent) -> Result<serde_json::Value, Error> {
-    let payload =
+/// The event as PostgreSQL can hold it: neither text nor jsonb take a NUL, which any tool's output
+/// or arguments may contain.
+fn stored(event: &TurnEvent) -> Result<(TurnEvent, serde_json::Value), Error> {
+    let mut payload =
         serde_json::to_value(event).map_err(|error| Error::Configuration(error.into()))?;
-    if sequence == 0
-        || sequence > i64::MAX as u64
-        || payload.to_string().len() > EVENT_BYTES
-        || !valid(event)
-    {
-        return Err(Error::InvalidConfiguration);
+    strip_nul(&mut payload);
+    let event = serde_json::from_value(payload.clone())
+        .map_err(|error| Error::Configuration(error.into()))?;
+    Ok((event, payload))
+}
+
+fn strip_nul(value: &mut serde_json::Value) {
+    use serde_json::Value;
+    match value {
+        Value::String(text) => text.retain(|c| c != '\0'),
+        Value::Array(items) => items.iter_mut().for_each(strip_nul),
+        Value::Object(fields) => {
+            *fields = std::mem::take(fields)
+                .into_iter()
+                .map(|(mut key, mut field)| {
+                    key.retain(|c| c != '\0');
+                    strip_nul(&mut field);
+                    (key, field)
+                })
+                .collect();
+        }
+        _ => {}
     }
-    Ok(payload)
+}
+
+fn accepted(sequence: u64, event: &TurnEvent, payload: &serde_json::Value) -> bool {
+    sequence != 0
+        && sequence <= i64::MAX as u64
+        && payload.to_string().len() <= EVENT_BYTES
+        && valid(event)
 }
 
 async fn settle(
@@ -409,7 +440,6 @@ async fn settle(
 ) -> Result<(), Error> {
     match event {
         TurnEvent::Done { response, memories } => {
-            // A parent with open or unseen children yields instead of completing.
             match super::collaboration::after_run(tx, turn).await? {
                 "complete" => {
                     sqlx::query!(
@@ -448,15 +478,13 @@ async fn settle(
     Ok(())
 }
 
-/// Agent-originated work settles as failed so its parent gets the evidence; a person's own
-/// request waits for them to retry.
 async fn fail(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
     code: &str,
 ) -> Result<(), Error> {
-    // shortcut: a child's provider outage fails it rather than waiting (docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt keeps them
-    // distinct); give children a provider wait if parents re-delegate needlessly.
+    // shortcut: a child's provider outage fails it rather than waiting; give children a provider
+    // wait if parents re-delegate needlessly.
     let failed = sqlx::query!(
         "
         UPDATE chat_turns
@@ -475,7 +503,6 @@ async fn fail(
 }
 
 fn valid(event: &TurnEvent) -> bool {
-    // Length is bounded by the encoded event as a whole.
     let text = |value: &str| !value.contains('\0');
     match event {
         TurnEvent::TextDelta { text: delta } => text(delta),
@@ -498,6 +525,26 @@ fn valid(event: &TurnEvent) -> bool {
         TurnEvent::ToolCall { name, .. } => !name.is_empty() && name.len() <= 128,
         TurnEvent::Usage { .. } => true,
     }
+}
+
+async fn failed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    error: &str,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        UPDATE chat_turns
+        SET status='failed', error=$2
+        WHERE id=$1
+        ",
+        turn,
+        error,
+    )
+    .execute(&mut **tx)
+    .await?;
+    super::collaboration::resume_parent(tx, turn).await?;
+    Ok(())
 }
 
 async fn wait(
@@ -523,8 +570,8 @@ async fn sender_allowed(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
 ) -> Result<bool, Error> {
-    // Agent-originated work, including the agent's own routines, carries its root person's
-    // authority, checked when it was sent.
+    // Agent-originated work, including the agent's own routines and broadcasts, carries its root
+    // person's authority, checked when it was sent.
     Ok(sqlx::query_scalar!(
         r#"
         SELECT EXISTS(
@@ -532,7 +579,7 @@ async fn sender_allowed(
             FROM chat_turns t
             JOIN human_accounts a ON a.id=t.actor_id AND a.active
             WHERE t.id=$1
-                AND (t.parent_turn_id IS NOT NULL OR EXISTS(SELECT 1 FROM routines r WHERE r.id=t.routine_id AND r.managed_by='agent') OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id)))))
+                AND (t.parent_turn_id IS NOT NULL OR EXISTS(SELECT 1 FROM routines r WHERE r.id=t.routine_id AND r.managed_by='agent') OR EXISTS(SELECT 1 FROM broadcasts b WHERE b.id=t.broadcast_id AND b.agent_id IS NOT NULL) OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id)))))
         ) AS "allowed!"
         "#,
         turn,
@@ -541,8 +588,6 @@ async fn sender_allowed(
     .await?)
 }
 
-/// The latest summary and every completed exchange from the turn it was written in onward,
-/// since a summary can precede its own turn's response.
 async fn history(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
@@ -579,8 +624,6 @@ async fn history(
     Ok((summary.map(|summary| summary.text), history))
 }
 
-/// The provider for the turn, or `None` once it waits for one. A routine's command alone needs
-/// no model (docs/adr/agents.md#routines).
 async fn inference(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     connections: Option<&Connections>,

@@ -1,7 +1,3 @@
-//! The embedded speech path on real models: `just speech-check [directory]`. Downloads them through
-//! the production model store, hears a human recording through Silero and Zipformer, speaks with
-//! both Piper voices and hears that back. Prints what docs/STATUS.md records, and fails on a wrong
-//! transcript.
 use cubebot_orchestrator::speech::{
     Audio, Heard, LESSAC, Listener, Models, Piper, RYAN, SAMPLE_RATE, SILERO, Silero, Tts,
     ZIPFORMER, Zipformer, piper, recognizer,
@@ -16,7 +12,6 @@ use std::{
 const SENTENCE: &str = "The weather in Paris is lovely this morning.";
 // Not "weather": Piper varies between runs and Zipformer sometimes hears its homophone.
 const HEARD_BACK: [&str; 2] = ["PARIS", "MORNING"];
-/// What the bundled recording says, from its trans.txt.
 const RECORDED: [&str; 2] = [
     "AFTER EARLY NIGHTFALL THE YELLOW LAMPS",
     "QUARTER OF THE BROTHELS",
@@ -32,8 +27,6 @@ fn rss_mb() -> u64 {
     text.trim().parse::<u64>().expect("ps prints kilobytes") / 1024
 }
 
-/// Hears `samples` in 100 ms frames, then silence enough to end the sentence. Returns the
-/// transcripts, how many partials came, and the time spent hearing the speech alone.
 fn hear(
     directory: &Path,
     recognizer: &Arc<OnlineRecognizer>,
@@ -73,7 +66,6 @@ fn resampled(samples: &[f32], rate: u32) -> Vec<f32> {
         .collect()
 }
 
-/// Speaks, timing the first audio as a call would hear it, and returns the voice at 16 kHz.
 fn speak(name: &str, tts: &Piper) -> Vec<f32> {
     let began = Instant::now();
     let mut first = None;
@@ -99,7 +91,6 @@ fn speak(name: &str, tts: &Piper) -> Vec<f32> {
     resampled(&samples, rate)
 }
 
-/// Calls share one recognizer and voice, each stream on its own thread.
 fn together(directory: &Path, recognizer: &Arc<OnlineRecognizer>, samples: &[f32], voice: &Piper) {
     std::thread::scope(|scope| {
         for _ in 0..3 {

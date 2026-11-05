@@ -24,6 +24,7 @@ pub use activity::ActivityItem;
 pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use calls::{CallRecord, Reply, ReplyEvent};
 pub use collaboration::Steering;
+pub(crate) use collaboration::cancel_open;
 pub use coordinator::{coordinate, route};
 pub use cursors::ReadCursor;
 pub use events::{Event, Page};
@@ -77,7 +78,6 @@ pub struct Turn {
     pub call: Option<CallRecord>,
 }
 
-/// A turn's own columns; its progress, origin, children and steering are attached after.
 pub(super) struct TurnRow {
     pub id: Uuid,
     pub sequence: i64,
@@ -182,7 +182,6 @@ impl Work {
         self.send_in(actor, conversation, input, None).await
     }
 
-    /// Sends a message, as part of a voice call when `call` names one.
     async fn send_in(
         &self,
         actor: &Actor,
@@ -230,7 +229,6 @@ impl Work {
     }
 }
 
-/// The turn an earlier send with this request id made; a different message under it is refused.
 async fn replayed(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &Actor,

@@ -1,5 +1,4 @@
-// The hero block turns toward the pointer. Rotation targets are CSS custom
-// properties on the block body so the stylesheet keeps the resting pose.
+// Rotation targets are CSS custom properties on the block body so the stylesheet keeps the resting pose.
 
 const REST_X = -18
 const REST_Y = 28

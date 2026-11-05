@@ -1,8 +1,5 @@
-//! The tool-free room coordinator (docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator). It takes one unaddressed room message, asks the
-//! installation's model to pick the member best placed to answer it or the open task it adds to,
-//! and validates the answer against current membership before any turn exists. A person always
-//! gets an answer: when no valid result comes, the room's first member takes the message. The model call happens outside any
-//! transaction; the message stays `routing` until a valid result commits.
+//! The model call happens outside any transaction; the message stays `routing` until a valid
+//! result commits.
 use super::rooms;
 use crate::{
     agents::kubernetes::Error,
@@ -19,7 +16,6 @@ use std::time::Duration;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Failed coordinator calls before the message is reported as failed.
 const ATTEMPTS: i16 = 3;
 
 const SYSTEM: &str = "You route one message in a team chat room to the single agent best placed to answer it. You have no tools and do no work yourself. Every message gets an owner, greetings and small talk included: pick the member whose description fits best, or the one the conversation was already with. Reply with JSON only, one of: {\"action\":\"assign\",\"agent\":\"<member id>\"} or {\"action\":\"continue\",\"task\":\"<open task id>\"} when the message corrects or adds to that open task.";
@@ -36,7 +32,6 @@ struct Pending {
     prompt: String,
 }
 
-/// Routes waiting room messages until stopped.
 pub async fn coordinate(pool: PgPool, connections: Connections, mut stop: watch::Receiver<bool>) {
     loop {
         if !routed(&pool, &connections).await {
@@ -48,7 +43,6 @@ pub async fn coordinate(pool: PgPool, connections: Connections, mut stop: watch:
     }
 }
 
-/// Whether a message left `routing`, so another may be waiting without a pause.
 async fn routed(pool: &PgPool, connections: &Connections) -> bool {
     route(pool, connections).await.unwrap_or_else(|error| {
         tracing::warn!(?error, "room coordination failed");
@@ -56,8 +50,6 @@ async fn routed(pool: &PgPool, connections: &Connections) -> bool {
     })
 }
 
-/// Settles at most one waiting message; `false` when none was waiting or a failed attempt left
-/// it `routing`, so the caller waits before retrying.
 pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Error> {
     let mut tx = pool.begin().await?;
     let Some(pending) = pending(&mut tx).await? else {
@@ -68,7 +60,6 @@ pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Err
     dispatch(pool, &pending, inference).await
 }
 
-/// Asks the model about one waiting message and settles the answer.
 #[tracing::instrument(skip_all, fields(message = %pending.id))]
 async fn dispatch(
     pool: &PgPool,
@@ -158,7 +149,6 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
     Ok(Some(Pending { id, prompt }))
 }
 
-/// Asks the model and records what the coordinator spent; a lost record never loses the answer.
 pub(super) async fn ask(
     pool: &PgPool,
     inference: &crate::connections::Inference,
@@ -194,7 +184,6 @@ pub(super) async fn ask(
     Ok(text)
 }
 
-/// The request through the named provider's adapter.
 async fn through(
     provider: ProviderKind,
     request: &Request<'_>,
@@ -255,15 +244,12 @@ async fn complete<P: Provider>(
     }
 }
 
-/// The first JSON object in the reply, so a fenced or explained answer still parses.
 fn decision(text: &str) -> Option<Decision> {
     let start = text.find('{')?;
     let end = text.rfind('}')?;
     serde_json::from_str(text.get(start..=end)?).ok()
 }
 
-/// Commits a valid result, or counts a failed attempt. A message already settled, by a retry
-/// or an earlier run, is left alone.
 async fn settle(
     pool: &PgPool,
     pending: &Pending,
@@ -311,7 +297,6 @@ async fn settle(
     Ok(routing != "routing")
 }
 
-/// The routing state a coordinator result leads to, delivering a valid assignment.
 async fn outcome(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     id: Uuid,
@@ -342,15 +327,12 @@ async fn assign(
     if !current.iter().any(|member| member.id == agent) {
         return attempt(tx, id, room, "coordinator_chose_no_member").await;
     }
-    // Members are not retired, so waking the agent cannot conflict here.
     rooms::deliver(tx, id, agent)
         .await
         .map_err(|_| Error::Conflict)?;
     Ok(("routed", None))
 }
 
-/// Stays routing for another try until the attempts are spent; then the room's first member
-/// answers, so the sender is never left without a reply. A room without members fails.
 async fn attempt(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     id: Uuid,
@@ -405,7 +387,6 @@ mod tests {
             "Ada should do it",
             r#"{"action":"assign","agent":"Ada"}"#,
             r#"{"action":"run","command":"rm -rf /"}"#,
-            // Every message gets an owner; the coordinator neither asks nor ignores.
             r#"{"action":"clarify","question":"Which region?"}"#,
             r#"{"action":"none"}"#,
         ] {

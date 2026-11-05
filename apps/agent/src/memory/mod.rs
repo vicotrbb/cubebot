@@ -1,6 +1,4 @@
-//! Memory tools (docs/adr/memory.md#explicit-and-automatic-memory-creation, docs/adr/memory.md#tool-initiated-memory-retrieval and docs/adr/memory.md#direct-memory-editing-and-conversational-correction). Nothing is recalled unless the agent searches. Saves and
-//! removals stage in the turn and commit with its completion, so a failed or cancelled turn
-//! changes nothing; durable revisions belong to the orchestrator.
+//! Saves and removals stage in the turn and commit with its completion, so a failed or cancelled turn changes nothing.
 use crate::{control::MemoryClient, tools::Running};
 use cubebot_protocol::{
     runtime::{MEMORY_BYTES, MemoryChange},
@@ -11,10 +9,8 @@ use serde_json::{Value, json};
 use std::sync::Mutex;
 use uuid::Uuid;
 
-/// Facts one extraction may add.
 const EXTRACTED: usize = 5;
 
-/// One turn's memory: its search client and the changes staged so far.
 pub struct Memories {
     client: Option<MemoryClient>,
     staged: Mutex<Vec<MemoryChange>>,
@@ -70,7 +66,6 @@ impl Memories {
         }
     }
 
-    /// `None` when `name` is not a memory tool.
     pub fn call(&self, name: &str, input: &Value) -> Option<Result<Running<'_>, &'static str>> {
         Some(match name {
             "search_memory" => self.search(input),
@@ -119,8 +114,7 @@ impl Memories {
         }))
     }
 
-    /// Asks for facts worth keeping that this turn did not already save. `None` when the turn
-    /// forgets something: extraction there tends to re-save what was just removed.
+    /// `None` when the turn forgets something: extraction there tends to re-save what was just removed.
     pub fn extraction(&self) -> Option<String> {
         let staged = self.staged.lock().unwrap();
         if staged
@@ -135,7 +129,6 @@ impl Memories {
         ))
     }
 
-    /// Stages the facts in an extraction reply; anything but a JSON array of strings adds none.
     pub fn extracted(&self, reply: &str) {
         let Ok(facts) = serde_json::from_str::<Vec<String>>(unfenced(reply)) else {
             return;
@@ -182,7 +175,6 @@ fn id(memory: &str) -> Result<Uuid, &'static str> {
     })
 }
 
-/// A model reply without the Markdown code fence models often wrap JSON in.
 pub(crate) fn unfenced(reply: &str) -> &str {
     let reply = reply.trim();
     reply

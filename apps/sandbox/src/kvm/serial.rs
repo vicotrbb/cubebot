@@ -1,4 +1,3 @@
-//! A transmit-only 16550 UART: enough for the Linux 8250 driver to probe it and write the console.
 use std::io::{self, Write};
 
 const DLAB: u8 = 0x80;
@@ -16,7 +15,6 @@ pub struct Serial {
 }
 
 impl Serial {
-    /// Writes one register and returns whether the guest's serial IRQ must be raised.
     pub fn write(&mut self, offset: u16, value: u8, out: &mut impl Write) -> io::Result<bool> {
         let dlab = self.lcr & DLAB != 0;
         match offset {
@@ -80,7 +78,6 @@ mod tests {
     fn passes_the_8250_probe_and_writes_the_console() {
         let mut serial = Serial::default();
         let mut out = Vec::new();
-        // autoconfig: IER read-back and the loopback modem-status test.
         serial.write(1, 0, &mut out).unwrap();
         assert_eq!(serial.read(1) & 0x0f, 0);
         serial.write(1, 0x0f, &mut out).unwrap();
@@ -88,7 +85,6 @@ mod tests {
         serial.write(4, LOOPBACK | 0x0a, &mut out).unwrap();
         assert_eq!(serial.read(6) & 0xf0, 0x90);
         serial.write(4, 0, &mut out).unwrap();
-        // Interrupt-driven transmit: each byte with THRI enabled raises the IRQ once per IIR read.
         serial.write(1, THR_EMPTY_INTERRUPT, &mut out).unwrap();
         assert_eq!(serial.read(2), 0x02);
         assert!(serial.write(0, b'o', &mut out).unwrap());

@@ -1,6 +1,5 @@
-// Chat rendering, attachments, the file viewer, rooms, webhooks, usage, the Situation room and the
-// activity badge in a real browser, on desktop and on a phone. Against a database-only stack with
-// CUBEBOT_STORAGE_DIRECTORY and Vite on :3100, seeded by platform_browser_seed.py:
+// Chat, attachments, the file viewer, rooms, webhooks, usage, the Situation room and the badge, on
+// desktop and on a phone. A database-only stack with CUBEBOT_STORAGE_DIRECTORY and Vite on :3100:
 //   python3 tests/system/platform_browser_seed.py $S/seed.json
 //   PLAYWRIGHT=/path/to/playwright/index.mjs S=<dir> node tests/system/platform_browser.mjs
 // BROWSER=firefox with FIREFOX=<executable> runs it in Firefox.
@@ -169,7 +168,6 @@ async function run(viewport, scheme, tag) {
     )
     ok(o <= 1, `${tag} no sideways scroll: ${w} (${o})`)
   }
-  // Conversation
   await p.goto(`${B}/agents/${seed.ayla}`)
   await p.getByText('Totals').waitFor({ timeout: 15000 })
   await p.waitForTimeout(1500)
@@ -248,7 +246,6 @@ async function run(viewport, scheme, tag) {
   await shot('attachment-open')
   await p.keyboard.press('Escape')
   await p.waitForTimeout(200)
-  // Room
   await p.goto(`${B}/rooms/${seed.room}`)
   await p.getByText('coding playbook').waitFor({ timeout: 10000 })
   ok(
@@ -258,7 +255,6 @@ async function run(viewport, scheme, tag) {
   await p.locator('.attachment-image img').first().waitFor({ timeout: 8000 })
   ok(true, `${tag} room attachment`)
   await shot('room')
-  // Files
   await p.goto(`${B}/files`)
   await p.getByText('notes.md').waitFor({ timeout: 10000 })
   await shot('files')
@@ -310,7 +306,6 @@ async function run(viewport, scheme, tag) {
     )
   }
   await overflow('files')
-  // Routines, after real deliveries: one accepted, then its repeat.
   for (let delivery = 0; delivery < 2; delivery++)
     await globalThis.fetch(`${B}/api/hooks/${seed.routine}`, {
       method: 'POST',
@@ -334,13 +329,11 @@ async function run(viewport, scheme, tag) {
   await p.waitForTimeout(150)
   await shot('routines')
   await overflow('routines')
-  // Usage
   await p.goto(`${B}/agents/${seed.ayla}/usage`)
   await p.getByText('Last 30 days').waitFor({ timeout: 10000 })
   await p.waitForTimeout(300)
   await shot('usage')
   await overflow('usage')
-  // Situation
   await situationFits(p, viewport, tag)
   await p.goto(`${B}/situation`)
   await p.locator('.brief h2').waitFor({ timeout: 10000 })
@@ -361,7 +354,6 @@ async function run(viewport, scheme, tag) {
     await p.waitForTimeout(200)
     await shot('situation-end')
   }
-  // Activity
   await p.goto(`${B}/`)
   await p.waitForTimeout(600)
   await p.goto(`${B}/activity`)

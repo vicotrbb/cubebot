@@ -1,6 +1,5 @@
 import { useAvatars } from '../app/queries'
 
-/** A person's profile picture, or the first letter of their name when they have none. */
 export function PersonAvatar({
   account,
   login,

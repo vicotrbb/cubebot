@@ -1,4 +1,3 @@
-//! The console's memory API through the configured browser router: cookies, CSRF and grants.
 use crate::support;
 use axum::{
     body::Body,
@@ -139,7 +138,6 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
     let memories = format!("/api/agents/{writer}/memories");
 
     assert_eq!(anonymous.get(&memories).await.0, StatusCode::UNAUTHORIZED);
-    // A cookie-authenticated write without the browser origin is cross-site and refused.
     let note = json!({"content":"The deadline is November 15"});
     assert_eq!(
         as_admin.call("POST", &memories, note.clone(), None).await.0,
@@ -173,7 +171,6 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
     assert_eq!(found.as_array().unwrap().len(), 1);
     assert_eq!(as_admin.get(&memories).await.1.as_array().unwrap().len(), 2);
 
-    // Edits name the revision they started from; a stale one changes nothing.
     let (status, revised) = as_admin
         .write(
             "PUT",
@@ -201,7 +198,6 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
             .0,
         StatusCode::CONFLICT
     );
-    // A memory is reachable only under the agent that owns it.
     let elsewhere = format!("/api/agents/{other}/memories/{id}");
     let moved = json!({"content":"Hijacked","expected_revision":2});
     assert_ne!(
@@ -218,7 +214,6 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
             .is_empty()
     );
 
-    // Invalid input is refused before it is stored.
     for body in [
         json!({"content":"   "}),
         json!({"content":"x".repeat(4097)}),
@@ -244,7 +239,6 @@ async fn the_console_reads_and_edits_memories_only_with_grants_and_fresh_revisio
         StatusCode::BAD_REQUEST
     );
 
-    // Members need memory.read to see and memory.edit to change, per agent.
     assert_eq!(as_member.get(&memories).await.0, StatusCode::NOT_FOUND);
     grant(
         &identity,

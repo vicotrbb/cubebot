@@ -81,7 +81,6 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         restarted.configure(&admin, &stale).await,
         Err(IdentityError::Conflict)
     ));
-    // OpenAI cannot report its window; Anthropic reports its own.
     let windowless = ConfigureProvider {
         request_id: Uuid::new_v4(),
         expected_revision: 1,
@@ -103,7 +102,6 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         cubebot_protocol::runtime::ProviderKind::Anthropic
     );
     assert_eq!((current.revision, current.context_window), (2, None));
-    // A model change alone keeps the saved key, re-encrypted under the next revision.
     let model_only = ConfigureProvider {
         request_id: Uuid::new_v4(),
         expected_revision: 2,
@@ -117,7 +115,6 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         restarted.inspect(&admin).await.unwrap().unwrap().model,
         "other-model"
     );
-    // A saved key never moves to another provider.
     let switched = ConfigureProvider {
         request_id: Uuid::new_v4(),
         expected_revision: 3,
@@ -159,13 +156,11 @@ async fn switching_providers_keeps_each_key_until_it_is_forgotten() {
     let input = configure(0, Openai, "gpt", Some("openai-key"));
     connections.configure(&admin, &input).await.unwrap();
     assert!(connections.saved(&admin).await.unwrap().is_empty());
-    // A provider without a key cannot be chosen.
     let input = configure(1, Openrouter, "vendor/model:free", None);
     assert!(matches!(
         connections.configure(&admin, &input).await,
         Err(IdentityError::InvalidInput)
     ));
-    // OpenRouter's model IDs hold characters OpenAI's do not.
     let input = configure(1, Openrouter, "~vendor/model:free", Some("router-key"));
     connections.configure(&admin, &input).await.unwrap();
     let saved = connections.saved(&admin).await.unwrap();
@@ -177,7 +172,6 @@ async fn switching_providers_keeps_each_key_until_it_is_forgotten() {
         .await
         .unwrap();
     assert!(!stored.windows(10).any(|bytes| bytes == b"openai-key"));
-    // Back to OpenAI with its saved key; OpenRouter's is now the one set aside.
     let input = configure(2, Openai, "gpt", None);
     connections.configure(&admin, &input).await.unwrap();
     assert!(connections.key_matches().await.unwrap());

@@ -1,6 +1,6 @@
 # Cubebot architecture decisions
 
-The [manifesto](../../MANIFESTO.md) defines the project intent. These documents record the consequential choices the user accepted, one document per decision area. The [architecture](../../ARCHITECTURE.md), [software specification](../design/software-specification.md) and [qualification plan](../design/qualification.md) connect them into a system; [STATUS](../STATUS.md) says what actually runs.
+The [manifesto](../../MANIFESTO.md) defines the project intent. These documents record the consequential choices the user accepted, one document per decision area. The [architecture](../../ARCHITECTURE.md) connects them into a system.
 
 | Document | Covers |
 | --- | --- |

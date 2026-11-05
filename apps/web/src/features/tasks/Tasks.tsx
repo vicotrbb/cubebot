@@ -28,7 +28,6 @@ const PILES: [Pile, string][] = [
   ['finished', 'Finished'],
 ]
 
-/** Say what you want done; the orchestrator takes it from there. */
 export function Tasks() {
   const session = useSession()
   const agents = useAgents()
@@ -87,7 +86,6 @@ export function Tasks() {
   )
 }
 
-/** Who the orchestrator can choose from, so the box says who is listening. */
 function Crew({ agents }: { agents: AgentSummary[] }) {
   if (agents.length === 0) return null
   const shown = agents.slice(0, 6)
@@ -184,7 +182,6 @@ function TaskRow({
           )
         })}
       </span>
-      {/* Touch has no hover card, so the row itself says how far the plan got. */}
       {task.items.length > 0 && (
         <span className="plan__meter task-row__meter" aria-hidden="true">
           <span

@@ -69,7 +69,7 @@ Ownership: the agent loop owns lane scheduling and concurrency limits. Provider 
 
 Routine occurrences are ordinary turns in the permanent conversation, so these lanes, retries and cancellation apply to them unchanged ([Routines](#routines)). [Queued messages with explicit steering](rooms.md#queued-messages-with-explicit-steering) selects queued ordinary messages and explicit steering at safe execution boundaries. [Explicit agent messaging and delegation](rooms.md#explicit-agent-messaging-and-delegation) defines Cubebot messaging and delegation semantics; external provider-native child agents remain outside the native engine architecture.
 
-Reference: OpenBot revision `cfee2971f29cdb7c16272e60ae912de7fbb30693`, inspected in the [runtime research](../research/openbot-agent-runtime-memory.md) and [collaboration research](../research/openbot-collaboration-channels.md). This decision adopts the described execution design, not a blanket commitment to every upstream implementation detail.
+Reference: OpenBot revision `cfee2971f29cdb7c16272e60ae912de7fbb30693`. This decision adopts the described execution design, not a blanket commitment to every upstream implementation detail.
 
 **Rationale.** The hybrid preserves ordered execution within each lane and bounded parallelism across tasks. Alternatives considered: one active turn for the entire agent simplifies shared-state ownership but prevents parallel task execution. Arbitrary concurrent turns without lane serialization expose more ordering and coordination problems.
 
@@ -194,6 +194,8 @@ During an orchestrator outage, its client interfaces and agent state operations 
 On restart, the orchestrator recovers durable intent, observes existing agent execution, and reconciles pending operations before resuming coordination. It must not assume every previously running turn failed or blindly repeat actions whose outcome is uncertain. Recovery must distinguish accepted work, observed completion, and unresolved outcomes.
 
 One active instance is an operational invariant, not merely a desired replica count. Restart, upgrade, and network-partition handling must prevent an old instance from acting concurrently with its replacement. The mechanism will be specified with execution ownership and recovery; this decision does not require a general multi-replica scheduling implementation.
+
+Kubernetes replacement proves the old pod terminated before taking over. A Docker or database-only instance has no pod to inspect, so it relies on the session advisory lock: holding the lock proves the previous holder's database session ended, its unreleased claim is replaced, and a process still running behind a lost session fails its next ownership check.
 
 Consequences: orchestrator failure and upgrades interrupt coordination and console operations until recovery succeeds. Automatic restart does not guarantee a particular recovery time or success when configuration, PostgreSQL, or cluster capacity is unavailable. PostgreSQL availability and backup policies remain separate decisions.
 
@@ -421,7 +423,7 @@ This decision selects inference adapter scope. Exact models, SDK or HTTP impleme
 
 **Open details.** Adapter interfaces and concrete protocols; capability discovery and validation; initial tested models and compatible endpoints; subscription authentication feasibility; error classification; usage accounting; embeddings; and provider-specific recovery behavior.
 
-**Validation scenarios.** Complete a tool-using turn through each native adapter and a qualified compatible endpoint; stream output and recover partial-stream failure; reject unsupported required capabilities; enforce connection grants; rotate credentials without disclosure; preserve selected-model waiting; and qualify each claimed subscription path separately. Accepting this decision executed no provider or subscription integration; see [../STATUS.md](../STATUS.md) for what currently runs.
+**Validation scenarios.** Complete a tool-using turn through each native adapter and a qualified compatible endpoint; stream output and recover partial-stream failure; reject unsupported required capabilities; enforce connection grants; rotate credentials without disclosure; preserve selected-model waiting; and qualify each claimed subscription path separately. Accepting this decision executed no provider or subscription integration.
 
 ## Native core tools with MCP integrations
 
@@ -709,7 +711,7 @@ Accepted 2026-11-04.
 - **Ledger.** `usage_events` holds one row per response a provider reported: a turn's, a dream's, or the room coordinator's (no agent). Tokens are what the provider said; usage it did not report stays unrecorded and is never guessed.
 - **Cost.** A provider's own figure wins, which today is OpenRouter's and Grok's. Otherwise cost is an estimate from the model's price as that provider publishes it. The user decided on 2026-11-04 that prices come from each provider, not from one aggregator. OpenAI and Anthropic have no price API and their Models APIs carry no price, so their adapters read the Markdown their pricing pages serve; OpenRouter's public model listing has prices of its own. The orchestrator asks only providers with a saved connection, at most daily, sending no key. A page it cannot read leaves the last good prices in place and logs a warning. Offline or for an unlisted model the cost stays NULL, the console says so, and the row is priced if a price arrives later. Standard-tier short-context rates apply; long-context, batch and regional rates and Anthropic cache writes are not modelled, so an estimate can run under the bill.
 - **Budget.** `agents.monthly_budget_usd`, unset by default, is set with `agent.manage` and recorded in the audit log. Past it, a new turn waits as `budget_exhausted` without calling the model, a running turn stops at its next response through the ordinary cancellation channel, and dreams are not admitted. A command-only routine still runs: it calls no model. An unpriced response cannot exhaust a budget.
-- **Resuming.** Raising or removing the budget requeues the paused turns, except those with tool effects of unknown outcome, which stay waiting for a person as any interrupted turn does.
+- **Resuming.** Raising or removing the budget, or a new month that leaves room, requeues the paused turns, except those with tool effects of unknown outcome, which stay waiting for a person as any interrupted turn does.
 - **Visibility.** People read an agent's usage with `conversation.read`. The Situation room shows each person the agents they may read; only administrators see the coordinator's spend, the provider and installation totals.
 
 **Rationale.** A shipped price table goes stale silently and would be wrong for any new model; a provider's own page is current and an absent price is visible. Reading a documentation page is more fragile than an API, so a page that yields nothing is an error rather than an empty price list. Stopping a running turn at its next response bounds overspend to the responses already in flight, which an already-issued request can always exceed.

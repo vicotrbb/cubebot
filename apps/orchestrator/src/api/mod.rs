@@ -1,5 +1,3 @@
-//! HTTP entry point for the Cubebot control plane.
-
 mod access;
 mod activity;
 mod agents;
@@ -36,8 +34,7 @@ pub fn router() -> Router {
     Router::new().route("/api/health/live", get(liveness))
 }
 
-/// One span per request, named by method and matched route template; never the raw path,
-/// query or headers.
+/// Spans name the matched route template, never the raw path, query or headers.
 pub fn traced(router: Router) -> Router {
     router.layer(axum::middleware::from_fn(request_span))
 }
@@ -63,7 +60,6 @@ async fn liveness() -> Json<Liveness> {
     })
 }
 
-/// The browser API. `just api` writes it for the web client's generated types.
 pub fn openapi() -> String {
     use utoipa::OpenApi;
     let mut doc = identity::Doc::openapi();
@@ -91,14 +87,12 @@ pub fn openapi() -> String {
     doc.to_pretty_json().unwrap_or_default()
 }
 
-/// A refusal: 409 with the reason the model or person reads.
 fn refused(reason: &str) -> axum::response::Response {
     use axum::response::IntoResponse;
     let body = Json(serde_json::json!({ "error": reason }));
     (axum::http::StatusCode::CONFLICT, body).into_response()
 }
 
-/// The credential of an `Authorization: Bearer` header.
 fn bearer(headers: &axum::http::HeaderMap) -> Option<&str> {
     headers
         .get(axum::http::header::AUTHORIZATION)?
@@ -107,14 +101,12 @@ fn bearer(headers: &axum::http::HeaderMap) -> Option<&str> {
         .strip_prefix("Bearer ")
 }
 
-/// The call socket and speech settings on stand-in engines, for tests.
 pub fn calls_router(pool: sqlx::PgPool, origin: &str, speech: crate::speech::Speech) -> Router {
     let mut identity = crate::identity::Identity::new(pool.clone());
     identity.browser_origin = Some(origin.to_owned());
     calls::router(pool, identity, speech, None)
 }
 
-/// Configured application endpoints share one concrete PostgreSQL pool.
 pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
@@ -192,9 +184,8 @@ pub async fn configured_router_with_credentials(
     )))
 }
 
-/// Starts an event stream's first frames with a comment. Firefox reports an EventSource open
-/// only once body bytes arrive, and the console loads history on open, so a quiet stream would
-/// otherwise keep it waiting for the first keep-alive, 15 s later.
+/// Firefox reports an EventSource open only once body bytes arrive, and the console loads history
+/// on open, so a quiet stream would otherwise wait 15 s for its first keep-alive.
 fn opening(mut first: Vec<axum::response::sse::Event>) -> Vec<axum::response::sse::Event> {
     first.insert(0, axum::response::sse::Event::default().comment("open"));
     first
@@ -211,7 +202,6 @@ async fn readiness(
     }
 }
 
-/// Explicit runtime routes. Normal startup does not discover a Kubernetes configuration.
 pub fn runtime_router(identity: crate::agents::runtime::RuntimeIdentity) -> Router {
     let pool = identity.pool.clone();
     runtime::router(identity.clone()).merge(knowledge_base::runtime_router(identity, pool))

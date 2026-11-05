@@ -1,5 +1,4 @@
-//! Virtio over MMIO (virtio 1.2 §4.2, version 2 registers). A [`Transport`] holds the registers
-//! and virtqueues of one [`Device`]; devices only see their queues and guest memory.
+//! Virtio over MMIO (virtio 1.2 §4.2, version 2 registers).
 pub mod block;
 pub mod net;
 pub mod queue;
@@ -22,13 +21,9 @@ const CONFIG: u64 = 0x100;
 pub trait Device: Send {
     const TYPE: u32;
     const QUEUES: usize;
-    /// Device-specific feature bits; the transport adds VIRTIO_F_VERSION_1.
     fn features(&self) -> u64;
     fn config(&self) -> &[u8];
-    /// The driver wrote `data` at `offset` in the configuration space, which is read-only unless
-    /// the device says otherwise.
     fn write_config(&mut self, _offset: u64, _data: &[u8]) {}
-    /// Serves the driver's notification for `queue`; returns whether the device used buffers.
     fn notify(
         &mut self,
         queue: usize,
@@ -38,13 +33,11 @@ pub trait Device: Send {
     fn reset(&mut self) {}
 }
 
-/// A device's MMIO window as the vCPU sees it.
 pub trait Mmio: Send + Sync {
     fn read(&self, offset: u64, data: &mut [u8]);
     fn write(&self, offset: u64, data: &[u8], memory: &GuestMemory) -> io::Result<()>;
 }
 
-/// One device on the bus: its transport, shared by the vCPU and device threads, and its interrupt.
 pub struct Slot<D> {
     transport: Mutex<Transport<D>>,
     pub irq: Irq,
@@ -62,7 +55,6 @@ impl<D: Device> Slot<D> {
         self.transport.lock().expect("device lock")
     }
 
-    /// Runs device work outside a driver notification and interrupts the guest if it used buffers.
     pub fn run(
         &self,
         work: impl FnOnce(&mut D, &mut [Queue]) -> io::Result<bool>,
@@ -131,7 +123,6 @@ impl<D: Device> Transport<D> {
         }
     }
 
-    /// Returns whether the write made the device use buffers, so the caller raises its interrupt.
     pub fn write(&mut self, offset: u64, data: &[u8], memory: &GuestMemory) -> io::Result<bool> {
         if offset >= CONFIG {
             self.device.write_config(offset - CONFIG, data);
@@ -155,7 +146,6 @@ impl<D: Device> Transport<D> {
         Ok(false)
     }
 
-    /// Runs device work that does not come from a driver notification, such as a received frame.
     pub fn run(
         &mut self,
         work: impl FnOnce(&mut D, &mut [Queue]) -> io::Result<bool>,
@@ -303,7 +293,6 @@ mod tests {
             .unwrap()
     }
 
-    /// A transport whose driver negotiated VERSION_1 and the device's own feature.
     fn negotiated() -> Transport<Counter> {
         let mut transport = Transport::new(Counter(0));
         write(&mut transport, 0x20, 1);
@@ -331,7 +320,6 @@ mod tests {
         transport.read(0x101, &mut config);
         assert_eq!(&config, b"fg\0\0");
         assert_eq!(read(&transport, 0xb0), u32::MAX, "no shared memory region");
-        // Without VIRTIO_F_VERSION_1 the device refuses FEATURES_OK.
         write(&mut transport, 0x20, 1);
         write(&mut transport, 0x70, 1 | 2 | FEATURES_OK);
         assert_eq!(read(&transport, 0x70), 3);

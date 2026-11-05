@@ -13,7 +13,7 @@ USER bun
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3000
 EXPOSE 3000
 CMD ["bun", ".output/server/index.mjs"]
-# Release builds pass these (.github/workflows/release.yml); last, so they never invalidate a cached layer.
+# Last, so they never invalidate a cached layer.
 ARG CUBEBOT_VERSION=dev
 ARG CUBEBOT_REVISION=unknown
 ARG CUBEBOT_CREATED=unknown

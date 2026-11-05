@@ -22,7 +22,6 @@
   margin: auto;
 }
 
-/* Sidebar */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -215,7 +214,6 @@
   background: var(--paper);
 }
 
-/* The account row and, for administrators, the platform gear beside it */
 .sidebar__foot {
   display: flex;
   align-items: center;
@@ -272,7 +270,6 @@ img.avatar-initial {
   background: var(--inset);
 }
 
-/* Menus (details-based) */
 .menu {
   position: relative;
 }
@@ -356,7 +353,6 @@ img.avatar-initial {
   color: var(--danger);
 }
 
-/* Page frame used by non-conversation screens */
 .page {
   display: flex;
   flex-direction: column;
@@ -379,7 +375,6 @@ img.avatar-initial {
 .page__head h1 .faint {
   font-weight: 400;
 }
-/* A long tab row takes its own line on phones instead of covering the title. */
 @media (max-width: 640px) {
   .page__head {
     flex-wrap: wrap;
@@ -394,7 +389,6 @@ img.avatar-initial {
   overflow: auto;
   padding: 20px;
 }
-/* Forms: one centered column. Lists: full pane width with a readable cap on text. */
 .page__body--narrow {
   align-self: center;
   width: 100%;
@@ -410,7 +404,6 @@ img.avatar-initial {
   max-width: 70ch;
 }
 
-/* Command palette */
 .palette {
   width: min(560px, calc(100vw - 32px));
   margin-top: 12vh;
@@ -464,7 +457,6 @@ img.avatar-initial {
   padding: 12px;
 }
 
-/* Bottom bar (phones) */
 .bottombar {
   position: fixed;
   left: 0;
@@ -516,7 +508,6 @@ img.avatar-initial {
   }
 }
 
-/* An unread mark for a row whose count does not matter. */
 .row__dot {
   width: 8px;
   height: 8px;

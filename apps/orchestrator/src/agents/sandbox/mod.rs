@@ -1,5 +1,3 @@
-//! Where agent sandboxes run (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). Every implementation launches the installation's declared
-//! [`Runtime`].
 mod docker;
 pub(crate) use docker::LAYOUT_MISMATCH;
 pub use docker::{Docker, DockerConfig};
@@ -16,9 +14,6 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
-/// The installation's sandbox runtime, set at install for every agent: `kvm`, a guest of
-/// `cubebot-sandbox`, or `container`, the agent image run directly, optionally under a named
-/// RuntimeClass or Docker runtime.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Runtime {
@@ -30,7 +25,6 @@ pub enum Runtime {
     },
 }
 impl Runtime {
-    /// A class must name a RuntimeClass, so it is a DNS subdomain, which is also a safe argument.
     pub fn validate(&self) -> Result<(), Error> {
         match self {
             Self::Container { class: Some(class) } if !subdomain(class) => {
@@ -51,7 +45,6 @@ impl Runtime {
             Self::Kvm {} => None,
         }
     }
-    /// The host channel command (docs/adr/sandbox.md#desktop-as-a-vmm-device) inside this runtime's sandbox.
     fn desktop(&self) -> [&'static str; 2] {
         match self {
             Self::Kvm {} => ["/usr/local/bin/cubebot-sandbox", "desktop"],
@@ -60,7 +53,6 @@ impl Runtime {
     }
 }
 
-/// A Kubernetes DNS subdomain name.
 pub(crate) fn subdomain(name: &str) -> bool {
     name.len() <= 253
         && name.split('.').all(|part| {
@@ -82,7 +74,6 @@ pub enum Status {
     Stopped,
 }
 
-/// A command attached inside the sandbox. Dropping it ends the session.
 pub struct ExecChannel {
     pub stdin: Box<dyn AsyncWrite + Send + Unpin>,
     pub stdout: Box<dyn AsyncRead + Send + Unpin>,
@@ -90,17 +81,14 @@ pub struct ExecChannel {
 }
 
 pub trait Sandbox {
-    /// Creates the workspace and anything else that must outlive one run.
     fn create(&self, agent: AgentId) -> impl Future<Output = Result<(), Error>> + Send;
     fn start(&self, agent: AgentId) -> impl Future<Output = Result<(), Error>> + Send;
-    /// Stops execution and keeps the workspace (docs/adr/memory.md#retain-durable-data-until-explicitly-deleted).
     fn stop(&self, agent: AgentId) -> impl Future<Output = Result<(), Error>> + Send;
     fn exec_channel(
         &self,
         agent: AgentId,
         command: &[&str],
     ) -> impl Future<Output = Result<ExecChannel, Error>> + Send;
-    /// The retained workspace volume's name, if one exists.
     fn workspace(
         &self,
         agent: AgentId,
@@ -110,8 +98,6 @@ pub trait Sandbox {
 
 type Opening = Pin<Box<dyn Future<Output = Result<ExecChannel, Error>> + Send>>;
 
-/// Opens the desktop host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device) in an agent's running sandbox, whichever kind runs
-/// it, and counts the people connected to each agent's desktop through this orchestrator.
 #[derive(Clone)]
 pub struct Desktop {
     open: Arc<dyn Fn(AgentId) -> Opening + Send + Sync>,
@@ -136,7 +122,6 @@ impl Desktop {
     }
 }
 
-/// Converges one agent's sandbox to its recorded lifecycle intent.
 #[tracing::instrument(skip_all, fields(agent = %agent.0))]
 pub async fn drive<S: Sandbox + Sync>(
     sandbox: &S,
@@ -157,6 +142,32 @@ pub async fn drive<S: Sandbox + Sync>(
     if state != "running" {
         return sandbox.stop(agent).await;
     }
+    if backing_off(pool, agent).await? {
+        return Ok(());
+    }
     sandbox.create(agent).await?;
     sandbox.start(agent).await
+}
+
+/// The delay doubles per undrained exit this hour, up to five minutes, so a crash loop neither spins
+/// nor grows `agent_resources` quickly; a person's restart starts a new generation, and over.
+async fn backing_off(pool: &PgPool, agent: AgentId) -> Result<bool, Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT COALESCE(max(r.updated_at) + make_interval(secs => LEAST(300, power(2, count(*)) - 2)) > clock_timestamp(), false) AS "waiting!"
+        FROM agent_resources r
+        JOIN agents a ON a.id = r.agent_id
+        WHERE r.agent_id = $1
+          AND r.kind = 'pod'
+          AND r.phase = 'stopped'
+          AND r.target_generation = a.restart_generation
+          AND r.updated_at > clock_timestamp() - interval '1 hour'
+          AND r.termination_proof->>'kind' IS DISTINCT FROM 'not_dispatched'
+          AND NOT EXISTS (SELECT 1 FROM agent_runtime_drains d WHERE d.attempt_id = r.id AND d.acknowledged_at IS NOT NULL)
+          AND NOT EXISTS (SELECT 1 FROM agent_resources o WHERE o.agent_id = $1 AND o.kind = 'pod' AND o.phase <> 'stopped')
+        "#,
+        agent.0,
+    )
+    .fetch_one(pool)
+    .await?)
 }

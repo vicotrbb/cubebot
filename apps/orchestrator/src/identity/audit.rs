@@ -1,12 +1,9 @@
-//! The installation audit log (migrations/0044_audit_log.sql): who did what to which resource.
-//! Command journals record their events in the command's own transaction; other changes record
-//! theirs once they commit, through [`Identity::audit`]. Details never carry a secret.
+//! Details never carry a secret.
 use super::{Actor, Identity, IdentityError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// One thing that happened, before it is recorded.
 pub struct Event {
     kind: &'static str,
     actor: Option<Uuid>,
@@ -16,7 +13,6 @@ pub struct Event {
 }
 
 impl Event {
-    /// `kind` is `area.action`, such as `vault.create`.
     pub fn by(actor: Uuid, kind: &'static str) -> Self {
         Self {
             kind,
@@ -27,7 +23,6 @@ impl Event {
         }
     }
 
-    /// An agent acting on its own, outside any person's request.
     pub fn by_agent(agent: Uuid, kind: &'static str) -> Self {
         Self {
             agent: Some(agent),
@@ -36,7 +31,6 @@ impl Event {
         }
     }
 
-    /// A change nobody signed in made, such as a refused sign-in.
     pub fn anonymous(kind: &'static str) -> Self {
         Self {
             actor: None,
@@ -103,12 +97,10 @@ pub struct AuditEntry {
     pub detail: Value,
 }
 
-/// Rows per page.
 pub const PAGE: i64 = 100;
 
 impl Identity {
-    /// Records a change that has already committed. A failure is logged rather than returned:
-    /// the change stands either way.
+    /// A failure is logged rather than returned: the change already committed.
     // shortcut: recorded after commit, so a crash in between loses the entry; move the write
     // into the change's transaction where the log must be complete.
     pub async fn audit(&self, event: Event) {
@@ -117,7 +109,6 @@ impl Identity {
         }
     }
 
-    /// Newest first, a page at a time; administrators only.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn audit_log(
         &self,
@@ -157,8 +148,6 @@ impl Identity {
     }
 }
 
-/// The areas a filter names, at most 16 of lowercase letters and underscores; `None` when it
-/// names anything else.
 fn areas(filter: Option<&str>) -> Option<Vec<String>> {
     let Some(filter) = filter.filter(|filter| !filter.is_empty()) else {
         return Some(Vec::new());

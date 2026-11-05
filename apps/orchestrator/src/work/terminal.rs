@@ -11,7 +11,6 @@ use sqlx::{Postgres, Transaction};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-/// Files one reply may carry.
 const ATTACHMENTS: i64 = 10;
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
@@ -67,7 +66,6 @@ pub struct ReplyAttachment {
     pub size: i64,
 }
 
-/// Each turn's attachments, oldest first.
 pub(super) async fn attachments(
     tx: &mut Transaction<'_, Postgres>,
     turns: &[Uuid],
@@ -100,7 +98,6 @@ pub(super) async fn attachments(
     Ok(grouped)
 }
 
-/// Each turn's tool calls so far, in order.
 pub(super) async fn tool_progress(
     tx: &mut Transaction<'_, Postgres>,
     ids: &[Uuid],
@@ -133,8 +130,6 @@ pub(super) async fn tool_progress(
 }
 
 impl Work {
-    /// Sends one of the agent's own files with its running turn's reply. The inner error is the
-    /// refusal the model reads.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn, file = %file))]
     pub(crate) async fn attach_file(
         &self,
@@ -196,8 +191,6 @@ impl Work {
             .ok_or_else(|| "that is not a file of yours".to_owned()))
     }
 
-    /// The agent whose file this is, when the caller may read the reply it came with: in the
-    /// agent's conversation, or in the room the turn belongs to.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, turn = %turn, file = %file))]
     pub async fn attachment_owner(
         &self,

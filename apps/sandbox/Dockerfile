@@ -1,5 +1,4 @@
-# The guest kernel and root image from tooling/guest, passed as `--build-context guest=target/guest`.
-# Without that context this empty stage stands in and the COPY of bzImage and root.ext4 below fails.
+# Pass the guest with `--build-context guest=target/guest`; without it the COPY of bzImage and root.ext4 fails.
 FROM scratch AS guest
 
 FROM rust:1.96.0-bookworm AS build
@@ -10,18 +9,14 @@ COPY apps/orchestrator ./apps/orchestrator
 COPY apps/agent ./apps/agent
 COPY apps/sandbox ./apps/sandbox
 COPY modules ./modules
-# Cached registry and target keep compiled dependencies across source changes; the
-# mount is not part of the image, so the binaries are copied out to /out.
+# The cache mount is not part of the image, so the binaries are copied out to /out.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --locked --release -p cubebot-agent -p cubebot-sandbox --bins \
     && mkdir /out \
     && cp target/release/cubebot-agent target/release/cubebot-sandbox /out/
 
-# One container per agent (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). The sandbox reads its guest kernel and root image from
-# CUBEBOT_GUEST_KERNEL and CUBEBOT_GUEST_ROOT; iproute2 joins its tap to the pod network and
-# e2fsprogs formats a new workspace disk. Launchers run it as root with only NET_ADMIN (see the
-# orchestrator's pod layout); the image's own default user stays unprivileged.
+# Launchers run it as root with only NET_ADMIN; the image's own default user stays unprivileged.
 FROM debian:bookworm-slim AS sandbox
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates bash e2fsprogs iproute2 \
     && rm -rf /var/lib/apt/lists/*
@@ -35,7 +30,7 @@ ENV CUBEBOT_GUEST_KERNEL=/usr/share/cubebot/guest/bzImage \
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/cubebot-sandbox"]
 CMD ["run"]
-# Release builds pass these (.github/workflows/release.yml); last, so they never invalidate a cached layer.
+# Last, so they never invalidate a cached layer.
 ARG CUBEBOT_VERSION=dev
 ARG CUBEBOT_REVISION=unknown
 ARG CUBEBOT_CREATED=unknown

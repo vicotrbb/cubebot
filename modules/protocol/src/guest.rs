@@ -1,16 +1,10 @@
-//! The control channel between `cubebot-sandbox` and the init of its `kvm` guest (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): one
-//! vsock stream the guest opens to `HOST_CID:PORT`. The host first sends the agent's environment
-//! as `NAME=value` entries, each ending in NUL, then an empty entry. A `*_FILE` entry carries the
-//! named file's contents, which the guest writes to a private file of its own. Later messages in
-//! the same framing carry only the `*_FILE` entries whose files changed, such as a refreshed
-//! projected token. The guest writes one [`Report`] JSON line per report: liveness while the agent
-//! runs, then the agent's exit status. The host ending its side stops the guest.
+//! Framing: the host sends `NAME=value` entries, each ending in NUL, then an empty entry; a `*_FILE` entry carries the named file's contents.
+//! Later messages carry only changed `*_FILE` entries. The guest writes one [`Report`] JSON line per report. The host ending its side stops the guest.
 use serde::{Deserialize, Serialize};
 
 pub const HOST_CID: u32 = 2;
 pub const GUEST_CID: u32 = 3;
 pub const PORT: u32 = 1024;
-/// Bounds the environment a guest accepts, and each liveness line the host accepts.
 pub const ENVIRONMENT_LIMIT: usize = 1 << 20;
 pub const LINE_LIMIT: usize = 4096;
 
@@ -44,7 +38,6 @@ pub fn complete(bytes: &[u8]) -> bool {
     bytes == b"\0" || bytes.ends_with(b"\0\0")
 }
 
-/// Decodes a complete message: every entry up to and including the empty one.
 pub fn decode(bytes: &[u8]) -> Option<Vec<(String, String)>> {
     if bytes == b"\0" {
         return Some(Vec::new());

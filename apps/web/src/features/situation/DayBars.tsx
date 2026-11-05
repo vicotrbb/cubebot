@@ -14,8 +14,6 @@ function dayLabel(day: string) {
   })
 }
 
-/** One measure, by day, for 30 days: thin rounded bars on a baseline, labelled at the ends, with
- *  a table behind it for anyone who cannot read the marks. */
 export function DayBars({
   days,
   measure,
@@ -78,7 +76,6 @@ export function DayBars({
                 rx={Math.min(3, height / 2)}
                 className={hover === index ? 'bars__bar is-on' : 'bars__bar'}
               />
-              {/* The whole column answers, however short its bar. */}
               <rect
                 x={index * slot}
                 width={slot}

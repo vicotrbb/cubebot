@@ -1,5 +1,3 @@
-/* The Situation room: a ledger on the desk, not a wall of tiles. One sentence says what needs a
-   person, ruled sections carry the rest, and colour is kept for what wants attention. */
 .situation .page__head {
   flex-wrap: nowrap;
 }
@@ -11,8 +9,6 @@
   align-items: center;
   gap: 6px;
 }
-/* The page never scrolls: it fills the pane, and each list scrolls in its own space. A pane too
-   short to hold that scrolls as a whole rather than crushing the lists to nothing. */
 .situation__body {
   container-type: inline-size;
   display: flex;
@@ -79,7 +75,6 @@
   min-width: 0;
   min-height: 0;
 }
-/* Now takes what it needs up to two fifths of the rail; Latest takes the rest. */
 .board-section--now {
   flex: 0 1 auto;
   max-height: 40%;
@@ -104,7 +99,6 @@
 .situation .feed {
   align-content: start;
 }
-/* The chart sets the row's height; the models scroll within it instead of growing it. */
 .spend {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
@@ -434,8 +428,6 @@
   font-weight: var(--w-strong);
 }
 
-/* Too narrow for the sections side by side: the sentence, then one view at a time, each filling
-   the screen with its list scrolling inside it. */
 @container (max-width: 860px) {
   .situation__grid {
     grid-template-columns: minmax(0, 1fr);
@@ -471,7 +463,6 @@
     color: var(--ink);
     font-weight: var(--w-strong);
   }
-  /* The tab already names this view. */
   .board-section--agents .board-section__head {
     display: none;
   }
@@ -488,7 +479,6 @@
   .situation__grid[data-view='spend'] .board-section--agents {
     display: none;
   }
-  /* On a small screen Spend's parts stack, and the view scrolls as one. */
   .board-section--spend {
     overflow: auto;
     overscroll-behavior: contain;
@@ -524,7 +514,6 @@
   }
 }
 
-/* An agent's Usage tab: the same parts, in a panel's width. */
 .usage {
   display: grid;
   gap: 12px;

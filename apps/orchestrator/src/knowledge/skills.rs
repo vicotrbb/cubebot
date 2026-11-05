@@ -1,7 +1,5 @@
-//! The shared skill library (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming, docs/adr/memory.md#shared-installation-skill-library-by-default and docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user). Any active person publishes and revises skills;
-//! a revision names the one it read, so concurrent contributors get a conflict instead of
-//! overwriting each other. Installing pins a revision per agent, and a new revision never moves
-//! another agent's installation. Storing a package never runs its scripts.
+//! A revision names the one it read, so contributors conflict instead of overwriting each other.
+//! Storing a package never runs its scripts.
 use super::{Knowledge, authorize};
 use crate::{
     agents::{AgentId, runtime::RuntimeActor},
@@ -17,12 +15,10 @@ use uuid::Uuid;
 
 pub type Files = BTreeMap<String, String>;
 
-/// Installed skills a dream sees in full.
 /// shortcut: the first 20 by name, which bounds the dream's prompt; select by relevance once
 /// agents install more.
 pub(super) const DREAM_SKILLS: i64 = 20;
 
-/// Skills that ship with the platform, each one `SKILL.md`. People edit them like any other.
 const SHIPPED: [&str; 2] = [
     include_str!("../../skills/coding/SKILL.md"),
     include_str!("../../skills/design/SKILL.md"),
@@ -135,7 +131,6 @@ impl Knowledge {
         })
     }
 
-    /// Registers a new skill; 409 when its name is taken.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn publish_skill(
         &self,
@@ -145,8 +140,6 @@ impl Knowledge {
         self.contribute(actor, None, None, &input.files).await
     }
 
-    /// Adds a revision on top of `expected_revision`; 409 when that is no longer current. The
-    /// package keeps the skill's name.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, skill = %skill))]
     pub async fn revise_skill(
         &self,
@@ -232,7 +225,6 @@ impl Knowledge {
         Ok(installed)
     }
 
-    /// Installs a revision, or moves an installation to it.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, skill = %skill, revision = revision))]
     pub async fn install_skill(
         &self,
@@ -250,7 +242,6 @@ impl Knowledge {
         Ok(())
     }
 
-    /// Removes the installation; the skill stays in the library.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0, skill = %skill))]
     pub async fn uninstall_skill(
         &self,
@@ -275,7 +266,6 @@ impl Knowledge {
     }
 }
 
-/// `false` when the revision does not exist.
 pub(super) async fn install(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -298,7 +288,6 @@ pub(super) async fn install(
     Ok(installed.rows_affected() == 1)
 }
 
-/// Who wrote a revision. Nobody: it shipped with the platform.
 #[derive(Clone, Copy, Default)]
 pub(super) struct Author {
     pub human: Option<Uuid>,
@@ -306,8 +295,6 @@ pub(super) struct Author {
     pub turn: Option<Uuid>,
 }
 
-/// Creates a skill, or adds a revision on top of `expected`. `None` when the name is taken or
-/// `expected` is not current.
 pub(super) async fn write(
     tx: &mut Transaction<'_, Postgres>,
     skill: Option<Uuid>,
@@ -322,7 +309,6 @@ pub(super) async fn write(
     }
 }
 
-/// A new skill with its first revision; `None` when the name is taken.
 async fn register(
     tx: &mut Transaction<'_, Postgres>,
     (name, description): &(String, String),
@@ -354,7 +340,6 @@ async fn register(
     Ok(written.map(|row| (row.skill_id, row.revision)))
 }
 
-/// A revision on top of `expected`; `None` when that is not current.
 async fn add_revision(
     tx: &mut Transaction<'_, Postgres>,
     skill: Uuid,
@@ -390,8 +375,6 @@ async fn add_revision(
     Ok(written.map(|row| (row.skill_id, row.revision)))
 }
 
-/// Publishes a dream's proposed package and installs it for the agent. A revision of an unknown
-/// skill, a stale revision, a taken name or a package identical to the current one is dropped.
 pub(super) async fn propose(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -400,7 +383,6 @@ pub(super) async fn propose(
     metadata: &(String, String),
 ) -> Result<(), sqlx::Error> {
     match proposed(tx, run, change, metadata).await? {
-        // The revision was just written, so it exists.
         Some((skill, revision)) => install(tx, agent, skill, revision).await.map(|_| ()),
         None => {
             dropped(&metadata.0);
@@ -434,7 +416,6 @@ async fn proposed(
     };
     match (skill, expected) {
         (None, Some(_)) => Ok(None),
-        // A new package under a taken name inserts nothing.
         (_, None) => write(tx, None, None, metadata, &change.files, author).await,
         (Some(_), Some(_)) => write(tx, skill, expected, metadata, &change.files, author).await,
     }
@@ -447,7 +428,6 @@ struct Current {
     files: Files,
 }
 
-/// The library's skill called `name`, at its current revision.
 async fn current(
     tx: &mut Transaction<'_, Postgres>,
     name: &str,
@@ -471,7 +451,6 @@ async fn current(
     }))
 }
 
-/// Every skill in the library, for a dream to improve rather than duplicate.
 /// shortcut: names and descriptions only, 200 at most; rank by relevance once libraries grow.
 pub(super) async fn catalog(
     tx: &mut Transaction<'_, Postgres>,
@@ -526,7 +505,6 @@ struct Install {
 
 const INVALID_PACKAGE: &str = "name is lowercase words joined by single hyphens, up to 64 characters; description is 1 to 1024 characters; instructions are not empty; files are under references/, scripts/ or assets/ with plain names; the whole package is text and at most 64 KiB";
 
-/// Builds a package from a tool call: the description becomes one line of front matter.
 fn compose(
     name: &str,
     description: &str,
@@ -554,8 +532,6 @@ fn compose(
 type Answer = Result<String, String>;
 
 impl Knowledge {
-    /// The `skill_*` tools of a running turn. `Err` is the refusal the model reads; the outer
-    /// error is the orchestrator's own. The turn is the revision's author.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn, tool = %call.tool))]
     pub(crate) async fn skill_tool(
         &self,
@@ -587,13 +563,10 @@ impl Knowledge {
             "skill_install" => install_named(&mut tx, actor.agent, &call.input).await?,
             _ => Err("no skill tool has this name".into()),
         };
-        // A refused call changed nothing, so its transaction has nothing to keep.
         tx.commit().await?;
         Ok(answer)
     }
 
-    /// Adds the skills that ship with the platform and installs each on every agent, the once:
-    /// a skill already called that stays as it is, and uninstalling one from an agent sticks.
     #[tracing::instrument(skip_all)]
     pub async fn seed_shipped_skills(pool: &PgPool) -> Result<(), sqlx::Error> {
         for entry in SHIPPED {
@@ -685,7 +658,6 @@ async fn create_skill(
         return Ok(Err(INVALID_PACKAGE.into()));
     };
     if let Some(known) = current(tx, &name).await? {
-        // A resent call, whose first answer was lost, finds its own package.
         if known.files == files {
             install(tx, agent, known.id, known.revision).await?;
             return Ok(Ok(format!("Skill {name} is saved and installed.")));
@@ -781,7 +753,6 @@ async fn install_named(
     )))
 }
 
-/// Skill revisions one turn may publish, so a confused model cannot flood the shared library.
 const TURN_SKILLS: i64 = 3;
 const TURN_LIMIT: &str =
     "one turn publishes at most 3 skill revisions; that is plenty, so finish with what you have";
@@ -799,7 +770,6 @@ async fn at_turn_limit(
     Ok(written >= TURN_SKILLS)
 }
 
-/// The agent's installed packages, or only the one called `name`.
 #[tracing::instrument(skip_all, fields(agent = %agent.0))]
 pub(crate) async fn packages<'e>(
     executor: impl sqlx::PgExecutor<'e>,
@@ -833,8 +803,6 @@ pub(crate) async fn packages<'e>(
         .collect())
 }
 
-/// A turn's system prompt: the agent's instructions, then each installed skill's name and
-/// description. The model loads a package with `load_skill` only when a task needs it.
 pub(crate) async fn instructions(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -875,9 +843,6 @@ pub(crate) async fn instructions(
     ))
 }
 
-/// The name and description of a valid package: at most `SKILL_BYTES` and 64 files, text only,
-/// a `SKILL.md` at the root whose front matter names it, and other files under `references/`,
-/// `scripts/` or `assets/`.
 pub fn package(files: &Files) -> Option<(String, String)> {
     let size: usize = files
         .iter()
@@ -908,7 +873,6 @@ fn place(path: &str) -> bool {
     plain && segments.len() <= 4 && (path == "SKILL.md" || folder)
 }
 
-/// The Agent Skills name rule: lowercase words of letters and digits joined by single hyphens.
 fn named(name: &str) -> bool {
     name.len() <= 64
         && name.split('-').all(|word| {
@@ -919,8 +883,6 @@ fn named(name: &str) -> bool {
         })
 }
 
-/// `name` and `description` from the front matter. A block value (`|` or `>`) continues on the
-/// indented lines below it and reads as one line, as a system prompt lists it.
 /// shortcut: `key: value` fields, quoted or as a block; parse YAML once imports bring packages
 /// with other forms.
 fn metadata(entrypoint: &str) -> Option<(String, String)> {

@@ -26,7 +26,6 @@ const PAGE = 100
 
 type AuditEntry = Schemas['AuditEntry']
 
-/** The installation's audit log, newest first: who did what to which resource. */
 function Audit() {
   const [filter, setFilter] = useState<string>(FILTERS[0].areas)
   const log = useInfiniteQuery({
@@ -182,7 +181,6 @@ function Entry({ entry }: { entry: AuditEntry }) {
 }
 
 function actorName(entry: AuditEntry) {
-  // Nobody signed in: a refused sign-in.
   return entry.agent_name ?? entry.actor_name ?? 'Someone'
 }
 

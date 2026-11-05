@@ -1,5 +1,3 @@
-//! Wire types shared across Cubebot process boundaries, not internal domain models.
-
 use serde::{Deserialize, Serialize};
 
 /// Process liveness only; this does not attest to dependency or agent readiness.
@@ -16,8 +14,7 @@ pub enum LivenessStatus {
     Alive,
 }
 
-/// The exit status of a sandbox that refused a workspace volume laid out by the other runtime:
-/// `workspace.ext4` under `container`, or a directory tree under `kvm`. Launchers report it.
+/// The exit status of a sandbox that refused a workspace volume laid out by the other runtime. Launchers report it.
 pub const LAYOUT_MISMATCH: u8 = 78;
 
 pub mod desktop;

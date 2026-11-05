@@ -1,5 +1,3 @@
-//! Browser sessions share backend authorization with bearer API clients.
-
 use crate::identity::{Identity, IdentityError};
 use axum::{
     extract::{Request, State},

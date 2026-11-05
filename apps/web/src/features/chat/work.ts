@@ -3,19 +3,12 @@ import { grammarOf } from '../files/viewer'
 
 type Progress = Turn['terminal'][number]
 
-/** How a tool call reads to a person: a sentence, what it touched and what to show when opened. */
 export type WorkView = {
-  /** `Wrote`, `Opened`, `Ran`. */
   verb: string
-  /** What it acted on: a file's name, a page, a command. */
   object: string
-  /** Where the object sits, such as the file's folder. */
   where?: string
-  /** A count beside the sentence, such as `+120 lines`. */
   stat?: string
-  /** Which family's icon it gets. */
   family: 'file' | 'shell' | 'browser' | 'desktop' | 'knowledge' | 'other'
-  /** The body shown when opened. */
   body:
     | {
         kind: 'file'
@@ -91,7 +84,6 @@ function page(url: string) {
   }
 }
 
-/** A browser call that names no page reads as what it did; its `session` is never news. */
 const browser =
   (verb: string, object: (args: Record<string, unknown>) => string): Build =>
   (args) => ({
@@ -202,7 +194,6 @@ const BUILDERS: Record<string, Build> = {
   }),
 }
 
-/** Any other tool: its name in words, and its arguments as a short list instead of JSON. */
 function generic(
   tool: Progress,
   args: Record<string, unknown> | null,
@@ -242,9 +233,8 @@ export function workView(tool: Progress): WorkView {
   return build && args ? build(args, tool) : generic(tool, args)
 }
 
-export type DiffLine = { sign: '+' | '-'; line: string }
+type DiffLine = { sign: '+' | '-'; line: string }
 
-/** The lines an edit took out and put in; what both keep at either end is not news. */
 export function diffLines(before: string, after: string): DiffLine[] {
   const a = before.split('\n')
   const b = after.split('\n')
@@ -267,7 +257,6 @@ export function diffLines(before: string, after: string): DiffLine[] {
   ]
 }
 
-/** The turn in a phrase: files first, since that is what a person came for. */
 export function workDigest(tools: Progress[]) {
   const views = tools.map(workView)
   const changed = new Set(

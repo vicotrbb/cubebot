@@ -1,6 +1,3 @@
-//! Streaming inference adapters. Callers own context, retries and tool policy; adapters
-//! translate requests, streams, usage, errors and capability differences. No provider-side
-//! history and no automatic retries.
 use futures_util::Stream;
 use reqwest::{Client, RequestBuilder, Response, Url};
 use serde_json::Value;
@@ -23,12 +20,9 @@ pub use prices::Price;
 
 type Source = Box<dyn std::error::Error + Send + Sync>;
 
-/// Variants carry their cause, when there is one, for `source()` only.
 pub enum Error {
     Configuration(Option<Source>),
     Unavailable,
-    /// HTTP 429 or 5xx, or a connection that failed, with the delay the provider asked for
-    /// when it sent one.
     Transient(Option<Duration>),
     Rejected,
     InvalidResponse(Option<Source>),
@@ -81,23 +75,18 @@ impl Error {
     }
 }
 
-/// A function tool. `parameters` is a JSON schema the provider enforces when `strict`.
 #[derive(Clone)]
 pub struct Tool {
     pub name: String,
     pub description: String,
     pub parameters: Value,
-    /// Strict schemas must close every object and require every property; external schemas
-    /// rarely do, so they are sent as advisory.
+    /// Strict schemas must close every object and require every property; external schemas rarely do, so they are sent as advisory.
     pub strict: bool,
-    /// The provider's own computer-use tool in place of a function. Its calls arrive as calls
-    /// of this tool: Anthropic's as `{"action": member, ...input}`, OpenAI's as
-    /// `{"actions": [...]}`, and their results go back in the provider's computer form.
+    /// Anthropic's calls arrive as `{"action": member, ...input}`, OpenAI's as `{"actions": [...]}`; results go back in the provider's computer form.
     pub computer: bool,
 }
 
 impl Tool {
-    /// A strict function tool taking an object of exactly `properties`, each required.
     pub fn strict(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -119,8 +108,6 @@ impl Tool {
     }
 }
 
-/// The call ids of computer-use calls in replayed provider output, whose results take the
-/// provider's computer form.
 fn computer_calls(messages: &[Message], native: impl Fn(&Value) -> Option<&str>) -> Vec<&str> {
     messages
         .iter()
@@ -140,14 +127,11 @@ pub struct FunctionCall {
     pub arguments: String,
 }
 
-/// One completed model response.
 #[derive(Clone, Debug)]
 pub struct Reply {
     pub text: String,
-    /// Calls the model made in this response, in order; they may run in parallel.
     pub calls: Vec<FunctionCall>,
-    /// The provider's own output, replayed verbatim to the same provider so reasoning state
-    /// survives; `Null` for history that only has text.
+    /// Replayed verbatim to the same provider so reasoning state survives; `Null` for history that only has text.
     pub native: Value,
 }
 
@@ -155,7 +139,6 @@ pub struct Reply {
 pub enum Message {
     User(String),
     Assistant(Reply),
-    /// `image` is a base64 PNG, such as a computer-use screenshot.
     ToolResult {
         call_id: String,
         output: String,
@@ -165,12 +148,9 @@ pub enum Message {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Usage {
-    /// The whole request, including cached input.
     pub input_tokens: u64,
     pub output_tokens: u64,
-    /// The part of `input_tokens` read from the provider's cache, billed at its lower rate.
     pub cached_input_tokens: u64,
-    /// What the provider itself says this cost, when it says; OpenRouter and Grok do.
     pub cost_usd: Option<f64>,
 }
 
@@ -191,23 +171,19 @@ pub struct Request<'a> {
     pub tools: &'a [Tool],
     /// The tools stay declared so the history remains valid, but the model may not call one.
     pub tools_disabled: bool,
-    /// `None` leaves the model's own output limit in effect where the provider allows it.
     pub max_output_tokens: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Capabilities {
     pub tool_calls: bool,
-    /// `limits` asks the provider; otherwise the context window must be configured.
     pub model_limits: bool,
 }
 
-/// A model the key can use, with its context window when the provider reports one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Model {
     pub id: String,
     pub context_window: Option<u64>,
-    /// Whether it can call tools, which an agent needs to do anything but talk.
     pub tools: bool,
 }
 
@@ -220,10 +196,8 @@ pub struct Limits {
 pub trait Provider: Sync {
     fn capabilities(&self) -> Capabilities;
     fn limits(&self, model: &str, key: &str) -> impl Future<Output = Result<Limits, Error>> + Send;
-    /// The models this key can use for conversations, newest first.
     fn models(&self, key: &str) -> impl Future<Output = Result<Vec<Model>, Error>> + Send;
-    /// Text deltas as they arrive, then exactly one `Done`. A stream that ends early is an
-    /// error, never a partial reply.
+    /// A stream that ends early is an error, never a partial reply.
     fn stream<'a>(
         &'a self,
         request: &'a Request<'a>,
@@ -297,7 +271,6 @@ fn retry_after(response: &Response) -> Option<Duration> {
     Duration::try_from_secs_f64(seconds).ok()
 }
 
-/// A non-streaming JSON body, such as model metadata. OpenRouter's listing alone is about 1 MiB.
 async fn json(response: Response) -> Result<Value, Error> {
     let bytes = body(response).await?;
     serde_json::from_slice(&bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
@@ -314,7 +287,6 @@ async fn body(mut response: Response) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
-/// The `data` array of a models listing; `window` reads an entry's context window.
 fn models(body: &Value, window: impl Fn(&Value) -> Option<u64>) -> Result<Vec<Model>, Error> {
     body["data"]
         .as_array()
@@ -334,7 +306,6 @@ fn models(body: &Value, window: impl Fn(&Value) -> Option<u64>) -> Result<Vec<Mo
 }
 
 trait Decoder: Default + Send {
-    /// Pushes the events in one payload; true once the provider's final event arrived.
     fn decode(&mut self, data: Value, events: &mut VecDeque<Event>) -> Result<bool, Error>;
 }
 
@@ -349,7 +320,6 @@ enum Phase<F, D> {
     Open(Box<Open<D>>),
 }
 
-/// The span covers opening the request (send and status), never the event loop.
 fn events<'a, D: Decoder + 'a>(
     provider: &'static str,
     model: &str,
@@ -392,7 +362,6 @@ fn reply(text: String, calls: Vec<FunctionCall>, native: Value) -> Result<Reply,
     })
 }
 
-/// Tool arguments carry whole files for `write_file`; the SSE event bound still applies.
 const ARGUMENT_BYTES: usize = 1024 * 1024;
 
 fn call(call_id: &str, name: &str, arguments: String) -> Result<FunctionCall, Error> {

@@ -3,7 +3,6 @@ import type { components } from '../../api/schema'
 export type Task = components['schemas']['Task']
 export type TaskItem = components['schemas']['TaskItem']
 
-/** Which pile a task sits in: what it asks of the person first, then what it is doing. */
 export type Pile = 'needs_you' | 'working' | 'finished'
 
 export function pileOf(task: Pick<Task, 'status' | 'blocked'>): Pile {
@@ -16,7 +15,6 @@ export const isRunning = (task: Task) => pileOf(task) !== 'finished'
 export const titleOf = (task: Pick<Task, 'title' | 'request'>) =>
   task.title ?? (task.request.split('\n')[0] ?? '').slice(0, 80)
 
-/** The task in a few words, for its row: what it waits on, or who is on what. */
 export function sentenceOf(task: Task) {
   if (task.blocked) return 'An agent is stuck and waits for you'
   if (task.status === 'needs_you') return 'The orchestrator has a question'
@@ -31,14 +29,12 @@ export function sentenceOf(task: Task) {
     : `${doneCount(task)} of ${task.items.length} done`
 }
 
-/** The card's line under the title; its plan already says who is on what. */
 export function headlineOf(task: Task) {
   return pileOf(task) === 'working' && task.items.length > 0 && !task.reading
     ? 'Working'
     : sentenceOf(task)
 }
 
-/** A short stretch of the plan around what is happening now; the counts say what it leaves out. */
 export function planWindow(items: TaskItem[], size = 5) {
   const doing = items.findIndex((item) => item.status === 'doing')
   const open = doing >= 0 ? doing : items.findIndex((i) => i.status === 'todo')
@@ -57,7 +53,6 @@ export function doneCount(task: Pick<Task, 'items'>) {
   ).length
 }
 
-/** Tasks in the pile, most recently active first as the server sends them. */
 export function piles(tasks: Task[]) {
   const group = (pile: Pile) => tasks.filter((task) => pileOf(task) === pile)
   return {

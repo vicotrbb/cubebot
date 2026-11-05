@@ -1,5 +1,3 @@
-//! One turn: streamed model steps and parallel tool calls, reported as ordered events. Tool
-//! calls are journaled before they run and are never recovered by running them again.
 use super::attempts::{Entry, Store};
 use crate::{
     collaboration::Collaboration, context::Context, memory::Memories, skills::Skills,
@@ -23,19 +21,15 @@ use tokio::sync::{mpsc::UnboundedSender, watch};
 use tracing::Instrument;
 use uuid::Uuid;
 
-/// Model requests per step, counting the first.
 const ATTEMPTS: u32 = 4;
-/// A provider asking for a longer wait leaves the turn waiting rather than holding it.
 const LONGEST_WAIT: Duration = Duration::from_secs(60);
 
-/// An event and, for tool events, the journal sequence its acknowledgement releases.
 pub(super) type Event = (Entry, Option<u64>);
 
 struct Run {
     turn: Uuid,
     next: u64,
     events: UnboundedSender<Event>,
-    /// Journaled calls without a journaled result.
     open: u64,
 }
 impl Run {
@@ -63,8 +57,7 @@ impl Run {
         let journal = match recorded {
             Ok(journal) => journal,
             Err(error) => {
-                // Recovery reports each open call as uncertain right after the last journaled
-                // entry; this run's later events must not take those sequences.
+                // Recovery reports each open call as uncertain right after the last journaled entry; later events must not take those sequences.
                 self.next += self.open;
                 return Err(error);
             }
@@ -171,9 +164,7 @@ pub(super) async fn run(
     run.emit(end, None);
 }
 
-/// A routine's command (docs/adr/agents.md#routines) runs once, before the model, as a journaled bash call; a rerun
-/// finds it among the turn's earlier events instead. The answer of a command-only turn, or `None`
-/// once the model has the result in its message.
+/// Runs once: a rerun finds the command among the turn's earlier events.
 async fn command(
     turn: &mut Turn,
     run: &mut Run,
@@ -198,7 +189,6 @@ async fn command(
     Ok(None)
 }
 
-/// Runs `command` with bash as the tool user, journaled like a model's call.
 async fn shell(
     command: &str,
     run: &mut Run,
@@ -289,7 +279,7 @@ async fn start<P: Provider>(
         turn.broadcast,
         turn.in_task,
     ));
-    // A task lane never drives the shared desktop (docs/adr/agents.md#agent-execution-lanes); the main lane owns it.
+    // A task lane never drives the shared desktop; the main lane owns it.
     tools.extend(
         registry
             .into_iter()
@@ -340,8 +330,7 @@ struct Session<'a, P> {
     skills: &'a Skills,
     collaboration: &'a Collaboration,
     cancel: watch::Receiver<bool>,
-    /// Held from this turn's first desktop call to its end, so another lane cannot move the mouse
-    /// between the steps of what this one is doing there.
+    /// Held from this turn's first desktop call to its end, so another lane cannot move the mouse between its steps.
     desktop: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
@@ -398,8 +387,7 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    /// Retries transient failures with bounded backoff, only before any text streamed so
-    /// nothing is emitted twice. The selected model and provider never change.
+    /// Retries only before any text streamed, so nothing is emitted twice.
     async fn retrying(
         &mut self,
         request: &Request<'_>,
@@ -420,7 +408,6 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    /// One model request, streamed; `streamed` records whether any text arrived.
     #[tracing::instrument(skip_all, fields(provider = ?self.turn.provider, model = request.model))]
     async fn request(
         &mut self,
@@ -445,8 +432,6 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    /// Takes delivered steering into the context at this safe point: before a model request,
-    /// after every tool result of the previous step.
     fn steer(&mut self, context: &mut Context) {
         for (id, message) in self.collaboration.take_steering() {
             context.messages.push(Message::User(format!(
@@ -470,8 +455,6 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    /// Journals every call before any starts, runs them in parallel and journals each result as
-    /// it arrives. Outputs come back in call order.
     async fn call(
         &mut self,
         calls: &[FunctionCall],
@@ -547,8 +530,6 @@ impl<P: Provider> Session<'_, P> {
             .map_err(|_| "journal_unavailable")
     }
 
-    /// Stages facts the turn did not save. Only cancellation fails the turn; otherwise it
-    /// completes without them.
     async fn extract(&mut self, context: &Context) -> Result<(), &'static str> {
         let Some(prompt) = self.memories.extraction() else {
             return Ok(());
@@ -574,7 +555,6 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    /// Summarizes with the same model and replaces the context only with a valid summary.
     async fn compact(&mut self, context: &mut Context) {
         let messages = context.summarizing();
         let request = Request {
@@ -597,13 +577,10 @@ impl<P: Provider> Session<'_, P> {
     }
 }
 
-/// The previous context stays valid; the next safe point tries again.
 fn keep_context() {
     eprintln!("Context compaction failed; keeping the previous context");
 }
 
-/// The delay before another attempt; `None` once the failure is not transient, attempts are
-/// spent, or the provider asks for a longer wait than the turn holds on for.
 fn backoff(error: &Error, attempt: u32) -> Option<Duration> {
     if !error.retryable() || attempt >= ATTEMPTS {
         return None;
@@ -630,9 +607,7 @@ fn done(response: String, memories: Vec<cubebot_protocol::runtime::MemoryChange>
     }
 }
 
-/// Every call with its arguments and unstarted run. A call that cannot run is still recorded,
-/// with unparsable arguments kept as text, and answers the model with why, so it can correct
-/// the call while the rest of the response runs.
+/// A call that cannot run is still recorded and answers the model with why, so it can correct the call while the rest of the response runs.
 #[allow(clippy::type_complexity)]
 fn prepare<'a>(
     tools: Option<&'a Registry>,
@@ -674,7 +649,6 @@ fn prepare<'a>(
         .collect()
 }
 
-/// The call uses what lanes share: the screen and input, or the browser session shown there.
 fn on_desktop(tools: &Registry, call: &FunctionCall) -> bool {
     crate::collaboration::drives_desktop(&call.name)
         || tools.computer(&call.name)
@@ -683,8 +657,6 @@ fn on_desktop(tools: &Registry, call: &FunctionCall) -> bool {
                 .is_ok_and(|input| input["session"] == "main"))
 }
 
-/// Why a task lane may not make this call: the desktop and the main browser session belong to
-/// the main lane (docs/adr/agents.md#agent-execution-lanes, docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions).
 fn lane(
     task: bool,
     tools: Option<&Registry>,
@@ -706,7 +678,6 @@ fn lane(
     Ok(())
 }
 
-/// What the model reads of an outcome: a screenshot's image goes beside its text, not in it.
 fn model_output(outcome: &Outcome) -> (String, Option<String>) {
     match outcome {
         Outcome::Screenshot { output, image } => (output.clone(), Some(image.clone())),
@@ -802,7 +773,6 @@ mod tests {
             panic!("refusals are exited outcomes");
         };
         assert!(main.contains("main browser session"), "{main}");
-        // Without a registry the task's own session is refused only for lacking the tool.
         assert_eq!(own, "The call was not run: no tool has this name.");
     }
 
@@ -823,7 +793,6 @@ mod tests {
             input: serde_json::json!({}),
         };
         run.journaled(&store, call("bash".into())).unwrap();
-        // A name past the journal's record bound cannot be recorded.
         let oversized = call("x".repeat(crate::journal::MAX_PAYLOAD));
         assert!(run.journaled(&store, oversized).is_err());
         let error = run.emit(failed("journal_unavailable"), None);

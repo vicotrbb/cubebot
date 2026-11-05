@@ -1,5 +1,6 @@
-//! Inspect a physical attempt once before provisioning or recovery decisions.
-use super::{Attempt, AttemptId, Error, Phase, ReconcileResult, Reconciler, ResourceKind};
+use super::{
+    Attempt, AttemptId, Error, Phase, ReconcileResult, Reconciler, ResourceKind, ResourceSpec,
+};
 use crate::agents::AgentId;
 
 pub(super) enum Inspection {
@@ -17,14 +18,36 @@ impl Reconciler {
         let Some(attempt) = self.registry.current(agent, ResourceKind::Pod).await? else {
             return Ok(Inspection::Vacant);
         };
-        let current = running && attempt.target_generation == generation;
+        let wanted = running && attempt.target_generation == generation;
+        let drifted = wanted && self.drifted(agent, &attempt).await?;
+        let current = wanted && !drifted;
         if attempt.phase == Phase::Planned {
             if !current {
                 self.registry.cancel_planned(attempt.id).await?;
             }
             return Ok(Inspection::Vacant);
         }
+        if drifted {
+            self.registry.request_drain(attempt.id).await?;
+        }
         self.inspect_dispatched(attempt, current).await
+    }
+    async fn drifted(&self, agent: AgentId, attempt: &Attempt) -> Result<bool, Error> {
+        let Some(workspace) = self
+            .registry
+            .current(agent, ResourceKind::Workspace)
+            .await?
+        else {
+            return Ok(false);
+        };
+        let name = workspace
+            .object
+            .metadata()
+            .name
+            .as_deref()
+            .ok_or(Error::InvalidConfiguration)?;
+        let configured = ResourceSpec::Pod(Box::new(self.layout.pod(name)?));
+        Ok(!configured.matches(&attempt.intent))
     }
     async fn inspect_dispatched(
         &self,

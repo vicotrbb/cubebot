@@ -1,10 +1,7 @@
 """A voice call in real Chromium through the real speech stack, with no provider key.
 
-A MediaStream in place of the microphone device plays a human recording. Real Silero and Zipformer hear it and
-real Piper speaks; the real agent binary runs in the `container` runtime against a scripted
-model that streams its replies. The call must produce turns the agent carries in its context
-and one Call message in the conversation. The model's words are scripted, so this is not
-agent qualification, and no real microphone or speaker is involved, so this says nothing about echo.
+The model's words are scripted, so this is not agent qualification, and no real microphone or speaker is involved,
+so this says nothing about echo.
 """
 # ruff: noqa: E501
 
@@ -39,8 +36,7 @@ from integration import run_database
 from smoke import running, unused_port
 
 PORT = 18080
-# Streams its reply. The second question also proves the call's first turn is in the context,
-# and the first that the turn carries the call's instructions.
+# The second question proves the first turn is in the context; the first, the call's instructions.
 STAND_IN = r"""
 import http.server, json, sys
 
@@ -99,7 +95,6 @@ def stand_in(name):
 
 
 def microphone(models: Path, path: Path):
-    """The bundled human recording, then long enough a silence for a reply to be heard."""
     recording = next(models.glob("sherpa-onnx-streaming-*/test_wavs/0.wav"))
     with wave.open(str(recording)) as source:
         params = source.getparams()

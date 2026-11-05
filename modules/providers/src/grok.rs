@@ -1,6 +1,4 @@
-//! xAI Grok over Chat Completions.
-//! shortcut: xAI labels this API legacy in favor of Responses, with no shutoff date; move to it
-//! when one is announced, sharing the OpenAI adapter's decoder.
+//! shortcut: xAI labels this API legacy in favor of Responses, with no shutoff date; move to it when one is announced.
 use crate::{
     Capabilities, Error, Event, Limits, Model, Provider, Request,
     completions::{self, Completions},
@@ -11,7 +9,6 @@ use serde_json::{Value, json};
 
 pub struct Grok {
     http: Client,
-    /// Ends in `/`; `chat/completions` and `models` resolve against it.
     base: Url,
 }
 
@@ -45,7 +42,6 @@ impl Provider for Grok {
     fn capabilities(&self) -> Capabilities {
         Capabilities {
             tool_calls: true,
-            // The window is configured from the listing.
             model_limits: false,
         }
     }
@@ -78,8 +74,7 @@ impl Provider for Grok {
     }
 }
 
-/// The listing also holds image and video models, which bill no completion tokens. A missing price
-/// keeps a model, so a change to the listing never empties it.
+/// Image and video models bill no completion tokens. A missing price keeps a model, so a change to the listing never empties it.
 fn conversational(entry: &Value) -> bool {
     let id = entry["id"].as_str().unwrap_or_default();
     entry["completion_text_token_price"].as_u64() != Some(0)

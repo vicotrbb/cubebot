@@ -1,4 +1,3 @@
-//! Kubernetes sandboxes: one `cubebot-sandbox` pod and one retained workspace PVC per agent.
 use super::{Error, Phase, ReconcileResult, Reconciler, ResourceKind, observation::Observation};
 use crate::agents::{
     AgentId,
@@ -14,7 +13,6 @@ impl Sandbox for Reconciler {
             Err(_) => Err(Error::Conflict),
         }
     }
-    /// Requires `create`; settles any stale pod before starting a new epoch.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn start(&self, agent: AgentId) -> Result<(), Error> {
         // Boxed, as is `stop`: inline, the server future's layout overflows the depth limit.
@@ -54,7 +52,6 @@ impl Sandbox for Reconciler {
     }
 }
 
-/// Draining and stopping are progress; an object of unknown ownership must be reconciled first.
 fn settled(result: ReconcileResult) -> Result<(), Error> {
     match result {
         ReconcileResult::Uncertain { .. } => Err(Error::Conflict),

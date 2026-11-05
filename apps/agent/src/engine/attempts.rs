@@ -1,5 +1,4 @@
-//! Local crash recovery for tool effects. A call is durable before its command starts and is
-//! never run again; after a crash it is reported with its outcome or as uncertain.
+//! A call is durable before its command starts and is never run again; after a crash it is reported with its outcome or as uncertain.
 use crate::journal::{Journal, MAX_PAYLOAD};
 use cubebot_protocol::{runtime::TurnEvent, terminal::Outcome};
 use serde::{Deserialize, Serialize};
@@ -23,10 +22,7 @@ impl Store {
             journal: Journal::open(path)?,
         })
     }
-    /// Returns the journal sequence that acknowledges this entry. A screenshot is recorded
-    /// without its image, which is no effect to recover and outgrows a journal record. A large
-    /// input or output is recorded truncated: the ledger gets it whole as the turn emits it, and
-    /// a call whose record failed would never be released.
+    /// A screenshot is recorded without its image; large text is truncated, since the ledger gets it whole and a call whose record failed would never be released.
     pub fn record(&mut self, entry: &Entry) -> io::Result<u64> {
         let mut entry = entry.clone();
         if let TurnEvent::ToolResult {
@@ -36,10 +32,15 @@ impl Store {
         {
             image.clear();
         }
-        self.journal.append(&fit(&mut entry)?)
+        let payload = fit(&mut entry)?;
+        // A full journal stops new calls starting, never the report of what earlier ones did.
+        if matches!(entry.event, TurnEvent::ToolCall { .. }) {
+            self.journal.append(&payload)
+        } else {
+            self.journal.append_outcome(&payload)
+        }
     }
-    /// Called once the ledger has the entry and everything before it. A call stays journaled
-    /// until its result is acknowledged too, so a crash while it runs still reports it.
+    /// A call stays journaled until its result is acknowledged too, so a crash while it runs still reports it.
     pub fn acknowledge(&mut self, through: u64) -> io::Result<()> {
         let entries = self.entries()?;
         let open = entries
@@ -49,9 +50,7 @@ impl Store {
         self.journal
             .acknowledge(open.map_or(through, |(_, journal)| journal - 1))
     }
-    /// Unacknowledged entries in order. Each call without a result first gets a journaled
-    /// uncertain result. A batch of parallel calls emits nothing between its first call and its
-    /// last result, so the sequences after the batch's latest entry are reserved for it.
+    /// A parallel batch emits nothing between its first call and last result, so the sequences after its latest entry are reserved for it.
     pub fn pending(&mut self) -> io::Result<Vec<(Entry, u64)>> {
         let mut pending = self.entries()?;
         let calls: Vec<(Uuid, Uuid)> = pending
@@ -88,11 +87,11 @@ impl Store {
 }
 const TRUNCATED: &str = "\n[truncated]";
 
-/// Serializes `entry`, cutting its one large text until the record fits the journal.
 fn fit(entry: &mut Entry) -> io::Result<Vec<u8>> {
+    let oversized = serde_json::to_vec(entry)?.len() > MAX_PAYLOAD;
     if let TurnEvent::ToolCall { input, .. } = &mut entry.event
         && !input.is_string()
-        && input.to_string().len() > MAX_PAYLOAD
+        && oversized
     {
         *input = Value::String(input.to_string());
     }
@@ -127,7 +126,6 @@ fn fit(entry: &mut Entry) -> io::Result<Vec<u8>> {
     }
 }
 
-/// The id of `entry` when it is a call without a result among `pending`.
 fn unfinished(pending: &[(Entry, u64)], entry: &Entry) -> Option<Uuid> {
     match entry.event {
         TurnEvent::ToolCall { id, .. } if !finished(pending, id) => Some(id),
@@ -249,7 +247,6 @@ mod tests {
             sequence: 2,
             event: TurnEvent::ToolResult {
                 id,
-                // Escaped control characters grow sixfold in JSON.
                 outcome: Outcome::Exited {
                     code: Some(0),
                     output: "\u{1}".repeat(MAX_PAYLOAD),
@@ -268,6 +265,85 @@ mod tests {
                 if output.ends_with(TRUNCATED)
         ));
         store.acknowledge(done).unwrap();
+        assert!(store.pending().unwrap().is_empty());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_call_just_under_the_record_limit_is_journaled_truncated() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let mut store = Store::open(&root).unwrap();
+        let mut entry = call(Uuid::new_v4(), 1);
+        let TurnEvent::ToolCall { input, .. } = &mut entry.event else {
+            unreachable!()
+        };
+        *input = serde_json::json!({"content": "x".repeat(MAX_PAYLOAD - 32)});
+        store.record(&entry).unwrap();
+        let [(recorded, _)] = &store.entries().unwrap()[..] else {
+            panic!("expected one entry");
+        };
+        assert!(matches!(
+            &recorded.event,
+            TurnEvent::ToolCall { input: Value::String(text), .. } if text.ends_with(TRUNCATED)
+        ));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_full_journal_holding_open_calls_reopens_and_reports_them() {
+        let root = std::env::temp_dir().join(format!("cubebot-attempts-{}", Uuid::new_v4()));
+        let turn = Uuid::new_v4();
+        let mut store = Store::open(&root).unwrap();
+        let large = || {
+            let mut entry = call(turn, 1);
+            let TurnEvent::ToolCall { input, .. } = &mut entry.event else {
+                unreachable!()
+            };
+            *input = serde_json::json!({"content": "x".repeat(MAX_PAYLOAD)});
+            entry
+        };
+        let first = large();
+        store.record(&first).unwrap();
+        let mut calls = 1;
+        while store.record(&large()).is_ok() {
+            calls += 1;
+        }
+        let TurnEvent::ToolCall { id, .. } = first.event else {
+            unreachable!()
+        };
+        let result = Entry {
+            turn,
+            sequence: 2,
+            event: TurnEvent::ToolResult {
+                id,
+                outcome: Outcome::Exited {
+                    code: Some(0),
+                    output: "x".repeat(MAX_PAYLOAD),
+                },
+            },
+        };
+        store.record(&result).unwrap();
+        drop(store);
+
+        let mut store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 2 * calls);
+        assert!(matches!(
+            pending.last().unwrap().0.event,
+            TurnEvent::ToolResult {
+                outcome: Outcome::Uncertain,
+                ..
+            }
+        ));
+        drop(store);
+        let mut store = Store {
+            journal: Journal::reopen(&root).unwrap(),
+        };
+        let pending = store.pending().unwrap();
+        assert_eq!(pending.len(), 2 * calls);
+        store.acknowledge(pending.last().unwrap().1).unwrap();
         assert!(store.pending().unwrap().is_empty());
         std::fs::remove_dir_all(&root).unwrap();
     }

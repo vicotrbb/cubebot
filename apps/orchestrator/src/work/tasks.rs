@@ -1,7 +1,4 @@
-//! Tasks (docs/adr/rooms.md#tasks-and-the-task-orchestrator): what a person wants done, whoever does it. Each has a room
-//! that appears only on the Tasks page, and its messages use the ordinary room machinery: a delivery
-//! is a turn that belongs to the room, so nothing here reaches an agent's own conversation. The
-//! agent's view is one way: its turn starts from its own conversation, as a fork that adds nothing back.
+//! A delivery is a turn that belongs to the room, so nothing here reaches an agent's own conversation.
 mod orchestrator;
 mod tools;
 
@@ -107,7 +104,6 @@ fn valid_settings(input: &TaskSettings) -> bool {
         && input.instructions.len() <= 8192
 }
 
-/// One task as stored, before its agents and items.
 struct Row {
     id: Uuid,
     room_id: Uuid,
@@ -122,7 +118,6 @@ struct Row {
 }
 
 impl Work {
-    /// Records the request; the orchestrator takes it from there, so this never calls a model.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn create_task(
         &self,
@@ -158,7 +153,6 @@ impl Work {
         task.ok_or(IdentityError::NotFound)
     }
 
-    /// The tasks the person may read, most recently active first.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn tasks(&self, actor: &Actor) -> Result<Vec<Task>, IdentityError> {
         let mut tx = self.pool.begin().await?;
@@ -175,7 +169,6 @@ impl Work {
         found.ok_or(IdentityError::NotFound)
     }
 
-    /// Stops the task's open work. Writing in the room later starts it again.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, task = %task))]
     pub async fn stop_task(&self, actor: &Actor, task: Uuid) -> Result<Task, IdentityError> {
         let mut tx = self.pool.begin().await?;
@@ -233,7 +226,6 @@ impl Work {
         Ok(settings)
     }
 
-    /// `input.revision` is the one the change was based on.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn save_task_settings(
         &self,
@@ -314,7 +306,6 @@ async fn insert(
     Ok(id)
 }
 
-/// The tasks the actor may read, all of them or just one: its owner and administrators.
 async fn read(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
@@ -382,7 +373,6 @@ async fn lock_room(tx: &mut Transaction<'_, Postgres>, room: Uuid) -> Result<(),
     Ok(())
 }
 
-/// A turn of a task is its owner's and administrators' to act on, whoever else may use the agent.
 pub(super) async fn guard(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
@@ -410,20 +400,16 @@ pub(super) async fn guard(
     Ok(())
 }
 
-/// An agent the task's owner may hand work to.
 #[derive(Clone)]
 pub(super) struct Eligible {
     pub id: Uuid,
     pub name: String,
     pub about: String,
     pub skills: Vec<String>,
-    /// Turns it has open, in any lane.
     pub open: i64,
-    /// Tasks it can work on at once; more than this wait.
     pub lanes: i16,
 }
 
-/// Least busy first, ties in no fixed order, so neither the list nor a fallback favors a name.
 pub(super) async fn eligible(
     tx: &mut Transaction<'_, Postgres>,
     owner: Uuid,
@@ -446,9 +432,6 @@ pub(super) async fn eligible(
     .await
 }
 
-/// A person wrote in a task room. Everything they say brings the task back to life, and they get
-/// fresh follow-up rounds. Returns the agents their mentions reach, who join the room; `None` when
-/// `room` is not a task's.
 pub(super) async fn person_wrote(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -468,7 +451,6 @@ pub(super) async fn person_wrote(
     let Some(owner) = woken else {
         return Ok(None);
     };
-    // An administrator may write in someone's task; the agents stay those its owner may use.
     let reachable: Vec<rooms::Member> = eligible(tx, owner)
         .await?
         .into_iter()
@@ -482,7 +464,6 @@ pub(super) async fn person_wrote(
     Ok(Some(mentioned))
 }
 
-/// Adds the agents to the task's room.
 async fn join(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -502,8 +483,6 @@ async fn join(
     Ok(())
 }
 
-/// Posts a message from the orchestrator or, with `agent`, from an agent. `request_id` makes a
-/// resent tool call post nothing new; `None` then.
 async fn post(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -530,7 +509,6 @@ async fn post(
     .await
 }
 
-/// One turn for `agent` from a task's message, reading `frame`.
 async fn deliver(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
@@ -555,7 +533,6 @@ async fn deliver(
     Ok(())
 }
 
-/// At most `bytes` of the text, whole characters only.
 fn clipped(text: &str, bytes: usize) -> &str {
     let mut end = text.len().min(bytes);
     while !text.is_char_boundary(end) {

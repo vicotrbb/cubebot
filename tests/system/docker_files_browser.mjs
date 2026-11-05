@@ -1,8 +1,4 @@
-// Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) in real Chromium against the built console behind
-// Caddy: the administrator uploads with the picker and by dropping a file, makes a folder,
-// drags a file into it, renames and downloads it, shares the folder with a person and
-// deletes a file; that person then finds the folder under Shared with me, read only, and
-// downloads from it.
+// Shared files in real Chromium against the built console behind Caddy.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import { Buffer } from 'node:buffer'
@@ -63,7 +59,6 @@ try {
   })
   await row(page, `picked-${marker}.txt`).waitFor()
 
-  // A drop of a file from the desktop, as the browser delivers it.
   const transfer = await page.evaluateHandle((name) => {
     const data = new globalThis.DataTransfer()
     data.items.add(new globalThis.File(['dropped bytes'], name))

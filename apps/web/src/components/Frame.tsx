@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 const MIN = 120
 const MAX = 640
 
-/** Runs a page where it cannot reach the console: an opaque origin with no network (see `framed`).
- *  `fill` takes the height it is given; otherwise the frame fits the page, up to a limit. */
+/** Runs a page where it cannot reach the console: an opaque origin with no network. */
 export function Frame({
   page,
   title,

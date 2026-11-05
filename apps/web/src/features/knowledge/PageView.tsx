@@ -41,7 +41,6 @@ import { PageIcon, useCreate } from './Knowledge'
 import { childrenOf, pathTo, titled } from './tree'
 import { useSave, type SaveState } from './useSave'
 
-// The editor is the console's heaviest part and only this page needs it.
 const Editor = lazy(() =>
   import('./Editor').then((module) => ({ default: module.Editor })),
 )
@@ -63,7 +62,6 @@ export function PageView({ id }: { id: string }) {
   )
 }
 
-/** Path, who last touched it and what can be done to it. */
 function Bar({
   page,
   state,
@@ -158,7 +156,6 @@ function Author({ page }: { page: Page }) {
   )
 }
 
-/** A few symbols to mark a page by; typing any other one works too. */
 const ICONS = [
   '📄',
   '📌',
@@ -230,7 +227,6 @@ function IconPick({
 function useTitle(page: Page, onChange: (title: string) => void) {
   const [title, setTitle] = useState(page.title)
   const box = useRef<HTMLTextAreaElement>(null)
-  // A title wraps like the text it is, instead of scrolling inside one line.
   useEffect(() => {
     const element = box.current
     if (!element) return
@@ -269,7 +265,6 @@ function Document({ page }: { page: Page }) {
   const uploads = useRef<HTMLInputElement>(null)
   const imageOnly = useRef(false)
 
-  // Someone else's save reaches a page nobody is typing in here.
   useEffect(() => {
     if (!follow(page.revision)) return
     setTitle(page.title)
@@ -694,7 +689,6 @@ function FolderView({ page }: { page: Page }) {
   )
 }
 
-/** Where the knowledge base opens: what changed lately, or how to begin. */
 export function Home() {
   const tree = useTree()
   const { create, error } = useCreate()

@@ -4,8 +4,26 @@ import '../styles/global.css'
 interface Props {
   title: string
   description: string
+  noindex?: boolean
 }
-const { title, description } = Astro.props
+const { title, description, noindex = false } = Astro.props
+const url = new URL(Astro.url.pathname, Astro.site).href
+const image = new URL('/og.png', Astro.site).href
+const alt =
+  'Cubebot: a large orange cube with eyes on a wooden desk, beside a sleeping sage cube and a small plant.'
+const structured = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Cubebot',
+  url: Astro.site,
+  image,
+  description,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Linux, macOS',
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  sameAs: 'https://github.com/vicotrbb/cubebot',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+}
 ---
 
 <!doctype html>
@@ -16,10 +34,29 @@ const { title, description } = Astro.props
     <title>{title}</title>
     <meta name="description" content={description} />
     <meta name="theme-color" content="#f26a1b" />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="canonical" href={url} />
+    <meta property="og:site_name" content="Cubebot" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content={url} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
+    <meta property="og:image" content={image} />
+    <meta property="og:image:secure_url" content={image} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
+    <meta name="twitter:image:alt" content={alt} />
+    <script type="application/ld+json" set:html={JSON.stringify(structured)} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-48.png" type="image/png" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link
       rel="preload"
       href="/fonts/rubik-latin.woff2"

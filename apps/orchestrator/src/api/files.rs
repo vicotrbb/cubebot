@@ -1,6 +1,4 @@
-//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) for people. Storage authorizes every request; this adapter
-//! authenticates the person and streams bodies. An upload is the raw request body; a download
-//! is always an attachment the browser never renders in the console's origin.
+//! A download is always an attachment the browser never renders in the console's origin.
 use crate::{
     identity::{Identity, IdentityError},
     storage::{Principal, Storage, StorageError, Upload},
@@ -17,10 +15,7 @@ use cubebot_protocol::runtime::{FileEntry, FileShare};
 use futures_util::Stream;
 use serde::Deserialize;
 use std::io::SeekFrom;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncSeekExt},
-    sync::OwnedSemaphorePermit,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
 use uuid::Uuid;
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -102,7 +97,6 @@ impl IntoResponse for Failure {
     }
 }
 
-/// The response for a storage failure; a refusal's body names the reason.
 pub(super) fn refused(error: StorageError) -> Response {
     let (status, reason) = status(&error);
     log(&error, status);
@@ -115,7 +109,6 @@ pub(super) fn refused(error: StorageError) -> Response {
     response
 }
 
-/// Integrity faults are logged as errors where they are found.
 fn log(error: &StorageError, status: StatusCode) {
     if status.is_server_error() || matches!(error, StorageError::Incomplete(_)) {
         tracing::warn!(?error, "shared file request failed");
@@ -153,8 +146,6 @@ async fn person(
     Ok((configured(storage)?, Principal::Person(actor.id)))
 }
 
-/// Streams the request body into storage: 201 with the new file, 200 with the one an earlier
-/// attempt under the same request id made.
 pub(super) async fn store(
     storage: &Storage,
     who: Principal,
@@ -270,8 +261,8 @@ async fn content(
     Path(file): Path<Uuid>,
 ) -> Result<Response, Failure> {
     let (storage, who) = person(&identity, &headers, storage).await?;
-    let (entry, bytes, transfer) = storage.open(who, file).await?;
-    Ok(download(entry, bytes, transfer, &headers).await)
+    let (entry, bytes) = storage.open(who, file).await?;
+    Ok(download(entry, bytes, &headers).await)
 }
 
 /// The file's own shares; inherited ones are on the folders above it.
@@ -299,11 +290,9 @@ async fn replace_shares(
     Ok(Json(storage.share(who, file, &input, true).await?))
 }
 
-/// Streams the file, or the one byte range asked for, holding the transfer slot until done.
 pub(super) async fn download(
     entry: FileEntry,
     mut bytes: tokio::fs::File,
-    transfer: OwnedSemaphorePermit,
     headers: &HeaderMap,
 ) -> Response {
     let size = entry.size.unwrap_or_default() as u64;
@@ -336,7 +325,7 @@ pub(super) async fn download(
             .status(StatusCode::PARTIAL_CONTENT)
             .header(header::CONTENT_RANGE, served);
     }
-    let body = Body::from_stream(chunks(bytes.take(end - start), transfer));
+    let body = Body::from_stream(chunks(bytes.take(end - start)));
     response
         .body(body)
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
@@ -344,24 +333,21 @@ pub(super) async fn download(
 
 fn chunks(
     reader: impl AsyncRead + Unpin + Send + 'static,
-    transfer: OwnedSemaphorePermit,
 ) -> impl Stream<Item = std::io::Result<Bytes>> + Send + 'static {
-    futures_util::stream::unfold(Some((reader, transfer)), |state| async move {
-        let (mut reader, transfer) = state?;
+    futures_util::stream::unfold(Some(reader), |state| async move {
+        let mut reader = state?;
         let mut buffer = vec![0; 64 * 1024];
         match reader.read(&mut buffer).await {
             Ok(0) => None,
             Ok(read) => {
                 buffer.truncate(read);
-                Some((Ok(Bytes::from(buffer)), Some((reader, transfer))))
+                Some((Ok(Bytes::from(buffer)), Some(reader)))
             }
             Err(error) => Some((Err(error), None)),
         }
     })
 }
 
-/// The single `bytes=` range of a `size`-byte file, end exclusive. `Ok(None)` serves the whole
-/// file, as for an absent or malformed header or several ranges; `Err` is unsatisfiable.
 fn byte_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()> {
     let Some((first, last)) = header
         .and_then(|value| value.strip_prefix("bytes="))
@@ -386,7 +372,6 @@ fn byte_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()>
     }
 }
 
-/// An attachment named by the file, with an ASCII fallback for older clients.
 fn disposition(name: &str) -> String {
     let fallback: String = name
         .chars()
@@ -423,7 +408,6 @@ mod tests {
         assert_eq!(range("bytes=100-"), Err(()));
         assert_eq!(range("bytes=-0"), Err(()));
         assert_eq!(byte_range(Some("bytes=0-"), 0), Err(()));
-        // Malformed or several ranges: the whole file.
         assert_eq!(range("bytes=9-0"), Ok(None));
         assert_eq!(range("bytes=0-1,5-6"), Ok(None));
         assert_eq!(range("items=0-1"), Ok(None));

@@ -2,18 +2,12 @@ import { useState, type KeyboardEvent, type RefObject } from 'react'
 import { Cube, type Avatar } from '../../components/Cube'
 import { complete, mentionAt, suggest, type MentionQuery } from './mentions'
 
-/** Someone the composer suggests after `@`. */
 export type Mentionable = {
   id: string
   name: string
   avatar?: Avatar | null
 }
 
-/**
- * Slack-style `@` suggestions for a textarea. `track` follows the caret, `steer` takes
- * the arrow keys, Enter, Tab and Escape while the list is open, and `menu` is the list.
- * Without `people` it does nothing.
- */
 export function useMentions(
   people: Mentionable[] | undefined,
   area: RefObject<HTMLTextAreaElement | null>,
@@ -43,7 +37,6 @@ export function useMentions(
       element.setSelectionRange(done.caret, done.caret)
     })
   }
-  /** Whether the key steered the open list, so the composer must not act on it. */
   function steer(event: KeyboardEvent<HTMLTextAreaElement>) {
     const chosen = options[active] ?? options[0]
     if (!chosen || event.nativeEvent.isComposing) return false

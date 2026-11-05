@@ -1,8 +1,5 @@
-/** How the audit log reads: each kind as words, and the filters that group its areas. */
-
 export type Detail = Record<string, unknown>
 
-/** The filters across the top; `areas` is the API's comma-separated area list. */
 export const FILTERS = [
   { label: 'All', areas: '' },
   { label: 'Sign-ins', areas: 'session' },
@@ -21,7 +18,6 @@ const LIFECYCLE: Record<string, string> = {
   retire: 'retired',
 }
 
-/** The verb phrase before the resource's name, from the kind and its detail. */
 const PHRASES: Record<string, (detail: Detail) => string> = {
   'account.bootstrap': () => 'set up the installation as',
   'account.create': () => 'created the account',
@@ -84,7 +80,6 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
     `broadcast to ${Number(detail.agents) || 0} ${Number(detail.agents) === 1 ? 'agent' : 'agents'}`,
 }
 
-/** Phrases for a person acting on their own account, which name no resource after them. */
 const SELF: Record<string, (detail: Detail) => string> = {
   'account.bootstrap': () => 'set up the installation',
   'account.avatar': (detail) =>
@@ -104,7 +99,6 @@ function capability(detail: Detail) {
   )
 }
 
-/** Kinds whose phrase already names everything, so no resource follows it. */
 const COMPLETE = new Set([
   'invitation.create',
   'invitation.revoke',
@@ -114,13 +108,11 @@ const COMPLETE = new Set([
   'broadcast.send',
 ])
 
-/** `self`: the resource is the person who acted. */
 export function phrase(kind: string, detail: Detail, self = false) {
   const words = (self && SELF[kind]) || PHRASES[kind]
   return words?.(detail) ?? kind.replace('.', ' ').replaceAll('_', ' ')
 }
 
-/** Whether the event is a person acting on their own account. */
 export function isSelf(
   kind: string,
   actor?: string | null,
@@ -129,7 +121,6 @@ export function isSelf(
   return Boolean(actor) && actor === resource && kind in SELF
 }
 
-/** The resource's name for the sentence, or `null` when the phrase stands alone. */
 export function target(
   kind: string,
   detail: Detail,
@@ -142,7 +133,6 @@ export function target(
   )
 }
 
-/** "Today", "Yesterday" or the date, for the separators between days. */
 export function day(at: string, now = new Date()) {
   const date = new Date(at)
   const start = (value: Date) =>

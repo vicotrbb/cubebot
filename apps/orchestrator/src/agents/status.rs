@@ -1,4 +1,3 @@
-//! Last validated observations, separate from desired intent and execution readiness.
 use super::{
     AgentId, Agents,
     kubernetes::{AttemptId, Phase},

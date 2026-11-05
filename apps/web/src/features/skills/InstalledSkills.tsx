@@ -10,7 +10,6 @@ import {
 import type { AgentSummary } from '../../api/types'
 import { Alert, Empty, Skeleton } from '../../components/primitives'
 
-/** The agent's installed skills, pinned to a revision, and what the library offers. */
 export function InstalledSkills({ agent }: { agent: AgentSummary }) {
   const [installed, setInstalled] = useState<InstalledSkill[]>([])
   const [library, setLibrary] = useState<Skill[]>([])

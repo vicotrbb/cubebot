@@ -1,14 +1,9 @@
-/** A name character, as the orchestrator's mention matcher counts them. */
+/** As the orchestrator's mention matcher counts them. */
 const WORD = /[\p{L}\p{N}_-]/u
 
-/** The `@` being typed at the caret: where it starts and what follows it so far. */
 export type MentionQuery = { start: number; query: string }
 
-/**
- * The mention the caret is in, if any. An `@` counts only at the start of the text or after
- * a non-name character, so `bob@example.com` never opens suggestions. Names may hold
- * spaces ("Test Agent"), so the query may too, but never a line break.
- */
+/** An `@` counts only at the start or after a non-name character, so `bob@example.com` never opens suggestions; names may hold spaces, so the query may too, but never a line break. */
 export function mentionAt(text: string, caret: number): MentionQuery | null {
   const start = text.lastIndexOf('@', caret - 1)
   if (start < 0) return null
@@ -19,7 +14,6 @@ export function mentionAt(text: string, caret: number): MentionQuery | null {
   return { start, query }
 }
 
-/** Members whose name, or one word of it, starts with the query; full-name matches first. */
 export function suggest<T extends { name: string }>(
   members: T[],
   query: string,
@@ -37,7 +31,6 @@ export function suggest<T extends { name: string }>(
   ]
 }
 
-/** The text with the mention replaced by `@name `, and the caret just after it. */
 export function complete(
   text: string,
   caret: number,

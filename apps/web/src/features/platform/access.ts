@@ -5,7 +5,6 @@ export type Level = 'none' | 'view' | 'chat' | 'manage' | 'custom'
 export type Target = { kind: 'agent' | 'room'; id: string }
 type Needed = { scope: 'agent' | 'room' | 'conversation'; capability: string }
 
-/** A level is the set of exact grants that make it, so people pick what they mean. */
 const AGENT: Record<Exclude<Level, 'none' | 'custom'>, Needed[]> = {
   view: [
     { scope: 'conversation', capability: 'conversation_read' },
@@ -55,7 +54,6 @@ export const LABEL: Record<Level, string> = {
   custom: 'Custom',
 }
 
-/** What each level allows, in the words a person would use. */
 export const MEANING: Record<Exclude<Level, 'none' | 'custom'>, string> = {
   view: 'See the conversation, desktop, memory and files',
   chat: 'Also send messages',
@@ -64,7 +62,6 @@ export const MEANING: Record<Exclude<Level, 'none' | 'custom'>, string> = {
 
 const needs = (target: Target) => (target.kind === 'agent' ? AGENT : ROOM)
 
-/** The grants on this target among a recipient's. */
 export function grantsOn(grants: Grant[], target: Target) {
   return grants.filter(
     (grant) =>
@@ -77,7 +74,6 @@ export function grantsOn(grants: Grant[], target: Target) {
 
 const key = (scope: string, capability: string) => `${scope}:${capability}`
 
-/** The level these grants make; `custom` when they match none exactly. */
 export function levelOf(onTarget: Grant[], target: Target): Level {
   if (onTarget.length === 0) return 'none'
   const held = new Set(onTarget.map((g) => key(g.scope_kind, g.capability)))
@@ -92,7 +88,6 @@ export function levelOf(onTarget: Grant[], target: Target): Level {
   return 'custom'
 }
 
-/** What to grant and revoke to move from these grants to `level`. */
 export function changesTo(
   onTarget: Grant[],
   target: Target,

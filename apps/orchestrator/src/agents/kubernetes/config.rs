@@ -1,4 +1,3 @@
-//! Explicit installation configuration. Never infer a developer's default Kubernetes context.
 use super::{Controller, Error, Layout};
 use crate::operations::ownership::PodIdentity;
 use serde::Deserialize;
@@ -12,13 +11,10 @@ pub struct ControllerConfig {
     runtime_service_account: String,
     orchestrator_origin: String,
     network: cubebot_protocol::network::NetworkPolicy,
-    /// Required: `sandbox_image` is the `cubebot-sandbox` image for `kvm`, the agent image for
-    /// `container`.
     runtime: crate::agents::sandbox::Runtime,
     control_ca_config_map: Option<String>,
     #[serde(default)]
     terminal_enabled: bool,
-    /// Offers the provider's computer-use tool and starts each guest's desktop (docs/adr/sandbox.md#desktop-as-a-vmm-device).
     #[serde(default)]
     computer_use_enabled: bool,
 }

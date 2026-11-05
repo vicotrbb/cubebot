@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(max(r.updated_at) + make_interval(secs => LEAST(300, power(2, count(*)) - 2)) > clock_timestamp(), false) AS \"waiting!\"\n        FROM agent_resources r\n        JOIN agents a ON a.id = r.agent_id\n        WHERE r.agent_id = $1\n          AND r.kind = 'pod'\n          AND r.phase = 'stopped'\n          AND r.target_generation = a.restart_generation\n          AND r.updated_at > clock_timestamp() - interval '1 hour'\n          AND r.termination_proof->>'kind' IS DISTINCT FROM 'not_dispatched'\n          AND NOT EXISTS (SELECT 1 FROM agent_runtime_drains d WHERE d.attempt_id = r.id AND d.acknowledged_at IS NOT NULL)\n          AND NOT EXISTS (SELECT 1 FROM agent_resources o WHERE o.agent_id = $1 AND o.kind = 'pod' AND o.phase <> 'stopped')\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "waiting!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "409d486a0b0032586612dc2f6081ed4188ca9062c6eae31aaa4fde20b064efcf"
+}

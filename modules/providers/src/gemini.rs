@@ -1,5 +1,4 @@
-//! Google Gemini over its OpenAI-compatible Chat Completions. The native API is only for listing,
-//! because only it reports each model's context window.
+//! The native API is only for listing, because only it reports each model's context window.
 use crate::{
     Capabilities, Error, Event, Limits, Model, Provider, Request, Tool,
     completions::{self, Completions},
@@ -28,7 +27,6 @@ const SCHEMA_KEYS: [&str; 14] = [
 
 pub struct Gemini {
     http: Client,
-    /// Ends in `/`; `models` and `openai/chat/completions` resolve against it.
     base: Url,
     pricing: Url,
 }
@@ -64,7 +62,6 @@ impl Gemini {
             .map_err(|error| Error::Configuration(Some(error.into())))
     }
 
-    /// The paid-tier prices on Gemini's pricing page.
     #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "gemini"))]
     pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
         let page = crate::prices::page(&self.http, self.pricing.clone()).await?;
@@ -80,7 +77,6 @@ impl Provider for Gemini {
     fn capabilities(&self) -> Capabilities {
         Capabilities {
             tool_calls: true,
-            // The window is configured from the listing.
             model_limits: false,
         }
     }
@@ -121,7 +117,6 @@ impl Provider for Gemini {
     }
 }
 
-/// A conversational model, without the `models/` its name starts with.
 fn listed(entry: &Value) -> Option<Model> {
     let generates = entry["supportedGenerationMethods"]
         .as_array()?
@@ -153,8 +148,7 @@ fn function(tool: &Tool) -> Value {
     function
 }
 
-/// `schema` narrowed to what Gemini accepts: `["string","null"]` is `nullable`, and unknown keys,
-/// such as `additionalProperties` in every strict tool and whatever an MCP server sends, go.
+/// `["string","null"]` is `nullable`, and unknown keys, such as `additionalProperties` in every strict tool, go.
 fn schema(value: &Value, depth: u32) -> Value {
     let Some(object) = value.as_object() else {
         return value.clone();
@@ -190,8 +184,7 @@ fn schema(value: &Value, depth: u32) -> Value {
         };
         kept.insert(key.clone(), part);
     }
-    // shortcut: a nested free-form object or an array of anything cannot be declared, so it travels
-    // as a string, which a tool may refuse; Gemini would otherwise refuse the whole request.
+    // shortcut: a nested free-form object or an array of anything travels as a string, which a tool may refuse; Gemini would otherwise refuse the whole request.
     if free_form(&Value::Object(kept.clone())) && depth > 0 {
         return json!({"type":"string","description":"A JSON object."});
     }
@@ -205,9 +198,7 @@ fn free_form(schema: &Value) -> bool {
     schema["type"] == "object" && schema["properties"].as_object().is_none_or(Map::is_empty)
 }
 
-/// The Standard table of each model's section on the pricing page.
-/// shortcut: a cell's first price is taken, so a promotion or the lowest context tier reads as the
-/// price; store the tiers if that skews estimates.
+/// shortcut: a cell's first price is taken, so a promotion or the lowest context tier reads as the price; store the tiers if that skews estimates.
 fn from_page(page: &str) -> Vec<crate::Price> {
     page.split("\n## ").skip(1).filter_map(section).collect()
 }
@@ -312,7 +303,6 @@ mod tests {
         assert_eq!(prices[0].cached_per_token, 0.125e-6);
     }
 
-    /// `cargo test -p cubebot-providers -- --ignored live_page`: whether the parser still fits.
     #[tokio::test]
     #[ignore = "reads the live pricing page"]
     async fn live_page() {

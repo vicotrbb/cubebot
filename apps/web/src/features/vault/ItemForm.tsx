@@ -3,12 +3,10 @@ import { api, ApiError, failure, ok, type VaultItem } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { Alert, Field } from '../../components/primitives'
 
-/** What the desktop can type (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills): printable ASCII and spaces. */
+/** What the desktop can type: printable ASCII and spaces. */
 export const TYPABLE = /^[\x20-\x7e]*$/
 type Kind = VaultItem['kind']
 
-/** Creates or edits an item; `fill` adds Save and fill, which types the secret for a person
- *  holding control. */
 export function ItemForm({
   agent,
   administrator = false,
@@ -153,7 +151,6 @@ export function LoginFields({
   )
 }
 
-/** For administrators creating an item: the installation's, with its access. */
 function ScopeFields({ agentName }: { agentName: string }) {
   return (
     <div className="row">
@@ -173,7 +170,6 @@ function ScopeFields({ agentName }: { agentName: string }) {
   )
 }
 
-/** The request for the form's values, or `null` when the desktop could not type them. */
 function itemBody(
   data: FormData,
   kind: Kind,
@@ -183,7 +179,6 @@ function itemBody(
   const text = (name: string) => String(data.get(name) ?? '')
   const [secret, username] = [text('secret'), text('username')]
   if (!TYPABLE.test(secret) || !TYPABLE.test(username)) return null
-  // An update keeps the item's scope and, without a choice here, its access.
   const installation = !existing && text('scope') === 'installation'
   const login = kind === 'login'
   const access =
@@ -214,7 +209,6 @@ function saveItem(
   )
 }
 
-/** Types an item's field at the desktop's focus; the arbiter's refusal, if any. */
 export async function fillItem(
   agent: string,
   item: string,

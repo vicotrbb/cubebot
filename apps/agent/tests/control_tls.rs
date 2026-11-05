@@ -46,7 +46,6 @@ async fn exchange(trusted: bool, hostname: &str) -> Result<(), Error> {
         );
         stream.write_all(response.as_bytes()).await.unwrap();
         stream.shutdown().await.unwrap();
-        // The channel verifies the same selected CA.
         let (stream, _) = listener.accept().await.unwrap();
         let stream = acceptor.accept(stream).await.unwrap();
         tokio_tungstenite::accept_async(stream).await.unwrap();

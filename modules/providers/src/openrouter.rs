@@ -1,5 +1,4 @@
-//! OpenRouter over Chat Completions, the one API every model it routes to speaks. Its docs require
-//! replaying `reasoning_details`, which the shared format does.
+//! OpenRouter's docs require replaying `reasoning_details`, which the shared format does.
 use crate::{
     Capabilities, Error, Event, Limits, Model, Provider, Request,
     completions::{self, Completions},
@@ -10,7 +9,6 @@ use serde_json::{Value, json};
 
 pub struct OpenRouter {
     http: Client,
-    /// Ends in `/`; `chat/completions`, `models` and `key` resolve against it.
     base: Url,
 }
 
@@ -39,7 +37,6 @@ impl OpenRouter {
             .map_err(|error| Error::Configuration(Some(error.into())))
     }
 
-    /// What every model on OpenRouter costs per token, from its public listing.
     #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "openrouter"))]
     pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
         let response = crate::send(self.http.get(self.url("models")?)).await?;
@@ -50,7 +47,6 @@ impl OpenRouter {
         Ok(entries.iter().filter_map(price).collect())
     }
 
-    /// Names the app on OpenRouter's own usage pages.
     fn authorized(&self, request: RequestBuilder, key: &str) -> RequestBuilder {
         request.bearer_auth(key).header("x-title", "Cubebot")
     }
@@ -110,7 +106,6 @@ impl Provider for OpenRouter {
     }
 }
 
-/// One listing entry's rates, written as decimal strings; an entry without them has no price.
 fn price(entry: &Value) -> Option<crate::Price> {
     let rate = |name: &str| entry["pricing"][name].as_str()?.parse::<f64>().ok();
     let (input, output) = (rate("prompt")?, rate("completion")?);

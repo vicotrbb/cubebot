@@ -11,7 +11,6 @@ use tokio_rustls::{
     },
 };
 
-// The agent's public localhost fixtures; their README forbids any installation use.
 const FIXTURES: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../agent/tests/fixtures/control-tls"

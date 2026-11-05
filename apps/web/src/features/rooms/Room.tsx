@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, failure, history, ok, type RoomMessage } from '../../api/client'
+import {
+  api,
+  failure,
+  history,
+  ok,
+  resumeAfter,
+  type RoomMessage,
+} from '../../api/client'
 import type { AgentSummary, RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
 import { followWhileVisible } from '../../app/stream'
@@ -16,9 +23,9 @@ import '../chat/chat.css'
 import { ORCHESTRATOR_AVATAR } from '../tasks/orchestrator'
 import { rounds } from './rounds'
 
+const PAGE = 60
 const FINISHED = ['complete', 'failed', 'cancelled']
 
-/** Applies message snapshots by id, in room order; a finished delivery never goes back. */
 function merge(known: RoomMessage[], incoming: RoomMessage[]) {
   const byId = new Map(known.map((message) => [message.id, message]))
   for (const message of incoming) {
@@ -35,6 +42,10 @@ function merge(known: RoomMessage[], incoming: RoomMessage[]) {
   }
   return [...byId.values()].sort((a, b) => a.sequence - b.sequence)
 }
+
+const changing = (message: RoomMessage) =>
+  message.routing === 'routing' ||
+  message.deliveries.some((item) => !FINISHED.includes(item.status))
 
 const ROUTING: Record<string, string> = {
   routing: 'Choosing an owner…',
@@ -54,7 +65,6 @@ const DELIVERY: Record<string, string> = {
   cancelled: 'cancelled',
 }
 
-/** A room is a channel: people and agents post, mentions deliver, the coordinator routes. */
 export function Room({
   room,
   session,
@@ -76,7 +86,6 @@ export function Room({
   )
 }
 
-/** A room's conversation, for a room in the sidebar and for a task's private one. */
 export function RoomView({
   roomId,
   session,
@@ -95,60 +104,80 @@ export function RoomView({
   placeholder: string
   note: string
   empty: string
-  /** Who `@` offers; every agent the viewer sees when absent. */
   mentionable?: { id: string; name: string }[]
   task?: boolean
 }) {
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [loaded, setLoaded] = useState(false)
   const [readError, setReadError] = useState('')
+  const [shown, setShown] = useState(PAGE)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
   const agents = useAgents()
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
-  useEffect(
-    () =>
-      followWhileVisible(`/api/rooms/${roomId}/events`, (source) => {
-        // History loads once the stream is following, so nothing falls between the two; a
-        // reconnect reloads it to catch messages that changed while disconnected.
-        source.onopen = () => {
-          setReadError('')
-          history((after) =>
+  const known = useRef(messages)
+  useEffect(() => {
+    known.current = messages
+  }, [messages])
+  useEffect(() => {
+    let loading: AbortController | undefined
+    // What the stream delivers first is no whole history, so only a finished load can resume.
+    let whole = false
+    const start = () => (whole ? resumeAfter(known.current, changing) : 0)
+    // The stream replays from its cursor too, which by default is the room's first message.
+    const url = () => `/api/rooms/${roomId}/events?after=${start()}`
+    const stop = followWhileVisible(url, (source) => {
+      // History loads once the stream is following, so nothing falls between the two.
+      source.onopen = () => {
+        setReadError('')
+        loading?.abort()
+        const { signal } = (loading = new AbortController())
+        history(
+          (after) =>
             ok(
               api.GET('/api/rooms/{room}/messages', {
+                signal,
                 params: { path: { room: roomId }, query: { after } },
               }),
             ),
-          ).then(
-            (loaded) => {
-              setMessages((current) => merge(current, loaded))
-              setLoaded(true)
-            },
-            (error) => setReadError(failure(error)),
-          )
-        }
-        source.onerror = () =>
-          setReadError(
-            source.readyState === EventSource.CLOSED
-              ? 'Live updates stopped. Reload the page to reconnect.'
-              : 'Reconnecting to live updates…',
-          )
-        source.addEventListener('message', (event) => {
-          const message: RoomMessage = JSON.parse(event.data)
-          setMessages((current) => merge(current, [message]))
-        })
-      }),
-    [roomId],
-  )
+          start(),
+        ).then(
+          (loaded) => {
+            if (signal.aborted) return
+            whole = true
+            setMessages((current) => merge(current, loaded))
+            setLoaded(true)
+          },
+          (error) => {
+            if (!signal.aborted) setReadError(failure(error))
+          },
+        )
+      }
+      source.onerror = () => setReadError('Reconnecting to live updates…')
+      source.addEventListener('message', (event) => {
+        const message: RoomMessage = JSON.parse(event.data)
+        setMessages((current) => merge(current, [message]))
+      })
+    })
+    return () => {
+      stop()
+      loading?.abort()
+    }
+  }, [roomId])
   const last = messages.at(-1)?.sequence ?? 0
   useEffect(() => {
     if (loaded && last > 0) void markRead('rooms', roomId, last)
   }, [roomId, loaded, last])
-  // Follow the newest message unless the reader scrolled up to read history.
   useEffect(() => {
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
   }, [loaded, messages])
+  const rows = task
+    ? rounds(messages)
+    : messages.map((message) => ({
+        message,
+        deliveries: message.deliveries,
+      }))
   return (
     <section className="conversation" aria-label={label}>
       <div
@@ -166,93 +195,104 @@ export function RoomView({
         {loaded && messages.length === 0 && (
           <Empty title="Nothing here yet.">{empty}</Empty>
         )}
-        {(task
-          ? rounds(messages)
-          : messages.map((message) => ({
-              message,
-              deliveries: message.deliveries,
-            }))
-        ).map(({ message, deliveries }) => (
-          <article className="exchange" key={message.id}>
-            <div
-              className={
-                message.orchestrator || message.author_agent_id
-                  ? 'msg msg--agent'
-                  : 'msg msg--person'
-              }
-            >
-              <AuthorAvatar message={message} agents={agents.data} />
-              <div className="msg__body">
-                <div className="msg__head">
-                  <span className="msg__author">{message.author}</span>
-                </div>
-                <Markdown text={message.message} />
-                {message.routing === 'continued' && (
-                  <p className="small faint" role="status">
-                    Coordinator added this to {message.note}’s open task as
-                    steering.
-                  </p>
-                )}
-                {(task ? TASK_ROUTING : ROUTING)[message.routing] && (
-                  <p className="small faint" role="status">
-                    {(task ? TASK_ROUTING : ROUTING)[message.routing]}
-                  </p>
-                )}
-              </div>
-            </div>
-            {message.routing === 'clarify' && (
-              <div className="msg msg--agent">
-                <span className="avatar-initial msg__avatar" aria-hidden="true">
-                  C
-                </span>
+        {loaded && rows.length > shown && (
+          <button
+            type="button"
+            className="btn btn--sm transcript__earlier"
+            onClick={() => {
+              pinned.current = false
+              setShown((count) => count + PAGE)
+            }}
+          >
+            Show earlier messages
+          </button>
+        )}
+        {rows
+          .slice(Math.max(0, rows.length - shown))
+          .map(({ message, deliveries }) => (
+            <article className="exchange" key={message.id}>
+              <div
+                className={
+                  message.orchestrator || message.author_agent_id
+                    ? 'msg msg--agent'
+                    : 'msg msg--person'
+                }
+              >
+                <AuthorAvatar message={message} agents={agents.data} />
                 <div className="msg__body">
                   <div className="msg__head">
-                    <span className="msg__author">Coordinator</span>
+                    <span className="msg__author">{message.author}</span>
                   </div>
-                  <Markdown text={message.note ?? ''} />
-                </div>
-              </div>
-            )}
-            {deliveries.map((item) => (
-              <div className="msg msg--agent agent-message" key={item.turn}>
-                <DeliveryAvatar
-                  agent={agentOf(item.agent_id)}
-                  name={item.agent}
-                />
-                <div className="msg__body">
-                  <div className="msg__head">
-                    <span className="msg__author">{item.agent}</span>
-                    <span className="faint small">
-                      · {DELIVERY[item.status] ?? item.status}
-                    </span>
-                  </div>
-                  {item.terminal.length > 0 && (
-                    <WorkLog
-                      tools={item.terminal}
-                      running={item.status === 'running'}
-                    >
-                      {item.terminal.map((tool) => (
-                        <WorkCard key={tool.id} tool={tool} />
-                      ))}
-                    </WorkLog>
-                  )}
-                  <Markdown text={item.response ?? item.partial ?? ''} />
-                  <Attachments turn={item.turn} items={item.attachments} />
-                  {item.status === 'failed' && item.error && (
-                    <p className="small" style={{ color: 'var(--danger)' }}>
-                      {item.error.replaceAll('_', ' ')}
+                  <Markdown text={message.message} />
+                  {message.routing === 'continued' && (
+                    <p className="small faint" role="status">
+                      Coordinator added this to {message.note}’s open task as
+                      steering.
                     </p>
                   )}
-                  <DeliveryActions
-                    item={item}
-                    agent={agentOf(item.agent_id)}
-                    session={session}
-                  />
+                  {(task ? TASK_ROUTING : ROUTING)[message.routing] && (
+                    <p className="small faint" role="status">
+                      {(task ? TASK_ROUTING : ROUTING)[message.routing]}
+                    </p>
+                  )}
                 </div>
               </div>
-            ))}
-          </article>
-        ))}
+              {message.routing === 'clarify' && (
+                <div className="msg msg--agent">
+                  <span
+                    className="avatar-initial msg__avatar"
+                    aria-hidden="true"
+                  >
+                    C
+                  </span>
+                  <div className="msg__body">
+                    <div className="msg__head">
+                      <span className="msg__author">Coordinator</span>
+                    </div>
+                    <Markdown text={message.note ?? ''} />
+                  </div>
+                </div>
+              )}
+              {deliveries.map((item) => (
+                <div className="msg msg--agent agent-message" key={item.turn}>
+                  <DeliveryAvatar
+                    agent={agentOf(item.agent_id)}
+                    name={item.agent}
+                  />
+                  <div className="msg__body">
+                    <div className="msg__head">
+                      <span className="msg__author">{item.agent}</span>
+                      <span className="faint small">
+                        · {DELIVERY[item.status] ?? item.status}
+                      </span>
+                    </div>
+                    {item.terminal.length > 0 && (
+                      <WorkLog
+                        tools={item.terminal}
+                        running={item.status === 'running'}
+                      >
+                        {item.terminal.map((tool) => (
+                          <WorkCard key={tool.id} tool={tool} />
+                        ))}
+                      </WorkLog>
+                    )}
+                    <Markdown text={item.response ?? item.partial ?? ''} />
+                    <Attachments turn={item.turn} items={item.attachments} />
+                    {item.status === 'failed' && item.error && (
+                      <p className="small" style={{ color: 'var(--danger)' }}>
+                        {item.error.replaceAll('_', ' ')}
+                      </p>
+                    )}
+                    <DeliveryActions
+                      item={item}
+                      agent={agentOf(item.agent_id)}
+                      session={session}
+                    />
+                  </div>
+                </div>
+              ))}
+            </article>
+          ))}
       </div>
       <Alert>{readError}</Alert>
       <Composer
@@ -283,8 +323,6 @@ export function RoomView({
   )
 }
 
-/** A delivery's work is steered from here: the agent's own conversation never shows it. Needs
- *  send access on the agent, like the same actions in its conversation. */
 function DeliveryActions({
   item,
   agent,
@@ -313,7 +351,6 @@ function DeliveryActions({
   )
 }
 
-/** A person's picture, the orchestrator's block, or the block of the agent that wrote. */
 function AuthorAvatar({
   message,
   agents,

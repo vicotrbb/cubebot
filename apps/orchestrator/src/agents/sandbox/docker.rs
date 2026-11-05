@@ -1,8 +1,5 @@
-//! Cluster-less sandboxes through the `docker` CLI: one container per attempt, one volume per agent.
-//!
-//! Each container is a pod attempt in namespace `docker`, so sessions, drains and epochs work as on
-//! Kubernetes. The attempt is recorded before the container is created; the epoch in the container
-//! name makes creation idempotent, so a lost reply is recovered by lookup, never by a second run.
+//! The attempt is recorded before the container is created; the epoch in its name makes creation
+//! idempotent, so a lost reply is recovered by lookup, never by a second run.
 use super::{ExecChannel, Runtime, Sandbox, Status};
 use crate::agents::{
     AgentId,
@@ -19,18 +16,17 @@ use uuid::Uuid;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DockerConfig {
-    /// The `cubebot-sandbox` image for `kvm`, the agent image for `container`.
     image: String,
     orchestrator_origin: String,
     runtime: Runtime,
     #[serde(default)]
     terminal_enabled: bool,
-    /// The guest desktop and the agent's computer tool (docs/adr/sandbox.md#desktop-as-a-vmm-device); needs `terminal_enabled`.
     #[serde(default)]
     computer_use_enabled: bool,
-    /// Host path of a PEM bundle the guest trusts for `orchestrator_origin`, e.g. from `just dev-ca`.
     #[serde(default)]
     control_ca_file: Option<String>,
+    #[serde(default)]
+    network: Option<String>,
 }
 const CONTROL_CA: &str = "/run/cubebot/control-ca/ca.crt";
 impl DockerConfig {
@@ -55,6 +51,10 @@ impl DockerConfig {
             || origin.scheme() != "https"
             || loopback(&origin)
             || config.runtime.validate().is_err()
+            || config
+                .network
+                .as_deref()
+                .is_some_and(|name| !argument(name))
             || config.control_ca_file.as_deref().is_some_and(|path| {
                 // `--mount` is CSV: a comma or quote would end the source and start another option.
                 !argument(path) || !path.starts_with('/') || path.contains([',', '"'])
@@ -114,7 +114,6 @@ impl Docker {
             program: "docker".into(),
         }
     }
-    /// Tests point this at a fake CLI.
     pub fn with_program(mut self, program: &str) -> Self {
         self.program = program.into();
         self
@@ -138,7 +137,6 @@ impl Docker {
         }
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
     }
-    /// The container's `State` with its image as `Image`, or `None` when it does not exist.
     async fn inspect(&self, name: &str) -> Result<Option<Value>, Error> {
         let format = r#"{"State":{{json .State}},"Image":{{json .Config.Image}}}"#;
         match self
@@ -229,7 +227,6 @@ impl Docker {
             phase: "creating".into(),
         })
     }
-    /// Creates the recorded container if it does not exist yet and binds its ID.
     async fn bind(&self, agent: AgentId, attempt: &Attempt) -> Result<(), Error> {
         if self.inspect(&attempt.name).await?.is_none() {
             let token = sandbox_token();
@@ -288,6 +285,12 @@ impl Docker {
             "ALL",
             "--security-opt",
             "no-new-privileges",
+            "--log-driver",
+            "json-file",
+            "--log-opt",
+            "max-size=10m",
+            "--log-opt",
+            "max-file=3",
             "--mount",
             &mount,
             "--env",
@@ -299,6 +302,9 @@ impl Docker {
             "--env",
             "CUBEBOT_WORKSPACE_DIRECTORY=/var/lib/cubebot/workspace",
         ];
+        if let Some(network) = &self.config.network {
+            args.extend(["--network", network]);
+        }
         let ca_mount = self
             .config
             .control_ca_file
@@ -308,8 +314,6 @@ impl Docker {
         if let Some(mount) = &ca_mount {
             args.extend(["--mount", mount, "--env", &ca_env]);
         }
-        // The scripted provider of the container check (`just container-check`) listens in the
-        // sandbox's own network, at the loopback origin the agent's test seam accepts.
         let provider = std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN")
             .map(|origin| format!("CUBEBOT_TEST_PROVIDER_ORIGIN={origin}"));
         if let Ok(provider) = &provider {
@@ -352,8 +356,6 @@ impl Docker {
         .await?;
         Ok(())
     }
-    /// Stops an attempt and retains its final state. A running agent is drained first, as on
-    /// Kubernetes; a container that already exited needs no acknowledgement.
     async fn retire(&self, attempt: &Attempt, mut state: Option<Value>) -> Result<(), Error> {
         if running(state.as_ref()) {
             sqlx::query!(
@@ -409,12 +411,9 @@ impl Docker {
         Ok(())
     }
 }
-/// The pod layout's shape in `docker run` flags.
 fn runtime_arguments(runtime: &Runtime) -> Vec<&str> {
     match runtime {
-        // Root with only NET_ADMIN creates the guest's tap in the container network namespace;
-        // group 10001 writes the image's workspace volume. Memory is the pod's limit; the VMM runs
-        // only threads per vCPU, device and host channel connection, well inside the pids limit.
+        // Root with only NET_ADMIN creates the guest's tap; group 10001 writes the workspace volume.
         Runtime::Kvm {} => vec![
             "--memory",
             "3g",
@@ -434,9 +433,12 @@ fn runtime_arguments(runtime: &Runtime) -> Vec<&str> {
             "--env",
             "CUBEBOT_GUEST_WORKSPACE=/var/lib/cubebot/workspace.ext4",
         ],
-        // Container init runs the desktop as root and drops to the tool and browser users.
         Runtime::Container { class } => {
             let mut args = vec![
+                "--memory",
+                "3g",
+                "--pids-limit",
+                "1024",
                 "--tmpfs",
                 "/tmp:exec",
                 "--shm-size",
@@ -457,7 +459,6 @@ fn runtime_arguments(runtime: &Runtime) -> Vec<&str> {
         }
     }
 }
-/// The sandbox image's command: the VMM, or the agent image's container init.
 fn command(runtime: &Runtime) -> &'static [&'static str] {
     match runtime {
         Runtime::Kvm {} => &["run"],
@@ -483,9 +484,7 @@ enum Next {
     Start,
     Observe,
 }
-/// What `start` does with the current attempt's container: a stale epoch or an exited agent
-/// is settled first, and the next pass starts a new epoch. A refused volume would refuse every
-/// new attempt too, so it stays, and the agent's status says why, until a restart.
+/// A refused volume would refuse every new attempt too, so it stays until a restart.
 fn next(stale: bool, state: Option<&Value>) -> Next {
     match status(state) {
         _ if stale => Next::Retire,
@@ -495,13 +494,11 @@ fn next(stale: bool, state: Option<&Value>) -> Next {
         _ => Next::Retire,
     }
 }
-/// The container runs another image than the configured one.
 fn outdated(state: Option<&Value>, image: &str) -> bool {
     state
         .and_then(|state| state["Image"].as_str())
         .is_some_and(|running| running != image)
 }
-/// Why a sandbox exited, when it says.
 fn reason(state: Option<&Value>) -> Option<&'static str> {
     state
         .filter(|state| {
@@ -510,7 +507,6 @@ fn reason(state: Option<&Value>) -> Option<&'static str> {
         })
         .map(|_| LAYOUT_MISMATCH)
 }
-/// What the agent's status shows for a refused workspace volume.
 pub(crate) const LAYOUT_MISMATCH: &str = "RuntimeLayoutMismatch";
 fn phase(state: Option<&Value>) -> &'static str {
     match status(state) {
@@ -525,7 +521,6 @@ fn phase(state: Option<&Value>) -> &'static str {
 impl Sandbox for Docker {
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     async fn create(&self, agent: AgentId) -> Result<(), Error> {
-        // An attempt already has its volume; every reconcile pass would otherwise run the CLI.
         if self.current(agent).await?.is_some() {
             return Ok(());
         }
@@ -545,8 +540,6 @@ impl Sandbox for Docker {
         }
         let state = self.inspect(&attempt.name).await?;
         let (_, generation) = self.intent(agent).await?;
-        // A changed definition or a new sandbox image, as after `cubebot update`, starts a new
-        // epoch on the next pass; the workspace volume carries over.
         let stale =
             attempt.target_generation != generation || outdated(state.as_ref(), &self.config.image);
         let state = match next(stale, state.as_ref()) {
@@ -643,6 +636,7 @@ mod tests {
             ),
             ("control_ca_file", serde_json::json!("ca.crt")),
             ("control_ca_file", serde_json::json!("/a,target=/etc")),
+            ("network", serde_json::json!("--privileged")),
             ("unexpected", serde_json::json!(true)),
             ("backend", serde_json::json!("kvm")),
         ] {

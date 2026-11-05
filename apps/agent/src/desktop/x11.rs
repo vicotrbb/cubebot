@@ -1,6 +1,3 @@
-//! The arbiter's [`Screen`] and [`Input`] on the outer X display (docs/adr/sandbox.md#desktop-as-a-vmm-device), which only root can
-//! reach: frames are GetImage of its root window, and input is XTEST on it, which Xephyr's window
-//! receives as device events and passes to the tool user's display nested inside it.
 use super::{Event, HEIGHT, Input, Screen, WIDTH};
 use std::{io, os::unix::net::UnixStream};
 use x11rb::{
@@ -22,11 +19,9 @@ const BUTTONS: [(u16, u8); 3] = [(0x110, 1), (0x111, 3), (0x112, 2)];
 pub struct Display {
     connection: RustConnection,
     root: Window,
-    /// The pointer as the last absolute events left it.
     at: [u32; 2],
 }
 
-/// Connects to display `number`'s socket with an MIT-MAGIC-COOKIE-1 `cookie`.
 pub fn connect(number: u32, cookie: &[u8]) -> io::Result<Display> {
     let stream = UnixStream::connect(format!("/tmp/.X11-unix/X{number}"))?;
     let (stream, _) = DefaultStream::from_unix_stream(stream)?;
@@ -46,8 +41,7 @@ pub fn connect(number: u32, cookie: &[u8]) -> io::Result<Display> {
 }
 
 impl Display {
-    /// Gives keyboard focus to the display's only top-level window, Xephyr's, since no window
-    /// manager runs on it to follow the pointer.
+    /// Xephyr's window needs explicit focus: no window manager runs on this display to follow the pointer.
     pub fn focus(&self) -> io::Result<()> {
         let tree = self
             .connection
@@ -92,7 +86,6 @@ impl Screen for Display {
 }
 
 impl Input for Display {
-    /// Sends the events as XTEST requests, then waits for the server to have taken them.
     fn send(&mut self, events: &[Event]) -> io::Result<()> {
         for (kind, detail, x, y) in fake(events, &mut self.at)? {
             self.connection
@@ -111,9 +104,7 @@ impl Input for Display {
     }
 }
 
-/// XTEST fake inputs (type, detail, x, y) for evdev events: key codes are evdev codes plus 8, as
-/// XKB's evdev rules number them, absolute moves become one motion at each SYN, and each wheel
-/// click a press and release of buttons 4 to 7.
+/// Key codes are evdev codes plus 8, as XKB's evdev rules number them; each wheel click is a press and release of buttons 4 to 7.
 fn fake(events: &[Event], at: &mut [u32; 2]) -> io::Result<Vec<(u8, u8, i16, i16)>> {
     let mut fakes = Vec::new();
     let mut moved = false;
@@ -136,7 +127,6 @@ fn fake(events: &[Event], at: &mut [u32; 2]) -> io::Result<Vec<(u8, u8, i16, i16
     Ok(fakes)
 }
 
-/// A key or button press, or its release when `value` is 0.
 fn pressed(code: u16, value: u32) -> io::Result<(u8, u8, i16, i16)> {
     let released = u8::from(value == 0);
     Ok(match BUTTONS.iter().find(|(evdev, _)| *evdev == code) {

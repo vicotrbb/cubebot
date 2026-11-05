@@ -147,7 +147,7 @@ Every sentence a person finishes becomes an ordinary `chat_turns` row through th
 
 **Rationale.** Keeping audio in the orchestrator leaves the sandbox boundary and every chat rule unchanged, and a model-free agent image stays small. Running each model through sherpa-onnx's safe wrapper means no `unsafe` in the orchestrator, as the repository requires. A transcript stored as turns rather than as a copy means there is one source for what was said, and the agent's context needs no call-specific handling.
 
-**Consequences.** The orchestrator links a native library, its image grows by about 70 MB, and resident models cost it memory ([STATUS](../STATUS.md) has the measurements). It now does CPU work proportional to active calls, which it did not do before. Calls are not capped. The first embedded call waits for a download of several hundred MB, shown on the call screen. Echo control is the browser's: without it, an agent heard through a loudspeaker can interrupt itself.
+**Consequences.** The orchestrator links a native library, its image grows by about 70 MB, and resident models cost it memory. It now does CPU work proportional to active calls, which it did not do before. Calls are not capped. The first embedded call waits for a download of several hundred MB, shown on the call screen. Echo control is the browser's: without it, an agent heard through a loudspeaker can interrupt itself.
 
 **Open details.** Non-English embedded models; a limit on concurrent calls; telling the agent how much of a reply was heard; mute.
 

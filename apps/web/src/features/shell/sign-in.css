@@ -22,6 +22,10 @@
   gap: 18px;
   margin-bottom: 12px;
 }
+/* The cube is drawn past its box; keep it on the card's left edge and clear of the name. */
+.sign-in__brand > .cube {
+  margin-inline: 10px;
+}
 .sign-in__name {
   font-weight: var(--w-head);
   font-size: var(--t-xl);

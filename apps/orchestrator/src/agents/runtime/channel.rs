@@ -1,6 +1,4 @@
-//! One WebSocket per sandbox: turns, cancellation, steering, drain, revocation and wallpaper
-//! changes go down; turn events come up. Several turns can be active, one per lane; the ledger
-//! decides admission and stays authoritative, the socket is only a delivery path.
+//! The ledger decides admission and stays authoritative; the socket is only a delivery path.
 use super::{Error, RuntimeAccess, RuntimeDisposition, RuntimeIdentity};
 use crate::work::Work;
 use axum::extract::ws::{Message, WebSocket};
@@ -9,25 +7,20 @@ use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-/// A connection cut behind a proxy stays open on this side until TCP gives up, and turns offered
-/// on it would be claimed onto a dead path; so the channel pings, and closes after this much
-/// silence. The agent's WebSocket library answers pings while it reads.
+/// A proxy-cut connection stays open here until TCP gives up, and turns offered on it would be
+/// claimed onto a dead path; so the channel pings and closes after this much silence.
 const PING: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(15);
 
 #[derive(Default)]
 struct Channel {
-    /// The agent accepts turns; it stops at a drain.
     pulling: bool,
-    /// The agent heard there is no work since it last received a turn.
     idle: bool,
     active: std::collections::HashSet<Uuid>,
-    /// Active turns already sent `cancel`; they stay active until the agent reports their end.
     cancelled: std::collections::HashSet<Uuid>,
     drain: Option<Uuid>,
     /// Steering sent on this connection; a reconnect resends what is still unincorporated.
     steered: std::collections::HashSet<Uuid>,
-    /// The wallpaper revision this connection last saw; the agent fetches it when it connects.
     wallpaper: Option<i64>,
 }
 
@@ -138,7 +131,6 @@ impl RuntimeIdentity {
         Ok(deliveries)
     }
 
-    /// The next turn, or once per idle spell the notice that there is none.
     async fn offer(
         &self,
         token: &str,
@@ -169,7 +161,6 @@ impl RuntimeIdentity {
     }
 }
 
-/// Cancellations and new steering for the turns the agent is running.
 async fn active(work: &Work, channel: &mut Channel) -> Result<Vec<Delivery>, Error> {
     let mut deliveries = Vec::new();
     for turn in channel.active.clone() {
@@ -190,7 +181,6 @@ async fn active(work: &Work, channel: &mut Channel) -> Result<Vec<Delivery>, Err
     Ok(deliveries)
 }
 
-/// The agent's configured idle delay before it may dream (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results).
 async fn dream_after(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &super::RuntimeActor,
@@ -220,7 +210,6 @@ async fn wallpaper_revision(
     .await?)
 }
 
-/// Pings the agent; false closes a channel silent for longer than [`SILENCE`].
 async fn keepalive(socket: &mut WebSocket, heard: Instant) -> bool {
     if heard.elapsed() > SILENCE {
         tracing::warn!("runtime channel unresponsive; closing it");
@@ -229,7 +218,6 @@ async fn keepalive(socket: &mut WebSocket, heard: Instant) -> bool {
     socket.send(Message::Ping(Default::default())).await.is_ok()
 }
 
-/// Sends deliveries in order; false closes the channel.
 async fn deliver(socket: &mut WebSocket, deliveries: Result<Vec<Delivery>, Error>) -> bool {
     let deliveries = match deliveries {
         Ok(deliveries) => deliveries,

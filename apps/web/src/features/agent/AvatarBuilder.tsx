@@ -10,7 +10,6 @@ import {
   type Paint,
 } from '../../components/Cube'
 
-/** Picks the block's paint, eyes and one accessory; the live block previews the choice. */
 export function AvatarBuilder({
   value,
   mood = 'idle',
@@ -23,7 +22,7 @@ export function AvatarBuilder({
   return (
     <div className="avatar-builder">
       <div className="avatar-builder__preview">
-        <Cube avatar={value} mood={mood} size={96} follow />
+        <Cube avatar={value} mood={mood} size={76} follow />
       </div>
       <div className="avatar-builder__choices">
         <Choice

@@ -1,6 +1,5 @@
-# Agents over compose.yaml, merged by deploy/cubebot when CUBEBOT_RUNTIME is kvm or container. The
-# orchestrator starts each agent's sandbox through the host's Docker daemon, so its access to the
-# Docker socket is root on this host: run it only on a machine you would give Cubebot that.
+# Merged when CUBEBOT_RUNTIME is kvm or container. The orchestrator's access to the Docker socket
+# is root on this host: run it only on a machine you would give Cubebot that.
 services:
   orchestrator:
     group_add:
@@ -14,8 +13,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
 configs:
-  # Docker reads control_ca_file on the host, since it bind-mounts it into each sandbox; without
-  # one, sandboxes trust public certificates only (CUBEBOT_DOMAIN).
+  # Read on the host, since Docker bind-mounts it; without one, sandboxes trust public certificates only.
   docker:
     content: |
-      {"image": "${CUBEBOT_SANDBOX_IMAGE:?set by deploy/cubebot}", "orchestrator_origin": "${CUBEBOT_CONTROL_ORIGIN:?set by deploy/cubebot}", "runtime": {"kind": "${CUBEBOT_RUNTIME}"},${CUBEBOT_DEV_CA:+ "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt",} "terminal_enabled": true, "computer_use_enabled": true}
+      {"image": "${CUBEBOT_SANDBOX_IMAGE:?set by deploy/cubebot}", "orchestrator_origin": "${CUBEBOT_CONTROL_ORIGIN:?set by deploy/cubebot}", "runtime": {"kind": "${CUBEBOT_RUNTIME}"}, "network": "${CUBEBOT_SANDBOX_NETWORK:?set by deploy/cubebot}",${CUBEBOT_DEV_CA:+ "control_ca_file": "${CUBEBOT_DEV_CA}/ca.crt",} "terminal_enabled": true, "computer_use_enabled": true}

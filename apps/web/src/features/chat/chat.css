@@ -96,7 +96,6 @@
   color: var(--orange-deep);
 }
 
-/* Work: a rail of plain sentences, each opening to the file, diff or terminal behind it. */
 .work {
   position: relative;
   min-width: 0;
@@ -123,7 +122,6 @@
   outline: 2px solid var(--orange);
   outline-offset: -2px;
 }
-/* The icon sits on the rail, its ground interrupting the line. */
 .work__icon {
   display: grid;
   place-items: center;
@@ -219,7 +217,6 @@
   white-space: pre-wrap;
 }
 
-/* A terminal stays a terminal whichever theme the console is in. */
 .term {
   --term-ground: #1a1512;
   --term-ink: #f3ece2;
@@ -431,7 +428,6 @@
   padding: 2px 0;
 }
 
-/* Composer */
 .composer {
   padding: 8px 20px 16px;
   display: grid;

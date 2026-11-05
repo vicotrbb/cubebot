@@ -217,7 +217,6 @@ async fn missing_bound_objects_retain_identity_and_never_authorize_recreation() 
             .unwrap()
             .clone();
         let removed = state.lock().unwrap().objects.remove(&path).unwrap();
-        // A missing workspace refuses `create`, as in the controller; a missing pod is uncertain.
         let result = reconciler.reconcile(agent).await;
         if id == workspace {
             assert!(matches!(result, Err(Error::Conflict)));
@@ -309,6 +308,7 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
         .await
         .unwrap();
     let actor = identity.authenticate(&session.token).await.unwrap();
+    start_session(&pool, pod).await;
     let agents = Agents::new(pool);
     let requests = state.lock().unwrap().requests;
     let changes = |state: &Server| {
@@ -344,8 +344,6 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
             matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
         );
     }
-    // One pod read per pass; the two running passes (wake, restart) also reread the anchor and
-    // the workspace first, as the controller's `drive` does. Nothing is created or cleaned up.
     assert_eq!(state.lock().unwrap().requests, requests + 4 + 2 * 2);
     assert_eq!(changes(&state.lock().unwrap()), changed);
     assert_eq!(
@@ -517,6 +515,21 @@ async fn request_sleep(pool: &sqlx::PgPool, agent: cubebot_orchestrator::agents:
         )
         .await
         .unwrap();
+}
+async fn start_session(
+    pool: &sqlx::PgPool,
+    attempt: cubebot_orchestrator::agents::kubernetes::AttemptId,
+) {
+    sqlx::query!(
+        "
+        INSERT INTO agent_runtime_sessions (attempt_id, instance_id, pod_uid, service_account_uid, token_hash)
+        VALUES ($1, gen_random_uuid(), 'pod-uid', 'service-uid', sha256(($1::uuid)::text::bytea))
+        ",
+        attempt as _,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
 }
 async fn acknowledge(
     pool: &sqlx::PgPool,
@@ -775,6 +788,75 @@ async fn retained_terminal_proof_does_not_allow_finalizing_a_replaced_or_changed
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_changed_image_drains_the_old_pod_then_starts_a_new_epoch_from_the_new_spec() {
+    let (pool, registry, agent) = registry_support::setup().await;
+    let (config, state, task) = server().await;
+    let reconciler =
+        Reconciler::new(pool.clone(), config.clone(), "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    start_session(&pool, pod).await;
+    let image = "registry.test/agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    let upgraded = Layout::new(
+        image,
+        "cubebot-runtime",
+        "https://cubebot.test",
+        cubebot_protocol::network::NetworkPolicy::new(vec!["10.96.0.10".parse().unwrap()]).unwrap(),
+    )
+    .unwrap();
+    let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", upgraded).unwrap();
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
+    );
+    acknowledge(&pool, pod).await;
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
+    );
+    complete_pod(&state);
+    let mut replacement = None;
+    for _ in 0..4 {
+        if let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+        {
+            replacement = Some(pod);
+            break;
+        }
+    }
+    let replacement = replacement.expect("a new epoch");
+    assert_ne!(replacement, pod);
+    let cubebot_orchestrator::agents::kubernetes::ResourceObject::Pod(next) =
+        registry.attempt(replacement).await.unwrap().intent
+    else {
+        panic!("pod expected")
+    };
+    assert_eq!(
+        next.spec.unwrap().containers[0].image.as_deref(),
+        Some(image)
+    );
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_pod_whose_agent_never_started_stops_without_a_drain() {
+    let (pool, _, agent) = registry_support::setup().await;
+    let (client, state, task) = server().await;
+    let reconciler = Reconciler::new(pool.clone(), client, "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    request_sleep(&pool, agent).await;
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
+    );
+    assert_eq!(state.lock().unwrap().deletes.len(), 1);
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn sleep_after_a_lost_create_response_binds_the_same_pod_for_recovery_drain() {
     let (pool, registry, agent) = registry_support::setup().await;
     let (config, state, task) = server().await;
@@ -782,6 +864,18 @@ async fn sleep_after_a_lost_create_response_binds_the_same_pod_for_recovery_drai
     let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", layout()).unwrap();
     assert!(reconciler.reconcile(agent).await.is_err());
     request_sleep(&pool, agent).await;
+    let lost = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id: cubebot_orchestrator::agents::kubernetes::AttemptId"
+        FROM agent_resources
+        WHERE agent_id = $1 AND kind = 'pod'
+        "#,
+        agent as _,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    start_session(&pool, lost).await;
     let ReconcileResult::AwaitingDrain { attempt } = reconciler.reconcile(agent).await.unwrap()
     else {
         panic!("drain expected")
@@ -916,6 +1010,7 @@ async fn same_generation_node_lost_is_visible_and_never_qualifies_for_replacemen
     else {
         panic!("provisioned expected")
     };
+    start_session(&pool, pod).await;
     complete_pod(&state);
     {
         let mut state = state.lock().unwrap();
@@ -1050,7 +1145,7 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
         200
     );
     assert_eq!(
-        http.get(format!("{origin}/api/runtime/identity"))
+        http.get(format!("{origin}/api/runtime/memories?query=x"))
             .send()
             .await
             .unwrap()
@@ -1343,6 +1438,56 @@ async fn clean_owner_release_waits_for_in_flight_http_handlers() {
     .await
     .unwrap();
     assert!(released);
+    api_task.abort();
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn clean_owner_release_does_not_wait_for_a_response_that_never_ends() {
+    use cubebot_orchestrator::{agents::kubernetes::Controller, operations::server};
+    let (pool, _, _) = registry_support::setup().await;
+    let (config, state, api_task) = server().await;
+    state.lock().unwrap().objects.insert(
+        "/api/v1/namespaces/cubebot-test/pods/orchestrator-a".into(),
+        platform_pod(),
+    );
+    let controller = Controller::new(pool.clone(), config, layout(), platform_identity())
+        .await
+        .unwrap();
+    let held = Arc::new(HeldRequest {
+        entered: tokio::sync::Semaphore::new(0),
+        finish: tokio::sync::Semaphore::new(0),
+    });
+    let routes = Router::new()
+        .route("/hold", axum::routing::get(held_request))
+        .with_state(held.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
+        stopped.await.unwrap();
+    }));
+    let request = tokio::spawn(openidconnect::reqwest::get(format!(
+        "http://{address}/hold"
+    )));
+    held.entered.acquire().await.unwrap().forget();
+    stop.send(()).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(9), serving)
+        .await
+        .expect("shutdown waited for an endless response")
+        .unwrap()
+        .unwrap();
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(released);
+    request.abort();
     api_task.abort();
 }
 #[tokio::test]

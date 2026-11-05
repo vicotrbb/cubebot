@@ -5,6 +5,7 @@ import Logo from '../components/Logo.astro'
 import Icon from '../components/Icon.astro'
 
 const repo = 'https://github.com/vicotrbb/cubebot'
+const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
 const docs = {
   architecture: `${repo}/blob/main/ARCHITECTURE.md`,
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -13,16 +14,16 @@ const docs = {
 
 const anatomy = [
   {
-    key: 'pod',
+    key: 'sandbox',
     tone: 'orange',
-    title: 'Its own pod',
-    body: 'A running agent is one Kubernetes pod: a trusted Rust runtime beside a separate tool container. Wake it for work, let it sleep when idle.',
+    title: 'Its own sandbox',
+    body: 'A running agent is one sandbox: a KVM guest of its own, or a declared container where KVM is not available. Its tools run inside it, and it stays on, ready for work.',
   },
   {
     key: 'volume',
     tone: 'wood',
     title: 'A workspace that stays',
-    body: 'Files live on a persistent volume. Sleep, retire, upgrade, or replace the pod; the workspace is still there.',
+    body: 'Files live on a persistent volume. Stop, upgrade, or replace the sandbox; the workspace is still there.',
   },
   {
     key: 'journal',
@@ -52,12 +53,12 @@ const anatomy = [
 
 const steps = [
   {
-    title: 'Install into a namespace',
-    body: 'One Rust orchestrator, PostgreSQL, and a web console. Bring your own cluster and your own provider keys. Helm packaging is on the roadmap.',
+    title: 'Install it',
+    body: 'One command with Docker, or the Helm chart on Kubernetes. You get one Rust orchestrator, PostgreSQL, and a web console. Bring your own provider keys.',
   },
   {
     title: 'Create agents',
-    body: 'A name, instructions, and a model. Each agent gets its pod, volume, journal, and conversation the moment it exists, and sleeps until there is work.',
+    body: 'A name, instructions, and a model. Each agent gets its sandbox, volume, journal, and conversation the moment it exists, and stays on, sleeping until there is work.',
   },
   {
     title: 'Grant, do not babysit',
@@ -65,35 +66,36 @@ const steps = [
   },
   {
     title: 'Work alongside them',
-    body: 'Chat, rooms, delegation, steering, and inspectable memory from the desktop console or the installable PWA. Stop any goal and its descendants in one move.',
+    body: 'Chat, voice calls, rooms, tasks, a shared desktop, and inspectable memory from the console or the installable PWA. Stop any goal and its descendants in one move.',
   },
 ]
 
 const status = {
   today: [
-    'Built-in sign-in, invitations, teams, scoped grants',
-    'Optional OpenID Connect',
-    'Agent definitions with revisions',
-    'Pod and volume reconciliation with guarded shutdown',
-    'Runtime identity and crash recovery',
-    'Encrypted OpenAI and Anthropic connections',
-    'One permanent conversation per agent, streamed live',
-    'Terminal, file tools and MCP, opt-in',
+    'Sign-in, invitations, teams, scoped grants, OpenID Connect',
+    'Each agent in its own KVM guest or declared container',
+    'Install with one command, or with the Helm chart',
+    'OpenAI, Anthropic, OpenRouter, Gemini and Grok',
+    'One permanent conversation per agent',
+    'Voice calls over the same conversation',
+    'Terminal, files, browser, desktop and MCP tools',
+    'Rooms, delegation, tasks and parallel lanes',
+    'Memory, dreaming and a shared skill library',
+    'Knowledge base and shared files',
+    'Routines on schedules and webhooks',
+    'Usage, budgets and an audit log',
   ],
   progress: [
-    'Each agent in its own virtual machine',
-    'Cluster fencing and isolation',
-    'Real-cluster acceptance',
+    'Real-cluster fencing and isolation',
+    'Network policy on production CNIs',
+    'Scale at 100 registered, 25 working agents',
   ],
   planned: [
-    'Compatible providers and task lanes',
-    'Browser sessions',
-    'Rooms, mentions, delegation',
-    'Memory retrieval and dreaming',
-    'Shared skill library',
-    'Schedules and triggers',
-    'Full console and PWA',
-    'Backup, restore, scale',
+    'Hybrid memory retrieval',
+    'Skill imports',
+    'Token-by-token streaming',
+    'Push notifications',
+    'Backup and restore from the console',
   ],
 }
 
@@ -103,67 +105,62 @@ const timeline = [
     datetime: '2026-10-24',
     state: 'done',
     title: 'Design baseline',
-    body: 'Manifesto, system architecture, 82 accepted decisions, software specification, qualification plan.',
-  },
-  {
-    date: 'Oct 25, 2026',
-    datetime: '2026-10-25',
-    state: 'done',
-    title: 'Identity and access',
-    body: 'Accounts, invitations, teams, scoped grants, replayable commands, OpenID Connect.',
-  },
-  {
-    date: 'Oct 26, 2026 · being painted',
-    datetime: '2026-10-26',
-    state: 'painting',
-    title: 'Agents on Kubernetes',
-    body: 'Durable definitions, pod and volume reconciliation, runtime identity, a virtual machine per agent. Fencing and isolation still being qualified.',
+    body: 'Manifesto, system architecture, and the first accepted decisions.',
   },
   {
     date: 'Oct 26, 2026',
     datetime: '2026-10-26',
     state: 'done',
-    title: 'Text chat MVP',
-    body: 'Encrypted provider connection, one permanent conversation per agent, restart recovery, a minimal console.',
+    title: 'Identity and first chat',
+    body: 'Accounts, teams, scoped grants, OpenID Connect, and one permanent conversation per agent.',
   },
   {
     date: 'Oct 28, 2026',
     datetime: '2026-10-28',
     state: 'done',
-    title: 'Native providers',
-    body: 'Native OpenAI and Anthropic adapters, context compaction, responses streamed live to the console.',
+    title: 'A sandbox of its own',
+    body: 'An in-house VMM runs each agent as a KVM guest, with native model providers.',
   },
   {
-    date: 'Oct 28, 2026 · being painted',
-    datetime: '2026-10-28',
-    state: 'painting',
-    title: 'Tools',
-    body: 'Terminal, files, and local and remote MCP, off by default. Browser sessions with live view and takeover come next.',
+    date: 'Oct 30, 2026',
+    datetime: '2026-10-30',
+    state: 'done',
+    title: 'Memory, skills, desktop',
+    body: 'Memory that dreams, a shared skill library, a browser, and a desktop you can take over.',
+  },
+  {
+    date: 'Oct 31, 2026',
+    datetime: '2026-10-31',
+    state: 'done',
+    title: 'Rooms and delegation',
+    body: 'Mentions, agent messaging, delegation, and steering.',
+  },
+  {
+    date: 'Nov 2, 2026',
+    datetime: '2026-11-02',
+    state: 'done',
+    title: 'Console and first release',
+    body: 'The full console, routines, a vault, and an install you can run with one command.',
+  },
+  {
+    date: 'Nov 5, 2026',
+    datetime: '2026-11-05',
+    state: 'done',
+    title: 'Tasks, knowledge, voice',
+    body: 'Parallel tasks, a knowledge base, usage budgets, more providers, and voice calls.',
   },
   {
     date: 'Next',
-    state: 'raw',
-    title: 'Rooms and delegation',
-    body: 'Mentions, a tool-free coordinator, task lanes, ancestry, steering, cancellation, shared budgets.',
-  },
-  {
-    date: 'Then',
-    state: 'raw',
-    title: 'Memory and skills',
-    body: 'Hybrid retrieval, dreaming reports, human corrections, a shared skill library with imports.',
-  },
-  {
-    date: 'Later',
-    state: 'raw',
-    title: 'Console, PWA, hardening',
-    body: 'Full workspace UI, notifications, backup and restore, and qualification at 100 registered agents.',
+    state: 'painting',
+    title: 'Qualification',
+    body: 'Real-cluster fencing and isolation, and measured scale at 100 registered agents.',
   },
 ] as const
 ---
 
 <Base
-  title="Cubebot · A home for your agents"
-  description="Cubebot is a Kubernetes-native runtime for persistent AI agents. Each agent gets a pod, a volume, one permanent conversation, and a memory that outlives any restart. Built in Rust, in the open."
+  title="Cubebot · A self-hosted home for your AI agents"
+  description="Run persistent AI agents on infrastructure you control. Each gets its own sandbox, one permanent conversation, and a memory that outlives any restart."
 >
   <header class="top">
     <div class="wrap top__row">
@@ -190,10 +187,10 @@ const timeline = [
         <div class="hero__copy">
           <h1>A home for your agents.</h1>
           <p class="hero__lede">
-            Cubebot is a Kubernetes-native runtime for persistent AI agents.
-            Each one gets its own pod, its own volume, one permanent
-            conversation, and a memory that outlives any restart. Built in
-            Rust, in the open, on infrastructure you control.
+            Cubebot is a self-hosted runtime for persistent AI agents. Each one
+            gets its own sandbox, its own volume, one permanent conversation,
+            and a memory that outlives any restart. Built in Rust, in the open,
+            on infrastructure you control.
           </p>
           <div class="hero__actions">
             <a class="btn" href={repo}>
@@ -205,10 +202,7 @@ const timeline = [
               <Icon name="arrow" />
             </a>
           </div>
-          <p class="stamp">
-            <Icon name="brush" />
-            Under development. Building in the open since October 2026.
-          </p>
+          <pre class="install" aria-label="Install command"><code>{install}</code></pre>
         </div>
 
         <div class="hero__scene" aria-label="An orange block with eyes on a wooden desk, beside a sleeping sage block, a raw wood block, and a small plant" role="img">
@@ -288,9 +282,9 @@ const timeline = [
     <section class="how" id="how">
       <div class="wrap">
         <div class="how__head">
-          <h2>Your cluster, with a few more residents.</h2>
+          <h2>Your hardware, with a few more residents.</h2>
           <p>
-            One Rust orchestrator, one PostgreSQL, one pod per agent. Only the
+            One Rust orchestrator, one PostgreSQL, one sandbox per agent. Only the
             orchestrator touches the cluster and the database. Agents talk to
             model providers themselves, inside the grants you gave them.
           </p>
@@ -344,11 +338,11 @@ const timeline = [
             </div>
             <div class="reveal-item cluster__node" style="--i:4;--x:280;--y:520;--s:14">
               <Cube eyes="open" contact style="--blink-delay:0.9s" />
-              <span>Agent pod</span>
+              <span>Agent</span>
             </div>
             <div class="reveal-item cluster__node" style="--i:5;--x:420;--y:520;--s:14">
               <Cube eyes="open" contact style="--blink-delay:2.3s" />
-              <span>Agent pod</span>
+              <span>Agent</span>
             </div>
             <div class="reveal-item cluster__node" style="--i:6;--x:562;--y:520;--s:11.5">
               <Cube tone="wood" label="api" contact />
@@ -379,9 +373,9 @@ const timeline = [
           <div>
             <h2>What runs today.</h2>
             <p>
-              Cubebot is early, and the page says so. Painted blocks are
-              implemented and validated locally. Half-painted blocks are being
-              qualified. Raw wood is planned, in order, with no dates promised.
+              Honesty is cheaper than a demo. Painted blocks run today.
+              Half-painted blocks are being qualified. Raw wood is planned, with
+              no dates promised.
             </p>
           </div>
           <div class="paintshop" aria-label="An orange block with eyes watches a raw wood block being painted orange, a can of paint between them" role="img">
@@ -420,8 +414,9 @@ const timeline = [
           </div>
         </div>
         <p class="status__note">
-          Everything above is backed by local tests and controlled fixtures.
-          No cluster security, failover, or scale claim has been qualified yet.
+          Everything above has run in automated tests or real installs.
+          Cluster security, failover, and scale are not qualified yet, and this
+          page will say when they are.
         </p>
       </div>
     </section>
@@ -486,12 +481,13 @@ const timeline = [
           </div>
         </div>
         <div>
-          <h2>Follow the build.</h2>
+          <h2>Move your agents in.</h2>
           <p>
-            Star the repository to watch milestones land, read the manifesto to
-            see why it is being built this way, or open the architecture and
-            the accepted decisions to see where it is going.
+            One command starts it on any machine with Docker. Read the manifesto
+            to see why it is built this way, or open the architecture and the
+            accepted decisions to see how.
           </p>
+          <pre class="install" aria-label="Install command"><code>{install}</code></pre>
           <div class="closing__actions">
             <a class="btn" href={repo}>
               <Icon name="github" />
@@ -510,7 +506,7 @@ const timeline = [
         <Logo size={30} />
         <div>
           <strong>Cubebot</strong>
-          <p>Persistent AI agents on Kubernetes you control.</p>
+          <p>Persistent AI agents on infrastructure you control.</p>
         </div>
       </div>
       <nav class="foot__links" aria-label="Project">
@@ -519,7 +515,7 @@ const timeline = [
         <a href={docs.architecture}>Architecture</a>
         <a href={docs.adrs}>Decisions</a>
       </nav>
-      <p class="foot__note">Built in the open. Under development. © 2026 Cubebot.</p>
+      <p class="foot__note">Built in the open. © 2026 Cubebot.</p>
     </div>
   </footer>
 </Base>
@@ -531,7 +527,6 @@ const timeline = [
 </script>
 
 <style>
-  /* Header: sticks to the top and picks up a shadow once the page scrolls. */
   .top {
     position: sticky;
     top: 0;
@@ -585,7 +580,6 @@ const timeline = [
     padding: 10px 16px 12px;
   }
 
-  /* Hero */
   .hero {
     padding-block: clamp(32px, 7vw, 88px) clamp(48px, 8vw, 110px);
     overflow: clip;
@@ -616,28 +610,20 @@ const timeline = [
     gap: 14px 28px;
     margin-top: 36px;
   }
-  /* Rubber-stamped on the desk: ink outline, slight tilt, no fill. */
-  .stamp {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 32px;
-    padding: 7px 14px;
-    border: 2px solid var(--orange-base);
-    border-radius: 6px;
-    color: var(--orange-base);
-    font-size: 0.95rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    transform: rotate(-1.4deg);
-    mask-image: radial-gradient(circle at 30% 60%, transparent 0.5px, #000 1.2px);
-  }
-  .stamp :global(svg) {
-    width: 18px;
-    height: 18px;
+  .install {
+    margin: 28px 0 0;
+    padding: 12px 16px;
+    max-width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    border-radius: var(--radius);
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 0.875rem;
+    width: fit-content;
+    user-select: all;
   }
 
-  /* Hero scene: a wooden desk seen slightly from above, blocks standing on it. */
   .hero__scene {
     --desk-surface: 118px; /* distance from scene bottom to the desk's top surface */
     position: relative;
@@ -713,7 +699,6 @@ const timeline = [
   .hero__small--sleep :global(.cube) {
     --ry: 34deg;
   }
-  /* The raw block sits closer to the viewer, in front of the cube's corner. */
   .hero__small--raw {
     left: 23%;
     bottom: calc(var(--desk-surface) - 6px);
@@ -722,7 +707,6 @@ const timeline = [
     --ry: -24deg;
   }
 
-  /* A small plant keeps the cube company. */
   .plant {
     position: absolute;
     right: -2%;
@@ -812,7 +796,6 @@ const timeline = [
     }
   }
 
-  /* Section rhythm */
   section {
     padding-block: clamp(56px, 9vw, 120px);
     scroll-margin-top: 72px;
@@ -831,7 +814,6 @@ const timeline = [
     font-size: 1.1rem;
   }
 
-  /* Slab: a short wooden shelf blocks rest on. Top surface plus a darker front edge. */
   .slab {
     position: relative;
     height: 34px;
@@ -866,7 +848,6 @@ const timeline = [
     box-shadow: 0 12px 24px -12px rgb(var(--shadow) / 0.45);
   }
 
-  /* Anatomy */
   .anatomy {
     background: var(--desk-deep);
   }
@@ -895,8 +876,7 @@ const timeline = [
     bottom: 92px;
     transform: translateY(calc(-1 * var(--i) * 92px));
   }
-  /* Opacity would flatten the 3D block, so the tower only drops into place,
-     from higher up and with a small overshoot, pod first. */
+  /* Opacity would flatten the 3D block, so the tower only drops into place. */
   :global(.js) .tower .tower__drop {
     opacity: 1;
     transform: translateY(-140px);
@@ -905,7 +885,6 @@ const timeline = [
     transform: translateY(0);
     transition: transform 0.6s cubic-bezier(0.34, 1.35, 0.64, 1) calc(var(--i) * 120ms);
   }
-  /* Each block turns to face you as it scrolls into view. */
   @supports (animation-timeline: view()) {
     .tower :global(.cube__body) {
       animation: turn linear both;
@@ -930,7 +909,6 @@ const timeline = [
   .tower__slot :global(.cube) {
     --ry: 28deg;
   }
-  /* Hovering a part lifts and turns its block in the stack. */
   .anatomy__grid:has(.anatomy__item:nth-child(1):hover) .tower__slot:nth-child(1) :global(.cube),
   .anatomy__grid:has(.anatomy__item:nth-child(2):hover) .tower__slot:nth-child(2) :global(.cube),
   .anatomy__grid:has(.anatomy__item:nth-child(3):hover) .tower__slot:nth-child(3) :global(.cube),
@@ -967,7 +945,6 @@ const timeline = [
     color: var(--ink-soft);
   }
 
-  /* Chips: small blocks seen from the front. Pick one up on hover. */
   .chip {
     display: inline-flex;
     align-items: center;
@@ -1004,7 +981,6 @@ const timeline = [
     background: var(--wood);
     border-bottom-color: var(--wood-deep);
   }
-  /* Half-painted: the orange end stops before the lettering. */
   .chip--half {
     padding-left: 20px;
     background: var(--wood);
@@ -1017,7 +993,6 @@ const timeline = [
       0 10px 16px -8px rgb(var(--shadow) / 0.4);
   }
 
-  /* How it works */
   .how__head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1034,9 +1009,7 @@ const timeline = [
     margin-top: 56px;
     align-items: center;
   }
-  /* The cluster is a wooden rack: blocks stand on three shelves, cables run
-     between them behind the shelves, and messages ride the cables. The scene
-     is a fixed 620 x 600 box so cables and blocks scale together. */
+  /* A fixed 620 x 600 box so cables and blocks scale together. */
   .cluster {
     --w: 620;
     --h: 600;
@@ -1104,7 +1077,6 @@ const timeline = [
   .cluster__node :global(.cube) {
     --size: calc(var(--s) * 1cqw);
   }
-  /* Paper tags hang under the shelf; cables run behind them. */
   .cluster__node span {
     position: absolute;
     top: calc(100% + 42px);
@@ -1143,7 +1115,6 @@ const timeline = [
     color: var(--ink-soft);
   }
 
-  /* Status */
   .status {
     background: var(--desk-deep);
   }
@@ -1153,7 +1124,6 @@ const timeline = [
     gap: clamp(24px, 5vw, 72px);
     align-items: end;
   }
-  /* The paint shop: the painted block watches a raw one get its coat. */
   .paintshop {
     position: relative;
     height: 250px;
@@ -1178,7 +1148,6 @@ const timeline = [
     left: 50%;
     bottom: 66px;
   }
-  /* A can of the same orange, open on the floor. */
   .can {
     position: absolute;
     left: 37%;
@@ -1279,7 +1248,6 @@ const timeline = [
     font-size: 0.98rem;
   }
 
-  /* Roadmap */
   .roadmap .wrap {
     position: relative;
   }
@@ -1297,7 +1265,6 @@ const timeline = [
     gap: 8px;
     align-content: start;
   }
-  /* Blocks rest on the roadmap shelf; the text hangs below it. */
   .milestone__block {
     position: relative;
     height: 96px;
@@ -1311,7 +1278,6 @@ const timeline = [
     --ry: 44deg;
   }
   .milestone__date {
-    /* Two lines reserved so the heading row shares one baseline. */
     min-height: 2.6em;
     font-size: 0.85rem;
     font-weight: 700;
@@ -1337,7 +1303,6 @@ const timeline = [
     z-index: -1;
   }
 
-  /* Closing: the same desk as the hero, a mug of something warm beside it. */
   .closing__grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1470,7 +1435,6 @@ const timeline = [
     margin-top: 32px;
   }
 
-  /* Footer */
   .foot {
     padding-block: 40px 48px;
     border-top: 2px solid rgb(var(--shadow) / 0.1);
@@ -1517,7 +1481,12 @@ const timeline = [
     .how__head,
     .status__head,
     .closing__grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    /* The desk runs past the viewport edge on purpose. */
+    .hero,
+    .closing {
+      overflow-x: clip;
     }
     .how__head p {
       margin-top: 20px;
@@ -1573,7 +1542,6 @@ const timeline = [
     .anatomy__hint {
       display: none;
     }
-    /* Two rows of three blocks on a short shelf. */
     .tower {
       height: 300px;
       perspective: 900px;
@@ -1667,7 +1635,6 @@ const timeline = [
     .tower__slot:nth-child(n + 4) {
       bottom: calc(74px + 56px);
     }
-    /* A taller rack so tags clear the shelf below; cables stretch with it. */
     .cluster {
       aspect-ratio: 620 / 820;
     }

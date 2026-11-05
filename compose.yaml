@@ -1,19 +1,19 @@
-# One Cubebot installation from the release images (ghcr.io, CUBEBOT_VERSION). deploy/cubebot runs it,
-# adding compose.domain.yaml, compose.agents.yaml and compose.control.yaml as .env asks; in a checkout
-# `just up` adds compose.dev.yaml, which builds the same services from source.
+# One installation from the release images; deploy/cubebot runs it and adds the overlays .env asks for.
 name: cubebot
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: '3'
 services:
   postgres:
     image: postgres:18-bookworm
-    # An init reaps a health check docker killed on timeout; as PID 1 the postmaster would take
-    # its exit for a crashed backend and restart every connection.
+    # An init reaps health checks docker kills; as PID 1 the postmaster would restart every connection.
     init: true
     environment:
       POSTGRES_DB: cubebot
       POSTGRES_USER: cubebot
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    ports:
-      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
     volumes:
       - postgres-data:/var/lib/postgresql
     healthcheck:
@@ -21,6 +21,8 @@ services:
       interval: 3s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
 
@@ -49,7 +51,7 @@ services:
       RUST_LOG: ${RUST_LOG:-info}
     volumes:
       - orchestrator-state:/state:ro
-      # Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume): only this one orchestrator mounts it.
+      # Shared files: only this one orchestrator mounts it.
       - shared-files:/var/lib/cubebot/files
     depends_on:
       postgres:
@@ -57,12 +59,16 @@ services:
       credential-key:
         condition: service_completed_successfully
     restart: unless-stopped
+    logging: *logging
+    # Time for its handlers and the controller to stop and for it to release ownership.
+    stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
 
   web:
     image: ${CUBEBOT_REGISTRY:-ghcr.io/vicotrbb}/cubebot-web:${CUBEBOT_VERSION:-local}
     restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
 
@@ -79,10 +85,10 @@ services:
       - orchestrator
       - web
     restart: unless-stopped
+    logging: *logging
 
 configs:
-  # The console and its API on one origin, as an ingress serves them: /api to the orchestrator,
-  # everything else to the web server. With CUBEBOT_DOMAIN, Caddy obtains a public certificate for it.
+  # The console and its API on one origin, as an ingress serves them.
   caddyfile:
     content: |
       ${CUBEBOT_DOMAIN:-http://:3000} {

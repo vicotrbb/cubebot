@@ -1,9 +1,3 @@
-//! Collaboration tools (docs/adr/rooms.md#explicit-agent-messaging-and-delegation) and steering (docs/adr/rooms.md#queued-messages-with-explicit-steering). `delegate` gives work to an agent
-//! sharing a room and makes this turn yield when it ends, resuming as each outcome arrives; a
-//! `send_message` request is not waited for, and its reply can be relayed back. Steering from a person enters the context before
-//! the next model request, never in the middle of a tool call. `request_login` (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) asks a
-//! person to log in through the desktop; their hand-back or refusal arrives as a new message.
-//! The vault tools (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) are in [`vault`], the routine tools (docs/adr/agents.md#routines) in [`routines`].
 mod routines;
 mod tasks;
 mod vault;
@@ -19,7 +13,6 @@ use serde_json::{Value, json};
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-/// Steering delivered for the active turn and not yet taken into its context.
 pub type Steering = Arc<Mutex<Vec<(Uuid, String)>>>;
 
 pub struct Collaboration {
@@ -44,15 +37,11 @@ struct Login {
     reason: String,
 }
 
-/// Tools that drive the desktop, which a delegated task never uses.
 pub fn drives_desktop(name: &str) -> bool {
     matches!(name, "request_login" | "vault_fill")
 }
 
-/// `desktop` offers `request_login` and `vault_fill`, which only a lane that controls the
-/// desktop can use; `broadcast` offers `broadcast` when the turn may send one. A task's turn talks
-/// through the task's tools instead of `delegate` and `send_message`, whose work would land in the
-/// other agent's own conversation.
+/// A task's turn omits `delegate` and `send_message`: their work would land in the other agent's own conversation.
 pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot_providers::Tool> {
     let tool = |name: &str, description: &str, reply: bool| {
         let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":"Self-contained instructions or information; the recipient sees nothing else of this conversation."}});
@@ -103,8 +92,7 @@ impl Collaboration {
         }
     }
 
-    /// `None` when `name` is not a collaboration tool. `id` is the journaled call's, so a
-    /// resent request creates nothing new.
+    /// `id` is the journaled call's, so a resent request creates nothing new.
     pub fn call(
         &self,
         name: &str,
@@ -202,7 +190,6 @@ impl Collaboration {
         Outcome::Exited { code, output }
     }
 
-    /// Steering waiting for the next safe point, oldest first.
     pub fn take_steering(&self) -> Vec<(Uuid, String)> {
         std::mem::take(&mut *self.steering.lock().unwrap())
     }

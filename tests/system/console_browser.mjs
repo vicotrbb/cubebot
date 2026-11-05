@@ -1,18 +1,16 @@
-// The console's knowledge base, agent card, files page and providers page in a real browser,
-// on desktop and on a phone. Against a stack with no agents' sandboxes needed: a disposable
-// database, the orchestrator with CUBEBOT_STORAGE_DIRECTORY and a credential key, and Vite.
-// Needs an account (CUBEBOT_TEST_LOGIN, CUBEBOT_TEST_PASSWORD), an agent named Ayla, and no
-// provider configured, and calls the provider's listing through a mock.
+// The console's knowledge base, agent card, files and providers pages, on desktop and on a phone.
+// Stack: a disposable database, the orchestrator with CUBEBOT_STORAGE_DIRECTORY and a credential key, Vite.
+// Needs CUBEBOT_TEST_LOGIN, CUBEBOT_TEST_PASSWORD, an agent named Ayla and no provider configured.
 //   PLAYWRIGHT=/path/to/playwright/index.mjs SHOTS=/tmp/shots node tests/system/console_browser.mjs
-// BROWSER=firefox with FIREFOX=<executable> runs it in Firefox, the browser most at risk here.
+// BROWSER=firefox with FIREFOX=<executable> runs it in Firefox.
 import console from 'node:console'
 import { Buffer } from 'node:buffer'
 import process from 'node:process'
 
 const { chromium, firefox } = await import(process.env.PLAYWRIGHT)
 const B = process.env.CUBEBOT_TEST_ORIGIN ?? 'http://127.0.0.1:3100'
-const LOGIN = process.env.CUBEBOT_TEST_LOGIN ?? 'victor'
-const PASSWORD = process.env.CUBEBOT_TEST_PASSWORD ?? 'dev-password-123'
+const LOGIN = process.env.CUBEBOT_TEST_LOGIN
+const PASSWORD = process.env.CUBEBOT_TEST_PASSWORD
 const SHOTS = process.env.SHOTS
 const browserKind = process.env.BROWSER === 'firefox' ? firefox : chromium
 const opts = process.env.FIREFOX ? { executablePath: process.env.FIREFOX } : {}
@@ -66,7 +64,6 @@ const shot = (page, name) =>
   SHOTS && page.screenshot({ path: `${SHOTS}/${name}.png` })
 const { page } = await session({ width: 1440, height: 900 })
 
-// hover card
 await page.evaluate(() => globalThis.fetch('/api/kb/trash'))
 const row = page.locator('.row--agent', { hasText: 'Ayla' }).first()
 await row.waitFor()
@@ -94,7 +91,6 @@ check(
   'card closes when the pointer leaves',
 )
 
-// panel tabs
 await row.click()
 await page.waitForURL(/agents\//)
 await page.getByRole('link', { name: 'Details' }).click()
@@ -106,7 +102,6 @@ check(
   'knowledge base capability defaults to on',
 )
 
-// files
 await page.goto(B + '/files')
 await page.waitForTimeout(1500)
 await shot(page, 'files')
@@ -117,7 +112,6 @@ check(
   'files column is centered in the pane',
 )
 
-// providers
 await page.route('**/api/provider/models', async (route) => {
   const body = JSON.parse(route.request().postData())
   if (body.api_key === 'bad')
@@ -141,8 +135,8 @@ await page.goto(B + '/platform/providers')
 await page.locator('.provider-card').first().waitFor()
 await shot(page, 'providers-closed')
 check(
-  (await page.locator('.provider-card').count()) === 3,
-  'three provider cards',
+  (await page.locator('.provider-card').count()) === 5,
+  'five provider cards',
 )
 check(
   (await page.locator('.provider-card').first().innerText()).includes(
@@ -176,7 +170,6 @@ check(
   (await page.locator('.provider-card').nth(2).innerText()).includes('In use'),
   'saved provider reads In use',
 )
-// switch to OpenAI, OpenRouter's key is kept
 await page.getByRole('button', { name: /OpenAI/ }).click()
 await page.fill('input[type="password"]', 'sk-openai')
 await page.keyboard.press('Enter')
@@ -196,7 +189,6 @@ check(
 )
 await shot(page, 'providers-final')
 
-// knowledge base
 await page.goto(B + '/kb')
 await page.waitForTimeout(1500)
 await shot(page, 'kb-home')
@@ -255,6 +247,50 @@ check(
   (await page.locator('.kb-diagram__art svg').count()) === 1,
   'a diagram draws',
 )
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  'base64',
+)
+await page.route('https://images.example/**', (route) =>
+  route.request().url().endsWith('ok.png')
+    ? route.fulfill({ contentType: 'image/png', body: png })
+    : route.fulfill({ status: 404 }),
+)
+const pictures = await page.evaluate(async () => {
+  const headers = {
+    'content-type': 'application/json',
+    'cubebot-csrf': '1',
+  }
+  const created = await globalThis.fetch('/api/kb/pages', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      request_id: globalThis.crypto.randomUUID(),
+      kind: 'page',
+      parent: null,
+      title: 'Pictures',
+      body: '![ok](https://images.example/ok.png)\n\n![gone](https://images.example/gone.png)\n',
+    }),
+  })
+  return (await created.json()).id
+})
+await page.goto(`${B}/kb/${pictures}`)
+await page.locator('.kb-image__missing').waitFor()
+check(
+  await page
+    .locator('.kb-image img[alt="ok"]')
+    .evaluate((image) => image.complete && image.naturalWidth > 0),
+  'an outside image renders in a page',
+)
+check(
+  (await page.locator('.kb-image__missing').count()) === 1 &&
+    (await page.locator('.kb-image__missing a').getAttribute('href')) ===
+      'https://images.example/gone.png',
+  'an outside image that fails shows a link to the original',
+)
+await shot(page, 'kb-images')
+await page.goto(`${B}/kb/${id}`)
+await page.locator('.kb-prose > p').last().waitFor()
 await shot(page, 'kb-page')
 await page.waitForTimeout(1200)
 check(
@@ -272,11 +308,6 @@ check(/- \[ \] Install it/.test(got.body), 'task list is Markdown')
 check(/\| *Name *\| *Value *\|/.test(got.body), 'table is Markdown')
 check(/```mermaid/.test(got.body), 'diagram is a mermaid fence')
 
-// image upload
-const png = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
-  'base64',
-)
 await page.locator('.kb-prose > p').last().click()
 await page.keyboard.type('/image')
 await page.waitForTimeout(150)
@@ -300,7 +331,6 @@ check(
 )
 await page.waitForTimeout(1200)
 
-// a block moves by its handle
 const paragraph = page.locator('.kb-prose > p', { hasText: 'Before after' })
 await paragraph.hover()
 await page.waitForTimeout(150)
@@ -326,7 +356,6 @@ check(
   order.indexOf('Before after') > order.indexOf('Steps'),
   'dragging the handle moves the block',
 )
-// reload keeps everything
 await page.reload()
 await page
   .locator('.kb-diagram__art svg')
@@ -414,7 +443,6 @@ const after = await page.evaluate(
 )
 check(after.body.includes('my words'), 'keeping mine saves mine over theirs')
 
-// history
 await page.getByRole('button', { name: 'Version history' }).click()
 await page.waitForTimeout(500)
 await shot(page, 'kb-history')
@@ -459,7 +487,6 @@ check(
 )
 await shot(page, 'kb-agent-page')
 
-// nested + folder + search + trash
 await page.goto(B + '/kb')
 await page.waitForTimeout(400)
 await page.locator('.kb-tree__head summary').click()
@@ -499,7 +526,6 @@ check(
   'restore brings it back',
 )
 
-// light theme
 const light = await session(
   { width: 1440, height: 900 },
   { colorScheme: 'light' },
@@ -508,7 +534,6 @@ await light.page.goto(`${B}/kb/${id}`)
 await light.page.waitForTimeout(1500)
 await shot(light.page, 'kb-light')
 
-// phone PWA
 const phone = await session(
   { width: 390, height: 844 },
   { hasTouch: true, isMobile: true, deviceScaleFactor: 2 },

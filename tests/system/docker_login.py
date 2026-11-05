@@ -1,13 +1,8 @@
-"""Login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover
-and docs/adr/sandbox.md#desktop-as-a-vmm-device) on a real agent through Docker.
+"""Login handoff on a real agent through Docker.
 
-Same host needs as docker_desktop.py, Node with Playwright included. Keeper runs the
-guest desktop with OpenAI's model and asks for logins with request_login; a controller
-with `browser.view` and `browser.control`, a viewer with `browser.view` only and an
-outsider with no grant each see their own side of it. The person's login is proved where
-it lands, on a server this script runs, and the agent's refusals in the arbiter's log
-and the ledger, never in the model's words. CUBEBOT_LOGIN_EVIDENCE keeps the evidence
-directory (console screenshots); CUBEBOT_LOGIN_HOLD keeps a failed run for 15 minutes.
+Same host needs as docker_desktop.py, Node with Playwright included.
+CUBEBOT_LOGIN_EVIDENCE keeps the evidence directory (console screenshots);
+CUBEBOT_LOGIN_HOLD keeps a failed run for 15 minutes.
 """
 
 import http.server
@@ -66,8 +61,6 @@ INSTRUCTIONS = (
 
 
 class Site:
-    """A login page; a session cookie once a person submits it; an account page."""
-
     def __init__(self):
         self.seen = []
         seen = self.seen
@@ -153,7 +146,6 @@ def turns(world):
 
 
 def request(world, site, reason):
-    """The model asks for a login and its turn ends with that call."""
     admin, keeper = world["people"]["admin"].api, world["keeper"]
     row = chat(
         admin,
@@ -177,7 +169,6 @@ def scopes_before(world):
 
 
 def requested(world, postgres):
-    """A real model opens the login page and asks a person; the turn ends."""
     admin, keeper, site = world["people"]["admin"].api, world["keeper"], world["site"]
     row = chat(
         admin,
@@ -253,7 +244,6 @@ def take(world, postgres):
 
 
 def blocked(world):
-    """While the login is in progress the agent sees and drives nothing."""
     admin, keeper = world["people"]["admin"].api, world["keeper"]
     before = len(arbiter_events(keeper))
     row = chat(
@@ -278,7 +268,6 @@ def blocked(world):
 
 
 def login_by_hand(world, controller):
-    """The controller signs in on the guest's Chromium with the keyboard."""
     site = world["site"]
     visit(controller, site.url(f"login-{MARKER}"))
     time.sleep(3)
@@ -316,7 +305,6 @@ def dropped(world, postgres, controller):
 
 
 def completed(world, postgres):
-    """Handing back completes it; the next turn reads it and looks again."""
     people, address, ca, keeper, site = (
         world[key] for key in ("people", "address", "ca", "keeper", "site")
     )
@@ -401,7 +389,6 @@ def declined(world, postgres):
 
 
 def console(world, postgres, step):
-    """The banner in real Chromium: take control and hand back, or decline."""
     site = "console.example" if step == "take" else "decline.example"
     request(world, site, f"Console {step}")
     environment = os.environ | {

@@ -1,4 +1,3 @@
-//! OpenAI Responses over SSE, stateless (`store: false`) with encrypted reasoning replay.
 use crate::{
     Capabilities, Decoder, Error, Event, Limits, Message, Model, Provider, Request, Usage, call,
     reply,
@@ -8,7 +7,6 @@ use reqwest::{Client, Url};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 
-/// Model families the Models API lists that cannot hold a conversation.
 const NOT_CONVERSATIONAL: [&str; 12] = [
     "embedding",
     "tts",
@@ -63,7 +61,6 @@ impl OpenAi {
         })
     }
 
-    /// The standard-tier prices on OpenAI's pricing page.
     #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "openai"))]
     pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
         let page = crate::prices::page(&self.http, self.pricing.clone()).await?;
@@ -137,8 +134,7 @@ fn body(request: &Request) -> Value {
                 output,
                 image,
             } => match image {
-                // A computer call's output is only its screenshot, so a refusal, such as while a
-                // person holds the desktop, follows it as a note the model can read.
+                // A computer call's output is only its screenshot, so a refusal, such as while a person holds the desktop, follows as a note.
                 Some(image) if computer.contains(&&**call_id) => {
                     input.push(json!({"type":"computer_call_output","call_id":call_id,"output":{"type":"computer_screenshot","image_url":format!("data:image/png;base64,{image}"),"detail":"original"}}));
                     if output != "OK" {
@@ -146,7 +142,6 @@ fn body(request: &Request) -> Value {
                         input.push(json!({"role":"developer","content":note}));
                     }
                 }
-                // Another tool's image, such as a browser screenshot, follows its text.
                 Some(image) => input.push(
                     json!({"type":"function_call_output","call_id":call_id,"output":[
                         {"type":"input_text","text":output},
@@ -198,7 +193,6 @@ impl Decoder for Responses {
                 events.push_back(completed(&data["response"])?);
                 Ok(true)
             }
-            // Truncated output is not a reply.
             Some("response.incomplete") => Err(Error::InvalidResponse(None)),
             Some("response.failed") => Err(failure(&data["response"]["error"]["code"])),
             Some("error") => Err(failure(&data["code"])),
@@ -271,7 +265,6 @@ fn function_call(item: &Value) -> Result<crate::FunctionCall, Error> {
     )
 }
 
-/// The call's batch of actions, as one `computer` call.
 fn computer_call(item: &Value) -> Result<crate::FunctionCall, Error> {
     let call_id = item["call_id"]
         .as_str()

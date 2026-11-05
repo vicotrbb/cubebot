@@ -3,7 +3,6 @@ import type { VaultItem } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { agentVault, fillItem } from './ItemForm'
 
-/** Fills a vault item into the desktop while the person holds control. */
 export function FillPicker({
   agent,
   holding,

@@ -431,8 +431,6 @@ Availability follows [One active orchestrator with automatic restart](agents.md#
 
 Backups must cover PostgreSQL, this shared-file volume and agent workspaces with a consistent restore procedure. [Cubebot-coordinated backup and restore workflows](packaging.md#cubebot-coordinated-backup-and-restore-workflows) assigns workflow coordination and restore validation to Cubebot. A persistent volume is not by itself a backup or a guarantee of replication. File cleanup must account for the database restore points the installation intends to keep.
 
-Engineering proposal: the [shared storage design](../design/shared-storage.md) develops immutable object publication, bounded streaming, recovery and backup mechanics. Those details are proposed, not additional user-selected product decisions.
-
 **Rationale.** Requiring S3-compatible storage, or supporting both object storage and filesystem backends initially, was considered. The volume-backed module reduces required services and keeps one storage implementation to qualify. Its API hides layout from consumers, leaving room for later changes based on measured needs.
 
 **Open details.** Native transport and endpoint contracts; transfer and resume contract; volume requirements; publication and cleanup mechanics; access revocation during downloads; quotas; retention; backup tooling; and recovery and throughput targets.
@@ -453,7 +451,7 @@ The interface must cover bounded uploads, completion and status lookup, metadata
 
 Consumers address logical artifacts and resource references, never arbitrary server paths. Shared-volume layout and PostgreSQL schema stay implementation details. Agent tools use the same underlying domain operations as human clients rather than maintaining a second file store. An object identifier is not an access credential.
 
-The native interface keeps every durability, authorization, capacity and backup requirement of the shared-file storage decision; a smaller protocol does not weaken them. The detailed upload and recovery flow in the [shared storage design](../design/shared-storage.md) remains an engineering proposal pending specification and validation.
+The native interface keeps every durability, authorization, capacity and backup requirement of the shared-file storage decision; a smaller protocol does not weaken them.
 
 **Rationale.** An S3-compatible interface for existing S3 clients was considered. It would add protocol and authentication semantics beyond the selected Cubebot workflows. The native API serves agents and the console directly with one identity and permission model and no external storage dependency.
 
@@ -494,6 +492,8 @@ Accepted 2026-11-04. The user asked for a Notion-inspired wiki that people and a
 **Decision.** The installation has one knowledge base: a tree of pages and folders (`kb_pages`, migrations/0048_knowledge_base.sql). Every active person reads and writes all of it without a grant; every agent does while its `knowledge_base` capability is on, which is the default, and the orchestrator checks that capability on each runtime call, not only when it offers the tools.
 
 A page's body is **Markdown** (GitHub-flavored), and that text is the stored truth. Agents read and edit it as text through `kb_read`, `kb_edit`, `kb_write` and `kb_create`; the console edits the same text as blocks with TipTap and its Markdown extension. Diagrams are ` ```mermaid ` fences, which the console draws and an agent writes like any code. Images and attachments are blobs on the storage volume, linked from the body by URL.
+
+Outside images in a page load when it opens, without a referrer, by the user's decision on 2026-11-05; an agent writing a page can therefore make a reader's browser request a URL it chose. Chat keeps them as links. An image that fails to load shows a link to the original.
 
 Concurrent writers are handled by revision: a whole-body save names the revision it read and is refused when the page moved on, and the console then asks the person which version to keep. An agent's `kb_edit` replaces one exact passage, so it needs no revision and cannot overwrite what it did not read. Opening a page never saves it, so what an agent wrote stays byte for byte until someone changes it.
 

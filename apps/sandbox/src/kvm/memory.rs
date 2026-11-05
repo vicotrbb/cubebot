@@ -1,5 +1,4 @@
-//! Guest physical memory, shared by the vCPU and device threads. Devices copy through it and never
-//! hold references into it, because the guest may change any byte at any time.
+//! Devices copy through guest memory and never hold references into it, because the guest may change any byte at any time.
 use nix::{
     errno::Errno,
     sys::mman::{MapFlags, ProtFlags, mmap_anonymous},

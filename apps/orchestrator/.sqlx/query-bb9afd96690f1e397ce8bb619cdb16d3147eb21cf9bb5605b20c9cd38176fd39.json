@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO orchestrator_development_owner (singleton, instance_id, generation)\n            VALUES (true, $1, 1)\n            ON CONFLICT (singleton) DO UPDATE SET\n                instance_id = EXCLUDED.instance_id,\n                generation = orchestrator_development_owner.generation + 1,\n                released_at = NULL\n            RETURNING generation AS \"generation!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "generation!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bb9afd96690f1e397ce8bb619cdb16d3147eb21cf9bb5605b20c9cd38176fd39"
+}

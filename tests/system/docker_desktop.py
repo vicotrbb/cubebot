@@ -1,20 +1,8 @@
-"""The console desktop view
-(docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and
-docs/adr/sandbox.md#desktop-as-a-vmm-device) on real agents through Docker.
+"""The console desktop view on real agents through Docker.
 
 Same host needs as docker_sandbox.py, plus Node with Playwright's Chromium
-(CUBEBOT_PLAYWRIGHT_MODULE) for the console check. The Desk agent runs the guest desktop
-with OpenAI's computer tool; the Idle agent is never woken. An administrator, a viewer
-with `browser.view` on Desk, a controller with `browser.view` and `browser.control` on
-Desk, and an outsider with no grants each open GET /api/agents/{id}/desktop.
-
-Human input is proved where it lands: the controller types a URL into the guest's
-Chromium and clicks a link on the page it opens, and both requests must reach a server
-this script runs. Agent refusals and re-observation are read from the ledger and the
-arbiter's log, never from the model's words. Latency is measured and printed: input
-round trip through the orchestrator to the arbiter, and keystroke to changed tiles.
-CUBEBOT_DESKTOP_EVIDENCE keeps the evidence directory, and CUBEBOT_DESKTOP_HOLD keeps a
-failed run's sandbox and orchestrator for 15 minutes to inspect.
+(CUBEBOT_PLAYWRIGHT_MODULE). CUBEBOT_DESKTOP_EVIDENCE keeps the evidence directory;
+CUBEBOT_DESKTOP_HOLD keeps a failed run's sandbox and orchestrator for 15 minutes.
 """
 
 import base64
@@ -115,7 +103,6 @@ class Desktop:
         return data
 
     def message(self):
-        """The next text message; a close raises Closed with its code and reason."""
         while True:
             first, second = self.exactly(2)
             length = second & 0x7F
@@ -150,7 +137,6 @@ class Desktop:
                 return message
 
     def ask(self, message):
-        """Sends a page message and returns its answer, keeping earlier frames."""
         t = time.monotonic() * 1000
         self.send(message | {"t": t})
         while True:
@@ -168,7 +154,6 @@ class Desktop:
         raise AssertionError(f"the desktop did not reach mode {mode}")
 
     def closed(self, timeout):
-        """The close the server sends within `timeout`."""
         self.socket.settimeout(timeout)
         try:
             while True:
@@ -229,8 +214,6 @@ def arbiter_events(identity):
 
 
 class Proof:
-    """Requests the guest's Chromium makes here: what a person typed and clicked."""
-
     def __init__(self):
         self.paths = []
         paths = self.paths
@@ -262,7 +245,6 @@ class Proof:
 
 
 def screen(frame):
-    """The RGB screen a frame's tiles paint on black."""
     canvas = bytearray(WIDTH * HEIGHT * 3)
     for tile in frame["tiles"]:
         pixels = rgb(tile["png"])
@@ -302,7 +284,6 @@ def refused(open_desktop):
 
 
 def scopes(world):
-    """Who may open which desktop, and that a cookie needs the console's own origin."""
     address, ca, desk, idle = (
         world["address"],
         world["ca"],
@@ -330,7 +311,6 @@ def scopes(world):
 
 
 def watching(world):
-    """A viewer sees the guest's real screen and can neither take control nor type."""
     viewer = world["people"]["viewer"].desktop(
         world["address"], world["ca"], world["desk"]
     )
@@ -394,7 +374,6 @@ def visit(desktop, url):
 
 
 def human_input(world, controller, viewer):
-    """The controller's keys and click reach the guest; the pointer is theirs."""
     proof = world["proof"]
     visit(controller, f"{proof.origin}/page-{MARKER}")
     proof.saw(f"/page-{MARKER}")
@@ -412,7 +391,6 @@ def human_input(world, controller, viewer):
 
 
 def agent_refused(world):
-    """While a person holds control the agent's input is refused at the arbiter."""
     before = len(arbiter_events(world["desk"]))
     row = chat(world["people"]["admin"].api, world["desk"], CLICK)
     # The model is told of the refusal and answers; the conversation does not stall.
@@ -432,7 +410,6 @@ def agent_refused(world):
 
 
 def latency(world, controller):
-    """Input round trips, and keystrokes to the frame that shows them."""
     trips = []
     for step in range(40):
         move = {"action": "move", "x": 100 + step, "y": 100}
@@ -477,7 +454,6 @@ def summary(samples):
 
 
 def handing_back(world, controller, viewer):
-    """After a hand-back the agent looks before acting; the transcript marks it."""
     answer = controller.ask({"kind": "hand_back"})
     assert answer["mode"] == "watch" and "error" not in answer, answer
     viewer.wait_mode("watch")
@@ -507,7 +483,6 @@ def handing_back(world, controller, viewer):
 
 
 def disconnects(world, viewer):
-    """A controller who vanishes, signs out or loses access gives control back."""
     people, address, ca, desk = (
         world[key] for key in ("people", "address", "ca", "desk")
     )
@@ -536,7 +511,6 @@ def disconnects(world, viewer):
 
 
 def recorded(world, postgres):
-    """Sessions record viewers, starts, ends and control changes, and never pixels."""
     rows = psql(
         postgres,
         "SELECT a.login, jsonb_path_query_array(s.mode_changes,'$[*].mode')::text, "
@@ -584,10 +558,7 @@ def psql(postgres, query):
 
 
 def console(world):
-    """In Chromium a person watches, takes control, types, clicks and hands back.
-
-    The console lists only agents a person manages, so this is the administrator.
-    """
+    """The console lists only agents a person manages, so this is the administrator."""
     environment = os.environ | {
         "CUBEBOT_CONSOLE": CONSOLE,
         "CUBEBOT_CONSOLE_LOGIN": "desk-admin",
@@ -612,7 +583,6 @@ def console(world):
 
 
 def surroundings(world, address, ca):
-    """The built console, and Caddy before it and the orchestrator as an ingress."""
     caddyfile = world["evidence"] / "Caddyfile"
     caddyfile.write_text(
         f"{CONSOLE} {{\n\treverse_proxy /api/* https://{address} {{\n"
@@ -663,8 +633,7 @@ def ready(people, desk):
         120,
     )
     time.sleep(5)
-    # The host channel, through the exec the orchestrator uses, answers each request
-    # while it stays open, as the orchestrator holds it.
+    # It answers each request while it stays open, as the orchestrator holds it.
     relay = subprocess.Popen(
         ["docker", "exec", "-i", container(desk), "cubebot-sandbox", "desktop"],
         stdin=subprocess.PIPE,

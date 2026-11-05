@@ -25,7 +25,6 @@ const THEMES: [Theme, string][] = [
   ['dark', 'Dark'],
 ]
 
-/** The person's own profile: picture, theme, session. */
 function You() {
   const session = useSession()
   const installation = useInstallation()
@@ -108,10 +107,8 @@ function You() {
   )
 }
 
-/** The side of the square a picture is stored at; small enough for any avatar in the console. */
 const SIDE = 256
 
-/** Crops the picture to its centred square and scales it to `SIDE`, as a PNG. */
 async function square(file: File): Promise<Blob> {
   const bitmap = await createImageBitmap(file)
   const side = Math.min(bitmap.width, bitmap.height)

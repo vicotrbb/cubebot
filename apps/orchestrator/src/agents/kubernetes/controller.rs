@@ -73,7 +73,6 @@ impl Controller {
             mode: Mode::DatabaseOnly,
         })
     }
-    /// Cluster-less sandboxes under development ownership; there is no pod to prove ownership.
     pub async fn docker(pool: PgPool, config: DockerConfig) -> Result<Self, Error> {
         let runtime = credentials(RuntimeIdentity::docker(pool.clone()))?;
         let owner = Owner::database_only(&pool).await?;
@@ -93,8 +92,6 @@ impl Controller {
             Mode::DatabaseOnly => axum::Router::new(),
         }
     }
-    /// The console's routes beside the runtime's, with desktop sessions reaching this
-    /// controller's sandboxes, if it has any.
     pub fn routes(&self, console: axum::Router) -> axum::Router {
         let router = console
             .merge(self.runtime_router())
@@ -111,7 +108,6 @@ impl Controller {
         };
         router.layer(axum::Extension(desktop))
     }
-    /// What the console may know about this controller (docs/design/console.md).
     pub fn installation(&self) -> Installation {
         match &self.mode {
             Mode::Kubernetes(lifecycle) => Installation {
@@ -129,8 +125,6 @@ impl Controller {
             Mode::DatabaseOnly => Installation::default(),
         }
     }
-    /// Reconciles agents, with routine schedules running beside it, and room coordination while
-    /// the installation's provider connection is configured.
     pub async fn run(&mut self, stop: watch::Receiver<bool>) -> Result<(), Error> {
         let connections = match &self.mode {
             Mode::Kubernetes(lifecycle) => lifecycle.runtime.connections.clone(),

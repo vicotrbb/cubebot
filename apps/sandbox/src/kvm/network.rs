@@ -1,8 +1,4 @@
-//! The guest's network (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): a tap device in the sandbox's network namespace, joined to the
-//! namespace's default-route interface by tc mirred redirects both ways, as Kata Containers'
-//! tcfilter mode does. The guest takes that interface's MAC, IPv4 address and gateway, so pod
-//! NetworkPolicy governs exactly the guest's traffic; the sandbox process keeps no network of its
-//! own once the redirect is in place. It needs CAP_NET_ADMIN and `/dev/net/tun`.
+//! A tap joined to the default-route interface by tc mirred, as Kata's tcfilter mode; the guest takes that interface's MAC and IPv4, so pod NetworkPolicy governs exactly its traffic.
 use super::memory::invalid;
 use nix::{ifaddrs::getifaddrs, ioctl_write_ptr_bad, request_code_write};
 use std::{
@@ -37,12 +33,11 @@ ioctl_write_ptr_bad!(
 pub struct Network {
     pub tap: File,
     pub mac: [u8; 6],
+    pub address: Ipv4Addr,
     pub mtu: u16,
-    /// The kernel `ip=` parameter that configures the guest's interface before init runs.
     pub cmdline: String,
 }
 
-/// An `invalid` error whose message is unchanged and whose cause stays behind `source()`.
 #[derive(Debug)]
 struct Unparsable {
     message: &'static str,
@@ -77,14 +72,13 @@ pub fn attach() -> io::Result<Network> {
     Ok(Network {
         tap,
         mac,
+        address,
         mtu,
         cmdline: kernel_ip(address, gateway, netmask, &nameservers(&resolver)),
     })
 }
 
-/// On a bare host the redirect would hand the host's own interface to the guest, so `run` there
-/// needs a network namespace of its own. Kernel threads are visible only from the host's PID
-/// namespace, so a container never trips this.
+/// On a bare host the redirect would hand the host's own interface to the guest; kernel threads are visible only from the host's PID namespace, so a container never trips this.
 fn own_namespace() -> io::Result<()> {
     let host = fs::read_to_string("/proc/2/comm").is_ok_and(|comm| comm.trim() == "kthreadd");
     let namespace = |pid: &str| {
@@ -98,7 +92,6 @@ fn own_namespace() -> io::Result<()> {
     Ok(())
 }
 
-/// The interface and gateway of the IPv4 default route in `/proc/net/route`.
 fn default_route(table: &str) -> io::Result<(String, Option<Ipv4Addr>)> {
     for line in table.lines().skip(1) {
         let fields: Vec<_> = line.split_whitespace().collect();
@@ -136,17 +129,21 @@ fn mac(text: &str) -> io::Result<[u8; 6]> {
         .ok_or_else(|| invalid("unreadable interface MAC address"))
 }
 
-/// The first two IPv4 nameservers, which the guest kernel publishes in `/proc/net/pnp`.
+/// A loopback nameserver answers only in this namespace, not on the guest's own loopback; with no other, public resolvers stand in, as Docker's default bridge does.
 fn nameservers(resolver: &str) -> Vec<Ipv4Addr> {
-    resolver
+    let found: Vec<Ipv4Addr> = resolver
         .lines()
         .filter_map(|line| line.strip_prefix("nameserver")?.trim().parse().ok())
+        .filter(|address: &Ipv4Addr| !address.is_loopback())
         .take(2)
-        .collect()
+        .collect();
+    if found.is_empty() {
+        return vec![Ipv4Addr::new(1, 1, 1, 1), Ipv4Addr::new(8, 8, 8, 8)];
+    }
+    found
 }
 
-/// Kernel `ip=` adds the default route only through a gateway inside the subnet; for a /32 pod
-/// address, as Calico gives, guest init adds it on-link from the same parameter.
+/// Kernel `ip=` adds the default route only through a gateway inside the subnet; for a /32, as Calico gives, guest init adds it on-link.
 // shortcut: IPv6 is not configured; add it once a dual-stack cluster is qualified.
 fn kernel_ip(
     address: Ipv4Addr,
@@ -182,8 +179,7 @@ fn open_tap() -> io::Result<File> {
     Ok(tun)
 }
 
-/// Mirrors every frame arriving on either interface out of the other. The tap disappears with
-/// the sandbox, so a restart first drops the stale ingress qdisc and its filter from `link`.
+/// The tap disappears with the sandbox, so a restart first drops the stale ingress qdisc and its filter from `link`.
 fn redirect(link: &str, mtu: u16) -> io::Result<()> {
     let mtu = mtu.to_string();
     let _ = Command::new("tc")
@@ -234,6 +230,11 @@ mod tests {
         assert_eq!(
             dns,
             [Ipv4Addr::new(10, 96, 0, 10), Ipv4Addr::new(1, 1, 1, 1)]
+        );
+        let docker = "nameserver 127.0.0.11\noptions ndots:0\n";
+        assert_eq!(
+            nameservers(docker),
+            [Ipv4Addr::new(1, 1, 1, 1), Ipv4Addr::new(8, 8, 8, 8)]
         );
         let address = Ipv4Addr::new(10, 200, 0, 2);
         let netmask = Ipv4Addr::new(255, 255, 255, 0);

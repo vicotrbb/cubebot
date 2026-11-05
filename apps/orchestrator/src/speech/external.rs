@@ -1,17 +1,13 @@
-//! OpenAI and ElevenLabs. Silero already found the sentence, so STT uploads it whole and has no
-//! partial transcripts. Each thread blocks on the orchestrator's runtime for its own requests.
 use super::{Audio, Provider, SAMPLE_RATE, SpeechError, Stt, Tts, Voice};
 use futures_util::StreamExt;
 use tokio::runtime::Handle;
 
 const OPENAI_STT: &str = "gpt-4o-mini-transcribe";
 const OPENAI_TTS: &str = "gpt-4o-mini-tts";
-/// OpenAI's `pcm` format.
 const OPENAI_RATE: u32 = 24_000;
 const ELEVENLABS_STT: &str = "scribe_v1";
 const ELEVENLABS_TTS: &str = "eleven_flash_v2_5";
 
-/// Where the providers answer; a test points them at a stand-in.
 #[derive(Clone)]
 pub struct Endpoints {
     pub openai: String,
@@ -58,7 +54,6 @@ impl Endpoints {
     }
 }
 
-/// A 16 kHz mono PCM16 WAV of `samples`.
 fn wav(samples: &[f32]) -> Vec<u8> {
     let bytes = (samples.len() * 2) as u32;
     let mut out = Vec::with_capacity(44 + bytes as usize);
@@ -80,7 +75,6 @@ fn wav(samples: &[f32]) -> Vec<u8> {
     out
 }
 
-/// A multipart/form-data body with one model field and one WAV file, and its boundary.
 fn form(field: &str, model: &str, audio: &[u8]) -> (String, Vec<u8>) {
     let boundary = format!("cubebot{}", uuid::Uuid::new_v4().simple());
     let mut body = format!(
@@ -166,11 +160,9 @@ pub struct Speaker {
 }
 
 impl Speaker {
-    /// The request and the sample rate of what it returns.
     fn request(&self, text: &str) -> (reqwest::RequestBuilder, u32) {
         match self.provider {
             Provider::Elevenlabs => {
-                // Rachel and Adam from ElevenLabs' default library.
                 let voice = match self.voice {
                     Voice::Female => "21m00Tcm4TlvDq8ikWAM",
                     Voice::Male => "pNInz6obpgDQGcFmaJgB",
@@ -209,7 +201,6 @@ impl Speaker {
             return Err(SpeechError::Refused(response.status().as_u16()));
         }
         let mut body = response.bytes_stream();
-        // Network chunks can split a sample.
         let mut pcm = Vec::new();
         while let Some(chunk) = body.next().await {
             pcm.extend_from_slice(&chunk?);
@@ -277,7 +268,6 @@ mod tests {
                         .into_response();
                 }
                 record(&tts, &uri, &headers, &body);
-                // Three bytes: the odd one must wait for the rest of its sample.
                 (status, vec![1u8, 0, 2]).into_response()
             }
         }));

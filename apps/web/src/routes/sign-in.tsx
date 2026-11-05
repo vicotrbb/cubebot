@@ -2,12 +2,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { type SubmitEvent, useState } from 'react'
 import { api, failure, ok } from '../api/client'
-import { keys } from '../app/queries'
 import { Cube } from '../components/Cube'
 import { Alert, Field } from '../components/primitives'
 import '../features/shell/sign-in.css'
 
-export const Route = createFileRoute('/sign-in')({ component: SignIn })
+export const Route = createFileRoute('/sign-in')({
+  head: () => ({ meta: [{ title: 'Sign in · Cubebot' }] }),
+  component: SignIn,
+})
 
 function SignIn() {
   const setup = useQuery({
@@ -19,7 +21,7 @@ function SignIn() {
     <main className="sign-in">
       <div className="sign-in__card">
         <div className="sign-in__brand">
-          <Cube size={64} follow />
+          <Cube size={48} follow />
           <span className="sign-in__name">Cubebot</span>
         </div>
         {setup.isPending ? null : open ? (
@@ -50,7 +52,6 @@ const LABELS = {
   false: ['Sign in', 'Signing in…'],
 }
 
-/** The sign-in form, or with `setup` the first administrator's, which also confirms the password. */
 function Credentials({ setup }: { setup: boolean }) {
   const navigate = useNavigate()
   const client = useQueryClient()
@@ -75,12 +76,8 @@ function Credentials({ setup }: { setup: boolean }) {
           ? api.POST('/api/identity/setup', { body })
           : api.POST('/api/identity/login', { body }),
       )
-      // 'all': the shell's session query is inactive here, and navigating on its
-      // cached null would send the browser straight back to sign-in.
-      await client.invalidateQueries({
-        queryKey: keys.session,
-        refetchType: 'all',
-      })
+      // Nothing cached belongs to this account, and navigating on a cached null session would send the browser straight back to sign-in.
+      client.clear()
       await navigate({ to: '/' })
     } catch (error) {
       setError(failure(error))

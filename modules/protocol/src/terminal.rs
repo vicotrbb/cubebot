@@ -1,4 +1,3 @@
-//! Terminal command outcomes reported as tool results.
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -24,7 +23,9 @@ pub enum Outcome {
 impl Outcome {
     pub fn validate(&self) -> Result<(), &'static str> {
         match self {
-            Self::Stopped { reason, .. } if reason != "cancelled" => {
+            Self::Stopped { reason, .. }
+                if !matches!(reason.as_str(), "cancelled" | "timed out") =>
+            {
                 Err("invalid terminal stop reason")
             }
             _ => Ok(()),

@@ -1,4 +1,3 @@
-//! Non-secret installation network configuration for agent sandboxes.
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 

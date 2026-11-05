@@ -1,18 +1,7 @@
 """One agent in the `container` sandbox runtime through Docker, with no provider key.
 
-Runs on every push in CI and on any host with Docker, Docker Desktop on a Mac included.
-The orchestrator and a disposable PostgreSQL run as in docker_sandbox.py; the agent
-image runs directly with computer use on. A scripted stand-in for the provider listens
-inside the agent's own network namespace, at the loopback origin the agent's test seam
-(CUBEBOT_TEST_PROVIDER_ORIGIN) accepts, and answers one message with one bash tool call.
-The ledger must show that call and its result. A second message makes
-the agent upload a file, share it with the person by the login its turn names, and
-create and edit a knowledge base page; a third runs one tool call through the OpenRouter
-adapter. Then, through the host channel (the
-console's desktop socket, which the orchestrator relays to `cubebot-agent desktop` in
-the sandbox), a screenshot must show the desktop, a person's key must be refused until
-they take control, and must then reach a window the tool user maps on its own display.
-This proves the container runtime boots and wires up; it is not agent qualification.
+Runs in CI and on any Docker host. Proves the container runtime boots and wires up; it
+is not agent qualification.
 """
 
 import json
@@ -29,6 +18,7 @@ from pathlib import Path
 from cluster_chat_setup import wait_for
 from docker_desktop import Desktop, container
 from docker_sandbox import (
+    IMAGES,
     INSTRUCTIONS,
     ROOT,
     Api,
@@ -159,7 +149,6 @@ def finished(api, identity, turn):
 
 
 def shared_and_written(api, postgres, identity, marker):
-    """A person's poem reaches Shared with me, and a page the wiki, by tools alone."""
     path = f"/api/conversations/{identity}/messages"
     message = command(message=scripted_request(marker))
     turn = api(path, message, expected=202)["id"]
@@ -186,11 +175,9 @@ def shared_and_written(api, postgres, identity, marker):
     assert {"coding", "design", "write-a-poem"} <= set(library), library
     installed = [s["name"] for s in api(f"/api/agents/{identity}/skills")]
     assert sorted(installed) == ["coding", "design", "write-a-poem"], installed
-    # What it sent is on the reply, and the person reads it through the reply.
     reply = finished(api, identity, turn)
     assert [a["name"][:4] for a in reply["attachments"]] == ["poem"], reply
     assert reply["attachments"][0]["size"] == len("verse\n"), reply
-    # The switch a person turns off reaches the definition.
     definition = api(f"/api/agents/{identity}")
     update = command(
         expected_revision=definition["revision"],
@@ -206,7 +193,6 @@ def shared_and_written(api, postgres, identity, marker):
 
 
 def openrouter_turn(api, postgres, identity, marker):
-    """One tool call through the OpenRouter adapter, on its documented stream."""
     provider = command(
         expected_revision=1,
         api_key="scripted-provider-key",
@@ -220,7 +206,6 @@ def openrouter_turn(api, postgres, identity, marker):
 
 
 def stand_in(name, marker):
-    """Starts the scripted provider in the agent's network namespace, as nobody."""
     subprocess.run(
         ["docker", "exec", "--detach", "--user", "65534:65534", name]
         + ["python3", "-c", STAND_IN, str(PORT), marker, scripted_request(marker)],
@@ -238,7 +223,6 @@ def stand_in(name, marker):
 
 
 def receiver(name):
-    """guest_desktop.py's key receiver as the tool user on its display, :1."""
     source = (Path(__file__).with_name("guest_desktop.py")).read_text()
     source = source.replace('if __name__ == "__main__":\n    main()', "receive_key()")
     process = subprocess.Popen(
@@ -261,8 +245,7 @@ def host_channel(address, ca, token, identity, name):
     try:
         desktop.frame()
 
-        # Chromium opens maximized over the wallpaper, so a photograph's colors show
-        # only if the screenshot beats it. A drawn desktop has far more than bare X.
+        # Chromium opens over the wallpaper; a drawn desktop has far more than bare X.
         def drawn():
             pixels = rgb(ask(desktop, {"action": "screenshot"}).get("png", ""))
             return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)}) > 64
@@ -286,15 +269,56 @@ def host_channel(address, ca, token, identity, name):
         desktop.close()
 
 
-def qualify(directory: Path):
+def isolated(name, network):
+    joined = subprocess.run(
+        ["docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", name],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert list(json.loads(joined)) == [network], joined
+    print("PASS the sandbox is on its network only")
+    daemon = subprocess.run(
+        ["docker", "info", "--format", "{{.OperatingSystem}}"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    # Docker installs its rule there, but the VM's bridge traffic does not meet it.
+    if daemon == "OrbStack":
+        print("SKIP inter-container traffic: OrbStack does not enforce it")
+        return
+    peer = f"{network}-peer"
+    subprocess.run(
+        ["docker", "run", "--detach", "--rm", "--name", peer, "--network", network]
+        + ["--entrypoint", "python3", IMAGES["container"]]
+        + ["-m", "http.server", "9000"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    try:
+        probe = f"import socket; socket.create_connection(('{peer}', 9000), 3)"
+        reached = subprocess.run(
+            ["docker", "exec", name, "python3", "-c", probe],
+            capture_output=True,
+            text=True,
+        )
+        assert "timed out" in reached.stderr, reached
+        print("PASS a neighbour on the sandbox network was unreachable")
+    finally:
+        subprocess.run(
+            ["docker", "rm", "--force", peer], check=False, stdout=subprocess.DEVNULL
+        )
+
+
+def qualify(directory: Path, network):
     with socket.socket() as probe:
         probe.bind((bridge(), 0))
         address = f"{bridge()}:{probe.getsockname()[1]}"
     environment = configure(directory, address, "container")
     config = directory / "docker.json"
-    config.write_text(
-        json.dumps(json.loads(config.read_text()) | {"computer_use_enabled": True})
-    )
+    settings = {"computer_use_enabled": True, "network": network}
+    config.write_text(json.dumps(json.loads(config.read_text()) | settings))
     environment["CUBEBOT_STORAGE_DIRECTORY"] = str(directory / "storage")
     # Forwarded to each sandbox; the stand-in listens there.
     environment["CUBEBOT_TEST_PROVIDER_ORIGIN"] = f"http://127.0.0.1:{PORT}/"
@@ -331,6 +355,7 @@ def qualify(directory: Path):
                 stand_in(name, marker)
                 bash_turn(api, postgres, identity, marker)
                 print("PASS one agent booted in a container and ran one bash tool call")
+                isolated(name, network)
                 host_channel(address, ca, api.token, identity, name)
                 shared_and_written(api, postgres, identity, marker)
                 print(
@@ -357,8 +382,18 @@ def qualify(directory: Path):
 def main():
     started = time.monotonic()
     build("container")
-    with tempfile.TemporaryDirectory() as directory:
-        qualify(Path(directory))
+    network = f"cubebot-check-{uuid.uuid4().hex[:12]}"
+    subprocess.run(
+        ["docker", "network", "create", "--opt"]
+        + ["com.docker.network.bridge.enable_icc=false", network],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    try:
+        with tempfile.TemporaryDirectory() as directory:
+            qualify(Path(directory), network)
+    finally:
+        subprocess.run(["docker", "network", "rm", network], check=False)
     print(f"container-check passed in {time.monotonic() - started:.0f}s")
     return 0
 

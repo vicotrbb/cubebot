@@ -1,11 +1,8 @@
-//! Chat Completions over SSE, the one wire format OpenRouter, Gemini and Grok share. Assistant
-//! messages are replayed whole, so reasoning details and thought signatures survive tool calls.
+//! Assistant messages are replayed whole, so reasoning details and thought signatures survive tool calls.
 use crate::{Decoder, Error, Event, FunctionCall, Message, Request, Tool, Usage, call, reply};
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 
-/// The request every Chat Completions provider takes; `tool` writes one tool in the provider's
-/// dialect. The caller adds how it asks for usage.
 pub(crate) fn body(request: &Request, tool: fn(&Tool) -> Value) -> Value {
     let mut messages = vec![json!({"role":"system","content":request.system})];
     // A person-role image may only follow the whole run of tool results it belongs to.
@@ -55,8 +52,7 @@ fn flush(messages: &mut Vec<Value>, images: &mut Vec<&String>) {
     messages.push(json!({"role":"user","content":content}));
 }
 
-/// These providers have no computer tool of their own, so it is an ordinary function taking the
-/// same single actions the agent runs for Anthropic.
+/// These providers have no computer tool of their own, so it is an ordinary function.
 pub(crate) fn function(tool: &Tool) -> Value {
     if !tool.computer {
         return json!({"type":"function","function":{"name":tool.name,"description":tool.description,"parameters":tool.parameters}});
@@ -127,8 +123,7 @@ impl Decoder for Completions {
 }
 
 impl Completions {
-    /// Where a piece of a call goes. Calls arrive in pieces addressed by index, but Gemini may
-    /// omit the index or repeat 0 for parallel calls, each then whole with its own id.
+    /// Calls arrive in pieces addressed by index, but Gemini may omit the index or repeat 0 for parallel calls, each then whole with its own id.
     fn slot(&self, part: &Value) -> usize {
         let id = part["id"].as_str().filter(|id| !id.is_empty());
         let last = self.calls.len().saturating_sub(1);
@@ -142,14 +137,12 @@ impl Completions {
                 self.calls.len()
             }
             (Some(index), _) => index as usize,
-            // Without an index, a piece naming a function starts a call.
             (None, _) if part["function"]["name"].is_string() => self.calls.len(),
             (None, Some(_)) => self.calls.len(),
             (None, None) => last,
         }
     }
 
-    /// The first piece names the call.
     fn tool_call(&mut self, part: &Value) -> Result<(), Error> {
         let index = self.slot(part);
         // Bounds what a stream can make this allocate; no reply makes this many calls.
@@ -184,8 +177,7 @@ impl Completions {
             .calls
             .iter()
             .enumerate()
-            // A call without arguments streams none, which is not JSON. Gemini may leave the id
-            // empty, and results must still pair with their call.
+            // A call without arguments streams none, which is not JSON. Gemini may leave the id empty, and results must still pair.
             .map(|(position, pending)| {
                 let arguments = match pending.arguments.as_str() {
                     "" => "{}".to_owned(),
@@ -236,7 +228,6 @@ fn usage(value: &Value) -> Option<Usage> {
     })
 }
 
-/// An error after the response started, carrying the HTTP status it would have had.
 fn failure(code: &Value) -> Error {
     match code.as_u64() {
         Some(429 | 500..=599) => Error::Transient(None),

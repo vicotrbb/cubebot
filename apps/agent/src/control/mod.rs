@@ -1,5 +1,3 @@
-//! Confidential machine control: one bootstrap per process, then one channel connection at a
-//! time. The issued credential lasts for this sandbox incarnation.
 mod config;
 mod transport;
 use crate::Source;
@@ -148,7 +146,6 @@ impl RuntimeClient {
         } else {
             Connector::Plain
         };
-        // A turn carries every exchange since the last summary, bounded by the model window.
         let config = WebSocketConfig::default()
             .max_message_size(Some(64 * 1024 * 1024))
             .max_frame_size(Some(64 * 1024 * 1024));
@@ -173,7 +170,6 @@ impl RuntimeClient {
         })?;
         Ok(channel)
     }
-    /// Memory search for this sandbox's credential, once bootstrapped.
     pub fn memory(&self) -> Option<MemoryClient> {
         Some(MemoryClient {
             http: self.http.clone(),
@@ -207,7 +203,6 @@ fn accepted(response: Result<reqwest::Response, String>) -> Result<Result<(), St
         Err(reason) => Ok(Err(reason)),
     }
 }
-/// A successful response, or the reason the orchestrator gave for refusing the request.
 async fn refused(
     request: reqwest::RequestBuilder,
 ) -> Result<Result<reqwest::Response, String>, Error> {
@@ -244,7 +239,6 @@ impl MemoryClient {
         transport::decode(response, 256 * 1024).await
     }
 
-    /// `None` when the orchestrator does not admit the run.
     #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn start_dream(&self, run: Uuid) -> Result<Option<runtime::Dream>, Error> {
         let response = self.dream(reqwest::Method::POST, run, "")?.send().await;
@@ -256,7 +250,6 @@ impl MemoryClient {
         transport::decode(response, 8 * 1024 * 1024).await.map(Some)
     }
 
-    /// `false` once the run has ended, so the change was not committed.
     #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn commit_dream(
         &self,
@@ -272,7 +265,6 @@ impl MemoryClient {
         }
     }
 
-    /// `false` once the run has ended, so the skill was not published.
     #[tracing::instrument(skip_all, fields(run = %run))]
     pub async fn commit_dream_skill(
         &self,
@@ -289,7 +281,6 @@ impl MemoryClient {
         }
     }
 
-    /// This agent's installed revision of a skill; `None` when it is not installed.
     #[tracing::instrument(skip_all, fields(skill = name))]
     pub async fn skill(&self, name: &str) -> Result<Option<runtime::SkillPackage>, Error> {
         // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/skills/{name}`.
@@ -304,10 +295,8 @@ impl MemoryClient {
         transport::decode(response, 512 * 1024).await.map(Some)
     }
 
-    /// This agent's wallpaper image; `None` when it uses the default.
     #[tracing::instrument(skip_all)]
     pub async fn wallpaper(&self) -> Result<Option<Vec<u8>>, Error> {
-        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/wallpaper`.
         let url = self.url.join("wallpaper").map_err(Error::configuration)?;
         let response = self.http.get(url).bearer_auth(&self.token).send().await;
         let response = response.map_err(request_failed)?;
@@ -317,7 +306,6 @@ impl MemoryClient {
         transport::bytes(response, 4 * 1024 * 1024).await.map(Some)
     }
 
-    /// The created child, or the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn collaborate(
         &self,
@@ -336,7 +324,6 @@ impl MemoryClient {
         }
     }
 
-    /// Records the login handoff, or returns the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn request_login(
         &self,
@@ -346,8 +333,6 @@ impl MemoryClient {
         accepted(self.post(&format!("turns/{turn}/logins"), request).await?)
     }
 
-    /// Delivers the broadcast and returns how many agents it reached, or the orchestrator's
-    /// reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn broadcast(
         &self,
@@ -366,7 +351,6 @@ impl MemoryClient {
         }
     }
 
-    /// The answer to one routine tool call (docs/adr/agents.md#routines), or the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn routine(
         &self,
@@ -383,7 +367,6 @@ impl MemoryClient {
         }
     }
 
-    /// The answer to one skill tool call, or the orchestrator's reason for refusing it.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn skill_tool(
         &self,
@@ -400,7 +383,6 @@ impl MemoryClient {
         }
     }
 
-    /// Sends one of the agent's shared files with the turn's reply.
     #[tracing::instrument(skip_all, fields(turn = %turn, file = %file))]
     pub async fn attach_file(&self, turn: Uuid, file: Uuid) -> Result<Result<(), String>, Error> {
         let body = runtime::AttachFile { file };
@@ -416,7 +398,6 @@ impl MemoryClient {
         }
     }
 
-    /// The vault items this agent may fill, without their secrets (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills).
     #[tracing::instrument(skip_all)]
     pub async fn vault(&self) -> Result<Vec<runtime::VaultItem>, Error> {
         let url = self.url.join("vault").map_err(Error::configuration)?;
@@ -425,7 +406,6 @@ impl MemoryClient {
         transport::decode(response, 1024 * 1024).await
     }
 
-    /// Has the arbiter type the field, or returns the reason it was refused.
     #[tracing::instrument(skip_all)]
     pub async fn vault_fill(
         &self,
@@ -434,7 +414,7 @@ impl MemoryClient {
         accepted(self.post("vault/fills", request).await?)
     }
 
-    /// Saves the agent's own item, or returns the reason it was refused. Never log `request`.
+    /// Never log `request`.
     #[tracing::instrument(skip_all)]
     pub async fn vault_put(
         &self,
@@ -443,7 +423,6 @@ impl MemoryClient {
         accepted(self.post("vault", request).await?)
     }
 
-    /// Shared files at the agent's own top level, in a folder, or shared with it (docs/adr/memory.md#native-cubebot-storage-api).
     #[tracing::instrument(skip_all)]
     pub async fn files(
         &self,
@@ -461,8 +440,7 @@ impl MemoryClient {
         }
     }
 
-    /// Streams `body` into a new shared file; `request` makes a resent upload return the file
-    /// the first one made. A body that ends in an error is never stored.
+    /// `request` makes a resent upload return the first one's file; a body that ends in an error is never stored.
     #[tracing::instrument(skip_all, fields(request = %request))]
     pub async fn put_file(
         &self,
@@ -483,7 +461,6 @@ impl MemoryClient {
         }
     }
 
-    /// A shared file's bytes, to read with [`reqwest::Response::chunk`].
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn file_content(
         &self,
@@ -493,7 +470,6 @@ impl MemoryClient {
         refused(self.files_request(reqwest::Method::GET, &path)?).await
     }
 
-    /// Adds or changes one share of a file the agent manages.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn share_file(
         &self,
@@ -513,13 +489,11 @@ impl MemoryClient {
         method: reqwest::Method,
         path: &str,
     ) -> Result<reqwest::RequestBuilder, Error> {
-        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/{path}`.
         let url = self.url.join(path).map_err(Error::configuration)?;
         let request = self.http.request(method, url).bearer_auth(&self.token);
         Ok(request.timeout(Duration::from_secs(30 * 60)))
     }
 
-    /// A knowledge base read, as the orchestrator's JSON text, or why it was refused.
     pub async fn kb_get(
         &self,
         path: &str,
@@ -529,7 +503,6 @@ impl MemoryClient {
         Self::kb_text(request).await
     }
 
-    /// A knowledge base write; `Null` sends no body.
     pub async fn kb_send(
         &self,
         method: reqwest::Method,
@@ -543,7 +516,6 @@ impl MemoryClient {
         Self::kb_text(request).await
     }
 
-    /// Streams `body` into a new attachment; `request` makes a resent upload find the first.
     pub async fn kb_attach(
         &self,
         page: Uuid,
@@ -579,13 +551,11 @@ impl MemoryClient {
         }
     }
 
-    /// The response to a runtime request, or the reason of a 409 refusal.
     async fn post(
         &self,
         path: &str,
         body: &impl serde::Serialize,
     ) -> Result<Result<reqwest::Response, String>, Error> {
-        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/{path}`.
         let url = self.url.join(path);
         let url = url.map_err(Error::configuration)?;
         let response = self.http.post(url).bearer_auth(&self.token).json(body);
@@ -613,7 +583,6 @@ impl MemoryClient {
         run: Uuid,
         suffix: &str,
     ) -> Result<reqwest::RequestBuilder, Error> {
-        // Relative to `.../api/runtime/memories`, so this names `.../api/runtime/dreams/{run}`.
         let url = self.url.join(&format!("dreams/{run}{suffix}"));
         let url = url.map_err(Error::configuration)?;
         Ok(self.http.request(method, url).bearer_auth(&self.token))

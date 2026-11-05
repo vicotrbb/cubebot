@@ -31,7 +31,6 @@ const STATUS: Record<string, string> = {
   cancelled: 'cancelled',
 }
 
-/** The Broadcast channel: what people and permitted agents sent to every agent, with replies. */
 export function Broadcast({ session }: { session: Session }) {
   const feed = useBroadcasts(true, true)
   const agents = useAgents()
@@ -43,7 +42,6 @@ export function Broadcast({ session }: { session: Session }) {
     (agent) => agent.desired_state !== 'retired',
   )
   useMarkRead(feed.data)
-  // Follow the newest broadcast unless the reader scrolled up.
   useEffect(() => {
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
@@ -99,7 +97,6 @@ export function Broadcast({ session }: { session: Session }) {
   )
 }
 
-/** Moves the read cursor to the newest broadcast once it is on screen. */
 function useMarkRead(feed: Feed | undefined) {
   const client = useQueryClient()
   const last = feed?.messages.at(-1)?.sequence ?? 0

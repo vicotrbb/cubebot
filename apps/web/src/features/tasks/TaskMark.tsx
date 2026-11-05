@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import { pileOf, type Task } from './status'
 
-/** A plan item's state. */
 export function ItemMark({ status }: { status: string }) {
   if (status === 'done') return <CircleCheck aria-label="Done" />
   if (status === 'doing')
@@ -17,7 +16,7 @@ export function ItemMark({ status }: { status: string }) {
   return <Circle aria-label="Not started" />
 }
 
-/** A task's state at a glance. The word beside it carries the meaning for assistive technology. */
+/** The word beside it carries the meaning for assistive technology. */
 export function TaskMark({ task }: { task: Task }) {
   const pile = pileOf(task)
   if (pile === 'needs_you')

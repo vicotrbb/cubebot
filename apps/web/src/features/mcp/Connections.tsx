@@ -10,10 +10,6 @@ import './mcp.css'
 
 type AgentMcpServer = Schemas['AgentMcpServer']
 
-/**
- * What the agent reaches beyond its computer: MCP servers, switched per agent when a server
- * is limited to chosen agents, and connected accounts, which come later.
- */
 export function Connections({
   agent,
   administrator,
@@ -56,7 +52,6 @@ function McpSection({
   const [error, setError] = useState('')
   async function grant(server: AgentMcpServer, enabled: boolean) {
     setError('')
-    // Shown at once; the refetch below settles it either way.
     client.setQueryData<AgentMcpServer[]>(key, (current) =>
       current?.map((item) =>
         item.id === server.id ? { ...item, enabled } : item,

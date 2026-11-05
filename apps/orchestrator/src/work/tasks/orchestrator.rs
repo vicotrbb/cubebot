@@ -1,9 +1,5 @@
-//! The task orchestrator: a platform agent with no sandbox, tools or memory of its own, one of the
-//! orchestrator's model duties (docs/adr/rooms.md#tasks-and-the-task-orchestrator). It names the task, picks agents and gives
-//! them items, and reads the room when a person speaks or the agents finish. It speaks only to hand
-//! work over and to ask the person; results are the agents' to give. The model only proposes:
-//! Rust checks each proposal against the agents and limits that hold when it is applied, and the
-//! model call happens outside any transaction.
+//! The model only proposes: Rust checks each proposal against the agents and limits that hold when
+//! it is applied, and the model call happens outside any transaction.
 use super::{Eligible, TaskSettings, clipped};
 use crate::{agents::kubernetes::Error, connections::Connections, work::coordinator};
 use serde::Deserialize;
@@ -12,7 +8,6 @@ use std::time::Duration;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Failed calls before the orchestrator stops trying and says so.
 const ATTEMPTS: i16 = 3;
 const MESSAGES: i64 = 40;
 
@@ -56,7 +51,6 @@ struct Assignment {
     items: Vec<String>,
 }
 
-/// The state a proposal is judged against, read when it is applied.
 struct Due {
     id: Uuid,
     room: Uuid,
@@ -67,7 +61,6 @@ struct Due {
     attempts: i16,
 }
 
-/// Advances tasks until stopped.
 pub async fn orchestrate(pool: PgPool, connections: Connections, mut stop: watch::Receiver<bool>) {
     loop {
         let advanced = advance(&pool, &connections).await.unwrap_or_else(|error| {
@@ -83,14 +76,10 @@ pub async fn orchestrate(pool: PgPool, connections: Connections, mut stop: watch
     }
 }
 
-/// Handles the task waiting longest: a person's unread message, or agents that all settled. `false`
-/// when none was due or the attempt failed, so the caller pauses.
 pub async fn advance(pool: &PgPool, connections: &Connections) -> Result<bool, Error> {
     step(pool, connections, None).await
 }
 
-/// `advance` with `reply` as the model's answer, for tests: a process has one test provider origin,
-/// and the agent under test holds it.
 pub async fn advance_replying(
     pool: &PgPool,
     connections: &Connections,
@@ -118,7 +107,6 @@ async fn step(
         .ok();
     tx.commit().await?;
     let reply = match (scripted, inference) {
-        // A decision that keeps failing to apply stops costing model calls and tells the person.
         _ if due.attempts >= ATTEMPTS => Err("orchestrator_gave_up"),
         (Some(reply), _) => Ok(reply.to_owned()),
         (None, Some(inference)) => coordinator::ask(pool, &inference, SYSTEM, &prompt, 4096).await,
@@ -127,7 +115,6 @@ async fn step(
     let proposal = reply.and_then(|text| parsed(&text).ok_or("invalid_orchestrator_result"));
     let settled = settle(pool, due.id, read_up_to, proposal).await;
     if settled.is_err() {
-        // Moves it down the queue, so one task that cannot be written never starves the rest.
         sqlx::query!(
             "UPDATE tasks SET attempts=attempts+1, updated_at=clock_timestamp() WHERE id=$1",
             due.id,
@@ -215,7 +202,6 @@ async fn prompt(
     ))
 }
 
-/// One agent as the model chooses among them: what it does and how much it already has.
 fn roster_line(agent: &Eligible) -> String {
     let load = match agent.open {
         0 => "free".to_owned(),
@@ -232,9 +218,7 @@ fn roster_line(agent: &Eligible) -> String {
     )
 }
 
-/// The first JSON object in the reply, so a fenced or explained answer still parses.
 fn parsed(text: &str) -> Option<Proposal> {
-    // PostgreSQL text cannot hold NUL; refused here it is one failed attempt, not a failed write.
     if text.contains('\0') || text.contains("\\u0000") {
         return None;
     }
@@ -243,20 +227,15 @@ fn parsed(text: &str) -> Option<Proposal> {
     serde_json::from_str(text.get(start..=end)?).ok()
 }
 
-/// What will actually happen, once the proposal meets the current state.
 #[derive(Debug, PartialEq)]
 enum Outcome {
     Assign(Vec<Assignment>),
     Ask,
     Wait,
     Finish,
-    /// An assignment that names no usable agent: not a valid answer.
     Invalid,
 }
 
-/// An assignment to an unknown agent is dropped, a repeat too, and any beyond the limit. Past the
-/// round limit the person decides; a task with open work cannot finish, and one with none has
-/// nothing to wait for.
 fn judged(
     proposal: Proposal,
     agents: &[Uuid],
@@ -305,7 +284,6 @@ async fn settle(
         .fetch_one(&mut *tx)
         .await?;
     super::lock_room(&mut tx, room).await?;
-    // A person stopping the task during the call wins.
     let Some(due) = lock(&mut tx, task).await? else {
         return Ok(true);
     };
@@ -323,8 +301,6 @@ async fn settle(
     Ok(done)
 }
 
-/// Applies a valid proposal against the state that holds now, or counts a failed attempt. `false`
-/// while the orchestrator may still retry.
 async fn decide(
     tx: &mut Transaction<'_, Postgres>,
     due: &Due,
@@ -345,7 +321,6 @@ async fn decide(
     match judged(proposal, &ids, open, rounds_left, limit) {
         Outcome::Invalid => failed(tx, due, &agents, "invalid_orchestrator_result").await,
         outcome => {
-            // Whatever else the model wrote, only a question reaches the room in its words.
             let say = if outcome == Outcome::Ask {
                 say.as_str()
             } else {
@@ -357,7 +332,6 @@ async fn decide(
     }
 }
 
-/// The task, unless stopped with nothing new to read.
 async fn lock(tx: &mut Transaction<'_, Postgres>, task: Uuid) -> Result<Option<Due>, sqlx::Error> {
     sqlx::query_as!(
         Due,
@@ -423,7 +397,6 @@ async fn ask_person(
     status(tx, due.id, "needs_you").await
 }
 
-/// The title the orchestrator gives is the task's and its room's; a later one keeps the first.
 async fn name(
     tx: &mut Transaction<'_, Postgres>,
     due: &Due,
@@ -474,8 +447,6 @@ async fn status(
     Ok(())
 }
 
-/// An item its agent never ticked is done when the agent finished its work, skipped otherwise. The
-/// orchestrator has read the replies by now and says in its summary if that overstates anything.
 async fn close_items(tx: &mut Transaction<'_, Postgres>, due: &Due) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -523,7 +494,6 @@ async fn assign(
             .filter(|name| *name != agent.name)
             .collect();
         let frame = frame(due, &assignment.brief, &numbered, &others);
-        // Eligible agents are not retired, so waking one cannot conflict here.
         super::deliver(tx, message, due.owner, agent.id, &frame)
             .await
             .map_err(|_| Error::Conflict)?;
@@ -537,7 +507,6 @@ async fn assign(
     Ok(())
 }
 
-/// Stores an assignment's items, or its brief when it lists none; the items as the agent reads them.
 async fn add_items(
     tx: &mut Transaction<'_, Postgres>,
     task: Uuid,
@@ -574,7 +543,6 @@ async fn add_items(
     Ok(numbered)
 }
 
-/// What the agent reads: where it is, what the task is, and its part.
 fn frame(due: &Due, brief: &str, items: &[String], others: &[&str]) -> String {
     let others = if others.is_empty() {
         "You are the only agent on this round.".to_owned()
@@ -592,8 +560,6 @@ fn frame(due: &Due, brief: &str, items: &[String], others: &[&str]) -> String {
     )
 }
 
-/// Counts a failed call. Past the attempts, a task nobody has started goes to the first agent, as a
-/// room message does, and any other asks the person; `false` while it may still retry.
 async fn failed(
     tx: &mut Transaction<'_, Postgres>,
     due: &Due,

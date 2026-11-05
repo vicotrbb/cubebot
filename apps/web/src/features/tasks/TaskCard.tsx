@@ -6,7 +6,6 @@ import { doneCount, headlineOf, pileOf, planWindow, titleOf } from './status'
 import { ItemMark, TaskMark } from './TaskMark'
 import './tasks.css'
 
-/** A task at a glance, where the pointer is: its state, how far the plan got and who is on it. */
 export function TaskCard({
   id,
   ref,

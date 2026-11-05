@@ -1,10 +1,7 @@
 # Historical design and research documents retain their existing formatting.
 /ARCHITECTURE.md
 /MANIFESTO.md
-/TASKS.md
 /docs/adr/
-/docs/design/
-/docs/research/
 Cargo.lock
 bun.lock
 uv.lock

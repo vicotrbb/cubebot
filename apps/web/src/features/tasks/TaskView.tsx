@@ -20,7 +20,6 @@ import {
 import { ItemMark, TaskMark } from './TaskMark'
 import './tasks.css'
 
-/** One task: its private room, with the plan beside it on a desk and above it on a phone. */
 export function TaskView({
   taskId,
   session,

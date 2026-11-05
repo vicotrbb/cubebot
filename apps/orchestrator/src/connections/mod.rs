@@ -1,5 +1,3 @@
-//! Installation-managed inference configuration, encrypted credential storage, the vault and
-//! MCP servers.
 mod credentials;
 mod mcp;
 mod models;
@@ -213,7 +211,6 @@ impl Connections {
             access: sqlx::types::Json(access),
         })
     }
-    /// The providers holding a key other than the one in use.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn saved(&self, actor: &Actor) -> Result<Vec<SavedProvider>, IdentityError> {
         let mut transaction = self.pool.begin().await?;
@@ -240,7 +237,6 @@ impl Connections {
             .collect()
     }
 
-    /// Forgets a saved key. The provider in use is replaced, never removed, so agents keep working.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn forget(&self, actor: &Actor, provider: ProviderKind) -> Result<(), IdentityError> {
         let mut transaction = self.pool.begin().await?;
@@ -261,8 +257,6 @@ impl Connections {
         Ok(())
     }
 
-    /// Whether the key decrypts the first stored provider credential or vault item; true when
-    /// none is stored.
     #[tracing::instrument(skip_all)]
     pub async fn key_matches(&self) -> Result<bool, IdentityError> {
         let mut tx = self.pool.begin().await?;
@@ -291,7 +285,10 @@ impl Connections {
             let Some(item) = item else {
                 return Ok(true);
             };
-            (item.ciphertext, self.vault_context(item.id).await?)
+            (
+                item.ciphertext,
+                vault::sealing_context(&mut *tx, "vault", item.id).await?,
+            )
         };
         tx.commit().await?;
         Ok(self.credentials.decrypt(&record, &context).is_ok())
@@ -306,8 +303,6 @@ impl Connections {
         self.connection(tx, Some(agent)).await
     }
 
-    /// The installation's connection for the orchestrator's own duties, such as room
-    /// coordination, regardless of which agents may use it.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn coordinator(
         &self,
@@ -316,8 +311,6 @@ impl Connections {
         self.connection(tx, None).await
     }
 
-    /// The task orchestrator's model: the one chosen for it, under its provider's saved key, or the
-    /// connection the agents use.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn task_orchestrator(
         &self,
@@ -336,8 +329,6 @@ impl Connections {
         })
     }
 
-    /// The key a call needs: OpenAI's is the provider connection's, under its agent grants, and
-    /// ElevenLabs' is stored with the speech settings.
     #[tracing::instrument(skip_all, fields(agent = %agent.0, provider = provider.as_str()))]
     pub(crate) async fn speech_key(
         &self,
@@ -368,7 +359,6 @@ impl Connections {
         self.saved_key(&mut tx, ProviderKind::Openai).await
     }
 
-    /// Replaces or, given `None`, removes the ElevenLabs key.
     pub(crate) async fn store_speech_key(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -429,8 +419,6 @@ impl Connections {
         })
     }
 
-    /// The key to store under `revision`, encrypted: the given one, or the saved one when the
-    /// model alone changes.
     async fn credential(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -485,8 +473,6 @@ impl Connections {
         Ok(saved.api_key)
     }
 
-    /// Before `next` replaces the connection: keeps the outgoing provider's key and choices so
-    /// switching back needs no pasting, and drops `next`'s now that it is in use.
     async fn set_aside(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
@@ -709,7 +695,6 @@ async fn previous(
     request: Uuid,
     digest: &[u8],
 ) -> Result<Option<ProviderSummary>, IdentityError> {
-    // The command's input digest, then its summary row.
     let previous = sqlx::query!(
         r#"
         SELECT

@@ -1,4 +1,3 @@
-//! Managed namespaced resources, runtime token review and conservative termination checks.
 mod authentication;
 mod config;
 mod controller;
@@ -25,7 +24,6 @@ pub use ownership::{Identity, RecordedPod, termination_proven, verify_pod};
 #[derive(Debug)]
 pub enum Error {
     InvalidConfiguration,
-    /// `InvalidConfiguration` with the error that caused it.
     Configuration(Box<dyn std::error::Error + Send + Sync>),
     Unauthorized,
     Busy,

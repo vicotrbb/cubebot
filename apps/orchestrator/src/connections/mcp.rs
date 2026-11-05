@@ -1,9 +1,6 @@
-//! MCP servers (docs/adr/agents.md#local-and-remote-mcp-server-support) as installation configuration. Administrators add them; each is
-//! available to every agent or to the agents granted it (docs/adr/identity.md#installation-wide-connection-access-by-default). A stdio
-//! server's environment and an HTTP server's headers are sealed as one Credentials record bound
-//! to the server's id: people see their names only, and the values leave this module only in
-//! the turn delivered to an agent with access. Callers authorize people.
-use super::{Access, Connections, ProviderAccess, validate_access};
+//! Secrets are sealed per server: people see names only, and values leave this module only in the
+//! turn delivered to an agent with access. Callers authorize people.
+use super::{Access, Connections, ProviderAccess, validate_access, vault::sealing_context};
 use crate::{agents::AgentId, identity::IdentityError};
 use cubebot_protocol::runtime::McpServer;
 use serde::{Deserialize, Serialize};
@@ -111,7 +108,6 @@ fn stored(transport: McpTransport) -> &'static str {
     }
 }
 
-/// Why a server cannot be saved, in words the console shows.
 pub fn problem(input: &SaveMcpServer) -> Option<&'static str> {
     let name = &input.name;
     if name.is_empty()
@@ -186,24 +182,26 @@ fn secrets_problem(input: &SaveMcpServer) -> Option<&'static str> {
 }
 
 impl Connections {
-    async fn seal_secrets(
+    async fn seal_secrets<'e>(
         &self,
+        db: impl sqlx::PgExecutor<'e>,
         server: Uuid,
         secrets: &BTreeMap<String, String>,
     ) -> Result<Vec<u8>, IdentityError> {
-        let context = self.sealing_context("mcp", server).await?;
+        let context = sealing_context(db, "mcp", server).await?;
         let plain = serde_json::to_vec(secrets).map_err(|_| IdentityError::InvalidInput)?;
         self.credentials
             .encrypt(&plain, &context)
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))
     }
 
-    async fn open_secrets(
+    async fn open_secrets<'e>(
         &self,
+        db: impl sqlx::PgExecutor<'e>,
         server: Uuid,
         sealed: &[u8],
     ) -> Result<BTreeMap<String, String>, IdentityError> {
-        let context = self.sealing_context("mcp", server).await?;
+        let context = sealing_context(db, "mcp", server).await?;
         let plain = self
             .credentials
             .decrypt(sealed, &context)
@@ -211,7 +209,6 @@ impl Connections {
         serde_json::from_slice(&plain).map_err(|_| IdentityError::CredentialUnavailable(None))
     }
 
-    /// Every server; the caller is an administrator.
     #[tracing::instrument(skip_all)]
     pub async fn mcp_servers(&self) -> Result<Vec<McpServerSummary>, IdentityError> {
         Ok(sqlx::query_as!(
@@ -230,7 +227,6 @@ impl Connections {
         .collect())
     }
 
-    /// The caller is an administrator.
     #[tracing::instrument(skip_all, fields(actor = %actor))]
     pub async fn create_mcp_server(
         &self,
@@ -244,7 +240,7 @@ impl Connections {
         let mut tx = self.pool.begin().await?;
         validate_access(&mut tx, &access).await?;
         let id = Uuid::new_v4();
-        let ciphertext = self.seal_secrets(id, secrets).await?;
+        let ciphertext = self.seal_secrets(&mut *tx, id, secrets).await?;
         let names: Vec<&String> = secrets.keys().collect();
         let row = sqlx::query_as!(
             Row,
@@ -273,8 +269,7 @@ impl Connections {
         Ok(row.into())
     }
 
-    /// The caller is an administrator. Changing the transport needs new secrets, since names
-    /// of environment variables are not names of headers.
+    /// Changing the transport needs new secrets: environment names are not header names.
     #[tracing::instrument(skip_all, fields(server = %server))]
     pub async fn update_mcp_server(
         &self,
@@ -300,7 +295,7 @@ impl Connections {
         }
         let (ciphertext, names) = match &input.secrets {
             Some(secrets) => (
-                Some(self.seal_secrets(server, secrets).await?),
+                Some(self.seal_secrets(&mut *tx, server, secrets).await?),
                 Some(secrets.keys().collect::<Vec<_>>()),
             ),
             None => (None, None),
@@ -334,7 +329,6 @@ impl Connections {
     }
 
     #[tracing::instrument(skip_all, fields(server = %server))]
-    /// Returns the deleted server's name.
     pub async fn delete_mcp_server(&self, server: Uuid) -> Result<String, IdentityError> {
         let deleted =
             sqlx::query_scalar!("DELETE FROM mcp_servers WHERE id=$1 RETURNING name", server)
@@ -343,7 +337,6 @@ impl Connections {
         deleted.ok_or(IdentityError::NotFound)
     }
 
-    /// Every server with whether `agent` may use it.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn agent_mcp_servers(
         &self,
@@ -372,9 +365,6 @@ impl Connections {
             .collect())
     }
 
-    /// Grants or withdraws one agent's use of a server whose access is explicit grants; a
-    /// server shared with every agent is changed on the server itself. The caller is an
-    /// administrator.
     #[tracing::instrument(skip_all, fields(server = %server, agent = %agent.0))]
     pub async fn grant_mcp_server(
         &self,
@@ -437,7 +427,9 @@ impl Connections {
         .await?;
         let mut servers = Vec::with_capacity(rows.len());
         for row in rows {
-            let secrets = self.open_secrets(row.id, &row.ciphertext).await?;
+            let secrets = self
+                .open_secrets(&mut **tx, row.id, &row.ciphertext)
+                .await?;
             servers.push(match (row.command, row.url) {
                 (Some(command), _) => McpServer::Stdio {
                     name: row.name,

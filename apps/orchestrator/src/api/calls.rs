@@ -1,4 +1,3 @@
-//! The call socket and speech settings (docs/adr/console.md#voice-calls-over-the-chat-pipeline).
 use crate::{
     agents::AgentId,
     connections::Connections,
@@ -19,7 +18,6 @@ use axum::{
 };
 use serde_json::json;
 
-/// A tenth of a second of 16 kHz PCM16 is 3200 bytes; this leaves room for a stalled page.
 const FRAME_LIMIT: usize = 64 * 1024;
 
 #[derive(Clone)]

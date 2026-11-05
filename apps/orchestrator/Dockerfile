@@ -19,7 +19,7 @@ USER 65532:65532
 ENV CUBEBOT_BIND_ADDR=0.0.0.0:8080
 EXPOSE 8080
 ENTRYPOINT ["cubebot-orchestrator"]
-# Release builds pass these (.github/workflows/release.yml); last, so they never invalidate a cached layer.
+# Last, so they never invalidate a cached layer.
 ARG CUBEBOT_VERSION=dev
 ARG CUBEBOT_REVISION=unknown
 ARG CUBEBOT_CREATED=unknown

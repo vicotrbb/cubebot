@@ -20,11 +20,7 @@ function write(key: string, value: string) {
   }
 }
 
-/**
- * The message box, Slack-shaped: Enter sends, Shift+Enter breaks a line. Drafts and an
- * unconfirmed request id persist per installation, person and conversation (docs/adr/console.md#online-console-operations-with-local-drafts), so a
- * lost acknowledgement retries with the same id instead of sending twice.
- */
+/** An unconfirmed request id persists with the draft, so a lost acknowledgement retries with the same id instead of sending twice. */
 export function Composer({
   draftKey,
   placeholder,
@@ -43,7 +39,6 @@ export function Composer({
   send: (requestId: string, text: string) => Promise<void>
   disabled?: boolean
   attach?: () => void
-  /** Offers these names when a word starts with `@`, as Slack does. */
   mentionables?: Mentionable[]
   children?: ReactNode
 }) {

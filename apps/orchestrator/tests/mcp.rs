@@ -1,7 +1,3 @@
-//! MCP servers as installation configuration (docs/adr/agents.md#local-and-remote-mcp-server-support): an administrator saves them through the
-//! console API, whose answers never carry an environment or header value; per-agent grants
-//! apply only to servers limited to chosen agents; and the agent's turn carries exactly the
-//! servers it may use, with their secrets.
 use crate::{
     runtime_identity::{
         delivery, http_server, native_chat_setup, open_channel, report, runtime_server,
@@ -65,7 +61,6 @@ async fn servers_keep_their_secrets_and_reach_only_agents_with_access() {
             .any(|window| window == TOKEN.as_bytes())
     );
 
-    // Shared with every agent, so a per-agent switch is refused and the agent sees it on.
     let grants = format!("/api/agents/{agent}/mcp-servers");
     let listed = api.json(&grants).await;
     assert_eq!(listed[0]["enabled"], true);
@@ -74,7 +69,6 @@ async fn servers_keep_their_secrets_and_reach_only_agents_with_access() {
     let set = |enabled: bool| api.send("PUT", &switch, Some(json!({"enabled":enabled})));
     assert_eq!(set(false).await.status(), 409);
 
-    // The turn carries the server with its secret while every agent has it.
     let session = auth
         .bootstrap("projected-token", uuid::Uuid::new_v4())
         .await
@@ -89,8 +83,6 @@ async fn servers_keep_their_secrets_and_reach_only_agents_with_access() {
             "args":["-y","@modelcontextprotocol/server-github"],"env":{"GITHUB_TOKEN":TOKEN}}])
     );
 
-    // Limited to chosen agents and saved without secrets: the token stays, the agent loses it
-    // until it is granted, and withdrawing it again takes it away.
     let limited = json!({"name":"github","transport":"stdio","command":"npx",
         "args":["-y","@modelcontextprotocol/server-github"],
         "access":{"mode":"explicit_grants","agents":[]}});
@@ -115,7 +107,6 @@ async fn servers_keep_their_secrets_and_reach_only_agents_with_access() {
     assert_eq!(api.json("/api/mcp-servers").await, json!([]));
 }
 
-/// The console API as the administrator.
 struct Console {
     http: openidconnect::reqwest::Client,
     origin: String,

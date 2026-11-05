@@ -1,5 +1,5 @@
-// Tasks, code rendering, coding work, previews, routines and Teams and access in a real browser, on
-// desktop and on a phone, against the stack tasks_browser_seed.py seeded and Vite on :3100:
+// Tasks, code rendering, previews, routines and Teams and access, on desktop and on a phone,
+// against the stack tasks_browser_seed.py seeded and Vite on :3100:
 //   python3 tests/system/tasks_browser_seed.py $S/seed.json
 //   PLAYWRIGHT=/path/to/playwright/index.mjs S=<dir> node tests/system/tasks_browser.mjs
 // BROWSER=firefox with FIREFOX=<executable> runs it in Firefox. Screenshots land in $S.
@@ -201,7 +201,6 @@ async function conversation(page, tag) {
   ok(await noOverflow(page), `conversation fits (${tag})`)
 }
 
-/** The hover card on a desk; on touch no card, and the row says how far the plan got. */
 async function taskCard(page, tag, phone) {
   const row = page
     .locator('.tasks__pile[data-pile="working"] .task-row')
@@ -412,8 +411,7 @@ async function routines(page, tag) {
   await page.getByRole('button', { name: 'Cancel' }).click()
 }
 
-/** Puts two more agents on their desktops, or takes them off; a desktop counts while a running turn
- *  used the browser in the last two minutes. */
+/** A desktop counts while a running turn used the browser in the last two minutes. */
 function desktops(status) {
   stacked = status === 'running'
   execFileSync('docker', [
@@ -434,7 +432,6 @@ function desktopSql(status) {
   return `UPDATE chat_turns SET status='${status}' WHERE id IN (${turns}); UPDATE turn_events SET created_at=clock_timestamp() WHERE turn_id IN (${turns},'${seed.running}')`
 }
 
-/** Desktop previews stack with one live, and the stack opens to choose. */
 async function stack(page, tag, phone) {
   await desktops('running')
   await page.goto(`${B}/tasks`)

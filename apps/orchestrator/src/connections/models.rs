@@ -1,4 +1,3 @@
-//! The models a provider key can use, listed so an administrator picks one instead of typing it.
 use super::{Connections, administrator, key_valid};
 use crate::identity::{Actor, IdentityError};
 use cubebot_protocol::runtime::ProviderKind;
@@ -34,7 +33,6 @@ impl From<IdentityError> for ModelsError {
     }
 }
 
-/// The same provider seam as the agent's: a literal loopback origin only under test.
 pub(crate) fn configured<P>(
     new: fn() -> Result<P, cubebot_providers::Error>,
     loopback: fn(&str) -> Result<P, cubebot_providers::Error>,

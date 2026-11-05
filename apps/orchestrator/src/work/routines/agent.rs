@@ -1,5 +1,3 @@
-//! The agent's routine tools (docs/adr/agents.md#routines): it lists all of its routines and changes only those it
-//! manages, as the person whose turn made the call. Answers are the text the model reads.
 use super::{Locked, SaveRoutine, insert, list, lock, occur, remove, update};
 use crate::{
     agents::{AgentId, runtime::RuntimeActor},
@@ -30,7 +28,6 @@ const INVALID: &str = "name is 1 to 128 bytes; prompt up to 8 KiB and command up
 type Answer = Result<String, String>;
 
 impl Work {
-    /// `Err` is the refusal the model reads; the outer error is the orchestrator's own.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn, tool = %call.tool))]
     pub(crate) async fn routine_tool(
         &self,
@@ -100,7 +97,6 @@ async fn create(
     let Ok(input) = SaveRoutine::deserialize(&call.input) else {
         return Err(IdentityError::InvalidInput);
     };
-    // The call's id makes a resent create return the routine it made.
     Ok(
         match insert(tx, agent, (human, "agent", call.call), &input).await? {
             Ok((id, _)) => Ok(format!("Created routine {id}.")),
@@ -166,7 +162,6 @@ async fn run(
     ))
 }
 
-/// The routine when the agent manages it; a person's routine is theirs to change.
 async fn managed(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,

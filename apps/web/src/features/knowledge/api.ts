@@ -6,7 +6,6 @@ import type { Summary } from './tree'
 export type Page = components['schemas']['Page']
 export type Attachment = components['schemas']['Attachment']
 
-/** How often an open page and the tree look for what others changed. */
 const PAGE_POLL = 5_000
 const TREE_POLL = 15_000
 
@@ -69,7 +68,6 @@ export function trashPage(id: string) {
   return ok(api.DELETE('/api/kb/pages/{id}', { params: { path: { id } } }))
 }
 
-/** A save refused because the page moved on, with the revision it is at now. */
 export class StaleSave extends Error {
   constructor(public revision: number) {
     super('The page changed since you opened it.')
@@ -99,7 +97,6 @@ export async function savePage(
 
 export const attachmentUrl = (id: string) => `/api/kb/attachments/${id}`
 
-/** Streams a file into a page's attachments. */
 export async function uploadAttachment(page: string, file: File) {
   const query = new URLSearchParams({
     name: file.name,

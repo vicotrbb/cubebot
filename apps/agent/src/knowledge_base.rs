@@ -1,6 +1,3 @@
-//! The knowledge base (migrations/0048_knowledge_base.sql): the installation's wiki, offered while
-//! the agent's capability is on, through the orchestrator, which checks it again on every call.
-//! Tools hand the model the orchestrator's JSON as it comes: there is nothing to translate.
 use crate::{
     control::{Error, MemoryClient},
     tools::{Registry, Running, parse},
@@ -71,7 +68,6 @@ struct Fetch {
     path: String,
 }
 
-/// `workspace` offers the tools that move bytes, which need the tool user.
 pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
     let tool = cubebot_providers::Tool::strict;
     let text = |description: &str| json!({"type":"string","description":description});
@@ -139,7 +135,6 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
     tools
 }
 
-/// `None` when `name` is not a knowledge base tool.
 pub fn call<'a>(
     client: Option<&'a MemoryClient>,
     name: &str,
@@ -321,7 +316,6 @@ async fn changed(
     reported(sent.map(|reply| reply.map(summarized)))
 }
 
-/// A write's reply without the page body the model just wrote.
 fn summarized(reply: String) -> String {
     let Ok(mut page) = serde_json::from_str::<Value>(&reply) else {
         return "Done.".into();

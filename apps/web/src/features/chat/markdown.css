@@ -1,5 +1,3 @@
-/* Messages as Markdown: the conversation's reading voice, with headings that stay quiet beside
-   a person's name. */
 .md {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -147,7 +145,6 @@
   height: auto;
 }
 
-/* What an agent sent with a reply */
 .attachments {
   display: flex;
   flex-wrap: wrap;

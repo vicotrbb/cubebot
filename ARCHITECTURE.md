@@ -1,8 +1,8 @@
 # Cubebot system architecture
 
-Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([Agent-centric execution in a sandbox boundary](docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary)), 2026-10-28 for the in-house VMM sandbox ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) and 2026-10-30 for the desktop as VMM devices ([Desktop as a VMM device](docs/adr/sandbox.md#desktop-as-a-vmm-device)), and 2026-11-02 for declared sandbox runtimes ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox) amended, [Standard containers with optional sandbox runtimes](docs/adr/sandbox.md#standard-containers-with-optional-sandbox-runtimes) restored). Status: intended design grounded in the accepted decisions under docs/adr. Each installation runs its agents in one declared runtime, a KVM guest (`kvm`) or the agent image as a container (`container`); [STATUS](docs/STATUS.md) lists what runs and what is unqualified.
+Design baseline: 2026-10-24, updated 2026-10-27 for agent-centric execution ([Agent-centric execution in a sandbox boundary](docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary)), 2026-10-28 for the in-house VMM sandbox ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) and 2026-10-30 for the desktop as VMM devices ([Desktop as a VMM device](docs/adr/sandbox.md#desktop-as-a-vmm-device)), and 2026-11-02 for declared sandbox runtimes ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox) amended, [Standard containers with optional sandbox runtimes](docs/adr/sandbox.md#standard-containers-with-optional-sandbox-runtimes) restored). Status: intended design grounded in the accepted decisions under docs/adr. Each installation runs its agents in one declared runtime, a KVM guest (`kvm`) or the agent image as a container (`container`).
 
-The [manifesto](MANIFESTO.md) states the product goal. The [decision documents](docs/adr/README.md) are authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable. The [software specification](docs/design/software-specification.md) defines proposed types, interfaces, states, and workflows. The [qualification plan](docs/design/qualification.md) defines evidence needed before shipping.
+The [manifesto](MANIFESTO.md) states the product goal. The [decision documents](docs/adr/README.md) are authoritative for accepted choices. This document connects those choices into a system; implementation selections explicitly called proposals remain reviewable.
 
 ## Start with the experience
 
@@ -76,7 +76,7 @@ Keep task scheduling, messaging, triggers, and budgets inside Work initially bec
 
 The Rust agent owns its loop, lane scheduling, context assembly and compaction, memory behavior, provider calls, tools, process and browser supervision, MCP adaptation and recovery journal. It has no database access.
 
-Accepted source layout, revised on 2026-10-25 and 2026-10-28: four applications under `apps/` (`orchestrator`, `agent`, `sandbox`, and `web`) and two shared Rust libraries under `modules/` (`protocol` and `providers`). Agent-specific behavior stays inside the agent app, including its tools, which run in the agent's own process and sandbox. The sandbox app owns the VMM ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) and nothing agent-specific; it is the only crate allowed `unsafe`, for KVM and tap ioctls and guest memory. Orchestrator domains remain ordinary Rust modules within its application. Shared libraries never depend on applications. See the [repository layout](docs/development/repository-layout.md) for ownership and development paths. This replaces the earlier four-package layout proposal without introducing new services.
+Accepted source layout, revised on 2026-10-25 and 2026-10-28: four applications under `apps/` (`orchestrator`, `agent`, `sandbox`, and `web`) and two shared Rust libraries under `modules/` (`protocol` and `providers`). Agent-specific behavior stays inside the agent app, including its tools, which run in the agent's own process and sandbox. The sandbox app owns the VMM ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) and nothing agent-specific; it is the only crate allowed `unsafe`, for KVM and tap ioctls and guest memory. Orchestrator domains remain ordinary Rust modules within its application. Shared libraries never depend on applications. This replaces the earlier four-package layout proposal without introducing new services.
 
 The repository scaffold selects Tokio/Axum for asynchronous HTTP and tracing for diagnostics, with locked dependencies and a pinned Rust toolchain. SQLx for PostgreSQL and kube-rs for cluster interaction remain proposals until those features are implemented. The TanStack Start frontend has a locked Bun/Vite build and a smoke-tested Bun server. These checks establish scaffold compatibility, not performance or agent-system qualification. [Axum](https://docs.rs/axum/latest/axum/), [SQLx](https://docs.rs/sqlx/latest/sqlx/), [kube-rs](https://kube.rs/).
 
@@ -88,7 +88,7 @@ Use current-state relational tables plus transactional audit/outbox records. Thi
 
 Each agent has a workspace PVC mounted into its sandbox pod and attached to the guest as a virtio-blk disk, holding the workspace and recovery journal. The agent never loads its own executable code from the writable workspace. Workspace files are mutable; published artifacts and skill bundles are immutable snapshots in shared storage.
 
-The [shared-storage proposal](docs/design/shared-storage.md) defines staging, publication, file synchronization, and crash reconciliation. It provides a native authenticated interface, not S3 compatibility, distributed replication, or a shared writable filesystem for every agent.
+Shared storage ([Native Cubebot storage API](docs/adr/memory.md#native-cubebot-storage-api)) provides a native authenticated interface, not S3 compatibility, distributed replication, or a shared writable filesystem for every agent.
 
 Retain durable data until explicit deletion. Retiring or sleeping releases execution resources, not workspace data. Bound caches, staging, diagnostic logs, and capture sizes independently. Capacity exhaustion must block affected writes visibly rather than erase retained evidence.
 
@@ -193,9 +193,6 @@ Emit structured logs, metrics, and trace correlation through existing Rust instr
 
 ## Read next
 
-- [Software specification](docs/design/software-specification.md): types, operations, state transitions, persistence, detailed flows, and decision traceability.
-- [Qualification and delivery](docs/design/qualification.md): release gates, measured performance targets, failure scenarios, evidence classes, and implementation sequence.
-- [Shared storage](docs/design/shared-storage.md): filesystem publication and recovery mechanics.
+- [Operator and API reference](docs/reference.md): configuration and HTTP behavior.
 - [Accepted decisions](docs/adr/README.md): the full set of choices, including the final [completion policy](docs/adr/rooms.md#agent-completion-with-optional-human-acceptance).
 
-Implementation may start from the reviewed contracts, but security enforcement, fencing, provider authentication, and durability must earn their support claims through the qualification plan.

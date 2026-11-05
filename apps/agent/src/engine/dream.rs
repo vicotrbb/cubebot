@@ -1,7 +1,3 @@
-//! One dream run (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results): with every lane idle, the agent asks its model to consolidate its own
-//! memories, and to write down a recurring procedure from its recent turns as a new or revised
-//! skill (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming). It commits the proposals one at a time, each naming the revision it read. A
-//! channel message stops the run before its next commit; what was committed stays.
 use crate::control::MemoryClient;
 use cubebot_protocol::runtime::{
     Dream, DreamEnd, DreamOutcome, MemoryChange, ProviderKind, REPORT_BYTES, SkillChange,
@@ -16,9 +12,7 @@ use serde::Deserialize;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-/// Changes one run may commit.
 const CHANGES: usize = 50;
-/// Skills one run may publish.
 const SKILLS: usize = 1;
 
 const SYSTEM: &str = "You maintain your own long-term memory while you are idle.";
@@ -98,8 +92,6 @@ async fn dream_on(
     (DreamOutcome::Completed, plan.report, usage)
 }
 
-/// The model's proposed changes, or why there are none, and what asking cost. The reason becomes
-/// the run's report.
 #[tracing::instrument(skip_all, fields(provider = ?dream.provider, model = %dream.model))]
 async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
     let messages = [Message::User(prompt(dream))];
@@ -182,7 +174,6 @@ fn prompt(dream: &Dream) -> String {
     )
 }
 
-/// A plan with only valid changes; anything but the requested JSON object is no plan.
 fn parse(reply: &str) -> Option<Plan> {
     let reply: Reply = serde_json::from_str(crate::memory::unfenced(reply)).ok()?;
     let changes = reply

@@ -54,7 +54,6 @@ impl Identity {
         .await?)
     }
 
-    /// Whether the installation still has no administrator, so its first account may be created.
     pub async fn setup_open(&self) -> Result<bool, IdentityError> {
         let bootstrapped = sqlx::query_scalar!(
             r#"
@@ -96,7 +95,7 @@ impl Identity {
         )
         .execute(&mut *transaction)
         .await?;
-        audit(&mut transaction, id, id, "bootstrap").await?;
+        audit(&mut transaction, id, id, "account.bootstrap").await?;
         transaction.commit().await?;
         Ok(id)
     }
@@ -135,7 +134,6 @@ impl Identity {
             "member"
         };
         let id = insert_account(&mut transaction, login, &verifier, role).await?;
-        audit(&mut transaction, actor.id, id, "account_created").await?;
         command
             .commit(transaction, Receipt { id, revision: 1 })
             .await?;
@@ -194,7 +192,6 @@ impl Identity {
         )
         .execute(&mut *transaction)
         .await?;
-        audit(&mut transaction, actor.id, subject, "account_suspended").await?;
         command
             .commit(
                 transaction,
@@ -250,28 +247,8 @@ pub(super) async fn audit(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: Uuid,
     subject: Uuid,
-    action: &str,
+    kind: &'static str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "
-        INSERT INTO identity_audit (actor_id, subject_id, action)
-        VALUES ($1, $2, $3)
-        ",
-        actor,
-        subject,
-        action,
-    )
-    .execute(&mut **transaction)
-    .await?;
-    let kind = match action {
-        "bootstrap" => "account.bootstrap",
-        "invitation_accepted" => "invitation.accept",
-        "oidc_sign_in" => "session.sign_in",
-        "oidc_identity_linked" => "oidc.link",
-        // account_created, account_suspended and oidc_identity_revoked are commands, which
-        // record themselves.
-        _ => return Ok(()),
-    };
     let detail = match kind {
         "session.sign_in" => serde_json::json!({"method": "oidc"}),
         _ => serde_json::json!({}),

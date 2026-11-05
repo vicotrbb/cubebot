@@ -76,10 +76,10 @@ async fn attachment(
 ) -> Result<Response, super::files::Failure> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     let owner = api.work.attachment_owner(&actor, turn, file).await?;
-    let (entry, bytes, transfer) = super::files::configured(storage)?
+    let (entry, bytes) = super::files::configured(storage)?
         .open(Principal::Agent(owner), file)
         .await?;
-    Ok(super::files::download(entry, bytes, transfer, &headers).await)
+    Ok(super::files::download(entry, bytes, &headers).await)
 }
 
 async fn conversation(
@@ -224,7 +224,6 @@ async fn events(
             // measured database load requires it.
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-        // Ending the stream makes the browser reconnect, which reports a refusal as a status.
         let frames = follow.poll().await.ok()?;
         Some((frames, follow))
     });
@@ -243,9 +242,7 @@ struct Follow {
     headers: HeaderMap,
     conversation: Uuid,
     after: i64,
-    /// The last poll hit its page limit, so more events are already waiting.
     full: bool,
-    /// Last sent snapshot of each unfinished turn.
     sent: HashMap<Uuid, String>,
 }
 

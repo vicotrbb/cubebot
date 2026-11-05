@@ -2,6 +2,7 @@ use crate::runtime_support;
 use axum::Router;
 use cubebot_orchestrator::{
     agents::{
+        Agents, CreateAgent,
         kubernetes::{Registry, ResourceObject},
         runtime::{RuntimeAccess, RuntimeIdentity},
     },
@@ -56,7 +57,6 @@ async fn runtime_sessions_last_for_the_incarnation_rotate_and_stay_separate_from
             .is_err()
     );
     assert_eq!(second.version, first.version + 1);
-    // No clock ends the credential; only the incarnation ending revokes it.
     sqlx::query!(
         "
         UPDATE agent_runtime_sessions
@@ -214,7 +214,7 @@ async fn http_exchange_uses_runtime_credentials_and_never_accepts_a_human_bearer
     assert_eq!(response.headers()["cache-control"], "no-store");
     let issued: Value = serde_json::from_slice(&response.bytes().await.unwrap()).unwrap();
     let runtime = client
-        .get(format!("{origin}/api/runtime/identity"))
+        .get(format!("{origin}/api/runtime/memories?query=x"))
         .bearer_auth(issued["token"].as_str().unwrap())
         .send()
         .await
@@ -225,7 +225,7 @@ async fn http_exchange_uses_runtime_credentials_and_never_accepts_a_human_bearer
         .await
         .unwrap();
     let denied = client
-        .get(format!("{origin}/api/runtime/identity"))
+        .get(format!("{origin}/api/runtime/memories?query=x"))
         .bearer_auth(human.token)
         .send()
         .await
@@ -486,7 +486,6 @@ async fn drain_request_is_durable_idempotent_and_cannot_restore_active_authority
     .await
     .unwrap();
     assert_eq!(phase, "bound");
-    // Even an accidentally restored generation cannot reopen a latched incarnation.
     sqlx::query!(
         "
         UPDATE agents
@@ -884,7 +883,6 @@ async fn text_reply(
     axum::Json(body): axum::Json<Value>,
 ) -> axum::response::Response {
     use axum::{http::StatusCode, response::IntoResponse};
-    // An immediate retry-after keeps bounded retries fast without changing their count.
     let failure = |status| (status, [("retry-after", "0")], "controlled failure").into_response();
     assert_eq!(body["model"], "controlled-model");
     assert_eq!(body["store"], false);
@@ -958,7 +956,6 @@ async fn native_text(first_failure: bool) {
     wait_native_response(&work, &admin, conversation).await;
     assert_eq!(
         state.calls.load(std::sync::atomic::Ordering::SeqCst),
-        // The reply, any retry, and a memory extraction that found nothing.
         2 + usize::from(first_failure)
     );
     drop(child);
@@ -966,7 +963,6 @@ async fn native_text(first_failure: bool) {
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].response.as_deref(), Some("Durable native reply"));
     let kinds = event_kinds(&f.pool, history[0].id).await;
-    // The fixture reports no usage, which is never recorded as zero.
     assert_eq!(kinds, ["text_delta", "done"]);
     server.abort();
     provider.abort();
@@ -1285,7 +1281,6 @@ pub(crate) async fn report(channel: &mut Socket, value: Value) {
         .await
         .unwrap();
 }
-/// The next delivery, or `null` once the orchestrator closes the channel.
 pub(crate) async fn delivery(channel: &mut Socket) -> Value {
     use futures_util::StreamExt;
     use tokio_tungstenite::tungstenite::Message;
@@ -1348,7 +1343,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     assert_eq!(first["message"], "First");
     assert_eq!(first["sequence"], 1);
     assert_eq!(first["provider"], "openai");
-    // The turn says who it serves, by the login a file share needs.
     assert!(
         first["instructions"]
             .as_str()
@@ -1373,7 +1367,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     .await
     .unwrap();
     assert_eq!(attempt, Some(f.attempt.0));
-    // A second pull while a turn is active is not another turn.
     report(&mut channel, json!({"type":"pull"})).await;
     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
     assert_eq!(
@@ -1413,7 +1406,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
         json!({"kind":"done","response":"Answer"}),
     )
     .await;
-    // The pull still pending from earlier now receives the next turn.
     let second = delivery(&mut channel).await;
     assert_eq!(second["message"], "Second");
     assert_eq!(
@@ -1430,7 +1422,6 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     let settled = work.history(&admin, conversation, 0).await.unwrap();
     assert_eq!(settled[0].status, "complete");
     assert_eq!(settled[0].response.as_deref(), Some("Answer"));
-    // The run ended without the call's result, so its effects are uncertain.
     assert_eq!(settled[0].terminal[0].status, "uncertain");
     let delta: Value = sqlx::query_scalar!(
         "
@@ -1444,13 +1435,185 @@ async fn channel_runs_one_turn_at_a_time_and_settles_it_once_from_idempotent_eve
     .await
     .unwrap();
     assert_eq!(delta["text"], "Ans");
-    // An event for a turn this agent does not own closes the channel.
     report(
         &mut channel,
         json!({"type":"event","turn":Uuid::new_v4(),"sequence":1,"event":{"kind":"done","response":"x"}}),
     )
     .await;
     assert_eq!(delivery(&mut channel).await, Value::Null);
+    server.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn nul_bytes_are_stripped_and_a_refused_event_fails_the_turn_without_closing_the_channel() {
+    let f = fixture().await;
+    let (auth, work, admin, conversation) = native_chat_setup(&f, "Run it").await;
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let turn = delivery(&mut channel).await["turn"].clone();
+    let id = Uuid::parse_str(turn.as_str().unwrap()).unwrap();
+    let call = Uuid::new_v4();
+    event(
+        &mut channel,
+        &turn,
+        1,
+        json!({"kind":"tool_call","id":call,"name":"bash","input":{"command":"printf 'a\u{0}b'"}}),
+    )
+    .await;
+    event(
+        &mut channel,
+        &turn,
+        2,
+        json!({"kind":"tool_result","id":call,"outcome":{"status":"exited","code":0,"output":"a\u{0}b"}}),
+    )
+    .await;
+    let stored = sqlx::query_scalar!(
+        r#"SELECT payload->'outcome'->>'output' AS "value!" FROM turn_events WHERE turn_id=$1 AND sequence=2"#,
+        id,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(stored, "ab");
+    assert_eq!(
+        work.history(&admin, conversation, 0).await.unwrap()[0].status,
+        "running"
+    );
+    event(
+        &mut channel,
+        &turn,
+        3,
+        json!({"kind":"tool_result","id":call,"outcome":{"status":"stopped","reason":"bogus","output":""}}),
+    )
+    .await;
+    let settled = &work.history(&admin, conversation, 0).await.unwrap()[0];
+    assert_eq!(
+        (settled.status.as_str(), settled.error.as_deref()),
+        ("failed", Some("invalid_event"))
+    );
+    assert_eq!(event_kinds(&f.pool, id).await, ["tool_call", "tool_result"]);
+    assert_eq!(
+        delivery(&mut channel).await,
+        json!({"type":"cancel","turn":turn})
+    );
+    server.abort();
+    f.task.abort();
+}
+
+async fn next_turn(channel: &mut Socket) -> Value {
+    loop {
+        let next = delivery(channel).await;
+        if next["type"] == "turn" {
+            return next;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_revoked_sender_fails_its_turn_while_an_agent_broadcast_on_their_behalf_still_runs() {
+    let f = fixture().await;
+    let (auth, _, admin, conversation) = native_chat_setup(&f, "Admin first").await;
+    let member = Identity::new(f.pool.clone())
+        .create_account(
+            &admin,
+            "member",
+            "member password long enough",
+            false,
+            Uuid::new_v4(),
+        )
+        .await
+        .unwrap();
+    let sender = Agents::new(f.pool.clone())
+        .create(
+            &admin,
+            &CreateAgent {
+                request_id: Uuid::new_v4(),
+                name: "Sender".into(),
+                instructions: "Be brief".into(),
+                avatar: None,
+                voice: None,
+            },
+        )
+        .await
+        .unwrap()
+        .id;
+    let origin_turn = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message)
+        VALUES ($1, $2, gen_random_uuid(), 'Sent to the other agent')
+        RETURNING id
+        ",
+        sender,
+        member,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    let broadcast = sqlx::query_scalar!(
+        "
+        INSERT INTO broadcasts (actor_id, agent_id, request_id, turn_id, message)
+        VALUES ($1, $2, gen_random_uuid(), $3, 'Heads up')
+        RETURNING id
+        ",
+        member,
+        sender,
+        origin_turn,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    for (message, broadcast) in [("Direct", None), ("Heads up", Some(broadcast))] {
+        sqlx::query!(
+            "
+            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, broadcast_id)
+            VALUES ($1, $2, gen_random_uuid(), $3, $4)
+            ",
+            conversation,
+            member,
+            message,
+            broadcast,
+        )
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    }
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let first = next_turn(&mut channel).await["turn"].clone();
+    event(
+        &mut channel,
+        &first,
+        1,
+        json!({"kind":"done","response":"Done"}),
+    )
+    .await;
+    assert_eq!(next_turn(&mut channel).await["message"], "Heads up");
+    let refused = sqlx::query!(
+        "
+        SELECT status, error
+        FROM chat_turns
+        WHERE conversation_id=$1 AND message='Direct'
+        ",
+        conversation,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(refused.status, "failed");
+    assert_eq!(refused.error.as_deref(), Some("sender_access_revoked"));
     server.abort();
     f.task.abort();
 }
@@ -1528,7 +1691,6 @@ async fn conversation_events_replay_after_a_cursor_and_then_follow_live() {
         )
         .await;
     }
-    // Without a cursor, replay starts at the running turn's first event.
     let start = work.event_cursor(&admin, conversation).await.unwrap();
     let page = work.events(&admin, conversation, start, &[]).await.unwrap();
     let replayed: String = page
@@ -1578,7 +1740,6 @@ async fn conversation_events_replay_after_a_cursor_and_then_follow_live() {
     )
     .await;
     until("\"status\":\"complete\"").await;
-    // Resuming after the first delta skips it, and the live completion arrives as a snapshot.
     assert!(!received.contains("Hel\""));
     assert!(received.contains("event: turn_event"));
     assert!(received.contains("\"text\":\"lo\""));
@@ -1624,7 +1785,6 @@ async fn uncertain_tool_effects_block_retry_until_an_outcome_is_reported() {
         request_id: Uuid::new_v4(),
     };
     assert!(work.retry(&admin, conversation, id, &retry).await.is_err());
-    // A recovered sandbox reports the outcome it journaled before the crash.
     let outcome = json!({"status":"exited","code":0,"output":"removed"});
     event(
         &mut channel,

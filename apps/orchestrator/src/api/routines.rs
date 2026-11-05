@@ -1,5 +1,4 @@
-//! Routines (docs/adr/agents.md#routines) for people, and the webhook that runs one. The webhook authenticates with
-//! the routine's own bearer secret, never a person's session.
+//! The webhook authenticates with the routine's own bearer secret, never a person's session.
 use crate::{
     agents::AgentId,
     identity::{Identity, IdentityError},
@@ -185,8 +184,6 @@ async fn occurrences(
     Ok(([("cache-control", "no-store")], Json(occurrences)))
 }
 
-/// 202 with the turn, `null` when it coalesced into a pending run; 200 with the first answer for
-/// a repeated Idempotency-Key; 401 for a wrong secret; 429 past the routine's rate.
 async fn hook(
     State(work): State<Work>,
     Path(routine): Path<Uuid>,

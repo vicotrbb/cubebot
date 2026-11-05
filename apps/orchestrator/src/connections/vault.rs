@@ -1,8 +1,5 @@
-//! The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills): logins and secrets an agent types into its desktop through the arbiter
-//! without reading them. Secrets are Credentials records bound to their item's id and never
-//! leave this module except as the text of one fill. Installation items follow docs/adr/identity.md#installation-wide-connection-access-by-default access;
-//! an agent's own items belong to it alone. Callers authorize people; the runtime calls name
-//! the authenticated agent.
+//! Secrets are Credentials bound to their item's id and leave this module only as one fill's text.
+//! Callers authorize people; runtime calls name the authenticated agent.
 use super::{Access, Connections, ProviderAccess, validate_access};
 use crate::{
     agents::AgentId,
@@ -94,8 +91,6 @@ fn stored(kind: VaultKind) -> &'static str {
     }
 }
 
-/// The host a site names, however it was written: `https://www.Example.com:443/a` is
-/// `example.com`.
 fn host(site: &str) -> String {
     let site = site.trim().to_ascii_lowercase();
     let site = site
@@ -111,9 +106,7 @@ fn host(site: &str) -> String {
     site.strip_prefix("www.").unwrap_or(site).to_owned()
 }
 
-/// Whether a login saved for `saved` serves `wanted`: the same host or one a subdomain of the
-/// other, so `amazon.com.br` serves `www.amazon.com.br` and `signin.amazon.com.br` but never
-/// `amazon.com`.
+/// Same host or one's subdomain: `amazon.com.br` serves `www.amazon.com.br`, never `amazon.com`.
 pub(crate) fn same_site(saved: &str, wanted: &str) -> bool {
     let (saved, wanted) = (host(saved), host(wanted));
     let under =
@@ -121,7 +114,6 @@ pub(crate) fn same_site(saved: &str, wanted: &str) -> bool {
     !saved.is_empty() && (saved == wanted || under(&wanted, &saved) || under(&saved, &wanted))
 }
 
-/// Why an item cannot be saved, in words the model and the console can show.
 pub fn problem(
     kind: VaultKind,
     name: &str,
@@ -155,37 +147,37 @@ fn invalid(input: &SaveVaultItem) -> bool {
         || (input.agent.is_some() && input.access.is_some())
 }
 
+/// Binds a sealed record to this installation, kind and row, so a copy on another row does not open.
+/// Reads through the caller's transaction: a second connection can fail on an exhausted pool.
+pub(super) async fn sealing_context<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    kind: &str,
+    id: Uuid,
+) -> Result<Vec<u8>, IdentityError> {
+    let installation = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id!"
+        FROM installation
+        "#,
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(format!("cubebot:{installation}:{kind}:{id}:key:1").into_bytes())
+}
+
 impl Connections {
-    pub(super) async fn vault_context(&self, item: Uuid) -> Result<Vec<u8>, IdentityError> {
-        self.sealing_context("vault", item).await
-    }
-
-    /// Binds a sealed record to this installation, its kind and its row, so a record copied
-    /// to another row does not open.
-    pub(super) async fn sealing_context(
+    async fn seal<'e>(
         &self,
-        kind: &str,
-        id: Uuid,
+        db: impl sqlx::PgExecutor<'e>,
+        item: Uuid,
+        secret: &str,
     ) -> Result<Vec<u8>, IdentityError> {
-        let installation = sqlx::query_scalar!(
-            r#"
-            SELECT id AS "id!"
-            FROM installation
-            "#,
-        )
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(format!("cubebot:{installation}:{kind}:{id}:key:1").into_bytes())
-    }
-
-    async fn seal(&self, item: Uuid, secret: &str) -> Result<Vec<u8>, IdentityError> {
-        let context = self.vault_context(item).await?;
+        let context = sealing_context(db, "vault", item).await?;
         self.credentials
             .encrypt(secret.as_bytes(), &context)
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))
     }
 
-    /// The scope of an item: `Some(None)` for an installation item, `None` when there is none.
     #[tracing::instrument(skip_all, fields(item = %item))]
     pub async fn vault_scope(&self, item: Uuid) -> Result<Option<Option<AgentId>>, IdentityError> {
         let agent = sqlx::query_scalar!(
@@ -201,7 +193,6 @@ impl Connections {
         Ok(agent.map(|agent| agent.map(AgentId)))
     }
 
-    /// Installation items with their access; the caller is an administrator.
     #[tracing::instrument(skip_all)]
     pub async fn installation_vault(&self) -> Result<Vec<VaultSummary>, IdentityError> {
         Ok(sqlx::query_as!(
@@ -221,7 +212,6 @@ impl Connections {
         .collect())
     }
 
-    /// Items `agent` may fill: its own and the installation's it has access to.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn agent_vault(&self, agent: AgentId) -> Result<Vec<VaultSummary>, IdentityError> {
         Ok(sqlx::query_as!(
@@ -244,7 +234,6 @@ impl Connections {
         .collect())
     }
 
-    /// The agent's view of [`Self::agent_vault`].
     pub async fn runtime_vault(&self, agent: AgentId) -> Result<Vec<VaultItem>, IdentityError> {
         let items = self.agent_vault(agent).await?;
         Ok(items
@@ -260,7 +249,6 @@ impl Connections {
             .collect())
     }
 
-    /// The caller has authorized `actor` for the item's scope.
     #[tracing::instrument(skip_all, fields(actor = %actor))]
     pub async fn create_vault_item(
         &self,
@@ -274,7 +262,7 @@ impl Connections {
         let mut tx = self.pool.begin().await?;
         validate_access(&mut tx, &access).await?;
         let id = Uuid::new_v4();
-        let ciphertext = self.seal(id, secret).await?;
+        let ciphertext = self.seal(&mut *tx, id, secret).await?;
         let row = sqlx::query_as!(
             Row,
             r#"
@@ -299,7 +287,6 @@ impl Connections {
         Ok(row.into())
     }
 
-    /// The caller has authorized the change for the item's scope.
     #[tracing::instrument(skip_all, fields(item = %item))]
     pub async fn update_vault_item(
         &self,
@@ -314,7 +301,7 @@ impl Connections {
             validate_access(&mut tx, access).await?;
         }
         let ciphertext = match &input.secret {
-            Some(secret) => Some(self.seal(item, secret).await?),
+            Some(secret) => Some(self.seal(&mut *tx, item, secret).await?),
             None => None,
         };
         let row = sqlx::query_as!(
@@ -344,9 +331,7 @@ impl Connections {
         Ok(row.into())
     }
 
-    /// The caller has authorized the deletion for the item's scope.
     #[tracing::instrument(skip_all, fields(item = %item))]
-    /// Returns the deleted item's name.
     pub async fn delete_vault_item(&self, item: Uuid) -> Result<String, IdentityError> {
         let deleted = sqlx::query_scalar!(
             "
@@ -361,10 +346,8 @@ impl Connections {
         deleted.ok_or(IdentityError::NotFound)
     }
 
-    /// The text to type for one field of an item `agent` may fill, and records its use; `None`
-    /// when the agent has no such item. Never log it.
+    /// Never log the returned text.
     #[tracing::instrument(skip_all, fields(agent = %agent.0, item = %item))]
-    /// `person` is who fills it from the console; `None` when the agent fills it itself.
     pub(crate) async fn vault_fill_text(
         &self,
         agent: AgentId,
@@ -400,7 +383,7 @@ impl Connections {
         if field == VaultField::Username {
             return Ok(row.username);
         }
-        let context = self.vault_context(item).await?;
+        let context = sealing_context(&self.pool, "vault", item).await?;
         let secret = self
             .credentials
             .decrypt(&row.ciphertext, &context)
@@ -411,8 +394,6 @@ impl Connections {
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.utf8_error().into())))
     }
 
-    /// Saves the agent's own item, replacing the secret of one with the same name. The inner
-    /// error is the refusal the model reads.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub(crate) async fn vault_put(
         &self,
@@ -446,7 +427,7 @@ impl Connections {
         .fetch_optional(&mut *tx)
         .await?;
         let id = existing.unwrap_or_else(Uuid::new_v4);
-        let ciphertext = self.seal(id, &input.secret).await?;
+        let ciphertext = self.seal(&mut *tx, id, &input.secret).await?;
         sqlx::query!(
             "
             INSERT INTO vault_items (id, agent_id, kind, name, site, username, ciphertext)

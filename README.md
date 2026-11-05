@@ -2,8 +2,6 @@
 
 A Kubernetes-native home for persistent agents, shared rooms, memories, and skills.
 
-**Status:** a minimal text-chat MVP runs locally: sign-in, agent management, an encrypted OpenAI connection and one permanent conversation per agent, served by the native Rust runtime. A terminal is implemented but disabled by default. See [STATUS](docs/STATUS.md) for everything not yet qualified.
-
 ## Install
 
 On Linux or macOS with Docker (Compose 2.23 or later):
@@ -73,7 +71,7 @@ CUBEBOT_BOOTSTRAP_LOGIN=admin CUBEBOT_BOOTSTRAP_PASSWORD=... \
 cargo run --locked -p cubebot-orchestrator
 ```
 
-`just integration` runs the database, HTTP and OIDC tests against a disposable PostgreSQL container. The [operator and API reference](docs/development/reference.md) covers identity, OIDC, agents, lifecycle controller configuration, runtime recovery and container builds.
+`just integration` runs the database, HTTP and OIDC tests against a disposable PostgreSQL container. The [operator and API reference](docs/reference.md) covers identity, OIDC, agents, lifecycle controller configuration, runtime recovery and container builds.
 
 ## Layout
 
@@ -82,23 +80,20 @@ cargo run --locked -p cubebot-orchestrator
 | `apps/orchestrator` | Installation control plane; identity, PostgreSQL, HTTP and shutdown                                                                                      |
 | `apps/agent`        | Agent runtime; runs its own tools inside its sandbox                                                                                                     |
 | `apps/sandbox`      | `cubebot-sandbox`: in-house KVM VMM and dev process backend ([In-house VMM as the agent sandbox](docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)) |
-| `apps/web`          | TanStack Start frontend and future PWA                                                                                                                   |
+| `apps/web`          | TanStack Start console and PWA                                                                                                                           |
 | `modules/protocol`  | Shared communication contracts                                                                                                                           |
-| `modules/providers` | Native OpenAI, Anthropic and OpenRouter adapters                                                                                                         |
+| `modules/providers` | Native model provider adapters                                                                                                                           |
 | `tooling/quality`   | Complexity gate, regression tests, and Python development environment                                                                                    |
-| `tests/system`      | Smoke checks spanning built application processes                                                                                                        |
+| `tests/system`      | System tests spanning built application processes                                                                                                        |
 | `deploy`            | Installation packaging; Dockerfiles live with their apps                                                                                                 |
 | `site`              | Public landing site: standalone static Astro build, no runtime code                                                                                      |
 | `docs/adr`          | Accepted product and architecture decisions                                                                                                              |
-
-See [repository layout](docs/development/repository-layout.md) for the module map and dependency rules.
 
 ## Read next
 
 - [Manifesto](MANIFESTO.md) and [architecture](ARCHITECTURE.md)
 - [Accepted decisions](docs/adr/README.md)
-- [Status](docs/STATUS.md)
-- [Software specification](docs/design/software-specification.md) and [qualification plan](docs/design/qualification.md)
+- [Operator and API reference](docs/reference.md)
 - [Contributing](CONTRIBUTING.md)
 
 Licensed under [Apache-2.0](LICENSE).

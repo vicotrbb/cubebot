@@ -3,6 +3,9 @@ use sqlx::PgPool;
 use std::time::Duration;
 use uuid::Uuid;
 impl Owner {
+    /// Holding the session lock proves the previous holder's session ended, so a claim it left
+    /// behind by crashing or being killed is replaced; were that process still running, its next
+    /// `check` fails. Kubernetes activation still refuses that claim, having no such proof.
     #[tracing::instrument(skip_all)]
     pub async fn database_only(pool: &PgPool) -> Result<Self, Error> {
         tokio::time::timeout(Duration::from_secs(30), Self::claim_development(pool))
@@ -33,14 +36,12 @@ impl Owner {
                 instance_id = EXCLUDED.instance_id,
                 generation = orchestrator_development_owner.generation + 1,
                 released_at = NULL
-            WHERE orchestrator_development_owner.released_at IS NOT NULL
             RETURNING generation AS "generation!"
             "#,
             instance,
         )
-        .fetch_optional(&mut connection)
-        .await?
-        .ok_or(Error::TerminationUnproven)?;
+        .fetch_one(&mut connection)
+        .await?;
         Ok(Self {
             connection: Some(connection),
             instance,

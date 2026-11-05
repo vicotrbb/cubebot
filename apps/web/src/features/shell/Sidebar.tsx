@@ -68,7 +68,6 @@ export const PLATFORM = [
   ['/platform/health', 'Health'],
 ] as const
 
-/** The installation's navigation; on phones it is the Home page (`page`). */
 export function Sidebar({
   page = false,
   onSearch,
@@ -160,7 +159,6 @@ export function Sidebar({
   )
 }
 
-/** Tasks, opening to a tree of the ones running while there are any. */
 function TasksRow() {
   const tasks = useTasks()
   const preferences = usePreferences()
@@ -229,8 +227,7 @@ function TasksRow() {
   )
 }
 
-/** Every agent at once (migrations/0046_broadcasts.sql); administrators only. */
-export function BroadcastRow() {
+function BroadcastRow() {
   const feed = useBroadcasts(true)
   const last = feed.data?.messages.at(-1)?.sequence ?? 0
   const fresh = last > (feed.data?.read_sequence ?? 0)
@@ -364,10 +361,9 @@ function AgentRow({ agent }: { agent: AgentSummary }) {
       activeProps={{ 'aria-current': 'page' }}
       {...agentHover(agent.id)}
     >
-      <Cube avatar={agent.avatar} mood={mood} size={22} />
+      <Cube avatar={agent.avatar} mood={mood} size={18} />
       <span className="row__text">
         <span className="row__label">{agent.name}</span>
-        {/* Phones have no hover, so their Home page says it on the row. */}
         <span className="row__doing">{doingOf(agent)}</span>
       </span>
       {agent.pending_login && <span className="row__flag">Needs you</span>}
@@ -421,7 +417,6 @@ function NewMenu() {
   )
 }
 
-/** Installation settings: every Platform tab, current while one is open. */
 function PlatformGear() {
   const inPlatform = useLocation({
     select: (location) => location.pathname.startsWith('/platform'),

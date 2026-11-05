@@ -30,7 +30,6 @@ impl From<std::io::Error> for CredentialError {
 }
 
 impl Credentials {
-    /// Read exactly 32 raw bytes from operator-provisioned private key storage.
     #[tracing::instrument(skip_all)]
     pub fn from_file(path: &std::path::Path) -> Result<Self, CredentialError> {
         use std::io::Read;
@@ -65,7 +64,6 @@ impl Credentials {
                 },
             )
             .map_err(|_| CredentialError(None))?;
-        // Format 1 is AES-256-GCM, 96-bit nonce followed by ciphertext and tag.
         let mut record = vec![1];
         record.extend_from_slice(&nonce);
         record.extend_from_slice(&encrypted);

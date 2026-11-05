@@ -26,9 +26,6 @@ function summary(call: Record) {
   ].join(' · ')
 }
 
-/** One message for a whole call, like a phone log; opening it shows every turn. `children` is that
- *  transcript, rendered as the conversation renders any turn. Work that outlived the call opens it,
- *  so its Stop and Retry stay in reach. */
 export function CallMessage({
   call,
   children,

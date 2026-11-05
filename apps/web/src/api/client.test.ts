@@ -5,9 +5,11 @@ import createClient from 'openapi-fetch'
 import {
   ApiError,
   agents,
+  history,
   merge,
   messageProblem,
   rejectedInput,
+  resumeAfter,
 } from './client'
 import type { paths } from './schema'
 import { keys, markRead, queryClient } from '../app/queries'
@@ -85,7 +87,6 @@ test('turn snapshots keep sequence order and never undo a finished turn', () => 
   assert.equal(stale[0]?.status, 'complete')
   const late = merge(stale, [{ ...turn('a', 1, 'cancelled') }])
   assert.equal(late[0]?.status, 'cancelled')
-  // A failed child is settled too; an older running snapshot cannot reopen it.
   const failed = merge([turn('c', 3, 'failed')], [turn('c', 3, 'running')])
   assert.equal(failed[0]?.status, 'failed')
 })
@@ -122,4 +123,28 @@ test('marking a room read clears its unread mark and never moves the cursor back
     'PUT /api/rooms/one/read',
     'PUT /api/rooms/two/read',
   ])
+})
+
+test('history starts where it is told and pages on from there', async () => {
+  const asked: number[] = []
+  const full = Array.from({ length: 100 }, (_, index) => ({
+    sequence: 41 + index,
+  }))
+  const items = await history(async (after) => {
+    asked.push(after)
+    return after === 40 ? full : []
+  }, 40)
+  assert.deepEqual(asked, [40, 140])
+  assert.equal(items.length, 100)
+})
+
+test('a reconnect resumes at the oldest item that can change, else after the newest', () => {
+  const items = [{ sequence: 3 }, { sequence: 7 }, { sequence: 9 }]
+  const open =
+    (...sequences: number[]) =>
+    (item: { sequence: number }) =>
+      sequences.includes(item.sequence)
+  assert.equal(resumeAfter(items, open(7, 9)), 6)
+  assert.equal(resumeAfter(items, open()), 9)
+  assert.equal(resumeAfter([], open()), 0)
 })

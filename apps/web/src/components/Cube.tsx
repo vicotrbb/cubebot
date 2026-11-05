@@ -34,7 +34,6 @@ export const DEFAULT_AVATAR: Avatar = {
   accessory: 'none',
 }
 
-/** The mood a block shows for an agent's current state; never stored. */
 export function moodOf(agent: {
   activity: string
   desktop_active?: boolean
@@ -78,10 +77,8 @@ export function Cube({
   avatar?: Avatar | null
   mood?: Mood
   size?: number
-  /** Turns toward the pointer; for the one large block on a page. */
   follow?: boolean
   className?: string
-  /** The agent this cube stands for, whose card opens on hover. */
   agentId?: string | undefined
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -200,7 +197,6 @@ function Eye({
   )
 }
 
-/** One accessory drawn over the front face, in ink and paper so it reads on any paint. */
 function Wear({ accessory }: { accessory: Accessory }) {
   if (accessory === 'none') return null
   return (
@@ -256,7 +252,6 @@ function Wear({ accessory }: { accessory: Accessory }) {
 
 const REST_X = -18
 const REST_Y = 28
-/** The block turns toward the pointer and its eyes glance the same way. */
 function useFollow(ref: React.RefObject<HTMLDivElement | null>, on: boolean) {
   useEffect(() => {
     const anchor = ref.current

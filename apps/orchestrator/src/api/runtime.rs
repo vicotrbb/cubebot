@@ -14,15 +14,14 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Broadcast, Broadcasted, Collaborate, Collaborated, Dream, DreamEnd, FileShare,
-    Memory, MemoryChange, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeActor,
-    RuntimeSession, SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
+    Memory, MemoryChange, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeSession,
+    SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
 };
 use uuid::Uuid;
 
 pub(super) fn router(identity: RuntimeIdentity) -> Router {
     Router::new()
         .route("/api/runtime/bootstrap", post(bootstrap))
-        .route("/api/runtime/identity", get(inspect))
         .route("/api/runtime/channel", get(channel))
         .route("/api/runtime/memories", get(memories))
         .route(
@@ -37,7 +36,6 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/turns/{turn}/broadcasts", post(broadcast))
         .route("/api/runtime/turns/{turn}/routines", post(routine))
         .route("/api/runtime/turns/{turn}/attachments", post(attach))
-        // A package of at most 64 KiB, JSON-escaped.
         .route(
             "/api/runtime/turns/{turn}/skills",
             post(skill_tool).layer(DefaultBodyLimit::max(160 * 1024)),
@@ -47,7 +45,6 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/files", get(files).post(upload_file))
         .route("/api/runtime/files/{file}/content", get(file_content))
         .route("/api/runtime/files/{file}/shares", post(share_file))
-        // A package of at most 64 KiB, JSON-escaped.
         .route(
             "/api/runtime/dreams/{run}/skills",
             post(commit_dream_skill).layer(DefaultBodyLimit::max(160 * 1024)),
@@ -66,17 +63,6 @@ async fn bootstrap(
         .await
         .map_err(Failure::from)?;
     Ok(Json(session.into()))
-}
-async fn inspect(
-    State(identity): State<RuntimeIdentity>,
-    headers: HeaderMap,
-) -> Result<Json<RuntimeActor>, Failure> {
-    let token = bearer(&headers)?;
-    let actor = identity
-        .authenticate(token, RuntimeAccess::Active)
-        .await
-        .map_err(Failure::from)?;
-    Ok(Json(actor.into()))
 }
 /// Authenticates before upgrading; the channel rechecks the credential while it runs.
 async fn channel(
@@ -98,7 +84,6 @@ async fn channel(
 struct MemoryQuery {
     query: String,
 }
-/// Searches only the authenticated agent's own memories.
 async fn memories(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -129,7 +114,6 @@ async fn memories(
             .collect(),
     ))
 }
-/// Admits a dream run; 409 when the agent may not dream now.
 async fn start_dream(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -142,7 +126,6 @@ async fn start_dream(
         .map(Json)
         .ok_or(Failure(StatusCode::CONFLICT))
 }
-/// Commits one change of a running run; 409 once it has ended.
 async fn commit_dream(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -162,7 +145,6 @@ async fn commit_dream(
         StatusCode::CONFLICT
     })
 }
-/// Publishes one skill of a running run; 409 once it has ended.
 async fn commit_dream_skill(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -182,7 +164,6 @@ async fn commit_dream_skill(
         StatusCode::CONFLICT
     })
 }
-/// The authenticated agent's installed revision of a skill; 404 when it is not installed.
 async fn skill(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -196,7 +177,6 @@ async fn skill(
         .map(Json)
         .ok_or(Failure(StatusCode::NOT_FOUND))
 }
-/// The authenticated agent's wallpaper; 404 when it uses the default.
 async fn wallpaper(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -209,8 +189,6 @@ async fn wallpaper(
     let content_type = crate::agents::content_type(&image).unwrap_or("application/octet-stream");
     Ok(([(header::CONTENT_TYPE, content_type)], image).into_response())
 }
-/// Sends work from the agent's running turn to an agent sharing a room with it; a refusal is
-/// 409 with the reason the model reads.
 async fn collaborate(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -227,8 +205,6 @@ async fn collaborate(
         Err(reason) => refused(&reason),
     })
 }
-/// Asks a person to log in for the agent's running turn; a refusal is 409 with the reason the
-/// model reads.
 async fn request_login(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -245,8 +221,6 @@ async fn request_login(
         Err(reason) => refused(&reason),
     })
 }
-/// Sends a message from the agent's running turn to every other agent; a refusal is 409 with
-/// the reason the model reads.
 async fn broadcast(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -263,8 +237,6 @@ async fn broadcast(
         Err(reason) => refused(&reason),
     })
 }
-/// One routine tool call (docs/adr/agents.md#routines) for the agent's running turn; a refusal is 409 with the
-/// reason the model reads.
 async fn routine(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -284,8 +256,6 @@ async fn routine(
         Err(reason) => refused(&reason),
     })
 }
-/// One skill tool call (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming)
-/// for the agent's running turn; a refusal is 409 with the reason the model reads.
 async fn skill_tool(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -306,7 +276,6 @@ async fn skill_tool(
     })
 }
 
-/// Sends one of the agent's files with its running turn's reply.
 async fn attach(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -337,7 +306,6 @@ fn vault_unavailable(error: crate::identity::IdentityError) -> Failure {
     tracing::warn!(?error, "runtime vault request failed");
     Failure(StatusCode::SERVICE_UNAVAILABLE)
 }
-/// The vault items the agent may fill (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills), without their secrets.
 async fn vault(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -346,7 +314,6 @@ async fn vault(
     let items = vault_of(&identity)?.runtime_vault(actor.agent).await;
     Ok(Json(items.map_err(vault_unavailable)?))
 }
-/// Saves an item in the agent's own scope; a refusal is 409 with the reason the model reads.
 async fn vault_put(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -359,8 +326,7 @@ async fn vault_put(
         Err(reason) => refused(reason),
     })
 }
-/// Has the arbiter type a field of an item the agent may fill at its desktop's focus; a refusal
-/// is 409 with the reason the model reads. The text never comes back.
+/// The text never comes back.
 #[tracing::instrument(skip_all, fields(item = %input.item))]
 async fn vault_fill(
     State(identity): State<RuntimeIdentity>,
@@ -396,7 +362,6 @@ struct FilesQuery {
     shared: bool,
 }
 type Storage = Option<axum::Extension<crate::storage::Storage>>;
-/// The agent's own top level or a folder it may read, or with `shared` what is shared with it.
 async fn files(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -413,7 +378,6 @@ async fn files(
         Json(entries).into_response()
     }))
 }
-/// Streams the body into a file, as `POST /api/files` does for people.
 async fn upload_file(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
@@ -440,13 +404,10 @@ async fn file_content(
         Err(error) => Err(error),
     };
     Ok(match opened {
-        Ok((entry, bytes, transfer)) => {
-            super::files::download(entry, bytes, transfer, &headers).await
-        }
+        Ok((entry, bytes)) => super::files::download(entry, bytes, &headers).await,
         Err(error) => super::files::refused(error),
     })
 }
-/// Adds or changes one share of a file the agent manages; a refusal names the reason.
 async fn share_file(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,

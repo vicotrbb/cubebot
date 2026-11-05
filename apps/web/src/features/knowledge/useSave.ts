@@ -12,8 +12,6 @@ export type SaveState =
 
 type Draft = { title?: string; body?: string }
 
-/** Saves a page a moment after the last keystroke, one request at a time, and never over someone
- *  else's newer revision: a refusal waits for the person to choose. */
 export function useSave(page: Page, onTitle: () => void) {
   const client = useQueryClient()
   const id = page.id
@@ -22,13 +20,11 @@ export function useSave(page: Page, onTitle: () => void) {
   const draft = useRef<Draft>({})
   const timer = useRef<number | undefined>(undefined)
   const running = useRef(false)
-  // A refused save holds further ones until the person chooses.
   const conflicted = useRef(false)
 
   const send = useCallback(async () => {
     if (running.current) return
     running.current = true
-    // What arrives while one request is out goes in the next.
     while (Object.keys(draft.current).length) {
       const sending = draft.current
       draft.current = {}
@@ -42,7 +38,6 @@ export function useSave(page: Page, onTitle: () => void) {
         client.setQueryData<Page>(kbKeys.page(id), saved)
         if (sending.title !== undefined) onTitle()
       } catch (error) {
-        // What failed to send stays, under anything typed since.
         draft.current = { ...sending, ...draft.current }
         running.current = false
         conflicted.current = error instanceof StaleSave
@@ -69,7 +64,6 @@ export function useSave(page: Page, onTitle: () => void) {
     [send],
   )
 
-  /** Writes what was typed over the newer revision. */
   const keepMine = useCallback(() => {
     if (state.status !== 'conflict') return
     conflicted.current = false
@@ -77,7 +71,6 @@ export function useSave(page: Page, onTitle: () => void) {
     void send()
   }, [send, state])
 
-  /** Drops what was typed and takes the current page. */
   const discard = useCallback((current: number) => {
     window.clearTimeout(timer.current)
     conflicted.current = false
@@ -86,8 +79,6 @@ export function useSave(page: Page, onTitle: () => void) {
     setState({ status: 'saved' })
   }, [])
 
-  /** Takes a revision someone else saved, when it is one: true if `current` is newer than
-   *  anything this page has read or saved, and nothing is waiting to be saved over it. */
   const follow = useCallback((current: number) => {
     const busy = running.current || Object.keys(draft.current).length > 0
     if (busy || current <= revision.current) return false
@@ -95,10 +86,10 @@ export function useSave(page: Page, onTitle: () => void) {
     return true
   }, [])
 
-  // What is typed survives leaving the page or closing the tab.
   useEffect(() => {
     const flush = () => {
-      if (!Object.keys(draft.current).length) return
+      // A refused save's revision is stale, so this one would only be refused too.
+      if (conflicted.current || !Object.keys(draft.current).length) return
       const body = JSON.stringify({
         expected_revision: revision.current,
         ...draft.current,
@@ -111,13 +102,14 @@ export function useSave(page: Page, onTitle: () => void) {
         headers: { 'content-type': 'application/json' },
         // Past the browser's keepalive limit the tab must stay open for it.
         keepalive: body.length < 60_000,
-      })
+      }).catch(() => undefined) // The page is gone: nobody is left to tell.
     }
     window.addEventListener('pagehide', flush)
     return () => {
       window.removeEventListener('pagehide', flush)
       window.clearTimeout(timer.current)
-      flush()
+      // A save under way sends what is left when it returns, at the revision it gets back.
+      if (!running.current) flush()
     }
   }, [id])
 

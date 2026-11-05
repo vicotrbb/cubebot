@@ -29,7 +29,6 @@ try {
     .getByRole('link', { name: /^Desk\b/ })
     .click()
   await page.getByRole('link', { name: 'Desktop', exact: true }).click()
-  // The desktop route watches as soon as it opens; there is no Watch click.
   await page
     .getByRole('button', { name: 'Stop watching', exact: true })
     .waitFor()
@@ -53,7 +52,6 @@ try {
   await page.getByText('You have control').waitFor()
   await page.getByRole('button', { name: 'Hand back', exact: true }).waitFor()
   const box = await canvas.boundingBox()
-  // The guest's address bar, in its 1280x800 screen.
   await page.mouse.click(
     box.x + (600 / 1280) * box.width,
     box.y + (63 / 800) * box.height,

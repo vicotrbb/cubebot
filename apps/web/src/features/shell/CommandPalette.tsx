@@ -13,7 +13,6 @@ type Hit = {
   icon?: React.ReactNode
 }
 
-/** ⌘K: jump to an agent, room or page by name. */
 export function CommandPalette({
   open,
   onClose,

@@ -17,7 +17,6 @@ use tokio_rustls::{
 };
 use tracing::Instrument;
 
-/// HTTPS on one TCP listener. Handshakes run concurrently, so a stalled client delays no other.
 pub struct Tls {
     incoming: mpsc::Receiver<(TlsStream<TcpStream>, SocketAddr)>,
     address: SocketAddr,
@@ -71,6 +70,10 @@ impl Listener for Tls {
     }
 }
 
+/// Open event streams never end by themselves; waiting for them outlasts the stop deadline, and the
+/// kill that follows leaves the ownership claim unreleased.
+const DRAIN: Duration = Duration::from_secs(5);
+
 pub async fn serve<L>(
     listener: L,
     router: Router,
@@ -114,7 +117,10 @@ where
             if server_done {
                 Ok(())
             } else {
-                server.await.map_err(|_| Error::Conflict)
+                tokio::time::timeout(DRAIN, &mut server)
+                    .await
+                    .unwrap_or(Ok(()))
+                    .map_err(|_| Error::Conflict)
             }
         },
         async {

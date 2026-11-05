@@ -1,8 +1,6 @@
 import { Marked, type Token, type TokenizerExtension } from 'marked'
 
-/** Math between `$$`, `\\[` or `\\(`. A lone `$` stays a dollar sign: prices are far more common. A
- *  block has no `start`: with one, marked cuts a paragraph at any inline `$$` and rejoins it with
- *  line breaks. */
+/** A lone `$` stays a dollar sign: prices are far more common. A block has no `start`: with one, marked cuts a paragraph at any inline `$$` and rejoins it with line breaks. */
 function math(
   name: string,
   level: 'block' | 'inline',
@@ -43,9 +41,11 @@ export function tokensOf(text: string): Token[] {
   return parser.lexer(text)
 }
 
-/** A link's target when it may open: web, mail, or a path in this console. */
+/** Browsers read `\` as `/` and drop tabs and line breaks, so each of those after the first slash can make a path that leaves this origin. */
+const LOCAL_PATH = /^\/(?![\\/\t\n\r])/
+
 export function safeHref(href: string): string | null {
-  if (href.startsWith('#') || /^\/(?!\/)/.test(href)) return href
+  if (href.startsWith('#') || LOCAL_PATH.test(href)) return href
   try {
     const { protocol } = new URL(href)
     return ['http:', 'https:', 'mailto:'].includes(protocol) ? href : null
@@ -54,10 +54,8 @@ export function safeHref(href: string): string | null {
   }
 }
 
-/** An image that may load by itself. An external one is a link instead: an agent reading
- *  untrusted pages could be tricked into writing an image URL that carries data out, and
- *  loading it would send that data with nobody clicking anything. */
+/** An external image stays a link: an agent reading untrusted pages could be tricked into writing an image URL that carries data out, and loading it would send that data with nobody clicking anything. */
 export function inlineImage(href: string): string | null {
-  if (/^\/(?!\/)/.test(href)) return href
+  if (LOCAL_PATH.test(href)) return href
   return /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(href) ? href : null
 }

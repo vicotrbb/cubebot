@@ -1,11 +1,8 @@
-//! What models cost, per token, as each provider publishes it. OpenAI and Anthropic have no price
-//! API, and their Models APIs carry no price, so their adapters read the Markdown their pricing
-//! pages serve; OpenRouter's listing has prices of its own.
+//! OpenAI and Anthropic have no price API, so their adapters read the Markdown their pricing pages serve.
 use crate::Error;
 use reqwest::{Client, Url};
 use std::collections::HashSet;
 
-/// What a model costs per token, under the id the provider itself uses.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Price {
     pub model: String,
@@ -14,25 +11,20 @@ pub struct Price {
     pub output_per_token: f64,
 }
 
-/// Which headers hold which rate in a provider's tables; a table without them is skipped.
 pub(crate) struct Columns {
     pub input: &'static [&'static str],
     pub cached: &'static [&'static str],
     pub output: &'static [&'static str],
 }
 
-/// The page's Markdown. A page that yields no prices is an error, so a redesign keeps the last
-/// good prices instead of erasing them.
+/// A page that yields no prices is an error, so a redesign keeps the last good prices instead of erasing them.
 pub(crate) async fn page(http: &Client, url: Url) -> Result<String, Error> {
     let response = crate::send(http.get(url)).await?;
     let bytes = crate::body(response).await?;
     String::from_utf8(bytes).map_err(|error| Error::InvalidResponse(Some(error.into())))
 }
 
-/// Every price in the tables under `heading`, in every section that has it. A model listed twice
-/// keeps its first row, which is its lowest context tier.
-/// shortcut: long-context rates are ignored, so a very long prompt reads as cheaper than it was;
-/// store the tiers if that skews estimates.
+/// shortcut: a model's first row is its lowest context tier, so a very long prompt reads as cheaper than it was; store the tiers if that skews estimates.
 pub(crate) fn from_markdown(
     markdown: &str,
     heading: &str,
@@ -55,7 +47,6 @@ fn level(line: &str) -> usize {
     line.chars().take_while(|c| *c == '#').count()
 }
 
-/// Runs of table lines under `heading`, up to the next heading at its level or above.
 fn tables<'a>(markdown: &'a str, heading: &str) -> Vec<Vec<&'a str>> {
     let mut inside = false;
     let mut tables: Vec<Vec<&str>> = vec![Vec::new()];
@@ -102,14 +93,12 @@ fn rows(table: &[&str], columns: &Columns, id: fn(&str) -> String) -> Vec<Price>
     table[1..].iter().filter_map(price).collect()
 }
 
-/// `Claude Opus 4.1 ([retired...](...))` or `gpt-5.5 (<272K context length)`, without the note.
 fn name(cell: &str) -> &str {
     let end = cell.find([' ', '<']).filter(|_| !cell.contains(' '));
     let note = cell.find(" (").or(end).unwrap_or(cell.len());
     cell[..note].trim()
 }
 
-/// `$0.25 / MTok<sup>1</sup>` or `$2.00`, per million tokens, as a rate per token.
 fn rate(cell: &str) -> Option<f64> {
     let number = cell.strip_prefix('$')?;
     let end = number

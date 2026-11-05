@@ -8,7 +8,7 @@ related_targets:
 
 # Surface: Cubebot console (apps/web)
 
-Mode: Operate. Scope: the whole console and PWA; design and API contract in docs/design/console.md.
+Mode: Operate. Scope: the whole console and PWA.
 
 Audience and job: the administrator who lives in the installation and the member with scoped grants; both arrive to message an agent or room, read its work, or step in. Proof is the ledger's own evidence rendered where Slack renders attachments and threads. Constraints: permission-shaped everywhere, TanStack Start file routes, one component system, Playwright harness hooks kept, complexity gate, no invented capabilities.
 

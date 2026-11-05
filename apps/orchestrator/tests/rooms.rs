@@ -72,8 +72,6 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         ));
     }
 
-    // Two distinct members, mentioned three times, plus a non-member: two deliveries, also when
-    // the same request is retried concurrently.
     let mentioned = message("@Ada and @bob, then @ada again; cc @Cy");
     let (first, second) = tokio::join!(
         work.post_room_message(&admin, room.id, &mentioned),
@@ -87,7 +85,6 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     let mut expected = vec![ada, bob];
     expected.sort();
     assert_eq!(recipients, expected);
-    // A delivery belongs to the room: it is a turn on the agent's ledger, not in its conversation.
     assert!(work.history(&admin, ada, 0).await.unwrap().is_empty());
     let delivered: String = sqlx::query_scalar(
         "SELECT message FROM chat_turns WHERE conversation_id=$1 AND room_message_id IS NOT NULL",
@@ -115,9 +112,6 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         Err(IdentityError::Conflict)
     ));
 
-    // Unaddressed: no turn until the coordinator decides. Without a provider each attempt fails,
-    // and after three the room's first member by name answers, so the sender always gets a
-    // reply; it is never broadcast.
     let open = work
         .post_room_message(&admin, room.id, &message("Can someone check the numbers?"))
         .await
@@ -126,7 +120,6 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         (open.routing.as_str(), open.deliveries.len()),
         ("routing", 0)
     );
-    // A failed attempt that leaves the message routing reports `false`, so the loop pauses.
     let connections = Connections::new(pool.clone(), Credentials::new([7; 32]));
     let mut left_routing = Vec::new();
     for _ in 0..3 {
@@ -151,7 +144,6 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     assert!(work.history(&admin, ada, 0).await.unwrap().is_empty());
     assert!(work.history(&admin, bob, 0).await.unwrap().is_empty());
 
-    // Room access is its own grant; agent conversation access is not needed to use the room.
     identity
         .create_account(&admin, "member", "member password", false, Uuid::new_v4())
         .await
@@ -189,7 +181,6 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         Err(IdentityError::NotFound)
     ));
 
-    // Membership changes need room.manage; removing a member keeps what it was given.
     let only_ada = RoomMembers { agents: vec![ada] };
     assert!(!work.rooms(&member).await.unwrap()[0].manage);
     assert!(matches!(

@@ -38,7 +38,7 @@ lint: complexity
     shellcheck deploy/install.sh deploy/cubebot
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts apps/web/src/features/chat/Markdown.test.tsx apps/web/src/app/stream.test.ts apps/web/src/features/knowledge/useSave.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
     uv run --project tooling/quality --locked python tests/system/install_widgets.py
@@ -52,13 +52,13 @@ build:
 site-dev:
     bun run --cwd site dev
 
-# Writes the orchestrator's browser API document and the web client's types generated from it.
+# Writes the browser API document and the web client's generated types.
 api:
     cargo run --locked -q -p cubebot-orchestrator --bin cubebot-admin openapi > apps/web/src/api/openapi.json
     bun run --cwd apps/web api
     bun run prettier --log-level warn --write apps/web/src/api/openapi.json apps/web/src/api/schema.d.ts
 
-# Lints the chart and renders each runtime and database mode with deploy/chart/ci/values.yaml.
+# Lints the chart and renders each runtime and database mode.
 chart:
     helm lint --strict deploy/chart --values deploy/chart/ci/values.yaml
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml > /dev/null
@@ -80,8 +80,7 @@ release-check file="digests.json":
         echo "$image:$tag $have"; \
     done
 
-# Installs a build of this checkout with deploy/install.sh from a local registry, signs in, wakes one container agent and uninstalls,
-# then installs again answering every prompt through a pty and uninstalls that; Docker only.
+# Installs this checkout from a local registry, twice (defaults, then pty answers); Docker only.
 install-check:
     uv run --project tooling/quality --locked python tests/system/install_check.py
 
@@ -89,11 +88,11 @@ install-check:
 smoke:
     uv run --project tooling/quality --locked python tests/system/smoke.py
 
-# The embedded speech models on real audio: downloads about 450 MB once, then prints RTF, first audio and memory.
+# The embedded speech models on real audio; downloads about 450 MB once.
 speech-check directory="target/speech-models":
     cargo run --locked --release -p cubebot-orchestrator --example speech-check -- "{{ directory }}"
 
-# A call in real Chromium with a recording in place of the microphone device, the embedded models and a real agent against a scripted model; Docker and Playwright (CUBEBOT_PLAYWRIGHT_MODULE).
+# A call in real Chromium with a recorded voice and a scripted model; Docker and Playwright (CUBEBOT_PLAYWRIGHT_MODULE).
 call-check:
     uv run --project tooling/quality --locked python tests/system/call_check.py
 
@@ -108,14 +107,11 @@ db-up:
 db-down:
     docker compose -f compose.yaml -f compose.dev.yaml --env-file .env down
 
-# The whole stack in Docker at http://localhost:3000 (CUBEBOT_PORT in .env), built from this checkout and run by
-# deploy/cubebot as an installed release runs. Agents run as KVM guests on x86_64 Linux with /dev/kvm, building the
-# guest first, else as containers; CUBEBOT_RUNTIME=kvm|container|off in .env chooses.
+# The whole stack in Docker at http://localhost:3000, built from this checkout; CUBEBOT_RUNTIME=kvm|container|off in .env.
 up:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ ! -f .env ]; then
-        # A random database password; .env stays out of git.
         sed "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env.example > .env
         echo "Created .env with a random POSTGRES_PASSWORD."
     fi
@@ -136,7 +132,7 @@ up:
     CUBEBOT_HOME="$PWD" CUBEBOT_RUNTIME="$CUBEBOT_RUNTIME" CUBEBOT_DEV_CA="$PWD/.cubebot/dev-ca" deploy/cubebot up
     echo "First run: create the administrator with \`just admin\`."
 
-# Stops `just up` and the agent sandboxes it started; data stays in Docker volumes (`docker compose down -v` deletes it).
+# Stops `just up` and its sandboxes; data stays in Docker volumes (`docker compose down -v` deletes it).
 down:
     CUBEBOT_HOME="$PWD" deploy/cubebot down
 
@@ -144,11 +140,9 @@ down:
 admin login="admin":
     CUBEBOT_HOME="$PWD" deploy/cubebot admin "{{ login }}"
 
-# Reuses a running `just db-up` server, else a disposable one; never an application DB.
+# Always its own disposable PostgreSQL container, never `just db-up`'s or an installation's.
 integration:
     uv run --project tooling/quality --locked python tests/system/integration.py
-
-# cluster-* recipes run nightly in CI (.github/workflows/nightly.yml), not per push.
 
 # Owns a disposable local cluster and PostgreSQL; never uses the default kubeconfig.
 cluster-admission:
@@ -162,11 +156,11 @@ cluster-startup:
 cluster-chat:
     uv run --project tooling/quality --locked python tests/system/cluster_chat.py
 
-# docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary sandbox scenarios on the kvm backend; x86_64 Linux with /dev/kvm, as cluster-chat.
+# Sandbox scenarios on the kvm backend; x86_64 Linux with /dev/kvm, as cluster-chat.
 cluster-sandbox:
     uv run --project tooling/quality --locked python tests/system/cluster_sandbox.py
 
-# A self-signed control CA and a certificate for `names` (default: the docker0 address); kept once made, remove the directory to reissue.
+# A self-signed control CA and a certificate for `names` (default: the docker0 address).
 dev-ca directory=".cubebot/dev-ca" names="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -190,51 +184,50 @@ docker-orchestrator: dev-ca
     CUBEBOT_CREDENTIAL_KEY_FILE="$state/credential.key" CUBEBOT_DOCKER_CONFIG="$state/docker.json" \
         cargo run --locked -p cubebot-orchestrator
 
-# Against `just docker-orchestrator`: bootstraps the administrator and OpenAI provider once, then creates and wakes an agent.
+# Against `just docker-orchestrator`: bootstraps once, then creates and wakes an agent.
 docker-agent name:
     uv run --project tooling/quality --locked python tests/system/docker_sandbox.py agent "{{ name }}"
 
-# One agent in the container runtime against a scripted provider: a bash call, and the desktop through the host channel; Docker only.
+# One agent in the container runtime against a scripted provider; Docker only.
 container-check:
     uv run --project tooling/quality --locked python tests/system/container_check.py
 
-# Boots one agent through Docker and runs one bash tool call; OPENAI_API_KEY_FILE, and for CUBEBOT_SANDBOX_RUNTIME=kvm (the default with /dev/kvm) x86_64 Linux.
+# One bash tool call through Docker; OPENAI_API_KEY_FILE; CUBEBOT_SANDBOX_RUNTIME=kvm|container (default kvm with /dev/kvm).
 docker-sandbox:
     uv run --project tooling/quality --locked python tests/system/docker_sandbox.py
 
-# The docker-* suites take CUBEBOT_SANDBOX_RUNTIME=kvm|container (default: kvm where /dev/kvm exists).
-# Three real agents dream, yield and fail through Docker (docs/adr/memory.md#idle-only-dreaming-with-visible-status-and-results); same needs as docker-sandbox.
+# Three real agents dream, yield and fail through Docker; same needs as docker-sandbox.
 docker-dreams:
     uv run --project tooling/quality --locked python tests/system/docker_dreams.py
 
-# The console desktop view on real agents through Docker (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device); docker-sandbox's needs plus Node with Playwright.
+# The console desktop view on real agents through Docker; docker-sandbox's needs plus Node with Playwright.
 docker-desktop:
     uv run --project tooling/quality --locked python tests/system/docker_desktop.py
 
-# The agent's browser tools on real agents through Docker (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction, docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions and docs/adr/sandbox.md#desktop-as-a-vmm-device); same needs as docker-sandbox.
+# The agent's browser tools on real agents through Docker; same needs as docker-sandbox.
 docker-browser:
     uv run --project tooling/quality --locked python tests/system/docker_browser.py
 
-# Login handoff on a real agent through Docker (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device); docker-desktop's needs.
+# Login handoff on a real agent through Docker; docker-desktop's needs.
 docker-login:
     uv run --project tooling/quality --locked python tests/system/docker_login.py
 
-# The vault on two real agents through Docker, from every scope and person's side (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills); docker-desktop's needs.
+# The vault on two real agents through Docker; docker-desktop's needs.
 docker-vault:
     uv run --project tooling/quality --locked python tests/system/docker_vault.py
 
-# Three real agents use rooms, delegation, messaging, steering, cancellation and lanes through Docker (docs/adr/agents.md#agent-execution-lanes, docs/adr/rooms.md#direct-mentions-and-a-tool-free-room-coordinator, docs/adr/rooms.md#independent-assignments-for-multiple-room-mentions, docs/adr/rooms.md#explicit-agent-messaging-and-delegation, docs/adr/rooms.md#queued-messages-with-explicit-steering, docs/adr/rooms.md#cancel-selected-work-and-its-descendants and docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt); same needs as docker-sandbox.
+# Rooms, delegation, messaging, steering, cancellation and lanes on three real agents through Docker; same needs as docker-sandbox.
 docker-rooms:
     uv run --project tooling/quality --locked python tests/system/docker_rooms.py
 
-# Shared files on two real agents through Docker, from every scope and person's side (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api); docker-desktop's needs.
+# Shared files on two real agents through Docker; docker-desktop's needs.
 docker-files:
     uv run --project tooling/quality --locked python tests/system/docker_files.py
 
-# Routines on two real agents through Docker, from every scope and person's side (docs/adr/agents.md#routines); docker-desktop's needs.
+# Routines on two real agents through Docker; docker-desktop's needs.
 docker-routines:
     uv run --project tooling/quality --locked python tests/system/docker_routines.py
 
-# Three real agents publish, pin, load, run and dream skills through Docker (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming, docs/adr/memory.md#shared-installation-skill-library-by-default and docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user); same needs as docker-sandbox.
+# Three real agents publish, pin, load, run and dream skills through Docker; same needs as docker-sandbox.
 docker-skills:
     uv run --project tooling/quality --locked python tests/system/docker_skills.py

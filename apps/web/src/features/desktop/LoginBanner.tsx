@@ -6,7 +6,6 @@ import { Alert } from '../../components/primitives'
 import { ItemForm } from '../vault/ItemForm'
 import './desktop.css'
 
-/** A pending login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover): the agent waits for a person to log in for it. */
 export function LoginBanner({
   agent,
   holding = false,
@@ -16,7 +15,6 @@ export function LoginBanner({
 }: {
   agent: AgentSummary
   holding?: boolean
-  /** False where control cannot be taken here, such as on a phone's desktop page. */
   canTake?: boolean
   takeLabel?: string
   onTake: () => void
@@ -26,13 +24,10 @@ export function LoginBanner({
     const { data, response } = await api.GET('/api/agents/{id}/login', {
       params: { path: { id: agent.id } },
     })
-    // Without browser.view the request is refused and no banner shows.
     if (response.ok) setHandoff(data ?? null)
   }, [agent.id])
   const pending = agent.pending_login
   useEffect(() => {
-    // `pending_login` on the installation stream says when to ask; the site and reason
-    // come from this route, polled every 3 s while the login is pending.
     if (!pending) return
     const poll = () => void refresh().catch(() => undefined)
     poll()

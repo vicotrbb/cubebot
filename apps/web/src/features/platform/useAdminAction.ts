@@ -2,7 +2,6 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { failure } from '../../api/client'
 
-/** Runs one administrator command, refreshes the named queries and keeps its outcome. */
 export function useAdminAction(invalidate: string[]) {
   const client = useQueryClient()
   const [error, setError] = useState('')

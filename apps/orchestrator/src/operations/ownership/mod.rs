@@ -1,4 +1,4 @@
-//! Single active process. Losing PostgreSQL connectivity never permits blind takeover.
+//! Single active process. On Kubernetes, losing PostgreSQL connectivity never permits blind takeover.
 mod development;
 mod proof;
 use crate::agents::kubernetes::{Error, Kubernetes};
@@ -171,7 +171,6 @@ async fn prove_previous(
     proof::replacement(&old, previous).map(Some)
 }
 
-/// The durable claim to replace, after refusing an active development owner or another namespace.
 async fn previous_owner(
     connection: &mut PgConnection,
     identity: &PodIdentity,

@@ -1,7 +1,4 @@
-//! The computer tool (docs/adr/sandbox.md#desktop-as-a-vmm-device): the provider's own computer-use tool, served by the sandbox's
-//! screen arbiter over its Unix socket. Anthropic toolset calls arrive as
-//! `{"action": member, ...input}` and OpenAI calls as `{"actions": [...]}`; each becomes arbiter
-//! requests tagged with the call's id. An OpenAI call always answers with a screenshot.
+//! Anthropic toolset calls arrive as `{"action": member, ...input}` and OpenAI calls as `{"actions": [...]}`.
 use super::{Running, Sandbox, Tool};
 use cubebot_protocol::{
     desktop::{Action, AgentRequest, Button, Response},
@@ -19,20 +16,15 @@ use std::{
 };
 use uuid::Uuid;
 
-/// Longest `wait` a call may ask for.
 const LONGEST_WAIT: Duration = Duration::from_secs(30);
 /// Lets the guest repaint before an OpenAI call's closing screenshot.
 const SETTLE: Duration = Duration::from_millis(500);
-/// Pixels per wheel click, as Chromium scrolls on Linux.
 const WHEEL_PIXELS: i64 = 100;
-/// Most actions one OpenAI call may batch; each may wait a second.
 const ACTIONS: usize = 50;
-/// How often a wait checks whether its call was cancelled.
 const POLL: Duration = Duration::from_millis(100);
 
 pub(super) struct Computer {
     definition: cubebot_providers::Tool,
-    /// One stream to the arbiter, opened on first use and reopened after a failure.
     desktop: Arc<Mutex<Option<BufReader<UnixStream>>>>,
 }
 
@@ -75,7 +67,6 @@ impl Tool for Computer {
     }
 }
 
-/// Tells the blocking steps their call was dropped, as cancellation does, so they stop.
 struct Stop(Arc<AtomicBool>);
 impl Drop for Stop {
     fn drop(&mut self) {
@@ -92,7 +83,6 @@ enum Step {
 #[derive(Debug, PartialEq)]
 struct Plan {
     steps: Vec<Step>,
-    /// The call answers with the screen after its steps.
     screenshot: bool,
 }
 
@@ -131,7 +121,6 @@ const CLICKS: [(&str, Button, u8); 5] = [
     ("triple_click", Button::Left, 3),
 ];
 
-/// One Anthropic computer toolset member.
 fn anthropic(action: &str, input: &Value) -> Result<Vec<Step>, &'static str> {
     let at = point(&input["coordinate"]);
     let hold = keys(&input["text"], '+');
@@ -193,7 +182,6 @@ fn repeated(input: &Value) -> Result<Vec<Step>, &'static str> {
         .collect())
 }
 
-/// One action of an OpenAI computer call.
 fn openai(action: &Value) -> Result<Step, &'static str> {
     let at = point_of(action);
     let hold: Vec<String> = action["keys"]
@@ -258,7 +246,6 @@ fn button(value: &Value) -> Result<Button, &'static str> {
     }
 }
 
-/// Pixels to wheel clicks, at least one for any movement.
 fn wheel(pixels: &Value) -> i32 {
     let pixels = pixels.as_i64().unwrap_or(0);
     let clicks = (pixels / WHEEL_PIXELS).clamp(-50, 50) as i32;
@@ -291,7 +278,6 @@ fn seconds(value: &Value) -> Duration {
     Duration::from_secs_f64(value.as_f64().unwrap_or(1.0).max(0.0)).min(LONGEST_WAIT)
 }
 
-/// Runs the steps until the arbiter refuses one, then takes the screenshot the call answers with.
 /// A dropped call stops between steps; nobody reads its outcome.
 fn run(
     desktop: &Mutex<Option<BufReader<UnixStream>>>,
@@ -363,7 +349,6 @@ fn unreachable_desktop(error: &io::Error) -> Outcome {
     }
 }
 
-/// One request and its response line; a broken stream is dropped so the next call reconnects.
 fn request(
     desktop: &mut Option<BufReader<UnixStream>>,
     call: Uuid,
@@ -381,7 +366,6 @@ fn request(
     exchanged
 }
 
-/// One request on a stream of its own.
 pub(super) fn ask(call: Uuid, action: Action) -> io::Result<Response> {
     exchange(
         &mut BufReader::new(connect()?),
@@ -463,7 +447,6 @@ mod tests {
                 .await
                 .is_err()
         );
-        // The blocking wait holds the desktop until it notices the call is gone.
         tokio::time::sleep(Duration::from_millis(400)).await;
         assert!(computer.desktop.try_lock().is_ok());
         let batch = json!({"actions": vec![json!({"type":"wait"}); ACTIONS + 1]});

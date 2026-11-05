@@ -8,7 +8,6 @@ pub(super) async fn decode<T: DeserializeOwned>(
     serde_json::from_slice(&bytes(response, limit).await?).map_err(Error::protocol)
 }
 
-/// A successful response's raw body of at most `limit` bytes.
 pub(super) async fn bytes(response: reqwest::Response, limit: usize) -> Result<Vec<u8>, Error> {
     if !response.status().is_success() {
         return Err(match response.status().as_u16() {
@@ -19,7 +18,6 @@ pub(super) async fn bytes(response: reqwest::Response, limit: usize) -> Result<V
     read(response, limit).await
 }
 
-/// A refusal's reason from its small JSON body, or `fallback` when the body has none.
 pub(super) async fn refusal(response: reqwest::Response, fallback: String) -> String {
     #[derive(serde::Deserialize)]
     struct Refused {

@@ -30,7 +30,6 @@ export const Route = createFileRoute('/_app/agents/$agentId')({
   component: AgentScreen,
 })
 
-/** The panel tabs, each a child route; the viewer sees the ones their grants allow. */
 const TABS: { to: string; label: string; needs: Capability }[] = [
   { to: '/agents/$agentId/about', label: 'About', needs: 'agent_manage' },
   { to: '/agents/$agentId/usage', label: 'Usage', needs: 'conversation_read' },
@@ -88,7 +87,6 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
       value={{
         agent,
         session: me,
-        // A thread can open a turn held inside a Call message.
         turns: conversation.turns.flatMap((turn) => turn.call?.turns ?? [turn]),
         streaming: conversation.streaming,
         addTurn: conversation.add,
@@ -234,7 +232,6 @@ function AgentHeader({
   )
 }
 
-/** The panel's tabs. The row scrolls in a narrow panel, so the open tab is kept in view. */
 function PanelTabs({
   agentId,
   tabs,

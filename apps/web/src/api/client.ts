@@ -37,7 +37,6 @@ export const api = createClient<paths>({
   credentials: 'same-origin',
   cache: 'no-store',
 })
-/** Resolves to the response body, or throws ApiError for a failure status. */
 export async function ok<T>(
   result: Promise<{ data?: T; response: Response }>,
 ): Promise<T> {
@@ -63,16 +62,23 @@ export async function agents(client: Client<paths> = api) {
     if (page.length < 100) return items
   }
 }
-/** Loads a whole sequence-ordered history, one page of up to 100 after another. */
 export async function history<T extends { sequence: number }>(
   page: (after: number) => Promise<T[]>,
+  start = 0,
 ) {
   const items: T[] = []
   for (;;) {
-    const next = await page(items.at(-1)?.sequence ?? 0)
+    const next = await page(items.at(-1)?.sequence ?? start)
     items.push(...next)
     if (next.length < 100) return items
   }
+}
+export function resumeAfter<T extends { sequence: number }>(
+  items: T[],
+  changing: (item: T) => boolean,
+) {
+  const oldest = items.find(changing)
+  return oldest ? oldest.sequence - 1 : (items.at(-1)?.sequence ?? 0)
 }
 export function messageProblem(text: string): string | null {
   if (!text.trim()) return 'Write a message before sending.'
@@ -86,11 +92,13 @@ export function rejectedInput(error: unknown): boolean {
     error instanceof ApiError && (error.status === 400 || error.status === 413)
   )
 }
-const final = (turn: Turn) =>
+const final = (turn: { status: string }) =>
   turn.status === 'complete' ||
   turn.status === 'failed' ||
   turn.status === 'cancelled'
-/** Applies turn snapshots, keeping history in sequence order. */
+/** A finished turn still shows the work it sent off, which can outlive it. */
+export const turnChanging = (turn: Turn) =>
+  !final(turn) || turn.children.some((child) => !final(child))
 export function merge(turns: Turn[], incoming: Turn[]) {
   const byId = new Map(turns.map((turn) => [turn.id, turn]))
   for (const turn of incoming) {

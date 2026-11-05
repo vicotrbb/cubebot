@@ -1,15 +1,6 @@
-"""Skills (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming,
-docs/adr/memory.md#shared-installation-skill-library-by-default and
-docs/adr/memory.md#shared-skill-revisions-by-any-agent-or-user) on real agents through
-the Docker sandbox backend.
+"""Skills on real agents through the Docker sandbox backend.
 
-Same host needs as docker_sandbox.py. An administrator and a member share one library.
-The Operator agent loads an installed skill and runs its script as the tool user, stays
-pinned to its revision while a newer one is published, moves only when updated, and
-loses the skill when uninstalled. The Bystander agent never sees it. The Learner agent
-is taught a recurring procedure, dreams it into a skill installed only for itself, and
-keeps that revision while a member edits it. Assertions read the ledger and tool
-events, never only the model's words.
+Same host needs as docker_sandbox.py.
 """
 
 import json
@@ -73,7 +64,6 @@ def chat(api, identity, message):
 
 
 def tools(postgres, turn):
-    """The turn's tool calls in order, each with its name, input and outcome text."""
     query = (
         f"SELECT payload::text FROM turn_events WHERE turn_id='{turn}' "
         "AND payload->>'kind' IN ('tool_call','tool_result') ORDER BY sequence"
@@ -115,7 +105,6 @@ def ask_probe(api, postgres, identity, label):
 
 
 def ran(calls, revision):
-    """Whether a bash call printed the code of `revision` as a non-root tool user."""
     code = f"PROBE-{MARKER}-r{revision}"
     for call in calls:
         outcome = call.get("outcome", "")
@@ -143,7 +132,6 @@ def member(api, base, ca):
 
 
 def library(admin, people, operator):
-    """Human publication, revision conflicts, validation and per-agent authority."""
     other, account = people
     published = other("/api/skills", {"files": probe(1)}, expected=201)
     skill = published["id"]
@@ -176,7 +164,6 @@ def library(admin, people, operator):
 
 
 def operator_uses(admin, other, postgres, operator, skill):
-    """Runs the installed revision, pinned until updated and gone when removed."""
     calls, row = ask_probe(admin, postgres, operator, "operator r1")
     assert [call["outcome"] for call in loads(calls)], "load_skill was not called"
     assert ran(calls, 1), "the skill's script did not run from revision 1"
@@ -226,7 +213,6 @@ PROCEDURE = (
 
 
 def dream_skill(admin, watch_runs, postgres, learner, tries=3):
-    """Teaches a recurring procedure until a dream writes it down as a skill."""
     for attempt in range(tries):
         turn, row = chat(admin, learner, PROCEDURE)
         show(f"learner lesson {attempt}", turn, row, tools(postgres, turn))

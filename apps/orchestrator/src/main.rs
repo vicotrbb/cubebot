@@ -28,7 +28,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     run(listening, address).await
 }
 
-/// A startup failure that reads, and prints from `main`, as its message alone.
 struct Failure {
     message: &'static str,
     source: Box<dyn Error + Send + Sync>,
@@ -68,7 +67,6 @@ enum Listening {
     Tls(Tls),
 }
 
-/// Reads the PEM chain and key before ownership is taken, so a bad file fails first.
 fn listening(listener: TcpListener) -> Result<Listening, Box<dyn Error + Send + Sync>> {
     match (
         std::env::var_os("CUBEBOT_TLS_CERT_FILE"),
@@ -167,7 +165,6 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
     }
 }
 
-/// What must hold in the database before anything is served.
 async fn startup_records(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send + Sync>> {
     credential_key(pool).await?;
     cubebot_orchestrator::knowledge::Knowledge::seed_shipped_skills(pool)
@@ -199,7 +196,6 @@ async fn credential_key(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send 
     Ok(())
 }
 
-/// Reconciles the shared-file volume before anything is served.
 async fn shared_files(
     pool: &sqlx::PgPool,
 ) -> Result<Option<cubebot_orchestrator::storage::Storage>, Box<dyn Error + Send + Sync>> {
@@ -212,7 +208,6 @@ async fn shared_files(
     })
 }
 
-/// Without a volume, files routes answer that storage is unavailable.
 fn with_storage(
     router: axum::Router,
     storage: Option<cubebot_orchestrator::storage::Storage>,
@@ -244,7 +239,7 @@ async fn docker_or_database_only(
         Some(config) => Controller::docker(pool.clone(), config)
             .await
             .map_err(failure(
-                "development ownership unavailable for Docker sandboxes",
+                "orchestrator ownership unavailable for Docker sandboxes",
             )),
         None => Controller::database_only(pool.clone())
             .await

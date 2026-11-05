@@ -1,17 +1,8 @@
-"""Shared files
-(docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and
-docs/adr/memory.md#native-cubebot-storage-api) on real agents through Docker, from every
-side.
+"""Shared files on real agents through Docker, from every side.
 
-Same host needs as docker_sandbox.py, plus Node with Playwright for the console. Writer
-and Reader are OpenAI agents with bash workspaces. People with no grant, workspace.read,
-workspace.write, a team membership and administration each read, change and share only
-what their access allows, through the HTTP API and the console in Chromium. Every claim
-is read from evidence the model cannot write: the ledger's tool outcomes, sha256 of
-bytes on both ends, rows in PostgreSQL and files on the storage volume. The orchestrator
-is killed and restarted over planted debris, and interrupted, concurrent and over-quota
-uploads leave nothing behind. CUBEBOT_FILES_EVIDENCE keeps the evidence directory;
-CUBEBOT_FILES_HOLD keeps a failed run for 15 minutes.
+Same host needs as docker_sandbox.py, plus Node with Playwright for the console.
+CUBEBOT_FILES_EVIDENCE keeps the evidence directory; CUBEBOT_FILES_HOLD keeps a failed
+run for 15 minutes.
 """
 
 import hashlib
@@ -69,8 +60,6 @@ def digest(data):
 
 
 class Raw:
-    """Uploads and downloads with bodies urllib cannot send or a test must inspect."""
-
     def __init__(self, world, who):
         self.world, self.who = world, who
 
@@ -111,7 +100,6 @@ class Raw:
         )
 
     def started(self, name, length):
-        """An upload that promised `length` bytes and sent only some of them."""
         connection = self.connection()
         query = urllib.parse.urlencode({"name": name, "request_id": str(uuid.uuid4())})
         connection.putrequest("POST", f"/api/files?{query}")
@@ -136,17 +124,14 @@ def rows(world, query):
 
 
 def entry_of(outcome):
-    """The FileEntry a files_put printed."""
     return json.loads(outcome["output"].split("Uploaded: ", 1)[1])
 
 
 def shell(row):
-    """The turn's bash calls, which the transcript shows as their bare command."""
     return [c for c in row["terminal"] if not re.match(r"files_\w+ \{", c["command"])]
 
 
 def shell_sha(row, path):
-    """The sha256 that the bash tool itself printed for `path`."""
     for call in shell(row):
         found = re.search(
             rf"([0-9a-f]{{64}})\s+\S*{re.escape(path)}", call["outcome"]["output"]
@@ -163,7 +148,6 @@ def refused(call, reason):
 
 
 def writer_puts(world):
-    """Writer uploads a workspace file it made; the bytes, owner and request id hold."""
     admin, writer = world["people"]["admin"], world["writer"]
     name = f"report-{MARKER}.bin"
     row = chat(
@@ -200,7 +184,6 @@ def writer_puts(world):
 
 
 def people_scopes(world):
-    """Who may read, change and share an agent's file, through grants alone."""
     people, report = world["people"], world["report"]["id"]
     for name in ("reader", "editor", "admin"):
         status, data, _ = Raw(world, people[name]).content(report)
@@ -235,7 +218,6 @@ def people_scopes(world):
 
 
 def agents_scoped(world):
-    """Reader cannot reach Writer's file until Writer shares it."""
     admin, writer, reader = world["people"]["admin"], world["writer"], world["reader"]
     report = world["report"]["id"]
     row = chat(
@@ -292,7 +274,6 @@ def agents_scoped(world):
 
 
 def team_share(world):
-    """A share to a team follows the team's membership."""
     people, writer, report = world["people"], world["writer"], world["report"]["id"]
     admin, teammate = people["admin"], people["teammate"]
     team = admin.api("/api/identity/teams", command(name=f"Reviewers {MARKER}"), 201)
@@ -335,7 +316,6 @@ def team_share(world):
 
 
 def folder_share(world):
-    """A write share on a person's folder lets Reader upload into it, read-only not."""
     admin, reader = world["people"]["admin"], world["reader"]
     folder = admin.api(
         "/api/files/folders", {"parent": None, "name": f"Inbox {MARKER}"}, 201
@@ -395,7 +375,6 @@ def folder_share(world):
 
 
 def transfers(world):
-    """Ranges, idempotent retries, interrupted and concurrent uploads, and the quota."""
     admin = world["people"]["admin"]
     raw = Raw(world, admin)
     data = secrets.token_bytes(300_000)
@@ -448,7 +427,6 @@ def transfers(world):
 
 
 def agent_quota(world):
-    """Writer's over-quota upload is a refusal with the reason, and stores nothing."""
     admin, writer = world["people"]["admin"], world["writer"]
     before = blobs(world)
     row = chat(
@@ -474,14 +452,9 @@ def agent_quota(world):
 
 
 def restart(world):
-    """A killed orchestrator restarts over debris, keeps its files and serves agents."""
     admin = world["people"]["admin"]
     world["process"].kill()
     world["process"].wait(timeout=30)
-    # Ownership after a kill waits for proof of termination
-    # (docs/adr/agents.md#one-active-orchestrator-with-automatic-restart); the test has
-    # it.
-    rows(world, "UPDATE orchestrator_development_owner SET released_at=now()")
     orphan = uuid.uuid4()
     (world["storage"] / "blobs" / str(orphan)).write_bytes(b"linked, never committed")
     (world["storage"] / "staging" / str(uuid.uuid4())).write_bytes(b"half an upload")
@@ -545,7 +518,6 @@ def console(world):
 
 
 def deleted(world):
-    """Deleting a folder takes its files, their blobs and their shares."""
     admin, reader = world["people"]["admin"], world["reader"]
     inbox = world["inbox"]["id"]
     inside = [e["id"] for e in admin.api(f"/api/files?parent={inbox}")]

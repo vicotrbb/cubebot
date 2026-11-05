@@ -1,5 +1,3 @@
-//! Routine tools (docs/adr/agents.md#routines). The orchestrator validates each call and answers with the text the
-//! model reads; the call's id makes a resent create or run make nothing new.
 use super::Collaboration;
 use crate::tools::Running;
 use cubebot_protocol::{runtime::RoutineCall, terminal::Outcome};
@@ -56,7 +54,6 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
 }
 
 impl Collaboration {
-    /// `None` when `name` is not a routine tool.
     pub(super) fn routine(
         &self,
         name: &str,
@@ -66,7 +63,6 @@ impl Collaboration {
         if !NAMES.contains(&name) {
             return None;
         }
-        // `routine_create` takes the routine alone, the others its id beside it.
         let input = match name {
             "routine_create" => input.get("routine").cloned().unwrap_or(Value::Null),
             _ => input.clone(),
@@ -79,7 +75,6 @@ impl Collaboration {
         Some(Ok(self.forward(call)))
     }
 
-    /// Sends one tool call to the orchestrator, whose answer is what the model reads.
     pub(super) fn forward(&self, call: RoutineCall) -> Running<'_> {
         Box::pin(async move {
             let sent = match &self.client {

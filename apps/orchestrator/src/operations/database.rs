@@ -2,9 +2,8 @@
 
 use std::time::Duration;
 
-use sqlx::{PgConnection, PgPool, postgres::PgPoolOptions};
+use sqlx::{PgPool, postgres::PgPoolOptions};
 
-// The URL carries the database password, so the span records nothing.
 #[tracing::instrument(skip_all)]
 pub async fn connect(url: &str) -> Result<PgPool, sqlx::Error> {
     let pool = PgPoolOptions::new()
@@ -18,16 +17,14 @@ pub async fn connect(url: &str) -> Result<PgPool, sqlx::Error> {
 
 #[tracing::instrument(skip_all)]
 pub async fn migrate(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
-    // A cancelled migration must never return a session-level advisory lock to the pool.
+    // These settings and the session-level advisory lock must never reach the pool.
     let mut connection = pool.acquire().await?.detach();
-    tokio::time::timeout(Duration::from_secs(10), run_migrations(&mut connection))
-        .await
-        .map_err(|_| sqlx::migrate::MigrateError::Execute(sqlx::Error::PoolTimedOut))?
-}
-
-async fn run_migrations(connection: &mut PgConnection) -> Result<(), sqlx::migrate::MigrateError> {
-    sqlx::query!("SET statement_timeout = '5s'")
-        .execute(&mut *connection)
+    // A migration may run as long as it needs, but a blocked one fails rather than queueing traffic.
+    sqlx::query!("SET statement_timeout = 0")
+        .execute(&mut connection)
         .await?;
-    sqlx::migrate!("./migrations").run(connection).await
+    sqlx::query!("SET lock_timeout = '5s'")
+        .execute(&mut connection)
+        .await?;
+    sqlx::migrate!("./migrations").run(&mut connection).await
 }

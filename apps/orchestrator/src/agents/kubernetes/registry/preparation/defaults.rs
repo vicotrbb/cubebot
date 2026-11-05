@@ -105,7 +105,7 @@ fn pod_defaults(expected: &mut PodSpec, actual: &PodSpec) {
         &actual.enable_service_links,
         true,
     );
-    // RuntimeClass admission copies the class's overhead into the pod (docs/adr/sandbox.md#standard-containers-with-optional-sandbox-runtimes).
+    // RuntimeClass admission copies the class's overhead into the pod.
     if expected.runtime_class_name.is_some() && expected.overhead.is_none() {
         expected.overhead = actual.overhead.clone();
     }

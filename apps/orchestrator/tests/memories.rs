@@ -98,7 +98,6 @@ async fn human_edits_win_over_stale_agent_writes_and_history_is_kept() {
         "no duplicate"
     );
 
-    // A person corrects the memory while the agent still holds revision 2.
     knowledge
         .revise(
             &admin,
@@ -139,7 +138,6 @@ async fn human_edits_win_over_stale_agent_writes_and_history_is_kept() {
         Err(IdentityError::Conflict)
     ));
 
-    // The agent cannot bring back verbatim what a person replaced, as a new memory or a revision.
     let rejected = "The deadline is November 22".to_owned();
     let replay = [
         MemoryChange::Remember {
@@ -159,7 +157,6 @@ async fn human_edits_win_over_stale_agent_writes_and_history_is_kept() {
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0].revision, 3);
 
-    // Another agent can neither find nor change this agent's memory.
     assert!(
         knowledge
             .search_for_agent(other, "deadline")
@@ -181,7 +178,6 @@ async fn human_edits_win_over_stale_agent_writes_and_history_is_kept() {
         1
     );
 
-    // Any query word matches; stop words and tsquery syntax are only text.
     assert_eq!(
         knowledge
             .search_for_agent(writer, "postgresql launch")

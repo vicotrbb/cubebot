@@ -1,4 +1,3 @@
-//! One agent sandbox of the `kvm` runtime (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox): a KVM guest.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod kvm;
 use std::{
@@ -7,12 +6,9 @@ use std::{
     process::ExitCode,
 };
 
-/// The host channel's socket; `CUBEBOT_GUEST_DESKTOP_SOCKET` moves it, such as for several
-/// sandboxes sharing one host's /tmp.
 const DESKTOP_SOCKET: &str = "/tmp/cubebot-desktop.sock";
 
 fn main() -> ExitCode {
-    // Silent unless RUST_LOG asks for spans' events; the eprintln! lines stay the output.
     let _ = tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -37,7 +33,6 @@ fn main() -> ExitCode {
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn run() -> io::Result<u8> {
-    // A container sandbox's journal sits beside where this one keeps its disk.
     let workspace = std::env::var_os("CUBEBOT_GUEST_WORKSPACE").map(std::path::PathBuf::from);
     if workspace.is_some_and(|disk| disk.with_file_name("runtime").exists()) {
         eprintln!(
@@ -53,9 +48,7 @@ fn run() -> io::Result<u8> {
     Err(io::Error::other("the sandbox needs x86_64 Linux"))
 }
 
-/// The host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device): relays desktop request lines on stdin to the running sandbox,
-/// which passes them to the guest's arbiter, and its responses to stdout. The orchestrator runs it inside the sandbox container,
-/// so reaching it takes the platform's exec authorization for that container.
+/// The orchestrator runs this inside the sandbox container, so reaching it takes the platform's exec authorization for that container.
 fn desktop() -> io::Result<()> {
     let path =
         std::env::var_os("CUBEBOT_GUEST_DESKTOP_SOCKET").unwrap_or_else(|| DESKTOP_SOCKET.into());
@@ -69,9 +62,7 @@ fn desktop() -> io::Result<()> {
     forward(&socket, io::stdout().lock())
 }
 
-/// Copies each read on as it arrives. `io::copy` would splice between the socket and a pipe,
-/// which holds responses back until the socket closes and stalls a conversation over the
-/// channel.
+/// `io::copy` would splice between the socket and a pipe, which holds responses back until the socket closes.
 fn forward(mut from: impl Read, mut to: impl Write) -> io::Result<()> {
     let mut buffer = vec![0; 64 << 10];
     loop {

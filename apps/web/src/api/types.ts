@@ -21,7 +21,6 @@ export const CAPABILITIES = [
 ] as const
 export type Capability = (typeof CAPABILITIES)[number]
 
-/** Whether the viewer may do this on the agent; administrators may do everything. */
 export function can(
   agent: AgentSummary,
   capability: Capability,

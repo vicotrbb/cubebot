@@ -53,7 +53,6 @@ async fn messages(headers: HeaderMap, Json(body): Json<Value>) -> Response {
     assert_eq!(body["system"], "Be brief.");
     assert_eq!(body["tools"][0]["input_schema"], json!({"type":"object"}));
     assert_eq!(body["tool_choice"], json!({"type":"auto"}));
-    // Parallel results share the user message that answers their assistant message.
     assert_eq!(
         body["messages"][3]["content"],
         json!([{"type":"tool_result","tool_use_id":"toolu_a","content":"one"},
@@ -346,7 +345,6 @@ async fn lists_models_with_their_reported_context_windows() {
     task.abort();
 }
 
-/// The table Anthropic's pricing page used on 2026-11-04.
 const PRICING: &str = "## Model pricing\n\n\
 | Model | Base input tokens | 5m cache writes | 1h cache writes | Cache hits and refreshes | Output tokens |\n\
 | :---- | :---- | :---- | :---- | :---- | :---- |\n\
@@ -387,7 +385,6 @@ async fn prices_come_from_its_own_page_under_the_ids_its_api_uses() {
     );
 }
 
-/// Reads the real page; `cargo test -- --ignored live_page` tells whether the parser still fits.
 #[tokio::test]
 #[ignore = "reaches platform.claude.com"]
 async fn live_page_still_parses() {
