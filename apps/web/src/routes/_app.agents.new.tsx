@@ -74,9 +74,9 @@ function NewAgent() {
             onChange={(chosen) => chosen && setVoice(chosen)}
           />
           <p className="small faint">
-            The agent starts asleep. Wake it from its Status tab once it has a
-            provider; its conversation, memory and workspace persist from here
-            on.
+            The agent starts right away and sleeps while it has no work. It
+            needs a provider to answer; its conversation, memory and workspace
+            persist from here on.
           </p>
           <Alert>{error}</Alert>
           <div className="actions">

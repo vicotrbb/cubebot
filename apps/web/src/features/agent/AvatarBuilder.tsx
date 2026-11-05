@@ -23,7 +23,7 @@ export function AvatarBuilder({
   return (
     <div className="avatar-builder">
       <div className="avatar-builder__preview">
-        <Cube avatar={value} mood={mood} size={96} follow />
+        <Cube avatar={value} mood={mood} size={76} follow />
       </div>
       <div className="avatar-builder__choices">
         <Choice

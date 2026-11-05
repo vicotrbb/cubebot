@@ -643,7 +643,10 @@ details.disclosure[open] > summary::before {
   select {
     min-height: 44px;
   }
-  .tabs > * {
+  .tabs > *,
+  .row,
+  .menu__item,
+  .avatar-builder__opt {
     min-height: 44px;
   }
 }

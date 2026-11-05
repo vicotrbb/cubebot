@@ -1,3 +1,4 @@
+// @ts-expect-error bun provides this at test time
 import { expect, test } from 'bun:test'
 import { pageTitle } from './title'
 
