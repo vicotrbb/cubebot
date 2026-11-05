@@ -20,6 +20,8 @@ export function useConversation(id: string) {
   useEffect(
     () =>
       followWhileVisible(`/api/conversations/${id}/events`, (source) => {
+        // A new source replays a running turn from its first event.
+        setStreaming({})
         // History loads once the stream is following, so nothing falls between the two; a
         // reconnect reloads it to catch turns that changed without an event.
         source.onopen = () => {
