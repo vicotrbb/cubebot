@@ -57,6 +57,8 @@ services:
       credential-key:
         condition: service_completed_successfully
     restart: unless-stopped
+    # Time for its handlers and the controller to stop and for it to release ownership.
+    stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
 

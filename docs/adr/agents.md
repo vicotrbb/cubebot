@@ -69,7 +69,7 @@ Ownership: the agent loop owns lane scheduling and concurrency limits. Provider 
 
 Routine occurrences are ordinary turns in the permanent conversation, so these lanes, retries and cancellation apply to them unchanged ([Routines](#routines)). [Queued messages with explicit steering](rooms.md#queued-messages-with-explicit-steering) selects queued ordinary messages and explicit steering at safe execution boundaries. [Explicit agent messaging and delegation](rooms.md#explicit-agent-messaging-and-delegation) defines Cubebot messaging and delegation semantics; external provider-native child agents remain outside the native engine architecture.
 
-Reference: OpenBot revision `cfee2971f29cdb7c16272e60ae912de7fbb30693`, inspected in the [runtime research](../research/openbot-agent-runtime-memory.md) and [collaboration research](../research/openbot-collaboration-channels.md). This decision adopts the described execution design, not a blanket commitment to every upstream implementation detail.
+Reference: OpenBot revision `cfee2971f29cdb7c16272e60ae912de7fbb30693`. This decision adopts the described execution design, not a blanket commitment to every upstream implementation detail.
 
 **Rationale.** The hybrid preserves ordered execution within each lane and bounded parallelism across tasks. Alternatives considered: one active turn for the entire agent simplifies shared-state ownership but prevents parallel task execution. Arbitrary concurrent turns without lane serialization expose more ordering and coordination problems.
 
@@ -194,6 +194,8 @@ During an orchestrator outage, its client interfaces and agent state operations 
 On restart, the orchestrator recovers durable intent, observes existing agent execution, and reconciles pending operations before resuming coordination. It must not assume every previously running turn failed or blindly repeat actions whose outcome is uncertain. Recovery must distinguish accepted work, observed completion, and unresolved outcomes.
 
 One active instance is an operational invariant, not merely a desired replica count. Restart, upgrade, and network-partition handling must prevent an old instance from acting concurrently with its replacement. The mechanism will be specified with execution ownership and recovery; this decision does not require a general multi-replica scheduling implementation.
+
+Kubernetes replacement proves the old pod terminated before taking over. A Docker or database-only instance has no pod to inspect, so it relies on the session advisory lock: holding the lock proves the previous holder's database session ended, its unreleased claim is replaced, and a process still running behind a lost session fails its next ownership check.
 
 Consequences: orchestrator failure and upgrades interrupt coordination and console operations until recovery succeeds. Automatic restart does not guarantee a particular recovery time or success when configuration, PostgreSQL, or cluster capacity is unavailable. PostgreSQL availability and backup policies remain separate decisions.
 
@@ -421,7 +423,7 @@ This decision selects inference adapter scope. Exact models, SDK or HTTP impleme
 
 **Open details.** Adapter interfaces and concrete protocols; capability discovery and validation; initial tested models and compatible endpoints; subscription authentication feasibility; error classification; usage accounting; embeddings; and provider-specific recovery behavior.
 
-**Validation scenarios.** Complete a tool-using turn through each native adapter and a qualified compatible endpoint; stream output and recover partial-stream failure; reject unsupported required capabilities; enforce connection grants; rotate credentials without disclosure; preserve selected-model waiting; and qualify each claimed subscription path separately. Accepting this decision executed no provider or subscription integration; see [../STATUS.md](../STATUS.md) for what currently runs.
+**Validation scenarios.** Complete a tool-using turn through each native adapter and a qualified compatible endpoint; stream output and recover partial-stream failure; reject unsupported required capabilities; enforce connection grants; rotate credentials without disclosure; preserve selected-model waiting; and qualify each claimed subscription path separately. Accepting this decision executed no provider or subscription integration.
 
 ## Native core tools with MCP integrations
 

@@ -244,7 +244,7 @@ async fn docker_or_database_only(
         Some(config) => Controller::docker(pool.clone(), config)
             .await
             .map_err(failure(
-                "development ownership unavailable for Docker sandboxes",
+                "orchestrator ownership unavailable for Docker sandboxes",
             )),
         None => Controller::database_only(pool.clone())
             .await

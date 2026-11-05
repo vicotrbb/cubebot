@@ -1,6 +1,6 @@
 # Contributing
 
-Read [ARCHITECTURE](ARCHITECTURE.md) and the relevant [decisions](docs/adr/README.md) before changing behavior, and [STATUS](docs/STATUS.md) for what actually runs. [AGENTS.md](AGENTS.md) holds the repository rules for people and coding agents alike.
+Read [ARCHITECTURE](ARCHITECTURE.md) and the relevant [decisions](docs/adr/README.md) before changing behavior. [AGENTS.md](AGENTS.md) holds the repository rules for people and coding agents alike.
 
 ## Before you open a change
 

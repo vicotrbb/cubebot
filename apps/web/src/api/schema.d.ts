@@ -2066,7 +2066,7 @@ export interface components {
     Authorization: {
       authorization_url: string
     }
-    /** @description The agent's cube (docs/design/console.md); mood is derived from activity, never stored. */
+    /** @description The agent's cube; mood is derived from activity, never stored. */
     Avatar: {
       accessory: components['schemas']['Accessory']
       eyes: components['schemas']['Eyes']

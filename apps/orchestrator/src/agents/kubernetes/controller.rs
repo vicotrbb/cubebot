@@ -111,7 +111,7 @@ impl Controller {
         };
         router.layer(axum::Extension(desktop))
     }
-    /// What the console may know about this controller (docs/design/console.md).
+    /// What the console may know about this controller.
     pub fn installation(&self) -> Installation {
         match &self.mode {
             Mode::Kubernetes(lifecycle) => Installation {

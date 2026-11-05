@@ -1347,6 +1347,56 @@ async fn clean_owner_release_waits_for_in_flight_http_handlers() {
 }
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn clean_owner_release_does_not_wait_for_a_response_that_never_ends() {
+    use cubebot_orchestrator::{agents::kubernetes::Controller, operations::server};
+    let (pool, _, _) = registry_support::setup().await;
+    let (config, state, api_task) = server().await;
+    state.lock().unwrap().objects.insert(
+        "/api/v1/namespaces/cubebot-test/pods/orchestrator-a".into(),
+        platform_pod(),
+    );
+    let controller = Controller::new(pool.clone(), config, layout(), platform_identity())
+        .await
+        .unwrap();
+    let held = Arc::new(HeldRequest {
+        entered: tokio::sync::Semaphore::new(0),
+        finish: tokio::sync::Semaphore::new(0),
+    });
+    let routes = Router::new()
+        .route("/hold", axum::routing::get(held_request))
+        .with_state(held.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
+        stopped.await.unwrap();
+    }));
+    let request = tokio::spawn(openidconnect::reqwest::get(format!(
+        "http://{address}/hold"
+    )));
+    held.entered.acquire().await.unwrap().forget();
+    stop.send(()).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(9), serving)
+        .await
+        .expect("shutdown waited for an endless response")
+        .unwrap()
+        .unwrap();
+    let released: bool = sqlx::query_scalar!(
+        r#"
+        SELECT released_at IS NOT NULL AS "value!"
+        FROM orchestrator_owner
+        WHERE singleton
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(released);
+    request.abort();
+    api_task.abort();
+}
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn lost_owner_session_stops_http_and_controller_without_releasing_claim() {
     use cubebot_orchestrator::{agents::kubernetes::Controller, operations::server};
     let (pool, _, _) = registry_support::setup().await;

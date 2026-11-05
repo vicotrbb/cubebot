@@ -1,6 +1,6 @@
 //! The embedded speech path on real models: `just speech-check [directory]`. Downloads them through
 //! the production model store, hears a human recording through Silero and Zipformer, speaks with
-//! both Piper voices and hears that back. Prints what docs/STATUS.md records, and fails on a wrong
+//! both Piper voices and hears that back. Prints what it measured, and fails on a wrong
 //! transcript.
 use cubebot_orchestrator::speech::{
     Audio, Heard, LESSAC, Listener, Models, Piper, RYAN, SAMPLE_RATE, SILERO, Silero, Tts,

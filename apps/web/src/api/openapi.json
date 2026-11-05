@@ -5119,7 +5119,7 @@
       },
       "Avatar": {
         "type": "object",
-        "description": "The agent's cube (docs/design/console.md); mood is derived from activity, never stored.",
+        "description": "The agent's cube; mood is derived from activity, never stored.",
         "required": ["paint", "eyes", "accessory"],
         "properties": {
           "accessory": {

@@ -1,4 +1,4 @@
-//! The console contract (docs/design/console.md): agent summaries by grant, read cursors, the
+//! The console contract: agent summaries by grant, read cursors, the
 //! installation stream and the activity inbox, against real PostgreSQL.
 use crate::support;
 use axum::{

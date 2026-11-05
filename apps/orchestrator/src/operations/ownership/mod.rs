@@ -1,4 +1,4 @@
-//! Single active process. Losing PostgreSQL connectivity never permits blind takeover.
+//! Single active process. On Kubernetes, losing PostgreSQL connectivity never permits blind takeover.
 mod development;
 mod proof;
 use crate::agents::kubernetes::{Error, Kubernetes};

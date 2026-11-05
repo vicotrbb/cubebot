@@ -108,8 +108,7 @@ function Health() {
       <aside className="platform__editor">
         <h2>Not covered here</h2>
         <p className="small muted">
-          Backups, upgrades, capacity limits and provider usage have no console
-          view yet; see STATUS.md for what is qualified.
+          Backups, upgrades and capacity limits have no console view yet.
         </p>
       </aside>
     </div>

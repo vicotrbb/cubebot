@@ -13,7 +13,7 @@ use uuid::Uuid;
 #[sqlx(transparent)]
 pub struct AgentId(pub Uuid);
 
-/// The agent's cube (docs/design/console.md); mood is derived from activity, never stored.
+/// The agent's cube; mood is derived from activity, never stored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Avatar {

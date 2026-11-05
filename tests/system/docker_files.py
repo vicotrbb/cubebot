@@ -478,10 +478,6 @@ def restart(world):
     admin = world["people"]["admin"]
     world["process"].kill()
     world["process"].wait(timeout=30)
-    # Ownership after a kill waits for proof of termination
-    # (docs/adr/agents.md#one-active-orchestrator-with-automatic-restart); the test has
-    # it.
-    rows(world, "UPDATE orchestrator_development_owner SET released_at=now()")
     orphan = uuid.uuid4()
     (world["storage"] / "blobs" / str(orphan)).write_bytes(b"linked, never committed")
     (world["storage"] / "staging" / str(uuid.uuid4())).write_bytes(b"half an upload")

@@ -42,12 +42,12 @@ Terminology: agent, orchestrator, runtime, sandbox, room, lane, dreaming, skill,
 
 ## Brand Commitments
 
-Name: Cubebot. Logo/icon: a literal cube with two eyes, cozy and warm with personality, rendered with real 3D depth (user reference: a rounded lilac square with two black scribbled eyes; ours should feel more three-dimensional and characterful). Core color: orange, on a light, cozy ground. The site should carry animation and 3D presence. Inspiration for page ambition and structure: openbot.run. Tone from the manifesto: plain, confident, engineering-honest, warm rather than hype. The current `apps/web` palette and tokens are explicitly not binding. Decisions made for the site are intended to carry into the future console. Console (decided 2026-11-01): the product console follows Slack's interface grammar played straight, at Slack's craft level, with Linear as the bar for management screens; it inherits the desk world in an Operate register with a dark theme, and the cube avatar is the only illustration. See docs/design/console.md.
+Name: Cubebot. Logo/icon: a literal cube with two eyes, cozy and warm with personality, rendered with real 3D depth (user reference: a rounded lilac square with two black scribbled eyes; ours should feel more three-dimensional and characterful). Core color: orange, on a light, cozy ground. The site should carry animation and 3D presence. Inspiration for page ambition and structure: openbot.run. Tone from the manifesto: plain, confident, engineering-honest, warm rather than hype. The current `apps/web` palette and tokens are explicitly not binding. Decisions made for the site are intended to carry into the future console. Console (decided 2026-11-01): the product console follows Slack's interface grammar played straight, at Slack's craft level, with Linear as the bar for management screens; it inherits the desk world in an Operate register with a dark theme, and the cube avatar is the only illustration.
 
 ## Evidence on Hand
 
-- MANIFESTO.md, ARCHITECTURE.md (with a deployment diagram), accepted decisions under docs/adr (seven area documents), software specification and qualification plan under docs/design.
-- Current state and open qualification gaps at docs/STATUS.md; dated evidence in docs/development/*.md and git history (source for the timeline section).
+- MANIFESTO.md, ARCHITECTURE.md (with a deployment diagram), accepted decisions under docs/adr (seven area documents).
+- Dated evidence in git history (source for the timeline section).
 - No product screenshots worth showing yet, no logo asset, no customers, no benchmarks, no press. The site must not fabricate any of these; illustrative UI must be labeled as illustration.
 
 ## Product Principles

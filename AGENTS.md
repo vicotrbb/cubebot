@@ -1,6 +1,6 @@
 # Cubebot engineering rules
 
-Read `ARCHITECTURE.md` and the relevant accepted decisions in `docs/adr` before changing behavior. `docs/STATUS.md` describes what currently runs and what is unqualified; design documents describe the intended system. Code rules are in `CONTRIBUTING.md`.
+Read `ARCHITECTURE.md` and the relevant accepted decisions in `docs/adr` before changing behavior. Code rules are in `CONTRIBUTING.md`.
 
 - Keep backend, agent runtime, and tool executor in Rust. The frontend uses TanStack Start, React, TypeScript, Bun, and Vite.
 - Applications live in `apps/orchestrator`, `apps/agent`, `apps/sandbox`, and `apps/web`. The agent runs its tools in its own process; there is no separate tool runner.

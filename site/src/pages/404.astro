@@ -1,0 +1,28 @@
+---
+import Base from '../layouts/Base.astro'
+import Cube from '../components/Cube.astro'
+---
+
+<Base
+  title="Page not found · Cubebot"
+  description="This page does not exist. Cubebot is a self-hosted home for persistent AI agents."
+  noindex
+>
+  <main class="missing">
+    <Cube size={96} tone="sage" eyes="closed" contact />
+    <h1>Nothing lives here.</h1>
+    <a class="btn" href="/">Back to Cubebot</a>
+  </main>
+</Base>
+
+<style>
+  .missing {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 32px;
+    min-height: 100dvh;
+    padding: var(--gutter);
+    text-align: center;
+  }
+</style>

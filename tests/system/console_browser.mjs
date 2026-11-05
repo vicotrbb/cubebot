@@ -11,8 +11,8 @@ import process from 'node:process'
 
 const { chromium, firefox } = await import(process.env.PLAYWRIGHT)
 const B = process.env.CUBEBOT_TEST_ORIGIN ?? 'http://127.0.0.1:3100'
-const LOGIN = process.env.CUBEBOT_TEST_LOGIN ?? 'victor'
-const PASSWORD = process.env.CUBEBOT_TEST_PASSWORD ?? 'dev-password-123'
+const LOGIN = process.env.CUBEBOT_TEST_LOGIN
+const PASSWORD = process.env.CUBEBOT_TEST_PASSWORD
 const SHOTS = process.env.SHOTS
 const browserKind = process.env.BROWSER === 'firefox' ? firefox : chromium
 const opts = process.env.FIREFOX ? { executablePath: process.env.FIREFOX } : {}
