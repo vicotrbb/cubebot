@@ -259,7 +259,7 @@ async fn admit(
     )
     .execute(&mut *transaction)
     .await?;
-    accounts::audit(&mut transaction, account, account, "invitation_accepted").await?;
+    accounts::audit(&mut transaction, account, account, "invitation.accept").await?;
     let command = Command::new(
         &Actor {
             id: account,
