@@ -164,7 +164,7 @@ def interactive(environment, directory, registry, name):
         if key not in ("CUBEBOT_HOME", "CUBEBOT_RUNTIME")
     } | {
         "HOME": str(user),
-        # This home is this HOME's default, whose project name a real installation holds.
+        # This home is HOME's default, whose project name a real installation holds.
         "COMPOSE_PROJECT_NAME": name,
         # Docker's contexts stay where the CLI found them.
         "DOCKER_CONFIG": os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker")),
@@ -287,7 +287,7 @@ def main():
             "CUBEBOT_RUNTIME": RUNTIME,
             "CUBEBOT_PORT": str(free_port()),
         }
-        # The installer's name for this home, so an installation on this machine is untouched.
+        # The installer's name for this home, so a real installation is untouched.
         checksum = subprocess.run(
             ["cksum"], input=str(home), capture_output=True, text=True, check=True
         )

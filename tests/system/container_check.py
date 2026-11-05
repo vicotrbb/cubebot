@@ -29,9 +29,9 @@ from pathlib import Path
 from cluster_chat_setup import wait_for
 from docker_desktop import Desktop, container
 from docker_sandbox import (
+    IMAGES,
     INSTRUCTIONS,
     ROOT,
-    IMAGES,
     Api,
     agent,
     bash_turn,
@@ -288,7 +288,7 @@ def host_channel(address, ca, token, identity, name):
 
 
 def isolated(name, network):
-    """The sandbox joined only its network, where a neighbour on it cannot be reached."""
+    """The sandbox joined only its network, where a neighbour cannot be reached."""
     joined = subprocess.run(
         ["docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", name],
         capture_output=True,
@@ -303,11 +303,9 @@ def isolated(name, network):
         text=True,
         check=True,
     ).stdout.strip()
-    # Docker installs its rule there, but the VM's bridge traffic does not pass through it.
+    # Docker installs its rule there, but the VM's bridge traffic does not meet it.
     if daemon == "OrbStack":
-        print(
-            "SKIP inter-container traffic: OrbStack does not enforce enable_icc=false"
-        )
+        print("SKIP inter-container traffic: OrbStack does not enforce it")
         return
     peer = f"{network}-peer"
     subprocess.run(
