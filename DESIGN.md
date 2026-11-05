@@ -25,11 +25,12 @@ colors:
   console-surface: '#fffdf9'
   console-raised: '#ffffff'
   console-inset: '#f3ebdf'
-  console-ink-faint: '#776a5f'
+  console-ink-faint: '#6e6157'
   console-line: 'rgb(43 36 32 / 0.12)'
   console-line-strong: 'rgb(43 36 32 / 0.22)'
   console-orange-wash: '#fde9dc'
-  console-danger: '#c23b22'
+  console-orange-text: '#ad470b'
+  console-danger: '#b8371f'
   console-danger-wash: '#fbe4df'
   console-success: '#6f8f7a'
   console-sleep: '#9bb7a4'
@@ -46,6 +47,7 @@ colors:
   console-line-dark: 'rgb(255 240 225 / 0.1)'
   console-line-strong-dark: 'rgb(255 240 225 / 0.2)'
   console-orange-wash-dark: '#3a2416'
+  console-orange-text-dark: '#ff8a3d'
   console-danger-dark: '#e86a52'
   console-danger-wash-dark: '#3b1f19'
   console-success-dark: '#8fb09c'
@@ -679,7 +681,7 @@ The site palette plus a plane system and a small set of status tints. Light valu
 
 #### Primary
 
-- **Painted Orange** (`orange`): selected sidebar row and palette hit (fill, `on-paint` ink text), primary button face with an `orange-deep` edge, unread badge and `row__dot`, the checked switch, the `::selection` background, the 2px focus outline, the working status dot and its pulse, the field focus ring (`rgb(242 106 27 / 0.18)`) and focused field border, link and link-button underlines (`rgb(242 106 27 / 0.6)`), the thread line's hover border, the checked avatar-builder option border, the desktop-control outline and the agent's desktop pointer tag. **Orange Deep** is the phone bottom bar's current item, the running-state text (messages and broadcast replies), spinner and warning marks, the checked switch's border and the login-handoff key icon; `--warn` is the same value and marks an uncertain work log. **Orange Wash** (`console-orange-wash`): selected table row, the selected mention, the paint notice, the login-handoff key well and the sidebar `row__flag` (text Orange Base, Orange Top at night). The login banner's ring is orange at 0.32.
+- **Painted Orange** (`orange`): selected sidebar row and palette hit (fill, `on-paint` ink text), primary button face with an `orange-deep` edge, unread badge and `row__dot`, the checked switch, the `::selection` background, the 2px focus outline, the working status dot and its pulse, the field focus ring (`rgb(242 106 27 / 0.18)`) and focused field border, link and link-button underlines (`rgb(242 106 27 / 0.6)`), the thread line's hover border, the checked avatar-builder option border, the desktop-control outline and the agent's desktop pointer tag. **Orange Text** (`console-orange-text`, AA on every plane in both themes) is the phone bottom bar's current item, the running-state text (messages and broadcast replies), spinner and warning marks; **Orange Deep** remains for button edges and fills, the checked switch's border and the login-handoff key icon; `--warn` is the same value and marks an uncertain work log. **Orange Wash** (`console-orange-wash`): selected table row, the selected mention, the paint notice, the login-handoff key well and the sidebar `row__flag` (text Orange Base, Orange Top at night). The login banner's ring is orange at 0.32.
 
 #### Secondary
 

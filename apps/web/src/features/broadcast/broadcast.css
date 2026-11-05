@@ -46,7 +46,7 @@
 }
 .broadcast-replies [data-status='running'],
 .broadcast-replies [data-status='queued'] {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .broadcast-replies [data-status='failed'] {
   color: var(--danger);

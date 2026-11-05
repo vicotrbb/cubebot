@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '../../api/types'
+import { ConfirmHost } from '../../components/primitives'
 import { AgentHoverCard } from '../agent/AgentHoverCard'
 import { FloatingPreviews } from '../desktop/FloatingPreview'
 import { CommandPalette } from './CommandPalette'
@@ -29,12 +30,18 @@ export function Shell({
   }, [])
   return (
     <div className="shell">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       {!phone && <Sidebar onSearch={() => setPalette(true)} />}
-      <main className="shell__main">{children}</main>
+      <main id="main" className="shell__main" tabIndex={-1}>
+        {children}
+      </main>
       <FloatingPreviews session={session} />
       <AgentHoverCard />
       {phone && <MobileBar />}
       <CommandPalette open={palette} onClose={() => setPalette(false)} />
+      <ConfirmHost />
     </div>
   )
 }

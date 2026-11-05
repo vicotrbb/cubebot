@@ -59,15 +59,16 @@
   --inset: #f3ebdf;
   --ink: #2b2420;
   --ink-soft: #5e5249;
-  --ink-faint: #776a5f;
+  --ink-faint: #6e6157;
   --on-paint: #2b2420;
   --line: rgb(43 36 32 / 0.12);
   --line-strong: rgb(43 36 32 / 0.22);
   --shadow: 43 36 32;
-  --danger: #c23b22;
+  --danger: #b8371f;
   --danger-wash: #fbe4df;
   --success: #6f8f7a;
-  --warn: #c9530f;
+  --warn: #ad470b;
+  --orange-text: #ad470b;
   --code-bg: #f3ebdf;
   --sleep: var(--sage);
   --btn-edge: var(--paper-deep);
@@ -122,6 +123,8 @@
     --code-bg: #1a1512;
     --sleep: #7f9a88;
     --btn-edge: rgb(0 0 0 / 0.4);
+    --warn: #ff8a3d;
+    --orange-text: #ff8a3d;
   }
 }
 :root[data-theme='dark'] {
@@ -144,4 +147,6 @@
   --code-bg: #1a1512;
   --sleep: #7f9a88;
   --btn-edge: rgb(0 0 0 / 0.4);
+  --warn: #ff8a3d;
+  --orange-text: #ff8a3d;
 }

@@ -60,7 +60,7 @@ function Health() {
             ))}
           </dd>
         </dl>
-        <h3 style={{ margin: '24px 0 8px' }}>Agents</h3>
+        <h2 className="platform__h2">Agents</h2>
         <table className="table">
           <thead>
             <tr>
@@ -68,14 +68,19 @@ function Health() {
               <th>Activity</th>
               <th>Desired</th>
               <th className="num">Lanes</th>
-              <th />
+              <th>
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {agents.data?.map((agent) => (
               <tr key={agent.id}>
                 <td>
-                  <span className="actions" style={{ gap: 8 }}>
+                  <span
+                    className="actions"
+                    style={{ gap: 8, flexWrap: 'nowrap' }}
+                  >
                     <Cube
                       agentId={agent.id}
                       avatar={agent.avatar}

@@ -1,6 +1,17 @@
 const PAGES: [string, string][] = [
   ['/activity', 'Activity'],
   ['/agents/new', 'New agent'],
+  ['/rooms/new', 'New room'],
+  ['/platform/people', 'People'],
+  ['/platform/teams', 'Teams and access'],
+  ['/platform/sign-in', 'Sign-in'],
+  ['/platform/providers', 'AI providers'],
+  ['/platform/speech', 'Speech'],
+  ['/platform/tasks', 'Task settings'],
+  ['/platform/mcp', 'MCP servers'],
+  ['/platform/vault', 'Vault'],
+  ['/platform/audit', 'Audit log'],
+  ['/platform/health', 'Health'],
   ['/broadcast', 'Broadcast'],
   ['/files', 'Files'],
   ['/kb', 'Knowledge base'],
@@ -15,8 +26,10 @@ const PAGES: [string, string][] = [
 export function pageTitle(
   path: string,
   agents: readonly { id: string; name: string }[] = [],
+  rooms: readonly { id: string; name: string }[] = [],
 ): string {
   const page =
+    rooms.find((room) => path.startsWith(`/rooms/${room.id}`))?.name ??
     PAGES.find(([prefix]) => path.startsWith(prefix))?.[1] ??
     agents.find((agent) => path.startsWith(`/agents/${agent.id}`))?.name
   return page ? `${page} · Cubebot` : 'Cubebot'

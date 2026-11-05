@@ -33,7 +33,9 @@ function SignInSettings() {
               <th>Issuer</th>
               <th>Subject</th>
               <th>State</th>
-              <th />
+              <th>
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>

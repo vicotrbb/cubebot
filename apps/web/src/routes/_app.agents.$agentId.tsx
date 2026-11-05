@@ -195,7 +195,8 @@ function AgentHeader({
       <div className="agent-head__title">
         <h1>{agent.name}</h1>
         <p className="faint small agent-head__doing">
-          <span className={`dot dot--${agent.activity}`} /> {doingOf(agent)}
+          <span className={`dot dot--${agent.activity}`} />
+          <span className="agent-head__status">{doingOf(agent)}</span>
         </p>
       </div>
       <div className="agent-head__actions">

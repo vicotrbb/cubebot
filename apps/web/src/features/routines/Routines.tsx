@@ -12,6 +12,7 @@ import type { components } from '../../api/schema'
 import type { AgentSummary } from '../../api/types'
 import {
   Alert,
+  confirmAction,
   CopyButton,
   Empty,
   Field,
@@ -83,15 +84,16 @@ export function Routines({
           : `A run of ${routine.name} is already waiting; nothing new was queued.`,
       )
     })
-  const rotate = (routine: Routine) => {
+  const rotate = async (routine: Routine) => {
     // A live secret stops working the moment it is replaced.
-    if (
-      routine.webhook &&
-      !window.confirm(
-        `Replace the webhook secret of ${routine.name}? Whatever sends to it stops working until it has the new one.`,
-      )
-    )
-      return
+    const go =
+      !routine.webhook ||
+      (await confirmAction({
+        title: `Replace the webhook secret of ${routine.name}?`,
+        body: 'Whatever sends to it stops working until it has the new one.',
+        action: 'Replace',
+      }))
+    if (!go) return
     void act(async () => {
       const made = await ok(
         api.POST(
@@ -102,13 +104,13 @@ export function Routines({
       setSecret({ id: routine.id, secret: made.secret })
     })
   }
-  const removeHook = (routine: Routine) => {
-    if (
-      !window.confirm(
-        `Remove the webhook of ${routine.name}? Its URL stops working; the routine stays.`,
-      )
-    )
-      return
+  const removeHook = async (routine: Routine) => {
+    const yes = await confirmAction({
+      title: `Remove the webhook of ${routine.name}?`,
+      body: 'Its URL stops working; the routine stays.',
+      action: 'Remove',
+    })
+    if (!yes) return
     void act(async () => {
       await ok(
         api.DELETE(

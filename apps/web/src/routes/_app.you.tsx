@@ -69,7 +69,6 @@ function You() {
                 type="button"
                 role="radio"
                 aria-checked={theme === value}
-                aria-selected={theme === value}
                 onClick={() => {
                   applyTheme(value)
                   if (preferences.data)

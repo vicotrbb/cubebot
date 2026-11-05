@@ -9,6 +9,25 @@ function dark() {
     : matchMedia('(prefers-color-scheme: dark)').matches
 }
 
+// Mermaid parses plain colours only, so these repeat the planes in tokens.css.
+const DAY = {
+  primaryColor: '#f3ebdf',
+  primaryBorderColor: '#b8955d',
+  primaryTextColor: '#2b2420',
+  secondaryColor: '#efe3d1',
+  tertiaryColor: '#fffdf9',
+  lineColor: '#5e5249',
+}
+const NIGHT = {
+  darkMode: true,
+  primaryColor: '#2b2420',
+  primaryBorderColor: '#a3968b',
+  primaryTextColor: '#f3ece2',
+  secondaryColor: '#1f1a16',
+  tertiaryColor: '#26201b',
+  lineColor: '#cfc3b6',
+}
+
 /** Agents and people write the source, so scripts in it stay inert. */
 function useDiagram(source: string) {
   const id = useId().replaceAll(/[^a-zA-Z0-9]/g, '')
@@ -22,7 +41,8 @@ function useDiagram(source: string) {
           startOnLoad: false,
           securityLevel: 'strict',
           suppressErrorRendering: true,
-          theme: dark() ? 'dark' : 'neutral',
+          theme: 'base',
+          themeVariables: dark() ? NIGHT : DAY,
           fontFamily: 'Rubik, system-ui, sans-serif',
         })
         const { svg } = await library.render(`diagram${id}`, source)

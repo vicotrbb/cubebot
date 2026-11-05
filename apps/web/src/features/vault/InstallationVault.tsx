@@ -13,6 +13,7 @@ import type { AgentSummary } from '../../api/types'
 import { useAgents } from '../../app/queries'
 import {
   Alert,
+  confirmAction,
   Dialog,
   Empty,
   Field,
@@ -36,12 +37,12 @@ export function InstallationVault() {
   const [error, setError] = useState('')
   const refresh = () => client.invalidateQueries({ queryKey: ['vault'] })
   async function remove(item: VaultItem) {
-    if (
-      !window.confirm(
-        `Delete ${item.name}? Agents can no longer fill it. This cannot be undone.`,
-      )
-    )
-      return
+    const yes = await confirmAction({
+      title: `Delete ${item.name}?`,
+      body: 'Agents can no longer fill it. This cannot be undone.',
+      action: 'Delete',
+    })
+    if (!yes) return
     setError('')
     try {
       await ok(
@@ -290,7 +291,6 @@ function KindChoice({
           type="button"
           role="radio"
           aria-checked={value === kind}
-          aria-selected={value === kind}
           onClick={() => onPick(kind)}
         >
           {kind === 'login' ? 'Login' : 'Secret'}

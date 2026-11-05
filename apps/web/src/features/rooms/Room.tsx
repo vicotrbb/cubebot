@@ -13,6 +13,7 @@ import { followWhileVisible } from '../../app/stream'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Empty, Skeleton } from '../../components/primitives'
+import { useFollowEnd } from '../chat/useFollowEnd'
 import { can } from '../../api/types'
 import { Attachments } from '../chat/Attachments'
 import { Composer } from '../chat/Composer'
@@ -78,7 +79,7 @@ export function Room({
       session={session}
       label="Room"
       draftKey={`cubebot:${session.id}:room:${room.id}`}
-      placeholder={`Message #${room.name} · @name addresses a member`}
+      placeholder={`Message #${room.name}`}
       note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
       empty="Mention members with @name to ask each of them, or write without a mention and the coordinator picks one owner."
       mentionable={room.members}
@@ -113,6 +114,7 @@ export function RoomView({
   const [shown, setShown] = useState(PAGE)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  useFollowEnd(scroller, pinned)
   const agents = useAgents()
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
   const known = useRef(messages)

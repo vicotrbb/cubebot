@@ -7,7 +7,12 @@ import type { AgentSummary, RoomSummary } from '../api/types'
 import { useAgents, useRooms } from '../app/queries'
 import { Cube } from '../components/Cube'
 import { PersonAvatar } from '../components/PersonAvatar'
-import { Alert, Skeleton, Status } from '../components/primitives'
+import {
+  Alert,
+  confirmAction,
+  Skeleton,
+  Status,
+} from '../components/primitives'
 import {
   changesTo,
   grantsOn,
@@ -220,12 +225,13 @@ function TeamDetail({
           type="button"
           className="btn btn--ghost btn--sm"
           disabled={action.busy}
-          onClick={() => {
-            if (
-              window.confirm(
-                `Delete ${team.name}? Its members lose what the team gave them.`,
-              )
-            )
+          onClick={async () => {
+            const yes = await confirmAction({
+              title: `Delete ${team.name}?`,
+              body: 'Its members lose what the team gave them.',
+              action: 'Delete',
+            })
+            if (yes)
               void action.run(
                 () => admin.deleteTeam(team.id, team.revision),
                 `${team.name} is gone.`,

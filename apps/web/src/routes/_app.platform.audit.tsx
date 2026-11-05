@@ -58,7 +58,7 @@ function Audit() {
             <button
               key={item.label}
               type="button"
-              aria-selected={filter === item.areas}
+              aria-pressed={filter === item.areas}
               onClick={() => setFilter(item.areas)}
             >
               {item.label}

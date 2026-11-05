@@ -488,7 +488,7 @@ img.avatar-initial {
   stroke-width: 1.75;
 }
 .bottombar__item[aria-current='page'] {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .bottombar__item .row__badge {
   position: absolute;
@@ -517,4 +517,18 @@ img.avatar-initial {
 }
 .row[aria-current='page'] .row__dot {
   background: var(--paper);
+}
+
+@media (pointer: coarse) {
+  .row,
+  .row-tree .row {
+    min-height: 44px;
+  }
+  .section__head {
+    min-height: 44px;
+  }
+  .row-tree__toggle {
+    width: 44px;
+    height: 44px;
+  }
 }

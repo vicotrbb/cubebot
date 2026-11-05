@@ -67,6 +67,7 @@ function RoomScreen() {
               to="/rooms/$roomId/members"
               params={{ roomId: room.id }}
               className="btn btn--sm"
+              aria-label={room.manage ? 'Edit members' : 'Members'}
             >
               <Users />
               <span className="agent-head__word">

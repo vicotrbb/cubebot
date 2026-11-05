@@ -6,7 +6,7 @@ import {
 } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useInstallationStream } from '../app/events'
-import { useAgents, usePreferences, useSession } from '../app/queries'
+import { useAgents, usePreferences, useRooms, useSession } from '../app/queries'
 import { applyTheme } from '../app/theme'
 import { pageTitle } from '../app/title'
 import { Shell } from '../features/shell/Shell'
@@ -32,9 +32,10 @@ function App() {
   useInstallationStream(Boolean(session.data))
   const path = useRouterState({ select: (state) => state.location.pathname })
   const agents = useAgents()
+  const rooms = useRooms()
   useEffect(() => {
-    document.title = pageTitle(path, agents.data)
-  }, [path, agents.data])
+    document.title = pageTitle(path, agents.data, rooms.data)
+  }, [path, agents.data, rooms.data])
   useEffect(() => {
     if (preferences.data) applyTheme(preferences.data.theme)
   }, [preferences.data])

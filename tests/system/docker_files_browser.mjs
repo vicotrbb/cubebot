@@ -112,8 +112,11 @@ try {
     mimeType: 'text/plain',
     buffer: Buffer.from('trash'),
   })
-  page.once('dialog', (confirm) => confirm.accept())
   await row(page, `trash-${marker}.txt`)
+    .getByRole('button', { name: 'Delete', exact: true })
+    .click()
+  await page
+    .getByRole('dialog', { name: `Delete trash-${marker}.txt?` })
     .getByRole('button', { name: 'Delete', exact: true })
     .click()
   await row(page, `trash-${marker}.txt`).waitFor({ state: 'detached' })
