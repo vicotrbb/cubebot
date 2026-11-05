@@ -12,7 +12,7 @@ const BASH: [&str; 3] = ["/bin/bash", "--noprofile", "--norc"];
 /// silently matching one level.
 const GLOB: &str = r#"shopt -s globstar 2>/dev/null || [[ $1 != *'**'* ]] || { echo 'This bash lacks globstar; ** is unsupported.'; exit 2; }; shopt -s nullglob; IFS=; matches=($1); [[ ${#matches[@]} -gt 0 ]] && printf '%s\n' "${matches[@]}""#;
 const WRITE: &str = r#"mkdir -p -- "$(dirname -- "$1")" && cat > "$1" && printf 'Wrote %s\n' "$1""#;
-const RETAINED: &str = "Combined output is kept in the workspace file named in the result; longer output is shown as its head and tail.";
+const RETAINED: &str = "Combined output is kept for at least a week in the workspace file named in the result; longer output is shown as its head and tail.";
 
 struct Builtin {
     definition: cubebot_providers::Tool,
@@ -44,7 +44,7 @@ pub(super) fn tools() -> Vec<Box<dyn Tool>> {
     };
     let text = json!({"type":"string"});
     vec![
-        tool("bash", format!("Execute a command using /bin/bash --noprofile --norc in the persistent workspace. The result includes the exit status as code; run programs directly without appending echo $? which masks that status. {RETAINED} Calls in one response run in parallel. Check exit status and verify results. Cancellation cannot undo effects. Never blindly repeat uncertain effects."),
+        tool("bash", format!("Execute a command using /bin/bash --noprofile --norc in the persistent workspace. The result includes the exit status as code; run programs directly without appending echo $? which masks that status. {RETAINED} A call stops after one hour, and background jobs stop when it ends; to keep a server running, start it with `setsid server > server.log 2>&1 &`. Calls in one response run in parallel. Check exit status and verify results. Cancellation cannot undo effects. Never blindly repeat uncertain effects."),
             json!({"command":text}), bash),
         tool("read_file", format!("Read a file. Relative paths start at the workspace. {RETAINED}"),
             json!({"path":text}), read_file),

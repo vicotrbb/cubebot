@@ -52,6 +52,10 @@ pub(crate) fn tool_user(user: &str) -> Option<(u32, u32)> {
 const HEAD: u64 = 8 * 1024;
 const TAIL: u64 = 8 * 1024;
 const OUTPUT: &str = ".cubebot-tool-output";
+/// Retained output older than this many minutes, seven days, is deleted when the agent starts.
+const OUTPUT_MINUTES: &str = "+10080";
+/// How long one call runs before it and its process group are stopped.
+const CALL_LIMIT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 /// The guest image's default desktop wallpaper.
 pub const WALLPAPER: &str = "/usr/share/cubebot/wallpaper.jpg";
 /// Guest init creates this once it has drawn the default, in `/run`, which only root writes.
@@ -129,8 +133,26 @@ impl Sandbox {
         self.workspace.join(OUTPUT).join(format!("{id}.log"))
     }
 
+    /// Deletes old retained output as the tool user. A failure costs only disk space.
+    async fn prune_output(&self) {
+        let mut command = self.command("find");
+        command
+            .args([OUTPUT, "-maxdepth", "1", "-type", "f", "-name", "*.log"])
+            .args(["-mmin", OUTPUT_MINUTES, "-delete"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if let Err(error) = command.status().await {
+            eprintln!("tool output not pruned: {error}");
+        }
+    }
+
     /// Runs a job with its combined output written by the tool user to the workspace.
     pub async fn run(&self, id: Uuid, job: Job) -> Outcome {
+        self.run_within(CALL_LIMIT, id, job).await
+    }
+
+    async fn run_within(&self, limit: std::time::Duration, id: Uuid, job: Job) -> Outcome {
         let mut command = self.command("/bin/sh");
         command
             .args([
@@ -146,9 +168,16 @@ impl Sandbox {
             })
             .stdout(Stdio::null())
             .stderr(Stdio::null());
-        let code = match self.wait(command, job.stdin).await {
-            Ok(code) => code,
-            Err(error) => {
+        // Dropping the wait kills the process group before the output is read.
+        let code = match tokio::time::timeout(limit, self.wait(command, job.stdin)).await {
+            Err(_) => {
+                return Outcome::Stopped {
+                    reason: "timed out".into(),
+                    output: self.preview(id),
+                };
+            }
+            Ok(Ok(code)) => code,
+            Ok(Err(error)) => {
                 return Outcome::Exited {
                     code: None,
                     output: format!("The tool did not start: {error}"),
@@ -260,6 +289,7 @@ impl Registry {
             return Ok(None);
         }
         let sandbox = Sandbox::from_environment()?;
+        sandbox.prune_output().await;
         let mut tools = builtin::tools();
         // The provider's computer-use tool, for models that support it (docs/adr/sandbox.md#desktop-as-a-vmm-device), and the
         // browser tools on the desktop's Chromium (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction and docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions).
@@ -447,6 +477,54 @@ mod tests {
             gid: owner.gid(),
             desktop: false,
         }
+    }
+
+    #[tokio::test]
+    async fn a_call_past_its_limit_stops_with_its_output_and_process_group() {
+        let sandbox = sandbox();
+        let id = Uuid::new_v4();
+        let script = "echo started; sleep 30 & echo $! > sleeper; wait";
+        let job = Job {
+            argv: vec!["/bin/sh".into(), "-c".into(), script.into()],
+            stdin: None,
+        };
+        let limit = std::time::Duration::from_millis(500);
+        let outcome = sandbox.run_within(limit, id, job).await;
+        assert!(outcome.validate().is_ok());
+        let Outcome::Stopped { reason, output } = outcome else {
+            panic!("unexpected outcome {outcome:?}");
+        };
+        assert_eq!(reason, "timed out");
+        assert!(output.contains("started"), "{output}");
+        let sleeper = std::fs::read_to_string(sandbox.workspace.join("sleeper")).unwrap();
+        let sleeper = nix::unistd::Pid::from_raw(sleeper.trim().parse().unwrap());
+        let gone = || nix::sys::signal::kill(sleeper, None).is_err();
+        for _ in 0..200 {
+            if gone() {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(gone());
+        std::fs::remove_dir_all(&sandbox.workspace).unwrap();
+    }
+
+    #[tokio::test]
+    async fn pruning_deletes_only_old_output() {
+        let sandbox = sandbox();
+        let directory = sandbox.workspace.join(OUTPUT);
+        std::fs::create_dir(&directory).unwrap();
+        let now = std::time::SystemTime::now();
+        for (name, days) in [("old.log", 8), ("recent.log", 6), ("old.keep", 8)] {
+            let file = std::fs::File::create(directory.join(name)).unwrap();
+            file.set_modified(now - std::time::Duration::from_secs(days * 86400))
+                .unwrap();
+        }
+        sandbox.prune_output().await;
+        assert!(!directory.join("old.log").exists());
+        assert!(directory.join("recent.log").exists());
+        assert!(directory.join("old.keep").exists());
+        std::fs::remove_dir_all(&sandbox.workspace).unwrap();
     }
 
     #[tokio::test]
