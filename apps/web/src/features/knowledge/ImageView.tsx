@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { ImageOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { safeHref } from '../chat/tokens'
 
 export function ImageView({ node, selected }: NodeViewProps) {
@@ -9,8 +9,7 @@ export function ImageView({ node, selected }: NodeViewProps) {
     alt: string | null
     title: string | null
   }
-  const [failed, setFailed] = useState(false)
-  useEffect(() => setFailed(false), [src])
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
   const href = safeHref(src)
   return (
     <NodeViewWrapper
@@ -18,7 +17,7 @@ export function ImageView({ node, selected }: NodeViewProps) {
       data-selected={selected}
       data-drag-handle
     >
-      {failed ? (
+      {failedSrc === src ? (
         <span className="kb-image__missing" contentEditable={false}>
           <ImageOff aria-hidden />
           <span>{alt || 'Image'} could not be loaded.</span>
@@ -35,7 +34,7 @@ export function ImageView({ node, selected }: NodeViewProps) {
           title={title ?? undefined}
           loading="lazy"
           referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
+          onError={() => setFailedSrc(src)}
         />
       )}
     </NodeViewWrapper>
