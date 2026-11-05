@@ -336,6 +336,58 @@ impl Connections {
         })
     }
 
+    /// The key a call needs: OpenAI's is the provider connection's, under its agent grants, and
+    /// ElevenLabs' is stored with the speech settings.
+    #[tracing::instrument(skip_all, fields(agent = %agent.0, provider = provider.as_str()))]
+    pub(crate) async fn speech_key(
+        &self,
+        agent: crate::agents::AgentId,
+        provider: crate::speech::Provider,
+    ) -> Result<String, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        if provider == crate::speech::Provider::Elevenlabs {
+            let stored = sqlx::query_scalar!("SELECT elevenlabs_credential FROM speech_settings")
+                .fetch_one(&mut *tx)
+                .await?
+                .ok_or(IdentityError::CredentialUnavailable(None))?;
+            let context = speech_context(&mut tx).await?;
+            let secret = self
+                .credentials
+                .decrypt(&stored, &context)
+                .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+            return String::from_utf8(secret).map_err(|error| {
+                IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
+            });
+        }
+        let active = sqlx::query_scalar!("SELECT provider FROM provider_connection")
+            .fetch_optional(&mut *tx)
+            .await?;
+        if active.as_deref() == Some(ProviderKind::Openai.as_str()) {
+            return Ok(self.connection(&mut tx, Some(agent)).await?.api_key);
+        }
+        self.saved_key(&mut tx, ProviderKind::Openai).await
+    }
+
+    /// Replaces or, given `None`, removes the ElevenLabs key.
+    pub(crate) async fn store_speech_key(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        key: Option<&str>,
+    ) -> Result<(), IdentityError> {
+        let context = speech_context(tx).await?;
+        let stored = key
+            .map(|key| self.credentials.encrypt(key.as_bytes(), &context))
+            .transpose()
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+        sqlx::query!(
+            "UPDATE speech_settings SET elevenlabs_credential=$1",
+            stored
+        )
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
     async fn connection(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -540,6 +592,20 @@ async fn credential_context(
     Ok(format!("cubebot:{installation}:provider:openai:key:1:revision:{revision}").into_bytes())
 }
 
+async fn speech_context(
+    transaction: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<u8>, IdentityError> {
+    let installation = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id!"
+        FROM installation
+        "#,
+    )
+    .fetch_one(&mut **transaction)
+    .await?;
+    Ok(format!("cubebot:{installation}:speech:elevenlabs").into_bytes())
+}
+
 async fn saved_context(
     transaction: &mut Transaction<'_, Postgres>,
     provider: ProviderKind,
@@ -583,7 +649,7 @@ fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
     Ok(())
 }
 
-fn key_valid(key: &str) -> bool {
+pub(crate) fn key_valid(key: &str) -> bool {
     (1..=4096).contains(&key.len()) && key.bytes().all(|byte| byte.is_ascii_graphic())
 }
 

@@ -119,3 +119,36 @@ Accepted 2026-11-04, from the user's request that everything that can be rendere
 **Decision.** A message's `html`, `svg`, `mermaid`, `markdown`, `csv`, `tsv` and `math` fences, and files of those kinds, show their result with their source one click away. HTML and SVG run in an iframe sandboxed with `allow-scripts` alone, whose page starts with a Content-Security-Policy that blocks every network request. The frame has an opaque origin, so it cannot reach the console, its cookies or the API; the policy keeps it from calling out or loading anything. This replaces the HTML file viewer's earlier `sandbox=""` with scripts off, since a page without its scripts is often not the page; external images staying off remains the rule, as in [Markdown messages](#conversation-first-workspace).
 
 **Consequences.** Previews that need a CDN, a font service or an API do not work, and agents are told to inline everything. A framed page can still navigate itself, which no policy prevents; what it could send is only its own source. JSX and other source needing a build shows as code.
+
+## Voice calls over the chat pipeline
+
+Accepted 2026-11-05, from the user's request to talk to agents like a phone call. The user set the feature, the providers, the embedded models, the transport and the placement of the pipeline; the details below marked *chosen here* were not specified and are open to overrule.
+
+**Decision.** A call is a normal conversation with speech at each end. The orchestrator turns a person's speech into a text message and the agent's text into speech. The agent never sees audio, and its image, tools, memory, context and permissions are untouched.
+
+Every sentence a person finishes becomes an ordinary `chat_turns` row through the same send path as typed text, including the `conversation.send` check, so it joins the agent's context, memory and lanes as any message does. Each row also carries `call_id`. The conversation shows those rows as one message: `history` and the event stream return a `calls` row in their place, as a `Turn` whose `call` field holds the time, duration, providers, turn count and the turns themselves. The `calls` row draws its `sequence` from `chat_turns`' own sequence so the two share one order.
+
+**Pipeline.** `apps/orchestrator/src/speech` is one module behind one `Stt` and one `Tts` trait, with embedded, OpenAI and ElevenLabs implementations. Both traits are blocking, because each stream owns one thread: one listens and one speaks, so a call costs nothing when silent beyond its model state, and an idle orchestrator pays only for models already resident. Silero always finds the end of speech, whichever provider transcribes, so turn-taking does not change with the provider and external providers need no streaming protocol. External STT therefore has no partial transcripts. Text is spoken sentence by sentence as the agent's `text_delta` events arrive.
+
+**Barge-in.** Silero detecting speech tells the page to drop queued audio, stops synthesis and mutes the rest of that reply. *Chosen here:* the agent's turn is not cancelled and its full reply stays in the transcript, because chat's rule is that a new message queues and only an explicit Stop cancels work. The agent is not told how much of its reply was heard.
+
+**Transport.** One WebSocket, `/api/agents/{id}/call`, authenticated as the desktop socket is, with the same origin check and a recheck every 30 seconds. The page sends 16 kHz mono PCM16 as binary frames from an AudioWorklet; JSON text frames carry state and transcripts; binary frames from the server carry a 4-byte little-endian sample rate followed by PCM16. There is no codec.
+
+**Configuration.** Installation settings hold the STT provider, TTS provider and voice; an agent may override each. Voice is Male or Female, chosen at creation and editable later. Providers: embedded (default), OpenAI (`gpt-4o-mini-transcribe`, `gpt-4o-mini-tts`) and ElevenLabs (`scribe_v1`, `eleven_flash_v2_5`). The OpenAI key is the one the provider connection already holds, and agent grants on that connection apply. *Chosen here:* the ElevenLabs key is a credential on `speech_settings`, encrypted with the installation key and write-only like provider keys, because ElevenLabs is not an inference provider and adding it to `ProviderKind` would offer it as a model.
+
+**Embedded models.** sherpa-onnx pinned to 1.13.x, since 2.0 has no espeak-ng frontend and cannot run Piper: `sherpa-onnx-streaming-zipformer-en-2023-06-26` int8, `silero_vad.onnx`, and Piper `en_US-lessac-medium` (Female) and `en_US-ryan-medium` (Male). Models download on first use into `speech-models` under the orchestrator's data directory (`CUBEBOT_STORAGE_DIRECTORY`), are checked against a pinned SHA-256 before use, and are never baked into an image. Once there they work offline. They load on the first call that needs them and stay resident.
+
+*Chosen here:*
+
+- Hanging up does not cancel the agent's work. A turn still unsettled stays reachable: the Call message says so and offers the usual Stop and Retry on it, because a `waiting` turn holds the main lane.
+- Each turn in a call tells the model, through its instructions, that it is on a voice call and should answer briefly in plain speech. This is the only difference a model sees. Markdown it writes anyway is flattened and code blocks are skipped when spoken; the transcript keeps the original.
+- A call with no turns is kept, as a phone log keeps a missed attempt.
+- Calls left open by a restart are closed at startup, which is safe because one orchestrator is active ([One active orchestrator with automatic restart](agents.md#one-active-orchestrator-with-automatic-restart)).
+
+**Rationale.** Keeping audio in the orchestrator leaves the sandbox boundary and every chat rule unchanged, and a model-free agent image stays small. Running each model through sherpa-onnx's safe wrapper means no `unsafe` in the orchestrator, as the repository requires. A transcript stored as turns rather than as a copy means there is one source for what was said, and the agent's context needs no call-specific handling.
+
+**Consequences.** The orchestrator links a native library, its image grows by about 70 MB, and resident models cost it memory ([STATUS](../STATUS.md) has the measurements). It now does CPU work proportional to active calls, which it did not do before. Calls are not capped. The first embedded call waits for a download of several hundred MB, shown on the call screen. Echo control is the browser's: without it, an agent heard through a loudspeaker can interrupt itself.
+
+**Open details.** Non-English embedded models; a limit on concurrent calls; telling the agent how much of a reply was heard; mute.
+
+**Validation scenarios.** Real speech through the embedded models yields the expected text; a call produces one Call message whose turns reached the agent's context; speaking over the agent stops playback; refusing a person's `conversation.send` refuses their call; each external adapter sends its documented request; a tampered model download is refused.

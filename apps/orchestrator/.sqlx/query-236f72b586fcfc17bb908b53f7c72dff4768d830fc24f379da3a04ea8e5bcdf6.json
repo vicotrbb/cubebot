@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT conversation_id, message, id\n            FROM chat_turns\n            WHERE actor_id=$1 AND request_id=$2\n            ",
+  "query": "\n        SELECT conversation_id, message, id\n        FROM chat_turns\n        WHERE actor_id=$1 AND request_id=$2\n        ",
   "describe": {
     "columns": [
       {
@@ -31,5 +31,5 @@
       false
     ]
   },
-  "hash": "33632034cd0d3c61388e49d64a015aa1964b48448bb79dd40381bc23c55da9ff"
+  "hash": "236f72b586fcfc17bb908b53f7c72dff4768d830fc24f379da3a04ea8e5bcdf6"
 }

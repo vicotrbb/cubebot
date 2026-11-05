@@ -19,6 +19,7 @@ pub(crate) async fn agent(pool: &sqlx::PgPool, admin: &Actor, name: &str) -> Uui
                 name: name.into(),
                 instructions: format!("You are {name}."),
                 avatar: None,
+                voice: None,
             },
         )
         .await

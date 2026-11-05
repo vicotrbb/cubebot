@@ -253,6 +253,7 @@ mod tests {
             name: "Agent".into(),
             instructions: "Existing definition".into(),
             avatar: None,
+            voice: None,
         };
         let command = Command::new(&actor, None, "agent.create", input.request_id, &input).unwrap();
         let original = Sha256::digest(serde_json::to_vec(&input).unwrap()).to_vec();

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE speech_settings SET stt_provider=$1, tts_provider=$2, voice=$3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "53de5a03e62372cc70903bfa0b231562f2d2c72d6006b060dd49c9325cb2c55b"
+}

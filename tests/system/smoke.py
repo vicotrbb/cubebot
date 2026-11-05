@@ -97,7 +97,8 @@ def check_invalid_configuration() -> None:
             cwd=ROOT,
             env={**os.environ, **settings},
             capture_output=True,
-            timeout=5,
+            # macOS scans a freshly linked binary on first launch; slow at this size.
+            timeout=60,
             check=False,
         )
         assert result.returncode != 0, f"Invalid configuration accepted: {settings}"

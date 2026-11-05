@@ -29,6 +29,7 @@ import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
 import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
 import { Route as AppPlatformProvidersRouteImport } from './routes/_app.platform.providers'
 import { Route as AppPlatformSignInRouteImport } from './routes/_app.platform.sign-in'
+import { Route as AppPlatformSpeechRouteImport } from './routes/_app.platform.speech'
 import { Route as AppPlatformTasksRouteImport } from './routes/_app.platform.tasks'
 import { Route as AppPlatformTeamsRouteImport } from './routes/_app.platform.teams'
 import { Route as AppPlatformVaultRouteImport } from './routes/_app.platform.vault'
@@ -150,6 +151,11 @@ const AppPlatformProvidersRoute = AppPlatformProvidersRouteImport.update({
 const AppPlatformSignInRoute = AppPlatformSignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformSpeechRoute = AppPlatformSpeechRouteImport.update({
+  id: '/speech',
+  path: '/speech',
   getParentRoute: () => AppPlatformRoute,
 } as any)
 const AppPlatformTasksRoute = AppPlatformTasksRouteImport.update({
@@ -291,6 +297,7 @@ export interface FileRoutesByFullPath {
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
+  '/platform/speech': typeof AppPlatformSpeechRoute
   '/platform/tasks': typeof AppPlatformTasksRoute
   '/platform/teams': typeof AppPlatformTeamsRoute
   '/platform/vault': typeof AppPlatformVaultRoute
@@ -334,6 +341,7 @@ export interface FileRoutesByTo {
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
+  '/platform/speech': typeof AppPlatformSpeechRoute
   '/platform/tasks': typeof AppPlatformTasksRoute
   '/platform/teams': typeof AppPlatformTeamsRoute
   '/platform/vault': typeof AppPlatformVaultRoute
@@ -380,6 +388,7 @@ export interface FileRoutesById {
   '/_app/platform/people': typeof AppPlatformPeopleRoute
   '/_app/platform/providers': typeof AppPlatformProvidersRoute
   '/_app/platform/sign-in': typeof AppPlatformSignInRoute
+  '/_app/platform/speech': typeof AppPlatformSpeechRoute
   '/_app/platform/tasks': typeof AppPlatformTasksRoute
   '/_app/platform/teams': typeof AppPlatformTeamsRoute
   '/_app/platform/vault': typeof AppPlatformVaultRoute
@@ -426,6 +435,7 @@ export interface FileRouteTypes {
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
+    | '/platform/speech'
     | '/platform/tasks'
     | '/platform/teams'
     | '/platform/vault'
@@ -469,6 +479,7 @@ export interface FileRouteTypes {
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
+    | '/platform/speech'
     | '/platform/tasks'
     | '/platform/teams'
     | '/platform/vault'
@@ -514,6 +525,7 @@ export interface FileRouteTypes {
     | '/_app/platform/people'
     | '/_app/platform/providers'
     | '/_app/platform/sign-in'
+    | '/_app/platform/speech'
     | '/_app/platform/tasks'
     | '/_app/platform/teams'
     | '/_app/platform/vault'
@@ -685,6 +697,13 @@ declare module '@tanstack/react-router' {
       path: '/sign-in'
       fullPath: '/platform/sign-in'
       preLoaderRoute: typeof AppPlatformSignInRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/speech': {
+      id: '/_app/platform/speech'
+      path: '/speech'
+      fullPath: '/platform/speech'
+      preLoaderRoute: typeof AppPlatformSpeechRouteImport
       parentRoute: typeof AppPlatformRoute
     }
     '/_app/platform/tasks': {
@@ -870,6 +889,7 @@ interface AppPlatformRouteChildren {
   AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
   AppPlatformProvidersRoute: typeof AppPlatformProvidersRoute
   AppPlatformSignInRoute: typeof AppPlatformSignInRoute
+  AppPlatformSpeechRoute: typeof AppPlatformSpeechRoute
   AppPlatformTasksRoute: typeof AppPlatformTasksRoute
   AppPlatformTeamsRoute: typeof AppPlatformTeamsRoute
   AppPlatformVaultRoute: typeof AppPlatformVaultRoute
@@ -882,6 +902,7 @@ const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformPeopleRoute: AppPlatformPeopleRoute,
   AppPlatformProvidersRoute: AppPlatformProvidersRoute,
   AppPlatformSignInRoute: AppPlatformSignInRoute,
+  AppPlatformSpeechRoute: AppPlatformSpeechRoute,
   AppPlatformTasksRoute: AppPlatformTasksRoute,
   AppPlatformTeamsRoute: AppPlatformTeamsRoute,
   AppPlatformVaultRoute: AppPlatformVaultRoute,

@@ -4,6 +4,7 @@ mod access;
 mod activity;
 mod agents;
 mod browser;
+mod calls;
 mod connections;
 mod desktop;
 mod files;
@@ -76,6 +77,7 @@ pub fn openapi() -> String {
     doc.merge(connections::Doc::openapi());
     doc.merge(work::Doc::openapi());
     doc.merge(desktop::Doc::openapi());
+    doc.merge(calls::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
     doc.merge(memories::Doc::openapi());
     doc.merge(skills::Doc::openapi());
@@ -103,6 +105,13 @@ fn bearer(headers: &axum::http::HeaderMap) -> Option<&str> {
         .to_str()
         .ok()?
         .strip_prefix("Bearer ")
+}
+
+/// The call socket and speech settings on stand-in engines, for tests.
+pub fn calls_router(pool: sqlx::PgPool, origin: &str, speech: crate::speech::Speech) -> Router {
+    let mut identity = crate::identity::Identity::new(pool.clone());
+    identity.browser_origin = Some(origin.to_owned());
+    calls::router(pool, identity, speech, None)
 }
 
 /// Configured application endpoints share one concrete PostgreSQL pool.
@@ -162,8 +171,16 @@ pub async fn configured_router_with_credentials(
         crate::identity::oidc::disable(&pool).await?;
         identity_router(pool.clone(), identity.clone())
     };
-    if let Some(credentials) = credentials {
-        let connections = crate::connections::Connections::new(pool, credentials);
+    let connections = credentials
+        .map(|credentials| crate::connections::Connections::new(pool.clone(), credentials));
+    let speech = crate::speech::Speech::environment(connections.clone());
+    routes = routes.merge(calls::router(
+        pool,
+        identity.clone(),
+        speech,
+        connections.clone(),
+    ));
+    if let Some(connections) = connections {
         routes = routes
             .merge(connections::router(identity.clone(), connections.clone()))
             .merge(vault::router(identity.clone(), connections.clone()))

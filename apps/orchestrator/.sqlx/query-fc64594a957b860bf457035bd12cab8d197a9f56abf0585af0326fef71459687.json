@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE calls SET ended_at=clock_timestamp() WHERE id=$1 AND ended_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fc64594a957b860bf457035bd12cab8d197a9f56abf0585af0326fef71459687"
+}

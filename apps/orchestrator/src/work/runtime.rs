@@ -37,7 +37,8 @@ impl Work {
         let pending = sqlx::query!(
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
-                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, t.in_task
+                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, t.in_task,
+                t.call_id IS NOT NULL AS "on_call!"
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -72,6 +73,7 @@ impl Work {
         let broadcast = pending.broadcast && !task;
         let knowledge_base = pending.knowledge_base;
         let in_task = pending.in_task;
+        let on_call = pending.on_call;
         if let Some(reason) = refused(tx, actor, turn, command_only).await? {
             wait(tx, turn, reason).await?;
             return Ok(None);
@@ -96,6 +98,7 @@ impl Work {
         let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
         let instructions =
             super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
+        let instructions = super::calls::spoken(instructions, on_call);
         let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let mcp_servers = mcp_servers(tx, connections, actor).await;

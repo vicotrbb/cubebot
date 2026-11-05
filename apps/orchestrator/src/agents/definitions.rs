@@ -86,6 +86,10 @@ pub struct Agent {
     pub capabilities: Vec<String>,
     #[schema(value_type = Avatar)]
     pub avatar: sqlx::types::Json<Avatar>,
+    /// `None` inherits the installation's speech settings.
+    pub stt_provider: Option<crate::speech::Provider>,
+    pub tts_provider: Option<crate::speech::Provider>,
+    pub voice: Option<crate::speech::Voice>,
     /// A running turn called a desktop tool in the last 120 seconds.
     pub desktop_active: bool,
     /// The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
@@ -111,6 +115,10 @@ pub struct CreateAgent {
     /// so receipts recorded before avatars still replay.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<Avatar>,
+    /// Left out, the agent speaks in the installation's voice. Absent from the digest when
+    /// `None`, like the avatar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voice: Option<crate::speech::Voice>,
 }
 
 impl Agents {
@@ -128,14 +136,15 @@ impl Agents {
         }
         let id = sqlx::query_scalar!(
             "
-            INSERT INTO agents (name, instructions, created_by, avatar)
-            VALUES ($1, $2, $3, COALESCE($4, '{\"paint\":\"orange\",\"eyes\":\"round\",\"accessory\":\"none\"}'::jsonb))
+            INSERT INTO agents (name, instructions, created_by, avatar, voice)
+            VALUES ($1, $2, $3, COALESCE($4, '{\"paint\":\"orange\",\"eyes\":\"round\",\"accessory\":\"none\"}'::jsonb), $5)
             RETURNING id
             ",
             input.name,
             input.instructions,
             actor.id,
             input.avatar.map(sqlx::types::Json) as Option<sqlx::types::Json<Avatar>>,
+            input.voice.map(crate::speech::Voice::as_str),
         )
         .fetch_one(&mut *transaction)
         .await?;
@@ -227,6 +236,9 @@ impl Agents {
                END AS "activity!",
                c.names AS "capabilities!",
                g.avatar AS "avatar: sqlx::types::Json<Avatar>",
+               g.stt_provider AS "stt_provider: crate::speech::Provider",
+               g.tts_provider AS "tts_provider: crate::speech::Provider",
+               g.voice AS "voice: crate::speech::Voice",
                EXISTS(
                    SELECT 1
                    FROM chat_turns t
@@ -327,6 +339,7 @@ mod tests {
             name: "Researcher".into(),
             instructions: "Evidence\0with null".into(),
             avatar: None,
+            voice: None,
         };
         assert!(matches!(validate(&input), Err(IdentityError::InvalidInput)));
     }

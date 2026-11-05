@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE chat_turns SET status='complete', response=$2, completed_at=clock_timestamp() WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0037854317042c2c4f929d04352e1cf62159099d59d919e7cfa7db458369acd2"
+}

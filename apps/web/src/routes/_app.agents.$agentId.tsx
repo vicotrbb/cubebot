@@ -17,6 +17,7 @@ import { useAgent, useSession } from '../app/queries'
 import { Cube, moodOf } from '../components/Cube'
 import { Empty, Skeleton } from '../components/primitives'
 import { AgentProvider } from '../features/agent/context'
+import { CallButton } from '../features/call/CallScreen'
 import { Conversation } from '../features/chat/Conversation'
 import { useConversation } from '../features/chat/useConversation'
 import { LoginBanner } from '../features/desktop/LoginBanner'
@@ -87,7 +88,8 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
       value={{
         agent,
         session: me,
-        turns: conversation.turns,
+        // A thread can open a turn held inside a Call message.
+        turns: conversation.turns.flatMap((turn) => turn.call?.turns ?? [turn]),
         streaming: conversation.streaming,
         addTurn: conversation.add,
       }}
@@ -200,6 +202,8 @@ function AgentHeader({
       </div>
       <div className="agent-head__actions">
         <FavoriteButton kind="agent" id={agent.id} />
+        {can(agent, 'conversation_send', me) &&
+          agent.desired_state !== 'retired' && <CallButton agent={agent} />}
         {can(agent, 'browser_view', me) && (
           <Link
             to="/agents/$agentId/desktop"

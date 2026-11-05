@@ -17,6 +17,7 @@ async fn agent(pool: &sqlx::PgPool, admin: &Actor, name: &str) -> AgentId {
                 name: name.into(),
                 instructions: String::new(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

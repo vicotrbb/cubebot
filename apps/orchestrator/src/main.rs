@@ -133,10 +133,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                 .map_err(failure(
                     "configured database connection or migration failed",
                 ))?;
-            credential_key(&pool).await?;
-            cubebot_orchestrator::knowledge::Knowledge::seed_shipped_skills(&pool)
-                .await
-                .map_err(failure("shipped skills could not be seeded"))?;
+            startup_records(&pool).await?;
             let config = cubebot_orchestrator::identity::oidc::environment()
                 .map_err(failure("invalid OIDC configuration"))?;
             let origin = match std::env::var("CUBEBOT_PUBLIC_ORIGIN") {
@@ -168,6 +165,19 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
         }
         Err(_) => Err("invalid CUBEBOT_DATABASE_URL".into()),
     }
+}
+
+/// What must hold in the database before anything is served.
+async fn startup_records(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    credential_key(pool).await?;
+    cubebot_orchestrator::knowledge::Knowledge::seed_shipped_skills(pool)
+        .await
+        .map_err(failure("shipped skills could not be seeded"))?;
+    cubebot_orchestrator::work::Work::new(pool.clone())
+        .close_open_calls()
+        .await
+        .map_err(failure("open calls could not be closed"))?;
+    Ok(())
 }
 
 /// Refuses a key that cannot decrypt what is stored, before a new key can encrypt anything.

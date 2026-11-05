@@ -198,6 +198,7 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
                 name: "Other".into(),
                 instructions: String::new(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

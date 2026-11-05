@@ -35,6 +35,7 @@ async fn setup() -> (sqlx::PgPool, Actor, AgentId) {
                 name: "Ops".into(),
                 instructions: "Be brief".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

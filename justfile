@@ -38,7 +38,7 @@ lint: complexity
     shellcheck deploy/install.sh deploy/cubebot
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
     uv run --project tooling/quality --locked python tests/system/install_widgets.py
@@ -88,6 +88,14 @@ install-check:
 # Starts temporary local processes, checks HTTP behavior, and stops them.
 smoke:
     uv run --project tooling/quality --locked python tests/system/smoke.py
+
+# The embedded speech models on real audio: downloads about 450 MB once, then prints RTF, first audio and memory.
+speech-check directory="target/speech-models":
+    cargo run --locked --release -p cubebot-orchestrator --example speech-check -- "{{ directory }}"
+
+# A call in real Chromium with a recording in place of the microphone device, the embedded models and a real agent against a scripted model; Docker and Playwright (CUBEBOT_PLAYWRIGHT_MODULE).
+call-check:
+    uv run --project tooling/quality --locked python tests/system/call_check.py
 
 # Builds the guest into target/guest and runs its acceptance in a network namespace (sudo); skips off x86_64 Linux.
 guest-boot:

@@ -1,0 +1,311 @@
+/* A call takes the whole screen, as a phone call does: the block, its name, and what was said. */
+.call-screen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  justify-items: center;
+  gap: 16px;
+  padding: max(32px, env(safe-area-inset-top)) 16px
+    max(24px, env(safe-area-inset-bottom));
+  background: var(--ground);
+  color: var(--ink);
+}
+.call-screen__stage {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+  --level: 0;
+}
+.call-screen__stage h1 {
+  margin: 14px 0 0;
+  font-size: var(--t-2xl);
+  font-weight: var(--w-head);
+  text-wrap: balance;
+}
+/* The block moves with whichever voice is sounding, leaning up as if saying the words. */
+.call-screen__cube {
+  transform: translateY(calc(var(--level) * -10px))
+    scale(calc(1 + var(--level) * 0.1), calc(1 + var(--level) * 0.16));
+  transform-origin: 50% 100%;
+  transition: transform 90ms linear;
+  /* The block's depth draws past its box. */
+  padding: 12px 0 24px;
+}
+[data-phase='ended'] .call-screen__cube {
+  opacity: 0.55;
+  filter: saturate(0.55);
+  transition:
+    opacity 500ms var(--settle),
+    filter 500ms var(--settle);
+}
+.call-screen__state {
+  margin: 0;
+  display: inline-flex;
+  gap: 10px;
+  color: var(--ink-soft);
+  font-size: var(--t-lg);
+}
+.call-screen__clock {
+  color: var(--ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.call-screen__prepare {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  max-width: 44ch;
+}
+.call-screen__prepare progress {
+  width: min(280px, 70vw);
+  height: 8px;
+  accent-color: var(--orange);
+}
+.call-screen__words {
+  width: min(640px, 100%);
+  min-height: 0;
+  margin: 0;
+  padding: 4px 4px 8px;
+  list-style: none;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: var(--t-lg);
+  line-height: 1.46;
+  /* New words arrive at the bottom; older ones fade under the block. */
+  mask-image: linear-gradient(transparent, #000 28px);
+}
+.call-screen__words > :first-child {
+  margin-top: auto;
+}
+.call-line p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.call-line__who {
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+.call-line--agent .call-line__who {
+  color: var(--orange-deep);
+}
+.call-line__note {
+  color: var(--ink-faint);
+  font-size: var(--t-md);
+}
+.call-screen__problem {
+  width: min(640px, 100%);
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: var(--t-md);
+}
+.call-screen__actions {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+.call-screen__hangup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 28px;
+  border: 0;
+  border-radius: 26px;
+  background: var(--danger);
+  color: #fffdf9;
+  font: inherit;
+  font-size: var(--t-lg);
+  font-weight: var(--w-strong);
+  box-shadow: var(--lift);
+  cursor: pointer;
+  transition: box-shadow var(--quick) var(--settle);
+}
+.call-screen__hangup:hover {
+  box-shadow: var(--lift-hover);
+}
+.call-screen__hangup svg {
+  width: 20px;
+  height: 20px;
+}
+@media (max-height: 560px) {
+  .call-screen {
+    padding-top: 12px;
+    gap: 8px;
+  }
+  .call-screen__cube {
+    zoom: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .call-screen__cube {
+    transform: none;
+    transition: none;
+  }
+}
+/* In dark the deep paint falls below contrast on the ground. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .call-line--agent .call-line__who {
+    color: var(--orange-top);
+  }
+  :root:not([data-theme='light']) .call-screen__hangup {
+    color: #201a16;
+  }
+}
+:root[data-theme='dark'] .call-line--agent .call-line__who {
+  color: var(--orange-top);
+}
+:root[data-theme='dark'] .call-screen__hangup {
+  color: #201a16;
+}
+
+/* One conversation message per call. */
+.call-message {
+  margin: 6px 0;
+  padding: 0 8px;
+}
+.call-message__row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--quick) var(--settle);
+}
+.call-message__row:hover {
+  border-color: var(--line-strong);
+}
+.call-message__icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  background: var(--orange-wash);
+  color: var(--orange-deep);
+}
+.call-message__icon svg {
+  width: 17px;
+  height: 17px;
+}
+.call-message__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.call-message__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  font-size: var(--t-lg);
+  font-weight: var(--w-strong);
+}
+.call-message__time {
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+  font-weight: 400;
+}
+.call-message__summary {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.call-message__chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-faint);
+  transition: transform var(--quick) var(--settle);
+}
+[data-open='true'] > .call-message__row .call-message__chevron {
+  transform: rotate(90deg);
+}
+.call-message__transcript {
+  margin: 6px 0 0 16px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line-strong);
+}
+.call-message__empty {
+  margin: 8px 0 0 16px;
+  color: var(--ink-faint);
+  font-size: var(--t-md);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .call-message__icon {
+    color: var(--orange-top);
+  }
+}
+:root[data-theme='dark'] .call-message__icon {
+  color: var(--orange-top);
+}
+
+/* Male or Female, side by side. */
+.voice-choice {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.voice-choice legend {
+  padding: 0;
+  margin-bottom: 4px;
+  font-size: var(--t-md);
+  font-weight: var(--w-label);
+}
+.voice-choice__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.voice-choice label {
+  position: relative;
+  cursor: pointer;
+}
+.voice-choice input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.voice-choice span {
+  display: block;
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: var(--t-md);
+}
+.voice-choice input:checked + span {
+  border-color: var(--orange);
+  background: var(--orange-wash);
+  font-weight: var(--w-label);
+}
+.voice-choice input:focus-visible + span {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.speech-form {
+  max-width: 62ch;
+}

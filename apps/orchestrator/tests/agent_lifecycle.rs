@@ -30,6 +30,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
                 name: "Researcher".into(),
                 instructions: "Original".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await
@@ -230,6 +231,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
                 name: "Original".into(),
                 instructions: "Keep this text".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await

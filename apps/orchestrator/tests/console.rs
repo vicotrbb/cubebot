@@ -70,6 +70,7 @@ async fn fixture() -> Fixture {
             name: name.into(),
             instructions: format!("You are {name}."),
             avatar,
+            voice: None,
         };
         ids.push(agents.create(&admin, &input).await.unwrap().id);
     }

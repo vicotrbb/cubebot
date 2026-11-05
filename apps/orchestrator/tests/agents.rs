@@ -34,6 +34,7 @@ async fn definitions_are_durable_scoped_and_creation_replays() {
         name: "Researcher".into(),
         instructions: "Inspect evidence".into(),
         avatar: None,
+        voice: None,
     };
     assert!(matches!(
         agents.create(&actor, &input).await,
@@ -131,6 +132,7 @@ async fn creation_is_atomic_under_retries_and_rechecks_current_role() {
         name: "Durable agent".into(),
         instructions: "Keep this configuration".into(),
         avatar: None,
+        voice: None,
     };
     let (first, second) =
         tokio::join!(agents.create(&actor, &input), agents.create(&actor, &input));
@@ -217,6 +219,7 @@ async fn an_agent_idle_past_its_delay_sleeps_without_stopping() {
                 name: "Dreamer".into(),
                 instructions: "Rest well".into(),
                 avatar: None,
+                voice: None,
             },
         )
         .await
