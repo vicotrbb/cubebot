@@ -168,24 +168,7 @@ impl Work {
         let owned = attempt == Some(actor.attempt.0);
         let live = status == "running" && owned;
         if accepted {
-            // A resent event keeps its first recorded form.
-            sqlx::query!(
-                "
-                INSERT INTO turn_events (turn_id, sequence, payload)
-                VALUES ($1, $2, $3)
-                ON CONFLICT DO NOTHING
-                ",
-                turn,
-                sequence as i64,
-                &payload,
-            )
-            .execute(&mut *tx)
-            .await?;
-            incorporated(&mut tx, turn, event).await?;
-            account(&mut tx, actor, turn, sequence, live, event).await?;
-            if live {
-                settle(&mut tx, actor, turn, event).await?;
-            }
+            append(&mut tx, actor, turn, sequence, event, &payload, live).await?;
         } else if live {
             // Resending cannot change the verdict, so the agent gets its ack and the turn ends.
             tracing::warn!(sequence, "refused an invalid turn event");
@@ -225,6 +208,36 @@ impl Work {
         crate::knowledge::recover_dreams(&self.pool).await?;
         Ok(())
     }
+}
+
+/// A resent event keeps its first recorded form.
+async fn append(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    turn: Uuid,
+    sequence: u64,
+    event: &TurnEvent,
+    payload: &serde_json::Value,
+    live: bool,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "
+        INSERT INTO turn_events (turn_id, sequence, payload)
+        VALUES ($1, $2, $3)
+        ON CONFLICT DO NOTHING
+        ",
+        turn,
+        sequence as i64,
+        payload,
+    )
+    .execute(&mut **tx)
+    .await?;
+    incorporated(tx, turn, event).await?;
+    account(tx, actor, turn, sequence, live, event).await?;
+    if live {
+        settle(tx, actor, turn, event).await?;
+    }
+    Ok(())
 }
 
 /// Steering the running work took in is incorporated.
