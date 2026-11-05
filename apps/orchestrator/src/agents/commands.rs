@@ -117,7 +117,7 @@ impl Command {
         )
         .execute(&mut *transaction)
         .await?;
-        // ponytail: share the short publication barrier; use watermarks if throughput requires it.
+        // A cursor must never advance beyond an uncommitted lower event sequence.
         sqlx::query!(
             "
             SELECT singleton
