@@ -157,6 +157,34 @@ pub async fn drive<S: Sandbox + Sync>(
     if state != "running" {
         return sandbox.stop(agent).await;
     }
+    if backing_off(pool, agent).await? {
+        return Ok(());
+    }
     sandbox.create(agent).await?;
     sandbox.start(agent).await
+}
+
+/// Whether a new epoch must wait: an attempt that ended this hour without draining failed, and each
+/// one doubles the delay, up to five minutes, so a crash loop neither spins nor grows
+/// `agent_resources` quickly. One crash restarts at once, and a person's restart starts over since
+/// it starts a new generation.
+async fn backing_off(pool: &PgPool, agent: AgentId) -> Result<bool, Error> {
+    Ok(sqlx::query_scalar!(
+        r#"
+        SELECT COALESCE(max(r.updated_at) + make_interval(secs => LEAST(300, power(2, count(*)) - 2)) > clock_timestamp(), false) AS "waiting!"
+        FROM agent_resources r
+        JOIN agents a ON a.id = r.agent_id
+        WHERE r.agent_id = $1
+          AND r.kind = 'pod'
+          AND r.phase = 'stopped'
+          AND r.target_generation = a.restart_generation
+          AND r.updated_at > clock_timestamp() - interval '1 hour'
+          AND r.termination_proof->>'kind' IS DISTINCT FROM 'not_dispatched'
+          AND NOT EXISTS (SELECT 1 FROM agent_runtime_drains d WHERE d.attempt_id = r.id AND d.acknowledged_at IS NOT NULL)
+          AND NOT EXISTS (SELECT 1 FROM agent_resources o WHERE o.agent_id = $1 AND o.kind = 'pod' AND o.phase <> 'stopped')
+        "#,
+        agent.0,
+    )
+    .fetch_one(pool)
+    .await?)
 }
