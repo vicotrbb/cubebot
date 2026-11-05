@@ -20,6 +20,12 @@ export const Route = createRootRoute({
         content: 'width=device-width, initial-scale=1, viewport-fit=cover',
       },
       { title: 'Cubebot' },
+      {
+        name: 'description',
+        content: 'The console of a self-hosted Cubebot installation.',
+      },
+      // Each installation is private; only the public site belongs in search results.
+      { name: 'robots', content: 'noindex' },
       { name: 'theme-color', content: '#f26a1b' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
       { name: 'mobile-web-app-capable', content: 'yes' },

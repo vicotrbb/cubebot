@@ -76,6 +76,11 @@
   background: var(--orange-wash);
   color: var(--orange-deep);
 }
+@media (pointer: coarse) {
+  .files__open {
+    min-height: 44px;
+  }
+}
 .files__open {
   appearance: none;
   justify-self: start;

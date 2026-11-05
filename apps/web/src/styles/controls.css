@@ -623,3 +623,27 @@ details.disclosure > summary::before {
 details.disclosure[open] > summary::before {
   transform: rotate(45deg);
 }
+
+/* Touch: fingers need larger targets, and iOS zooms into any field under 16px. */
+@media (pointer: coarse) {
+  .btn,
+  .btn--sm {
+    min-height: 44px;
+  }
+  .btn--icon,
+  .btn--icon.btn--sm {
+    width: 44px;
+  }
+  input:not([type='checkbox'], [type='radio'], [type='file']),
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+  input:not([type='checkbox'], [type='radio'], [type='file']),
+  select {
+    min-height: 44px;
+  }
+  .tabs > * {
+    min-height: 44px;
+  }
+}

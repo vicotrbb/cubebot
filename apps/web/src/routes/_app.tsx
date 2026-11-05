@@ -1,8 +1,14 @@
-import { createFileRoute, Navigate, Outlet } from '@tanstack/react-router'
+import {
+  createFileRoute,
+  Navigate,
+  Outlet,
+  useRouterState,
+} from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { useInstallationStream } from '../app/events'
-import { usePreferences, useSession } from '../app/queries'
+import { useAgents, usePreferences, useSession } from '../app/queries'
 import { applyTheme } from '../app/theme'
+import { pageTitle } from '../app/title'
 import { Shell } from '../features/shell/Shell'
 
 // The shell is personal and lives behind a session cookie, so it renders in the browser; the
@@ -25,6 +31,11 @@ function App() {
   const session = useSession()
   const preferences = usePreferences()
   useInstallationStream(Boolean(session.data))
+  const path = useRouterState({ select: (state) => state.location.pathname })
+  const agents = useAgents()
+  useEffect(() => {
+    document.title = pageTitle(path, agents.data)
+  }, [path, agents.data])
   useEffect(() => {
     if (preferences.data) applyTheme(preferences.data.theme)
   }, [preferences.data])

@@ -364,7 +364,7 @@ function AgentRow({ agent }: { agent: AgentSummary }) {
       activeProps={{ 'aria-current': 'page' }}
       {...agentHover(agent.id)}
     >
-      <Cube avatar={agent.avatar} mood={mood} size={22} />
+      <Cube avatar={agent.avatar} mood={mood} size={18} />
       <span className="row__text">
         <span className="row__label">{agent.name}</span>
         {/* Phones have no hover, so their Home page says it on the row. */}

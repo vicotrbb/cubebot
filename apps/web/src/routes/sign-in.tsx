@@ -7,7 +7,10 @@ import { Cube } from '../components/Cube'
 import { Alert, Field } from '../components/primitives'
 import '../features/shell/sign-in.css'
 
-export const Route = createFileRoute('/sign-in')({ component: SignIn })
+export const Route = createFileRoute('/sign-in')({
+  head: () => ({ meta: [{ title: 'Sign in · Cubebot' }] }),
+  component: SignIn,
+})
 
 function SignIn() {
   const setup = useQuery({
@@ -19,7 +22,7 @@ function SignIn() {
     <main className="sign-in">
       <div className="sign-in__card">
         <div className="sign-in__brand">
-          <Cube size={64} follow />
+          <Cube size={48} follow />
           <span className="sign-in__name">Cubebot</span>
         </div>
         {setup.isPending ? null : open ? (

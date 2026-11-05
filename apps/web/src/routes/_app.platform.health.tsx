@@ -67,7 +67,7 @@ function Health() {
               <th>Agent</th>
               <th>Activity</th>
               <th>Desired</th>
-              <th>Lanes</th>
+              <th className="num">Lanes</th>
               <th />
             </tr>
           </thead>
