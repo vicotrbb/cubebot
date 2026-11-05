@@ -31,13 +31,12 @@ body > div {
 
 ::selection {
   background: var(--orange);
-  color: var(--paper);
+  color: var(--on-paint);
 }
 
 :focus-visible {
   outline: 2px solid var(--orange);
   outline-offset: 2px;
-  border-radius: var(--r-sm);
 }
 
 * {
@@ -121,7 +120,7 @@ pre {
 }
 kbd {
   padding: 1px 6px;
-  border-radius: 5px;
+  border-radius: var(--r-xs);
   background: var(--inset);
   border: 1px solid var(--line);
   font-size: var(--t-xs);
@@ -138,6 +137,21 @@ kbd {
 }
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--float);
+  font-weight: var(--w-strong);
+  transform: translateY(-200%);
+}
+.skip-link:focus {
+  transform: none;
 }
 .sr-only {
   position: absolute;
@@ -295,6 +309,17 @@ kbd {
   height: 26px;
   width: 30px;
   padding: 0;
+}
+@media (pointer: coarse) {
+  .codeblock__head .btn {
+    min-width: 30px;
+    position: relative;
+  }
+  .codeblock__head .btn::after {
+    content: '';
+    position: absolute;
+    inset: -9px -7px;
+  }
 }
 .codeblock__scroll {
   display: flex;

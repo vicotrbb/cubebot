@@ -18,6 +18,7 @@ import { api, ApiError, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
 import {
   Alert,
+  confirmAction,
   Dialog,
   Menu,
   Skeleton,
@@ -377,7 +378,7 @@ function ViewTabs({
         <button
           key={kind}
           type="button"
-          aria-selected={view === kind}
+          aria-pressed={view === kind}
           onClick={() => onPick(kind)}
         >
           {kind === 'mine' ? 'My files' : 'Shared with me'}
@@ -657,12 +658,16 @@ function Row({
           entry={entry}
           onShare={onShare}
           onRename={() => setRenaming(true)}
-          onDelete={() => {
+          onDelete={async () => {
             const what = entry.folder
               ? `${entry.name} and everything in it`
               : entry.name
-            if (window.confirm(`Delete ${what}? This cannot be undone.`))
-              onDelete()
+            const yes = await confirmAction({
+              title: `Delete ${what}?`,
+              body: 'This cannot be undone.',
+              action: 'Delete',
+            })
+            if (yes) onDelete()
           }}
         />
       </div>

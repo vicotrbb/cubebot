@@ -185,7 +185,9 @@ function TaskRow({
       {task.items.length > 0 && (
         <span className="plan__meter task-row__meter" aria-hidden="true">
           <span
-            style={{ width: `${(doneCount(task) / task.items.length) * 100}%` }}
+            style={{
+              transform: `scaleX(${doneCount(task) / task.items.length})`,
+            }}
           />
         </span>
       )}

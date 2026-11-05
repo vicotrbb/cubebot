@@ -327,7 +327,8 @@
   height: 100%;
   border-radius: 2px;
   background: var(--sage-deep);
-  transition: width 400ms var(--settle);
+  transform-origin: left;
+  transition: transform 400ms var(--settle);
 }
 .meter[data-state='near'] .meter__track span {
   background: var(--orange);

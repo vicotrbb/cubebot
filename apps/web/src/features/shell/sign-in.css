@@ -35,6 +35,5 @@
   margin-top: 8px;
 }
 .sign-in .btn {
-  justify-self: start;
-  min-width: 120px;
+  width: 100%;
 }

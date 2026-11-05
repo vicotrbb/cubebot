@@ -53,7 +53,7 @@ export function TaskCard({
       </div>
       {total > 0 && (
         <div className="plan__meter task-card__meter" aria-hidden="true">
-          <span style={{ width: `${(done / total) * 100}%` }} />
+          <span style={{ transform: `scaleX(${done / total})` }} />
         </div>
       )}
       {total === 0 && pile === 'working' && (

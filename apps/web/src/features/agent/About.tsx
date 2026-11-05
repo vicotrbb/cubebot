@@ -10,7 +10,13 @@ import {
 import type { AgentSummary } from '../../api/types'
 import { keys, useInstallation } from '../../app/queries'
 import { moodOf, type Avatar } from '../../components/Cube'
-import { Alert, Field, Status, Switch } from '../../components/primitives'
+import {
+  Alert,
+  confirmAction,
+  Field,
+  Status,
+  Switch,
+} from '../../components/primitives'
 import { AgentSpeechSection } from '../call/SpeechSettings'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
@@ -466,14 +472,15 @@ export function Lifecycle({
             type="button"
             className={danger ? 'btn btn--danger btn--sm' : 'btn btn--sm'}
             disabled={busy || retired || agent.desired_state === held[action]}
-            onClick={() => {
-              if (
-                danger &&
-                !window.confirm(
-                  `Retire ${agent.name}? It cannot be started again.`,
-                )
-              )
-                return
+            onClick={async () => {
+              const go =
+                !danger ||
+                (await confirmAction({
+                  title: `Retire ${agent.name}?`,
+                  body: 'It cannot be started again.',
+                  action: 'Retire',
+                }))
+              if (!go) return
               void save(
                 () => admin.lifecycle(agent.id, action, agent.revision),
                 `${label} requested.`,

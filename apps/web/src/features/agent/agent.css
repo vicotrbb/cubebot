@@ -27,6 +27,12 @@
   align-items: center;
   gap: 6px;
 }
+.agent-head__status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .agent-head__actions {
   display: flex;
   align-items: center;
@@ -71,6 +77,18 @@
 }
 .panel__tabs > * {
   padding: 5px 8px;
+}
+/* A mouse has no swipe to find hidden tabs, so every tab stays on screen. */
+@media (hover: hover) and (pointer: fine) {
+  .panel__head {
+    align-items: flex-start;
+  }
+  .panel__tabs {
+    flex-wrap: wrap;
+    overflow: visible;
+    padding-right: 0;
+    mask-image: none;
+  }
 }
 .panel__body {
   flex: 1;

@@ -137,7 +137,7 @@ function Plan({ task, phone }: { task: Task; phone: boolean }) {
           aria-valuemax={task.items.length}
           aria-valuenow={done}
         >
-          <span style={{ width: `${(done / task.items.length) * 100}%` }} />
+          <span style={{ transform: `scaleX(${done / task.items.length})` }} />
         </div>
       )}
       {task.items.length === 0 && (

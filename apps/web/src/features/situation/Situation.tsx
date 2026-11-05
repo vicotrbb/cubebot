@@ -328,7 +328,7 @@ export function BudgetMeter({
         aria-valuemax={budget}
         aria-valuenow={Math.min(spent, budget)}
       >
-        <span style={{ width: `${Math.min(100, (spent / budget) * 100)}%` }} />
+        <span style={{ transform: `scaleX(${Math.min(1, spent / budget)})` }} />
       </span>
     </div>
   )

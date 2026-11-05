@@ -151,7 +151,7 @@
   height: 32px;
   border-radius: 50%;
   background: var(--orange-wash);
-  color: var(--orange-deep);
+  color: var(--orange-text);
   align-self: start;
 }
 .login-handoff__icon svg {
@@ -361,7 +361,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--orange-wash);
-  color: var(--orange-deep);
+  color: var(--orange-text);
   font: inherit;
   font-size: var(--t-xs);
   font-weight: var(--w-strong);

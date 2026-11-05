@@ -14,6 +14,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { api, failure, ok } from '../../api/client'
 import {
   Alert,
+  confirmAction,
   Dialog,
   Empty,
   Menu,
@@ -37,6 +38,7 @@ import {
   type Drop,
   type Summary,
 } from './tree'
+import { useIsPhone } from '../shell/viewport'
 import './kb.css'
 
 const OPEN_KEY = 'cubebot.kb.open'
@@ -100,6 +102,7 @@ export function useCreate() {
 }
 
 export function KnowledgeTree({ current }: { current?: string | undefined }) {
+  const phone = useIsPhone()
   const tree = useTree()
   const { create, error } = useCreate()
   const [query, setQuery] = useState('')
@@ -107,6 +110,7 @@ export function KnowledgeTree({ current }: { current?: string | undefined }) {
   const pages = tree.data ?? []
   return (
     <aside className="kb-tree" aria-label="Knowledge base">
+      {phone && !current && <h1 className="sr-only">Knowledge base</h1>}
       <header className="kb-tree__head">
         <div className="kb-search">
           <Search aria-hidden="true" />
@@ -506,13 +510,13 @@ function Trash({ onClose }: { onClose: () => void }) {
             <button
               type="button"
               className="btn btn--sm btn--danger"
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    `Delete ${titled(page)} for good, with everything under it?`,
-                  )
-                )
-                  return
+              onClick={async () => {
+                const yes = await confirmAction({
+                  title: `Delete ${titled(page)} for good?`,
+                  body: 'Everything under it goes too. This cannot be undone.',
+                  action: 'Delete',
+                })
+                if (!yes) return
                 void act(() =>
                   ok(
                     api.POST('/api/kb/pages/{id}/purge', {

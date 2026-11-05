@@ -73,7 +73,7 @@
 }
 .files__row--folder .entry__icon {
   background: var(--orange-wash);
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 @media (pointer: coarse) {
   .files__open {

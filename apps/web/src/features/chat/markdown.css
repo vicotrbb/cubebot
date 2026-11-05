@@ -147,7 +147,7 @@
 
 .attachments {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   align-items: flex-start;
   gap: 8px;
   max-width: 78ch;
@@ -173,6 +173,7 @@
   height: 160px;
 }
 .attachment-media {
+  margin: 0;
   display: grid;
   gap: 4px;
   width: min(100%, 460px);

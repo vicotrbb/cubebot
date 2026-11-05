@@ -80,7 +80,11 @@ export function Sidebar({
   const administrator = Boolean(session.data?.administrator)
   const attention = useUnreadActivity()
   return (
-    <aside className={page ? 'sidebar sidebar--page' : 'sidebar'}>
+    <aside
+      className={page ? 'sidebar sidebar--page' : 'sidebar'}
+      aria-label="Sidebar"
+    >
+      {page && <h1 className="sr-only">Home</h1>}
       <header className="sidebar__head">
         <span className="sidebar__brand">
           <Cube size={20} />

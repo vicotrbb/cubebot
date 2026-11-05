@@ -6,6 +6,7 @@ import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Skeleton } from '../../components/primitives'
+import { useFollowEnd } from './useFollowEnd'
 import { CallMessage } from '../call/CallMessage'
 import { Attachments } from './Attachments'
 import { Composer } from './Composer'
@@ -38,6 +39,7 @@ export function Conversation({
   const [shown, setShown] = useState(PAGE)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  useFollowEnd(scroller, pinned)
   const visible = turns.slice(Math.max(0, turns.length - shown))
   const last = turns.at(-1)
   useEffect(() => {

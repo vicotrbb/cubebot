@@ -473,6 +473,7 @@
   font-size: var(--t-md);
 }
 .empty h2,
+.empty h2,
 .empty h3 {
   color: var(--ink);
   font-size: var(--t-lg);
@@ -512,7 +513,7 @@ dialog.dialog {
   color: var(--ink);
   box-shadow: var(--float);
   width: min(520px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
 }
 dialog.dialog::backdrop {
   background: rgb(18 14 11 / 0.45);
@@ -522,6 +523,9 @@ dialog.dialog::backdrop {
   padding: 18px 20px 20px;
   display: grid;
   gap: 14px;
+}
+.dialog__actions {
+  justify-content: flex-end;
 }
 .dialog__head h2 {
   font-size: var(--t-xl);
@@ -571,13 +575,16 @@ dialog.dialog::backdrop {
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 .tabs > :hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 .tabs > [aria-current='page'],
-.tabs > [aria-selected='true'] {
+.tabs > [aria-pressed='true'],
+.tabs > [aria-checked='true'] {
   background: color-mix(in srgb, var(--ink) 10%, transparent);
   color: var(--ink);
 }
@@ -614,16 +621,40 @@ details.disclosure[open] > summary::before {
   .btn,
   .btn--sm {
     min-height: 44px;
+    min-width: 44px;
+  }
+  /* Grows the target, not the line. */
+  .link-btn,
+  .table a {
+    display: inline-block;
+    padding-block: 12px;
+    margin-block: -12px;
+  }
+  details.disclosure > summary {
+    padding-block: 12px;
+    margin-block: -12px;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    inset: -11px -4px;
   }
   .btn--icon,
   .btn--icon.btn--sm {
     width: 44px;
   }
+  .input,
+  .field input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  .field textarea,
+  .field select,
   input:not([type='checkbox'], [type='radio'], [type='file']),
   select,
   textarea {
     font-size: 1rem;
   }
+  .input,
+  .field input:not([type='checkbox']):not([type='radio']):not([type='file']),
+  .field select,
   input:not([type='checkbox'], [type='radio'], [type='file']),
   select {
     min-height: 44px;

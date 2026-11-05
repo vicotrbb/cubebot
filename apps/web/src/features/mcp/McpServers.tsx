@@ -13,6 +13,7 @@ import type { Schemas } from '../../api/types'
 import { useAgents } from '../../app/queries'
 import {
   Alert,
+  confirmAction,
   Dialog,
   Empty,
   Menu,
@@ -55,10 +56,12 @@ export function McpServers() {
       setError(failure(error))
     }
   }
-  const remove = (server: McpServer) =>
-    window.confirm(
-      `Remove ${server.name}? Agents lose its tools from their next turn.`,
-    ) &&
+  const remove = async (server: McpServer) =>
+    (await confirmAction({
+      title: `Remove ${server.name}?`,
+      body: 'Agents lose its tools from their next turn.',
+      action: 'Remove',
+    })) &&
     void act(() =>
       ok(
         api.DELETE('/api/mcp-servers/{server}', {

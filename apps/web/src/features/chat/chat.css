@@ -93,7 +93,7 @@
   color: var(--danger);
 }
 .exchange[data-status='running'] .msg__state {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 
 .work {
@@ -141,7 +141,7 @@
 .work[data-status='running'] .work__icon {
   background: var(--orange-wash);
   box-shadow: 0 0 0 1px var(--orange);
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .work__line {
   flex: 1;
@@ -179,13 +179,13 @@
   color: var(--success);
 }
 .work__mark .warn {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .work__mark .danger {
   color: var(--danger);
 }
 .work__mark .spin {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .work__body {
   display: grid;
@@ -343,7 +343,7 @@
   width: 14px;
   height: 14px;
   flex: none;
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .worklog__label {
   font-weight: 600;

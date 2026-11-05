@@ -149,7 +149,6 @@ function TransportChoice({
           type="button"
           role="radio"
           aria-checked={value === transport}
-          aria-selected={value === transport}
           onClick={() => onPick(transport)}
         >
           {label}

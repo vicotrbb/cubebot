@@ -209,6 +209,7 @@ function Controls({
       <button
         type="button"
         className={holding ? 'btn btn--ghost btn--sm' : 'btn btn--sm'}
+        aria-label={watching ? 'Stop watching' : 'Watch'}
         onClick={onWatch}
       >
         {watching ? <Pause /> : <Play />}

@@ -68,7 +68,7 @@ export function Empty({
 }) {
   return (
     <div className="empty">
-      <h3>{title}</h3>
+      <h2>{title}</h2>
       {children && <p>{children}</p>}
       {action}
     </div>
@@ -120,6 +120,57 @@ export function Dialog({
         {open && children}
       </div>
     </dialog>
+  )
+}
+
+type Question = {
+  title: string
+  body?: string
+  action: string
+  answer: (yes: boolean) => void
+}
+let ask: ((question: Question) => void) | null = null
+
+/** Asks before a destructive action; resolves false when nothing is mounted to ask with. */
+export function confirmAction(question: Omit<Question, 'answer'>) {
+  return new Promise<boolean>((answer) => {
+    if (ask) ask({ ...question, answer })
+    else answer(false)
+  })
+}
+
+export function ConfirmHost() {
+  const [question, setQuestion] = useState<Question | null>(null)
+  useEffect(() => {
+    ask = setQuestion
+    return () => {
+      ask = null
+    }
+  }, [])
+  const settle = (yes: boolean) => {
+    question?.answer(yes)
+    setQuestion(null)
+  }
+  return (
+    <Dialog
+      open={question !== null}
+      title={question?.title ?? ''}
+      onClose={() => settle(false)}
+    >
+      {question?.body && <p className="muted">{question.body}</p>}
+      <div className="actions dialog__actions">
+        <button type="button" className="btn" onClick={() => settle(false)}>
+          Cancel
+        </button>
+        <button
+          type="button"
+          className="btn btn--danger"
+          onClick={() => settle(true)}
+        >
+          {question?.action}
+        </button>
+      </div>
+    </Dialog>
   )
 }
 

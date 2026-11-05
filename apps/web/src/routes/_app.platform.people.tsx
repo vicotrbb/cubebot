@@ -2,7 +2,13 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { admin } from '../api/admin'
-import { Alert, Field, Skeleton, Status } from '../components/primitives'
+import {
+  Alert,
+  confirmAction,
+  Field,
+  Skeleton,
+  Status,
+} from '../components/primitives'
 import { useAdminAction } from '../features/platform/useAdminAction'
 import '../features/platform/platform.css'
 
@@ -38,7 +44,9 @@ function People() {
               <th>Login</th>
               <th>Role</th>
               <th>State</th>
-              <th />
+              <th>
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -53,8 +61,13 @@ function People() {
                       type="button"
                       className="link-btn small"
                       disabled={busy}
-                      onClick={() => {
-                        if (window.confirm(`Suspend ${account.login}?`))
+                      onClick={async () => {
+                        const yes = await confirmAction({
+                          title: `Suspend ${account.login}?`,
+                          body: 'The account keeps its history and loses its access.',
+                          action: 'Suspend',
+                        })
+                        if (yes)
                           void run(
                             () => admin.suspend(account.id, account.revision),
                             'Suspended.',
@@ -69,14 +82,16 @@ function People() {
             ))}
           </tbody>
         </table>
-        <h3 style={{ margin: '24px 0 8px' }}>Invitations</h3>
+        <h2 className="platform__h2">Invitations</h2>
         <table className="table">
           <thead>
             <tr>
               <th>Login</th>
               <th>Status</th>
               <th>Expires</th>
-              <th />
+              <th>
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>

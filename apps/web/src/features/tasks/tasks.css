@@ -67,7 +67,7 @@
   color: var(--ink-faint);
 }
 .tasks__pile[data-pile='needs_you'] .tasks__pile-head {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .task-row {
   display: flex;
@@ -137,10 +137,10 @@
   height: 16px;
 }
 .task-mark[data-state='working'] {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .task-mark[data-state='needs_you'] {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .task-mark[data-state='done'] {
   color: var(--success);
@@ -229,7 +229,8 @@
   height: 100%;
   border-radius: 2px;
   background: var(--orange);
-  transition: width 240ms var(--settle);
+  transform-origin: left;
+  transition: transform 240ms var(--settle);
 }
 .plan__agent {
   display: grid;
@@ -265,7 +266,7 @@
   color: var(--ink-faint);
 }
 .plan__item[data-status='doing'] svg {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .plan__item[data-status='done'] svg {
   color: var(--success);
@@ -442,7 +443,7 @@
   color: var(--ink-faint);
 }
 .task-card[data-pile='needs_you'] .task-card__what span {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .task-card__count {
   font-size: var(--t-xs);
@@ -484,7 +485,7 @@
   font-weight: var(--w-label);
 }
 .task-card__item[data-status='doing'] > svg {
-  color: var(--orange-deep);
+  color: var(--orange-text);
 }
 .task-card__item[data-status='done'] > svg {
   color: var(--success);
