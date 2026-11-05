@@ -215,7 +215,7 @@ async fn http_exchange_uses_runtime_credentials_and_never_accepts_a_human_bearer
     assert_eq!(response.headers()["cache-control"], "no-store");
     let issued: Value = serde_json::from_slice(&response.bytes().await.unwrap()).unwrap();
     let runtime = client
-        .get(format!("{origin}/api/runtime/identity"))
+        .get(format!("{origin}/api/runtime/memories?query=x"))
         .bearer_auth(issued["token"].as_str().unwrap())
         .send()
         .await
@@ -226,7 +226,7 @@ async fn http_exchange_uses_runtime_credentials_and_never_accepts_a_human_bearer
         .await
         .unwrap();
     let denied = client
-        .get(format!("{origin}/api/runtime/identity"))
+        .get(format!("{origin}/api/runtime/memories?query=x"))
         .bearer_auth(human.token)
         .send()
         .await

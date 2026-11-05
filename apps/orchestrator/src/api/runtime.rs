@@ -14,15 +14,14 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Broadcast, Broadcasted, Collaborate, Collaborated, Dream, DreamEnd, FileShare,
-    Memory, MemoryChange, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeActor,
-    RuntimeSession, SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
+    Memory, MemoryChange, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeSession,
+    SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
 };
 use uuid::Uuid;
 
 pub(super) fn router(identity: RuntimeIdentity) -> Router {
     Router::new()
         .route("/api/runtime/bootstrap", post(bootstrap))
-        .route("/api/runtime/identity", get(inspect))
         .route("/api/runtime/channel", get(channel))
         .route("/api/runtime/memories", get(memories))
         .route(
@@ -66,17 +65,6 @@ async fn bootstrap(
         .await
         .map_err(Failure::from)?;
     Ok(Json(session.into()))
-}
-async fn inspect(
-    State(identity): State<RuntimeIdentity>,
-    headers: HeaderMap,
-) -> Result<Json<RuntimeActor>, Failure> {
-    let token = bearer(&headers)?;
-    let actor = identity
-        .authenticate(token, RuntimeAccess::Active)
-        .await
-        .map_err(Failure::from)?;
-    Ok(Json(actor.into()))
 }
 /// Authenticates before upgrading; the channel rechecks the credential while it runs.
 async fn channel(

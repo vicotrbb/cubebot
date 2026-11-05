@@ -17,15 +17,6 @@ pub struct RuntimeSession {
     pub epoch: i64,
     pub version: i64,
 }
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RuntimeActor {
-    pub agent: Uuid,
-    pub attempt: Uuid,
-    pub epoch: i64,
-    pub version: i64,
-}
-
 /// Orchestrator to agent over `/api/runtime/channel`.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

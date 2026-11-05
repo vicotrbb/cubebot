@@ -1150,7 +1150,7 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
         200
     );
     assert_eq!(
-        http.get(format!("{origin}/api/runtime/identity"))
+        http.get(format!("{origin}/api/runtime/memories?query=x"))
             .send()
             .await
             .unwrap()
