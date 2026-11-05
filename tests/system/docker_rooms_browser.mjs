@@ -1,5 +1,4 @@
-// The console's rooms, delegation and steering views in real Chromium, against the agents
-// docker_rooms.py has just run, through the built web server behind Caddy.
+// Rooms, delegation and steering in real Chromium, against the agents docker_rooms.py has just run.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -31,8 +30,6 @@ try {
     .fill(process.env.CUBEBOT_CONSOLE_PASSWORD)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
 
-  // The room shows earlier routing and replies, then a new mention streams its reply in
-  // without a reload.
   const rooms = page.getByRole('navigation', { name: 'Rooms' })
   await rooms.getByRole('link', { name: /^Launch\b/ }).click()
   await page.getByText(`ROUTE-${marker}`).first().waitFor()
@@ -40,7 +37,6 @@ try {
   await page
     .getByRole('textbox', { name: 'Message the room' })
     .fill(`@Analyst reply with only the word BROWSER-${marker}`)
-  // The send button carries the composer's label as its accessible name.
   await page
     .getByRole('button', { name: 'Message the room', exact: true })
     .click()
@@ -55,8 +51,6 @@ try {
   await shot(page, 'room-members')
   await page.getByRole('link', { name: 'Close members', exact: true }).click()
 
-  // Lead's conversation lists the work it handed off (in its thread panel) and the
-  // steering it received.
   const agents = page.getByRole('navigation', { name: 'Agents' })
   await agents.getByRole('link', { name: /^Lead\b/ }).click()
   await page.getByRole('button', { name: 'Delegated work' }).first().click()
@@ -69,7 +63,6 @@ try {
   await page.getByText('Reply from agent Scribe').first().waitFor()
   await shot(page, 'lead-chat')
 
-  // Analyst's conversation shows where each request came from.
   await agents.getByRole('link', { name: /^Analyst\b/ }).click()
   await page.getByText('Delegated by Lead').first().waitFor()
   await page.getByText('Room · Launch').first().waitFor()
@@ -84,8 +77,7 @@ try {
   assert.equal(await lanes.inputValue(), '2')
   await shot(page, 'analyst-edit')
 
-  // At phone width the room still fits without horizontal scrolling. The sidebar is the
-  // Home page there, so open it from the console root.
+  // The sidebar is the Home page at phone width, so open it from the console root.
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto(process.env.CUBEBOT_CONSOLE)
   await rooms.getByRole('link', { name: /^Launch\b/ }).click()

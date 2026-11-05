@@ -108,8 +108,6 @@ def install_csi(config, artifacts):
 
 
 def install_devices(config, name):
-    """A generic device plugin hands /dev/kvm and /dev/net/tun to sandbox pods under the
-    KubeVirt resource names the orchestrator requests."""
     devices = [
         {"name": device, "groups": [{"count": 8, "paths": [{"path": path}]}]}
         for device, path in (("kvm", "/dev/kvm"), ("tun", "/dev/net/tun"))

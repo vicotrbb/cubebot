@@ -1,10 +1,6 @@
 """Rooms, delegation, messaging, steering, cancellation and lanes on real agents.
 
-Same host needs as docker_sandbox.py. Three agents share a room: Lead delegates, Analyst
-runs shell commands, Scribe writes prose. Every check reads the ledger or the API (turn
-status, children, steering, tool events, room routing), never only the model's words;
-markers that only a real tool run or a real delivery can produce tie the words to the
-work.
+Same host needs as docker_sandbox.py.
 """
 
 import json
@@ -62,11 +58,7 @@ ROLES = {
 
 
 def deputy(admin, room, ids, name):
-    """A fresh agent in Lead's role, added to the room.
-
-    A long chat history teaches a small model to answer "I have asked Analyst" without
-    calling the tool, so each check that needs a real delegate call starts afresh.
-    """
+    """A long chat history teaches a small model to skip the tool, so start afresh."""
     identity = agent(admin, name, ROLES["Lead"])
     ids[name] = identity
     current = next(r for r in admin("/api/rooms") if r["id"] == room)["members"]
@@ -459,7 +451,6 @@ def members(admin, people, postgres, room, ids):
 
 
 def stream(api, room, frames, stop):
-    """Collects the room's server-sent `message` frames until stopped."""
     request = urllib.request.Request(
         f"{api.base}/api/rooms/{room}/events",
         headers={"Authorization": f"Bearer {api.token}", "Accept": "text/event-stream"},
@@ -499,7 +490,6 @@ def streamed(admin, room):
 
 
 def console(password, address, ca):
-    """Rooms, delegation and steering in the console's Chromium; needs Playwright."""
     if not os.environ.get("CUBEBOT_PLAYWRIGHT_MODULE"):
         print("SKIP console: set CUBEBOT_PLAYWRIGHT_MODULE to check it in Chromium")
         return

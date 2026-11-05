@@ -1,20 +1,8 @@
 """deploy/install.sh against a local registry, as a user runs it from a release.
 
-Builds the orchestrator, web and agent images from this checkout, pushes them to a
-disposable registry under one tag, and runs install.sh with that registry and this
-checkout as its file source into a temporary home under its own Compose project. Then
-it creates the administrator through the setup endpoint, checks setup closed and the
-declared runtime, wakes one agent until its runtime authenticates over the development
-control CA, runs install.sh again to check it keeps the database password, and stops
-the installation with `cubebot down`. With CUBEBOT_PLAYWRIGHT_MODULE set, it then
-empties the database and creates the administrator from the console's setup form in
-Chromium. It removes that installation with `cubebot uninstall --yes`, then installs
-again through a pty, answering every prompt with keystrokes into a temporary $HOME,
-signs in with the administrator created there and uninstalls it, checking the
-directory, the volumes and the images are gone each time. No provider is called.
-Needs Docker only; the control port 8443 must be free. The runtime is container unless
-CUBEBOT_SANDBOX_RUNTIME=kvm, which also builds the guest and sandbox image and needs
-what `just guest-boot` needs.
+Needs Docker only; the control port 8443 must be free. Container runtime unless
+CUBEBOT_SANDBOX_RUNTIME=kvm, which needs what `just guest-boot` needs.
+CUBEBOT_PLAYWRIGHT_MODULE adds the console's setup form. No provider is called.
 """
 
 import os
@@ -154,7 +142,6 @@ def uninstall(environment, home, registry, name, agents=()):
 
 
 def interactive(environment, directory, registry, name):
-    """Answers every prompt the installer shows, as a person at a terminal would."""
     user = directory / "user"
     user.mkdir()
     home = user / ".cubebot"

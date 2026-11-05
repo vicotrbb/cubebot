@@ -1,6 +1,4 @@
-// The login handoff banner (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) in real Chromium against the built console behind
-// Caddy. CUBEBOT_LOGIN_STEP is `take` (take control from the chat's banner and hand back
-// on the Desktop route) or `decline` (decline from the chat's banner with a reason).
+// The login handoff banner in real Chromium. CUBEBOT_LOGIN_STEP is `take` or `decline`.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -39,7 +37,6 @@ try {
   await page.screenshot({ path: join(evidence, `login-${step}-chat.png`) })
 
   if (step === 'take') {
-    // Take control moves to the Desktop route, where the banner shows again.
     await banner
       .getByRole('button', { name: 'Take control', exact: true })
       .click()

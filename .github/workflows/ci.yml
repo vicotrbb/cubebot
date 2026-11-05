@@ -46,7 +46,6 @@ jobs:
   guest:
     uses: ./.github/workflows/guest.yml
 
-  # One agent in the container runtime against the scripted provider; no /dev/kvm or key.
   container-runtime:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -62,7 +61,6 @@ jobs:
         run: rustup show active-toolchain
       - run: just container-check
 
-  # deploy/install.sh from a local registry, as a release installs; container runtime, no key.
   install:
     runs-on: ubuntu-24.04
     timeout-minutes: 45

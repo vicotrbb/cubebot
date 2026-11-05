@@ -50,7 +50,6 @@ try {
     await page
       .getByRole('button', { name: 'Send message', exact: true })
       .click()
-    // Both turns settled: the streamed draft is gone and the response is final.
     await page.waitForFunction(
       () =>
         globalThis.document.querySelectorAll(

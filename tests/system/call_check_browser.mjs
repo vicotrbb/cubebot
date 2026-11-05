@@ -1,5 +1,4 @@
-// A call in real Chromium: a human recording in place of the microphone device, the real speech stack
-// behind a small reverse proxy that stands where an ingress does.
+// A call in real Chromium: a human recording in place of the microphone, the real speech stack.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import { readFileSync } from 'node:fs'
@@ -70,8 +69,7 @@ await new Promise((resolve) =>
 
 const browser = await chromium.launch()
 const recording = readFileSync(env.CUBEBOT_MICROPHONE).toString('base64')
-// Stands where the device would: everything after getUserMedia is the production path. Chromium's
-// fake capture flags hang getUserMedia on the Mac this ran on, so they cannot be relied on.
+// Stands in for the device: Chromium's fake capture flags hang getUserMedia on a Mac.
 function speakIntoMicrophone(base64) {
   globalThis.navigator.mediaDevices.getUserMedia = async () => {
     const context = new globalThis.AudioContext()
@@ -125,7 +123,6 @@ try {
   await page.goBack()
   console.log('PASS choosing a voice in Details keeps the page in view')
 
-  // Call sits immediately before Desktop and Details.
   const actions = await page
     .locator('.agent-head__actions > :is(a, button)')
     .evaluateAll((items) =>
@@ -150,7 +147,6 @@ try {
     new globalThis.MutationObserver(note).observe(element, { attributes: true })
   })
 
-  // The recording reaches Zipformer through the worklet, partials first.
   await screen
     .getByText(/yellow|early|night/i)
     .first()
@@ -177,8 +173,7 @@ try {
   )
   await page.screenshot({ path: join(evidence, 'call-desktop-light.png') })
 
-  // The recording loops: the second question gets a reply of many sentences, and the third
-  // saying of it starts while that reply is playing.
+  // The recording loops: its third saying starts while the long reply to the second is playing.
   await screen.getByText(/sentence number 3 of/).waitFor({ timeout: 90000 })
   const spokeAt = await page.waitForFunction(
     () => {
@@ -209,7 +204,6 @@ try {
   await screen.getByRole('button', { name: 'Hang up' }).click()
   await screen.waitFor({ state: 'detached' })
 
-  // One Call message, however many turns the call took.
   const message = page.locator('.call-message')
   await message.first().waitFor({ timeout: 15000 })
   await page.waitForFunction(

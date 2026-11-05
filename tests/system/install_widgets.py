@@ -1,10 +1,4 @@
-"""deploy/install.sh's picker and confirmation driven with keystrokes through a pty.
-
-Sources the installer in each bash on this machine (macOS's /bin/bash is 3.2, the
-floor), picks with arrow keys, j and k, digits and Enter, answers confirmations with a
-key and with Enter, and checks the terminal settings are restored after each widget and
-after Ctrl-C. Needs no Docker.
-"""
+"""deploy/install.sh's picker and confirmation driven through a pty; needs no Docker."""
 
 import fcntl
 import os
@@ -40,8 +34,6 @@ DOWN, UP = "\x1b[B", "\x1b[A"
 
 
 class Terminal:
-    """A bash with a pty as its controlling terminal."""
-
     def __init__(self, bash, script, environment=os.environ):
         self.master, self.slave = os.openpty()
         fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
@@ -61,7 +53,6 @@ class Terminal:
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
 
     def read_until(self, text, timeout=10):
-        """Waits for `text` after the last text waited for."""
         deadline = time.monotonic() + timeout
         while (found := self.output.find(text.encode(), self.seen)) < 0:
             remaining = deadline - time.monotonic()

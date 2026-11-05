@@ -1,15 +1,7 @@
-"""The agent's browser tools
-(docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction,
-docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions and
-docs/adr/sandbox.md#desktop-as-a-vmm-device) on real agents through Docker.
+"""The agent's browser tools on real agents through Docker.
 
-Same host needs as docker_sandbox.py. Two agents with computer use drive the guest's
-desktop Chromium through the browser tools with OpenAI's model: Surfer in its main
-session, Tasks in named task sessions. Every claim is read from evidence the model
-cannot write: requests and cookies the guest's Chromium sends to a server this script
-runs, the ledger's tool calls and outcomes, the arbiter's log, and the host's own frame
-of the guest screen. Nothing is taken from the model's words. CUBEBOT_BROWSER_HOLD keeps
-a failed run alive for 15 minutes.
+Same host needs as docker_sandbox.py. CUBEBOT_BROWSER_HOLD keeps a failed run alive for
+15 minutes.
 """
 
 import http.server
@@ -70,8 +62,6 @@ MAGENTA = (0xFF, 0x00, 0xFF)
 
 
 class Site:
-    """The pages the guest's Chromium visits, and every request with its cookies."""
-
     def __init__(self):
         self.seen = []
         seen = self.seen
@@ -110,7 +100,6 @@ class Site:
 
 
 def page(path):
-    """A page's HTML and the cookie it sets; `set-<name>` sets `<name>=MARKER`."""
     if path == f"form-{MARKER}":
         return (
             f"<!doctype html><title>Form {MARKER}</title>"
@@ -138,7 +127,6 @@ def lifecycle(api, identity, action):
 
 
 def ready(api, identity):
-    """The runtime is up and its sandbox's desktop has started."""
     status = f"/api/agents/{identity}/status"
     wait_for("the runtime", lambda: api(status)["runtime_available"], 300)
     wait_for(
@@ -152,8 +140,7 @@ def ready(api, identity):
 
 
 def chat(api, identity, message):
-    """A turn that called tools; a reply without a call is asked again once, since a
-    model can answer from earlier results instead of acting."""
+    """A reply without a call is asked again: a model can answer from old results."""
     row = turn(api, identity, message)
     if not row["terminal"]:
         print("  the model answered without a tool call; asking again")
@@ -177,7 +164,6 @@ def turn(api, identity, message):
 
 
 def calls(row, tool):
-    """The turn's calls of one tool, each with its parsed input."""
     found = []
     for call in row["terminal"]:
         name, _, rest = call["command"].partition(" ")
@@ -195,7 +181,6 @@ def succeeded(call):
 
 
 def mode_checks(identity, row):
-    """The arbiter's mode queries made for this turn's calls, by call id."""
     ids = {call["id"] for call in row["terminal"]}
     return [
         event
@@ -207,7 +192,6 @@ def mode_checks(identity, row):
 
 
 def form(world):
-    """Navigate, read, type and click in the main session submit a real form."""
     api, surfer, site = world["api"], world["surfer"], world["site"]
     row = chat(
         api,
@@ -231,16 +215,13 @@ def form(world):
         for call in calls(row, tool)
     }
     reads = {call["id"] for call in calls(row, "browser_read")}
-    # Every call asks, so a login handoff
-    # (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) can refuse
-    # reads too.
+    # Every call asks, so a login handoff can refuse reads too.
     assert inputs | reads <= checked, (inputs, reads, checked)
     print("PASS form: navigate, read, type and click in session main submitted")
     print(f"     name={NAME!r}; every call asked the arbiter first")
 
 
 def visible(world):
-    """The desktop's own Chromium is the one driven: the host frame shows the page."""
     api, surfer, site = world["api"], world["surfer"], world["site"]
     row = chat(
         api,
@@ -259,13 +240,11 @@ def visible(world):
 
 
 def share(pixels, colour=RED):
-    """How much of an RGB screen is one colour, the red page by default."""
     found = sum(tuple(pixels[at : at + 3]) == colour for at in range(0, len(pixels), 3))
     return found / (len(pixels) // 3)
 
 
 def failures(world):
-    """An unreachable page and an unknown element are failed calls, not successes."""
     api, surfer = world["api"], world["surfer"]
     row = chat(
         api, surfer, "In browser session main, browser_navigate to http://127.0.0.1:1/."
@@ -283,7 +262,6 @@ def failures(world):
 
 
 def screenshot(world, postgres):
-    """A page screenshot's PNG is in the ledger and left out of the view."""
     api, surfer = world["api"], world["surfer"]
     row = chat(api, surfer, "Take a browser_screenshot of browser session main.")
     shot = calls(row, "browser_screenshot")[0]
@@ -303,7 +281,6 @@ def screenshot(world, postgres):
 
 
 def sessions(world):
-    """Task sessions have their own page and cookies; closing one leaves the rest."""
     api, tasks, site = world["api"], world["tasks"], world["site"]
     chat(
         api,
@@ -375,7 +352,6 @@ def sessions(world):
 
 
 def control(world):
-    """While a person holds the desktop, browser input is refused; reads work."""
     api, surfer, site = world["api"], world["surfer"], world["site"]
     controller = world["controller"].desktop(world["address"], world["ca"], surfer)
     controller.frame()
@@ -403,7 +379,6 @@ def control(world):
 
 
 def persistence(world):
-    """The main session's profile is on the workspace disk and outlives the sandbox."""
     api, surfer, site = world["api"], world["surfer"], world["site"]
     chat(
         api,
@@ -465,7 +440,6 @@ def set_wallpaper(api, identity, image):
 
 
 def uncovered(world, identity):
-    """A person takes the desktop, closes Chromium's window and returns the screen."""
     desk = world["controller"].desktop(world["address"], world["ca"], identity)
     desk.frame()
     assert desk.ask({"kind": "take"})["mode"] == "human"
@@ -476,8 +450,6 @@ def uncovered(world, identity):
 
 
 def wallpaper(world):
-    """The desktop shows the default wallpaper, then the configured one, live and
-    after a restart, and Chromium comes back for the next browser call."""
     api, surfer, site = world["api"], world["surfer"], world["site"]
 
     def colours():

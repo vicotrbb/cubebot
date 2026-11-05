@@ -1,13 +1,6 @@
-"""Routines (docs/adr/agents.md#routines) on real agents through Docker, from every
-side.
+"""Routines on real agents through Docker, from every side.
 
-Same host needs as docker_sandbox.py, plus Node with Playwright for the console. Keeper
-and Other are OpenAI agents with bash workspaces. People with no grant,
-conversation.read, conversation.read and conversation.send, and administration each see
-and change only what their access allows. Routines run by hand, from the agent's own
-tools, on a schedule across an orchestrator outage, and by webhook through the
-orchestrator and through the console's origin. Every claim is read from evidence the
-model cannot write: the ledger's events, rows in PostgreSQL and the HTTP answers.
+Same host needs as docker_sandbox.py, plus Node with Playwright for the console.
 CUBEBOT_ROUTINES_EVIDENCE keeps the evidence directory; CUBEBOT_ROUTINES_HOLD keeps a
 failed run for 15 minutes; CUBEBOT_ROUTINES_ONLY=a,b runs chosen scenarios.
 """
@@ -104,7 +97,6 @@ def update(who, agent, current, expected=200, **changes):
 
 
 def turn_row(api, agent, turn):
-    """The conversation's row for `turn`, paging through the history."""
     after = 0
     while True:
         page = api(f"/api/conversations/{agent}/messages?after={after}")
@@ -155,7 +147,6 @@ def column(world, turn, name):
 
 
 def hook(world, routine_id, secret=None, body=b"{}", key=None, base=None, auth=None):
-    """A webhook delivery; `base` is the orchestrator unless the console's origin."""
     headers = {"Content-Type": "application/json"}
     if auth or secret:
         headers["Authorization"] = auth or f"Bearer {secret}"
@@ -190,7 +181,6 @@ def when(text):
 
 
 def scopes(world):
-    """Who may read, run and change an agent's routines, through grants alone."""
     people, keeper, other = world["people"], world["keeper"], world["other"]
     admin, reader, sender, outsider = (
         people[name] for name in ("admin", "reader", "sender", "outsider")
@@ -220,7 +210,6 @@ def scopes(world):
     assert column(world, turn, "actor_id") == sender.id
     settled(sender.api, keeper, turn)
     sender.api(f"/api/agents/{other}/routines", expected=404)
-    # A routine is reached only through its own agent.
     update(admin, other, listed(admin, keeper, rid), expected=404, name="moved")
     assert runs(admin, other, rid) == []
     run(admin, other, rid, expected=404)
@@ -277,7 +266,6 @@ def scopes(world):
 
 
 def person_run(world):
-    """A prompt and command run by hand: the command first, as the tool user."""
     sender, keeper = world["people"]["sender"], world["keeper"]
     script = f"printf 'probe-{MARKER}\\n' > probe.txt && cat probe.txt && id -u"
     made = create(
@@ -317,7 +305,6 @@ def person_run(world):
 
 
 def command_only(world):
-    """Without a prompt the result is the answer and no provider is asked."""
     admin, keeper = world["people"]["admin"], world["keeper"]
     for script, code in (
         ("uname -m && echo only-" + MARKER, 0),
@@ -340,7 +327,6 @@ def command_only(world):
 
 
 def coalesce(world):
-    """A coalescing routine keeps one pending turn; an individual one makes each."""
     admin, keeper = world["people"]["admin"], world["keeper"]
     slow = create(admin, keeper, routine("slow", command_="sleep 25"))["routine"]["id"]
     first = run(admin, keeper, slow)["turn"]
@@ -370,7 +356,6 @@ def coalesce(world):
 
 
 def schedule(world):
-    """A schedule runs on time, and once, not per missed minute, after an outage."""
     admin, keeper = world["people"]["admin"], world["keeper"]
     made = create(
         admin, keeper, routine("tick", command_="date -u +%T", schedule="* * * * *")
@@ -424,7 +409,6 @@ def schedule(world):
 
 
 def webhooks(world):
-    """The secret, the body as data, replay, size, rate, console origin, rotation."""
     admin, keeper = world["people"]["admin"], world["keeper"]
     made = create(
         admin,
@@ -527,7 +511,6 @@ def agent_output(row, tool):
 
 
 def agent_tools(world):
-    """Other manages its own routines; a person's and Keeper's stay out of reach."""
     admin, keeper, other = world["people"]["admin"], world["keeper"], world["other"]
     api = admin.api
     name = f"agent-{MARKER}"
@@ -626,7 +609,6 @@ def agent_tools(world):
 
 
 def authority(world):
-    """Later runs act under current authority: a revoked sender's run waits."""
     people, keeper = world["people"], world["keeper"]
     sender, admin = people["sender"], people["admin"]
     made = create(
@@ -661,7 +643,6 @@ def authority(world):
 
 
 def deleting(world):
-    """Deleting a routine cancels its waiting turns and keeps its history."""
     admin, keeper = world["people"]["admin"], world["keeper"]
     made = create(admin, keeper, routine("doomed", command_="sleep 15", coalesce=False))
     rid = made["routine"]["id"]
@@ -733,7 +714,6 @@ def console(world):
 
 
 def retired(world):
-    """A retired agent's routines run nowhere."""
     admin, other = world["people"]["admin"], world["other"]
     made = create(admin, other, routine("late", command_="true"), webhook=True)
     status = admin.api(f"/api/agents/{other}/status")

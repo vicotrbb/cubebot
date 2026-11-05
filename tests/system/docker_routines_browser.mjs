@@ -1,8 +1,4 @@
-// Routines (docs/adr/agents.md#routines) in real Chromium against the built console behind Caddy: the
-// administrator makes a command routine with a webhook on Keeper's Routines tab, reads
-// its secret once and its URL, runs it now, finds the run in its history and the turn
-// labelled with the routine in the chat, and after a reload no secret is on the page.
-// It prints SECRET= and HOOK= for the Python side to deliver with.
+// Routines in real Chromium; prints SECRET= and HOOK= for the Python side to deliver with.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
@@ -17,7 +13,6 @@ const evidence = process.env.CUBEBOT_EVIDENCE_DIRECTORY
 const marker = process.env.CUBEBOT_ROUTINES_MARKER
 const name = `console-${marker}`
 
-// The Routines tab lives in the agent's details panel.
 async function routines(page) {
   await page
     .getByRole('navigation', { name: 'Agents' })
@@ -80,8 +75,7 @@ try {
     .getByRole('link', { name: 'Back to conversation', exact: true })
     .click()
   await page.getByText(`Routine · ${name}`).first().waitFor({ timeout: 15000 })
-  // This run's answer, not an earlier routine's: the work card for this command reports
-  // its exit status and output. The card collapses once the command ends, so open it.
+  // The work card collapses once the command ends, so open it.
   const work = page
     .locator('details.work')
     .filter({ hasText: `echo ${name}` })

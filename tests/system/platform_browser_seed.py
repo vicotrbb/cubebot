@@ -172,7 +172,6 @@ turn(a, "Queued follow-up", status="queued", ago="1 minute")
 # Enough history that the Situation room's Latest list has to scroll in its own space.
 for number in range(16):
     turn(k, f"Earlier job {number}", resp="Done.", ago=f"{number + 3} hours")
-# usage history over 30 days
 vals = []
 random.seed(4)
 for ag, scale in [(a, 1.0), (k, 0.5), (t, 0.25), (y, 0.1)]:
@@ -198,7 +197,6 @@ sql(
 sql(
     f"UPDATE agents SET monthly_budget_usd=20 WHERE id='{k}'; UPDATE agents SET monthly_budget_usd=3 WHERE id='{y}'; UPDATE agents SET monthly_budget_usd=4 WHERE id='{t}';"
 )
-# room
 s, room = call(
     "POST",
     "/api/rooms",
@@ -222,7 +220,6 @@ sql(
 )
 
 
-# files
 def png(w=320, h=200):
     raw = b"".join(
         b"\0" + b"".join(bytes([x * 255 // w, 120, y * 255 // h]) for x in range(w))
@@ -293,7 +290,6 @@ for n, (d, c) in files.items():
     )
     assert s < 300, (n, s, e)
     got[n] = e["id"]
-# attachments as the agent's own files
 last = sql(
     f"select id from chat_turns where conversation_id='{a}' and message like 'Thanks%'"
 )
@@ -316,7 +312,6 @@ s, e = call(
 sql(
     f"UPDATE files SET owner_account_id=NULL,owner_agent_id='{a}' WHERE id='{e['id']}'; INSERT INTO turn_attachments(turn_id,file_id) VALUES ('{dt}','{e['id']}');"
 )
-# routines
 s, r = call(
     "POST",
     f"/api/agents/{a}/routines",

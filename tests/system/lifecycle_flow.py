@@ -108,5 +108,4 @@ def check_lifecycle_restart(base, admin, checkpoint):
     definition = request(base, path, admin)[1]
     assert definition["desired_state"] == "retired" and definition["revision"] == 7
     assert definition["instructions"] == "Corrected instructions"
-    # The member's original receipt remains private to that actor, not the admin.
     assert request(base, path + "/lifecycle", admin, wake)[0] == 409

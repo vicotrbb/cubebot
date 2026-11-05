@@ -1,17 +1,5 @@
 #!/usr/bin/python3 -u
-"""Init of guest-boot's desktop boot (docs/adr/sandbox.md#desktop-as-a-vmm-device),
-wrapping the real guest init.
-
-Runs the real init (`cubebot-agent-real guest`) as its child, so the guest starts its
-desktop and arbiter as it does for an agent. Once the desktop is ready it checks, as the
-tool user, that the outer display, the arbiter's socket and the host channel are out of
-reach and that the tool user's display has no XTEST, printing "Guest isolation passed"
-or why not. Then, still as the tool user, it maps a focused window on :1, prints "Guest
-desktop ready" and prints the first key the window receives. The host types it only
-after a person takes control, so the agent's own key request that follows, sent as root
-on the arbiter's socket, must be refused; it prints the arbiter's answer and exits,
-which ends the VM.
-"""
+"""Init of guest-boot's desktop boot, running the real guest init as its child."""
 
 import json
 import os
@@ -52,7 +40,6 @@ def main():
 
 
 def isolation() -> list:
-    """What the tool user could reach that it must not, by the spike's check (c)."""
     failures = []
 
     def refused(name, attempt, *expected):
@@ -143,7 +130,6 @@ class X11:
         return reply[8] == 1
 
     def window(self) -> int:
-        """Maps a window that takes key presses, focused once mapped."""
         window = self.base | 1
         # CreateWindow with KeyPress and StructureNotify events, then MapWindow.
         fields = (1, 0, 9, window, self.root, 40, 40, 320, 220, 0, 1, 0, 0x800, 0x20001)
@@ -166,7 +152,6 @@ def receive_key():
 
 
 def agent_key() -> str:
-    """Asks for a key press on the arbiter's socket, as the agent does."""
     stream = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     stream.connect(ARBITER)
     request = {

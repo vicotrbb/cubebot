@@ -1,18 +1,12 @@
 """One agent through the Docker sandbox backend, without a cluster.
 
-CUBEBOT_SANDBOX_RUNTIME picks the sandbox runtime for this and every docker_*.py
-suite: `kvm` (the default where /dev/kvm exists) needs x86_64 Linux with /dev/kvm and
-the kernel build tools of tooling/guest; `container` needs only Docker. Both need
-OpenSSL and OPENAI_API_KEY_FILE. The orchestrator serves HTTPS on the docker0
-address, or on Docker Desktop on loopback, which sandboxes reach as
-host.docker.internal, with a CA from `just dev-ca`; a disposable PostgreSQL holds its
-state. A real model is asked for one bash tool call; the assertion reads the ledger's
-tool call and result, never the model's reply.
+CUBEBOT_SANDBOX_RUNTIME picks the runtime for this and every docker_*.py suite: `kvm`
+(the default where /dev/kvm exists) needs x86_64 Linux and tooling/guest's kernel build
+tools; `container` needs only Docker. Both need OpenSSL and OPENAI_API_KEY_FILE.
 
-`docker_sandbox.py agent NAME` instead creates and wakes an agent against a running
-`just docker-orchestrator`, bootstrapping the administrator from
-CUBEBOT_BOOTSTRAP_LOGIN/CUBEBOT_BOOTSTRAP_PASSWORD and the provider from
-OPENAI_API_KEY_FILE the first time.
+`docker_sandbox.py agent NAME` creates and wakes an agent against a running
+`just docker-orchestrator`, bootstrapping from CUBEBOT_BOOTSTRAP_LOGIN and
+CUBEBOT_BOOTSTRAP_PASSWORD and OPENAI_API_KEY_FILE the first time.
 """
 
 import json
@@ -37,7 +31,6 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = os.environ.get("CUBEBOT_SANDBOX_RUNTIME") or (
     "kvm" if os.path.exists("/dev/kvm") else "container"
 )
-# The kvm runtime runs the VMM's image, the container runtime the agent image itself.
 IMAGES = {"kvm": "cubebot-sandbox:dev", "container": "cubebot-agent:dev"}
 IMAGE = IMAGES.get(RUNTIME, "")
 MARKER = "docker-sandbox-ok"
@@ -78,8 +71,7 @@ def command(**values):
 
 
 def bridge():
-    """The host address sandboxes reach: docker0, or on Docker Desktop the loopback it
-    forwards host.docker.internal to."""
+    """docker0, or on Docker Desktop the loopback host.docker.internal forwards to."""
     if sys.platform == "darwin":
         return "127.0.0.1"
     output = subprocess.run(
@@ -92,7 +84,6 @@ def bridge():
 
 
 def sign_in(api, database, login, password):
-    """Bootstraps the administrator unless one exists, then logs in."""
     admin = ["cargo", "run", "--locked", "-q", "-p", "cubebot-orchestrator"]
     subprocess.run(
         admin + ["--bin", "cubebot-admin", "bootstrap"],
@@ -111,7 +102,6 @@ def sign_in(api, database, login, password):
 
 
 def configure_provider(api, model="gpt-4.1-mini"):
-    """Sets the OpenAI provider from OPENAI_API_KEY_FILE."""
     key = Path(os.environ["OPENAI_API_KEY_FILE"]).read_text().strip()
     provider = command(
         expected_revision=0,
@@ -132,8 +122,7 @@ def agent(
     memories=(),
     wake=True,
 ):
-    """Creates an agent, sets its idle delay and dreaming model when given an idle
-    delay and seeds its memories. A new agent runs; `wake=False` stops it."""
+    """A new agent runs; `wake=False` stops it."""
     created = command(name=name, instructions=instructions)
     identity = api("/api/agents", created, expected=201)["id"]
     if idle_delay_seconds is not None:
@@ -157,7 +146,6 @@ def agent(
 
 
 def grant(api, account, scope, capability, kind="agent"):
-    """Grants a person `capability` on the `kind` resource `scope`."""
     body = command(
         recipient={"kind": "user", "id": account},
         scope={"kind": kind, "id": scope},
@@ -181,15 +169,12 @@ def create(name):
 
 
 def reachable(address):
-    """`address` as a sandbox names it."""
     if sys.platform == "darwin":
         return address.replace("127.0.0.1", "host.docker.internal")
     return address
 
 
 def unsupported(suite):
-    """Prints why `suite` cannot run here in RUNTIME and returns its exit status, or
-    None."""
     if RUNTIME not in IMAGES:
         print(
             f"{suite} failed: CUBEBOT_SANDBOX_RUNTIME is kvm or container",
@@ -238,7 +223,6 @@ def build(runtime=RUNTIME):
 
 
 def configure(directory: Path, address, runtime=RUNTIME):
-    """The orchestrator's environment for Docker sandboxes of `runtime`."""
     host = address.rsplit(":", 1)[0]
     names = f"IP:{host}"
     if reachable(host) != host:

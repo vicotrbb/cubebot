@@ -1,7 +1,4 @@
-"""Seeds a disposable stack (docker container cubebot-dev-pg, database `app`) for tasks_browser.mjs.
-
-Writes what the orchestrator and a running agent would, since a database-only stack has neither.
-"""
+"""Seeds a disposable stack (docker container cubebot-dev-pg, database `app`) for tasks_browser.mjs."""
 # ruff: noqa: E501
 
 import http.cookiejar
@@ -97,7 +94,6 @@ export async function search(query: string): Promise<SubtitleFile[]> {
 
 
 def events(turn, items):
-    """Tool calls and results for a turn, in order."""
     rows = []
     for number, (name, tool_input, outcome) in enumerate(items, start=1):
         call_id = str(uuid.uuid4())

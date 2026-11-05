@@ -1,5 +1,4 @@
-"""Owned Kubernetes/CSI text-chat fixture: installs deploy/chart with Helm. Never reads
-the default kubeconfig."""
+"""Owned Kubernetes/CSI text-chat fixture; never reads the default kubeconfig."""
 
 import base64
 import json
@@ -20,7 +19,6 @@ TRAEFIK = "oci://ghcr.io/traefik/helm/traefik"
 TRAEFIK_VERSION = "41.7.1"
 CONTROL = "https://traefik.traefik.svc.cluster.local"
 CONTROL_PORT = 8443
-# As docker_sandbox.py: kvm where /dev/kvm exists, else container.
 RUNTIME = os.environ.get("CUBEBOT_SANDBOX_RUNTIME") or (
     "kvm" if os.path.exists("/dev/kvm") else "container"
 )
@@ -64,13 +62,11 @@ class Fixture:
         self.create("Pod", name, spec=dict(containers=containers, **fields))
 
     def platform(self, app):
-        """The chart's one pod labelled `app`, as JSON."""
         items = json.loads(self.k("get", "pods", "-l", f"app={app}", "-o", "json"))
         (item,) = items["items"]
         return item
 
     def controller(self):
-        """The ingress controller pod's address."""
         items = json.loads(
             admission.kubectl(
                 self.config,

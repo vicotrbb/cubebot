@@ -1,16 +1,8 @@
-"""The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) on real agents
-through Docker.
+"""The vault on real agents through Docker.
 
-Same host needs as docker_login.py, Node with Playwright included. Keeper and Other run
-guest desktops with OpenAI's model. An administrator, a controller (`browser.view` and
-`browser.control` on Keeper), a viewer (`browser.view`) and an outsider each manage
-what their grants allow; installation items follow
-docs/adr/identity.md#installation-wide-connection-access-by-default access. The agents
-list,
-fill and save items, and every fill is proved where it lands, on a login page this
-script serves, and refused fills in the arbiter's log and the ledger. No secret is in
-the database dump, the orchestrator's log or the sandboxes' logs. CUBEBOT_VAULT_EVIDENCE
-keeps the evidence directory; CUBEBOT_VAULT_HOLD keeps a failed run for 15 minutes.
+Same host needs as docker_login.py, Node with Playwright included.
+CUBEBOT_VAULT_EVIDENCE keeps the evidence directory; CUBEBOT_VAULT_HOLD keeps a failed
+run for 15 minutes.
 """
 
 import json
@@ -74,12 +66,10 @@ INSTRUCTIONS = (
 
 
 def login_page(site):
-    """Docker_login's sign-in page, whose user field has the focus once it loads."""
     return site.url(f"login-{PAGE}")
 
 
 def submitted(site, before):
-    """The user and password of the first sign-in after `before` requests."""
     path, _ = wait_for(
         "the guest to sign in",
         lambda: site.requests(f"session-{PAGE}")[before:],
@@ -94,7 +84,6 @@ def sign_ins(site):
 
 
 def fills(identity, before=0):
-    """The arbiter's fill events since `before`, as who filled which item."""
     events = [e for e in arbiter_events(identity)[before:] if "item" in e]
     for event in events:
         event["who"] = {
@@ -131,7 +120,6 @@ def save(who, body, expected=200, method=None, path="/api/vault"):
 
 
 def items(world):
-    """The administrator's installation items and the controller's item on Keeper."""
     admin, controller = world["people"]["admin"], world["people"]["controller"]
     keeper = world["keeper"]
     login = {"kind": "login", "site": world["site"].host}
@@ -205,7 +193,6 @@ def listings(world):
 
 
 def access(world):
-    """Access changes on an installation item reach the agents' listings."""
     admin, keeper, other = world["people"]["admin"], world["keeper"], world["other"]
     shared = item(world, "Shared")
     body = {"kind": "login", "name": "Shared", "site": shared["site"]}
@@ -254,7 +241,6 @@ def agent_lists(world):
 
 
 def agent_fill(world):
-    """Keeper signs in with Shared, without the model seeing the password."""
     admin, keeper, site = world["people"]["admin"].api, world["keeper"], world["site"]
     shared = item(world, "Shared")["id"]
     before, events = sign_ins(site), len(arbiter_events(keeper))
@@ -286,7 +272,6 @@ def agent_fill(world):
 
 
 def other_scope(world):
-    """Other fills the all-agents item, never Keeper's items."""
     admin, other = world["people"]["admin"].api, world["other"]
     for name in ("Keeper only", "Own"):
         before = len(arbiter_events(other))
@@ -318,7 +303,6 @@ def other_scope(world):
 
 
 def agent_put(world):
-    """Keeper saves a password it made; the ledger keeps only the redaction."""
     admin, keeper = world["people"]["admin"].api, world["keeper"]
     row = chat(
         admin,
@@ -352,7 +336,6 @@ def agent_put(world):
 
 
 def person_fill(world):
-    """The controller fills while holding control; nobody else fills or the agent."""
     people, address, ca, keeper, site = (
         world[key] for key in ("people", "address", "ca", "keeper", "site")
     )
@@ -409,7 +392,6 @@ def person_fill(world):
 
 
 def handoff(world, postgres):
-    """During a login handoff the agent cannot fill; a person saves and fills."""
     people, address, ca, keeper, site = (
         world[key] for key in ("people", "address", "ca", "keeper", "site")
     )
@@ -422,8 +404,6 @@ def handoff(world, postgres):
         "your turn.",
     )
     assert calls(row, "request_login")[0]["outcome"]["code"] == 0, row["terminal"]
-    # The controller takes control for the login, types the username and leaves the
-    # focus in the password field.
     controller = people["controller"].desktop(address, ca, keeper)
     controller.frame()
     assert controller.ask({"kind": "take"})["mode"] == "human"
@@ -446,7 +426,6 @@ def handoff(world, postgres):
     saved = next(i for i in vault(people["admin"], keeper) if i["name"] == site.host)
     assert saved["agent"] == keeper and saved["username"] == "ada", saved
     assert pending(world, postgres)[-1][1] == "completed"
-    # The handoff is complete; the controller takes control again to submit the form.
     controller = people["controller"].desktop(address, ca, keeper)
     controller.frame()
     assert controller.ask({"kind": "take"})["mode"] == "human"

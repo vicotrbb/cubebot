@@ -1,18 +1,7 @@
 """One agent in the `container` sandbox runtime through Docker, with no provider key.
 
-Runs on every push in CI and on any host with Docker, Docker Desktop on a Mac included.
-The orchestrator and a disposable PostgreSQL run as in docker_sandbox.py; the agent
-image runs directly with computer use on. A scripted stand-in for the provider listens
-inside the agent's own network namespace, at the loopback origin the agent's test seam
-(CUBEBOT_TEST_PROVIDER_ORIGIN) accepts, and answers one message with one bash tool call.
-The ledger must show that call and its result. A second message makes
-the agent upload a file, share it with the person by the login its turn names, and
-create and edit a knowledge base page; a third runs one tool call through the OpenRouter
-adapter. Then, through the host channel (the
-console's desktop socket, which the orchestrator relays to `cubebot-agent desktop` in
-the sandbox), a screenshot must show the desktop, a person's key must be refused until
-they take control, and must then reach a window the tool user maps on its own display.
-This proves the container runtime boots and wires up; it is not agent qualification.
+Runs in CI and on any Docker host. Proves the container runtime boots and wires up; it
+is not agent qualification.
 """
 
 import json
@@ -160,7 +149,6 @@ def finished(api, identity, turn):
 
 
 def shared_and_written(api, postgres, identity, marker):
-    """A person's poem reaches Shared with me, and a page the wiki, by tools alone."""
     path = f"/api/conversations/{identity}/messages"
     message = command(message=scripted_request(marker))
     turn = api(path, message, expected=202)["id"]
@@ -187,11 +175,9 @@ def shared_and_written(api, postgres, identity, marker):
     assert {"coding", "design", "write-a-poem"} <= set(library), library
     installed = [s["name"] for s in api(f"/api/agents/{identity}/skills")]
     assert sorted(installed) == ["coding", "design", "write-a-poem"], installed
-    # What it sent is on the reply, and the person reads it through the reply.
     reply = finished(api, identity, turn)
     assert [a["name"][:4] for a in reply["attachments"]] == ["poem"], reply
     assert reply["attachments"][0]["size"] == len("verse\n"), reply
-    # The switch a person turns off reaches the definition.
     definition = api(f"/api/agents/{identity}")
     update = command(
         expected_revision=definition["revision"],
@@ -207,7 +193,6 @@ def shared_and_written(api, postgres, identity, marker):
 
 
 def openrouter_turn(api, postgres, identity, marker):
-    """One tool call through the OpenRouter adapter, on its documented stream."""
     provider = command(
         expected_revision=1,
         api_key="scripted-provider-key",
@@ -221,7 +206,6 @@ def openrouter_turn(api, postgres, identity, marker):
 
 
 def stand_in(name, marker):
-    """Starts the scripted provider in the agent's network namespace, as nobody."""
     subprocess.run(
         ["docker", "exec", "--detach", "--user", "65534:65534", name]
         + ["python3", "-c", STAND_IN, str(PORT), marker, scripted_request(marker)],
@@ -239,7 +223,6 @@ def stand_in(name, marker):
 
 
 def receiver(name):
-    """guest_desktop.py's key receiver as the tool user on its display, :1."""
     source = (Path(__file__).with_name("guest_desktop.py")).read_text()
     source = source.replace('if __name__ == "__main__":\n    main()', "receive_key()")
     process = subprocess.Popen(
@@ -262,8 +245,7 @@ def host_channel(address, ca, token, identity, name):
     try:
         desktop.frame()
 
-        # Chromium opens maximized over the wallpaper, so a photograph's colors show
-        # only if the screenshot beats it. A drawn desktop has far more than bare X.
+        # Chromium opens over the wallpaper; a drawn desktop has far more than bare X.
         def drawn():
             pixels = rgb(ask(desktop, {"action": "screenshot"}).get("png", ""))
             return len({pixels[at : at + 3] for at in range(0, len(pixels), 3)}) > 64
@@ -288,7 +270,6 @@ def host_channel(address, ca, token, identity, name):
 
 
 def isolated(name, network):
-    """The sandbox joined only its network, where a neighbour cannot be reached."""
     joined = subprocess.run(
         ["docker", "inspect", "--format", "{{json .NetworkSettings.Networks}}", name],
         capture_output=True,

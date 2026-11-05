@@ -1,5 +1,4 @@
-# Local development over compose.yaml: the same services, built from this checkout. `just up` and
-# `just db-up` add it; deploy/cubebot then uses the local sandbox images `just up` builds.
+# Local development: the same services, built from this checkout.
 name: cubebot-dev
 services:
   # A checkout's tools reach the database directly; a release keeps it on Compose's network.
