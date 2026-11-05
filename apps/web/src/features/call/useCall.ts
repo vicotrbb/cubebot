@@ -65,24 +65,33 @@ async function capture(
       autoGainControl: true,
     },
   })
-  await context.audioWorklet.addModule('/call-capture.js')
-  const source = context.createMediaStreamSource(stream)
-  const worklet = new AudioWorkletNode(context, 'call-capture')
-  worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-    if (socket.readyState === WebSocket.OPEN) socket.send(event.data)
-  }
-  source.connect(level)
-  source.connect(worklet)
-  // Some browsers only run a node that reaches the destination; the silent gain keeps it from playing.
-  const silent = context.createGain()
-  silent.gain.value = 0
-  worklet.connect(silent).connect(context.destination)
-  return () => {
-    worklet.port.onmessage = null
-    source.disconnect()
-    worklet.disconnect()
-    silent.disconnect()
+  const stopTracks = () => {
     for (const track of stream.getTracks()) track.stop()
+  }
+  try {
+    await context.audioWorklet.addModule('/call-capture.js')
+    const source = context.createMediaStreamSource(stream)
+    const worklet = new AudioWorkletNode(context, 'call-capture')
+    worklet.port.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+      if (socket.readyState === WebSocket.OPEN) socket.send(event.data)
+    }
+    source.connect(level)
+    source.connect(worklet)
+    // Some browsers only run a node that reaches the destination; the silent gain keeps it from playing.
+    const silent = context.createGain()
+    silent.gain.value = 0
+    worklet.connect(silent).connect(context.destination)
+    return () => {
+      worklet.port.onmessage = null
+      source.disconnect()
+      worklet.disconnect()
+      silent.disconnect()
+      stopTracks()
+    }
+  } catch (error) {
+    // Nothing else holds the stream yet, and a live track keeps the microphone on.
+    stopTracks()
+    throw error
   }
 }
 

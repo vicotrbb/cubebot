@@ -230,8 +230,11 @@ function useFolder(view: View, folder: string | undefined) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [error, setError] = useState('')
   const [loaded, setLoaded] = useState(false)
+  // Only the newest listing shows, so a late one cannot put folder A's files in folder B.
+  const latest = useRef(0)
   useEffect(() => {
     let live = true
+    latest.current++
     void list(view, folder)
       .then((items) => {
         if (!live) return
@@ -244,7 +247,11 @@ function useFolder(view: View, folder: string | undefined) {
       live = false
     }
   }, [view, folder])
-  const load = async () => setEntries(await list(view, folder))
+  const load = async () => {
+    const ticket = ++latest.current
+    const items = await list(view, folder)
+    if (ticket === latest.current) setEntries(items)
+  }
   return { entries, loaded, error, setError, load }
 }
 

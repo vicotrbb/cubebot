@@ -186,7 +186,8 @@ DRAWN.katex = DRAWN.math as (typeof DRAWN)[string]
 
 function Code({ token }: { token: Tokens.Code }) {
   const language = token.lang?.split(/\s/)[0]?.toLowerCase()
-  const drawn = language ? DRAWN[language] : undefined
+  const drawn =
+    language && Object.hasOwn(DRAWN, language) ? DRAWN[language] : undefined
   if (drawn)
     return (
       <PreviewBlock

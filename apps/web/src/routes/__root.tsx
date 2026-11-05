@@ -15,6 +15,11 @@ export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: 'utf-8' },
+      // An agent can write a page or message; an outside image in one would carry data out on load.
+      {
+        httpEquiv: 'Content-Security-Policy',
+        content: "img-src 'self' data: blob:",
+      },
       {
         name: 'viewport',
         content: 'width=device-width, initial-scale=1, viewport-fit=cover',

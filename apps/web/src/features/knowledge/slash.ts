@@ -169,7 +169,7 @@ export type SlashView = Pick<
 > & { key: number }
 
 /** The menu's open state, which the React menu reads; the extension only reports it. */
-export type SlashEvents = {
+type SlashEvents = {
   show: (view: SlashView | null) => void
   key: (event: KeyboardEvent) => boolean
 }

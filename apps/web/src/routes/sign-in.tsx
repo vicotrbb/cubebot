@@ -2,7 +2,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { type SubmitEvent, useState } from 'react'
 import { api, failure, ok } from '../api/client'
-import { keys } from '../app/queries'
 import { Cube } from '../components/Cube'
 import { Alert, Field } from '../components/primitives'
 import '../features/shell/sign-in.css'
@@ -78,12 +77,9 @@ function Credentials({ setup }: { setup: boolean }) {
           ? api.POST('/api/identity/setup', { body })
           : api.POST('/api/identity/login', { body }),
       )
-      // 'all': the shell's session query is inactive here, and navigating on its
-      // cached null would send the browser straight back to sign-in.
-      await client.invalidateQueries({
-        queryKey: keys.session,
-        refetchType: 'all',
-      })
+      // Nothing cached belongs to this account, and navigating on a cached null session
+      // would send the browser straight back to sign-in.
+      client.clear()
       await navigate({ to: '/' })
     } catch (error) {
       setError(failure(error))

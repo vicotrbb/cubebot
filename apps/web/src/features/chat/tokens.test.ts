@@ -68,3 +68,22 @@ describe('inlineImage', () => {
     expect(inlineImage('data:image/png;base64,AAAA')).not.toBeNull()
   })
 })
+
+describe('local paths', () => {
+  // What the browser itself would load, on the origin the console is at.
+  const origin = (href: string) =>
+    new URL(href, 'https://console.example').origin
+  test('a path the browser reads as another host stays out', () => {
+    const leaving = [
+      '//evil.example/p',
+      '/\\evil.example/p?d=S',
+      '/\t/evil.example/p',
+      '/\n/evil.example/p',
+    ]
+    for (const href of leaving) {
+      expect(origin(href)).toBe('https://evil.example')
+      expect(inlineImage(href)).toBeNull()
+      expect(safeHref(href)).toBeNull()
+    }
+  })
+})

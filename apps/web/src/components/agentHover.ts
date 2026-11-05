@@ -1,6 +1,6 @@
 /** Which agent or task the pointer or keyboard is on, for the one card the shell draws. Handlers
  *  only mark the start: the card follows the pointer itself and notices it has left. */
-export type Hovered = {
+type Hovered = {
   kind: 'agent' | 'task'
   id: string
   anchor: Element

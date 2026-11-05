@@ -98,7 +98,8 @@ export function useSave(page: Page, onTitle: () => void) {
   // What is typed survives leaving the page or closing the tab.
   useEffect(() => {
     const flush = () => {
-      if (!Object.keys(draft.current).length) return
+      // A refused save's revision is stale, so this one would only be refused too.
+      if (conflicted.current || !Object.keys(draft.current).length) return
       const body = JSON.stringify({
         expected_revision: revision.current,
         ...draft.current,
@@ -111,13 +112,14 @@ export function useSave(page: Page, onTitle: () => void) {
         headers: { 'content-type': 'application/json' },
         // Past the browser's keepalive limit the tab must stay open for it.
         keepalive: body.length < 60_000,
-      })
+      }).catch(() => undefined) // The page is gone: nobody is left to tell.
     }
     window.addEventListener('pagehide', flush)
     return () => {
       window.removeEventListener('pagehide', flush)
       window.clearTimeout(timer.current)
-      flush()
+      // A save under way sends what is left when it returns, at the revision it gets back.
+      if (!running.current) flush()
     }
   }, [id])
 

@@ -242,7 +242,7 @@ export function workView(tool: Progress): WorkView {
   return build && args ? build(args, tool) : generic(tool, args)
 }
 
-export type DiffLine = { sign: '+' | '-'; line: string }
+type DiffLine = { sign: '+' | '-'; line: string }
 
 /** The lines an edit took out and put in; what both keep at either end is not news. */
 export function diffLines(before: string, after: string): DiffLine[] {
