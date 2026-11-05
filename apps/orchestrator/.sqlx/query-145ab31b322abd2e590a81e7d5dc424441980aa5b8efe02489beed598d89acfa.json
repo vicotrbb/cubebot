@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1\n            FROM chat_turns t\n            JOIN human_accounts a ON a.id=t.actor_id AND a.active\n            WHERE t.id=$1\n                AND (t.parent_turn_id IS NOT NULL OR EXISTS(SELECT 1 FROM routines r WHERE r.id=t.routine_id AND r.managed_by='agent') OR EXISTS(SELECT 1 FROM broadcasts b WHERE b.id=t.broadcast_id AND b.agent_id IS NOT NULL) OR a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.capability='conversation.send' AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id) OR (g.scope_kind='room' AND g.scope_id=(SELECT room_id FROM room_messages m WHERE m.id=t.room_message_id)))))\n        ) AS \"allowed!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "allowed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "145ab31b322abd2e590a81e7d5dc424441980aa5b8efe02489beed598d89acfa"
+}

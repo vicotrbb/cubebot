@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT payload->'outcome'->>'output' AS \"value!\" FROM turn_events WHERE turn_id=$1 AND sequence=2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eb231461f4de994d8a13f922c15ff8c83b3e8509ce2045b445ba2aa3c5abd144"
+}
