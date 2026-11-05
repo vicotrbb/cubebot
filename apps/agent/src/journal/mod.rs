@@ -36,7 +36,6 @@ pub struct Journal {
 }
 
 impl Journal {
-    /// Opens a dedicated private directory and exclusively locks its stable lock file.
     pub fn open(root: &Path) -> io::Result<Self> {
         files::directory(root)?;
         let lock_path = root.join("lock");
@@ -61,8 +60,7 @@ impl Journal {
         Ok(journal)
     }
 
-    /// Children spawned by parallel tool tests hold a copy of the lock descriptor between fork and
-    /// exec, so a reopen right after a drop can briefly see the lock held. Wait out only that error.
+    /// Children of parallel tool tests hold the lock descriptor between fork and exec, so a reopen right after a drop can briefly see it held.
     #[cfg(test)]
     pub(crate) fn reopen(path: &Path) -> io::Result<Self> {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
@@ -83,7 +81,6 @@ impl Journal {
         &self.records
     }
 
-    /// Refuses a record once the journal is full; see [`Self::append_outcome`] for what is not.
     pub fn append(&mut self, payload: &[u8]) -> io::Result<u64> {
         if self.records.len() >= MAX_RECORDS
             || self.bytes + payload.len() + RECORD_HEADER > MAX_BYTES
@@ -93,10 +90,7 @@ impl Journal {
         self.append_outcome(payload)
     }
 
-    /// Records what became of an appended call even when the journal is full, since refusing it
-    /// would leave the call open for good and stop the agent reopening its journal. Each call has
-    /// one outcome, so this at most doubles the records. Returns only after the record and
-    /// checkpoint have been synchronized.
+    /// Accepted even when full: refusing would leave the call open for good and stop the agent reopening its journal. One outcome per call at most doubles the records.
     pub fn append_outcome(&mut self, payload: &[u8]) -> io::Result<u64> {
         self.healthy()?;
         if payload.len() > MAX_PAYLOAD {
@@ -190,8 +184,7 @@ impl Journal {
     fn recover(&mut self) -> io::Result<()> {
         // Validate all committed evidence before removing any disposable files.
         let count = self.state.committed - self.state.acknowledged;
-        // Outcomes may double a full journal. Their bytes are bounded by this count and the read
-        // limit below; a tighter byte limit could refuse a journal this process wrote.
+        // Outcomes may double a full journal; a tighter byte limit could refuse a journal this process wrote.
         if count > 2 * MAX_RECORDS as u64 {
             return Err(corrupt());
         }

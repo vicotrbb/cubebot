@@ -1,4 +1,3 @@
-//! Server-sent events carrying one JSON payload each.
 use crate::{Error, unavailable};
 use reqwest::Response;
 use serde_json::Value;
@@ -11,7 +10,6 @@ pub(crate) const DONE: &str = "[DONE]";
 pub(crate) struct Reader {
     response: Response,
     buffer: Vec<u8>,
-    /// Bytes already searched for a boundary, so a large event is not rescanned per chunk.
     scanned: usize,
 }
 impl Reader {
@@ -23,8 +21,6 @@ impl Reader {
         }
     }
 
-    /// The next event's data, or `None` when the body ends. Event names, comments and
-    /// keep-alives are skipped; both providers repeat the event type in the data.
     pub async fn next(&mut self) -> Result<Option<Value>, Error> {
         loop {
             let from = self.scanned;

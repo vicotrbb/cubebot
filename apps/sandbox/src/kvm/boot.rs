@@ -1,6 +1,4 @@
-//! The Linux x86 boot protocol's 64-bit entry (Documentation/arch/x86/boot.rst): places a bzImage,
-//! command line, zero page, MP table, GDT and identity page tables in guest memory. The guest
-//! mounts its root disk itself, so there is no initramfs.
+//! The Linux x86 boot protocol's 64-bit entry (Documentation/arch/x86/boot.rst); the guest mounts its root disk itself, so there is no initramfs.
 use super::memory::invalid;
 use std::io;
 
@@ -89,8 +87,7 @@ fn zero_page(memory: &mut [u8], kernel: &[u8]) -> io::Result<()> {
     put(memory, ZERO_PAGE, &page)
 }
 
-/// An Intel MultiProcessor Specification 1.4 floating pointer and configuration table: one
-/// processor per vCPU with APIC IDs from 0, the ISA bus, and the in-kernel IOAPIC with each ISA
+/// MP Specification 1.4: one processor per vCPU with APIC IDs from 0, the ISA bus, and the in-kernel IOAPIC with each ISA
 /// interrupt on the pin of the same number, as KVM's default routing delivers them.
 fn mp_table(vcpus: u8) -> Vec<u8> {
     let ioapic = vcpus;
@@ -130,7 +127,6 @@ fn mp_table(vcpus: u8) -> Vec<u8> {
     [pointer, table].concat()
 }
 
-/// The byte that makes `bytes` sum to zero.
 fn checksum(bytes: &[u8]) -> u8 {
     bytes
         .iter()
@@ -234,7 +230,6 @@ mod tests {
         old[0x236] = 0;
         assert!(load(&mut memory, &old, "", 1).is_err());
         assert!(load(&mut memory, b"not a kernel", "", 1).is_err());
-        // The decompressor works in 16-20 MiB.
         let mut small = vec![0u8; 19 << 20];
         assert!(load(&mut small, &bzimage(), "", 1).is_err());
     }

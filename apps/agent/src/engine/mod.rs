@@ -1,6 +1,3 @@
-//! The agent's own loop: one channel to the switchboard and the turns it admits, one per lane. Events wait in an
-//! outbox until the ledger acknowledges them, so a reconnect resends rather than loses them.
-//! With no turn, no unacknowledged event and no drain for the idle delay, the agent dreams.
 mod attempts;
 mod dream;
 mod turn;
@@ -60,7 +57,7 @@ async fn shutdown(terminate: &mut Signal) {
     }
 }
 
-/// The switchboard closes a channel silent this long (agents/runtime/channel.rs).
+/// The switchboard closes a channel silent this long.
 const SILENCE: Duration = Duration::from_secs(15);
 
 enum Next {
@@ -82,13 +79,10 @@ struct Agent {
     bootstrapped: bool,
     tools: Option<Arc<crate::tools::Registry>>,
     memory: Option<MemoryClient>,
-    /// Running turns by id; the switchboard admits at most one per lane.
     active: HashMap<Uuid, Active>,
     drain: Option<Uuid>,
-    /// When to dream, armed by the switchboard's idle notice.
     dream_at: Option<Instant>,
     dreaming: Option<(watch::Sender<bool>, tokio::task::JoinHandle<()>)>,
-    /// The wallpaper being fetched and drawn; a newer change replaces it.
     wallpaper: Option<tokio::task::JoinHandle<()>>,
 }
 
@@ -102,7 +96,6 @@ impl Agent {
         let mut store = Store::open(&root.join("tools")).map_err(|error| {
             Caused::new("runtime journal unavailable; recovery required", error)
         })?;
-        // Tool effects from before a crash are reported once, with their outcome or as uncertain.
         let outbox = store
             .pending()
             .map_err(|error| Caused::new("runtime journal unreadable; recovery required", error))?
@@ -164,8 +157,7 @@ impl Agent {
         }
     }
 
-    /// Any channel message disarms the idle timer and makes a running dream yield, except a
-    /// wallpaper change, which is not work.
+    /// A wallpaper change is not work, so it neither disarms the idle timer nor makes a dream yield.
     fn wake(&mut self, delivery: &Delivery) {
         if matches!(delivery, Delivery::WallpaperChanged) {
             return;
@@ -176,7 +168,6 @@ impl Agent {
         }
     }
 
-    /// Dreams only with every lane idle and every reported outcome acknowledged.
     fn dream(&mut self) {
         self.dream_at = None;
         let dreaming = self
@@ -213,10 +204,8 @@ impl Agent {
         Ok(())
     }
 
-    /// With no turn running, reports a requested drain or asks for work.
     async fn idle(&mut self, channel: &mut Channel) -> Result<(), Error> {
-        // A turn that ended without a final event, such as one that panicked, holds no lane.
-        // With events still queued, a finished turn may yet report its end in order.
+        // A turn that ended without a final event, such as one that panicked, holds no lane; with events queued it may yet report its end.
         if self.events.is_empty() {
             self.active.retain(|_, active| !active.task.is_finished());
         }
@@ -268,7 +257,6 @@ impl Agent {
         Ok(None)
     }
 
-    /// Arms the dream timer when no lane is running.
     fn rest(&mut self, dream_after_seconds: u64) {
         if self.active.is_empty() {
             let delay = Duration::from_secs(dream_after_seconds);
@@ -276,7 +264,6 @@ impl Agent {
         }
     }
 
-    /// Fetches and draws the wallpaper in the background, replacing a draw still running.
     fn redraw(&mut self) {
         let (Some(client), Some(tools)) = (self.memory.clone(), self.tools.clone()) else {
             return;
@@ -324,7 +311,6 @@ impl Agent {
         );
     }
 
-    /// Queues steering for the active turn once, however often it is redelivered.
     fn steer(&mut self, turn: Uuid, id: Uuid, message: String) {
         if let Some(active) = self.active.get_mut(&turn)
             && active.steered.insert(id)
@@ -379,7 +365,6 @@ mod tests {
     use super::*;
     use std::os::unix::fs::DirBuilderExt;
 
-    /// A channel the switchboard has already closed, so every send fails.
     async fn closed() -> Channel {
         use axum::{Router, extract::WebSocketUpgrade, routing::get};
         let upgrade = |upgrade: WebSocketUpgrade| async move {
@@ -432,7 +417,6 @@ mod tests {
         };
         assert!(agent.forward(&mut channel, (done, None)).await.is_err());
         assert!(agent.active.is_empty());
-        // A turn whose task ended without a final event holds no lane either.
         let ended = tokio::spawn(async {});
         while !ended.is_finished() {
             tokio::task::yield_now().await;

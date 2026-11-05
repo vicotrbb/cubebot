@@ -1,9 +1,4 @@
-//! virtio-vsock (virtio 1.2 §5.10) carrying the guest's control channel
-//! ([`cubebot_protocol::guest`]) and the desktop's host channel streams
-//! ([`cubebot_protocol::desktop`]): the guest may hold one stream to the host's control port and
-//! a few to its desktop host port from reserved source ports, and every other packet is answered
-//! with a reset. Host channel bytes pass through unparsed, and the guest gets credit for them only
-//! once the host channel connection has taken them.
+//! virtio-vsock (virtio 1.2 §5.10): one control stream and a few host channel streams from reserved ports; every other packet is reset.
 use super::{Device, queue::Queue};
 use crate::kvm::memory::{GuestMemory, invalid};
 use cubebot_protocol::{
@@ -27,13 +22,11 @@ const CREDIT_UPDATE: u16 = 6;
 const CREDIT_REQUEST: u16 = 7;
 /// The host sends no more, so the guest sees end of stream but can still report its exit.
 const SHUTDOWN_SEND: u32 = 2;
-/// The receive buffer advertised to the guest; report lines are consumed as they arrive.
 const BUFFER: u32 = 64 << 10;
 const RECEIVE: usize = 0;
 const TRANSMIT: usize = 1;
 pub const DESKTOP_STREAMS: usize = 16;
-/// Transmit waits while this many replies wait for receive buffers, so a guest that stops taking
-/// them cannot grow the host's memory.
+/// Transmit waits while this many replies wait for receive buffers, so a guest that stops taking them cannot grow the host's memory.
 const REPLIES: usize = 1024;
 /// The guest kernel's last reserved vsock port; binding one takes root.
 const RESERVED: u32 = 1023;
@@ -86,7 +79,6 @@ impl Header {
         raw
     }
 
-    /// A packet from the host back to the sender of `self`.
     fn reply(&self, op: u16) -> Self {
         Self {
             src_cid: HOST_CID.into(),
@@ -102,7 +94,6 @@ impl Header {
 
 /// One open stream and both directions of its credit (§5.10.6.3).
 struct Connection {
-    /// The guest's port, and the host port it connected to.
     port: u32,
     service: u32,
     peer_buffer: u32,
@@ -111,10 +102,8 @@ struct Connection {
     forwarded: u32,
     outbox: VecDeque<u8>,
     line: Vec<u8>,
-    /// Where a host channel stream's bytes go, once paired with a connection.
     bridge: Option<Sender<Vec<u8>>>,
     received: u32,
-    /// The host channel connection ended; the host's side shuts once the outbox is sent.
     ending: bool,
 }
 
@@ -126,7 +115,6 @@ impl Connection {
         self.outbox.len().min(credit as usize)
     }
 
-    /// The whole lines in `payload`, or None once the unfinished line passes `limit`.
     fn lines(&mut self, payload: &[u8], limit: usize) -> Option<Vec<Vec<u8>>> {
         self.forwarded = self.forwarded.wrapping_add(payload.len() as u32);
         self.line.extend_from_slice(payload);
@@ -137,7 +125,6 @@ impl Connection {
         (self.line.len() <= limit).then_some(lines)
     }
 
-    /// The host sends no more on this stream.
     fn shutdown(&self) -> Header {
         Header {
             flags: SHUTDOWN_SEND,
@@ -159,16 +146,13 @@ pub struct Vsock {
     config: [u8; 8],
     environment: Vec<u8>,
     connections: Vec<Connection>,
-    /// The guest port of each new host channel stream, for pairing.
     spares: SyncSender<u32>,
-    /// Packets without payload, waiting for receive buffers.
     replies: VecDeque<Header>,
     alive: bool,
     exit: Option<u8>,
 }
 
 impl Vsock {
-    /// `environment` is the encoded message the guest receives when it connects.
     pub fn new(environment: Vec<u8>, spares: SyncSender<u32>) -> Self {
         Self {
             config: u64::from(GUEST_CID).to_le_bytes(),
@@ -181,7 +165,6 @@ impl Vsock {
         }
     }
 
-    /// The agent's exit status, once the guest has reported it.
     pub fn exit(&self) -> Option<u8> {
         self.exit
     }
@@ -190,7 +173,6 @@ impl Vsock {
         self.connections.iter_mut().find(|c| c.service == PORT)
     }
 
-    /// Replaces the environment a new stream receives, and sends `changed` on the open one.
     pub fn refresh(&mut self, environment: Vec<u8>, changed: &[u8]) {
         self.environment = environment;
         if let Some(connection) = self.control() {
@@ -204,8 +186,6 @@ impl Vsock {
             .find(|c| c.service == desktop::HOST_PORT && c.port == port)
     }
 
-    /// Sends the host channel stream from guest `port`'s bytes to `bridge`; false when that
-    /// stream has closed or is already paired.
     pub fn pair(&mut self, port: u32, bridge: Sender<Vec<u8>>) -> bool {
         match self.host_channel(port) {
             Some(connection) if connection.bridge.is_none() => {
@@ -216,14 +196,12 @@ impl Vsock {
         }
     }
 
-    /// Queues host channel bytes for the stream from guest `port`, if still open.
     pub fn send(&mut self, port: u32, bytes: &[u8]) {
         if let Some(connection) = self.host_channel(port) {
             connection.outbox.extend(bytes);
         }
     }
 
-    /// The host channel connection took `bytes` of the guest's, which frees their credit.
     pub fn consumed(&mut self, port: u32, bytes: usize) {
         let Some(connection) = self.host_channel(port) else {
             return;
@@ -233,8 +211,6 @@ impl Vsock {
         self.replies.push_back(update);
     }
 
-    /// The host channel connection sends no more: the stream from guest `port` shuts the host's
-    /// side once what it queued is sent.
     pub fn end(&mut self, port: u32) {
         let Some(connection) = self.host_channel(port) else {
             return;
@@ -246,7 +222,6 @@ impl Vsock {
         }
     }
 
-    /// Asks the guest to stop by ending the control stream; false when no stream is open.
     pub fn shutdown(&mut self) -> bool {
         let Some(connection) = self.control() else {
             return false;
@@ -275,8 +250,7 @@ impl Vsock {
             .position(|c| c.port == header.src_port && c.service == header.dst_port)
     }
 
-    /// One control stream, and host channel streams from reserved ports only, so only root in the
-    /// guest, which is the arbiter, opens them.
+    /// Only reserved source ports, so only root in the guest, which is the arbiter, opens host channel streams.
     fn admits(&self, header: &Header) -> bool {
         let open = |service| {
             self.connections
@@ -294,7 +268,6 @@ impl Vsock {
             }
     }
 
-    /// Resets a stream that broke the protocol.
     fn refuse(&mut self, header: Header) {
         if let Some(index) = self.current(&header) {
             self.close(index);
@@ -352,14 +325,12 @@ impl Vsock {
             DATA => return self.bridged(index, header, payload),
             CREDIT_REQUEST => (),
             CREDIT_UPDATE => return,
-            // A second request, a response to nothing or a shutdown.
             _ => return self.refuse(header),
         }
         self.replies.push_back(header.reply(CREDIT_UPDATE));
     }
 
-    /// Passes host channel bytes on; a stream that speaks before it is paired, outruns its
-    /// credit or whose connection is gone is reset.
+    /// A stream that speaks before it is paired, outruns its credit or whose connection is gone is reset.
     fn bridged(&mut self, index: usize, header: Header, payload: &[u8]) {
         let connection = &mut self.connections[index];
         connection.received = connection.received.wrapping_add(payload.len() as u32);
@@ -417,8 +388,6 @@ impl Vsock {
         Ok(used)
     }
 
-    /// Writes waiting packets into receive buffers: replies first, then credit-limited data. Also
-    /// delivers packets queued outside a driver notification, such as a shutdown.
     pub fn deliver(&mut self, queues: &mut [Queue], memory: &GuestMemory) -> io::Result<bool> {
         let queue = &mut queues[RECEIVE];
         let mut used = false;
@@ -466,7 +435,6 @@ impl Vsock {
     }
 }
 
-/// A stream packet from the guest to the host.
 fn addressed(header: &Header) -> bool {
     header.kind == STREAM
         && header.src_cid == u64::from(GUEST_CID)
@@ -492,8 +460,7 @@ impl Device for Vsock {
         memory: &GuestMemory,
     ) -> io::Result<bool> {
         let flushed = self.deliver(queues, memory)?;
-        // Transmit waits while replies do, so any notification, such as new receive buffers,
-        // resumes it.
+        // Transmit waits while replies do, so any notification, such as new receive buffers, resumes it.
         let transmitted = queues[TRANSMIT].ready && self.transmit(&mut queues[TRANSMIT], memory)?;
         // The event queue only ever holds buffers; this device raises no events.
         Ok(self.deliver(queues, memory)? | flushed | transmitted)
@@ -581,7 +548,6 @@ mod tests {
             self.sent += 1;
         }
 
-        /// The packets the host delivered since the last call.
         fn receive(&mut self) -> Vec<(Header, Vec<u8>)> {
             let used = self.memory.load_u16(0x1c02).unwrap();
             let packets = (self.received..used).map(|slot| {
@@ -616,7 +582,6 @@ mod tests {
         let packets = guest.receive();
         assert_eq!(ops(&packets), [(RESPONSE, &b""[..]), (DATA, b"A=1\0")]);
         assert_eq!((packets[1].0.src_port, packets[1].0.dst_port), (PORT, 5000));
-        // The guest consumed four bytes, which frees credit for the last one.
         guest.send(CREDIT_UPDATE, PORT, (4, 4), &[]);
         assert_eq!(ops(&guest.receive()), [(DATA, &b"\0"[..])]);
         guest.post(2);

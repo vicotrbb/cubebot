@@ -1,7 +1,4 @@
-//! The host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device): each connection on the Unix socket that `cubebot-sandbox
-//! desktop` relays for the orchestrator is paired with one of the streams the guest's arbiter
-//! keeps open to the desktop host port, and bytes pass both ways unparsed. The arbiter treats
-//! each stream as one host channel connection, so its control and frame state end with it.
+//! Bytes pass both ways unparsed; the arbiter treats each paired stream as one host channel connection.
 use super::virtio::{Slot, vsock::Vsock};
 use crate::kvm::memory::GuestMemory;
 use std::{
@@ -15,11 +12,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// How long a connection waits for the guest's arbiter, such as while the guest boots.
 const WAIT: Duration = Duration::from_secs(30);
 
-/// Accepts host channel connections on `path` and pairs them in order with the streams in
-/// `spares`, on threads of their own.
 pub fn listen(
     path: &Path,
     vsock: Arc<Slot<Vsock>>,
@@ -44,8 +38,6 @@ pub fn listen(
     Ok(())
 }
 
-/// Copies the guest stream's bytes to the connection and the connection's to the stream, each
-/// on its own thread.
 fn bridge(
     client: UnixStream,
     port: u32,
@@ -66,14 +58,12 @@ fn bridge(
                 memory,
             );
         }
-        // The stream closed, or the connection did; either ends both.
         let _ = client.shutdown(std::net::Shutdown::Both);
     });
     std::thread::spawn(move || forward(to_guest, port, &vsock, memory));
     Ok(())
 }
 
-/// The next guest stream that is still open, waiting at most [`WAIT`] in all.
 fn pair(vsock: &Slot<Vsock>, spares: &Receiver<u32>) -> Option<(u32, Receiver<Vec<u8>>)> {
     let deadline = Instant::now() + WAIT;
     loop {
@@ -87,10 +77,7 @@ fn pair(vsock: &Slot<Vsock>, spares: &Receiver<u32>) -> Option<(u32, Receiver<Ve
     }
 }
 
-/// Copies the connection's bytes to the guest stream until it ends, then shuts the stream's
-/// host side so the arbiter sees the end after answering what it has.
-/// shortcut: the stream's outbox grows with whatever the orchestrator sends unanswered; bound it
-/// if a host channel client other than the orchestrator appears.
+/// shortcut: the stream's outbox grows with whatever the orchestrator sends unanswered; bound it if a host channel client other than the orchestrator appears.
 fn forward(mut client: UnixStream, port: u32, vsock: &Slot<Vsock>, memory: &GuestMemory) {
     let mut buffer = vec![0; 64 << 10];
     loop {

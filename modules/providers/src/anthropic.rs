@@ -1,4 +1,3 @@
-//! Anthropic Messages over SSE. Content blocks, including signed thinking, are kept for replay.
 use crate::{
     Capabilities, Decoder, Error, Event, Limits, Message, Model, Provider, Request, Usage, call,
     reply,
@@ -23,7 +22,6 @@ fn model_id(name: &str) -> String {
 
 pub struct Anthropic {
     http: Client,
-    /// Ends in `/`; `messages` and `models/{id}` resolve against it.
     base: Url,
     pricing: Url,
 }
@@ -53,7 +51,6 @@ impl Anthropic {
         })
     }
 
-    /// The prices on Anthropic's pricing page.
     #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic"))]
     pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
         let page = crate::prices::page(&self.http, self.pricing.clone()).await?;
@@ -94,7 +91,6 @@ impl Provider for Anthropic {
         })
     }
 
-    /// Newest first, as Anthropic lists them; one page holds every model.
     #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic"))]
     async fn models(&self, key: &str) -> Result<Vec<Model>, Error> {
         let mut url = self
@@ -167,8 +163,7 @@ fn body(request: &Request) -> Result<Value, Error> {
         };
         messages.push(value);
     }
-    // Automatic caching moves one breakpoint to the end of the history each turn, so the
-    // resent prefix is read from cache instead of billed in full.
+    // One breakpoint moves to the end of the history each turn, so the resent prefix is read from cache.
     let mut body = json!({"model":request.model,"max_tokens":limit,"messages":messages,
         "stream":true,"cache_control":{"type":"ephemeral"}});
     if !request.system.is_empty() {
@@ -195,7 +190,6 @@ fn body(request: &Request) -> Result<Value, Error> {
     Ok(body)
 }
 
-/// A computer toolset call becomes a `computer` call whose action is the member's name.
 fn tool_use(block: &Value) -> Result<crate::FunctionCall, Error> {
     let field = |name: &str| block[name].as_str().ok_or(Error::InvalidResponse(None));
     if block["toolset_name"] != "computer" {
@@ -211,7 +205,6 @@ fn tool_use(block: &Value) -> Result<crate::FunctionCall, Error> {
     )
 }
 
-/// Turns off the toolset members the desktop arbiter does not serve.
 fn unserved() -> Value {
     [
         "zoom",
@@ -226,7 +219,6 @@ fn unserved() -> Value {
     .into()
 }
 
-/// A result with its image after the text; a computer toolset result echoes its toolset.
 fn tool_result(call_id: &str, output: &str, image: Option<&str>, computer: bool) -> Value {
     let mut result = json!({"type":"tool_result","tool_use_id":call_id,"content":output});
     if let Some(image) = image {

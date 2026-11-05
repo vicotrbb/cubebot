@@ -1,7 +1,4 @@
-//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) through the orchestrator, which authorizes every call.
-//! `files_put` uploads a workspace file as the tool user reads it and `files_get` writes one as
-//! the tool user, so neither reaches further than a tool call does. A put's request id is the
-//! journaled call's, so a resent call returns the file it already made.
+//! Transfers run as the tool user, so neither `files_put` nor `files_get` reaches further than a tool call does.
 use crate::{
     control::{Error, MemoryClient},
     tools::{Registry, Running, parse},
@@ -57,7 +54,6 @@ struct Share {
     permission: SharePermission,
 }
 
-/// `workspace` offers `files_get` and `files_put`, which need the tool user.
 pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
     let tool = cubebot_providers::Tool::strict;
     let text = |description: &str| json!({"type":"string","description":description});
@@ -99,7 +95,6 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
     tools
 }
 
-/// `None` when `name` is not a files tool.
 pub fn call<'a>(
     client: Option<&'a MemoryClient>,
     turn: Uuid,
@@ -178,8 +173,6 @@ fn attach<'a>(
     }))
 }
 
-/// Uploads, then attaches. The call's id names the upload, so a resent call attaches the same
-/// file.
 async fn sent(
     client: &MemoryClient,
     tools: &Registry,
@@ -214,7 +207,6 @@ async fn sent(
     }))
 }
 
-/// `chart.png` as `chart-1f3a9c2e.png`, keeping the extension that decides how it is shown.
 fn unique_name(name: &str, id: Uuid) -> String {
     let tag = &id.simple().to_string()[..8];
     match name.rsplit_once('.') {
@@ -282,8 +274,7 @@ async fn upload(
     Ok(stored.map(|entry| format!("Uploaded: {}", json!(entry))))
 }
 
-/// A file the tool user reads as a request body. A missing or unreadable file fails here, before
-/// anything is sent; one that fails later ends the body in an error, so nothing is stored.
+/// A file that fails after the first read ends the body in an error, so nothing is stored.
 pub(crate) async fn tool_user_body(mut reader: Child) -> io::Result<reqwest::Body> {
     let mut stdout = reader
         .stdout
@@ -305,8 +296,6 @@ pub(crate) async fn tool_user_body(mut reader: Child) -> io::Result<reqwest::Bod
     Ok(reqwest::Body::wrap_stream(chunks))
 }
 
-/// The next chunk the tool user read, `None` once it read the whole file, or an error when it
-/// could not.
 async fn next_chunk(stdout: &mut ChildStdout, reader: &mut Child) -> io::Result<Option<Vec<u8>>> {
     let mut buffer = vec![0; 64 * 1024];
     let read = stdout.read(&mut buffer).await?;
@@ -334,7 +323,6 @@ async fn download(
     }
 }
 
-/// Writes a download as the tool user.
 pub(crate) async fn written(
     mut response: reqwest::Response,
     tools: &Registry,

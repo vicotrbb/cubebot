@@ -23,7 +23,6 @@ fn issued() -> Value {
     json!({"token":format!("cb_runtime_{}", "a".repeat(64)),"agent":Uuid::from_u128(1),"attempt":Uuid::from_u128(2),"epoch":1,"version":1})
 }
 
-/// A scripted orchestrator: the test reads every report and chooses every delivery.
 #[derive(Clone)]
 struct Channel {
     reports: mpsc::UnboundedSender<Value>,
@@ -104,7 +103,6 @@ async fn relay(channel: Channel, mut socket: WebSocket) {
         }
     }
 }
-/// Each scripted reply is a list of SSE payloads, or `{"status":..,"retry_after":..}`.
 async fn model(State(channel): State<Channel>, Json(body): Json<Value>) -> Response {
     use axum::response::IntoResponse;
     let mut replies = channel.provider.lock().unwrap();
@@ -123,7 +121,6 @@ async fn model(State(channel): State<Channel>, Json(body): Json<Value>) -> Respo
         .collect();
     ([("content-type", "text/event-stream")], body).into_response()
 }
-/// An OpenAI stream: one delta per message text, then the completed response.
 fn responses(output: Value, usage: Value) -> Value {
     let mut events: Vec<Value> = output
         .as_array()
@@ -135,7 +132,6 @@ fn responses(output: Value, usage: Value) -> Value {
     events.push(json!({"type":"response.completed","response":{"status":"completed","output":output,"usage":usage}}));
     events.into()
 }
-/// An Anthropic stream of one text block.
 fn messages(text: &str, input_tokens: u64, output_tokens: u64) -> Value {
     json!([
         {"type":"message_start","message":{"usage":{"input_tokens":input_tokens,"output_tokens":1}}},
@@ -192,7 +188,6 @@ fn root() -> PathBuf {
     root
 }
 fn spawn(origin: &str, root: &std::path::Path) -> std::process::Child {
-    // The test's own user stands in for the tool user, as on the development backend.
     let owner = std::fs::metadata(root).unwrap();
     std::process::Command::new(env!("CARGO_BIN_EXE_cubebot-agent"))
         .env("CUBEBOT_ORCHESTRATOR_ORIGIN", origin)
@@ -251,7 +246,6 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
         fake.event(4).await,
         json!({"kind":"usage","input_tokens":9,"output_tokens":2,"cached_input_tokens":0,"cost_usd":null})
     );
-    // Extraction streams nothing; its fact commits with the turn.
     assert_eq!(
         fake.event(5).await,
         json!({"kind":"usage","input_tokens":12,"output_tokens":3,"cached_input_tokens":0,"cost_usd":null})
@@ -279,7 +273,6 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     assert_eq!(request["model"], "test-model");
     assert_eq!(request["stream"], true);
     assert!(request.get("max_output_tokens").is_none());
-    // The platform's preamble comes first; the agent's own instructions close the prompt.
     let system = request["input"][0]["content"].as_str().unwrap();
     assert!(system.starts_with("You are an autonomous agent") && system.ends_with("\n\nBe brief."));
     assert_eq!(
@@ -289,7 +282,6 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
         .as_array()
         .unwrap()[..]
     );
-    // Only the first event reaches the ledger before the connection drops.
     fake.ack(id, [3]);
     fake.deliver(Value::Null);
     fake.event(4).await;
@@ -352,7 +344,6 @@ async fn crash_recovery_reports_unfinished_tool_effects_once_and_cancel_stops_pa
     let started = fake.event(2).await;
     assert_eq!(started["kind"], "tool_call");
     assert_eq!(started["input"], json!({"command":"sleep 30"}));
-    // Both calls are journaled before either runs; the edit finishes while the command runs.
     let edit = fake.event(3).await;
     assert_eq!(edit["name"], "edit_file");
     let edited = fake.event(4).await;
@@ -441,7 +432,6 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
         json!({"kind":"done","response":"Fixed"})
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
-    // Both results go back to the model, in call order.
     let request = fake.provider.lock().unwrap()[1].clone();
     let outputs: Vec<&Value> = request["input"]
         .as_array()
@@ -479,7 +469,6 @@ async fn a_routine_command_runs_before_the_model_and_alone_needs_no_model() {
     let root = root();
     let mut child = spawn(&fake.origin, &root);
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
-    // Without a prompt the command's result is the answer and no provider is asked.
     let only = Uuid::new_v4();
     let mut delivery = turn(only, 1, "Routine disk (schedule) runs its command");
     delivery["command"] = json!("printf routine-ran");
@@ -506,14 +495,12 @@ async fn a_routine_command_runs_before_the_model_and_alone_needs_no_model() {
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
     fake.ack(only, 1..=3);
-    // A request would have taken the first scripted reply.
     assert_eq!(
         fake.provider.lock().unwrap()[0],
         answer,
         "no provider request"
     );
 
-    // With a prompt the model reads the result after the request.
     let prompted = Uuid::new_v4();
     let mut delivery = turn(prompted, 1, "Routine disk (person):\n\nSummarize");
     delivery["command"] = json!("printf prompted-ran");
@@ -567,8 +554,6 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
         fake.event(2).await,
         json!({"kind":"usage","input_tokens":790,"output_tokens":20,"cached_input_tokens":0,"cost_usd":null})
     );
-    // 810 of the discovered 1000-token window: after extraction, summarize before the reply
-    // settles the turn.
     assert_eq!(fake.event(3).await["kind"], "usage");
     assert_eq!(fake.event(4).await["kind"], "usage");
     assert_eq!(
@@ -581,7 +566,6 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
     let requests = fake.provider.lock().unwrap().clone();
-    // The rate-limited request was resent unchanged to the same model.
     assert_eq!(requests[0], requests[1]);
     assert_eq!(requests[0]["model"], "test-model");
     assert_eq!(requests[0]["max_tokens"], 64);

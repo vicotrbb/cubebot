@@ -1,4 +1,3 @@
-//! Local servers: newline-delimited JSON-RPC over the pipes of a child run as the tool user.
 use super::{Failure, RESPONSE_BYTES, answer, result};
 use crate::tools::{Sandbox, lock};
 use serde_json::{Value, json};
@@ -21,7 +20,6 @@ type Pending = crate::tools::Waiting;
 pub(in crate::tools) struct Stdio {
     stdin: Arc<tokio::sync::Mutex<ChildStdin>>,
     pending: Pending,
-    /// Set once the server's output ends; the next call starts it again.
     closed: Arc<AtomicBool>,
     _child: Child,
 }
@@ -61,7 +59,6 @@ impl Stdio {
         !self.closed.load(Ordering::Acquire)
     }
 
-    /// Stops waiting for a cancelled request's response.
     pub fn forget(&self, id: u64) {
         lock(&self.pending).remove(&id);
     }
@@ -90,8 +87,6 @@ async fn write(stdin: &tokio::sync::Mutex<ChildStdin>, message: &Value) -> std::
     stdin.lock().await.write_all(line.as_bytes()).await
 }
 
-/// Routes responses to their callers and answers server requests. When the server exits, every
-/// waiting caller learns its result is lost.
 async fn read(
     stdout: ChildStdout,
     stdin: Arc<tokio::sync::Mutex<ChildStdin>>,
@@ -132,7 +127,6 @@ mod tests {
     use cubebot_protocol::terminal::Outcome;
     use std::time::Duration;
 
-    /// A line-oriented fake server: answers initialize, lists one tool and echoes calls.
     const SERVER: &str = r#"
 while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
@@ -143,8 +137,6 @@ while IFS= read -r line; do
   esac
 done"#;
 
-    /// Counts its starts, exits after answering a quick call, never answers a slow one and
-    /// records cancellations.
     const ONE_SHOT: &str = r#"
 echo >> starts
 while IFS= read -r line; do
@@ -174,7 +166,6 @@ done"#;
             matches!(quick, Outcome::Exited { code: Some(0), .. }),
             "{quick:?}"
         );
-        // Wait for the exit to be noticed, so the next call cannot race it into a lost result.
         tokio::time::sleep(Duration::from_millis(300)).await;
         let slow = tools[0]
             .call(&sandbox, id, &json!({"mode":"slow"}))

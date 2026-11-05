@@ -1,4 +1,3 @@
-//! Agent runtime entry point. It runs inside its sandbox: a `kvm` guest or a container (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox).
 use std::process::ExitCode;
 
 #[tokio::main(flavor = "current_thread")]
@@ -11,15 +10,11 @@ async fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     match (args.next().as_deref(), args.next()) {
         (None, _) => (),
-        // Re-executed as the tool user to apply one edit_file call.
         (Some("edit-file"), None) => return cubebot_agent::tools::edit_file(),
-        // The kvm guest's init, which runs the agent as its child.
         #[cfg(target_os = "linux")]
         (Some("guest"), None) => return cubebot_agent::guest::init(),
-        // PID 1 of the container runtime's sandbox, which runs the agent as its child.
         #[cfg(target_os = "linux")]
         (Some("container"), None) => return cubebot_agent::container::init(),
-        // The container runtime's host channel, run by the orchestrator through the platform's exec.
         (Some("desktop"), None) => {
             return match cubebot_agent::desktop::channel() {
                 Ok(()) => ExitCode::SUCCESS,

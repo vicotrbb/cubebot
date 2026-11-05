@@ -1,11 +1,4 @@
-//! Browser tools (docs/adr/sandbox.md#structured-browser-tools-with-visual-interaction and docs/adr/sandbox.md#main-browser-session-with-separate-task-sessions) on the desktop's Chromium, which this module starts as its
-//! own user with its profile on the workspace disk, driven through Chromium's DevTools protocol on
-//! a pipe only the agent holds, so a tool command reaches neither. The
-//! `main` session is a page in the profile's own context; any other session name is a task
-//! session with a browser context of its own, whose cookies end when it closes. Calls address a
-//! session's page directly, so one session never moves another's page or takes its input. Input
-//! is refused while a person holds the desktop (docs/adr/sandbox.md#desktop-as-a-vmm-device), and every call while they hold it for
-//! a login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover); the arbiter is asked first.
+//! Chromium runs as its own user, driven over a DevTools pipe only the agent holds, so a tool command reaches neither; the arbiter is asked before input.
 use super::{Running, Sandbox, Tool, Waiting, computer, lock};
 use cubebot_protocol::{
     desktop::{Action, Mode, PERSON_HAS_CONTROL},
@@ -31,7 +24,6 @@ use tokio::{
 };
 use uuid::Uuid;
 
-/// The browser's own user and profile, apart from the tool user's (10001) workspace.
 const USER: u32 = 10002;
 const PROFILE: &str = "/var/lib/cubebot/browser";
 const CHROMIUM: [&str; 13] = [
@@ -52,8 +44,7 @@ const CHROMIUM: [&str; 13] = [
     "--user-data-dir=/var/lib/cubebot/browser",
     "about:blank",
 ];
-/// Moves the shell's standard input and output onto the descriptors --remote-debugging-pipe
-/// uses, then runs its arguments.
+/// Moves the shell's standard input and output onto the descriptors --remote-debugging-pipe uses.
 const PIPE: &str = r#"exec "$0" "$@" 3<&0 4>&1 </dev/null >/dev/null"#;
 /// Bounds one DevTools message, so the browser cannot exhaust the agent's memory.
 const MESSAGE: u64 = 64 * 1024 * 1024;
@@ -61,7 +52,6 @@ const MAIN: &str = "main";
 /// Bounds each DevTools reply, so a hung page fails the call rather than the turn.
 const REPLY: Duration = Duration::from_secs(30);
 const LOAD: Duration = Duration::from_secs(15);
-/// Accessibility outline shown to the model; the rest of a long page is cut.
 const OUTLINE_BYTES: usize = 32 * 1024;
 
 #[derive(Clone, Copy, PartialEq)]
@@ -82,7 +72,6 @@ struct BrowserTool {
 
 pub(super) fn tools() -> Vec<Box<dyn Tool>> {
     let browser = Arc::new(Browser::default());
-    // The desktop shows Chromium from boot, for the computer tool as much as these.
     let starting = browser.clone();
     tokio::spawn(async move {
         if let Err(error) = starting.state.lock().await.cdp().await {
@@ -149,7 +138,6 @@ fn validate(kind: Kind, input: &Value) -> Result<(), &'static str> {
     }
 }
 
-/// A session's page and, for a task session, the browser context it owns.
 #[derive(Clone)]
 struct Page {
     target: String,
@@ -169,8 +157,7 @@ struct State {
 }
 
 impl State {
-    /// The connection, starting Chromium again when it is gone. Its pages' handles belong to
-    /// the connection that ended, so every session ends with it.
+    /// Its pages' handles belong to the connection that ended, so every session ends with it.
     async fn cdp(&mut self) -> Result<Arc<Cdp>, String> {
         if let Some(cdp) = self.cdp.clone().filter(|cdp| cdp.alive()) {
             return Ok(cdp);
@@ -212,8 +199,7 @@ impl Browser {
         result
     }
 
-    /// The named session's page, opened only by a navigation so a closed or lost session is
-    /// never silently replaced.
+    /// Opened only by a navigation, so a closed or lost session is never silently replaced.
     async fn page(&self, name: &str, open: bool) -> Result<(Arc<Cdp>, Page), String> {
         let mut state = self.state.lock().await;
         let cdp = state.cdp().await?;
@@ -231,8 +217,7 @@ impl Browser {
     }
 }
 
-/// The browser bypasses the arbiter's input devices, so it asks the arbiter's mode itself; the
-/// arbiter refuses the question itself during a login handoff.
+/// The browser bypasses the arbiter's input devices, so it asks the arbiter's mode itself.
 async fn agent_has_control(call: Uuid, input: bool) -> Result<(), String> {
     let asked = tokio::task::spawn_blocking(move || computer::ask(call, Action::Mode)).await;
     match asked {
@@ -307,7 +292,6 @@ async fn click(cdp: &Cdp, page: &Page, node: Value) -> Result<Outcome, String> {
     Ok(done("Clicked.".into()))
 }
 
-/// A task session's context goes with its page, and with it the session's cookies.
 async fn close(cdp: &Cdp, page: &Page) -> Result<Outcome, String> {
     match &page.context {
         Some(context) => {
@@ -323,7 +307,6 @@ async fn close(cdp: &Cdp, page: &Page) -> Result<Outcome, String> {
     Ok(done("Closed.".into()))
 }
 
-/// Navigates, then waits for the document to finish loading, up to [`LOAD`].
 async fn navigate(cdp: &Cdp, page: &Page, url: &Value) -> Result<Outcome, String> {
     let navigated = cdp
         .send(Some(&page.session), "Page.navigate", json!({"url":url}))
@@ -358,7 +341,6 @@ async fn navigate(cdp: &Cdp, page: &Page, url: &Value) -> Result<Outcome, String
     }
 }
 
-/// The middle of an element's content box, in the page's viewport pixels.
 fn center(model: &Value) -> Result<[f64; 2], String> {
     let quad: Vec<f64> = model["model"]["content"]
         .as_array()
@@ -372,8 +354,6 @@ fn center(model: &Value) -> Result<[f64; 2], String> {
     Ok([0, 1].map(|axis| quad.iter().skip(axis).step_by(2).sum::<f64>() / 4.0))
 }
 
-/// The accessibility tree as indented lines, leaving out ignored and unnamed structural nodes
-/// and lifting their children.
 fn outline(nodes: &[Value]) -> String {
     let by_id: HashMap<&str, &Value> = nodes
         .iter()
@@ -443,8 +423,6 @@ fn field(result: &Value, name: &str) -> Result<String, String> {
         .ok_or_else(|| format!("The browser's reply had no {name}."))
 }
 
-/// The DevTools pipe to the browser, which dies with it; page commands travel on it with their
-/// session id.
 struct Cdp {
     input: Mutex<ChildStdin>,
     waiting: Waiting,
@@ -454,7 +432,6 @@ struct Cdp {
 }
 
 impl Cdp {
-    /// Starts Chromium on the desktop as [`USER`], once the desktop is up.
     async fn launch() -> Result<Self, String> {
         let failed = |error: &dyn std::fmt::Display| format!("The browser did not start: {error}");
         display().await.map_err(|error| failed(&error))?;
@@ -483,7 +460,6 @@ impl Cdp {
         };
         let waiting = Waiting::default();
         let replies = waiting.clone();
-        // Replies go to their waiting command; events carry no id and are not used.
         let reader = tokio::spawn(async move {
             let mut output = BufReader::new(output);
             let mut message = Vec::new();
@@ -493,7 +469,6 @@ impl Cdp {
                     .take(MESSAGE)
                     .read_until(0, &mut message)
                     .await;
-                // The end of the pipe, or a message over the bound, ends the connection.
                 if read.is_err() || message.pop() != Some(0) {
                     break;
                 }
@@ -563,7 +538,6 @@ impl Cdp {
     }
 }
 
-/// Waits up to 30 s for guest init's desktop, so openbox manages Chromium's window.
 async fn display() -> std::io::Result<()> {
     let deadline = Instant::now() + Duration::from_secs(30);
     while !Path::new(super::DESKTOP_READY).exists() {
@@ -575,7 +549,6 @@ async fn display() -> std::io::Result<()> {
     Ok(())
 }
 
-/// The profile directory, which only the browser user can enter.
 fn profile() -> std::io::Result<()> {
     std::fs::DirBuilder::new()
         .recursive(true)
@@ -598,7 +571,6 @@ impl Drop for Cdp {
 mod tests {
     use super::*;
 
-    /// Sources the launch flags as Debian's chromium wrapper does, with `lock` as the profile's.
     fn locked_after_launch(lock: &str) -> bool {
         let home = std::env::temp_dir().join(format!("cubebot-lock-{}", Uuid::new_v4()));
         let profile = home.join(".config/chromium");

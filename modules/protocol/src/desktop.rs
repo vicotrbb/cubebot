@@ -1,36 +1,24 @@
-//! The desktop arbiter's requests (docs/adr/sandbox.md#desktop-as-a-vmm-device). The agent's tools send one [`AgentRequest`] JSON
-//! line per request on the arbiter's Unix socket; the host channel carries [`HostRequest`] lines
-//! from the orchestrator. Each request gets one [`Response`] line. The arbiter tags every request
-//! with its source from the stream it arrived on, never from its body.
+//! Each request gets one [`Response`] line. The arbiter tags every request with its source from the stream it arrived on, never from its body.
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// In a `kvm` guest the arbiter opens host channel streams to `HOST_CID:HOST_PORT` from a
-/// reserved source port, and the sandbox pairs each with a host channel connection.
+/// A `kvm` guest's arbiter opens host channel streams to `HOST_CID:HOST_PORT` from a reserved source port.
 pub const HOST_PORT: u32 = 1026;
-/// Bounds each request line, such as the text of one `type`.
 pub const LINE_LIMIT: usize = 64 << 10;
-/// The refusal of agent input while a person holds control.
 pub const PERSON_HAS_CONTROL: &str = "a person has control";
-/// The refusal of agent input after a person handed control back, until the agent takes a
-/// screenshot: what it last saw may no longer be on the screen (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
+/// Refused until the agent takes a screenshot: what it last saw may no longer be on the screen.
 pub const REOBSERVE: &str = "a person had control; take a screenshot before further input";
-/// The refusal of every agent request, screenshots included, while a person holds control to
-/// complete a login the agent asked for (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
+/// The refusal of every agent request, screenshots included, while a person completes a login the agent asked for.
 pub const LOGIN_PENDING: &str =
     "a person is logging in for you; wait for the message that the login handoff finished";
-/// Changed screen regions travel as square tiles of this many pixels per side.
 pub const TILE: u32 = 64;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
-    /// The agent drives and no person is connected.
     #[default]
     Agent,
-    /// The agent drives and people see the screen.
     Watch,
-    /// One person holds control.
     Human,
 }
 
@@ -42,19 +30,17 @@ pub enum Button {
     Middle,
 }
 
-/// Coordinates are screen pixels from the top left. `hold` keys stay pressed for the action.
+/// Coordinates are screen pixels from the top left.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Action {
     Screenshot,
-    /// Changes nothing; the response carries the mode, which the agent's browser tools ask
-    /// before input they send to Chromium directly.
+    /// The response carries the mode, which the agent's browser tools ask before input they send to Chromium directly.
     Mode,
     Move {
         x: u32,
         y: u32,
     },
-    /// At the pointer when `at` is omitted.
     Click {
         #[serde(default)]
         at: Option<[u32; 2]>,
@@ -63,7 +49,6 @@ pub enum Action {
         #[serde(default)]
         hold: Vec<String>,
     },
-    /// Presses at the first point, moves through the rest and releases at the last.
     Drag {
         path: Vec<[u32; 2]>,
         #[serde(default)]
@@ -78,24 +63,20 @@ pub enum Action {
         #[serde(default)]
         hold: Vec<String>,
     },
-    /// Literal text on a US keyboard layout.
     Type {
         text: String,
     },
-    /// Pressed in order and released in reverse, such as `["ctrl", "l"]`.
     Key {
         keys: Vec<String>,
     },
 }
 
 impl Action {
-    /// Every action but a screenshot or a mode query sends input.
     pub fn is_input(&self) -> bool {
         !matches!(self, Self::Screenshot | Self::Mode)
     }
 }
 
-/// From the guest: input or a screenshot for one of the agent's tool calls.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentRequest {
@@ -103,31 +84,25 @@ pub struct AgentRequest {
     pub action: Action,
 }
 
-/// From the orchestrator: a person's input or screenshot, a mode change, or the next frame.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum HostRequest {
-    /// The tiles that changed since this host channel connection's last frame; the first frame
-    /// of a connection has every tile.
+    /// The first frame of a connection has every tile.
     Frame,
     Input {
         account: Uuid,
         action: Action,
     },
-    /// `human` names the person who takes control; while one person holds it, any change must
-    /// name that person.
+    /// While one person holds control, any change must name that person.
     Mode {
         mode: Mode,
         #[serde(default)]
         account: Option<Uuid>,
-        /// With `human`: the person takes control for a pending login handoff, and the agent's
-        /// screenshots and mode queries are refused too until control changes again.
+        /// With `human`: for a pending login handoff, so the agent's screenshots and mode queries are refused too until control changes.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         handoff: bool,
     },
-    /// Types a vault item's field (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) for `account`, who must hold control, or for the
-    /// agent's `vault_fill` when `None`, which is refused like the agent's own input. Only `item`
-    /// and the text's length are logged.
+    /// `None` is the agent's `vault_fill`, refused like its own input; only `item` and the text's length are logged.
     Fill {
         item: Uuid,
         text: String,
@@ -136,13 +111,11 @@ pub enum HostRequest {
     },
 }
 
-/// Whether the arbiter types every character of `text`: printable ASCII and spaces on a US
-/// layout. A vault refuses to save what it could not fill.
+/// Printable ASCII and spaces on a US layout. A vault refuses to save what it could not fill.
 pub fn typable(text: &str) -> bool {
     text.chars().all(|c| c == ' ' || c.is_ascii_graphic())
 }
 
-/// The mode after the request, and its refusal or screenshot.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Response {
@@ -152,10 +125,8 @@ pub struct Response {
     /// The screen as a base64 PNG.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub png: Option<String>,
-    /// A frame's changed tiles.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tiles: Vec<Tile>,
-    /// A frame's pointer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pointer: Option<Pointer>,
 }
@@ -166,7 +137,6 @@ pub struct Response {
 pub struct Tile {
     pub x: u32,
     pub y: u32,
-    /// A base64 PNG.
     pub png: String,
 }
 

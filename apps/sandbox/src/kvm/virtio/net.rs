@@ -1,5 +1,4 @@
-//! virtio-net (virtio 1.2 §5.1) over a tap device. No offloads are offered, so every buffer is a
-//! 12-byte header followed by one Ethernet frame.
+//! virtio-net (virtio 1.2 §5.1). No offloads are offered, so every buffer is a 12-byte header followed by one Ethernet frame.
 use super::{Device, Slot, queue::Queue};
 use crate::kvm::memory::GuestMemory;
 use std::{
@@ -18,9 +17,8 @@ const TRANSMIT: usize = 1;
 /// The largest frame a tap without offloads passes: a 64 KiB packet and its Ethernet header.
 const FRAME_LIMIT: usize = 65535 + 14;
 
-/// Whether a guest's frame claims only the guest's own addresses. The guest's address is static,
-/// from the kernel's `ip=` parameter, so no DHCP client legitimately sends from 0.0.0.0. Anything
-/// but IPv4 and ARP is dropped: the guest has no IPv6, and a VLAN tag would hide these headers.
+/// The guest's address is static, so no DHCP client legitimately sends from 0.0.0.0. Anything but IPv4 and ARP is dropped:
+/// the guest has no IPv6, and a VLAN tag would hide these headers.
 fn genuine(frame: &[u8], mac: &[u8], address: &[u8]) -> bool {
     if frame.get(6..12) != Some(mac) {
         return false;
@@ -36,7 +34,6 @@ pub struct Net {
     tap: File,
     config: [u8; 12],
     address: [u8; 4],
-    /// Signalled when the driver posts receive buffers.
     receivable: Arc<Condvar>,
 }
 
@@ -57,7 +54,6 @@ impl Net {
         self.receivable.clone()
     }
 
-    /// Delivers one frame; returns false when the driver has no receive buffer for it yet.
     fn receive(
         &self,
         queues: &mut [Queue],
@@ -129,8 +125,6 @@ impl Device for Net {
     }
 }
 
-/// Moves frames from the tap to the guest until the tap fails, waiting for receive buffers
-/// rather than dropping frames.
 pub fn receive(
     mut tap: File,
     slot: &Slot<Net>,
@@ -159,7 +153,6 @@ mod tests {
     const RING: Ring = Ring(0x1000);
     use std::os::{fd::OwnedFd, unix::net::UnixDatagram};
 
-    /// A datagram pair keeps frame boundaries, as a tap does.
     fn net() -> (Net, UnixDatagram) {
         let (tap, peer) = UnixDatagram::pair().unwrap();
         let tap = File::from(OwnedFd::from(tap));
@@ -204,11 +197,9 @@ mod tests {
         assert!(!check(&arp(OTHER_MAC, MAC_ADDRESS, ADDRESS)));
         assert!(!check(&arp(MAC_ADDRESS, OTHER_MAC, ADDRESS)));
         assert!(!check(&arp(MAC_ADDRESS, MAC_ADDRESS, OTHER_ADDRESS)));
-        // A VLAN tag would otherwise carry a forged header past these checks.
         let mut tagged = ipv4(MAC_ADDRESS, ADDRESS);
         tagged[12..14].copy_from_slice(&[0x81, 0x00]);
         assert!(!check(&tagged));
-        // Too short to hold what it claims, at every length.
         let whole = ipv4(MAC_ADDRESS, ADDRESS);
         assert!((0..30).all(|length| !check(&whole[..length])));
     }

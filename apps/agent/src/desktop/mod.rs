@@ -1,14 +1,4 @@
-//! The screen arbiter (docs/adr/sandbox.md#desktop-as-a-vmm-device): a root process in the sandbox and the only client of the outer
-//! display, so the only reader of the screen and the only writer of input. It serves the agent's
-//! tools on a Unix socket only root can open, and the host channel ([`Host`]): in a `kvm` guest
-//! over streams it holds open to the sandbox's vsock host port, which the sandbox pairs with the
-//! connections `cubebot-sandbox desktop` relays for the orchestrator, and in a container on a
-//! second root-only socket that `cubebot-agent desktop` relays; one request at a time. It holds the mode,
-//! refuses agent input while a person holds control and until the agent looks again after they
-//! hand it back, refuses every agent request while a person holds control for a login handoff
-//! (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover), and logs every request with its source: the agent and its tool call, or the
-//! person's account. Each host channel connection gets frames of the tiles that changed since its
-//! last one, encoded on its own relay thread. Its device edges are [`Screen`] and [`Input`].
+//! The only client of the outer display, so the only reader of the screen and writer of input; a person holding control overrides the agent.
 mod png;
 pub mod x11;
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -28,21 +18,18 @@ use std::{
 };
 use uuid::Uuid;
 
-/// The agent's socket, in `/run`, which only root writes.
+/// In `/run`, which only root writes.
 pub const SOCKET: &str = "/run/cubebot-desktop.sock";
-/// The host channel's socket in a container, which only root opens.
 pub const HOST_SOCKET: &str = "/run/cubebot-host-desktop.sock";
 pub const WIDTH: u32 = 1280;
 pub const HEIGHT: u32 = 800;
 const NO_CONTROL: &str = "this person does not have control";
 const OTHER_HAS_CONTROL: &str = "another person has control";
 const SHIFT: u16 = 42;
-/// Bounds what one request queues on the input devices.
 const MAX_CLICKS: u8 = 3;
 const MAX_PATH: usize = 100;
 const MAX_WHEEL: i32 = 50;
 const MAX_KEYS: usize = 8;
-/// US layout rows: unshifted and shifted characters from the first key code.
 const ROWS: [(&str, &str, u16); 4] = [
     ("1234567890-=", "!@#$%^&*()_+", 2),
     ("qwertyuiop[]", "QWERTYUIOP{}", 16),
@@ -126,17 +113,14 @@ const KEYS: [(&str, u16); 73] = [
     ("menu", 139),
 ];
 
-/// The screen: BGRX rows of [`WIDTH`] by [`HEIGHT`] pixels as last presented.
 pub trait Screen: Send {
     fn capture(&mut self) -> io::Result<Vec<u8>>;
 }
 
-/// The keyboard and pointer, taking evdev events in order.
 pub trait Input: Send {
     fn send(&mut self, events: &[Event]) -> io::Result<()>;
 }
 
-/// One request and where its response goes.
 pub enum Request {
     Agent {
         line: Vec<u8>,
@@ -153,7 +137,6 @@ pub enum Request {
 pub struct Snapshot {
     mode: Mode,
     pointer: Pointer,
-    /// BGRX rows of the screen's width.
     screen: Vec<u8>,
 }
 
@@ -166,11 +149,8 @@ pub struct Arbiter<S, I> {
     mode: Mode,
     holder: Option<Uuid>,
     pointer: [u32; 2],
-    /// Who last moved the pointer: a person, or the agent when `None`.
     pointer_by: Option<Uuid>,
-    /// Set when a person hands control back, until the agent's next screenshot.
     stale: bool,
-    /// Set while a person holds control for a login handoff.
     handoff: bool,
 }
 
@@ -188,12 +168,10 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         }
     }
 
-    /// Serves requests in arrival order for the life of the sandbox.
     pub fn serve(mut self, requests: Receiver<Request>) {
         for request in requests {
             match request {
-                // A connection that went away no longer wants its response.
-                // An unencodable response drops the reply, which the relay reports as an error.
+                // A gone connection no longer wants its response; an unencodable one drops the reply, which the relay reports.
                 Request::Agent { line, reply } => {
                     if let Ok(response) = encode(&self.agent(&line)) {
                         drop(reply.send(response));
@@ -298,8 +276,7 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         })
     }
 
-    /// `human` hands control to `account`; any other mode takes it back. Only the person
-    /// holding control changes the mode while they hold it.
+    /// Only the person holding control changes the mode while they hold it.
     fn switch(&mut self, mode: Mode, account: Option<Uuid>, handoff: bool) -> Response {
         if mode == Mode::Human && account.is_none() {
             return self.response(Some("taking control names the person".into()), None);
@@ -318,7 +295,6 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         self.response(None, None)
     }
 
-    /// `by` is the person acting, or the agent when `None`.
     fn act(
         &mut self,
         by: Option<Uuid>,
@@ -349,7 +325,6 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         }
     }
 
-    /// Sends the action's input, or returns the screen for a screenshot.
     fn perform(&mut self, action: &Action) -> Result<Option<String>, String> {
         let pointer = match action {
             Action::Screenshot => return self.screenshot().map(Some),
@@ -387,7 +362,6 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         Ok(None)
     }
 
-    /// Pointer events with `hold` keys pressed around them.
     fn pointer(&mut self, hold: &[String], events: Vec<Event>) -> Result<Option<String>, String> {
         let codes = hold
             .iter()
@@ -472,7 +446,6 @@ fn pressed(code: u16) -> [Event; 4] {
     [(1, code, 1), (0, 0, 0), (1, code, 0), (0, 0, 0)]
 }
 
-/// Presses `codes` in order, and releases them in reverse.
 fn held(codes: &[u16]) -> (Vec<Event>, Vec<Event>) {
     let press = codes.iter().flat_map(|&code| [(1, code, 1), (0, 0, 0)]);
     let release = codes
@@ -482,7 +455,6 @@ fn held(codes: &[u16]) -> (Vec<Event>, Vec<Event>) {
     (press.collect(), release.collect())
 }
 
-/// The key code and whether shift types `character` on a US layout.
 fn character(character: char) -> Option<(u16, bool)> {
     match character {
         ' ' => return Some((57, false)),
@@ -525,7 +497,6 @@ fn combination(keys: &[String]) -> Result<Vec<Event>, String> {
     Ok(press)
 }
 
-/// Every character's key presses, or which character a US layout cannot type.
 fn typed(text: &str) -> Result<Vec<Event>, String> {
     let mut events = Vec::new();
     for c in text.chars() {
@@ -538,7 +509,7 @@ fn typed(text: &str) -> Result<Vec<Event>, String> {
     Ok(events)
 }
 
-/// The action as logged: typed text may be a credential, so only its length is kept.
+/// Typed text may be a credential, so only its length is logged.
 fn logged(action: &Action) -> Value {
     let mut value = json!(action);
     if let Action::Type { text } = action {
@@ -551,17 +522,12 @@ fn encode(response: &Response) -> io::Result<Vec<u8>> {
     Ok(serde_json::to_vec(response)?)
 }
 
-/// Where the host channel reaches the arbiter.
 #[derive(Clone, Copy)]
 pub enum Host {
-    /// The `kvm` sandbox's vsock host port.
     Vsock,
-    /// [`HOST_SOCKET`], in a container.
     Socket,
 }
 
-/// Starts the arbiter on its own thread with the agent's socket and, in a guest, the host
-/// channel's streams.
 pub fn start<S: Screen + 'static, I: Input + 'static>(
     screen: S,
     input: I,
@@ -577,7 +543,6 @@ pub fn start<S: Screen + 'static, I: Input + 'static>(
     Ok(())
 }
 
-/// Serves `path`, which only root can open, one connection per thread.
 #[tracing::instrument(name = "desktop_listen", skip_all)]
 fn listen(
     path: &Path,
@@ -605,15 +570,12 @@ fn serve_host(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()> 
     relay(BufReader::new(stream.try_clone()?), &stream, requests)
 }
 
-/// `cubebot-agent desktop`: relays host channel lines on stdin to [`HOST_SOCKET`] and the
-/// arbiter's responses to stdout. Opening the socket takes root in the container, which the
-/// orchestrator reaches through the platform's exec.
+/// Opening the socket takes root in the container, which the orchestrator reaches through the platform's exec.
 pub fn channel() -> io::Result<()> {
     let socket = UnixStream::connect(HOST_SOCKET)?;
     let requests = socket.try_clone()?;
     std::thread::spawn(move || {
         let _ = forward(io::stdin().lock(), &requests);
-        // The arbiter answers what it already has, then sees the end.
         let _ = requests.shutdown(std::net::Shutdown::Write);
     });
     forward(&socket, io::stdout().lock())
@@ -647,7 +609,6 @@ fn serve_agent(stream: UnixStream, requests: &Sender<Request>) -> io::Result<()>
     Ok(())
 }
 
-/// One request line without its newline, or `None` at the end of the stream.
 fn read_line(reader: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
     let mut line = Vec::new();
     let limit = LINE_LIMIT as u64 + 1;
@@ -660,9 +621,7 @@ fn read_line(reader: &mut impl BufRead) -> io::Result<Option<Vec<u8>>> {
     Ok(Some(line))
 }
 
-/// Keeps one unused stream open to the sandbox's host port, so each host channel connection the
-/// sandbox accepts has a stream to pair with: the next is dialed once the last has its first
-/// request, or has ended. The sandbox admits only reserved source ports, which take root.
+/// One spare stream stays open so each accepted connection can pair; the sandbox admits only reserved source ports, which take root.
 fn dial(requests: &Sender<Request>) {
     let (paired, next) = mpsc::channel();
     loop {
@@ -724,8 +683,7 @@ fn host_stream() -> io::Result<std::fs::File> {
     ))
 }
 
-/// Serves one host channel connection; whoever took control through it and still holds it when
-/// it closes, such as an orchestrator that went away, hands control back.
+/// Whoever took control through it and still holds it when it closes hands control back.
 #[tracing::instrument(name = "desktop_connection", skip_all)]
 fn relay(reader: impl BufRead, writer: impl Write, requests: &Sender<Request>) -> io::Result<()> {
     let mut held = None;
@@ -750,7 +708,6 @@ fn serve_connection(
     requests: &Sender<Request>,
     held: &mut Option<Uuid>,
 ) -> io::Result<()> {
-    // The screen as this connection's last frame showed it.
     let mut shown = Vec::new();
     while let Some(line) = read_line(&mut reader)? {
         let request = serde_json::from_slice(&line).ok();
@@ -790,8 +747,6 @@ fn frame(requests: &Sender<Request>, shown: &mut Vec<u8>) -> io::Result<Response
     })
 }
 
-/// The tiles of `screen` that differ from `shown`, every tile when `shown` is not a screen of
-/// the same size, as PNGs; `screen` becomes what is shown.
 fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
     let (width, height) = (WIDTH, HEIGHT);
     let stride = width as usize * 4;
@@ -821,7 +776,6 @@ fn tiles(screen: &[u8], shown: &mut Vec<u8>) -> Vec<Tile> {
 mod tests {
     use super::*;
 
-    /// A black screen, and input that keeps what it was sent.
     #[derive(Default)]
     struct Fake {
         sent: Vec<Event>,
@@ -997,7 +951,6 @@ mod tests {
         assert_eq!(all.len(), 20 * 13, "the first frame has every tile");
         assert_eq!(shown, screen);
         assert!(tiles(&screen, &mut shown).is_empty());
-        // One pixel in the bottom row of tiles, which is 32 pixels tall.
         screen[((790 * width + 130) * 4) as usize] = 255;
         let changed = tiles(&screen, &mut shown);
         assert_eq!(

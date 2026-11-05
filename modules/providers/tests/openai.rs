@@ -9,7 +9,6 @@ use cubebot_providers::{Event, Message, Model, OpenAi, Provider, Request, Tool, 
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 
-/// Streams events in seven-byte chunks so frames are split across reads.
 fn sse(events: &[Value]) -> Response {
     let text: String = events
         .iter()
@@ -178,7 +177,6 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
         assert_eq!(body["tools"][0]["strict"], true);
         assert_eq!(body["tools"][1]["strict"], false);
         assert!(body.get("parallel_tool_calls").is_none());
-        // The earlier reasoning and call are replayed verbatim before their output.
         assert_eq!(body["input"][2]["type"], "reasoning");
         assert_eq!(body["input"][3]["call_id"], "call_0");
         assert_eq!(
@@ -376,7 +374,6 @@ async fn a_rejected_key_lists_no_models() {
     task.abort();
 }
 
-/// The two table shapes OpenAI's pricing page used on 2026-11-04.
 const PRICING: &str = "# Pricing\n\n### Standard pricing data\n\n\
 | Model | Short context input | Short context output | Short context cached input | Short context 30m write | Long context input |\n\
 | --- | --- | --- | --- | --- | --- |\n\
@@ -421,7 +418,6 @@ async fn prices_come_from_the_standard_tier_of_its_own_page_without_a_key() {
     );
 }
 
-/// Reads the real page; `cargo test -- --ignored live_page` tells whether the parser still fits.
 #[tokio::test]
 #[ignore = "reaches developers.openai.com"]
 async fn live_page_still_parses() {

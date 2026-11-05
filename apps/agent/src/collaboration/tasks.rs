@@ -1,5 +1,3 @@
-//! A task's tools (docs/adr/rooms.md#tasks-and-the-task-orchestrator). The orchestrator validates each call and answers with
-//! the text the model reads; the call's id makes a resent message post nothing new.
 use super::Collaboration;
 use crate::tools::Running;
 use cubebot_protocol::runtime::RoutineCall;
@@ -30,7 +28,6 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
 }
 
 impl Collaboration {
-    /// `None` when `name` is not a task tool.
     pub(super) fn task(
         &self,
         name: &str,

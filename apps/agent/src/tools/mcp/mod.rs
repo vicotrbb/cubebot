@@ -1,6 +1,4 @@
-//! MCP client (docs/adr/agents.md#native-core-tools-with-mcp-integrations and docs/adr/agents.md#local-and-remote-mcp-server-support): local stdio servers run as the tool user, remote servers over
-//! Streamable HTTP. Server tools join the registry as `<server>__<tool>`, so they can never
-//! shadow a built-in or another server's tool. Descriptions and results are external data.
+//! Server tools join the registry as `<server>__<tool>`, so they can never shadow a built-in or another server's tool. Descriptions and results are external data.
 mod http;
 mod stdio;
 
@@ -17,21 +15,16 @@ use std::{
 use uuid::Uuid;
 
 const VERSIONS: [&str; 3] = ["2025-11-25", "2025-06-18", "2025-03-26"];
-/// Initialization only; tool calls have no duration budget and end by cancellation.
 /// Server output is held in memory before it is retained, so one message is bounded here.
 const RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 const CONNECT: Duration = Duration::from_secs(30);
 /// Request ids are unique across every session, so they never need resetting on reconnect.
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
-/// Servers come from the orchestrator with each turn (docs/adr/agents.md#local-and-remote-mcp-server-support).
 use cubebot_protocol::runtime::McpServer as Config;
 
-/// Why a request has no result.
 pub(super) enum Failure {
-    /// Nothing reached the server.
     NotSent(String),
-    /// The server definitively refused it.
     Rejected(String),
     /// The request may have taken effect.
     Lost,
@@ -61,7 +54,6 @@ impl Transport {
             Self::Http(http) => http.notify(&message).await,
         }
     }
-    /// A stopped local server needs starting again; HTTP reports an expired session instead.
     fn alive(&self) -> bool {
         match self {
             Self::Stdio(stdio) => stdio.alive(),
@@ -69,7 +61,6 @@ impl Transport {
         }
     }
 
-    /// `tools/call`, announcing cancellation to the server if the call is dropped unfinished.
     async fn call(self: &Arc<Self>, params: Value) -> Result<Value, Failure> {
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         let mut cancel = Cancel(Some((self.clone(), id)));
@@ -79,8 +70,7 @@ impl Transport {
     }
 }
 
-/// Cancellation is advisory: the server may already have done the work, so the result stays
-/// stopped or uncertain either way.
+/// Cancellation is advisory: the server may already have done the work, so the result stays stopped or uncertain either way.
 struct Cancel(Option<(Arc<Transport>, u64)>);
 impl Drop for Cancel {
     fn drop(&mut self) {
@@ -109,7 +99,6 @@ pub(super) fn answer(request: &Value) -> Value {
     }
 }
 
-/// One configured server and its current session, opened again when it stops or expires.
 struct Server {
     config: Config,
     live: tokio::sync::Mutex<Option<Arc<Transport>>>,
@@ -128,8 +117,7 @@ impl Server {
         Ok(transport)
     }
 
-    /// An expired session proves the request was not processed, so it is resent once on a new
-    /// session, as the specification requires.
+    /// An expired session proves the request was not processed, so it is resent once on a new session, as the specification requires.
     async fn call(&self, sandbox: &Sandbox, params: Value) -> Result<Value, Failure> {
         for _ in 0..2 {
             let transport = self.open(sandbox).await.map_err(Failure::NotSent)?;
@@ -152,7 +140,6 @@ impl Server {
     }
 }
 
-/// The result of a JSON-RPC response, or its error message.
 pub(super) fn result(mut message: Value) -> Result<Value, Failure> {
     if let Some(error) = message.get("error") {
         let text = error["message"].as_str().unwrap_or("MCP server error");
@@ -207,7 +194,6 @@ impl Tool for McpTool {
     }
 }
 
-/// Retains the result text in the workspace through the tool user, like any tool output.
 /// Code 1 marks a result the server flagged as an error.
 async fn keep(sandbox: &Sandbox, id: Uuid, result: &Value) -> Outcome {
     let job = Job {
@@ -226,7 +212,6 @@ async fn keep(sandbox: &Sandbox, id: Uuid, result: &Value) -> Outcome {
     }
 }
 
-/// Text content as is; other content is named, since binary data is no use as model text.
 fn text(result: &Value) -> String {
     let parts: Vec<String> = result["content"]
         .as_array()
@@ -246,8 +231,6 @@ fn text(result: &Value) -> String {
     }
 }
 
-/// Connects every server, returning the tools of each that connected and whether all did. A
-/// server that fails to start is logged and left out; duplicate or malformed names are refused.
 pub(super) async fn tools(
     sandbox: &Sandbox,
     configs: Vec<Config>,
@@ -294,7 +277,6 @@ async fn connect(sandbox: &Sandbox, config: Config) -> Result<Vec<Box<dyn Tool>>
     list(server, &transport).await
 }
 
-/// Starts or reaches the server and completes the initialization handshake.
 async fn initialize(sandbox: &Sandbox, config: &Config) -> Result<Arc<Transport>, String> {
     let transport = Arc::new(match config {
         Config::Stdio {
@@ -324,8 +306,7 @@ async fn initialize(sandbox: &Sandbox, config: &Config) -> Result<Arc<Transport>
     Ok(transport)
 }
 
-/// Every page of the server's tool catalog. shortcut: the catalog is read once at startup and
-/// not after a restart; re-list it once catalog changes are reconciled with grants (docs/adr/agents.md#native-core-tools-with-mcp-integrations).
+/// shortcut: the catalog is read once at startup and not after a restart; re-list it once catalog changes are reconciled with grants.
 async fn list(server: Arc<Server>, transport: &Transport) -> Result<Vec<Box<dyn Tool>>, String> {
     let name = server.config.name();
     let mut tools: Vec<Box<dyn Tool>> = Vec::new();

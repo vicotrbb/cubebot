@@ -1,6 +1,4 @@
-//! Screenshots as PNG (docs/adr/sandbox.md#desktop-as-a-vmm-device): 8-bit RGB rows, each with the Up filter, in one zlib stream
-//! holding a single fixed-Huffman deflate block with LZ77 matches. Desktop frames repeat rows and
-//! runs of one colour, which the Up filter and back-references compress without a Huffman tree.
+//! One fixed-Huffman deflate block: desktop frames repeat rows and runs, which the Up filter and back-references compress without a Huffman tree.
 
 const WINDOW: usize = 32 << 10;
 const HASH_BITS: u32 = 15;
@@ -22,7 +20,6 @@ const DISTANCE_EXTRA: [u8; 30] = [
     13,
 ];
 
-/// Encodes BGRX rows of `width` pixels as a PNG.
 pub fn encode(width: u32, height: u32, bgrx: &[u8]) -> Vec<u8> {
     let stride = width as usize * 3;
     let mut rows = Vec::with_capacity((stride + 1) * height as usize);
@@ -94,7 +91,6 @@ fn zlib(data: &[u8]) -> Vec<u8> {
     out
 }
 
-/// The match at `at` against the last position with the same three bytes, recording `at`.
 fn longest(data: &[u8], at: usize, head: &mut [usize]) -> (usize, usize) {
     if at + MIN_MATCH > data.len() {
         return (0, 0);
@@ -138,7 +134,6 @@ impl Bits {
         self.put(code.reverse_bits() >> (32 - length), length);
     }
 
-    /// A literal byte, the end of block (256) or a length code (257 to 285).
     fn literal(&mut self, symbol: u32) {
         match symbol {
             0..=143 => self.code(0x30 + symbol, 8),
@@ -182,7 +177,6 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    /// Decodes with Python's zlib, an independent inflate, and returns the IDAT's raw rows.
     fn inflate(png: &[u8]) -> Vec<u8> {
         let length = u32::from_be_bytes(png[33..37].try_into().unwrap()) as usize;
         assert_eq!(&png[37..41], b"IDAT");
@@ -206,7 +200,6 @@ mod tests {
     #[test]
     fn encodes_rows_that_zlib_inflates_back() {
         let (width, height) = (300u32, 40u32);
-        // Runs, a gradient and noise, so literals, short and long matches all occur.
         let mut seed = 7u32;
         let bgrx: Vec<u8> = (0..width * height)
             .flat_map(|pixel| {
@@ -240,7 +233,6 @@ mod tests {
             assert_eq!(rgb, expected, "row {y}");
             previous = rgb;
         }
-        // A blank screen is mostly back-references.
         let blank = encode(1280, 800, &vec![0; 1280 * 800 * 4]);
         assert!(blank.len() < 64 << 10, "{}", blank.len());
         assert_eq!(inflate(&blank).len(), 800 * (1280 * 3 + 1));

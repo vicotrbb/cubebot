@@ -7,10 +7,8 @@ use std::{
 pub struct Config {
     pub(super) origin: reqwest::Url,
     pub(super) token_file: PathBuf,
-    /// A fixed bootstrap token, used instead of `token_file` by Docker sandboxes.
     pub(super) token: Option<String>,
     pub(super) root_certificates: Vec<reqwest::Certificate>,
-    /// The same certificates for the channel's TLS connection.
     pub(super) root_pem: Vec<u8>,
 }
 impl Config {
