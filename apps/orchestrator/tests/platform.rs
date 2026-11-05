@@ -227,7 +227,9 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
         .unwrap();
     let model = Arc::new(Model::default());
     let list = || Step::Reply(json!([call("skill_list", json!({}))]));
-    let steps = (0..40).map(|_| list()).collect();
+    // A fast agent outruns the pause on a slow runner, so leave far more steps than it can reach.
+    const STEPS: usize = 120;
+    let steps = (0..STEPS).map(|_| list()).collect();
     model.turn(steps, json!([]));
     let (provider, _provider) = http_server(
         Router::new()
@@ -242,7 +244,10 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
     assert!(paused.response.is_none());
     tokio::time::sleep(Duration::from_secs(4)).await;
     let settled = model.requests().len();
-    assert!(settled < 40, "the agent kept spending: {settled} requests");
+    assert!(
+        settled < STEPS,
+        "the agent kept spending: {settled} requests"
+    );
     tokio::time::sleep(Duration::from_secs(2)).await;
     assert_eq!(
         model.requests().len(),
