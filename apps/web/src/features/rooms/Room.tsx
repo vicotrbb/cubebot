@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { api, failure, history, ok, type RoomMessage } from '../../api/client'
+import {
+  api,
+  failure,
+  history,
+  ok,
+  resumeAfter,
+  type RoomMessage,
+} from '../../api/client'
 import type { AgentSummary, RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
 import { followWhileVisible } from '../../app/stream'
@@ -35,6 +42,11 @@ function merge(known: RoomMessage[], incoming: RoomMessage[]) {
   }
   return [...byId.values()].sort((a, b) => a.sequence - b.sequence)
 }
+
+/** The orchestrator's `settled`: a message that can still change. */
+const changing = (message: RoomMessage) =>
+  message.routing === 'routing' ||
+  message.deliveries.some((item) => !FINISHED.includes(item.status))
 
 const ROUTING: Record<string, string> = {
   routing: 'Choosing an owner…',
@@ -106,35 +118,56 @@ export function RoomView({
   const pinned = useRef(true)
   const agents = useAgents()
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
-  useEffect(
-    () =>
-      followWhileVisible(`/api/rooms/${roomId}/events`, (source) => {
-        // History loads once the stream is following, so nothing falls between the two; a
-        // reconnect reloads it to catch messages that changed while disconnected.
-        source.onopen = () => {
-          setReadError('')
-          history((after) =>
+  const known = useRef(messages)
+  useEffect(() => {
+    known.current = messages
+  }, [messages])
+  useEffect(() => {
+    let loading: AbortController | undefined
+    // What the stream delivers first is no whole history, so only a finished load can resume.
+    let whole = false
+    const start = () => (whole ? resumeAfter(known.current, changing) : 0)
+    // The stream replays from its cursor too, which by default is the room's first message.
+    const url = () => `/api/rooms/${roomId}/events?after=${start()}`
+    const stop = followWhileVisible(url, (source) => {
+      // History loads once the stream is following, so nothing falls between the two; a
+      // reconnect reloads what changed while disconnected.
+      source.onopen = () => {
+        setReadError('')
+        loading?.abort()
+        const { signal } = (loading = new AbortController())
+        history(
+          (after) =>
             ok(
               api.GET('/api/rooms/{room}/messages', {
+                signal,
                 params: { path: { room: roomId }, query: { after } },
               }),
             ),
-          ).then(
-            (loaded) => {
-              setMessages((current) => merge(current, loaded))
-              setLoaded(true)
-            },
-            (error) => setReadError(failure(error)),
-          )
-        }
-        source.onerror = () => setReadError('Reconnecting to live updates…')
-        source.addEventListener('message', (event) => {
-          const message: RoomMessage = JSON.parse(event.data)
-          setMessages((current) => merge(current, [message]))
-        })
-      }),
-    [roomId],
-  )
+          start(),
+        ).then(
+          (loaded) => {
+            if (signal.aborted) return
+            whole = true
+            setMessages((current) => merge(current, loaded))
+            setLoaded(true)
+          },
+          (error) => {
+            if (!signal.aborted) setReadError(failure(error))
+          },
+        )
+      }
+      source.onerror = () => setReadError('Reconnecting to live updates…')
+      source.addEventListener('message', (event) => {
+        const message: RoomMessage = JSON.parse(event.data)
+        setMessages((current) => merge(current, [message]))
+      })
+    })
+    return () => {
+      stop()
+      loading?.abort()
+    }
+  }, [roomId])
   const last = messages.at(-1)?.sequence ?? 0
   useEffect(() => {
     if (loaded && last > 0) void markRead('rooms', roomId, last)

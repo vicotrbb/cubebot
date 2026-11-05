@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   api,
   failure,
   history,
   merge,
   ok,
+  resumeAfter,
+  turnChanging,
   type Turn,
   type TurnEvent,
 } from '../../api/client'
@@ -17,27 +19,44 @@ export function useConversation(id: string) {
   const [streaming, setStreaming] = useState<Record<string, string>>({})
   const [loaded, setLoaded] = useState(false)
   const [readError, setReadError] = useState('')
-  useEffect(
-    () =>
-      followWhileVisible(`/api/conversations/${id}/events`, (source) => {
+  const known = useRef(turns)
+  useEffect(() => {
+    known.current = turns
+  }, [turns])
+  useEffect(() => {
+    let loading: AbortController | undefined
+    // What the stream delivers first is no whole history, so only a finished load can resume.
+    let whole = false
+    const stop = followWhileVisible(
+      `/api/conversations/${id}/events`,
+      (source) => {
         // A new source replays a running turn from its first event.
         setStreaming({})
         // History loads once the stream is following, so nothing falls between the two; a
-        // reconnect reloads it to catch turns that changed without an event.
+        // reconnect reloads what may have changed without an event.
         source.onopen = () => {
           setReadError('')
-          history((after) =>
-            ok(
-              api.GET('/api/conversations/{conversation}/messages', {
-                params: { path: { conversation: id }, query: { after } },
-              }),
-            ),
+          loading?.abort()
+          const { signal } = (loading = new AbortController())
+          history(
+            (after) =>
+              ok(
+                api.GET('/api/conversations/{conversation}/messages', {
+                  signal,
+                  params: { path: { conversation: id }, query: { after } },
+                }),
+              ),
+            whole ? resumeAfter(known.current, turnChanging) : 0,
           ).then(
             (loaded) => {
+              if (signal.aborted) return
+              whole = true
               setTurns((current) => merge(current, loaded))
               setLoaded(true)
             },
-            (error) => setReadError(failure(error)),
+            (error) => {
+              if (!signal.aborted) setReadError(failure(error))
+            },
           )
         }
         source.onerror = () => setReadError('Reconnecting to live updates…')
@@ -61,9 +80,13 @@ export function useConversation(id: string) {
               [turn_id]: (current[turn_id] ?? '') + payload.text,
             }))
         })
-      }),
-    [id],
-  )
+      },
+    )
+    return () => {
+      stop()
+      loading?.abort()
+    }
+  }, [id])
   // A call's own sequence is older than the turns it holds, which are what unread counts.
   const final = turns.at(-1)
   const last = final?.call?.turns.at(-1)?.sequence ?? final?.sequence ?? 0
