@@ -653,7 +653,7 @@ impl Storage {
 
     /// A kept blob's bytes.
     pub async fn read(&self, blob: Uuid, size: i64) -> Result<tokio::fs::File, StorageError> {
-        Ok(self.0.volume.open(blob, size).await?)
+        self.0.volume.open(blob, size).await
     }
 
     /// Deletes kept blobs nothing refers to any more.
