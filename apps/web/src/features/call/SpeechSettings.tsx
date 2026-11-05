@@ -21,7 +21,6 @@ const useSpeech = () =>
     queryFn: () => ok(api.GET('/api/speech')),
   })
 
-/** Platform › Speech: what every agent uses unless it overrides it. */
 export function PlatformSpeech() {
   const speech = useSpeech()
   if (speech.isPending) return <Skeleton lines={4} width="62ch" />
@@ -136,7 +135,6 @@ function SpeechForm({ settings }: { settings: Settings }) {
   )
 }
 
-/** An agent's overrides, on its About tab. */
 export function AgentSpeechSection({ agent }: { agent: AgentSummary }) {
   const client = useQueryClient()
   const speech = useSpeech()

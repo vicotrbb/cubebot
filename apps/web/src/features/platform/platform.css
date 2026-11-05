@@ -35,7 +35,6 @@
   }
 }
 
-/* Teams and access: pick someone on the left, read and change what they reach on the right. */
 .access {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
@@ -337,7 +336,6 @@
   }
 }
 
-/* AI providers: one full-width card per provider, opened on click. */
 .provider-page {
   display: grid;
   gap: 12px;
@@ -408,7 +406,6 @@
   font-weight: var(--w-label);
   color: var(--ink-soft);
 }
-/* Filled when it is what agents use, ringed when it only holds a key, hollow and faint when not. */
 .provider-mark {
   flex: none;
   width: 10px;
@@ -616,7 +613,6 @@
   }
 }
 
-/* Audit log: one sentence per event, grouped by day. */
 .audit {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -715,7 +711,6 @@
   }
 }
 
-/* The orchestrator's settings: a short, friendly form. */
 .task-settings {
   max-width: 620px;
   gap: 20px;

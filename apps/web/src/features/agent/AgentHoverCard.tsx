@@ -12,11 +12,9 @@ import { TaskCard } from '../tasks/TaskCard'
 import { doingOf } from './doing'
 import './hover.css'
 
-/** Away from the pointer, so the card never covers what it describes. */
 const OFFSET = 14
 const OPEN_DELAY = 280
 
-/** Keeps the card by the point and on screen, on the point's other side near an edge. */
 function place(card: HTMLElement, x: number, y: number) {
   const { width, height } = card.getBoundingClientRect()
   const left =
@@ -26,7 +24,6 @@ function place(card: HTMLElement, x: number, y: number) {
   card.style.transform = `translate(${Math.max(4, left)}px, ${Math.max(4, top)}px)`
 }
 
-/** The one small card for whatever agent or task the pointer is on, wherever it appears. */
 export function AgentHoverCard() {
   const hovered = useSyncExternalStore(subscribeHover, currentHover, () => null)
   const card = useRef<HTMLDivElement>(null)
@@ -80,7 +77,6 @@ export function AgentHoverCard() {
   if (!hovered) return null
   return createPortal(
     hovered.kind === 'task' ? (
-      // Each task's card plays its entrance, so moving down the list reads as a new card.
       <TaskCard key={hovered.id} ref={card} id={hovered.id} />
     ) : (
       <Card ref={card} id={hovered.id} />

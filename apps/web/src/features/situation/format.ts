@@ -1,4 +1,3 @@
-/** Money in dollars: exact enough to compare, and never a misleading $0.00 for real spend. */
 export function money(usd: number) {
   if (usd === 0) return '$0.00'
   if (usd < 0.01) return '<$0.01'
@@ -6,7 +5,6 @@ export function money(usd: number) {
   return `$${Math.round(usd).toLocaleString('en-US')}`
 }
 
-/** 930, 12.4K, 3.2M. */
 export function count(tokens: number) {
   if (tokens < 1000) return String(tokens)
   if (tokens < 1_000_000) return `${Number((tokens / 1000).toFixed(1))}K`
@@ -15,7 +13,6 @@ export function count(tokens: number) {
 
 type Pace = 'none' | 'fine' | 'near' | 'over'
 
-/** Where a month's spend stands against its budget. */
 export function pace(spent: number, budget: number | null | undefined): Pace {
   if (!budget) return 'none'
   if (spent >= budget) return 'over'
@@ -33,7 +30,6 @@ type Facts = {
   overBudget: number
 }
 
-/** The room's one sentence: what needs a person, or that nothing does. */
 export function headline({ agents, work, failedToday, overBudget }: Facts) {
   const waiting = work.filter((item) => item.status === 'waiting').length
   const logins = agents.filter((agent) => agent.pending_login).length
@@ -62,7 +58,6 @@ function plural(amount: number, one: string, many: string) {
   return amount === 1 ? `1 ${one}` : `${amount} ${many}`
 }
 
-/** Every day of the last `span`, oldest first, with the days nothing ran filled in as zero. */
 export function fillDays<T extends { day: string }>(
   days: T[],
   empty: (day: string) => T,

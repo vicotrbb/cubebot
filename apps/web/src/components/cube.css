@@ -1,4 +1,3 @@
-/* The agent's face: a painted block with eyes, carrying its mood. */
 .cube {
   --size: 36px;
   --rx: -18deg;
@@ -121,7 +120,6 @@
   background: var(--face-base);
   transform: rotateX(-90deg) translateZ(calc(var(--size) / 2));
 }
-/* A screen's light on the face while the agent uses its desktop. */
 .cube--desktop .cube__face--front::after {
   content: '';
   position: absolute;
@@ -182,7 +180,6 @@
 .cube--stopped .cube__eye {
   animation: none;
 }
-/* Stopped: the computer is off, so the paint dims and nothing moves. */
 .cube--stopped .cube__face {
   filter: saturate(0.35) brightness(0.94);
 }
@@ -192,7 +189,6 @@
   height: 100%;
   overflow: visible;
 }
-/* Half-lids while dreaming. */
 .cube__eye--lid::after {
   content: '';
   position: absolute;

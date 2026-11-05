@@ -15,8 +15,7 @@ const Diagram = lazy(() =>
 )
 const MathView = lazy(() => import('./Math'))
 
-/** Messages as Markdown, built as React elements: raw HTML in a message stays visible text and
- *  can never run. */
+/** Built as React elements: raw HTML in a message stays visible text and can never run. */
 export function Markdown({ text }: { text: string }) {
   const tokens = useMemo(() => tokensOf(text), [text])
   return <div className="md">{blocks(tokens)}</div>
@@ -117,8 +116,6 @@ function List({ token }: { token: Tokens.List }) {
   )
 }
 
-/** Languages a message can draw, with the name its block goes by and how it draws. Everything else
- *  is code. The fence's source shows beside the result. */
 const DRAWN: Record<
   string,
   {

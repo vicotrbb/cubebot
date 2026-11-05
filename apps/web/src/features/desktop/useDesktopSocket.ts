@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-/** The guest screen (docs/adr/sandbox.md#desktop-as-a-vmm-device); frames and input use its pixels. */
 export const WIDTH = 1280
 export const HEIGHT = 800
 const SAMPLES = 20
@@ -15,11 +14,6 @@ type Frame = {
 type Answer = { ack: number; mode?: Mode; error?: string }
 export type Pointer = NonNullable<Frame['pointer']>
 
-/**
- * One desktop WebSocket: paints frames onto `canvas`, measures the input round trip, and
- * takes or hands back control. `watching` opens the socket and reopens it, backing off, when
- * it closes, since the sandbox may still be starting; `take` takes control as soon as it opens.
- */
 export function useDesktopSocket(
   agentId: string,
   watching: boolean,
@@ -33,12 +27,10 @@ export function useDesktopSocket(
   const [error, setError] = useState('')
   const [latency, setLatency] = useState<number[]>([])
   const [updates, setUpdates] = useState(0)
-  // Whether this connection has painted a frame, and how many connections failed before one did.
   const [live, setLive] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const failures = useRef(0)
   const socket = useRef<WebSocket | null>(null)
-  // The `t` of an unanswered take; its answer says whether this viewer now has control.
   const taking = useRef<number | null>(null)
   const wantTake = useRef(take)
 
@@ -181,7 +173,6 @@ async function paint(
 type Point = [number, number]
 type Press = { button: number; start: Point; path: Point[] }
 
-/** Sends the mouse and keyboard on the canvas as desktop actions while `active`. */
 function useCapture(
   canvas: React.RefObject<HTMLCanvasElement | null>,
   active: boolean,
@@ -211,8 +202,7 @@ function useCapture(
     }
     const move = (event: PointerEvent) => {
       if (press) {
-        // shortcut: a drag is sent whole on release, so the guest shows no motion until then;
-        // stream press, move and release if people need live drag feedback.
+        // shortcut: a drag is sent whole on release, so the guest shows no motion until then; stream press, move and release if people need live drag feedback.
         if (press.path.length < 100) press.path.push(at(event))
         return
       }
@@ -276,7 +266,6 @@ function useCapture(
   }, [canvas, active, input])
 }
 
-/** A character typed alone, or a key with the modifiers held, by the arbiter's key names. */
 export function keyAction(
   event: Pick<
     KeyboardEvent,

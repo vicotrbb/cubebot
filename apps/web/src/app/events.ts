@@ -4,13 +4,7 @@ import type { AgentSummary, RoomSummary } from '../api/types'
 import { keys } from './queries'
 import { followWhileVisible } from './stream'
 
-/**
- * Follows the installation stream (`GET /api/events`) and folds its frames into the
- * query cache, so the sidebar and the live preview update without polling each
- * conversation. Each time the stream is refused or lost for good it refreshes agents,
- * rooms and the session, which is how a lost session is noticed. The stream pauses while
- * the tab is hidden; reopening it refreshes what changed meanwhile.
- */
+/** A refused or lost stream refreshes agents, rooms and the session, which is how a lost session is noticed. */
 export function useInstallationStream(enabled: boolean) {
   const client = useQueryClient()
   useEffect(() => {
@@ -47,7 +41,6 @@ export function useInstallationStream(enabled: boolean) {
           ),
         )
       })
-      // Only administrators get these; the feed itself carries the deliveries.
       source.addEventListener('broadcast', () => {
         void client.invalidateQueries({ queryKey: keys.broadcasts })
       })

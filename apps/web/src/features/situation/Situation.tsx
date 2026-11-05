@@ -26,8 +26,6 @@ type Row = components['schemas']['SituationAgent']
 type Recent = components['schemas']['RecentEvent']
 type Open = components['schemas']['OpenWork']
 
-/** Everything happening on the installation, read top to bottom: one sentence on what needs you,
- *  the money, the agents, then what is running and what just happened. */
 export function Situation() {
   const situation = useSituation()
   const agents = useAgents()
@@ -101,7 +99,6 @@ function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
   )
 }
 
-/** A phone cannot hold every section at once, so it shows one of these at a time. */
 const VIEWS = [
   ['now', 'Now'],
   ['agents', 'Agents'],
@@ -301,7 +298,6 @@ function AgentRow({ row, agent }: { row: Row; agent: AgentSummary }) {
   )
 }
 
-/** A month's spend, against its budget when there is one; the words carry the state, not colour. */
 export function BudgetMeter({
   spent,
   budget,
@@ -389,7 +385,6 @@ function NowList({
   )
 }
 
-/** A message's Markdown marks mean nothing on one small line. */
 function preview(text: string) {
   return text
     .replace(/[*_`#>~]+/g, '')

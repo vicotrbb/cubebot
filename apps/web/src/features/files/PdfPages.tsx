@@ -2,11 +2,9 @@ import type { PDFDocumentLoadingTask, PDFPageProxy } from 'pdfjs-dist'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Skeleton } from '../../components/primitives'
 
-/** Pages longer than this stop rendering; the download has the rest. */
 const PAGES = 30
 
-/** PDFs drawn here rather than by the browser: Android's and an iOS home-screen app's built-in
- *  viewers show nothing, or only the first page, inside a page. Loaded with the first PDF. */
+/** Drawn here because Android's and an iOS home-screen app's built-in viewers show nothing, or only the first page, inside a page. */
 export function PdfPages({ blob }: { blob: Blob }) {
   const host = useRef<HTMLDivElement>(null)
   const [state, setState] = useState<'loading' | 'done' | 'failed'>('loading')
@@ -69,7 +67,6 @@ export function PdfPages({ blob }: { blob: Blob }) {
 async function drawn(page: PDFPageProxy, available: number) {
   const natural = page.getViewport({ scale: 1 })
   const fit = Math.min(available, 960) / natural.width
-  // Sharp on a phone's dense screen without an enormous canvas.
   const density = Math.min(window.devicePixelRatio || 1, 2)
   const viewport = page.getViewport({ scale: fit * density })
   const canvas = document.createElement('canvas')

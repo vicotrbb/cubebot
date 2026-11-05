@@ -1,4 +1,3 @@
-/* The desk world (DESIGN.md) in a product register: one warm ground, one paint. */
 @font-face {
   font-family: 'Rubik';
   font-style: normal;
@@ -20,7 +19,6 @@
 
 :root {
   color-scheme: light;
-  /* Paint */
   --orange: #f26a1b;
   --orange-top: #ff8a3d;
   --orange-deep: #c9530f;
@@ -54,7 +52,6 @@
   --plum-top: #b6a6cd;
   --plum-deep: #6f5d8f;
   --plum-base: #574872;
-  /* Ground and ink */
   --ground: #f6efe4;
   --sidebar: #efe3d1;
   --surface: #fffdf9;
@@ -74,7 +71,6 @@
   --code-bg: #f3ebdf;
   --sleep: var(--sage);
   --btn-edge: var(--paper-deep);
-  /* Type (fixed rem scale): 14px chrome, 15px reading, headings that stop at 20px */
   --font: 'Rubik', system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --t-xs: 0.75rem;
@@ -86,7 +82,6 @@
   --w-head: 700;
   --w-strong: 600;
   --w-label: 500;
-  /* Shape and depth */
   --r-xs: 4px;
   --r-sm: 6px;
   --r-md: 7px;
@@ -100,7 +95,6 @@
   --hairline: 0 1px 0 rgb(var(--shadow) / 0.06);
   --settle: cubic-bezier(0.16, 1, 0.3, 1);
   --quick: 140ms;
-  /* Layout */
   --sidebar-w: 248px;
   --panel-w: 368px;
   --header-h: 50px;

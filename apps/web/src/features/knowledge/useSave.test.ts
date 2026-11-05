@@ -56,7 +56,6 @@ function mount() {
   return { save, unmount: () => cleanups.forEach((cleanup) => cleanup?.()) }
 }
 
-/** Types `body` and lets the quiet period pass. */
 function typed(save: ReturnType<typeof runSave>, body: string) {
   save.change({ body })
   timers.splice(0).forEach((run) => run())

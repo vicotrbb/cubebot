@@ -1,4 +1,3 @@
-/* Tasks: a quiet page with one question, and what you asked for underneath. */
 .tasks {
   flex: 1;
   min-height: 0;
@@ -132,7 +131,6 @@
     margin: 2px 0 2px 26px;
   }
 }
-/* A task's mark: a ring turning, a ring asking, a tick or a stop. */
 .task-mark {
   flex: none;
   width: 16px;
@@ -155,7 +153,6 @@
   margin-left: 10px;
 }
 
-/* One task: its room, with the plan beside it. */
 .task {
   flex: 1;
   min-height: 0;
@@ -338,7 +335,6 @@
   .task__head {
     padding-inline: 12px;
   }
-  /* The plan's summary beneath says the same, and the title needs the width. */
   .task__state {
     display: none;
   }
@@ -359,7 +355,6 @@
   }
 }
 
-/* Tasks in the sidebar: the row opens to a tree of what is running. */
 .row-tree {
   display: flex;
   align-items: center;
@@ -414,7 +409,6 @@
   height: 13px;
 }
 
-/* The task card: the agent card's shell, with the plan's progress playing in once it opens. */
 .task-card {
   width: 312px;
   gap: 10px;
@@ -581,7 +575,6 @@
   animation: task-card-tick 320ms var(--settle) backwards;
   animation-delay: calc(var(--i) * 45ms + 180ms);
 }
-/* The light that passes over what is being worked on now. */
 .task-card__item[data-status='doing']::before {
   content: '';
   position: absolute;

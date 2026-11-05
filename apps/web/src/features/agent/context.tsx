@@ -13,7 +13,6 @@ type AgentScreen = {
 const Context = createContext<AgentScreen | null>(null)
 export const AgentProvider = Context.Provider
 
-/** The selected agent and its conversation, shared with the right panel's routes. */
 export function useAgentScreen() {
   const value = useContext(Context)
   if (!value) throw new Error('useAgentScreen outside an agent route')

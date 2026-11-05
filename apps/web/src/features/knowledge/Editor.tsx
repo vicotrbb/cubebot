@@ -47,9 +47,7 @@ import {
 } from './slash'
 
 export type EditorHandle = {
-  /** Replaces the text with a revision someone else saved. */
   load: (markdown: string) => void
-  /** Puts a link to a page or file at the cursor. */
   link: (name: string, href: string) => void
   image: (name: string, src: string) => void
 }
@@ -122,7 +120,6 @@ class Wires {
     this.callbacks?.onOpenLink(href)
     return true
   }
-  /** Files pasted or dropped become attachments. */
   files(data: DataTransfer | null) {
     const files = [...(data?.files ?? [])]
     if (!files.length || !this.callbacks?.onFiles) return false
@@ -134,8 +131,7 @@ class Wires {
   }
 }
 
-/** A page's body: Markdown stored, blocks edited. Loaded text is never written back unless a
- *  person changes it, so what an agent wrote stays as it wrote it. */
+/** Loaded text is never written back unless a person changes it, so what an agent wrote stays as it wrote it. */
 export function Editor({
   ref,
   markdown,
@@ -339,7 +335,6 @@ function LinkField({ editor, onDone }: { editor: Tiptap; onDone: () => void }) {
   )
 }
 
-/** Over selected text: the marks a selection can take. */
 function Formatting({ editor }: { editor: Tiptap }) {
   const [linking, setLinking] = useState(false)
   return (
@@ -449,7 +444,6 @@ function beginMove(view: Tiptap['view'], selection: NodeSelection) {
   view.dragging = { slice: selection.content(), move: true }
 }
 
-/** The handle beside the block under the pointer: `+` adds below it, the grip drags it. */
 function BlockHandle({ editor }: { editor: Tiptap }) {
   const [block, setBlock] = useState<{ pos: number; top: number } | null>(null)
   const root = useRef<HTMLDivElement>(null)

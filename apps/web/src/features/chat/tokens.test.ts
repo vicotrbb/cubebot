@@ -70,7 +70,6 @@ describe('inlineImage', () => {
 })
 
 describe('local paths', () => {
-  // What the browser itself would load, on the origin the console is at.
   const origin = (href: string) =>
     new URL(href, 'https://console.example').origin
   test('a path the browser reads as another host stays out', () => {

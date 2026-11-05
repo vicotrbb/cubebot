@@ -8,11 +8,8 @@ import './markdown.css'
 
 type Attachment = Turn['attachments'][number]
 
-/** Media loads by itself below this; a larger file waits behind its chip. */
 const INLINE_BYTES = 64 * 1024 * 1024
 
-/** What an agent sent with a reply: pictures inline, audio and video with a player, the rest as a
- *  chip. Anything opens in the viewer. */
 export function Attachments({
   turn,
   items,
@@ -63,7 +60,6 @@ function Item({ file, onOpen }: { file: Viewable; onOpen: () => void }) {
   )
 }
 
-/** Holds back media, which downloads whole, until it nears the reader: a history holds a lot. */
 function Near({ children }: { children: ReactNode }) {
   const [near, setNear] = useState(false)
   const spot = useRef<HTMLSpanElement>(null)

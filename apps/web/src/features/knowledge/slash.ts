@@ -28,7 +28,6 @@ export type Block = {
   run: (editor: Editor) => void
 }
 
-/** What only the page can do: open a file picker or a page picker. */
 export type BlockActions = {
   pickImage: () => void
   pickFile: () => void
@@ -168,7 +167,6 @@ export type SlashView = Pick<
   'items' | 'command' | 'clientRect'
 > & { key: number }
 
-/** The menu's open state, which the React menu reads; the extension only reports it. */
 type SlashEvents = {
   show: (view: SlashView | null) => void
   key: (event: KeyboardEvent) => boolean
@@ -176,7 +174,6 @@ type SlashEvents = {
 
 let opened = 0
 
-/** `/` anywhere opens the block menu. */
 export function SlashCommands(items: () => Block[], events: SlashEvents) {
   return Extension.create({
     name: 'slashCommands',

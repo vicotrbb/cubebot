@@ -27,7 +27,6 @@ export type McpServer = Schemas['McpServerSummary']
 export type SaveMcpServer = Schemas['SaveMcpServer']
 export const MCP_KEY = ['mcp-servers']
 
-/** The fields a save repeats from the server as it stands; secrets stay as stored. */
 export function unchanged(server: McpServer): SaveMcpServer {
   return {
     name: server.name,
@@ -38,11 +37,6 @@ export function unchanged(server: McpServer): SaveMcpServer {
   }
 }
 
-/**
- * Installation MCP servers (docs/adr/agents.md#local-and-remote-mcp-server-support): administrators add local programs or remote
- * endpoints once, and every agent may use them unless a server is limited to chosen agents,
- * which each agent's Connections tab also switches.
- */
 export function McpServers() {
   const client = useQueryClient()
   const servers = useQuery({

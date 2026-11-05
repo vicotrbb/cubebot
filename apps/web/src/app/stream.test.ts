@@ -28,7 +28,6 @@ class FakeSource {
 const globals = globalThis as never as Record<string, unknown>
 const real = { setTimeout, clearTimeout }
 
-/** Runs `followWhileVisible` with a page that can be hidden and timers that fire on demand. */
 function page() {
   const state = { hidden: false, onChange: () => {} }
   const timers = new Map<number, () => void>()

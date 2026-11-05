@@ -40,7 +40,6 @@ export function Conversation({
   const pinned = useRef(true)
   const visible = turns.slice(Math.max(0, turns.length - shown))
   const last = turns.at(-1)
-  // Follow the newest turn unless the reader scrolled up to read history.
   useEffect(() => {
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
@@ -169,7 +168,6 @@ function stateLabel(turn: Turn, activity: string) {
   return ''
 }
 
-/** Why a queued turn waits: the same state the header shows, not a guess. */
 function queuedLabel(activity: string) {
   if (activity === 'working') return 'Queued until the agent is free.'
   if (activity === 'stopped')
@@ -248,8 +246,6 @@ function Exchange({
   )
 }
 
-/** The request without the framing the agent reads: its author line already says where it came
- *  from. */
 function shownRequest(turn: Turn) {
   if (turn.origin?.kind === 'broadcast')
     return turn.message.replace(/^Broadcast [^\n]*:\n\n/, '')
@@ -258,7 +254,6 @@ function shownRequest(turn: Turn) {
   return turn.message
 }
 
-/** The request as a person's message, or as the room, routine or agent it came from. */
 function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
   const via = origin(turn)
   const from = turn.origin
@@ -284,7 +279,6 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
   )
 }
 
-/** "3 tasks · 2 done": the delegated work under a turn, opened like a thread. */
 function ThreadLine({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {
   const done = turn.children.filter((child) =>
     ['complete', 'failed', 'cancelled'].includes(child.status),
@@ -422,7 +416,6 @@ export function Retry({
   )
 }
 
-/** The orchestrator delivers the cancel to the agent over its runtime channel. */
 export function Stop({
   conversation,
   turn,

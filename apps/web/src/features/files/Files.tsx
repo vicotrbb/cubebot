@@ -30,13 +30,9 @@ import './files.css'
 
 export type FileEntry = components['schemas']['FileEntry']
 type FileShare = components['schemas']['FileShare']
-/** A folder opened from the top of a view, with what you may do in it. */
 type Crumb = { id: string; name: string; access: FileEntry['access'] }
 export type View = 'mine' | 'shared'
 
-/** Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api): your folders, what others shared with you, uploads by
- *  drag and drop, downloads, and sharing with people, teams and agents. `only` narrows the
- *  shared view to one agent's files. */
 export function Files({ only }: { only?: { agent: string } }) {
   const [view, setView] = useState<View>(only ? 'shared' : 'mine')
   const [path, setPath] = useState<Crumb[]>([])
@@ -101,7 +97,6 @@ export function Files({ only }: { only?: { agent: string } }) {
         root={rootLabel(only, view)}
         view={only ? null : view}
         path={path}
-        // An empty folder offers them itself, so the surface keeps one primary action.
         actions={writable && (creating || shown.length > 0) ? actions : null}
         onView={(kind) => {
           setView(kind)
@@ -171,8 +166,6 @@ export function Files({ only }: { only?: { agent: string } }) {
   )
 }
 
-/** A folder's entries, reloaded when the view or folder changes; a late answer for a folder
- *  the person already left never replaces the current one. */
 function OpenFile({
   entries,
   open,
@@ -270,7 +263,6 @@ type RowActions = {
   onDelete: () => void
 }
 
-/** The folder's rows, a new folder's name row while one is being made, or `empty`. */
 function Listing({
   entries,
   creating,
@@ -299,7 +291,6 @@ function Listing({
   )
 }
 
-/** Files dragged in from the desktop, while the folder takes them. */
 function useFileDrop(writable: boolean, onFiles: (files: FileList) => void) {
   const [dragging, setDragging] = useState(false)
   const handlers = {
@@ -322,7 +313,6 @@ function useFileDrop(writable: boolean, onFiles: (files: FileList) => void) {
   return { dragging, handlers }
 }
 
-/** The view tabs and the folder's actions, then the path once inside a folder. */
 function FilesBar({
   root,
   view,
@@ -333,7 +323,6 @@ function FilesBar({
   onMove,
 }: {
   root: string
-  /** `null` in an agent's panel, which has one view. */
   view: View | null
   path: Crumb[]
   actions: Actions | null
@@ -361,7 +350,6 @@ function FilesBar({
   )
 }
 
-/** At the top of an agent's panel, only that agent's files; inside a folder, all of it. */
 function visible(
   entries: FileEntry[],
   only: { agent: string } | undefined,
@@ -416,7 +404,6 @@ function Toolbar({ onUpload, onFolder }: Actions) {
   )
 }
 
-/** An empty folder teaches the drop: the whole pane takes files. */
 function EmptyFolder({
   view,
   inFolder,
@@ -511,7 +498,6 @@ function list(view: View, parent: string | undefined) {
   return ok(api.GET('/api/files', { params: { query: {} } }))
 }
 
-/** Streams the file as the request body. */
 async function uploadFile(file: File, parent: string | undefined) {
   const query = new URLSearchParams({
     name: file.name,
@@ -533,7 +519,6 @@ async function uploadFile(file: File, parent: string | undefined) {
   if (!response.ok) throw new ApiError(response.status)
 }
 
-/** Each folder above the current one; dropping a row on one moves it there. */
 function Breadcrumbs({
   root,
   view,
@@ -554,7 +539,6 @@ function Breadcrumbs({
   return (
     <nav className="crumbs" aria-label="Folder">
       {crumbs.map(({ label, depth }) => {
-        // Moving to the top level is only into your own.
         const above = path[depth - 1]
         const target = above ? above.id : view === 'mine' ? null : undefined
         return (
@@ -710,7 +694,6 @@ function RenameForm({
         defaultValue={name}
         autoFocus
         onFocus={(event) => {
-          // Selects the name without its extension, as file managers do.
           const dot = name.lastIndexOf('.')
           event.currentTarget.setSelectionRange(0, dot > 0 ? dot : name.length)
         }}
@@ -740,7 +723,6 @@ function RowMenu({
   onDelete: () => void
 }) {
   const writable = entry.access !== 'read'
-  // A folder you only view has nothing to download, share or change.
   if (entry.folder && !writable) return <span />
   return (
     <Menu
@@ -781,7 +763,6 @@ function RowMenu({
   )
 }
 
-/** The entry's own shares; a folder's reach everything inside it. */
 function ShareDialog({
   entry,
   onClose,

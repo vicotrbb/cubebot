@@ -1,5 +1,3 @@
-/* Shared controls: block buttons, fields, chips, tables, panels. */
-
 .btn {
   --face: var(--raised);
   --edge: var(--btn-edge);
@@ -117,7 +115,6 @@
   text-decoration-color: currentColor;
 }
 
-/* Fields */
 .field {
   display: grid;
   gap: 5px;
@@ -201,8 +198,7 @@
   gap: 16px;
   max-width: 62ch;
 }
-/* A form's row of fields; it shares the name with the sidebar's navigation row, whose
-   padding, hover and pointer must not reach it. */
+/* Shares its name with the sidebar's navigation row, whose padding, hover and pointer must not reach it. */
 .form .row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -241,7 +237,6 @@
   background: var(--orange-wash);
 }
 
-/* Chips */
 .switch {
   position: relative;
   flex: none;
@@ -322,7 +317,6 @@
   height: 12px;
 }
 
-/* Status dot */
 .dot {
   display: inline-block;
   width: 8px;
@@ -365,7 +359,6 @@
   }
 }
 
-/* Tables */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -396,7 +389,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Lists */
 .list {
   display: grid;
 }
@@ -414,7 +406,6 @@
   font-weight: var(--w-label);
 }
 
-/* Entry rows: an icon well, the name over its detail, meta, then the row's menu */
 .entries {
   display: grid;
   border-top: 1px solid var(--line);
@@ -472,7 +463,6 @@
   white-space: nowrap;
 }
 
-/* Empty state */
 .empty {
   display: grid;
   justify-items: center;
@@ -495,7 +485,6 @@
   max-width: 44ch;
 }
 
-/* Skeleton */
 .skeleton {
   display: block;
   height: 14px;
@@ -515,7 +504,6 @@
   }
 }
 
-/* Dialog and sheet */
 dialog.dialog {
   border: 0;
   padding: 0;
@@ -545,7 +533,6 @@ dialog.dialog::backdrop {
   gap: 12px;
 }
 
-/* Key value */
 .kv {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -561,7 +548,6 @@ dialog.dialog::backdrop {
   overflow-wrap: anywhere;
 }
 
-/* Segmented tabs */
 .tabs {
   display: flex;
   gap: 2px;
@@ -590,7 +576,6 @@ dialog.dialog::backdrop {
   color: var(--ink);
   background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
-/* No frame: the current tab is the row's only shape, so tabs sit on any surface. */
 .tabs > [aria-current='page'],
 .tabs > [aria-selected='true'] {
   background: color-mix(in srgb, var(--ink) 10%, transparent);

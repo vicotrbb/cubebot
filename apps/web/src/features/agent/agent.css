@@ -61,7 +61,6 @@
 .panel__tabs {
   flex: 1;
   min-width: 0;
-  /* The row scrolls in a narrow panel; its fading edge shows there is more. */
   scrollbar-width: none;
   scroll-padding-inline: 8px 24px;
   padding-right: 24px;
@@ -102,7 +101,6 @@
   font-size: var(--t-sm);
 }
 
-/* Thread (delegated work) */
 .thread__root {
   padding: 10px 12px;
   border-radius: var(--r-md);

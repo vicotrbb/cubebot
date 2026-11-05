@@ -27,12 +27,10 @@ export type Viewable = {
   url: string
 }
 
-/** Past this a preview would hold too much in memory; the download always works. */
 const MEDIA_BYTES = 512 * 1024 * 1024
 const TEXT_BYTES = 2 * 1024 * 1024
 
-/** The file's bytes as a blob and its URL. The server always answers with a download, which is
- *  what keeps a file from ever rendering in the console's origin; reading it here shows it safely. */
+/** The server always answers with a download, which keeps a file from ever rendering in the console's origin; reading it here shows it safely. */
 export function useFileBlob(file: Viewable) {
   const [loaded, setLoaded] = useState<{ blob: Blob; url: string } | null>(null)
   const [failed, setFailed] = useState(false)
@@ -61,7 +59,6 @@ export function useFileBlob(file: Viewable) {
   return { blob: loaded?.blob ?? null, url: loaded?.url ?? '', failed }
 }
 
-/** Opens a file over the page: full screen on a phone, a large sheet on a desk. */
 export function FileViewer({
   file,
   onClose,
@@ -144,7 +141,6 @@ function Unavailable({ file, big }: { file: Viewable; big: boolean }) {
   )
 }
 
-/** A name and type that say nothing: it still shows if its bytes read as text. */
 function Unknown({ file }: { file: Viewable }) {
   const [text, setText] = useState<boolean | null>(
     file.size > TEXT_BYTES ? false : null,
@@ -254,7 +250,6 @@ function TextPreview({
   )
 }
 
-/** What each drawable kind becomes; the rest is simply code. */
 function drawing(kind: string, text: string, name: string): ReactNode {
   if (kind === 'markdown')
     return (

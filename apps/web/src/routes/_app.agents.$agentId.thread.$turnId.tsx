@@ -22,7 +22,6 @@ const STATES: Record<string, string> = {
   cancelled: 'cancelled',
 }
 
-/** One turn's delegated work and steering, like a Slack thread. */
 function Thread() {
   const { turnId } = Route.useParams()
   const { agent, session, turns } = useAgentScreen()
@@ -84,7 +83,6 @@ function Thread() {
   )
 }
 
-/** A correction for this turn only; ordinary messages still queue. */
 function Steer({
   conversation,
   turnId,

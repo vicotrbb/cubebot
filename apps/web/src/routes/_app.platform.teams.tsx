@@ -33,7 +33,6 @@ type Chosen = { kind: 'team' | 'user'; id: string }
 const active = <T extends { active: boolean }>(list: T[] | undefined) =>
   list?.filter((item) => item.active) ?? []
 
-/** Pick a person or team, see what they can reach, and change it where you read it. */
 function TeamsAndAccess() {
   const teams = useQuery({ queryKey: ['teams'], queryFn: admin.teams })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: admin.accounts })
@@ -85,7 +84,6 @@ function TeamsAndAccess() {
   )
 }
 
-/** Everyone access can be given to. */
 function Recipients({
   teams,
   people,
@@ -344,7 +342,6 @@ function PersonDetail({
   )
 }
 
-/** The strongest level a person's teams give them here, and which team gives it. */
 function throughTeams(teams: Team[], grants: Grant[], target: Target) {
   for (const level of ['manage', 'chat', 'view', 'custom'] as const)
     for (const team of teams) {
@@ -358,7 +355,6 @@ function throughTeams(teams: Team[], grants: Grant[], target: Target) {
   return null
 }
 
-/** One row per agent and room, each with the level this recipient holds. */
 function AccessTable({
   recipient,
   own,

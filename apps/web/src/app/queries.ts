@@ -126,13 +126,11 @@ export function useActivity() {
   })
 }
 
-/** How many inbox items arrived since the person last opened it. */
 export function useUnreadActivity() {
   const activity = useActivity()
   return activity.data?.filter((item) => item.unread).length ?? 0
 }
 
-/** Marks the inbox seen on the server, so the badge clears on every device, and here at once. */
 export async function markActivityRead() {
   queryClient.setQueryData<components['schemas']['ActivityItem'][]>(
     keys.activity,
@@ -149,7 +147,6 @@ export function useSituation() {
   })
 }
 
-/** People's profile picture revisions; a new picture is a new URL. */
 export function useAvatars() {
   return useQuery({
     queryKey: keys.avatars,
@@ -158,7 +155,6 @@ export function useAvatars() {
   })
 }
 
-/** The Broadcast channel, for administrators: the newest 100 broadcasts and the read cursor. */
 export function useBroadcasts(enabled: boolean, live = false) {
   return useQuery({
     queryKey: keys.broadcasts,
@@ -170,7 +166,6 @@ export function useBroadcasts(enabled: boolean, live = false) {
   })
 }
 
-/** Marks the conversation read up to `sequence` and clears its unread mark in the cached list. */
 export async function markRead(
   scope: 'conversations' | 'rooms',
   id: string,
@@ -188,7 +183,6 @@ export async function markRead(
           body: { sequence },
         })
   const { response } = await request.catch(() => ({ response: null }))
-  // A lost request leaves the cursor, and the mark, where they were.
   if (!response?.ok) return
   queryClient.setQueryData<{ id: string; read_sequence: number }[]>(
     scope === 'rooms' ? keys.rooms : keys.agents,
@@ -201,7 +195,6 @@ export async function markRead(
   )
 }
 
-/** Ends the session and forgets everything cached for it. */
 export async function signOut() {
   try {
     const { response } = await api.POST('/api/identity/logout')

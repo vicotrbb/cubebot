@@ -4,7 +4,6 @@ import { CodeBlock } from '../../components/CodeBlock'
 import { CopyButton } from '../../components/primitives'
 import '../files/viewer.css'
 
-/** The Preview and Code switch both a message's block and an opened file use. */
 export function ViewSwitch({
   code,
   onChange,
@@ -30,11 +29,6 @@ export function ViewSwitch({
   )
 }
 
-/**
- * A block in a message that can be drawn: its result and its source, one click apart, so a person
- * and an agent can work on the thing itself. Until its fence closes it is still being written, so
- * it shows as code; `preview` draws it, `full` meaning it has a whole sheet.
- */
 export function PreviewBlock({
   label,
   language,

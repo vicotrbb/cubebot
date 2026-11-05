@@ -1,4 +1,4 @@
-/* The agent card: follows the pointer and never takes it, so it cannot steal a hover. */
+/* Never takes the pointer, so the card cannot steal a hover. */
 .agent-card {
   position: fixed;
   top: 0;

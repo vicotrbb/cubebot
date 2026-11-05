@@ -5,7 +5,6 @@ import { PLATFORM } from '../features/shell/Sidebar'
 
 export const Route = createFileRoute('/_app/platform')({ component: Platform })
 
-/** Installation administration: dense tables with an editor beside them. */
 function Platform() {
   const session = useSession()
   if (session.data && !session.data.administrator)

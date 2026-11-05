@@ -11,8 +11,7 @@ import { applyTheme } from '../app/theme'
 import { pageTitle } from '../app/title'
 import { Shell } from '../features/shell/Shell'
 
-// The shell is personal and lives behind a session cookie, so it renders in the browser; the
-// server sends the pending component in its place.
+// The shell lives behind a session cookie, so it renders in the browser; the server sends the pending component.
 export const Route = createFileRoute('/_app')({
   ssr: false,
   pendingComponent: Opening,

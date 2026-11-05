@@ -1,7 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { decodeAudio, phase, reduce, START, type Message } from './call'
 
-/** Why a call could not go on, in words a person can act on. */
 function microphoneProblem(error: unknown) {
   if (!globalThis.isSecureContext)
     return 'Calls need the microphone, which browsers only allow over HTTPS or on localhost.'
@@ -12,7 +11,6 @@ function microphoneProblem(error: unknown) {
   return 'The microphone could not be started.'
 }
 
-/** Plays audio frames back to back, and can drop everything at once. */
 function player(context: AudioContext) {
   const output = context.createAnalyser()
   output.fftSize = 512
@@ -51,7 +49,6 @@ function player(context: AudioContext) {
   }
 }
 
-/** Starts the microphone and streams it to `socket` until the returned function is called. */
 async function capture(
   context: AudioContext,
   socket: WebSocket,
@@ -95,16 +92,12 @@ async function capture(
   }
 }
 
-/** Keeps a phone's screen on for the call, where the browser allows it. */
 function keepAwake() {
   const lock = navigator.wakeLock?.request('screen').catch(() => null)
   return () => void lock?.then((held) => held?.release())
 }
 
-/**
- * One call while mounted: microphone to socket, socket to speaker. `context` is created by the
- * click that placed the call, since mobile browsers only start audio from a gesture.
- */
+/** `context` comes from the click that placed the call, since mobile browsers only start audio from a gesture. */
 export function useCall(
   agentId: string,
   context: AudioContext,
@@ -165,7 +158,6 @@ export function useCall(
         )
     }
     const release = keepAwake()
-    // The cube moves with whichever voice is sounding.
     const samples = new Uint8Array(256)
     let frame = requestAnimationFrame(function tick() {
       const source = speaker.playing.size > 0 ? speaker.output : microphone

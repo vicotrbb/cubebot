@@ -19,7 +19,6 @@ const MOODS: Record<Phase, Mood> = {
   speaking: 'idle',
 }
 
-/** The Call button of an agent's header; owns whether a call is on. */
 export function CallButton({ agent }: { agent: AgentSummary }) {
   const [context, setContext] = useState<AudioContext | null>(null)
   return (

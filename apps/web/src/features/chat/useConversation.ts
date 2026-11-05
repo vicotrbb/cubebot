@@ -13,7 +13,6 @@ import {
 import { markRead } from '../../app/queries'
 import { followWhileVisible } from '../../app/stream'
 
-/** Follows one permanent conversation: its history, live turn snapshots and streamed text. */
 export function useConversation(id: string) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [streaming, setStreaming] = useState<Record<string, string>>({})
@@ -32,8 +31,7 @@ export function useConversation(id: string) {
       (source) => {
         // A new source replays a running turn from its first event.
         setStreaming({})
-        // History loads once the stream is following, so nothing falls between the two; a
-        // reconnect reloads what may have changed without an event.
+        // History loads once the stream is following, so nothing falls between the two.
         source.onopen = () => {
           setReadError('')
           loading?.abort()
@@ -63,8 +61,7 @@ export function useConversation(id: string) {
         source.addEventListener('turn', (event) => {
           const turn: Turn = JSON.parse(event.data)
           setTurns((current) => merge(current, [turn]))
-          // shortcut: a retried turn replayed on connect shows its interrupted run's text first;
-          // record run boundaries on events if that confuses people.
+          // shortcut: a retried turn replayed on connect shows its interrupted run's text first; record run boundaries on events if that confuses people.
           if (turn.status !== 'running')
             setStreaming((current) =>
               Object.fromEntries(

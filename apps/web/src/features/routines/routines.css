@@ -1,4 +1,3 @@
-/* A routine's webhook: one quiet block under its description, not a second list. */
 .hook {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -81,7 +80,6 @@
   color: var(--ink-faint);
 }
 
-/* A routine's triggers: optional, independent and off until chosen. */
 .triggers {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

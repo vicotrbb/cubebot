@@ -12,7 +12,6 @@ description: What this skill does and when to use it.
 2. How to verify it worked.
 `
 
-/** Shows any revision and saves edits as a new revision on top of the current one. */
 export function SkillEditor({
   skill,
   onDone,

@@ -4,7 +4,6 @@ import { CopyButton } from './primitives'
 /** Past this, highlighting would hold the page up; the code still shows, plain. */
 const HIGHLIGHT_BYTES = 512 * 1024
 
-/** Loaded with the first block of code: it carries every grammar. */
 const library = () => import('./highlight')
 
 function useHighlight(code: string, language: string | undefined) {
@@ -24,8 +23,6 @@ function useHighlight(code: string, language: string | undefined) {
   return html?.code === code ? html.html : null
 }
 
-/** Code, highlighted once its grammar loads. `bare` fills a sheet; otherwise it is a framed block
- *  with a head naming it, and `maxHeight` keeps a long one from taking over a conversation. */
 export function CodeBlock({
   code,
   language,

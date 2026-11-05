@@ -1,4 +1,4 @@
-/** How a file shows in the console, decided from its name first: agents upload without a type. */
+/** Decided from the name first: agents upload without a type. */
 export type Kind =
   | 'image'
   | 'audio'
@@ -99,8 +99,7 @@ export function kindOf(name: string, type?: string | null): Kind {
   return kindOfType(type)
 }
 
-/** The type a blob of this file takes. Only media types come through, so a blob URL can never
- *  be HTML that runs in the console's origin; HTML shows in a sandboxed frame instead. */
+/** Only media types come through, so a blob URL can never be HTML that runs in the console's origin; HTML shows in a sandboxed frame instead. */
 export function blobType(name: string, type?: string | null) {
   const ext = extension(name)
   const known = own(IMAGES, ext) ?? own(AUDIO, ext) ?? own(VIDEO, ext)
@@ -111,7 +110,6 @@ export function blobType(name: string, type?: string | null) {
   return media ? (type?.split(';')[0]?.trim() ?? '') : 'text/plain'
 }
 
-/** Rows of separated text, with quoted fields. */
 export function parseTable(
   text: string,
   separator: ',' | '\t' = ',',
@@ -135,7 +133,6 @@ export function parseTable(
   return rows
 }
 
-/** Which grammar highlights a file. Files that name their format in full, such as `Dockerfile`, count. */
 const GRAMMARS: Record<string, string> = {
   ts: 'typescript',
   tsx: 'typescript',
@@ -218,7 +215,6 @@ export function grammarOf(name: string): string | undefined {
   return own(GRAMMARS, extension(name))
 }
 
-/** Whether these bytes read as text, for a file whose name and type say nothing. */
 export function looksLikeText(bytes: Uint8Array) {
   const sample = bytes.subarray(0, 8192)
   if (sample.includes(0)) return false

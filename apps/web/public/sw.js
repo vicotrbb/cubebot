@@ -1,5 +1,4 @@
-// App-shell caching only (docs/adr/console.md#online-console-operations-with-local-drafts): hashed build assets and fonts are cached as they load;
-// pages and the API always go to the network, so nothing authenticated is stored by accident.
+// Pages and the API always go to the network, so nothing authenticated is stored by accident.
 const CACHE = 'cubebot-shell-v1'
 
 self.addEventListener('install', () => self.skipWaiting())

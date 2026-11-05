@@ -43,7 +43,6 @@ export function AgentChoices({
   )
 }
 
-/** Replaces the member set; removed agents keep the work already given to them. */
 export function Members({
   room,
   agents,

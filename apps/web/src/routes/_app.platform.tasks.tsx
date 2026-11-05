@@ -37,7 +37,6 @@ function TaskSettingsPage() {
   return <Form saved={settings.data} />
 }
 
-/** The providers with a key to think with: the one in use and those set aside. */
 function useKeyedProviders() {
   const current = useQuery({
     queryKey: ['provider'],

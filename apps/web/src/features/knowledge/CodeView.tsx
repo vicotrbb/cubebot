@@ -6,7 +6,6 @@ import {
 import { useState } from 'react'
 import { Diagram } from '../../components/Diagram'
 
-/** A code block, or a diagram when fenced `mermaid`: the drawing, with its source one click away. */
 export function CodeView({ node, editor }: NodeViewProps) {
   const language = node.attrs.language as string | null
   const [editing, setEditing] = useState(!node.textContent)

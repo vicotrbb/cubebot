@@ -1,13 +1,11 @@
 import type { RoomMessage } from '../../api/client'
 
-/** A row of a task's room: a message and the agents' replies shown beneath it. */
 type Round = {
   message: RoomMessage
   deliveries: RoomMessage['deliveries']
 }
 
-/** In a task an agent posts while it works, so its reply, the result, belongs after those posts
- *  rather than under the message that started it. A person or the orchestrator speaking starts the next round. */
+/** In a task an agent posts while it works, so its reply, the result, belongs after those posts rather than under the message that started it. */
 export function rounds(messages: RoomMessage[]) {
   const rows: Round[] = []
   let held: RoomMessage['deliveries'] = []

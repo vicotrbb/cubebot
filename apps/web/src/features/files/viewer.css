@@ -1,5 +1,3 @@
-/* Opening a file: the sheet stays out of the file's way. Full screen on a phone, respecting the
-   installed app's safe areas. */
 dialog.viewer {
   width: min(1120px, calc(100vw - 48px));
   height: calc(100dvh - 48px);
@@ -106,7 +104,6 @@ dialog.viewer::backdrop {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-/* Preview and Code, the same wherever something can be drawn. */
 .view-switch {
   display: inline-flex;
   padding: 2px;

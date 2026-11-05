@@ -37,7 +37,6 @@ export const api = createClient<paths>({
   credentials: 'same-origin',
   cache: 'no-store',
 })
-/** Resolves to the response body, or throws ApiError for a failure status. */
 export async function ok<T>(
   result: Promise<{ data?: T; response: Response }>,
 ): Promise<T> {
@@ -63,7 +62,6 @@ export async function agents(client: Client<paths> = api) {
     if (page.length < 100) return items
   }
 }
-/** Loads a sequence-ordered history after `start`, one page of up to 100 after another. */
 export async function history<T extends { sequence: number }>(
   page: (after: number) => Promise<T[]>,
   start = 0,
@@ -75,8 +73,6 @@ export async function history<T extends { sequence: number }>(
     if (next.length < 100) return items
   }
 }
-/** Where a reconnect picks up a history it already holds: at the oldest item that can still
- *  change, or else after the newest. */
 export function resumeAfter<T extends { sequence: number }>(
   items: T[],
   changing: (item: T) => boolean,
@@ -103,7 +99,6 @@ const final = (turn: { status: string }) =>
 /** A finished turn still shows the work it sent off, which can outlive it. */
 export const turnChanging = (turn: Turn) =>
   !final(turn) || turn.children.some((child) => !final(child))
-/** Applies turn snapshots, keeping history in sequence order. */
 export function merge(turns: Turn[], incoming: Turn[]) {
   const byId = new Map(turns.map((turn) => [turn.id, turn]))
   for (const turn of incoming) {

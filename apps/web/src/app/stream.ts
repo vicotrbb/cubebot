@@ -1,13 +1,6 @@
 const RETRY = 5000
 
-/**
- * Holds an EventSource on `url` only while the page is visible. Over HTTP/1.1 a browser
- * keeps at most six connections per origin, so streams left open in background tabs would
- * queue every other request of the console. `setup` runs on each new source; its `onopen`
- * should reload whatever may have changed while the page was hidden. A browser gives up on
- * a source after a failing status such as a 502, so a closed one is replaced after a wait.
- * Returns the cleanup.
- */
+/** Browsers keep six HTTP/1.1 connections per origin, so background-tab streams would queue every request; they also give up on a source after a failing status such as a 502, so a closed one is replaced after a wait. */
 export function followWhileVisible(
   url: string | (() => string),
   setup: (source: EventSource) => void,

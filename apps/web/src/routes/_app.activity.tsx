@@ -22,7 +22,6 @@ const ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   agent_published_skill: BookOpen,
 }
 
-/** Where an item leads: room work is answered in its room, not the agent's own conversation. */
 function destination(item: components['schemas']['ActivityItem']) {
   if (item.task) return `/tasks/${item.task}`
   if (item.room) return `/rooms/${item.room}`
@@ -35,11 +34,9 @@ function destination(item: components['schemas']['ActivityItem']) {
     : `/agents/${item.agent}`
 }
 
-/** What needs the person: pending logins, waiting or failed work, invitations, new skills. */
 function Activity() {
   const activity = useActivity()
   const agents = useAgents()
-  // Seeing the page is what reads it, also when something new arrives while it is open.
   const fresh = activity.data?.some((item) => item.unread)
   useEffect(() => {
     if (fresh) void markActivityRead()

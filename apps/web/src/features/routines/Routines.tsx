@@ -20,7 +20,6 @@ import {
 } from '../../components/primitives'
 import './routines.css'
 
-/** Common cron lines, so nobody has to write one to start. */
 const SCHEDULES = [
   ['Weekdays at 09:00', '0 9 * * 1-5'],
   ['Every day at 09:00', '0 9 * * *'],
@@ -37,7 +36,6 @@ const ORIGINS: Record<string, string> = {
 type Secret = { id: string; secret: string }
 type HookDelivery = components['schemas']['HookDelivery']
 
-/** Stored prompts and commands the agent runs by hand, on a schedule or by webhook (docs/adr/agents.md#routines). */
 export function Routines({
   agent,
   editable,
@@ -267,8 +265,6 @@ const OUTCOMES: Record<string, string> = {
   paused: 'Refused: the routine is paused',
 }
 
-/** A webhook is one way to trigger its routine, so it lives on the routine: where to send, how to
- *  authenticate, and what arrived. */
 function WebhookDetails({
   agent,
   routine,
@@ -350,8 +346,7 @@ function WebhookDetails({
   )
 }
 
-/** What reached the webhook in the last 30 days, loaded when opened. A delivery with a wrong
- *  secret never reached the routine: the caller gets the 401 and it is not listed. */
+/** A delivery with a wrong secret never reached the routine: the caller gets the 401 and it is not listed. */
 function Deliveries({ agent, routine }: { agent: string; routine: string }) {
   const [rows, setRows] = useState<HookDelivery[] | null>(null)
   const [error, setError] = useState('')
@@ -401,7 +396,6 @@ function Deliveries({ agent, routine }: { agent: string; routine: string }) {
   )
 }
 
-/** The routine's latest runs, loaded when opened. */
 function History({ agent, routine }: { agent: string; routine: string }) {
   const [runs, setRuns] = useState<Occurrence[] | null>(null)
   const [error, setError] = useState('')
@@ -439,7 +433,6 @@ function History({ agent, routine }: { agent: string; routine: string }) {
   )
 }
 
-/** Creates or replaces a routine; a new one with a webhook hands back its secret once. */
 function RoutineForm({
   agent,
   existing,
@@ -536,7 +529,6 @@ function RoutineForm({
   )
 }
 
-/** When a routine runs, beyond by hand: neither, either or both. */
 function Triggers({ existing }: { existing: Routine | undefined }) {
   const [scheduled, setScheduled] = useState(Boolean(existing?.schedule))
   const [cron, setCron] = useState<string>(
@@ -620,7 +612,6 @@ function Triggers({ existing }: { existing: Routine | undefined }) {
   )
 }
 
-/** Saves the form; a new routine's webhook secret, if it made one. */
 async function saveRoutine(
   agent: string,
   existing: Routine | undefined,

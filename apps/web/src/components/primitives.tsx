@@ -123,8 +123,6 @@ export function Dialog({
   )
 }
 
-/** A `details` menu that closes when an item is chosen, on a click outside it and on Escape,
- *  as well as from its trigger. */
 export function Menu({
   className,
   trigger,
@@ -140,8 +138,7 @@ export function Menu({
 }) {
   const ref = useRef<HTMLDetailsElement>(null)
   const detach = useRef<(() => void) | null>(null)
-  // Listens from the opening click, not from `toggle`: browsers coalesce toggle events, so a
-  // quick close and reopen can skip one. Each handler reads the element's own state.
+  // Listens from the opening click, not `toggle`: browsers coalesce toggle events, so a quick close and reopen can skip one.
   const watch = () => {
     const menu = ref.current
     if (!menu || detach.current) return
@@ -249,7 +246,6 @@ export function when(value: string | null | undefined) {
   return `${date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${time}`
 }
 
-/** An on/off control that applies at once, named by `label` for assistive technology. */
 export function Switch({
   checked,
   label,

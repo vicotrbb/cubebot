@@ -15,7 +15,6 @@ import { AgentSpeechSection } from '../call/SpeechSettings'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
 
-/** Everything a manager changes about an agent: identity, instructions, behaviour, lifecycle. */
 export function About({ agent }: { agent: AgentSummary }) {
   const client = useQueryClient()
   const refresh = () => client.invalidateQueries({ queryKey: keys.agents })
@@ -32,7 +31,6 @@ export function About({ agent }: { agent: AgentSummary }) {
   )
 }
 
-/** The definition fields the update route requires; a section edits its own part. */
 function definition(agent: AgentSummary) {
   return {
     expected_revision: agent.revision,
@@ -124,7 +122,6 @@ function Wallpaper({ agent }: { agent: AgentSummary }) {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
-  // A JPEG or PNG of at most 4 MiB, or `null` to reset to the default.
   async function set(file: File | null) {
     setError('')
     setNotice('')
@@ -357,7 +354,6 @@ function Behaviour({
   )
 }
 
-/** What the agent may do beyond its own conversation; each switch applies at once. */
 function Capabilities({
   agent,
   onSaved,
@@ -432,7 +428,6 @@ function Capabilities({
   )
 }
 
-/** The desired state an action would repeat, so the current one is disabled. */
 const held: Partial<Record<LifecycleAction, string>> = {
   start: 'running',
   stop: 'stopped',

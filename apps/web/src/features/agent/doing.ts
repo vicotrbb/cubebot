@@ -1,4 +1,3 @@
-/** What an agent is doing, in the few words the console shows wherever the agent appears. */
 type Doing = {
   activity: string
   pending_login?: boolean
@@ -14,7 +13,6 @@ const IDLE: Record<string, string> = {
   retired: 'Retired',
 }
 
-/** Tools named as what they do; `$` is their target, when there is one. */
 const TOOLS: [RegExp, string, string?][] = [
   [/^(bash|terminal)$/, 'Running a command'],
   [/^read_file$/, 'Reading $', 'Reading a file'],
@@ -42,7 +40,6 @@ const TOOLS: [RegExp, string, string?][] = [
   [/^create_routine|routine/, 'Setting up a routine'],
 ]
 
-/** A URL's host and a path's last part, so a target stays a few words. */
 function short(target: string) {
   if (/^https?:\/\//.test(target)) {
     try {

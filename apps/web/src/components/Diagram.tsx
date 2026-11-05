@@ -1,6 +1,5 @@
 import { useEffect, useId, useState } from 'react'
 
-/** Loaded on the first diagram: it is the heaviest thing a page can need. */
 const mermaid = () => import('mermaid').then((module) => module.default)
 
 function dark() {
@@ -10,7 +9,7 @@ function dark() {
     : matchMedia('(prefers-color-scheme: dark)').matches
 }
 
-/** Draws diagram source; agents and people write it, so scripts in it stay inert. */
+/** Agents and people write the source, so scripts in it stay inert. */
 function useDiagram(source: string) {
   const id = useId().replaceAll(/[^a-zA-Z0-9]/g, '')
   const [drawn, setDrawn] = useState<{ svg?: string; error?: string }>({})

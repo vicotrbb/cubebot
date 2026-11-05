@@ -162,7 +162,6 @@ kbd {
   }
 }
 
-/* Highlighted code: the desk's paints, darkened or lightened until they read on the code ground. */
 :root {
   --hl-keyword: #a6420a;
   --hl-string: #4a6b56;
@@ -311,7 +310,6 @@ kbd {
   outline: 2px solid var(--orange);
   outline-offset: -2px;
 }
-/* Numbers stay put while the code scrolls; they are not selectable, so copying takes only code. */
 .codeblock__gutter {
   position: sticky;
   left: 0;

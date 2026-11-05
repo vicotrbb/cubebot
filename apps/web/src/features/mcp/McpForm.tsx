@@ -10,7 +10,6 @@ type Transport = SaveMcpServer['transport']
 type Access = McpServer['access']
 type Pair = { name: string; value: string }
 
-/** Creates a server or edits one; stored secret values are kept unless replaced. */
 export function McpForm({
   existing,
   onDone,
@@ -25,7 +24,6 @@ export function McpForm({
   const [access, setAccess] = useState<Access>(
     existing?.access ?? { mode: 'all_agents' },
   )
-  // A new server, or one changing transport, needs its secrets entered.
   const [replacing, setReplacing] = useState(!existing)
   const [pairs, setPairs] = useState<Pair[]>([])
   const [error, setError] = useState('')
@@ -207,7 +205,6 @@ function TransportFields({
   )
 }
 
-/** Environment variables or headers: names stay visible, values are write-only. */
 function Secrets({
   transport,
   stored,

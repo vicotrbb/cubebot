@@ -36,7 +36,6 @@ function Icon({ family, name }: { family: WorkView['family']; name: string }) {
   return <Wrench />
 }
 
-/** The card's overall mark: the tool's status, sharpened by a non-zero exit or a stop. */
 function statusOf(tool: Progress) {
   const outcome = tool.outcome
   if (tool.status === 'uncertain') return 'uncertain'
@@ -58,8 +57,6 @@ function Mark({ status }: { status: string }) {
   return <CircleCheck className="ok" />
 }
 
-/** One tool call on the work log's rail: a sentence, opening to the file, diff or terminal behind
- *  it. A write in progress stays open, so people can read along. */
 export function WorkCard({ tool }: { tool: Progress }) {
   const status = statusOf(tool)
   const view = workView(tool)
@@ -152,7 +149,6 @@ function WorkBody({ tool, view }: { tool: Progress; view: WorkView }) {
 const failedOutcome = (tool: Progress) =>
   tool.outcome?.status !== 'exited' || tool.outcome.code !== 0
 
-/** A command and what it printed, as the terminal it ran in looks: dark in either theme. */
 function TerminalView({ tool, command }: { tool: Progress; command: string }) {
   const outcome = tool.outcome
   const printed = outcome && 'output' in outcome ? outcome.output : ''
@@ -232,10 +228,6 @@ function OutcomeView({ outcome }: { outcome: Outcome }) {
   )
 }
 
-/**
- * Every tool call of one turn under a single line, so a long run of work folds away. It
- * stays open while the turn runs and folds once it settles; a reader can toggle it.
- */
 export function WorkLog({
   tools,
   running,

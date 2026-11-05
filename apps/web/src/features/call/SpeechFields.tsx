@@ -10,7 +10,6 @@ const VOICES: [Voice, string][] = [
   ['male', 'Male'],
 ]
 
-/** Male or Female as two choices; with `inherit` naming the installation's voice, a third. */
 export function VoiceChoice({
   value,
   onChange,
@@ -43,7 +42,6 @@ export function VoiceChoice({
   )
 }
 
-/** A provider select; with `inherit` naming the installation's choice, an option to follow it. */
 export function ProviderField({
   label,
   value,

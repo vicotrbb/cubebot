@@ -24,7 +24,6 @@ const EXTRA: Record<string, LanguageFn> = {
 for (const [name, language] of Object.entries(EXTRA))
   hljs.registerLanguage(name, language)
 
-/** The code as escaped HTML with highlight spans; `null` when the language is unknown. */
 export function highlighted(code: string, language: string) {
   if (!hljs.getLanguage(language)) return null
   return hljs.highlight(code, { language, ignoreIllegals: true }).value

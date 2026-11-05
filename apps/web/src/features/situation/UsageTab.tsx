@@ -8,7 +8,6 @@ import { count, money } from './format'
 import { BudgetMeter, modelCost } from './Situation'
 import './situation.css'
 
-/** What this agent spends, and the limit that keeps it honest. */
 export function UsageTab({
   agent,
   session,

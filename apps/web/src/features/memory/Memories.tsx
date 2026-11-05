@@ -24,7 +24,6 @@ export function Memories({
       setLoading(false)
     }
   }
-  /** Runs a change, then shows the current memories; a conflict shows the newer revision. */
   async function change(action: () => Promise<unknown>) {
     setError('')
     try {

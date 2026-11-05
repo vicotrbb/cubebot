@@ -1,20 +1,15 @@
-/** A call's state as its socket reports it (docs/adr/console.md#voice-calls-over-the-chat-pipeline). */
 export type Line = {
   id: string
   who: 'you' | 'agent'
   text: string
-  /** Tools the agent is using for this reply, or why it did not finish. */
   note?: string
 }
 
 export type CallState = {
-  /** Before `ready`: what is being downloaded, as a share of its size. */
   preparing: { model: string; share: number } | null
   ready: boolean
-  /** The person's sentence so far. */
   partial: string
   lines: Line[]
-  /** Replies the agent still owes. */
   awaited: number
   notice: string
 }
@@ -160,7 +155,6 @@ const NAMES = {
   elevenlabs: 'ElevenLabs',
 } as const
 
-/** The provider a call used, or both when speech went each way through a different one. */
 export function providers(stt: keyof typeof NAMES, tts: keyof typeof NAMES) {
   return stt === tts ? NAMES[stt] : `${NAMES[stt]} and ${NAMES[tts]}`
 }

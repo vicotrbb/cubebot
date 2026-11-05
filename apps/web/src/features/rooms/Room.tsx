@@ -26,7 +26,6 @@ import { rounds } from './rounds'
 const PAGE = 60
 const FINISHED = ['complete', 'failed', 'cancelled']
 
-/** Applies message snapshots by id, in room order; a finished delivery never goes back. */
 function merge(known: RoomMessage[], incoming: RoomMessage[]) {
   const byId = new Map(known.map((message) => [message.id, message]))
   for (const message of incoming) {
@@ -44,7 +43,6 @@ function merge(known: RoomMessage[], incoming: RoomMessage[]) {
   return [...byId.values()].sort((a, b) => a.sequence - b.sequence)
 }
 
-/** The orchestrator's `settled`: a message that can still change. */
 const changing = (message: RoomMessage) =>
   message.routing === 'routing' ||
   message.deliveries.some((item) => !FINISHED.includes(item.status))
@@ -67,7 +65,6 @@ const DELIVERY: Record<string, string> = {
   cancelled: 'cancelled',
 }
 
-/** A room is a channel: people and agents post, mentions deliver, the coordinator routes. */
 export function Room({
   room,
   session,
@@ -89,7 +86,6 @@ export function Room({
   )
 }
 
-/** A room's conversation, for a room in the sidebar and for a task's private one. */
 export function RoomView({
   roomId,
   session,
@@ -108,7 +104,6 @@ export function RoomView({
   placeholder: string
   note: string
   empty: string
-  /** Who `@` offers; every agent the viewer sees when absent. */
   mentionable?: { id: string; name: string }[]
   task?: boolean
 }) {
@@ -132,8 +127,7 @@ export function RoomView({
     // The stream replays from its cursor too, which by default is the room's first message.
     const url = () => `/api/rooms/${roomId}/events?after=${start()}`
     const stop = followWhileVisible(url, (source) => {
-      // History loads once the stream is following, so nothing falls between the two; a
-      // reconnect reloads what changed while disconnected.
+      // History loads once the stream is following, so nothing falls between the two.
       source.onopen = () => {
         setReadError('')
         loading?.abort()
@@ -174,7 +168,6 @@ export function RoomView({
   useEffect(() => {
     if (loaded && last > 0) void markRead('rooms', roomId, last)
   }, [roomId, loaded, last])
-  // Follow the newest message unless the reader scrolled up to read history.
   useEffect(() => {
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
@@ -330,8 +323,6 @@ export function RoomView({
   )
 }
 
-/** A delivery's work is steered from here: the agent's own conversation never shows it. Needs
- *  send access on the agent, like the same actions in its conversation. */
 function DeliveryActions({
   item,
   agent,
@@ -360,7 +351,6 @@ function DeliveryActions({
   )
 }
 
-/** A person's picture, the orchestrator's block, or the block of the agent that wrote. */
 function AuthorAvatar({
   message,
   agents,

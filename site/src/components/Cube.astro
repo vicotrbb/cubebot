@@ -7,7 +7,6 @@ interface Props {
   class?: string
   style?: string
   contact?: boolean
-  /** true: static half-painted block; 'live': paints itself face by face, forever. */
   paint?: boolean | 'live'
 }
 
@@ -22,7 +21,6 @@ const {
   paint = false,
 } = Astro.props
 
-// Order in which faces come to the front as the live block turns backwards.
 const sides = ['right', 'back', 'left'] as const
 const strokes = [0, 1, 2, 3]
 ---

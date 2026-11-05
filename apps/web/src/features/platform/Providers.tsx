@@ -43,7 +43,6 @@ const NAMES = Object.fromEntries(
   PROVIDERS.map(({ id, name }) => [id, name]),
 ) as Record<Provider, string>
 
-/** Where a provider stands: the one agents think with, holding a key, or untouched. */
 type Standing = 'active' | 'saved' | 'none'
 const STANDING: Record<Standing, string> = {
   active: 'In use',
@@ -51,8 +50,6 @@ const STANDING: Record<Standing, string> = {
   none: 'Not configured',
 }
 
-/** One card per provider (docs/adr/identity.md#installation-managed-provider-connections and docs/adr/agents.md#initial-openai-anthropic-and-compatible-endpoint-support):
- *  agents think with one connection, and a provider stepping aside keeps its key. */
 export function Providers() {
   const client = useQueryClient()
   const current = useQuery({
@@ -186,12 +183,8 @@ function ProviderCard({
   )
 }
 
-/** Lists the models a key can use: the saved key's on their own whenever it applies, a
- *  pasted key's once asked. */
 export function useModels(provider: Provider, key: string, saved: boolean) {
-  // The pasted key a person asked to list with.
   const [asked, setAsked] = useState<string | null>(null)
-  // '' lists with the saved key; null lists nothing yet.
   const listing = saved && !key ? '' : asked
   const query = useQuery({
     queryKey: ['provider-models', provider, listing],
@@ -226,7 +219,6 @@ export function useModels(provider: Provider, key: string, saved: boolean) {
   }
 }
 
-/** What the form starts from: what this provider last used, or nothing. */
 function draftFor(choice: Current | Saved | null | undefined) {
   return {
     model: choice?.model ?? '',
@@ -234,7 +226,7 @@ function draftFor(choice: Current | Saved | null | undefined) {
   }
 }
 
-/** Saves the connection; one request id per attempt, so a retried save is not a second one. */
+/** One request id per attempt, so a retried save is not a second one. */
 function useSaveConnection(
   current: Current | null,
   onSaved: () => Promise<unknown>,
@@ -461,7 +453,6 @@ function KeyField({
   )
 }
 
-/** A list you can search: OpenRouter alone returns hundreds, past what a select can browse. */
 export function ModelField({
   models,
   typed,
@@ -469,7 +460,6 @@ export function ModelField({
   onPick,
 }: {
   models: Choice[] | null
-  /** The provider could not be reached, so the ID is typed; an outage never blocks setup. */
   typed: boolean
   value: string
   onPick: (id: string) => void
@@ -519,7 +509,6 @@ export function ModelField({
           placeholder="Search models"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          // Enter picks the only match rather than saving the form.
           onKeyDown={(event) => {
             if (event.key !== 'Enter') return
             event.preventDefault()

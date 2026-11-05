@@ -117,7 +117,6 @@ svg {
   white-space: nowrap;
 }
 
-/* Block button: a painted wooden block you can press. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -191,7 +190,6 @@ svg {
   initial-value: -18deg;
 }
 
-/* 3D block. Faces live on a body that rotates; a wrapper carries idle motion. */
 .cube {
   /* Inline --cube-size is the default; stylesheet --size overrides win. */
   --size: var(--cube-size, 120px);
@@ -238,7 +236,6 @@ svg {
   transform: rotateX(var(--rx)) rotateY(var(--ry));
 }
 
-/* Faces meet at crisp edges; paint is lit from the top-left. */
 .face {
   position: absolute;
   inset: 0;
@@ -299,12 +296,7 @@ svg {
   color: var(--ink);
 }
 
-/* A wood block being painted. Static (`paint`): three finished strokes and one
-   wet stroke on the front, the side painted to the last finished stroke.
-   Live (`paint="live"`): every side face carries four strokes. The brush lays
-   them bottom-up over 4.8s, the block turns a quarter backwards over 0.8s so
-   the fresh face comes forward and the painted one shows as the right side,
-   and a face resets only while it is hidden at the back. Period 22.4s. */
+/* Live: a face resets only while it is hidden at the back; the period is 22.4s. */
 .paint {
   position: absolute;
   inset: 0;
@@ -331,7 +323,6 @@ svg {
 .cube--live .cube__body {
   animation: quarter 22.4s linear infinite;
 }
-/* The hand floats just in front of the resting front face and does not turn. */
 .cube__hand {
   position: absolute;
   inset: 0;
@@ -387,7 +378,6 @@ svg {
     transform: rotateX(var(--rx)) rotateY(calc(var(--ry) - 360deg));
   }
 }
-/* Four left-to-right passes climbing the face, then a dip toward the can. */
 @keyframes brushloop {
   0% {
     translate: 0 calc(var(--size) * 0.435);
@@ -432,8 +422,6 @@ svg {
   }
 }
 
-/* Eyes glance toward the pointer through --look-x/--look-y on the block body;
-   idle blocks look around on their own. */
 .eyes {
   display: flex;
   gap: calc(var(--size) * 0.1);
@@ -464,7 +452,6 @@ svg {
   }
 }
 
-/* Sleeping blocks breathe out little z's. */
 .zz {
   position: absolute;
   left: 82%;
@@ -547,7 +534,6 @@ svg {
   }
 }
 
-/* Contact shadow under a block that rests on the desk. */
 .contact {
   position: absolute;
   left: 50%;
@@ -595,7 +581,6 @@ svg {
   .cube--live .cube__body {
     transform: rotateX(var(--rx)) rotateY(var(--ry));
   }
-  /* Still: three strokes on the front, the brush resting at the fourth. */
   .paint__wet {
     animation: none;
   }

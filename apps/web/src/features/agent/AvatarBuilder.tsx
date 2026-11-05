@@ -10,7 +10,6 @@ import {
   type Paint,
 } from '../../components/Cube'
 
-/** Picks the block's paint, eyes and one accessory; the live block previews the choice. */
 export function AvatarBuilder({
   value,
   mood = 'idle',

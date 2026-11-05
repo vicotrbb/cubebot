@@ -21,7 +21,6 @@ import {
 } from './useDesktopSocket'
 import './desktop.css'
 
-/** The full desktop (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover): watch, take control, hand back, fill from the vault. */
 export function DesktopView({
   agent,
   accountId,
@@ -31,7 +30,6 @@ export function DesktopView({
 }: {
   agent: AgentSummary
   accountId: string
-  /** Watches and takes control as soon as the connection opens. */
   take?: boolean | undefined
   canControl: boolean
   canManage: boolean
@@ -64,7 +62,6 @@ export function DesktopView({
           watching={watching}
           mode={desk.mode}
           holding={desk.holding}
-          // A pending login's banner owns the one Take control.
           canTake={takeable && !agent.pending_login}
           onWatch={() => setWatching(!watching)}
           onTake={takeControl}
@@ -151,7 +148,6 @@ function Head({
   )
 }
 
-/** What lies over the screen while watching: pointer tags, or the cover before a frame. */
 function Overlay({
   agent,
   desk,
@@ -245,7 +241,6 @@ function Controls({
   )
 }
 
-/** What the screen shows before its first frame: the computer off, or starting. */
 function ScreenCover({
   agent,
   running,
@@ -320,7 +315,6 @@ function ScreenCover({
   )
 }
 
-/** Input round trip: page to orchestrator to the sandbox's arbiter and back. */
 function Latency({ samples, updates }: { samples: number[]; updates: number }) {
   const last = samples.at(-1)
   const sorted = [...samples].sort((a, b) => a - b)

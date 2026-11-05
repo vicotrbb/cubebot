@@ -1,5 +1,4 @@
-// Runs on the audio thread: averages the microphone down to 16 kHz mono PCM16 and posts it in
-// 100 ms frames. AudioContext rates vary by device, so the rate conversion cannot be left out.
+// AudioContext rates vary by device, so the conversion to 16 kHz cannot be left out.
 const FRAME = 1600
 
 class CallCapture extends globalThis.AudioWorkletProcessor {

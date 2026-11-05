@@ -527,7 +527,6 @@ const timeline = [
 </script>
 
 <style>
-  /* Header: sticks to the top and picks up a shadow once the page scrolls. */
   .top {
     position: sticky;
     top: 0;
@@ -581,7 +580,6 @@ const timeline = [
     padding: 10px 16px 12px;
   }
 
-  /* Hero */
   .hero {
     padding-block: clamp(32px, 7vw, 88px) clamp(48px, 8vw, 110px);
     overflow: clip;
@@ -612,7 +610,6 @@ const timeline = [
     gap: 14px 28px;
     margin-top: 36px;
   }
-  /* One click selects the whole command, ready to copy. */
   .install {
     margin: 28px 0 0;
     padding: 12px 16px;
@@ -627,7 +624,6 @@ const timeline = [
     user-select: all;
   }
 
-  /* Hero scene: a wooden desk seen slightly from above, blocks standing on it. */
   .hero__scene {
     --desk-surface: 118px; /* distance from scene bottom to the desk's top surface */
     position: relative;
@@ -703,7 +699,6 @@ const timeline = [
   .hero__small--sleep :global(.cube) {
     --ry: 34deg;
   }
-  /* The raw block sits closer to the viewer, in front of the cube's corner. */
   .hero__small--raw {
     left: 23%;
     bottom: calc(var(--desk-surface) - 6px);
@@ -712,7 +707,6 @@ const timeline = [
     --ry: -24deg;
   }
 
-  /* A small plant keeps the cube company. */
   .plant {
     position: absolute;
     right: -2%;
@@ -802,7 +796,6 @@ const timeline = [
     }
   }
 
-  /* Section rhythm */
   section {
     padding-block: clamp(56px, 9vw, 120px);
     scroll-margin-top: 72px;
@@ -821,7 +814,6 @@ const timeline = [
     font-size: 1.1rem;
   }
 
-  /* Slab: a short wooden shelf blocks rest on. Top surface plus a darker front edge. */
   .slab {
     position: relative;
     height: 34px;
@@ -856,7 +848,6 @@ const timeline = [
     box-shadow: 0 12px 24px -12px rgb(var(--shadow) / 0.45);
   }
 
-  /* Anatomy */
   .anatomy {
     background: var(--desk-deep);
   }
@@ -885,8 +876,7 @@ const timeline = [
     bottom: 92px;
     transform: translateY(calc(-1 * var(--i) * 92px));
   }
-  /* Opacity would flatten the 3D block, so the tower only drops into place,
-     from higher up and with a small overshoot, pod first. */
+  /* Opacity would flatten the 3D block, so the tower only drops into place. */
   :global(.js) .tower .tower__drop {
     opacity: 1;
     transform: translateY(-140px);
@@ -895,7 +885,6 @@ const timeline = [
     transform: translateY(0);
     transition: transform 0.6s cubic-bezier(0.34, 1.35, 0.64, 1) calc(var(--i) * 120ms);
   }
-  /* Each block turns to face you as it scrolls into view. */
   @supports (animation-timeline: view()) {
     .tower :global(.cube__body) {
       animation: turn linear both;
@@ -920,7 +909,6 @@ const timeline = [
   .tower__slot :global(.cube) {
     --ry: 28deg;
   }
-  /* Hovering a part lifts and turns its block in the stack. */
   .anatomy__grid:has(.anatomy__item:nth-child(1):hover) .tower__slot:nth-child(1) :global(.cube),
   .anatomy__grid:has(.anatomy__item:nth-child(2):hover) .tower__slot:nth-child(2) :global(.cube),
   .anatomy__grid:has(.anatomy__item:nth-child(3):hover) .tower__slot:nth-child(3) :global(.cube),
@@ -957,7 +945,6 @@ const timeline = [
     color: var(--ink-soft);
   }
 
-  /* Chips: small blocks seen from the front. Pick one up on hover. */
   .chip {
     display: inline-flex;
     align-items: center;
@@ -994,7 +981,6 @@ const timeline = [
     background: var(--wood);
     border-bottom-color: var(--wood-deep);
   }
-  /* Half-painted: the orange end stops before the lettering. */
   .chip--half {
     padding-left: 20px;
     background: var(--wood);
@@ -1007,7 +993,6 @@ const timeline = [
       0 10px 16px -8px rgb(var(--shadow) / 0.4);
   }
 
-  /* How it works */
   .how__head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1024,9 +1009,7 @@ const timeline = [
     margin-top: 56px;
     align-items: center;
   }
-  /* The cluster is a wooden rack: blocks stand on three shelves, cables run
-     between them behind the shelves, and messages ride the cables. The scene
-     is a fixed 620 x 600 box so cables and blocks scale together. */
+  /* A fixed 620 x 600 box so cables and blocks scale together. */
   .cluster {
     --w: 620;
     --h: 600;
@@ -1094,7 +1077,6 @@ const timeline = [
   .cluster__node :global(.cube) {
     --size: calc(var(--s) * 1cqw);
   }
-  /* Paper tags hang under the shelf; cables run behind them. */
   .cluster__node span {
     position: absolute;
     top: calc(100% + 42px);
@@ -1133,7 +1115,6 @@ const timeline = [
     color: var(--ink-soft);
   }
 
-  /* Status */
   .status {
     background: var(--desk-deep);
   }
@@ -1143,7 +1124,6 @@ const timeline = [
     gap: clamp(24px, 5vw, 72px);
     align-items: end;
   }
-  /* The paint shop: the painted block watches a raw one get its coat. */
   .paintshop {
     position: relative;
     height: 250px;
@@ -1168,7 +1148,6 @@ const timeline = [
     left: 50%;
     bottom: 66px;
   }
-  /* A can of the same orange, open on the floor. */
   .can {
     position: absolute;
     left: 37%;
@@ -1269,7 +1248,6 @@ const timeline = [
     font-size: 0.98rem;
   }
 
-  /* Roadmap */
   .roadmap .wrap {
     position: relative;
   }
@@ -1287,7 +1265,6 @@ const timeline = [
     gap: 8px;
     align-content: start;
   }
-  /* Blocks rest on the roadmap shelf; the text hangs below it. */
   .milestone__block {
     position: relative;
     height: 96px;
@@ -1301,7 +1278,6 @@ const timeline = [
     --ry: 44deg;
   }
   .milestone__date {
-    /* Two lines reserved so the heading row shares one baseline. */
     min-height: 2.6em;
     font-size: 0.85rem;
     font-weight: 700;
@@ -1327,7 +1303,6 @@ const timeline = [
     z-index: -1;
   }
 
-  /* Closing: the same desk as the hero, a mug of something warm beside it. */
   .closing__grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1460,7 +1435,6 @@ const timeline = [
     margin-top: 32px;
   }
 
-  /* Footer */
   .foot {
     padding-block: 40px 48px;
     border-top: 2px solid rgb(var(--shadow) / 0.1);
@@ -1568,7 +1542,6 @@ const timeline = [
     .anatomy__hint {
       display: none;
     }
-    /* Two rows of three blocks on a short shelf. */
     .tower {
       height: 300px;
       perspective: 900px;
@@ -1662,7 +1635,6 @@ const timeline = [
     .tower__slot:nth-child(n + 4) {
       bottom: calc(74px + 56px);
     }
-    /* A taller rack so tags clear the shelf below; cables stretch with it. */
     .cluster {
       aspect-ratio: 620 / 820;
     }

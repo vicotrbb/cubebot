@@ -1,5 +1,3 @@
-// The header underlines the section currently in the middle of the viewport.
-
 const links = Array.from(
   document.querySelectorAll<HTMLAnchorElement>('.top__nav a[href^="#"]'),
 )

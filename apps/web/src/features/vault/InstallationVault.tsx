@@ -26,8 +26,6 @@ import './vault.css'
 type Kind = VaultItem['kind']
 type Access = VaultItem['access']
 
-/** Installation logins and secrets with docs/adr/identity.md#installation-wide-connection-access-by-default access (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills).
- *  Agents' own items live on their Vault tabs. */
 export function InstallationVault() {
   const client = useQueryClient()
   const items = useQuery({
@@ -302,7 +300,6 @@ function KindChoice({
   )
 }
 
-/** All agents, or the agents ticked below, for a connection shared across the installation. */
 export function AccessChoice({
   access,
   agents,

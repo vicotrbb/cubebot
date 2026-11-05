@@ -52,7 +52,6 @@ const LABELS = {
   false: ['Sign in', 'Signing in…'],
 }
 
-/** The sign-in form, or with `setup` the first administrator's, which also confirms the password. */
 function Credentials({ setup }: { setup: boolean }) {
   const navigate = useNavigate()
   const client = useQueryClient()
@@ -77,8 +76,7 @@ function Credentials({ setup }: { setup: boolean }) {
           ? api.POST('/api/identity/setup', { body })
           : api.POST('/api/identity/login', { body }),
       )
-      // Nothing cached belongs to this account, and navigating on a cached null session
-      // would send the browser straight back to sign-in.
+      // Nothing cached belongs to this account, and navigating on a cached null session would send the browser straight back to sign-in.
       client.clear()
       await navigate({ to: '/' })
     } catch (error) {

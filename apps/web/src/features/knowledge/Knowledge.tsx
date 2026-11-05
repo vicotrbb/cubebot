@@ -50,10 +50,8 @@ function storedOpen(): string[] {
   }
 }
 
-/** Which rows are open, per browser: a convenience, not worth a server round trip. */
 function useOpenRows(reveal: string[]) {
   const [open, setOpen] = useState(() => new Set(storedOpen()))
-  // A page opened by link or search shows where it lives, once, so it can still be collapsed.
   const wanted = reveal.join()
   const [revealed, setRevealed] = useState('')
   if (wanted !== revealed) {
@@ -84,7 +82,6 @@ export function PageIcon({ page }: { page: Pick<Summary, 'icon' | 'kind'> }) {
   )
 }
 
-/** Creates a page or folder and opens it. */
 export function useCreate() {
   const navigate = useNavigate()
   const refresh = useRefreshTree()
@@ -102,7 +99,6 @@ export function useCreate() {
   return { create, error }
 }
 
-/** The tree beside every page: the page itself on phones. */
 export function KnowledgeTree({ current }: { current?: string | undefined }) {
   const tree = useTree()
   const { create, error } = useCreate()
@@ -208,7 +204,6 @@ function Results({ query }: { query: string }) {
   )
 }
 
-/** Every row, with what a drag is doing, which only the whole tree can tell. */
 function Rows({
   pages,
   current,
@@ -409,7 +404,6 @@ function TreeRow({
   )
 }
 
-/** Moving without dragging, which touch screens need. */
 function MoveDialog({
   page,
   pages,
@@ -453,7 +447,6 @@ function MoveDialog({
   )
 }
 
-/** What was thrown away: restore it, or delete it for good. */
 function Trash({ onClose }: { onClose: () => void }) {
   const client = useQueryClient()
   const refresh = useRefreshTree()
