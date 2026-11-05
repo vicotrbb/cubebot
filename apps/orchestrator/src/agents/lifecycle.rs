@@ -84,6 +84,9 @@ impl Agents {
         )
         .execute(&mut *transaction)
         .await?;
+        if matches!(input.action, LifecycleAction::Retire) {
+            crate::work::cancel_open(&mut transaction, id).await?;
+        }
         command
             .commit(transaction, Receipt { id: id.0, revision })
             .await

@@ -274,6 +274,72 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
 }
 
 /// Waits until the model has received `count` requests in all.
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn retiring_an_agent_ends_its_open_turns_and_frees_a_parent_waiting_on_them() {
+    use cubebot_orchestrator::agents::{LifecycleAction, LifecycleCommand};
+    let f = fixture().await;
+    let (_, work, admin, lead) = native_chat_setup(&f, "Delegate it").await;
+    let agents = Agents::new(f.pool.clone());
+    let created = agents
+        .create(
+            &admin,
+            &CreateAgent {
+                request_id: Uuid::new_v4(),
+                name: "Bee".into(),
+                instructions: "Be brief".into(),
+                avatar: None,
+                voice: None,
+            },
+        )
+        .await
+        .unwrap();
+    let parent = work.history(&admin, lead, 0).await.unwrap()[0].id;
+    sqlx::query!(
+        "UPDATE chat_turns SET status='delegated' WHERE id=$1",
+        parent,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let child: Uuid = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id,actor_id,request_id,message,parent_turn_id,awaited)
+        VALUES ($1,$2,gen_random_uuid(),'Delegated to you by agent Lead: research',$3,true)
+        RETURNING id
+        ",
+        created.id,
+        admin.id,
+        parent,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    agents
+        .lifecycle(
+            &admin,
+            cubebot_orchestrator::agents::AgentId(created.id),
+            &LifecycleCommand {
+                request_id: Uuid::new_v4(),
+                expected_revision: created.revision,
+                action: LifecycleAction::Retire,
+            },
+        )
+        .await
+        .unwrap();
+    let status = |id: Uuid| {
+        let pool = f.pool.clone();
+        async move {
+            sqlx::query_scalar!("SELECT status FROM chat_turns WHERE id=$1", id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+        }
+    };
+    assert_eq!(status(child).await, "cancelled");
+    assert_eq!(status(parent).await, "queued");
+}
+
 async fn requested(model: &Model, count: usize) {
     for _ in 0..200 {
         if model.requests().len() >= count {

@@ -711,6 +711,30 @@ pub(super) async fn cancel_subtree(
     Ok(())
 }
 
+/// A retired agent never runs again: its open turns end, with what they delegated, and any parent
+/// waiting on one hears the outcome.
+pub(crate) async fn cancel_open(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+) -> Result<(), IdentityError> {
+    let open = sqlx::query_scalar!(
+        "
+        SELECT id
+        FROM chat_turns
+        WHERE conversation_id=$1 AND status NOT IN ('complete','failed','cancelled')
+        ORDER BY sequence
+        FOR UPDATE
+        ",
+        agent.0,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    for turn in open {
+        cancel_subtree(tx, agent, turn).await?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
