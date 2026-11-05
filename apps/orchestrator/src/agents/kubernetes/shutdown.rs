@@ -85,6 +85,7 @@ impl Reconciler {
     }
 
     async fn wait_or_stop(&self, attempt: &Attempt, pod: &Pod) -> Result<ReconcileResult, Error> {
+        // An agent that never started, as in a pending pod, holds no work and would never answer.
         let acknowledged = sqlx::query_scalar!(
             r#"
             SELECT EXISTS (
@@ -92,6 +93,10 @@ impl Reconciler {
                 FROM agent_runtime_drains
                 WHERE attempt_id = $1
                   AND acknowledged_at IS NOT NULL
+            ) OR NOT EXISTS (
+                SELECT 1
+                FROM agent_runtime_sessions
+                WHERE attempt_id = $1
             ) AS "acknowledged!"
             "#,
             attempt.id.0,

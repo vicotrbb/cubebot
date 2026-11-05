@@ -309,6 +309,7 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
         .await
         .unwrap();
     let actor = identity.authenticate(&session.token).await.unwrap();
+    start_session(&pool, pod).await;
     let agents = Agents::new(pool);
     let requests = state.lock().unwrap().requests;
     let changes = |state: &Server| {
@@ -517,6 +518,22 @@ async fn request_sleep(pool: &sqlx::PgPool, agent: cubebot_orchestrator::agents:
         )
         .await
         .unwrap();
+}
+/// The agent started: from here a stop waits for it to drain.
+async fn start_session(
+    pool: &sqlx::PgPool,
+    attempt: cubebot_orchestrator::agents::kubernetes::AttemptId,
+) {
+    sqlx::query!(
+        "
+        INSERT INTO agent_runtime_sessions (attempt_id, instance_id, pod_uid, service_account_uid, token_hash)
+        VALUES ($1, gen_random_uuid(), 'pod-uid', 'service-uid', sha256(($1::uuid)::text::bytea))
+        ",
+        attempt as _,
+    )
+    .execute(pool)
+    .await
+    .unwrap();
 }
 async fn acknowledge(
     pool: &sqlx::PgPool,
@@ -775,6 +792,24 @@ async fn retained_terminal_proof_does_not_allow_finalizing_a_replaced_or_changed
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_pod_whose_agent_never_started_stops_without_a_drain() {
+    let (pool, _, agent) = registry_support::setup().await;
+    let (client, state, task) = server().await;
+    let reconciler = Reconciler::new(pool.clone(), client, "cubebot-test", layout()).unwrap();
+    let ReconcileResult::Provisioned { pod, .. } = reconciler.reconcile(agent).await.unwrap()
+    else {
+        panic!("provisioned expected")
+    };
+    request_sleep(&pool, agent).await;
+    assert!(
+        matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::Stopping { attempt } if attempt == pod)
+    );
+    assert_eq!(state.lock().unwrap().deletes.len(), 1);
+    task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn sleep_after_a_lost_create_response_binds_the_same_pod_for_recovery_drain() {
     let (pool, registry, agent) = registry_support::setup().await;
     let (config, state, task) = server().await;
@@ -782,6 +817,18 @@ async fn sleep_after_a_lost_create_response_binds_the_same_pod_for_recovery_drai
     let reconciler = Reconciler::new(pool.clone(), config, "cubebot-test", layout()).unwrap();
     assert!(reconciler.reconcile(agent).await.is_err());
     request_sleep(&pool, agent).await;
+    let lost = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id: cubebot_orchestrator::agents::kubernetes::AttemptId"
+        FROM agent_resources
+        WHERE agent_id = $1 AND kind = 'pod'
+        "#,
+        agent as _,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    start_session(&pool, lost).await;
     let ReconcileResult::AwaitingDrain { attempt } = reconciler.reconcile(agent).await.unwrap()
     else {
         panic!("drain expected")
@@ -916,6 +963,7 @@ async fn same_generation_node_lost_is_visible_and_never_qualifies_for_replacemen
     else {
         panic!("provisioned expected")
     };
+    start_session(&pool, pod).await;
     complete_pod(&state);
     {
         let mut state = state.lock().unwrap();

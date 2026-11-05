@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT EXISTS (\n                SELECT 1\n                FROM agent_runtime_drains\n                WHERE attempt_id = $1\n                  AND acknowledged_at IS NOT NULL\n            ) OR NOT EXISTS (\n                SELECT 1\n                FROM agent_runtime_sessions\n                WHERE attempt_id = $1\n            ) AS \"acknowledged!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "acknowledged!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "facf0fc9b3fce6eb64f60d5e3e908fb4c4dc40ec404078ee37e9dec7d47ff30d"
+}
