@@ -107,6 +107,18 @@ async fn migration_lock_contention_fails_within_startup_deadline() {
             .is_err()
     );
     blocker.rollback().await.unwrap();
-    // Cancellation must not leave the migration connection's advisory lock in the pool.
+    // A failed migration must not leave its advisory lock or timeouts in the pool.
     database::migrate(&pool).await.unwrap();
+    let settings = sqlx::query!(
+        r#"
+        SELECT current_setting('lock_timeout') AS "lock!", current_setting('statement_timeout') AS "statement!"
+        "#
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        (settings.lock.as_str(), settings.statement.as_str()),
+        ("0", "0")
+    );
 }

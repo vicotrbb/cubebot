@@ -291,7 +291,10 @@ impl Connections {
             let Some(item) = item else {
                 return Ok(true);
             };
-            (item.ciphertext, self.vault_context(item.id).await?)
+            (
+                item.ciphertext,
+                vault::sealing_context(&mut *tx, "vault", item.id).await?,
+            )
         };
         tx.commit().await?;
         Ok(self.credentials.decrypt(&record, &context).is_ok())

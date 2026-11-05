@@ -1,5 +1,5 @@
 use crate::identity::{
-    Actor, Identity, IdentityError, accounts,
+    Actor, Identity, IdentityError,
     commands::{Command, Receipt},
 };
 use serde::Serialize;
@@ -102,7 +102,6 @@ impl Identity {
         )
         .execute(&mut *transaction)
         .await?;
-        accounts::audit(&mut transaction, actor.id, account, "oidc_identity_revoked").await?;
         command.commit(transaction, Receipt { id, revision }).await
     }
 }

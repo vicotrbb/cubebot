@@ -95,6 +95,44 @@ impl Fixture {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_crash_loop_waits_longer_between_epochs_until_a_person_restarts_it() {
+    let f = fixture().await;
+    let crash = |epoch| f.set(epoch, "exited");
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    crash(1);
+    // Retires epoch 1; one crash restarts at once.
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(f.phases().await.len(), 2);
+    crash(2);
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    // Two recent failures: no third epoch yet.
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(f.phases().await.len(), 2);
+    tokio::time::sleep(std::time::Duration::from_millis(2100)).await;
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(f.phases().await.len(), 3);
+    // A person's restart is a new generation, which starts without the wait.
+    crash(3);
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    sqlx::query!(
+        "
+        UPDATE agents
+        SET restart_generation = restart_generation + 1
+        WHERE id = $1
+        ",
+        f.agent as _,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    drive(&f.docker, &f.pool, f.agent).await.unwrap();
+    assert_eq!(f.phases().await.len(), 4);
+    std::fs::remove_dir_all(&f.root).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn container_token_authenticates_only_its_own_running_epoch() {
     let f = fixture().await;
     drive(&f.docker, &f.pool, f.agent).await.unwrap();

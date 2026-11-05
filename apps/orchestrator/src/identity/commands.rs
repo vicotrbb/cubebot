@@ -97,7 +97,6 @@ impl Command {
         receipt: Receipt,
     ) -> Result<Receipt, IdentityError> {
         // A cursor must never advance beyond an uncommitted lower event sequence.
-        // ponytail: serialize this short publication; add a watermark if measured throughput requires it.
         sqlx::query!(
             "
             SELECT singleton

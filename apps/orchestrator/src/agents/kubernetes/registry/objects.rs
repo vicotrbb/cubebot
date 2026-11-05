@@ -25,7 +25,7 @@ impl ResourceSpec {
             Self::Workspace(_) => ResourceKind::Workspace,
         }
     }
-    pub(super) fn matches(&self, object: &ResourceObject) -> bool {
+    pub(in crate::agents::kubernetes) fn matches(&self, object: &ResourceObject) -> bool {
         match (self, object) {
             (Self::Pod(spec), ResourceObject::Pod(pod)) => pod.spec.as_ref() == Some(spec.as_ref()),
             (Self::Workspace(spec), ResourceObject::Workspace(claim)) => {

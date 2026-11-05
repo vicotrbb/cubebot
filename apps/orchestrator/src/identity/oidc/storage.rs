@@ -215,7 +215,7 @@ pub(super) async fn admit(
     )
     .execute(&mut *transaction)
     .await?;
-    accounts::audit(&mut transaction, account, account, "oidc_sign_in").await?;
+    accounts::audit(&mut transaction, account, account, "session.sign_in").await?;
     transaction.commit().await?;
     Ok(Session { token })
 }
@@ -274,7 +274,7 @@ async fn resolve(
     .fetch_optional(&mut **transaction)
     .await?;
     inserted.ok_or(IdentityError::Conflict)?;
-    accounts::audit(transaction, account, account, "oidc_identity_linked").await?;
+    accounts::audit(transaction, account, account, "oidc.link").await?;
     Ok(account)
 }
 

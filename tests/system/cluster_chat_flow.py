@@ -477,8 +477,8 @@ def permissions(f):
                 command(id=grant["id"], expected_revision=grant["revision"]),
             )
         f.request(f"/api/conversations/{identity}/messages", token=token, expected=404)
-    waiting = outcome(f, identity, turn, ("waiting",))
-    assert waiting["error"] == "sender_access_revoked"
+    refused = outcome(f, identity, turn, ("failed",))
+    assert refused["error"] == "sender_access_revoked"
     print("PASS revoked sender cannot read or start accepted queued work", flush=True)
 
 

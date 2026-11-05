@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO agent_runtime_sessions (attempt_id, instance_id, pod_uid, service_account_uid, token_hash)\n        VALUES ($1, gen_random_uuid(), 'pod-uid', 'service-uid', sha256(($1::uuid)::text::bytea))\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6f3f95f4d5a8630dffbf022b1a18aa089aca5655698c1a6b1f64580e4fd7a52"
+}

@@ -370,7 +370,7 @@ async fn content(
     api.caller(&headers).await?;
     let storage = files::configured(storage)?;
     let (attachment, blob) = api.base.attachment(id).await?;
-    let (bytes, transfer) = storage.read(blob, attachment.size).await?;
+    let bytes = storage.read(blob, attachment.size).await?;
     let entry = FileEntry {
         id: attachment.id,
         parent: None,
@@ -384,7 +384,7 @@ async fn content(
         access: FileAccess::Read,
         updated_at: attachment.created_at,
     };
-    Ok(files::download(entry, bytes, transfer, &headers).await)
+    Ok(files::download(entry, bytes, &headers).await)
 }
 
 #[utoipa::path(delete, path = "/api/kb/attachments/{id}", operation_id = "kb_detach", params(("id" = Uuid, Path)), responses((status = 204)))]

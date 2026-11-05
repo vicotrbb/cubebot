@@ -17,10 +17,7 @@ use cubebot_protocol::runtime::{FileEntry, FileShare};
 use futures_util::Stream;
 use serde::Deserialize;
 use std::io::SeekFrom;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncSeekExt},
-    sync::OwnedSemaphorePermit,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncSeekExt};
 use uuid::Uuid;
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -270,8 +267,8 @@ async fn content(
     Path(file): Path<Uuid>,
 ) -> Result<Response, Failure> {
     let (storage, who) = person(&identity, &headers, storage).await?;
-    let (entry, bytes, transfer) = storage.open(who, file).await?;
-    Ok(download(entry, bytes, transfer, &headers).await)
+    let (entry, bytes) = storage.open(who, file).await?;
+    Ok(download(entry, bytes, &headers).await)
 }
 
 /// The file's own shares; inherited ones are on the folders above it.
@@ -299,11 +296,10 @@ async fn replace_shares(
     Ok(Json(storage.share(who, file, &input, true).await?))
 }
 
-/// Streams the file, or the one byte range asked for, holding the transfer slot until done.
+/// Streams the file, or the one byte range asked for.
 pub(super) async fn download(
     entry: FileEntry,
     mut bytes: tokio::fs::File,
-    transfer: OwnedSemaphorePermit,
     headers: &HeaderMap,
 ) -> Response {
     let size = entry.size.unwrap_or_default() as u64;
@@ -336,7 +332,7 @@ pub(super) async fn download(
             .status(StatusCode::PARTIAL_CONTENT)
             .header(header::CONTENT_RANGE, served);
     }
-    let body = Body::from_stream(chunks(bytes.take(end - start), transfer));
+    let body = Body::from_stream(chunks(bytes.take(end - start)));
     response
         .body(body)
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
@@ -344,16 +340,15 @@ pub(super) async fn download(
 
 fn chunks(
     reader: impl AsyncRead + Unpin + Send + 'static,
-    transfer: OwnedSemaphorePermit,
 ) -> impl Stream<Item = std::io::Result<Bytes>> + Send + 'static {
-    futures_util::stream::unfold(Some((reader, transfer)), |state| async move {
-        let (mut reader, transfer) = state?;
+    futures_util::stream::unfold(Some(reader), |state| async move {
+        let mut reader = state?;
         let mut buffer = vec![0; 64 * 1024];
         match reader.read(&mut buffer).await {
             Ok(0) => None,
             Ok(read) => {
                 buffer.truncate(read);
-                Some((Ok(Bytes::from(buffer)), Some((reader, transfer))))
+                Some((Ok(Bytes::from(buffer)), Some(reader)))
             }
             Err(error) => Some((Err(error), None)),
         }

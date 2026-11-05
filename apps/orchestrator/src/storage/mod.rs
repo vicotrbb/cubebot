@@ -24,7 +24,8 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 use volume::{Published, Volume};
 
-/// Concurrent uploads and downloads; another is refused with a retry rather than queued.
+/// Concurrent uploads, which fill the disk; another is refused with a retry rather than queued.
+/// Downloads are not gated: a stalled reader would hold a slot and block everyone's files.
 const TRANSFERS: usize = 16;
 const DEFAULT_QUOTA: u64 = 10 << 30;
 
@@ -544,21 +545,20 @@ impl Storage {
         Ok(())
     }
 
-    /// A file's bytes for `who`, holding a transfer slot until the returned permit drops.
+    /// A file's bytes for `who`.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn open(
         &self,
         who: Principal,
         file: Uuid,
-    ) -> Result<(FileEntry, tokio::fs::File, OwnedSemaphorePermit), StorageError> {
+    ) -> Result<(FileEntry, tokio::fs::File), StorageError> {
         let access = self.require(file, who, FileAccess::Read).await?;
         let row = self.row(file).await?;
         let (Some(blob), Some(size)) = (row.blob_id, row.size) else {
             return Err(StorageError::Invalid("a folder has no content"));
         };
-        let transfer = self.transfer()?;
         let bytes = self.0.volume.open(blob, size).await?;
-        Ok((row.entry(access), bytes, transfer))
+        Ok((row.entry(access), bytes))
     }
 
     /// Renames and moves a file or folder among its owner's folders.
@@ -651,14 +651,9 @@ impl Storage {
         }
     }
 
-    /// A kept blob's bytes, holding a transfer slot until they are served.
-    pub async fn read(
-        &self,
-        blob: Uuid,
-        size: i64,
-    ) -> Result<(tokio::fs::File, OwnedSemaphorePermit), StorageError> {
-        let transfer = self.transfer()?;
-        Ok((self.0.volume.open(blob, size).await?, transfer))
+    /// A kept blob's bytes.
+    pub async fn read(&self, blob: Uuid, size: i64) -> Result<tokio::fs::File, StorageError> {
+        self.0.volume.open(blob, size).await
     }
 
     /// Deletes kept blobs nothing refers to any more.

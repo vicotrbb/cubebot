@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT status IN ('cancelled','failed') OR (status='waiting' AND error='budget_exhausted') AS \"cancelled!\"\n            FROM chat_turns\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cancelled!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "febace147be1c505572d866606c1df209bcf179185858ec3fcd991e96e1b51a9"
+}

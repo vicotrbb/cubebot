@@ -153,6 +153,14 @@ impl Registry {
     }
 
     #[tracing::instrument(skip_all, fields(attempt = %id.0))]
+    pub(super) async fn request_drain(&self, id: AttemptId) -> Result<(), Error> {
+        let mut transaction = self.pool.begin().await?;
+        latch_drain(&mut transaction, id).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(skip_all, fields(attempt = %id.0))]
     pub(super) async fn block(
         &self,
         id: AttemptId,

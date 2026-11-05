@@ -643,19 +643,14 @@ def authority(world):
     status, later, _ = hook(world, rid, secret, "{}")
     assert status == 202
     row = settled(admin.api, keeper, later["turn"])
-    assert (row["status"], row["error"]) == ("waiting", "sender_access_revoked"), row
+    assert (row["status"], row["error"]) == ("failed", "sender_access_revoked"), row
     run(sender, keeper, rid, expected=404)
     assert listed(sender, keeper, rid)
-    admin.api(
-        f"/api/conversations/{keeper}/messages/{later['turn']}/cancel",
-        {},
-        expected=204,
-    )
     print(
         "PASS authority: a sender's webhook ran as them; once their conversation.send"
     )
     print(
-        "     was revoked the next delivery waited as sender_access_revoked, and they"
+        "     was revoked the next delivery failed as sender_access_revoked, and they"
     )
     print("     could no longer run it though they still read it")
 

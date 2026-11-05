@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT DISTINCT conversation_id\n        FROM chat_turns\n        WHERE status='waiting' AND error='budget_exhausted'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "conversation_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d82c784dfccbb0db08681b80cd4a19fec4e7bd63ff9e49ae65bf65a785fa0dcd"
+}

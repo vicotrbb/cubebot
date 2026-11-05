@@ -123,17 +123,7 @@ impl Work {
             .detail(serde_json::json!({ "monthly_budget_usd": input.monthly_budget_usd }));
         record(&mut *tx, &event).await?;
         if !exhausted(&mut tx, agent).await? {
-            sqlx::query!(
-                "
-                UPDATE chat_turns t
-                SET status='queued', error=NULL
-                WHERE t.conversation_id=$1 AND t.status='waiting' AND t.error='budget_exhausted'
-                    AND NOT EXISTS(SELECT 1 FROM turn_events c WHERE c.turn_id=t.id AND c.payload->>'kind'='tool_call' AND NOT EXISTS(SELECT 1 FROM turn_events r WHERE r.turn_id=c.turn_id AND r.payload->>'kind'='tool_result' AND r.payload->>'id'=c.payload->>'id' AND r.payload->'outcome'->>'status'<>'uncertain'))
-                ",
-                agent.0,
-            )
-            .execute(&mut *tx)
-            .await?;
+            requeue_paused(&mut tx, agent).await?;
         }
         let usage = read(&mut tx, agent).await?;
         tx.commit().await?;
@@ -301,6 +291,43 @@ pub(super) async fn windows(
 }
 
 /// The agent spent its monthly budget. No budget is never exhausted.
+/// A new month leaves room again: every agent with room gets the work its budget paused back.
+pub(super) async fn resume_paused(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
+    let paused = sqlx::query_scalar!(
+        "
+        SELECT DISTINCT conversation_id
+        FROM chat_turns
+        WHERE status='waiting' AND error='budget_exhausted'
+        ",
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    for agent in paused {
+        if !exhausted(tx, AgentId(agent)).await? {
+            requeue_paused(tx, AgentId(agent)).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn requeue_paused(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "
+        UPDATE chat_turns t
+        SET status='queued', error=NULL
+        WHERE t.conversation_id=$1 AND t.status='waiting' AND t.error='budget_exhausted'
+            AND NOT EXISTS(SELECT 1 FROM turn_events c WHERE c.turn_id=t.id AND c.payload->>'kind'='tool_call' AND NOT EXISTS(SELECT 1 FROM turn_events r WHERE r.turn_id=c.turn_id AND r.payload->>'kind'='tool_result' AND r.payload->>'id'=c.payload->>'id' AND r.payload->'outcome'->>'status'<>'uncertain'))
+        ",
+        agent.0,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
 pub(crate) async fn exhausted(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,

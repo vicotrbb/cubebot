@@ -24,6 +24,7 @@ pub use activity::ActivityItem;
 pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use calls::{CallRecord, Reply, ReplyEvent};
 pub use collaboration::Steering;
+pub(crate) use collaboration::cancel_open;
 pub use coordinator::{coordinate, route};
 pub use cursors::ReadCursor;
 pub use events::{Event, Page};

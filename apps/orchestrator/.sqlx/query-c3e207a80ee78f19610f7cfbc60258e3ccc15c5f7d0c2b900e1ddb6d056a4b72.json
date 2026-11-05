@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE usage_events SET created_at=clock_timestamp() - interval '40 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c3e207a80ee78f19610f7cfbc60258e3ccc15c5f7d0c2b900e1ddb6d056a4b72"
+}

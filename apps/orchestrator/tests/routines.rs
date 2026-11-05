@@ -128,6 +128,55 @@ async fn a_coalescing_routine_keeps_one_pending_turn() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_new_month_requeues_turns_its_budget_paused() {
+    let (pool, admin, agent) = setup().await;
+    let work = Work::new(pool.clone());
+    work.set_budget(
+        &admin,
+        agent,
+        &cubebot_orchestrator::work::SetBudget {
+            monthly_budget_usd: Some(1.0),
+        },
+    )
+    .await
+    .unwrap();
+    let turn = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, status, error)
+        VALUES ($1, $2, gen_random_uuid(), 'Paused', 'waiting', 'budget_exhausted')
+        RETURNING id
+        ",
+        agent.0,
+        admin.id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        "
+        INSERT INTO usage_events (agent_id, turn_id, event_sequence, kind, provider, model, input_tokens, output_tokens, cost_usd)
+        VALUES ($1, $2, 1, 'turn', 'openai', 'model', 1, 1, 2.0)
+        ",
+        agent.0,
+        turn,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let status =
+        || sqlx::query_scalar!("SELECT status FROM chat_turns WHERE id=$1", turn).fetch_one(&pool);
+    routines::tick(&pool).await.unwrap();
+    assert_eq!(status().await.unwrap(), "waiting");
+    sqlx::query!("UPDATE usage_events SET created_at=clock_timestamp() - interval '40 days'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    routines::tick(&pool).await.unwrap();
+    assert_eq!(status().await.unwrap(), "queued");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn an_overdue_schedule_runs_once_and_moves_past_now() {
     let (pool, admin, agent) = setup().await;
     let work = Work::new(pool.clone());

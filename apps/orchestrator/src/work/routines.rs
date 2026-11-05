@@ -433,6 +433,7 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     )
     .execute(&mut *tx)
     .await?;
+    super::usage::resume_paused(&mut tx).await?;
     let now = now(&mut tx).await?;
     // Another orchestrator's tick takes the rows this one holds.
     let due = sqlx::query!(

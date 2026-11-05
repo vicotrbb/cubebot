@@ -52,7 +52,7 @@ export function UsageTab({
           <p className="notice notice--danger small" role="status">
             {data.paused_turns}{' '}
             {data.paused_turns === 1 ? 'turn is' : 'turns are'} paused by this
-            budget. Raising it resumes them.
+            budget. Raising it, or a new month, resumes them.
           </p>
         )}
         {can(agent, 'agent_manage', session) && (
