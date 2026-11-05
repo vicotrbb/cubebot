@@ -7,21 +7,20 @@ import { followWhileVisible } from './stream'
 /**
  * Follows the installation stream (`GET /api/events`) and folds its frames into the
  * query cache, so the sidebar and the live preview update without polling each
- * conversation. A closed stream falls back to refreshing agents, rooms and the
- * session every 5 seconds. The stream pauses while the tab is hidden; reopening it
- * refreshes what changed meanwhile.
+ * conversation. Each time the stream is refused or lost for good it refreshes agents,
+ * rooms and the session, which is how a lost session is noticed. The stream pauses while
+ * the tab is hidden; reopening it refreshes what changed meanwhile.
  */
 export function useInstallationStream(enabled: boolean) {
   const client = useQueryClient()
   useEffect(() => {
     if (!enabled) return
-    let fallback: ReturnType<typeof setInterval> | undefined
     let opened = false
     const refresh = () => {
       for (const queryKey of [keys.agents, keys.rooms, keys.session])
         void client.invalidateQueries({ queryKey })
     }
-    const stop = followWhileVisible('/api/events', (source) => {
+    return followWhileVisible('/api/events', (source) => {
       source.onopen = () => {
         if (opened) refresh()
         opened = true
@@ -53,14 +52,8 @@ export function useInstallationStream(enabled: boolean) {
         void client.invalidateQueries({ queryKey: keys.broadcasts })
       })
       source.onerror = () => {
-        if (source.readyState !== EventSource.CLOSED || fallback) return
-        // A closed stream (a lost session or a restart) falls back to polling.
-        fallback = setInterval(refresh, 5000)
+        if (source.readyState === EventSource.CLOSED) refresh()
       }
     })
-    return () => {
-      stop()
-      clearInterval(fallback)
-    }
   }, [enabled, client])
 }

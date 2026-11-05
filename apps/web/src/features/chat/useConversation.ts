@@ -38,12 +38,7 @@ export function useConversation(id: string) {
             (error) => setReadError(failure(error)),
           )
         }
-        source.onerror = () =>
-          setReadError(
-            source.readyState === EventSource.CLOSED
-              ? 'Live updates stopped. Reload the page to reconnect.'
-              : 'Reconnecting to live updates…',
-          )
+        source.onerror = () => setReadError('Reconnecting to live updates…')
         source.addEventListener('turn', (event) => {
           const turn: Turn = JSON.parse(event.data)
           setTurns((current) => merge(current, [turn]))

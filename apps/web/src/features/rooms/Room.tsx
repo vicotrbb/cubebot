@@ -127,12 +127,7 @@ export function RoomView({
             (error) => setReadError(failure(error)),
           )
         }
-        source.onerror = () =>
-          setReadError(
-            source.readyState === EventSource.CLOSED
-              ? 'Live updates stopped. Reload the page to reconnect.'
-              : 'Reconnecting to live updates…',
-          )
+        source.onerror = () => setReadError('Reconnecting to live updates…')
         source.addEventListener('message', (event) => {
           const message: RoomMessage = JSON.parse(event.data)
           setMessages((current) => merge(current, [message]))
