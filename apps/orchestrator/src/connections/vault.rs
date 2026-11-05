@@ -155,31 +155,33 @@ fn invalid(input: &SaveVaultItem) -> bool {
         || (input.agent.is_some() && input.access.is_some())
 }
 
+/// Binds a sealed record to this installation, its kind and its row, so a record copied to another
+/// row does not open. Reads through the caller's transaction: a second connection while holding one
+/// fails when the pool is exhausted, as many channels claiming turns at once can leave it.
+pub(super) async fn sealing_context<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    kind: &str,
+    id: Uuid,
+) -> Result<Vec<u8>, IdentityError> {
+    let installation = sqlx::query_scalar!(
+        r#"
+        SELECT id AS "id!"
+        FROM installation
+        "#,
+    )
+    .fetch_one(db)
+    .await?;
+    Ok(format!("cubebot:{installation}:{kind}:{id}:key:1").into_bytes())
+}
+
 impl Connections {
-    pub(super) async fn vault_context(&self, item: Uuid) -> Result<Vec<u8>, IdentityError> {
-        self.sealing_context("vault", item).await
-    }
-
-    /// Binds a sealed record to this installation, its kind and its row, so a record copied
-    /// to another row does not open.
-    pub(super) async fn sealing_context(
+    async fn seal<'e>(
         &self,
-        kind: &str,
-        id: Uuid,
+        db: impl sqlx::PgExecutor<'e>,
+        item: Uuid,
+        secret: &str,
     ) -> Result<Vec<u8>, IdentityError> {
-        let installation = sqlx::query_scalar!(
-            r#"
-            SELECT id AS "id!"
-            FROM installation
-            "#,
-        )
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(format!("cubebot:{installation}:{kind}:{id}:key:1").into_bytes())
-    }
-
-    async fn seal(&self, item: Uuid, secret: &str) -> Result<Vec<u8>, IdentityError> {
-        let context = self.vault_context(item).await?;
+        let context = sealing_context(db, "vault", item).await?;
         self.credentials
             .encrypt(secret.as_bytes(), &context)
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))
@@ -274,7 +276,7 @@ impl Connections {
         let mut tx = self.pool.begin().await?;
         validate_access(&mut tx, &access).await?;
         let id = Uuid::new_v4();
-        let ciphertext = self.seal(id, secret).await?;
+        let ciphertext = self.seal(&mut *tx, id, secret).await?;
         let row = sqlx::query_as!(
             Row,
             r#"
@@ -314,7 +316,7 @@ impl Connections {
             validate_access(&mut tx, access).await?;
         }
         let ciphertext = match &input.secret {
-            Some(secret) => Some(self.seal(item, secret).await?),
+            Some(secret) => Some(self.seal(&mut *tx, item, secret).await?),
             None => None,
         };
         let row = sqlx::query_as!(
@@ -400,7 +402,7 @@ impl Connections {
         if field == VaultField::Username {
             return Ok(row.username);
         }
-        let context = self.vault_context(item).await?;
+        let context = sealing_context(&self.pool, "vault", item).await?;
         let secret = self
             .credentials
             .decrypt(&row.ciphertext, &context)
@@ -446,7 +448,7 @@ impl Connections {
         .fetch_optional(&mut *tx)
         .await?;
         let id = existing.unwrap_or_else(Uuid::new_v4);
-        let ciphertext = self.seal(id, &input.secret).await?;
+        let ciphertext = self.seal(&mut *tx, id, &input.secret).await?;
         sqlx::query!(
             "
             INSERT INTO vault_items (id, agent_id, kind, name, site, username, ciphertext)

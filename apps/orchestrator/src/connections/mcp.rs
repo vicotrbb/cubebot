@@ -3,7 +3,7 @@
 //! server's environment and an HTTP server's headers are sealed as one Credentials record bound
 //! to the server's id: people see their names only, and the values leave this module only in
 //! the turn delivered to an agent with access. Callers authorize people.
-use super::{Access, Connections, ProviderAccess, validate_access};
+use super::{Access, Connections, ProviderAccess, validate_access, vault::sealing_context};
 use crate::{agents::AgentId, identity::IdentityError};
 use cubebot_protocol::runtime::McpServer;
 use serde::{Deserialize, Serialize};
@@ -186,24 +186,26 @@ fn secrets_problem(input: &SaveMcpServer) -> Option<&'static str> {
 }
 
 impl Connections {
-    async fn seal_secrets(
+    async fn seal_secrets<'e>(
         &self,
+        db: impl sqlx::PgExecutor<'e>,
         server: Uuid,
         secrets: &BTreeMap<String, String>,
     ) -> Result<Vec<u8>, IdentityError> {
-        let context = self.sealing_context("mcp", server).await?;
+        let context = sealing_context(db, "mcp", server).await?;
         let plain = serde_json::to_vec(secrets).map_err(|_| IdentityError::InvalidInput)?;
         self.credentials
             .encrypt(&plain, &context)
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))
     }
 
-    async fn open_secrets(
+    async fn open_secrets<'e>(
         &self,
+        db: impl sqlx::PgExecutor<'e>,
         server: Uuid,
         sealed: &[u8],
     ) -> Result<BTreeMap<String, String>, IdentityError> {
-        let context = self.sealing_context("mcp", server).await?;
+        let context = sealing_context(db, "mcp", server).await?;
         let plain = self
             .credentials
             .decrypt(sealed, &context)
@@ -244,7 +246,7 @@ impl Connections {
         let mut tx = self.pool.begin().await?;
         validate_access(&mut tx, &access).await?;
         let id = Uuid::new_v4();
-        let ciphertext = self.seal_secrets(id, secrets).await?;
+        let ciphertext = self.seal_secrets(&mut *tx, id, secrets).await?;
         let names: Vec<&String> = secrets.keys().collect();
         let row = sqlx::query_as!(
             Row,
@@ -300,7 +302,7 @@ impl Connections {
         }
         let (ciphertext, names) = match &input.secrets {
             Some(secrets) => (
-                Some(self.seal_secrets(server, secrets).await?),
+                Some(self.seal_secrets(&mut *tx, server, secrets).await?),
                 Some(secrets.keys().collect::<Vec<_>>()),
             ),
             None => (None, None),
@@ -437,7 +439,9 @@ impl Connections {
         .await?;
         let mut servers = Vec::with_capacity(rows.len());
         for row in rows {
-            let secrets = self.open_secrets(row.id, &row.ciphertext).await?;
+            let secrets = self
+                .open_secrets(&mut **tx, row.id, &row.ciphertext)
+                .await?;
             servers.push(match (row.command, row.url) {
                 (Some(command), _) => McpServer::Stdio {
                     name: row.name,
