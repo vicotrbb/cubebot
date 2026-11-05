@@ -440,9 +440,7 @@ async fn file_content(
         Err(error) => Err(error),
     };
     Ok(match opened {
-        Ok((entry, bytes, transfer)) => {
-            super::files::download(entry, bytes, transfer, &headers).await
-        }
+        Ok((entry, bytes)) => super::files::download(entry, bytes, &headers).await,
         Err(error) => super::files::refused(error),
     })
 }

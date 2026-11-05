@@ -76,10 +76,10 @@ async fn attachment(
 ) -> Result<Response, super::files::Failure> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     let owner = api.work.attachment_owner(&actor, turn, file).await?;
-    let (entry, bytes, transfer) = super::files::configured(storage)?
+    let (entry, bytes) = super::files::configured(storage)?
         .open(Principal::Agent(owner), file)
         .await?;
-    Ok(super::files::download(entry, bytes, transfer, &headers).await)
+    Ok(super::files::download(entry, bytes, &headers).await)
 }
 
 async fn conversation(
