@@ -1,5 +1,3 @@
-//! Remote servers over Streamable HTTP: each message is a POST answered by JSON or by an SSE
-//! stream carrying the response.
 use super::{Failure, RESPONSE_BYTES, answer, result};
 use reqwest::{
     Client, Response, Url,
@@ -73,8 +71,7 @@ impl Http {
         result(serde_json::from_slice(&body).map_err(|_| Failure::Lost)?)
     }
 
-    /// Reads SSE events as they arrive, answering server requests such as ping, until the
-    /// response to `id`. A stream that ends first lost the response.
+    /// A stream that ends before the response to `id` lost the response.
     async fn stream(&self, mut response: Response, id: u64) -> Result<Value, Failure> {
         let mut buffer = Vec::new();
         let mut scanned = 0;
@@ -148,7 +145,6 @@ impl Http {
     }
 }
 
-/// A JSON response body, bounded.
 async fn body(mut response: Response) -> Result<Vec<u8>, Failure> {
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await.map_err(|_| Failure::Lost)? {
@@ -160,7 +156,6 @@ async fn body(mut response: Response) -> Result<Vec<u8>, Failure> {
     Ok(bytes)
 }
 
-/// The end of the first complete event, searching from where the last search stopped.
 fn boundary(buffer: &[u8], from: usize) -> Option<usize> {
     buffer[from..]
         .windows(2)
@@ -168,7 +163,6 @@ fn boundary(buffer: &[u8], from: usize) -> Option<usize> {
         .map(|position| from + position)
 }
 
-/// The JSON message carried in one event's `data` lines.
 fn event(bytes: &[u8]) -> Option<Value> {
     let text = String::from_utf8_lossy(bytes);
     let data: Vec<&str> = text
@@ -191,7 +185,6 @@ mod tests {
     static SESSIONS: AtomicUsize = AtomicUsize::new(0);
     static PONGED: AtomicBool = AtomicBool::new(false);
 
-    /// Expires the first session on its first call, pings mid-stream and never closes a stream.
     async fn server(headers: HeaderMap, Json(message): Json<Value>) -> axum::response::Response {
         let id = message["id"].clone();
         let session = headers

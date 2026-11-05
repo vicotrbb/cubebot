@@ -33,7 +33,6 @@ impl Block {
         })
     }
 
-    /// Serves one request and returns how many bytes it wrote into the chain.
     fn serve(&self, chain: &Chain, memory: &GuestMemory) -> io::Result<u32> {
         let mut header = [0u8; HEADER as usize];
         let writable = chain.writable_len();
@@ -155,7 +154,6 @@ mod tests {
         status[0]
     }
 
-    /// A four-sector disk whose name is unlinked at once.
     fn disk(name: &str) -> File {
         let path = std::env::temp_dir().join(format!("cubebot-{name}-{}", std::process::id()));
         let file = File::options()

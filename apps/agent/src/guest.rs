@@ -1,9 +1,3 @@
-//! `cubebot-agent guest`: init of the `kvm` sandbox's guest (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). It mounts the workspace
-//! disk, receives the agent's environment over the control channel ([`cubebot_protocol::guest`]),
-//! hands it to [`crate::init`], which runs the agent and, with computer use on, the desktop
-//! (docs/adr/sandbox.md#desktop-as-a-vmm-device), rewrites received files the host refreshes, and reports liveness and then the agent's
-//! exit status to the host. When the agent exits it syncs the disks and reboots, which ends the
-//! VM; the host ending its side of the channel stops the agent first.
 use crate::init::{PRIVATE, STATE};
 use cubebot_protocol::{
     Liveness, LivenessStatus,
@@ -95,9 +89,8 @@ fn mount_filesystems() -> io::Result<()> {
             MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC,
             Some("mode=0620,ptmxmode=0666"),
         ),
-        // The workspace disk is the second virtio disk, after the read-only root. Without delayed
-        // allocation each journal commit writes file data first, so the commit that journals a
-        // tool result also persists that tool's effects; the guest's page cache dies with the VM.
+        // The second virtio disk. Without delayed allocation each journal commit writes file data first, so the commit that
+        // journals a tool result also persists that tool's effects; the guest's page cache dies with the VM.
         ("/dev/vdb", STATE, "ext4", private, Some("nodelalloc")),
         // The kernel publishes the nameservers from its ip= parameter in resolv.conf syntax.
         (
@@ -115,10 +108,7 @@ fn mount_filesystems() -> io::Result<()> {
     Ok(())
 }
 
-/// Sends every packet through the kernel `ip=` gateway, as pod CNIs route: kind's ptp routes even
-/// its own subnet that way and answers no ARP for other pods, and a /32 address with Calico's
-/// link-local gateway gets no default route from `ip=`, whose netmask the kernel then guesses.
-/// So each on-link route the kernel added becomes the same prefix via the gateway, over netlink.
+/// Pod CNIs route every packet through the gateway: kind's ptp answers no ARP for other pods, and a /32 with Calico's link-local gateway gets no default route from `ip=`.
 fn default_route(cmdline: &str) -> io::Result<()> {
     let Some((gateway, interface)) = gateway(cmdline) else {
         return Ok(());
@@ -162,7 +152,6 @@ fn default_route(cmdline: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// The gateway and interface of the kernel `ip=` parameter.
 fn gateway(cmdline: &str) -> Option<(Ipv4Addr, &str)> {
     let parameter = cmdline
         .split_whitespace()
@@ -174,7 +163,6 @@ fn gateway(cmdline: &str) -> Option<(Ipv4Addr, &str)> {
     Some((gateway.parse().ok()?, interface))
 }
 
-/// The prefixes `/proc/net/route` lists as on-link (no gateway) through `interface`.
 fn on_link(table: &str, interface: &str) -> Vec<(Ipv4Addr, u8)> {
     table
         .lines()
@@ -242,7 +230,6 @@ fn control_channel() -> io::Result<File> {
     Ok(File::from(socket))
 }
 
-/// Reads one message, leaving any that follow it in `channel`.
 fn receive(channel: &mut BufReader<File>) -> io::Result<Vec<(String, String)>> {
     let mut message = Vec::new();
     while !guest::complete(&message) {
@@ -256,7 +243,6 @@ fn receive(channel: &mut BufReader<File>) -> io::Result<Vec<(String, String)>> {
     guest::decode(&message).ok_or_else(|| io::Error::other("invalid guest environment"))
 }
 
-/// The host's settings with each received file written privately.
 fn prepare(received: Vec<(String, String)>) -> io::Result<Vec<(String, String)>> {
     DirBuilder::new().mode(0o700).create(PRIVATE)?;
     let mut environment = Vec::new();
@@ -318,7 +304,6 @@ fn report(channel: Arc<Mutex<File>>) {
     });
 }
 
-/// Rewrites the files the host refreshes; the end of the host's side means stop.
 fn follow(mut channel: BufReader<File>, agent: Pid) {
     std::thread::spawn(move || {
         if let Err(error) = refresh(&mut channel) {

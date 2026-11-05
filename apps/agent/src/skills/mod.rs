@@ -1,7 +1,3 @@
-//! Installed skills (docs/adr/memory.md#reusable-skills-created-by-humans-agents-and-dreaming). The system prompt names each installed skill; `load_skill` fetches
-//! the installed revision on demand, writes its files into the workspace as the tool user and
-//! returns its instructions, so its scripts run through the ordinary tools under the same limits
-//! as any other command. The library and installations belong to the orchestrator.
 use crate::{
     control::MemoryClient,
     tools::{Registry, Running},
@@ -14,7 +10,6 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-/// Workspace directory packages are written to, one directory per skill revision.
 const SKILLS: &str = ".cubebot-skills";
 
 const TOOLS: [&str; 4] = [
@@ -83,8 +78,6 @@ impl Skills {
         Self { client, turn }
     }
 
-    /// `None` when `name` is neither a skill tool nor a shared files tool, which also moves
-    /// orchestrator content through the workspace (see [`crate::files`]).
     pub fn call<'a>(
         &'a self,
         name: &str,
@@ -112,7 +105,6 @@ impl Skills {
         Some(load.map(|Load { name }| -> Running<'a> { Box::pin(self.load(name, tools)) }))
     }
 
-    /// The orchestrator validates each call and answers with the text the model reads.
     async fn manage(&self, tool: String, id: Uuid, input: Value) -> Outcome {
         let call = RoutineCall {
             call: id,
@@ -156,7 +148,6 @@ impl Skills {
     }
 }
 
-/// The package's instructions, after writing all of its files under one revision's directory.
 async fn materialize(package: &SkillPackage, tools: Option<&Registry>) -> String {
     let entry = package.files.get("SKILL.md").cloned().unwrap_or_default();
     let others: Vec<&str> = package

@@ -1,5 +1,3 @@
-//! The agent application. The agent runs its own tools inside its sandbox (docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary and docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox).
-
 pub mod collaboration;
 #[cfg(target_os = "linux")]
 pub mod container;
@@ -21,7 +19,6 @@ pub mod journal;
 
 pub type Source = Box<dyn std::error::Error + Send + Sync>;
 
-/// A fixed message that keeps the error that caused it.
 #[derive(Debug)]
 pub struct Caused {
     message: &'static str,

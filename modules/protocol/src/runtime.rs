@@ -1,4 +1,3 @@
-//! Machine identity and the runtime channel. The agent credential lasts for its sandbox's lifetime.
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -26,12 +25,10 @@ pub struct RuntimeActor {
     pub version: i64,
 }
 
-/// Orchestrator to agent over `/api/runtime/channel`.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Delivery {
     Turn(Box<Turn>),
-    /// The event is durable in the ledger.
     Ack {
         turn: Uuid,
         sequence: u64,
@@ -40,8 +37,7 @@ pub enum Delivery {
     Cancel {
         turn: Uuid,
     },
-    /// A person's correction for the active turn, incorporated before its next model request
-    /// and reported as `TurnEvent::Steered`. Redelivered after a reconnect until reported.
+    /// Redelivered after a reconnect until reported as `TurnEvent::Steered`.
     Steer {
         turn: Uuid,
         id: Uuid,
@@ -50,13 +46,11 @@ pub enum Delivery {
     Drain {
         request_id: Uuid,
     },
-    /// The credential no longer authorizes this sandbox; stop work.
     Revoked,
     /// No work is waiting. An agent still idle and reconciled after the delay may ask to dream.
     Idle {
         dream_after_seconds: u64,
     },
-    /// The agent's wallpaper was set or reset; fetch `/api/runtime/wallpaper` and redraw it.
     WallpaperChanged,
 }
 
@@ -107,49 +101,32 @@ pub struct Turn {
     pub provider: ProviderKind,
     pub model: String,
     pub api_key: String,
-    /// Configured model window in tokens; providers that report their limits may omit it.
     pub context_window: Option<u64>,
-    /// The latest compaction summary, covering the conversation before `history`.
     pub summary: Option<String>,
-    /// Every completed exchange since the summary, oldest first. Context assembly is the
-    /// agent's job.
     pub history: Vec<Exchange>,
-    /// Tool events from earlier runs of this turn.
     pub prior: Vec<TurnEvent>,
-    /// The turn belongs to a task's room (`task` below means a delegated lane): the agent talks
-    /// through the task's tools and its reply stays in that room.
+    /// The turn belongs to a task's room (`task` below means a delegated lane); its reply stays in that room.
     #[serde(default)]
     pub in_task: bool,
-    /// Work this turn delegated, oldest first: settled children with their outcome, and open
-    /// ones with their status only.
     #[serde(default)]
     pub delegations: Vec<Delegation>,
-    /// A delegated task in a task lane (docs/adr/agents.md#agent-execution-lanes): its own context, beside the main lane, and
-    /// no control of the shared desktop.
     #[serde(default)]
     pub task: bool,
-    /// A routine's shell command (docs/adr/agents.md#routines), run once as the tool user before the model.
     #[serde(default)]
     pub command: Option<String>,
-    /// The routine has no prompt: the turn answers with the command's result, without a model.
     #[serde(default)]
     pub command_only: bool,
-    /// The MCP servers this agent may use now, with their credentials; the agent connects
-    /// them when they differ from what it already has. Never log them.
+    /// Credentials included; never log them.
     #[serde(default)]
     pub mcp_servers: Vec<McpServer>,
-    /// The agent may broadcast to every agent from this turn: its broadcast capability is on
-    /// and the turn is not itself a broadcast, so broadcasts never answer each other.
+    /// False for a turn that is itself a broadcast, so broadcasts never answer each other.
     #[serde(default)]
     pub broadcast: bool,
-    /// The agent's knowledge base capability is on, so it gets those tools.
     #[serde(default)]
     pub knowledge_base: bool,
 }
 
-/// One MCP server (docs/adr/agents.md#local-and-remote-mcp-server-support) as the agent connects it: a local
-/// program run as the tool user, or a remote Streamable HTTP endpoint. Names are unique letters,
-/// digits or hyphens, and prefix the server's tools as `<name>__<tool>`.
+/// Names are unique letters, digits or hyphens, and prefix the server's tools as `<name>__<tool>`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "transport", rename_all = "snake_case", deny_unknown_fields)]
 pub enum McpServer {
@@ -177,8 +154,7 @@ impl McpServer {
     }
 }
 
-/// A child's settled outcome. `evidence` holds its last tool events, so a failed child still
-/// shows what it did; it is untrusted program output.
+/// `evidence` is untrusted program output.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Delegation {
@@ -191,9 +167,7 @@ pub struct Delegation {
     pub evidence: Vec<TurnEvent>,
 }
 
-/// `POST /api/runtime/turns/{turn}/routines`: one routine tool call (docs/adr/agents.md#routines), which the
-/// orchestrator validates and answers with the text the model reads. `call` is the tool call's
-/// id, so a resent create or run makes nothing new.
+/// `POST /api/runtime/turns/{turn}/routines`. `call` is the tool call's id, so a resent create or run makes nothing new.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RoutineCall {
@@ -207,17 +181,14 @@ pub struct RoutineAnswer {
     pub output: String,
 }
 
-/// `POST /api/runtime/turns/{turn}/attachments`: sends one of the agent's own shared files with
-/// the turn's reply. A refusal is 409 with the reason the model reads.
+/// `POST /api/runtime/turns/{turn}/attachments`. A refusal is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttachFile {
     pub file: Uuid,
 }
 
-/// `POST /api/runtime/turns/{turn}/messages`: work for another agent sharing a room. `call`
-/// is the tool call's id, so a resend creates nothing new. With `wait` the sending turn yields
-/// when it ends and resumes once every awaited child has settled.
+/// `POST /api/runtime/turns/{turn}/messages`. `call` is the tool call's id, so a resend creates nothing new.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Collaborate {
@@ -225,13 +196,10 @@ pub struct Collaborate {
     pub agent: String,
     pub message: String,
     pub wait: bool,
-    /// Without `wait`: relay the recipient's response back as a new turn once it completes.
     #[serde(default)]
     pub expects_reply: bool,
 }
-/// `POST /api/runtime/turns/{turn}/logins`: asks a person to log in on `site` through the
-/// desktop (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover). `call` is the tool call's id, so a resend records nothing new. A refusal
-/// is 409 with the reason the model reads.
+/// `POST /api/runtime/turns/{turn}/logins`. `call` is the tool call's id, so a resend records nothing new; a refusal is 409.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestLogin {
@@ -239,9 +207,7 @@ pub struct RequestLogin {
     pub site: String,
     pub reason: String,
 }
-/// A message from the agent's running turn to every other agent, at `POST
-/// /api/runtime/turns/{turn}/broadcasts`. `call` is the tool call's id, so a resend sends
-/// nothing new; a refusal is 409 with the reason the model reads.
+/// `POST /api/runtime/turns/{turn}/broadcasts`. `call` is the tool call's id, so a resend sends nothing new; a refusal is 409.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Broadcast {
@@ -252,7 +218,6 @@ pub struct Broadcast {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Broadcasted {
-    /// The agents it was delivered to.
     pub agents: u32,
 }
 
@@ -287,16 +252,14 @@ pub enum VaultField {
     /// A login's password or a secret's value.
     Secret,
 }
-/// `POST /api/runtime/vault/fills`: types the field into the agent's desktop at its focus. A
-/// refusal is 409 with the reason the model reads.
+/// `POST /api/runtime/vault/fills`. A refusal is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VaultFill {
     pub item: Uuid,
     pub field: VaultField,
 }
-/// `POST /api/runtime/vault`: saves an item in the agent's own scope, replacing
-/// its secret when one by that name exists. A refusal is 409 with the reason the model reads.
+/// `POST /api/runtime/vault`. A refusal is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VaultPut {
@@ -378,11 +341,9 @@ pub struct Exchange {
     pub response: String,
 }
 
-/// Agent to orchestrator over `/api/runtime/channel`.
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Report {
-    /// Ready for the next turn.
     Pull,
     Event {
         turn: Uuid,
@@ -458,24 +419,18 @@ pub enum MemoryChange {
     },
 }
 
-/// An admitted dream run, from `POST /api/runtime/dreams/{run}`. Changes go one at a time to
-/// `POST /api/runtime/dreams/{run}/changes` as `MemoryChange`s; `PUT /api/runtime/dreams/{run}`
-/// ends it with a `DreamEnd`. Provider material is current at admission; never log it.
+/// `POST /api/runtime/dreams/{run}`; changes go to `.../changes`, `PUT` ends it. Provider material is current at admission; never log it.
 #[derive(Serialize, Deserialize)]
 pub struct Dream {
     pub provider: ProviderKind,
     pub model: String,
     pub api_key: String,
-    /// The agent's most recently changed memories.
     pub memories: Vec<Memory>,
-    /// The agent's latest completed exchanges, oldest first, each side cut to 2000 characters.
     #[serde(default)]
     pub turns: Vec<Exchange>,
-    /// The agent's installed skills at their installed revisions. A proposed skill commits to
-    /// `POST /api/runtime/dreams/{run}/skills` as a `SkillChange`.
+    /// A proposed skill commits to `POST /api/runtime/dreams/{run}/skills` as a `SkillChange`.
     #[serde(default)]
     pub skills: Vec<SkillPackage>,
-    /// Every skill in the shared library, so a dream improves one instead of duplicating it.
     #[serde(default)]
     pub library: Vec<LibrarySkill>,
 }
@@ -490,8 +445,7 @@ pub struct LibrarySkill {
 /// Largest skill package: the sum of its path and content bytes.
 pub const SKILL_BYTES: usize = 64 * 1024;
 
-/// One revision of a skill package: relative path to text content, with `SKILL.md` at its root.
-/// `GET /api/runtime/skills/{name}` returns the agent's installed revision.
+/// Relative path to text content, with `SKILL.md` at its root.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SkillPackage {
@@ -500,8 +454,7 @@ pub struct SkillPackage {
     pub files: std::collections::BTreeMap<String, String>,
 }
 
-/// A dream's proposed skill: new without `expected_revision`, otherwise a revision of the skill
-/// named in its `SKILL.md`. A stale revision or a taken name is dropped.
+/// New without `expected_revision`; a stale revision or a taken name is dropped.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SkillChange {
@@ -513,7 +466,6 @@ pub struct SkillChange {
 #[serde(rename_all = "snake_case")]
 pub enum DreamOutcome {
     Completed,
-    /// Stopped for a channel message; changes committed before it stay.
     Yielded,
     Failed,
 }
@@ -523,7 +475,6 @@ pub enum DreamOutcome {
 pub struct DreamEnd {
     pub outcome: DreamOutcome,
     pub report: String,
-    /// What the run's model call used, when the provider reported it.
     #[serde(default)]
     pub usage: Option<TokenUsage>,
 }
@@ -543,10 +494,8 @@ pub struct TokenUsage {
 /// Largest dream report in bytes; escaped, it still fits a runtime request body.
 pub const REPORT_BYTES: usize = 8 * 1024;
 
-/// Largest memory content in bytes.
 pub const MEMORY_BYTES: usize = 4096;
 
-/// A memory search result over `GET /api/runtime/memories?query=`.
 #[derive(Serialize, Deserialize)]
 pub struct Memory {
     pub id: Uuid,

@@ -1,6 +1,3 @@
-//! What `cubebot-agent guest` and `cubebot-agent container` share once the agent's environment
-//! is known: its storage on the workspace volume, the desktop and its arbiter when computer use
-//! is on (docs/adr/sandbox.md#desktop-as-a-vmm-device), the agent as a child, and reaping as PID 1 until the agent exits.
 use crate::desktop::Host;
 use nix::{
     errno::Errno,
@@ -19,21 +16,15 @@ use std::{
     time::Duration,
 };
 
-/// The workspace volume, laid out the same in both runtimes.
 pub(crate) const STATE: &str = "/var/lib/cubebot";
 const JOURNAL: &str = "/var/lib/cubebot/runtime";
 const WORKSPACE: &str = "/var/lib/cubebot/workspace";
-/// Files only the agent reads.
 pub(crate) const PRIVATE: &str = "/run/cubebot";
-/// The outer display's cookie (docs/adr/sandbox.md#desktop-as-a-vmm-device), for the arbiter and Xephyr.
 const OUTER_AUTHORITY: &str = "/run/cubebot/display";
 const PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-/// Written by openbox's startup command once it manages windows; a window mapped before then
-/// can be dropped, so the desktop is not ready until it exists.
+/// A window mapped before openbox manages windows can be dropped, so the desktop is not ready until this exists.
 const OPENBOX_STARTED: &str = "/tmp/.cubebot-openbox-started";
 
-/// Prepares storage, starts the desktop and then the agent with `environment` and init's own
-/// paths, which win over any duplicate; returns the agent's pid.
 pub(crate) fn start(mut environment: Vec<(String, String)>, host: Host) -> io::Result<Pid> {
     // The agent refuses a malformed or root tool user itself, and then runs no tools.
     let user = setting(&environment, "CUBEBOT_TOOL_USER").and_then(crate::tools::tool_user);
@@ -66,7 +57,6 @@ fn setting<'a>(environment: &'a [(String, String)], wanted: &str) -> Option<&'a 
         .map(|(_, value)| value.as_str())
 }
 
-/// The agent's private journal, and a workspace the tool user can write.
 fn storage(tool_user: Option<(u32, u32)>) -> io::Result<()> {
     DirBuilder::new().recursive(true).create(JOURNAL)?;
     std::fs::set_permissions(JOURNAL, std::fs::Permissions::from_mode(0o700))?;
@@ -80,9 +70,7 @@ fn storage(tool_user: Option<(u32, u32)>) -> io::Result<()> {
     Ok(())
 }
 
-/// The outer display is up and closed to every other user before this returns, so before the
-/// agent runs any tool; the rest starts on its own thread. A desktop that fails to start leaves
-/// the agent running without a screen.
+/// The outer display is closed to every other user before this returns, so before the agent runs any tool.
 fn desktop(uid: u32, gid: u32, host: Host) {
     match outer_display() {
         Ok(cookie) => drop(std::thread::spawn(move || {
@@ -94,8 +82,7 @@ fn desktop(uid: u32, gid: u32, host: Host) {
     }
 }
 
-/// Xvfb on :0 as root, reachable only through its path socket, which becomes root's alone once
-/// it exists, and only with a cookie only root can read; returns the cookie.
+/// Reachable only through its path socket, root's alone once it exists, and only with a cookie only root can read.
 fn outer_display() -> io::Result<[u8; 16]> {
     let mut cookie = [0; 16];
     File::open("/dev/urandom")?.read_exact(&mut cookie)?;
@@ -124,7 +111,6 @@ fn outer_display() -> io::Result<[u8; 16]> {
     Ok(cookie)
 }
 
-/// An Xauthority file with one MIT-MAGIC-COOKIE-1 entry for `display` at any address.
 fn xauthority(display: &str, cookie: &[u8]) -> Vec<u8> {
     let mut file = 0xffffu16.to_be_bytes().to_vec();
     for field in [&b""[..], display.as_bytes(), b"MIT-MAGIC-COOKIE-1", cookie] {
@@ -134,7 +120,6 @@ fn xauthority(display: &str, cookie: &[u8]) -> Vec<u8> {
     file
 }
 
-/// Starts openbox and returns once it manages windows.
 fn openbox(command: &mut Command) -> io::Result<()> {
     // A container's writable root keeps /tmp across restarts.
     match std::fs::remove_file(OPENBOX_STARTED) {
@@ -147,7 +132,6 @@ fn openbox(command: &mut Command) -> io::Result<()> {
     appears(Path::new(OPENBOX_STARTED), "openbox")
 }
 
-/// Waits for `path`, a server's socket or openbox's startup marker.
 fn appears(path: &Path, server: &str) -> io::Result<()> {
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while !path.exists() {
@@ -159,10 +143,7 @@ fn appears(path: &Path, server: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// Xephyr on :1 as root, a window filling :0 at (0, 0) and without XTEST, as the tool user's
-/// display; then openbox, the wallpaper and the taskbar on it as the tool user, and the arbiter
-/// on :0. The
-/// agent's browser module starts Chromium as a user of its own.
+/// Xephyr on :1, without XTEST, is the tool user's display; the arbiter stays on :0.
 fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()> {
     Command::new("/usr/bin/Xephyr")
         .args([
@@ -195,8 +176,7 @@ fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()
         command
     };
     openbox(&mut client("/usr/bin/openbox"))?;
-    // The default stays when the orchestrator is unreachable; the agent draws its own after it.
-    // Once it is drawn Xephyr is serving, so its window is on :0 for the arbiter to focus.
+    // The default stays when the orchestrator is unreachable; once drawn, Xephyr is serving, so its window is on :0 for the arbiter.
     let drawn = client("/usr/bin/xwallpaper")
         .args(["--zoom", crate::tools::WALLPAPER])
         .status();
@@ -205,8 +185,6 @@ fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()
         Err(error) if error.raw_os_error() != Some(Errno::ECHILD as i32) => return Err(error),
         _ => (),
     }
-    // The taskbar makes the desktop usable by a person as well as the agent; programs it
-    // launches run as the tool user, like the agent's own commands.
     client("/usr/bin/tint2").spawn()?;
     let input = crate::desktop::x11::connect(0, cookie)?;
     input.focus()?;
@@ -216,8 +194,6 @@ fn start_desktop(uid: u32, gid: u32, cookie: &[u8], host: Host) -> io::Result<()
     Ok(())
 }
 
-/// As PID 1, waits for every child, orphaned tool processes included, until the agent exits, and
-/// returns its exit status as a shell reports it.
 pub(crate) fn reap(agent: Pid) -> io::Result<u8> {
     loop {
         match waitpid(None, None) {

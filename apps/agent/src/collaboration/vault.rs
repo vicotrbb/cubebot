@@ -1,7 +1,4 @@
-//! Vault tools (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills). `vault_list` shows the items this agent may fill, without secrets;
-//! `vault_fill` has the desktop's arbiter type one field at the keyboard focus, so the secret
-//! never reaches the model; `vault_put` saves a secret the agent made, and its `secret` argument
-//! is redacted before the call reaches the journal or the turn ledger.
+//! `vault_fill` types at the arbiter so the secret never reaches the model; `vault_put`'s `secret` is redacted before the journal or ledger.
 use super::Collaboration;
 use crate::tools::Running;
 use cubebot_protocol::{
@@ -19,7 +16,6 @@ struct Fill {
     field: cubebot_protocol::runtime::VaultField,
 }
 
-/// `desktop` offers `vault_fill`, which only a lane that controls the desktop can use.
 pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     let tool = cubebot_providers::Tool::strict;
     let text = |description: &str| json!({"type":"string","description":description});
@@ -53,8 +49,7 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     tools
 }
 
-/// A call's arguments as the journal and ledger keep them: unparsed `vault_put` text is dropped
-/// whole, since it may hold the secret.
+/// Unparsed `vault_put` text is dropped whole, since it may hold the secret.
 pub fn redacted(name: &str, mut input: Value) -> Value {
     if name != "vault_put" {
         return input;
@@ -69,7 +64,6 @@ pub fn redacted(name: &str, mut input: Value) -> Value {
 }
 
 impl Collaboration {
-    /// `None` when `name` is not a vault tool.
     pub(super) fn vault(
         &self,
         name: &str,

@@ -1,27 +1,15 @@
-//! Working-context assembly and rolling compaction (docs/adr/memory.md#rolling-context-compaction). The context is the system
-//! prompt, tool definitions, the latest summary and every exchange after it. Once the
-//! provider reports 80% of the model window used, the context is summarized at the next safe
-//! point and replaced by that summary plus the current request.
 use cubebot_protocol::runtime::Turn;
 use cubebot_providers::{Message, Reply, Request, Tool, Usage};
 
-/// How every agent works, ahead of its own instructions: it owns each request and keeps going
-/// until it is done or has genuinely run out of ways to do it.
 const DRIVE: &str = "You are an autonomous agent with your own persistent computer. Own every request end to end and see it through: do the work yourself instead of describing how it could be done, and do not ask the person for anything you can find out or do on your own. Be persistent and resourceful. When something fails, read the error, work out why, and try another way: a different tool, command, source or website, or install what you are missing. Keep going until the request is done. Say you could not do something only after several genuinely different attempts, and then say exactly what you tried and what stopped you. Verify results before reporting them, and never present guesses as facts.";
-/// The terminal's environment, offered when the agent has one.
 const TERMINAL: &str = "Your terminal is a Linux shell in your workspace, which is your home directory and keeps everything across restarts. Python 3 with pip and venv, Node.js with npm, git, curl, wget, build tools, jq, ripgrep and sqlite3 are installed. You are not root and there is no sudo: install whatever else you need yourself with pip install, npm install -g, pipx, or by downloading a program into ~/.local/bin, which is on your PATH.";
-/// Keeping house, offered when the agent has a terminal.
 const WORKSPACE: &str = "Your workspace and desktop are yours to look after; nobody tidies them for you, and you will live with what you leave. Keep them organized as you work. Give each project its own folder under ~/projects with a short README saying what it is and how to run it, and keep its dependencies inside it, such as a Python virtual environment in .venv. Put throwaway work in ~/scratch, and delete it once it is no longer needed. Give files clear names, keep what you make for people apart from caches and build output, and look in your workspace before you recreate something. When you finish, stop the background processes you started unless they are meant to keep running, close the windows and browser tabs you no longer need, and remove temporary files.";
-/// The desktop, offered when the agent has the computer or browser tools.
 const DESKTOP: &str = "You also have a graphical desktop that the people you work with can watch live. A taskbar along its bottom edge opens Chromium, a terminal, a file manager and a text editor, and lists open windows; graphical programs you start from your terminal appear on it too. Use your browser tools to open and work with websites, and the computer tool for anything else on the screen. Take a screenshot to see the screen before acting on it.";
-/// The knowledge base, offered while the agent's capability is on.
 const KNOWLEDGE_BASE: &str = "This installation has a knowledge base: one wiki that every person and agent here reads and writes. Search it before answering questions about how things work here, and write down what others will need later: decisions, how-tos and findings. Your memory is yours alone; the knowledge base is everyone's.";
 
-/// Skills, always offered. Without this models treat "create a skill" as a request for a document.
+/// Without this models treat "create a skill" as a request for a document.
 const SKILLS: &str = "Skills are your reusable procedures, kept in a library this installation shares. When the skills listed in your instructions cover the work, load the relevant one with load_skill before you start, and follow it. A skill exists only once it is published with skill_create: when someone asks you to create, save or write a skill, call it, and do not produce a file, a zip or a knowledge base page instead. Check skill_list first so you improve an existing skill with skill_update rather than duplicating it. Beyond what people ask for, publish a skill only after a multi-step procedure worked and will clearly recur; most work needs none. Never put credentials or personal details in one.";
-/// Attachments, offered with a workspace.
 const ATTACHMENTS: &str = "When an image, audio clip, video or document would serve the person better than words, send it with send_attachment; it appears under your message. Write your replies in Markdown: headings, lists, tables, syntax-highlighted fenced code and math between $$ all render.\n\nThe console draws these fences live, next to their source, so when someone asks you to show, build or draft something visual, put it in your reply rather than only describing it or saving it to a file: ```html for a page or component, ```svg for a drawing, ```mermaid for a diagram, ```csv for a table, and ```markdown for a document. A person can read the code and see the result, and ask you to change it. An html preview runs its scripts in a sandbox with no network, so keep the whole page in the one fence, with inline CSS and JavaScript and no outside images, fonts or libraries.";
-/// A turn in a task's private room.
 const TASK: &str = "This turn is part of a task. Everyone working on it talks in the task's private room, which people can read and join; nothing here reaches your main conversation, though what you remember stays yours. Use task_item to mark each of your items as you start and finish it, so people can follow along. Use task_message to tell the room something useful as you go or to ask another agent for help; naming an agent in plain text does nothing. Your final reply goes to the room, where the orchestrator reads it.";
 
 const SUMMARIZE: &str = "Write a structured summary of this conversation so far so you can continue the work without it. Include the objective; constraints and corrections; decisions; completed actions and their outcomes, which must never be repeated; unresolved work; and evidence references such as file paths and commands. Reply with the summary only and do not call tools.";
@@ -30,7 +18,6 @@ pub struct Context {
     pub system: String,
     pub tools: Vec<Tool>,
     pub messages: Vec<Message>,
-    /// Model window in tokens.
     pub window: u64,
 }
 
@@ -78,27 +65,23 @@ impl Context {
         }
     }
 
-    /// Provider-reported tokens reached 80% of the window. Unreported usage never triggers.
     pub fn full(&self, usage: Option<Usage>) -> bool {
         usage
             .is_some_and(|usage| (usage.input_tokens + usage.output_tokens) * 10 >= self.window * 8)
     }
 
-    /// The messages a summary request sends: everything so far plus the instruction.
     pub fn summarizing(&self) -> Vec<Message> {
         let mut messages = self.messages.clone();
         messages.push(Message::User(SUMMARIZE.into()));
         messages
     }
 
-    /// Switches to a validated summary. Completed tool calls leave with their results, so no
-    /// call/result pair is split.
+    /// Completed tool calls leave with their results, so no call/result pair is split.
     pub fn compacted(&mut self, text: &str, message: &str) {
         self.messages = vec![summary(text), Message::User(message.into())];
     }
 }
 
-/// The platform's preamble for the tools this turn has, then the agent's own instructions.
 fn system(tools: &[Tool], instructions: &str) -> String {
     let has = |wanted: fn(&str) -> bool| tools.iter().any(|tool| wanted(&tool.name));
     let mut system = DRIVE.to_owned();

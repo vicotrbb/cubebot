@@ -1,7 +1,3 @@
-//! The sandbox: one VM with one memory region and a thread per vCPU booting a Linux guest from a
-//! read-only root disk, with the agent's guest init as init (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox). Its devices are a 16550 serial
-//! console relayed to stdout and virtio-mmio disks for the root and workspace, a network device on
-//! a tap, and vsock for the control channel and the desktop's host channel (docs/adr/sandbox.md#desktop-as-a-vmm-device).
 #![allow(
     unsafe_code,
     reason = "KVM ioctls and guest memory (docs/adr/sandbox.md#in-house-vmm-as-the-agent-sandbox)"
@@ -36,8 +32,7 @@ use virtio::{Mmio, Slot, block::Block, net::Net, vsock::Vsock};
 
 // shortcut: fixed workspace size, make it configurable when an agent needs more.
 const WORKSPACE_SIZE: u64 = 8 << 30;
-/// CUBEBOT_GUEST_VCPUS and CUBEBOT_GUEST_MEMORY_MIB (docs/adr/sandbox.md#desktop-as-a-vmm-device). 32 is the guest kernel's NR_CPUS;
-/// shortcut: a 64-vCPU guest hung in reboot on a 16-core host, find why before raising it.
+/// 32 is the guest kernel's NR_CPUS; shortcut: a 64-vCPU guest hung in reboot on a 16-core host, find why before raising it.
 const VCPUS: (u32, std::ops::RangeInclusive<u32>) = (2, 1..=32);
 const MEMORY_MIB: (u32, std::ops::RangeInclusive<u32>) = (2048, 256..=3072);
 const CMDLINE: &str = "console=ttyS0 earlyprintk=serial reboot=t panic=-1 \
@@ -47,10 +42,8 @@ const SERIAL_IRQ: u32 = 4;
 /// Device windows sit above guest RAM, which the E820 map ends at the guest memory size.
 const MMIO: u64 = 0xd000_0000;
 const _: () = assert!((*MEMORY_MIB.1.end() as u64) << 20 <= MMIO);
-/// Root disk, workspace disk, network, vsock: free ISA interrupts once COM1 has IRQ 4. Linux
-/// names the disks vda and vdb in this order.
+/// Free ISA interrupts once COM1 has IRQ 4; Linux names the disks vda and vdb in this order.
 const IRQS: [u32; 4] = [5, 6, 9, 10];
-/// The guest owns its storage paths; it mounts the workspace disk itself.
 const GUEST_OWNED: [&str; 2] = ["CUBEBOT_JOURNAL_DIRECTORY", "CUBEBOT_WORKSPACE_DIRECTORY"];
 const FILE_LIMIT: u64 = 64 << 10;
 /// Well inside the kubelet's refresh of a projected token at 80% of its lifetime.
@@ -147,14 +140,10 @@ fn open_vm() -> io::Result<(File, OwnedFd)> {
 struct Devices {
     bus: [Arc<dyn Mmio>; 4],
     net: Arc<Slot<Net>>,
-    /// The tap's receive side, read by its own thread.
     tap: File,
     vsock: Arc<Slot<Vsock>>,
-    /// The guest ports of the arbiter's host channel streams, for the bridge.
     spares: mpsc::Receiver<u32>,
-    /// The environment the guest receives first.
     environment: Vec<(String, String)>,
-    /// The kernel command line, which declares the devices and the guest's network.
     cmdline: String,
 }
 
@@ -246,8 +235,7 @@ fn run_vcpu(
     }
 }
 
-/// The first SIGTERM or SIGINT asks the guest to stop over its control channel, so it unmounts
-/// its disks; a second one, or one before the channel is open, ends the VM at once.
+/// The first SIGTERM or SIGINT asks the guest to stop so it unmounts its disks; a second, or one before the channel is open, ends the VM.
 fn stop(termination: SigSet, vsock: &Slot<Vsock>, memory: &GuestMemory) {
     let Ok(signal) = termination.wait() else {
         fail("sigwait failed");
@@ -265,8 +253,7 @@ fn stop(termination: SigSet, vsock: &Slot<Vsock>, memory: &GuestMemory) {
     std::process::exit(128 + signal as i32)
 }
 
-/// Sends the guest every `*_FILE` whose contents changed, such as a projected token the kubelet
-/// rotated, since the guest holds only copies.
+/// The guest holds only copies, so a projected token the kubelet rotated must be sent again.
 fn refresh(mut sent: Vec<(String, String)>, vsock: &Slot<Vsock>, memory: &GuestMemory) -> ! {
     loop {
         std::thread::sleep(REFRESH);
@@ -327,8 +314,7 @@ fn read_configured(name: &str) -> io::Result<Vec<u8>> {
         .map_err(|error| io::Error::other(format!("{name} {}: {error}", path.display())))
 }
 
-/// Opens the workspace disk, creating and formatting it only when it does not exist, so an
-/// existing disk is never reformatted. The root directory belongs to root, not the tool user.
+/// Created and formatted only when it does not exist, so an existing disk is never reformatted.
 fn workspace_disk(path: &Path) -> io::Result<File> {
     if !path.try_exists()? {
         let partial = path.with_extension("partial");
@@ -348,8 +334,6 @@ fn workspace_disk(path: &Path) -> io::Result<File> {
     File::options().read(true).write(true).open(path)
 }
 
-/// The agent's `CUBEBOT_*` environment as the guest receives it (`cubebot_protocol::guest`): no
-/// sandbox or storage settings, and each `*_FILE` variable replaced by the file's contents.
 fn guest_environment(
     variables: impl IntoIterator<Item = (OsString, OsString)>,
 ) -> io::Result<Vec<(String, String)>> {
@@ -406,8 +390,6 @@ fn sized(name: &str, (default, range): (u32, std::ops::RangeInclusive<u32>)) -> 
         })
 }
 
-/// Maps the single guest memory region at guest physical address 0, with the in-kernel PIC, IOAPIC
-/// and PIT the guest's timer and device interrupts need.
 #[tracing::instrument(name = "guest_memory_setup", skip_all, fields(size = size))]
 fn guest_memory(vm: &OwnedFd, size: usize) -> io::Result<GuestMemory> {
     let fd = vm.as_raw_fd();
@@ -430,8 +412,7 @@ fn guest_memory(vm: &OwnedFd, size: usize) -> io::Result<GuestMemory> {
     Ok(memory)
 }
 
-/// Creates the vCPUs with the host's supported CPUID and their own APIC IDs. The bootstrap
-/// processor starts at the kernel entry; the rest wait in the in-kernel APIC for the guest's SIPI.
+/// The bootstrap processor starts at the kernel entry; the rest wait in the in-kernel APIC for the guest's SIPI.
 #[tracing::instrument(name = "vcpu_setup", skip_all, fields(count = count))]
 fn create_vcpus(kvm: &File, vm: RawFd, count: u8, entry: u64) -> io::Result<Vec<OwnedFd>> {
     let mut supported = sys::Cpuid {
@@ -457,7 +438,6 @@ fn create_vcpus(kvm: &File, vm: RawFd, count: u8, entry: u64) -> io::Result<Vec<
     Ok(vcpus)
 }
 
-/// Starts the vCPU in 64-bit long mode at the kernel entry.
 fn start_at(vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
     let fd = vcpu.as_raw_fd();
     let mut sregs = sys::Sregs::default();
@@ -502,8 +482,7 @@ fn start_at(vcpu: &OwnedFd, entry: u64) -> io::Result<()> {
     Ok(())
 }
 
-/// The supported CPUID carries the host CPU's APIC ID; each vCPU reports its own, as the MP
-/// table lists it.
+/// The supported CPUID carries the host CPU's APIC ID; each vCPU reports its own, as the MP table lists it.
 fn as_vcpu(cpuid: &mut sys::Cpuid, id: u8) {
     for entry in cpuid.entries.iter_mut().take(cpuid.nent as usize) {
         match entry.function {
@@ -516,7 +495,6 @@ fn as_vcpu(cpuid: &mut sys::Cpuid, id: u8) {
     }
 }
 
-/// Serves the 16550 at COM1; other ports read as zero and ignore writes, as on an empty bus.
 fn port_io(run: &mut sys::Run, serial: &mut serial::Serial, vm: RawFd) -> io::Result<()> {
     let sys::Io {
         direction,
@@ -553,7 +531,6 @@ fn port_io(run: &mut sys::Run, serial: &mut serial::Serial, vm: RawFd) -> io::Re
     Ok(())
 }
 
-/// Serves a virtio-mmio window; addresses outside every window read as zero and ignore writes.
 fn mmio(run: &mut sys::Run, bus: &[Arc<dyn Mmio>], memory: &GuestMemory) -> io::Result<()> {
     let exit = unsafe { &mut run.exit.mmio };
     let data = &mut exit.data[..(exit.len as usize).min(8)];
@@ -573,7 +550,6 @@ fn mmio(run: &mut sys::Run, bus: &[Arc<dyn Mmio>], memory: &GuestMemory) -> io::
     device.write(offset, data, memory)
 }
 
-/// An edge on one of the in-kernel PIC's lines.
 #[derive(Clone, Copy)]
 pub struct Irq {
     vm: RawFd,

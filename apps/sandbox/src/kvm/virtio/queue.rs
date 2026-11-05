@@ -1,5 +1,4 @@
-//! Split virtqueues (virtio 1.2 §2.7), shared by every device. Indirect descriptors and event
-//! suppression are not offered, so each chain is a plain list in the descriptor table.
+//! Split virtqueues (virtio 1.2 §2.7). Indirect descriptors and event suppression are not offered.
 use super::super::memory::{GuestMemory, invalid};
 use std::io;
 
@@ -25,8 +24,6 @@ pub struct Descriptor {
     pub writable: bool,
 }
 
-/// One request: the device reads its readable descriptors and writes its writable ones, each as a
-/// contiguous byte stream.
 pub struct Chain {
     pub head: u16,
     pub descriptors: Vec<Descriptor>,
@@ -81,7 +78,6 @@ impl Queue {
         }
     }
 
-    /// Returns a chain to the driver with the number of bytes the device wrote into it.
     pub fn push(&mut self, memory: &GuestMemory, head: u16, written: u32) -> io::Result<()> {
         let slot = at(self.device, 4 + 8 * u64::from(self.next_used % self.size))?;
         let element = (u64::from(written) << 32) | u64::from(head);
@@ -100,7 +96,6 @@ impl Chain {
         self.total(true)
     }
 
-    /// Reads the readable stream from `offset`; returns how many bytes it held.
     pub fn read_at(
         &self,
         memory: &GuestMemory,
@@ -112,7 +107,6 @@ impl Chain {
         })
     }
 
-    /// Writes the writable stream from `offset`; returns how many bytes fit.
     pub fn write_at(&self, memory: &GuestMemory, offset: u64, bytes: &[u8]) -> io::Result<usize> {
         self.each(true, offset, bytes.len(), |address, range| {
             memory.write(address, &bytes[range])
@@ -127,7 +121,6 @@ impl Chain {
             .sum()
     }
 
-    /// Calls `copy` with each guest address and buffer range overlapping `[offset, offset + len)`.
     fn each(
         &self,
         writable: bool,
@@ -169,7 +162,6 @@ fn read<const N: usize>(memory: &GuestMemory, address: u64) -> io::Result<[u8; N
 pub mod tests {
     use super::*;
 
-    /// A driver side for tests: a ring of at most 64 entries in the 4 KiB at `self.0`.
     pub struct Ring(pub u64);
 
     impl Ring {
@@ -184,7 +176,6 @@ pub mod tests {
             }
         }
 
-        /// Writes `chain` as descriptors from `first` and offers it in driver-ring slot `slot`.
         pub fn offer(&self, memory: &GuestMemory, first: u16, slot: u16, chain: &[Descriptor]) {
             let last = first + chain.len() as u16 - 1;
             for (index, descriptor) in (first..).zip(chain) {
@@ -204,7 +195,6 @@ pub mod tests {
             memory.store_u16(driver + 2, slot + 1).unwrap();
         }
 
-        /// The (head, written) element the device put in used-ring slot `slot`.
         pub fn used(&self, memory: &GuestMemory, slot: u16) -> (u32, u32) {
             let element: [u8; 8] = read(memory, self.0 + 0xc00 + 4 + 8 * u64::from(slot)).unwrap();
             let (id, len) = element.split_at(4);
@@ -271,7 +261,6 @@ pub mod tests {
         let memory = GuestMemory::map(1 << 16).unwrap();
         let ring = Ring(0x1000);
         let mut queue = ring.queue(4);
-        // Descriptor 3 points back to itself.
         ring.offer(&memory, 3, 0, &[readable(0x4000, 1)]);
         let mut raw = [0u8; 16];
         memory.read(0x1000 + 48, &mut raw).unwrap();

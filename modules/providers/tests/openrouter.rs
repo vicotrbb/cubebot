@@ -9,7 +9,6 @@ use cubebot_providers::{Error, Event, Message, Model, OpenRouter, Provider, Repl
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 
-/// Streams chunks split at seven bytes, an SSE comment first and the sentinel last, as OpenRouter does.
 fn sse(chunks: &[Value], done: bool) -> Response {
     let mut text = ": OPENROUTER PROCESSING\n\n".to_owned();
     for chunk in chunks {
@@ -55,7 +54,6 @@ async fn tool_turn(headers: HeaderMap, Json(body): Json<Value>) -> Response {
     assert_eq!(body["stream"], true);
     assert_eq!(body["messages"][0]["role"], "system");
     assert!(body.get("max_tokens").is_none());
-    // The computer tool is an ordinary function here.
     assert_eq!(body["tools"][0]["function"]["name"], "read");
     assert_eq!(body["tools"][1]["function"]["name"], "computer");
     let required = &body["tools"][1]["function"]["parameters"]["required"];
@@ -110,7 +108,6 @@ async fn pieced_tool_calls_become_a_reply_that_replays_its_reasoning() {
     assert_eq!(format!("{first}{second}"), "Let me.");
     assert_eq!(reply.text, "Let me.");
     assert_eq!(reply.calls[0].arguments, "{\"path\":\"a\"}");
-    // A call that streamed no arguments still parses.
     assert_eq!(reply.calls[1].arguments, "{}");
     let usage = usage.unwrap();
     assert_eq!(usage.input_tokens, 9);
@@ -127,7 +124,6 @@ async fn pieced_tool_calls_become_a_reply_that_replays_its_reasoning() {
 async fn replayed(Json(body): Json<Value>) -> Response {
     let messages = &body["messages"];
     assert_eq!(messages[2]["reasoning_details"][0]["data"], "abc");
-    // Images wait for the whole run of tool results.
     assert_eq!(messages[3]["role"], "tool");
     assert_eq!(messages[3]["content"], "shot");
     assert_eq!(messages[4]["role"], "tool");
@@ -214,7 +210,6 @@ async fn every_model_is_listed_newest_first_after_the_key_is_checked() {
         json!({"id":"old/one","created":1,"context_length":8000,"supported_parameters":[]}),
         json!({"id":"new/two:free","created":9,"context_length":200000,"supported_parameters":["tools"]}),
     ];
-    // Far past the bound on small JSON bodies the other providers' listings fit in.
     for number in 0..4000 {
         data.push(
             json!({"id":format!("x/{number}"),"created":0,"description":"padding padding padding"}),
