@@ -126,6 +126,7 @@ mod tests {
             provider: ProviderKind::Openai,
             model: "m".into(),
             api_key: "k".into(),
+            api_key_expires_at: None,
             context_window: Some(1000),
             summary: summary.map(Into::into),
             history: ["a", "b"]

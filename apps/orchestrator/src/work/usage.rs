@@ -444,7 +444,10 @@ async fn listed(provider: &str) -> Result<Vec<Price>, Error> {
         Some(ProviderKind::Anthropic) => Anthropic::new()?.prices().await,
         Some(ProviderKind::Openrouter) => OpenRouter::new()?.prices().await,
         Some(ProviderKind::Gemini) => Gemini::new()?.prices().await,
-        Some(ProviderKind::Grok) => Ok(Vec::new()),
+        // A plan has no per-token price.
+        Some(ProviderKind::Grok | ProviderKind::Chatgpt | ProviderKind::Supergrok) => {
+            Ok(Vec::new())
+        }
         None => Err(Error::Unavailable),
     }
 }

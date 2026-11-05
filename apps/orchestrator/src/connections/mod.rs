@@ -1,11 +1,18 @@
+mod chatgpt;
 mod credentials;
 mod mcp;
 mod models;
+mod subscriptions;
+mod supergrok;
 mod vault;
+pub use chatgpt::ChatgptSignIn;
 pub use credentials::{CredentialError, Credentials};
 pub use mcp::{AgentMcpServer, McpServerSummary, McpTransport, SaveMcpServer};
 pub(crate) use models::configured;
 pub use models::{ListModels, ModelChoice, ModelsError};
+pub(crate) use subscriptions::For;
+pub use subscriptions::{SignInError, SubscriptionSummary, keep_fresh};
+pub use supergrok::SupergrokSignIn;
 pub(crate) use vault::same_site;
 pub use vault::{SaveVaultItem, VaultSummary};
 
@@ -20,6 +27,9 @@ use uuid::Uuid;
 pub struct Connections {
     pool: PgPool,
     credentials: Credentials,
+    sign_ins: subscriptions::Pending,
+    /// Controlled-vendor qualification: subscription OAuth at a loopback origin.
+    vendor: Option<reqwest::Url>,
 }
 
 #[derive(Deserialize, Serialize, utoipa::ToSchema)]
@@ -34,7 +44,7 @@ pub struct ConfigureProvider {
     /// reports its own when this is absent.
     #[serde(default)]
     pub context_window: Option<i64>,
-    /// `None` keeps the key saved for this provider.
+    /// `None` keeps the key saved for this provider. A subscription has none: its owner signs in.
     #[serde(default)]
     pub api_key: Option<String>,
     #[serde(default)]
@@ -80,6 +90,8 @@ pub(crate) struct Inference {
     pub provider: ProviderKind,
     pub model: String,
     pub api_key: String,
+    /// Unix seconds when a subscription's access token expires.
+    pub api_key_expires_at: Option<i64>,
     pub context_window: Option<u64>,
 }
 
@@ -95,7 +107,25 @@ pub enum ProviderAccess {
 
 impl Connections {
     pub fn new(pool: PgPool, credentials: Credentials) -> Self {
-        Self { pool, credentials }
+        Self {
+            pool,
+            credentials,
+            sign_ins: Default::default(),
+            vendor: None,
+        }
+    }
+
+    /// Sends subscription sign-in and refresh to a literal loopback origin instead of the vendors.
+    pub fn with_vendor_for_loopback_tests(mut self, origin: &str) -> Self {
+        self.vendor = reqwest::Url::parse(origin)
+            .ok()
+            .filter(|url| url.host_str() == Some("127.0.0.1"));
+        assert!(self.vendor.is_some(), "a loopback origin");
+        self
+    }
+
+    fn vendor(&self) -> Option<&reqwest::Url> {
+        self.vendor.as_ref()
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
@@ -158,7 +188,9 @@ impl Connections {
             .next_revision(&mut transaction, input.expected_revision)
             .await?;
         let access = selected_access(&mut transaction, input.access.as_ref()).await?;
-        let encrypted = self.credential(&mut transaction, input, revision).await?;
+        let encrypted = self
+            .credential(&mut transaction, actor, input, revision)
+            .await?;
         self.set_aside(&mut transaction, input.provider).await?;
         sqlx::query!(
             "
@@ -264,13 +296,27 @@ impl Connections {
             r#"
             SELECT credential AS "credential!", revision AS "revision!"
             FROM provider_connection
+            WHERE credential IS NOT NULL
             "#,
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        let subscription = sqlx::query!(
+            "SELECT provider, credential, revision FROM provider_subscriptions ORDER BY provider LIMIT 1"
         )
         .fetch_optional(&mut *tx)
         .await?;
         let (record, context) = if let Some(row) = provider {
             let context = credential_context(&mut tx, row.revision).await?;
             (row.credential, context)
+        } else if let Some(row) = subscription {
+            let provider = ProviderKind::parse(&row.provider).ok_or(IdentityError::InvalidInput)?;
+            let opens = self
+                .opened(&mut tx, provider, row.revision, &row.credential)
+                .await
+                .is_ok();
+            tx.commit().await?;
+            return Ok(opens);
         } else {
             let item = sqlx::query!(
                 "
@@ -300,31 +346,58 @@ impl Connections {
         tx: &mut Transaction<'_, Postgres>,
         agent: crate::agents::AgentId,
     ) -> Result<Inference, IdentityError> {
-        self.connection(tx, Some(agent)).await
+        self.connection(tx, For::Agent(agent)).await
     }
 
+    /// The agent's current material, renewing a due subscription first.
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
+    pub(crate) async fn current(
+        &self,
+        agent: crate::agents::AgentId,
+    ) -> Result<Inference, IdentityError> {
+        let active = sqlx::query_scalar!("SELECT provider FROM provider_connection")
+            .fetch_optional(&self.pool)
+            .await?;
+        if let Some(provider) = active
+            .as_deref()
+            .and_then(ProviderKind::parse)
+            .filter(|provider| provider.subscription())
+        {
+            self.refresh_due(provider).await?;
+        }
+        let mut tx = self.pool.begin().await?;
+        let inference = self.inference(&mut tx, agent).await?;
+        tx.commit().await?;
+        Ok(inference)
+    }
+
+    /// Room routing for a message `person` sent.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn coordinator(
         &self,
         tx: &mut Transaction<'_, Postgres>,
+        person: Uuid,
     ) -> Result<Inference, IdentityError> {
-        self.connection(tx, None).await
+        self.connection(tx, For::Person(person)).await
     }
 
+    /// Orchestration of a task `person` owns.
     #[tracing::instrument(skip_all)]
     pub(crate) async fn task_orchestrator(
         &self,
         tx: &mut Transaction<'_, Postgres>,
+        person: Uuid,
         provider: Option<ProviderKind>,
         model: Option<&str>,
     ) -> Result<Inference, IdentityError> {
         let (Some(provider), Some(model)) = (provider, model) else {
-            return self.coordinator(tx).await;
+            return self.coordinator(tx, person).await;
         };
         Ok(Inference {
             provider,
             model: model.to_owned(),
             api_key: self.saved_key(tx, provider).await?,
+            api_key_expires_at: None,
             context_window: None,
         })
     }
@@ -354,7 +427,7 @@ impl Connections {
             .fetch_optional(&mut *tx)
             .await?;
         if active.as_deref() == Some(ProviderKind::Openai.as_str()) {
-            return Ok(self.connection(&mut tx, Some(agent)).await?.api_key);
+            return Ok(self.connection(&mut tx, For::Agent(agent)).await?.api_key);
         }
         self.saved_key(&mut tx, ProviderKind::Openai).await
     }
@@ -378,53 +451,80 @@ impl Connections {
         Ok(())
     }
 
+    /// A subscription ignores the access setting: it serves only its owner's work.
     async fn connection(
         &self,
         tx: &mut Transaction<'_, Postgres>,
-        agent: Option<crate::agents::AgentId>,
+        who: For,
     ) -> Result<Inference, IdentityError> {
+        let agent = match who {
+            For::Agent(agent) => Some(agent.0),
+            For::Person(_) | For::Installation => None,
+        };
         let row = sqlx::query!(
             r#"
             SELECT
                 provider AS "provider!",
                 model AS "model!",
-                credential AS "credential!",
+                credential AS "credential?",
                 revision AS "revision!",
                 context_window AS "context_window?"
             FROM provider_connection
             WHERE $1::uuid IS NULL
+                OR provider IN ('chatgpt', 'supergrok')
                 OR access->>'mode' = 'all_agents'
                 OR (access->>'mode' = 'explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))
             "#,
-            agent.map(|agent| agent.0),
+            agent,
         )
         .fetch_optional(&mut **tx)
         .await?
         .ok_or(IdentityError::CredentialUnavailable(None))?;
-        let context = credential_context(tx, row.revision).await?;
-        let secret = self
-            .credentials
-            .decrypt(&row.credential, &context)
-            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
-        // Only the UTF-8 position survives; FromUtf8Error would keep the decrypted key bytes.
-        let api_key = String::from_utf8(secret).map_err(|error| {
-            IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
-        })?;
+        let provider =
+            ProviderKind::parse(&row.provider).ok_or(IdentityError::CredentialUnavailable(None))?;
+        let (api_key, api_key_expires_at) = match row.credential {
+            Some(credential) => (self.api_key(tx, row.revision, &credential).await?, None),
+            None => {
+                let (token, expires) = self.subscription_token(tx, provider, who).await?;
+                (token, Some(expires))
+            }
+        };
         Ok(Inference {
-            provider: ProviderKind::parse(&row.provider)
-                .ok_or(IdentityError::CredentialUnavailable(None))?,
+            provider,
             model: row.model,
             api_key,
+            api_key_expires_at,
             context_window: row.context_window.map(|window| window as u64),
         })
+    }
+
+    async fn api_key(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        revision: i64,
+        credential: &[u8],
+    ) -> Result<String, IdentityError> {
+        let context = credential_context(tx, revision).await?;
+        let secret = self
+            .credentials
+            .decrypt(credential, &context)
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+        // Only the UTF-8 position survives; FromUtf8Error would keep the decrypted key bytes.
+        String::from_utf8(secret)
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.utf8_error().into())))
     }
 
     async fn credential(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
+        actor: &Actor,
         input: &ConfigureProvider,
         revision: i64,
-    ) -> Result<Vec<u8>, IdentityError> {
+    ) -> Result<Option<Vec<u8>>, IdentityError> {
+        if input.provider.subscription() {
+            subscriptions::owned(transaction, actor, input.provider).await?;
+            return Ok(None);
+        }
         let key = match &input.api_key {
             Some(key) => key.clone(),
             None => self.saved_key(transaction, input.provider).await?,
@@ -432,6 +532,7 @@ impl Connections {
         let context = credential_context(transaction, revision).await?;
         self.credentials
             .encrypt(key.as_bytes(), &context)
+            .map(Some)
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))
     }
 
@@ -461,7 +562,7 @@ impl Connections {
             });
         }
         let saved = self
-            .connection(transaction, None)
+            .connection(transaction, For::Installation)
             .await
             .map_err(|error| match error {
                 IdentityError::CredentialUnavailable(None) => IdentityError::InvalidInput,
@@ -487,7 +588,7 @@ impl Connections {
         )
         .execute(&mut **transaction)
         .await?;
-        let outgoing = match self.connection(transaction, None).await {
+        let outgoing = match self.connection(transaction, For::Installation).await {
             Ok(outgoing) if outgoing.provider != next => outgoing,
             Ok(_) | Err(IdentityError::CredentialUnavailable(None)) => return Ok(()),
             Err(error) => return Err(error),
@@ -519,7 +620,7 @@ impl Connections {
     ) -> Result<i64, IdentityError> {
         let current = sqlx::query!(
             r#"
-            SELECT revision AS "revision!", credential AS "credential!"
+            SELECT revision AS "revision!", credential AS "credential?"
             FROM provider_connection
             "#,
         )
@@ -527,10 +628,10 @@ impl Connections {
         .await?;
         let revision = match current {
             Some(current) => {
-                let context = credential_context(transaction, current.revision).await?;
-                self.credentials
-                    .decrypt(&current.credential, &context)
-                    .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+                if let Some(credential) = &current.credential {
+                    self.api_key(transaction, current.revision, credential)
+                        .await?;
+                }
                 current.revision
             }
             None => 0,
@@ -612,6 +713,9 @@ async fn saved_context(
 }
 
 fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
+    if input.provider.subscription() && (input.api_key.is_some() || input.access.is_some()) {
+        return Err(IdentityError::InvalidInput);
+    }
     if input.request_id.is_nil()
         || input.expected_revision < 0
         || input.model.is_empty()

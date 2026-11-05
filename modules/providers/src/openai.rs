@@ -33,7 +33,34 @@ pub struct OpenAi {
     http: Client,
     endpoint: Url,
     pricing: Url,
+    dialect: Dialect,
 }
+
+/// How a Responses endpoint reached with a plan's token differs from the API-key one.
+#[derive(Clone, Copy)]
+pub(crate) struct Dialect {
+    /// The system prompt goes in `instructions`, and `max_output_tokens` is refused.
+    pub instructions: bool,
+    /// Hosted computer use is unsupported, so the computer tool is an ordinary function.
+    pub native_computer: bool,
+    pub header: Option<(&'static str, &'static str)>,
+    pub catalog: fn(Value) -> Result<Vec<Model>, Error>,
+}
+
+const API: Dialect = Dialect {
+    instructions: false,
+    native_computer: true,
+    header: None,
+    catalog: api_catalog,
+};
+
+/// Sign in with ChatGPT's plan usage: https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations
+const CHATGPT: Dialect = Dialect {
+    instructions: true,
+    native_computer: false,
+    header: None,
+    catalog: chatgpt_catalog,
+};
 
 impl OpenAi {
     pub fn new() -> Result<Self, Error> {
@@ -53,12 +80,26 @@ impl OpenAi {
         Self::endpoint(join("responses")?, join("pricing.md")?)
     }
 
-    fn endpoint(endpoint: Url, pricing: Url) -> Result<Self, Error> {
+    /// The same Responses API with a ChatGPT plan's access token; never ChatGPT's `backend-api`.
+    pub fn chatgpt() -> Result<Self, Error> {
+        Ok(Self::new()?.with(CHATGPT))
+    }
+
+    pub fn chatgpt_for_loopback_tests(origin: &str) -> Result<Self, Error> {
+        Ok(Self::for_loopback_tests(origin)?.with(CHATGPT))
+    }
+
+    pub(crate) fn endpoint(endpoint: Url, pricing: Url) -> Result<Self, Error> {
         Ok(Self {
             http: crate::client()?,
             endpoint,
             pricing,
+            dialect: API,
         })
+    }
+
+    pub(crate) fn with(self, dialect: Dialect) -> Self {
+        Self { dialect, ..self }
     }
 
     #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "openai"))]
@@ -87,17 +128,8 @@ impl Provider for OpenAi {
             .endpoint
             .join("models")
             .map_err(|error| Error::Configuration(Some(error.into())))?;
-        let response = crate::send(self.http.get(url).bearer_auth(key)).await?;
-        let mut body = crate::json(response).await?;
-        if let Some(data) = body["data"].as_array_mut() {
-            data.retain(|entry| {
-                entry["id"]
-                    .as_str()
-                    .is_some_and(|id| !NOT_CONVERSATIONAL.iter().any(|word| id.contains(word)))
-            });
-            data.sort_by_key(|entry| std::cmp::Reverse(entry["created"].as_u64()));
-        }
-        crate::models(&body, |_| None)
+        let response = crate::send(self.headed(self.http.get(url)).bearer_auth(key)).await?;
+        (self.dialect.catalog)(crate::json(response).await?)
     }
 
     fn stream<'a>(
@@ -108,20 +140,61 @@ impl Provider for OpenAi {
             "openai",
             request.model,
             crate::send(
-                self.http
-                    .post(self.endpoint.clone())
+                self.headed(self.http.post(self.endpoint.clone()))
                     .bearer_auth(request.key)
-                    .json(&body(request)),
+                    .json(&body(request, self.dialect)),
             ),
         )
     }
 }
 
-fn body(request: &Request) -> Value {
+impl OpenAi {
+    fn headed(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match self.dialect.header {
+            Some((name, value)) => builder.header(name, value),
+            None => builder,
+        }
+    }
+}
+
+fn api_catalog(mut body: Value) -> Result<Vec<Model>, Error> {
+    if let Some(data) = body["data"].as_array_mut() {
+        data.retain(|entry| {
+            entry["id"]
+                .as_str()
+                .is_some_and(|id| !NOT_CONVERSATIONAL.iter().any(|word| id.contains(word)))
+        });
+        data.sort_by_key(|entry| std::cmp::Reverse(entry["created"].as_u64()));
+    }
+    crate::models(&body, |_| None)
+}
+
+/// The account's own catalog, in the server's order: listed models by `slug`.
+fn chatgpt_catalog(body: Value) -> Result<Vec<Model>, Error> {
+    let models = body["models"]
+        .as_array()
+        .ok_or(Error::InvalidResponse(None))?;
+    models
+        .iter()
+        .filter(|entry| entry["visibility"] == "list" && entry["supported_in_api"] != false)
+        .map(|entry| {
+            Ok(Model {
+                id: entry["slug"]
+                    .as_str()
+                    .ok_or(Error::InvalidResponse(None))?
+                    .to_owned(),
+                context_window: entry["context_window"].as_u64(),
+                tools: true,
+            })
+        })
+        .collect()
+}
+
+fn body(request: &Request, dialect: Dialect) -> Value {
     let computer = crate::computer_calls(request.messages, |item| {
         (item["type"] == "computer_call").then(|| item["call_id"].as_str())?
     });
-    let mut input = vec![json!({"role":"system","content":request.system})];
+    let mut input = system(request, dialect);
     for message in request.messages {
         match message {
             Message::User(text) => input.push(json!({"role":"user","content":text})),
@@ -157,26 +230,47 @@ fn body(request: &Request) -> Value {
         "model":request.model,"input":input,"store":false,"stream":true,
         "include":["reasoning.encrypted_content"]
     });
-    if let Some(limit) = request.max_output_tokens {
-        body["max_output_tokens"] = json!(limit);
-    }
+    prompted(&mut body, request, dialect);
     if !request.tools.is_empty() {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| {
-                if tool.computer {
-                    json!({"type":"computer"})
-                } else {
-                    json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters})
-                }
-            })
+            .map(|tool| declared(tool, dialect))
             .collect();
         if request.tools_disabled {
             body["tool_choice"] = json!("none");
         }
     }
     body
+}
+
+/// A plan takes the system prompt as `instructions`, never as a system message.
+fn system(request: &Request, dialect: Dialect) -> Vec<Value> {
+    if dialect.instructions {
+        return Vec::new();
+    }
+    vec![json!({"role":"system","content":request.system})]
+}
+
+/// A plan refuses `max_output_tokens`.
+fn prompted(body: &mut Value, request: &Request, dialect: Dialect) {
+    if dialect.instructions {
+        body["instructions"] = json!(request.system);
+    } else if let Some(limit) = request.max_output_tokens {
+        body["max_output_tokens"] = json!(limit);
+    }
+}
+
+fn declared(tool: &crate::Tool, dialect: Dialect) -> Value {
+    if tool.computer && dialect.native_computer {
+        json!({"type":"computer"})
+    } else if tool.computer {
+        let mut function = crate::completions::function(tool)["function"].take();
+        function["type"] = json!("function");
+        function
+    } else {
+        json!({"type":"function","name":tool.name,"description":tool.description,"strict":tool.strict,"parameters":tool.parameters})
+    }
 }
 
 #[derive(Default)]
@@ -195,7 +289,13 @@ impl Decoder for Responses {
             }
             Some("response.incomplete") => Err(Error::InvalidResponse(None)),
             Some("response.failed") => Err(failure(&data["response"]["error"]["code"])),
-            Some("error") => Err(failure(&data["code"])),
+            // Plan usage reports its code under `error`; the API puts it at the top.
+            Some("error") => Err(failure(
+                data["error"]
+                    .get("code")
+                    .filter(|code| !code.is_null())
+                    .unwrap_or(&data["code"]),
+            )),
             _ => Ok(false),
         }
     }
@@ -204,9 +304,19 @@ impl Decoder for Responses {
 /// Only rate limits and server faults are worth retrying; anything else fails the same again.
 fn failure(code: &Value) -> Error {
     match code.as_str() {
-        Some("server_error" | "rate_limit_exceeded") => Error::Transient(None),
+        Some(
+            "server_error"
+            | "rate_limit_exceeded"
+            | "subscription_sharing_usage_unavailable"
+            | "subscription_sharing_user_unavailable",
+        ) => Error::Transient(None),
+        _ if usage_limit(code) => Error::UsageLimit,
         _ => Error::Rejected,
     }
+}
+
+pub(crate) fn usage_limit(code: &Value) -> bool {
+    code == "subscription_sharing_usage_limit_exceeded"
 }
 
 /// The final response is authoritative; deltas were only progress.

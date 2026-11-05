@@ -433,3 +433,156 @@ async fn live_page_still_parses() {
         "{prices:?}"
     );
 }
+
+fn desktop() -> Tool {
+    Tool {
+        name: "computer".into(),
+        description: "desktop".into(),
+        parameters: json!({}),
+        strict: false,
+        computer: true,
+    }
+}
+
+#[tokio::test]
+async fn a_chatgpt_plan_sends_its_system_prompt_as_instructions_without_refused_fields() {
+    async fn plan(Json(body): Json<Value>) -> Response {
+        assert_eq!(body["store"], false);
+        assert_eq!(body["stream"], true);
+        assert_eq!(body["instructions"], "Be brief.");
+        assert_eq!(body["input"], json!([{"role":"user","content":"Hello"}]));
+        for refused in ["max_output_tokens", "temperature", "previous_response_id"] {
+            assert!(body.get(refused).is_none(), "{refused}");
+        }
+        // Hosted computer use is unsupported on plans, so the desktop is a function.
+        assert_eq!(body["tools"][0]["type"], "function");
+        assert_eq!(body["tools"][0]["name"], "computer");
+        assert!(body["tools"][0]["parameters"]["properties"]["action"].is_object());
+        sse(&[
+            json!({"type":"response.completed","response":{"status":"completed",
+                "output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}]}}),
+        ])
+    }
+    let (origin, task) = serve(Router::new().route("/responses", post(plan))).await;
+    let provider = OpenAi::chatgpt_for_loopback_tests(&origin).unwrap();
+    let messages = [Message::User("Hello".into())];
+    let tools = [desktop()];
+    let mut capped = request(&messages, &tools);
+    capped.max_output_tokens = Some(512);
+    let events = collect(&provider, &capped).await;
+    assert!(matches!(&events[..], [Event::Done { reply, .. }] if reply.text == "Hi"));
+    task.abort();
+}
+
+#[tokio::test]
+async fn a_plan_usage_limit_is_neither_retried_nor_reported_as_a_rejected_key() {
+    // The shape ChatGPT sent on 2026-11-05 for an exhausted plan: an `error` event, then `response.failed`.
+    let limited = json!({"type":"invalid_request_error","code":"subscription_sharing_usage_limit_exceeded","message":"The ChatGPT user has reached their Subscription Sharing usage limit.","param":null});
+    let mid_stream = limited.clone();
+    let router = Router::new()
+        .route(
+            "/responses",
+            post(move |Json(body): Json<Value>| {
+                let limited = mid_stream.clone();
+                async move {
+                    if body["model"] == "admission" {
+                        return (
+                            StatusCode::TOO_MANY_REQUESTS,
+                            Json(json!({"error": limited})),
+                        )
+                            .into_response();
+                    }
+                    sse(&[
+                        json!({"type":"response.created"}),
+                        json!({"type":"error","error":limited,"sequence_number":3}),
+                        json!({"type":"response.failed","response":{"status":"failed","error":limited}}),
+                    ])
+                }
+            }),
+        );
+    let (origin, task) = serve(router).await;
+    let provider = OpenAi::chatgpt_for_loopback_tests(&origin).unwrap();
+    for model in ["streamed", "admission"] {
+        let mut asked = request(&[], &[]);
+        asked.model = model;
+        let error = std::pin::pin!(provider.stream(&asked))
+            .next()
+            .await
+            .unwrap()
+            .err()
+            .unwrap();
+        assert_eq!(error.code(), "provider_usage_limit", "{model}");
+        assert!(!error.retryable());
+    }
+    task.abort();
+}
+
+#[tokio::test]
+async fn a_chatgpt_plan_lists_only_its_listed_models_in_server_order() {
+    async fn models(headers: HeaderMap) -> Json<Value> {
+        assert_eq!(headers["authorization"], "Bearer controlled-key");
+        Json(json!({"models":[
+            {"slug":"gpt-6.1-sol","visibility":"list","supported_in_api":true,"context_window":500000},
+            {"slug":"gpt-reserve","visibility":"hide","supported_in_api":true,"context_window":272000},
+            {"slug":"gpt-6-luna","visibility":"list","supported_in_api":true,"context_window":272000},
+            {"slug":"gpt-internal","visibility":"list","supported_in_api":false},
+        ]}))
+    }
+    let (origin, task) = serve(Router::new().route("/models", get(models))).await;
+    let provider = OpenAi::chatgpt_for_loopback_tests(&origin).unwrap();
+    let listed = provider.models("controlled-key").await.unwrap();
+    let ids: Vec<_> = listed.iter().map(|model| model.id.as_str()).collect();
+    assert_eq!(ids, ["gpt-6.1-sol", "gpt-6-luna"]);
+    assert_eq!(listed[0].context_window, Some(500_000));
+    task.abort();
+}
+
+#[tokio::test]
+async fn supergrok_passes_the_grok_cli_version_gate_and_keeps_the_api_body() {
+    async fn proxy(headers: HeaderMap, Json(body): Json<Value>) -> Response {
+        if headers
+            .get("x-grok-client-version")
+            .is_none_or(|v| v != "1.0.13")
+        {
+            return (StatusCode::UPGRADE_REQUIRED, "outdated").into_response();
+        }
+        assert_eq!(
+            body["input"][0],
+            json!({"role":"system","content":"Be brief."})
+        );
+        assert_eq!(body["max_output_tokens"], 512);
+        assert_eq!(body["tools"][0]["type"], "function");
+        sse(&[
+            json!({"type":"response.completed","response":{"status":"completed",
+                "output":[{"type":"function_call","call_id":"call-1","name":"computer","arguments":"{\"action\":\"screenshot\"}"}]}}),
+        ])
+    }
+    async fn models(headers: HeaderMap) -> Json<Value> {
+        assert_eq!(headers["x-grok-client-version"], "1.0.13");
+        Json(
+            json!({"object":"list","data":[{"id":"grok-4.7","object":"model","context_window":256000}]}),
+        )
+    }
+    let router = Router::new()
+        .route("/responses", post(proxy))
+        .route("/models", get(models));
+    let (origin, task) = serve(router).await;
+    let provider = OpenAi::supergrok_for_loopback_tests(&origin).unwrap();
+    let tools = [desktop()];
+    let mut capped = request(&[], &tools);
+    capped.max_output_tokens = Some(512);
+    let events = collect(&provider, &capped).await;
+    assert!(
+        matches!(&events[..], [Event::Done { reply, .. }] if reply.calls[0].name == "computer")
+    );
+    let listed = provider.models("controlled-key").await.unwrap();
+    assert_eq!(
+        listed,
+        [Model {
+            id: "grok-4.7".into(),
+            context_window: Some(256_000),
+            tools: true
+        }]
+    );
+    task.abort();
+}

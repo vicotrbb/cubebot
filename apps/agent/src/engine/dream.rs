@@ -125,6 +125,16 @@ async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
             let provider = super::turn::configured(Grok::new, Grok::for_loopback_tests);
             reply(provider, &request).await
         }
+        ProviderKind::Chatgpt => {
+            let provider =
+                super::turn::configured(OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests);
+            reply(provider, &request).await
+        }
+        ProviderKind::Supergrok => {
+            let provider =
+                super::turn::configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests);
+            reply(provider, &request).await
+        }
     };
     let (reply, usage) = match reply {
         Ok(answered) => answered,

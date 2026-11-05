@@ -295,6 +295,14 @@ impl MemoryClient {
         transport::decode(response, 512 * 1024).await.map(Some)
     }
 
+    /// The agent's current provider material; a subscription's access token is renewed here.
+    #[tracing::instrument(skip_all)]
+    pub async fn provider(&self) -> Result<runtime::ProviderKey, Error> {
+        let url = self.url.join("provider").map_err(Error::configuration)?;
+        let response = self.http.get(url).bearer_auth(&self.token).send().await;
+        transport::decode(response.map_err(request_failed)?, 64 * 1024).await
+    }
+
     #[tracing::instrument(skip_all)]
     pub async fn wallpaper(&self) -> Result<Option<Vec<u8>>, Error> {
         let url = self.url.join("wallpaper").map_err(Error::configuration)?;

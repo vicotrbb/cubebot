@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE provider_subscriptions SET problem = $2, updated_at = clock_timestamp() WHERE provider = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a4c3c96dd0d4ee7b12cd53c03ac52869668750b064df1dbec2bbd69cc43c87c7"
+}

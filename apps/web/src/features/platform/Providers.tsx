@@ -5,18 +5,26 @@ import { api, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
 import { COMMON_WINDOWS, suggestedWindow, tokens } from './models'
+import { PLANS, PlanBlock, type PlanKind } from './Plan'
 import './platform.css'
 
 type Provider = components['schemas']['ProviderKind']
 type Current = components['schemas']['ProviderSummary']
 type Choice = components['schemas']['ModelChoice']
 type Saved = components['schemas']['SavedProvider']
+type Subscription = components['schemas']['SubscriptionSummary']
 
-const PROVIDERS: { id: Provider; name: string; note: string }[] = [
+const PROVIDERS: {
+  id: Provider
+  name: string
+  note: string
+  plan?: PlanKind
+}[] = [
   {
     id: 'openai',
     name: 'OpenAI',
-    note: 'The Responses API. You set each model’s context window.',
+    note: 'A ChatGPT plan, or the Responses API with a key.',
+    plan: 'chatgpt',
   },
   {
     id: 'anthropic',
@@ -36,16 +44,20 @@ const PROVIDERS: { id: Provider; name: string; note: string }[] = [
   {
     id: 'grok',
     name: 'xAI Grok',
-    note: 'A key from the xAI console. Each model reports its own window and cost.',
+    note: 'A SuperGrok plan, or a key from the xAI console.',
+    plan: 'supergrok',
   },
 ]
-const NAMES = Object.fromEntries(
-  PROVIDERS.map(({ id, name }) => [id, name]),
-) as Record<Provider, string>
+const NAMES = {
+  ...Object.fromEntries(PROVIDERS.map(({ id, name }) => [id, name])),
+  chatgpt: 'your ChatGPT plan',
+  supergrok: 'your Grok plan',
+} as Record<Provider, string>
 
-type Standing = 'active' | 'saved' | 'none'
+type Standing = 'active' | 'plan' | 'saved' | 'none'
 const STANDING: Record<Standing, string> = {
   active: 'In use',
+  plan: 'Plan signed in',
   saved: 'Key saved',
   none: 'Not configured',
 }
@@ -60,6 +72,12 @@ export function Providers() {
     queryKey: ['provider-saved'],
     queryFn: () => ok(api.GET('/api/provider/saved')),
   })
+  const plans = useQuery({
+    queryKey: ['provider-subscriptions'],
+    queryFn: () => ok(api.GET('/api/provider/subscriptions')),
+    // Renewals and usage-limit waits change without anyone touching this page.
+    refetchInterval: 30_000,
+  })
   const [open, setOpen] = useState<Provider | null>(null)
   // Here, not in a form, which starts over on the revision a save makes.
   const [notice, setNotice] = useState('')
@@ -67,16 +85,17 @@ export function Providers() {
     Promise.all([
       client.invalidateQueries({ queryKey: ['provider'] }),
       client.invalidateQueries({ queryKey: ['provider-saved'] }),
+      client.invalidateQueries({ queryKey: ['provider-subscriptions'] }),
     ])
-  if (current.isPending || saved.isPending)
+  if (current.isPending || saved.isPending || plans.isPending)
     return <Skeleton lines={4} width="62ch" />
-  if (current.isError || saved.isError)
+  if (current.isError || saved.isError || plans.isError)
     return <Alert>The providers could not be read. Retry shortly.</Alert>
   return (
     <div className="provider-page">
       <p className="platform__lead">
-        Every eligible agent thinks with the provider in use. Keys are encrypted
-        on the server and never shown again.
+        Every eligible agent thinks with the provider in use. Keys and plan
+        sign-ins are encrypted on the server and never shown again.
       </p>
       <Status>{notice}</Status>
       <div className="provider-list">
@@ -86,6 +105,9 @@ export function Providers() {
             {...provider}
             current={current.data ?? null}
             saved={saved.data.find((item) => item.provider === provider.id)}
+            subscription={plans.data.find(
+              (item) => item.provider === provider.plan,
+            )}
             open={open === provider.id}
             onToggle={() => {
               setNotice('')
@@ -94,6 +116,10 @@ export function Providers() {
             onDone={async (message) => {
               setNotice(message)
               setOpen(null)
+              await refresh()
+            }}
+            onPlanChanged={async (message) => {
+              setNotice(message)
               await refresh()
             }}
           />
@@ -107,23 +133,30 @@ function ProviderCard({
   id,
   name,
   note,
+  plan,
   current,
   saved,
+  subscription,
   open,
   onToggle,
   onDone,
+  onPlanChanged,
 }: {
   id: Provider
   name: string
   note: string
+  plan?: PlanKind | undefined
   current: Current | null
   saved: Saved | undefined
+  subscription: Subscription | undefined
   open: boolean
   onToggle: () => void
   onDone: (message: string) => Promise<unknown>
+  onPlanChanged: (message: string) => Promise<unknown>
 }) {
-  const active = current?.provider === id ? current : null
-  const standing: Standing = active ? 'active' : saved ? 'saved' : 'none'
+  const planInUse = Boolean(plan) && current?.provider === plan
+  const active = current?.provider === id || planInUse ? current : null
+  const standing = cardStanding(Boolean(active), subscription, saved)
   const choice = active ?? saved
   const panel = `provider-${id}`
   return (
@@ -163,6 +196,33 @@ function ProviderCard({
       </h2>
       {open && (
         <div id={panel} className="provider-card__body">
+          {plan && (
+            <>
+              <PlanBlock
+                plan={plan}
+                subscription={subscription}
+                inUse={planInUse}
+                onChanged={onPlanChanged}
+              >
+                <ProviderForm
+                  key={`plan-${current?.revision ?? 0}`}
+                  provider={plan}
+                  keyless
+                  current={current}
+                  saved={undefined}
+                  onSaved={() =>
+                    onDone(
+                      planInUse
+                        ? `Your ${PLANS[plan].name} plan saved. Agents use it from their next turn.`
+                        : `Your agents now use your ${PLANS[plan].name} plan, from their next turn.`,
+                    )
+                  }
+                  onForgotten={() => onDone('')}
+                />
+              </PlanBlock>
+              <h3 className="provider-card__or">Or use an API key</h3>
+            </>
+          )}
           <ProviderForm
             key={current?.revision ?? 0}
             provider={id}
@@ -181,6 +241,16 @@ function ProviderCard({
       )}
     </section>
   )
+}
+
+function cardStanding(
+  active: boolean,
+  subscription: Subscription | undefined,
+  saved: Saved | undefined,
+): Standing {
+  if (active) return 'active'
+  if (subscription) return 'plan'
+  return saved ? 'saved' : 'none'
 }
 
 export function useModels(provider: Provider, key: string, saved: boolean) {
@@ -280,19 +350,22 @@ function listProblem(status: number | undefined, provider: Provider) {
 
 function ProviderForm({
   provider,
+  keyless = false,
   current,
   saved,
   onSaved,
   onForgotten,
 }: {
   provider: Provider
+  /** A signed-in plan: its own token lists the models, and there is no key to paste. */
+  keyless?: boolean
   current: Current | null
   saved: Saved | undefined
   onSaved: () => Promise<unknown>
   onForgotten: () => Promise<unknown>
 }) {
   const active = current?.provider === provider
-  const hasKey = active || Boolean(saved)
+  const hasKey = keyless || active || Boolean(saved)
   const [key, setKey] = useState('')
   const [draft, setDraft] = useState(() => draftFor(active ? current : saved))
   const list = useModels(provider, key, hasKey)
@@ -317,17 +390,19 @@ function ProviderForm({
         void connection.save({ provider, key, ...draft })
       }}
     >
-      <KeyField
-        provider={provider}
-        value={key}
-        saved={hasKey}
-        loading={list.loading}
-        onChange={(value) => {
-          setKey(value)
-          list.reset()
-        }}
-        onLoad={() => void list.load()}
-      />
+      {!keyless && (
+        <KeyField
+          provider={provider}
+          value={key}
+          saved={hasKey}
+          loading={list.loading}
+          onChange={(value) => {
+            setKey(value)
+            list.reset()
+          }}
+          onLoad={() => void list.load()}
+        />
+      )}
       {list.problem && (
         <p role="alert" className="small provider-problem">
           {list.problem}
@@ -335,6 +410,7 @@ function ProviderForm({
       )}
       <ModelField
         models={list.models}
+        planOrder={keyless}
         typed={list.unreachable}
         value={draft.model}
         onPick={choose}
@@ -455,11 +531,14 @@ function KeyField({
 
 export function ModelField({
   models,
+  planOrder = false,
   typed,
   value,
   onPick,
 }: {
   models: Choice[] | null
+  /** A plan lists its models in its own order, not by date. */
+  planOrder?: boolean
   typed: boolean
   value: string
   onPick: (id: string) => void
@@ -498,7 +577,10 @@ export function ModelField({
     <fieldset className="provider-models">
       <legend>
         Model
-        <span className="hint">{models.length} available, newest first</span>
+        <span className="hint">
+          {models.length} available,{' '}
+          {planOrder ? 'in the plan’s order' : 'newest first'}
+        </span>
       </legend>
       <div className="provider-models__search">
         <Search aria-hidden="true" />

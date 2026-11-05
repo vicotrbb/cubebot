@@ -787,3 +787,152 @@
     min-height: 44px;
   }
 }
+
+/* A provider's plan sign-in, above its key form. */
+.plan {
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+  padding-top: 14px;
+}
+.plan h3,
+.provider-card__or {
+  margin: 0;
+  font-size: var(--t-lg);
+  font-weight: var(--w-head);
+  letter-spacing: -0.012em;
+  color: var(--ink);
+}
+.plan__intro {
+  display: grid;
+  gap: 2px;
+}
+.plan__intro p {
+  max-width: 62ch;
+  margin: 0;
+}
+.plan__start {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+.plan__risk {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--ink);
+}
+.plan__signed {
+  display: grid;
+  gap: 12px;
+}
+.plan__account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.plan__who {
+  display: grid;
+  min-width: 0;
+}
+.plan__who strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plan__signed .provider-form {
+  padding-top: 2px;
+}
+.plan__steps {
+  display: grid;
+  gap: 12px;
+}
+.plan__steps ol {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.plan__steps li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  justify-items: start;
+  align-items: center;
+  gap: 6px 10px;
+  counter-increment: step;
+}
+.plan__steps li::before {
+  content: counter(step);
+  grid-row: 1 / span 2;
+  align-self: start;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--orange-wash);
+  color: var(--orange-text);
+  font-size: var(--t-xs);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.plan__steps li > * {
+  grid-column: 2;
+}
+.plan__steps li .field {
+  width: 100%;
+}
+.plan__code-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.plan__code {
+  padding: 6px 12px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  font-family: var(--mono);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+  user-select: all;
+}
+.plan__waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--ink-soft);
+}
+.plan__waiting svg {
+  width: 14px;
+  height: 14px;
+}
+.provider-card__or {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 520px) {
+  .plan__account {
+    flex-wrap: wrap;
+  }
+  .plan__steps li .btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan__waiting svg {
+    animation: none;
+  }
+}

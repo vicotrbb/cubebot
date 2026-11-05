@@ -58,3 +58,15 @@ describe('audit sentences', () => {
     assert.ok(day(new Date(2025, 0, 2).toISOString(), now).includes('2025'))
   })
 })
+
+test('plan sign-ins name the plan and an unconfirmed revocation', () => {
+  assert.equal(
+    phrase('provider.sign_in', { provider: 'supergrok' }),
+    'signed in their Grok plan',
+  )
+  assert.equal(
+    phrase('provider.sign_out', { provider: 'chatgpt', revoked: false }),
+    'signed out the ChatGPT plan, without the vendor confirming',
+  )
+  assert.equal(target('provider.sign_out', {}, 'x', 'y'), null)
+})

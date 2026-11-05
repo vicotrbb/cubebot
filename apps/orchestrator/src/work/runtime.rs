@@ -105,6 +105,7 @@ impl Work {
             provider: inference.provider,
             model: inference.model,
             api_key: inference.api_key,
+            api_key_expires_at: inference.api_key_expires_at,
             context_window: inference.context_window,
             summary,
             history,
@@ -517,6 +518,7 @@ fn valid(event: &TurnEvent) -> bool {
             code.as_str(),
             "provider_unavailable"
                 | "provider_rejected"
+                | "provider_usage_limit"
                 | "provider_invalid_response"
                 | "journal_unavailable"
                 | "cancelled"
@@ -637,6 +639,7 @@ async fn inference(
             provider: cubebot_protocol::runtime::ProviderKind::Anthropic,
             model: String::new(),
             api_key: String::new(),
+            api_key_expires_at: None,
             context_window: None,
         })),
         None => {

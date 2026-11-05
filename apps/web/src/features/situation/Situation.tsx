@@ -372,7 +372,9 @@ function NowList({
                 <span className="feed__state">
                   {item.error === 'budget_exhausted'
                     ? 'Paused by its budget'
-                    : (OPEN[item.status] ?? item.status)}
+                    : item.error === 'provider_usage_limit'
+                      ? 'Waiting for plan usage'
+                      : (OPEN[item.status] ?? item.status)}
                 </span>
               </span>
               <span className="feed__text">{preview(item.message)}</span>

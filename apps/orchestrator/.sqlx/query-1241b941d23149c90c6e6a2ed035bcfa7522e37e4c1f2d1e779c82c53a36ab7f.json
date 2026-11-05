@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE provider_subscriptions SET\n                credential = $2,\n                revision = $3,\n                expires_at = clock_timestamp() + make_interval(secs => $4),\n                refresh_after = GREATEST(clock_timestamp() + make_interval(secs => $4 - $5), to_timestamp($6)),\n                problem = NULL,\n                updated_at = clock_timestamp()\n            WHERE provider = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bytea",
+        "Int8",
+        "Float8",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1241b941d23149c90c6e6a2ed035bcfa7522e37e4c1f2d1e779c82c53a36ab7f"
+}

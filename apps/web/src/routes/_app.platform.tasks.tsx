@@ -24,7 +24,12 @@ const NAMES: Record<Provider, string> = {
   openrouter: 'OpenRouter',
   gemini: 'Google Gemini',
   grok: 'xAI Grok',
+  chatgpt: 'ChatGPT plan',
+  supergrok: 'Grok plan',
 }
+/** A plan is personal, so it never becomes the installation's task orchestrator by choice. */
+const keyed = (provider: Provider) =>
+  provider !== 'chatgpt' && provider !== 'supergrok'
 
 function TaskSettingsPage() {
   const settings = useQuery({
@@ -54,7 +59,7 @@ function useKeyedProviders() {
       ...(saved.data ?? [])
         .map((item) => item.provider)
         .filter((provider) => provider !== active),
-    ],
+    ].filter(keyed),
   }
 }
 

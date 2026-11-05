@@ -54,10 +54,10 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         Err(IdentityError::Forbidden)
     ));
     let encrypted: Vec<u8> = sqlx::query_scalar!(
-        "
-        SELECT credential
+        r#"
+        SELECT credential AS "credential!"
         FROM provider_connection
-        "
+        "#
     )
     .fetch_one(&pool)
     .await

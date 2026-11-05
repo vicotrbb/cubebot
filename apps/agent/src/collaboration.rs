@@ -92,6 +92,15 @@ impl Collaboration {
         }
     }
 
+    /// The orchestrator's current key and its expiry, while the agent still uses `provider`.
+    pub async fn renewed_key(
+        &self,
+        provider: cubebot_protocol::runtime::ProviderKind,
+    ) -> Option<(String, Option<i64>)> {
+        let key = self.client.as_ref()?.provider().await.ok()?;
+        (key.provider == provider).then_some((key.api_key, key.api_key_expires_at))
+    }
+
     /// `id` is the journaled call's, so a resent request creates nothing new.
     pub fn call(
         &self,

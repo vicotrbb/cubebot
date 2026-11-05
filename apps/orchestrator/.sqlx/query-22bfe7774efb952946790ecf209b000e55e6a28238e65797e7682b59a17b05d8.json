@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT agent_host_id, chatgpt_client_id FROM installation",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent_host_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "chatgpt_client_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "22bfe7774efb952946790ecf209b000e55e6a28238e65797e7682b59a17b05d8"
+}

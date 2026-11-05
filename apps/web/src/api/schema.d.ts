@@ -1544,6 +1544,99 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/provider/subscriptions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Signed-in plans, without their tokens. */
+    get: operations['subscriptions']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/subscriptions/chatgpt': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Starts Sign in with ChatGPT; the browser ends on a `127.0.0.1` address the person pastes back. */
+    post: operations['start_chatgpt']
+    /**
+     * Forgets the ChatGPT plan, stops agents using it and asks OpenAI to revoke it; `revoked` is
+     *     false when OpenAI did not confirm, and the person can disconnect the app in ChatGPT's settings.
+     */
+    delete: operations['sign_out_chatgpt']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/subscriptions/chatgpt/{sign_in}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * 422 with `sign_in_expired`, `sign_in_denied`, `sign_in_refused`, `sign_in_mismatch` or
+     *     `plan_not_included`; 400 when the address is not this sign-in's; 409 while someone else's plan is signed in.
+     */
+    post: operations['finish_chatgpt']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/subscriptions/supergrok': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Starts SuperGrok device sign-in, which uses the Grok CLI's client id. */
+    post: operations['start_supergrok']
+    /** Forgets the Grok plan, stops agents using it and asks xAI to revoke it. */
+    delete: operations['sign_out_supergrok']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/subscriptions/supergrok/{sign_in}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 202 until the person approves on xAI's page; then the signed-in plan. */
+    post: operations['poll_supergrok']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/rooms': {
     parameters: {
       query?: never
@@ -2155,6 +2248,12 @@ export interface components {
       | 'browser_view'
       | 'browser_control'
       | 'room_manage'
+    ChatgptSignIn: {
+      /** Format: uuid */
+      sign_in: string
+      /** @description Opened in the person's browser; it ends on a `127.0.0.1` address they paste back. */
+      url: string
+    }
     Child: {
       agent: string
       /** Format: uuid */
@@ -2169,7 +2268,7 @@ export interface components {
     }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
-      /** @description `None` keeps the key saved for this provider. */
+      /** @description `None` keeps the key saved for this provider. A subscription has none: its owner signs in. */
       api_key?: string | null
       /**
        * Format: int64
@@ -2512,6 +2611,10 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    Landed: {
+      /** @description The `http://127.0.0.1:1456/auth/callback?...` address the browser landed on. */
+      url: string
+    }
     /** @enum {string} */
     LifecycleAction: 'start' | 'stop' | 'restart' | 'retire'
     LifecycleCommand: {
@@ -2522,7 +2625,10 @@ export interface components {
       request_id: string
     }
     ListModels: {
-      /** @description The key to list with; without one, the saved key when it belongs to `provider`. */
+      /**
+       * @description The key to list with; without one, the saved key when it belongs to `provider`, or for a
+       *     subscription, the caller's own signed-in plan.
+       */
       api_key?: string | null
       provider: components['schemas']['ProviderKind']
     }
@@ -2815,7 +2921,14 @@ export interface components {
           mode: 'explicit_grants'
         }
     /** @enum {string} */
-    ProviderKind: 'openai' | 'anthropic' | 'openrouter' | 'gemini' | 'grok'
+    ProviderKind:
+      | 'openai'
+      | 'anthropic'
+      | 'openrouter'
+      | 'gemini'
+      | 'grok'
+      | 'chatgpt'
+      | 'supergrok'
     ProviderSummary: {
       access: components['schemas']['ProviderAccess']
       /** Format: int64 */
@@ -3101,6 +3214,9 @@ export interface components {
     ShareKind: 'user' | 'team' | 'agent'
     /** @enum {string} */
     SharePermission: 'read' | 'write'
+    SignedOut: {
+      revoked: boolean
+    }
     Situation: {
       agents: components['schemas']['SituationAgent'][]
       days: components['schemas']['DaySpend'][]
@@ -3212,6 +3328,37 @@ export interface components {
       id: string
       /** Format: uuid */
       request_id: string
+    }
+    SubscriptionSummary: {
+      /** @description The plan's account, as its vendor names it: usually an email address. */
+      account: string
+      /**
+       * Format: int64
+       * @description Unix seconds when the access token expires; the orchestrator renews it before then.
+       */
+      expires_at: number
+      mine: boolean
+      /** @description Login of the person whose plan it is. */
+      owner: string
+      /** @description `sign_in_again` when the vendor refused the refresh, `refresh_failing` while a renewal retries. */
+      problem?: string | null
+      provider: components['schemas']['ProviderKind']
+      /**
+       * Format: int64
+       * @description Turns waiting because the plan reached its usage limit, while it is the provider in use.
+       */
+      waiting: number
+    }
+    SupergrokSignIn: {
+      /** Format: int64 */
+      expires_in: number
+      /** Format: int64 */
+      interval: number
+      /** Format: uuid */
+      sign_in: string
+      user_code: string
+      /** @description Opens xAI's approval page with the code filled in. */
+      verification_uri: string
     }
     Task: {
       agents: components['schemas']['Member'][]
@@ -6152,6 +6299,213 @@ export interface operations {
         content?: never
       }
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  subscriptions: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SubscriptionSummary'][]
+        }
+      }
+    }
+  }
+  start_chatgpt: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ChatgptSignIn']
+        }
+      }
+    }
+  }
+  sign_out_chatgpt: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SignedOut']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  finish_chatgpt: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        sign_in: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Landed']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SubscriptionSummary']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  start_supergrok: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SupergrokSignIn']
+        }
+      }
+      502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  sign_out_supergrok: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SignedOut']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  poll_supergrok: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        sign_in: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SubscriptionSummary']
+        }
+      }
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      502: {
         headers: {
           [name: string]: unknown
         }

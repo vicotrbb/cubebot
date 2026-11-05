@@ -49,6 +49,12 @@ async fn fake(replies: Vec<Value>) -> Fake {
             }),
         )
         .route("/api/runtime/channel", get(upgrade))
+        .route(
+            "/api/runtime/provider",
+            get(|| async {
+                Json(json!({"provider":"chatgpt","api_key":"renewed-key","api_key_expires_at":now() + 3600}))
+            }),
+        )
         .route("/responses", post(model))
         .route("/messages", post(model))
         .route(
@@ -103,10 +109,19 @@ async fn relay(channel: Channel, mut socket: WebSocket) {
         }
     }
 }
-async fn model(State(channel): State<Channel>, Json(body): Json<Value>) -> Response {
+async fn model(
+    State(channel): State<Channel>,
+    headers: HeaderMap,
+    Json(mut body): Json<Value>,
+) -> Response {
     use axum::response::IntoResponse;
     let mut replies = channel.provider.lock().unwrap();
     let reply = replies.remove(0);
+    body["_authorization"] = json!(
+        headers
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+    );
     replies.push(body);
     if let Some(status) = reply["status"].as_u64() {
         let status = axum::http::StatusCode::from_u16(status as u16).unwrap();
@@ -213,6 +228,12 @@ async fn child_exit(child: &mut std::process::Child) -> std::process::ExitStatus
     child.kill().unwrap();
     child.wait().unwrap();
     panic!("native runtime did not exit");
+}
+fn now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
 }
 fn turn(id: Uuid, sequence: u64, message: &str) -> Value {
     json!({"type":"turn","turn":id,"sequence":sequence,"message":message,"instructions":"Be brief.",
@@ -646,4 +667,55 @@ async fn bootstrap_rejects_oversized_and_redirected_responses() {
         task.abort();
         std::fs::remove_file(path).unwrap();
     }
+}
+
+#[tokio::test]
+async fn a_chatgpt_turn_takes_the_renewed_token_before_its_own_lapses() {
+    let mut fake = fake(vec![
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"Hi"}]}]),
+            json!({"input_tokens":9,"output_tokens":2}),
+        ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"[]"}]}]),
+            json!({"input_tokens":9,"output_tokens":2}),
+        ),
+    ])
+    .await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let id = Uuid::new_v4();
+    let mut delivery = turn(id, 1, "Hello");
+    delivery["provider"] = json!("chatgpt");
+    delivery["api_key"] = json!("expiring-key");
+    delivery["api_key_expires_at"] = json!(now() + 60);
+    fake.deliver(delivery);
+    assert_eq!(
+        fake.event(1).await,
+        json!({"kind":"text_delta","text":"Hi"})
+    );
+    fake.event(2).await;
+    fake.event(3).await;
+    assert_eq!(fake.event(4).await["kind"], "done");
+    let request = fake.provider.lock().unwrap()[0].clone();
+    assert_eq!(request["_authorization"], "Bearer renewed-key");
+    assert!(
+        request["instructions"]
+            .as_str()
+            .unwrap()
+            .ends_with("Be brief.")
+    );
+    assert_eq!(
+        request["input"][0],
+        json!({"role":"user","content":"Earlier"})
+    );
+    assert_eq!(
+        (request["store"].as_bool(), request["stream"].as_bool()),
+        (Some(false), Some(true))
+    );
+    fake.ack(id, [1, 2, 3, 4]);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.drain(&mut child).await;
+    std::fs::remove_dir_all(root).unwrap();
 }
