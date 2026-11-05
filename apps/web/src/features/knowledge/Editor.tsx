@@ -38,6 +38,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { CodeView } from './CodeView'
+import { ImageView } from './ImageView'
 import {
   blocks,
   SlashCommands,
@@ -74,7 +75,11 @@ function extensions(
         return ReactNodeViewRenderer(CodeView)
       },
     }).configure({ lowlight: createLowlight(common) }),
-    Image.configure({ allowBase64: false }),
+    Image.extend({
+      addNodeView() {
+        return ReactNodeViewRenderer(ImageView)
+      },
+    }).configure({ allowBase64: false }),
     TaskList,
     TaskItem.configure({ nested: true }),
     Table.configure({ resizable: false }),

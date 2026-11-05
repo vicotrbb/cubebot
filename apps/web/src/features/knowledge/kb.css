@@ -503,8 +503,25 @@
   height: auto;
   border-radius: var(--r-md);
 }
-.kb-prose img.ProseMirror-selectednode {
+.kb-image[data-selected='true'] img,
+.kb-image[data-selected='true'] .kb-image__missing {
   outline: 2px solid var(--orange);
+}
+.kb-image__missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.kb-image__missing svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
 }
 .kb-prose table {
   width: 100%;

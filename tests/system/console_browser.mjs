@@ -135,8 +135,8 @@ await page.goto(B + '/platform/providers')
 await page.locator('.provider-card').first().waitFor()
 await shot(page, 'providers-closed')
 check(
-  (await page.locator('.provider-card').count()) === 3,
-  'three provider cards',
+  (await page.locator('.provider-card').count()) === 5,
+  'five provider cards',
 )
 check(
   (await page.locator('.provider-card').first().innerText()).includes(
@@ -247,6 +247,50 @@ check(
   (await page.locator('.kb-diagram__art svg').count()) === 1,
   'a diagram draws',
 )
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  'base64',
+)
+await page.route('https://images.example/**', (route) =>
+  route.request().url().endsWith('ok.png')
+    ? route.fulfill({ contentType: 'image/png', body: png })
+    : route.fulfill({ status: 404 }),
+)
+const pictures = await page.evaluate(async () => {
+  const headers = {
+    'content-type': 'application/json',
+    'cubebot-csrf': '1',
+  }
+  const created = await globalThis.fetch('/api/kb/pages', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      request_id: globalThis.crypto.randomUUID(),
+      kind: 'page',
+      parent: null,
+      title: 'Pictures',
+      body: '![ok](https://images.example/ok.png)\n\n![gone](https://images.example/gone.png)\n',
+    }),
+  })
+  return (await created.json()).id
+})
+await page.goto(`${B}/kb/${pictures}`)
+await page.locator('.kb-image__missing').waitFor()
+check(
+  await page
+    .locator('.kb-image img[alt="ok"]')
+    .evaluate((image) => image.complete && image.naturalWidth > 0),
+  'an outside image renders in a page',
+)
+check(
+  (await page.locator('.kb-image__missing').count()) === 1 &&
+    (await page.locator('.kb-image__missing a').getAttribute('href')) ===
+      'https://images.example/gone.png',
+  'an outside image that fails shows a link to the original',
+)
+await shot(page, 'kb-images')
+await page.goto(`${B}/kb/${id}`)
+await page.locator('.kb-prose > p').last().waitFor()
 await shot(page, 'kb-page')
 await page.waitForTimeout(1200)
 check(
@@ -264,10 +308,6 @@ check(/- \[ \] Install it/.test(got.body), 'task list is Markdown')
 check(/\| *Name *\| *Value *\|/.test(got.body), 'table is Markdown')
 check(/```mermaid/.test(got.body), 'diagram is a mermaid fence')
 
-const png = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
-  'base64',
-)
 await page.locator('.kb-prose > p').last().click()
 await page.keyboard.type('/image')
 await page.waitForTimeout(150)

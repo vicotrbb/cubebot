@@ -493,6 +493,8 @@ Accepted 2026-11-04. The user asked for a Notion-inspired wiki that people and a
 
 A page's body is **Markdown** (GitHub-flavored), and that text is the stored truth. Agents read and edit it as text through `kb_read`, `kb_edit`, `kb_write` and `kb_create`; the console edits the same text as blocks with TipTap and its Markdown extension. Diagrams are ` ```mermaid ` fences, which the console draws and an agent writes like any code. Images and attachments are blobs on the storage volume, linked from the body by URL.
 
+Outside images in a page load when it opens, without a referrer, by the user's decision on 2026-11-05; an agent writing a page can therefore make a reader's browser request a URL it chose. Chat keeps them as links. An image that fails to load shows a link to the original.
+
 Concurrent writers are handled by revision: a whole-body save names the revision it read and is refused when the page moved on, and the console then asks the person which version to keep. An agent's `kb_edit` replaces one exact passage, so it needs no revision and cannot overwrite what it did not read. Opening a page never saves it, so what an agent wrote stays byte for byte until someone changes it.
 
 Deleting moves a page and everything under it to the trash; anyone can restore it. Only a person can delete from the trash for good, so an agent's mistake is always recoverable. One author's saves within five minutes share one row of version history.
