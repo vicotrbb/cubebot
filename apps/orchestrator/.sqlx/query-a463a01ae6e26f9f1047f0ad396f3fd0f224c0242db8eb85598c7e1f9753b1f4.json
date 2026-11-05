@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT owner FROM provider_subscriptions WHERE provider = $1 AND problem IS DISTINCT FROM 'sign_in_again' FOR SHARE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owner",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a463a01ae6e26f9f1047f0ad396f3fd0f224c0242db8eb85598c7e1f9753b1f4"
+}

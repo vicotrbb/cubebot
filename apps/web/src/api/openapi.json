@@ -3806,6 +3806,203 @@
         }
       }
     },
+    "/api/provider/subscriptions": {
+      "get": {
+        "tags": [],
+        "summary": "Signed-in plans, without their tokens.",
+        "operationId": "subscriptions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubscriptionSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/provider/subscriptions/chatgpt": {
+      "post": {
+        "tags": [],
+        "summary": "Starts Sign in with ChatGPT; the browser ends on a `127.0.0.1` address the person pastes back.",
+        "operationId": "start_chatgpt",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatgptSignIn"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Forgets the ChatGPT plan, stops agents using it and asks OpenAI to revoke it; `revoked` is\nfalse when OpenAI did not confirm, and the person can disconnect the app in ChatGPT's settings.",
+        "operationId": "sign_out_chatgpt",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/provider/subscriptions/chatgpt/{sign_in}": {
+      "post": {
+        "tags": [],
+        "summary": "422 with `sign_in_expired`, `sign_in_denied`, `sign_in_refused`, `sign_in_mismatch` or\n`plan_not_included`; 400 when the address is not this sign-in's; 409 while someone else's plan is signed in.",
+        "operationId": "finish_chatgpt",
+        "parameters": [
+          {
+            "name": "sign_in",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Landed"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          },
+          "502": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/provider/subscriptions/supergrok": {
+      "post": {
+        "tags": [],
+        "summary": "Starts SuperGrok device sign-in, which uses the Grok CLI's client id.",
+        "operationId": "start_supergrok",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupergrokSignIn"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Forgets the Grok plan, stops agents using it and asks xAI to revoke it.",
+        "operationId": "sign_out_supergrok",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/provider/subscriptions/supergrok/{sign_in}": {
+      "post": {
+        "tags": [],
+        "summary": "202 until the person approves on xAI's page; then the signed-in plan.",
+        "operationId": "poll_supergrok",
+        "parameters": [
+          {
+            "name": "sign_in",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionSummary"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          },
+          "502": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/rooms": {
       "get": {
         "tags": [],
@@ -5314,6 +5511,20 @@
           "room_manage"
         ]
       },
+      "ChatgptSignIn": {
+        "type": "object",
+        "required": ["sign_in", "url"],
+        "properties": {
+          "sign_in": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string",
+            "description": "Opened in the person's browser; it ends on a `127.0.0.1` address they paste back."
+          }
+        }
+      },
       "Child": {
         "type": "object",
         "required": ["id", "agent_id", "agent", "status", "awaited"],
@@ -5360,7 +5571,7 @@
           },
           "api_key": {
             "type": ["string", "null"],
-            "description": "`None` keeps the key saved for this provider."
+            "description": "`None` keeps the key saved for this provider. A subscription has none: its owner signs in."
           },
           "context_window": {
             "type": ["integer", "null"],
@@ -6181,6 +6392,17 @@
         },
         "additionalProperties": false
       },
+      "Landed": {
+        "type": "object",
+        "required": ["url"],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The `http://127.0.0.1:1456/auth/callback?...` address the browser landed on."
+          }
+        },
+        "additionalProperties": false
+      },
       "LifecycleAction": {
         "type": "string",
         "enum": ["start", "stop", "restart", "retire"]
@@ -6209,7 +6431,7 @@
         "properties": {
           "api_key": {
             "type": ["string", "null"],
-            "description": "The key to list with; without one, the saved key when it belongs to `provider`."
+            "description": "The key to list with; without one, the saved key when it belongs to `provider`, or for a\nsubscription, the caller's own signed-in plan."
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderKind"
@@ -6957,7 +7179,15 @@
       },
       "ProviderKind": {
         "type": "string",
-        "enum": ["openai", "anthropic", "openrouter", "gemini", "grok"]
+        "enum": [
+          "openai",
+          "anthropic",
+          "openrouter",
+          "gemini",
+          "grok",
+          "chatgpt",
+          "supergrok"
+        ]
       },
       "ProviderSummary": {
         "type": "object",
@@ -7661,6 +7891,15 @@
         "type": "string",
         "enum": ["read", "write"]
       },
+      "SignedOut": {
+        "type": "object",
+        "required": ["revoked"],
+        "properties": {
+          "revoked": {
+            "type": "boolean"
+          }
+        }
+      },
       "Situation": {
         "type": "object",
         "required": [
@@ -7950,6 +8189,80 @@
           }
         },
         "additionalProperties": false
+      },
+      "SubscriptionSummary": {
+        "type": "object",
+        "required": [
+          "provider",
+          "account",
+          "owner",
+          "mine",
+          "expires_at",
+          "waiting"
+        ],
+        "properties": {
+          "account": {
+            "type": "string",
+            "description": "The plan's account, as its vendor names it: usually an email address."
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Unix seconds when the access token expires; the orchestrator renews it before then."
+          },
+          "mine": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "string",
+            "description": "Login of the person whose plan it is."
+          },
+          "problem": {
+            "type": ["string", "null"],
+            "description": "`sign_in_again` when the vendor refused the refresh, `refresh_failing` while a renewal retries."
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          },
+          "waiting": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Turns waiting because the plan reached its usage limit, while it is the provider in use."
+          }
+        }
+      },
+      "SupergrokSignIn": {
+        "type": "object",
+        "required": [
+          "sign_in",
+          "user_code",
+          "verification_uri",
+          "expires_in",
+          "interval"
+        ],
+        "properties": {
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "interval": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "sign_in": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_code": {
+            "type": "string"
+          },
+          "verification_uri": {
+            "type": "string",
+            "description": "Opens xAI's approval page with the code filled in."
+          }
+        }
       },
       "Task": {
         "type": "object",

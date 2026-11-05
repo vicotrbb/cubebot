@@ -11,6 +11,7 @@ mod openai;
 mod openrouter;
 mod prices;
 mod sse;
+mod supergrok;
 pub use anthropic::Anthropic;
 pub use gemini::Gemini;
 pub use grok::Grok;
@@ -25,6 +26,8 @@ pub enum Error {
     Unavailable,
     Transient(Option<Duration>),
     Rejected,
+    /// A subscription plan's usage limit; vendors give no reset time, so it is not retried.
+    UsageLimit,
     InvalidResponse(Option<Source>),
 }
 // Debug omits the cause: callers format it into reports as the variant name alone.
@@ -35,6 +38,7 @@ impl std::fmt::Debug for Error {
             Self::Unavailable => f.write_str("Unavailable"),
             Self::Transient(delay) => f.debug_tuple("Transient").field(delay).finish(),
             Self::Rejected => f.write_str("Rejected"),
+            Self::UsageLimit => f.write_str("UsageLimit"),
             Self::InvalidResponse(_) => f.write_str("InvalidResponse"),
         }
     }
@@ -70,6 +74,7 @@ impl Error {
                 "provider_unavailable"
             }
             Self::Rejected => "provider_rejected",
+            Self::UsageLimit => "provider_usage_limit",
             Self::InvalidResponse(_) => "provider_invalid_response",
         }
     }
@@ -249,7 +254,14 @@ async fn send(request: RequestBuilder) -> Result<Response, Error> {
     }
     eprintln!("Provider HTTP failure: status={status}");
     Err(match status {
-        429 | 500..=599 => Error::Transient(retry_after(&response)),
+        429 => {
+            let delay = retry_after(&response);
+            match json(response).await {
+                Ok(body) if openai::usage_limit(&body["error"]["code"]) => Error::UsageLimit,
+                _ => Error::Transient(delay),
+            }
+        }
+        500..=599 => Error::Transient(retry_after(&response)),
         _ => Error::Rejected,
     })
 }

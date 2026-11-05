@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE installation SET chatgpt_client_id = $1 WHERE chatgpt_client_id IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "100bcd5e9d544356cd61ceebdd869d4ffa31ef5395ce1f2cef84f397bb7524d4"
+}

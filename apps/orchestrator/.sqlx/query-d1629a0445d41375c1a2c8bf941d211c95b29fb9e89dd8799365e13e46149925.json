@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO provider_subscriptions (provider, owner, account, credential, expires_at, refresh_after)\n         SELECT 'supergrok', id, 'person@example.com', '\\x00', clock_timestamp(), clock_timestamp()\n         FROM human_accounts WHERE login = 'admin'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d1629a0445d41375c1a2c8bf941d211c95b29fb9e89dd8799365e13e46149925"
+}

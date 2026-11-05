@@ -23,6 +23,8 @@ use uuid::Uuid;
 
 const ATTEMPTS: u32 = 4;
 const LONGEST_WAIT: Duration = Duration::from_secs(60);
+/// A subscription's token is renewed this close to expiry; the orchestrator may renew it from then.
+const RENEW_WITHIN: i64 = 5 * 60;
 
 pub(super) type Event = (Entry, Option<u64>);
 
@@ -150,6 +152,30 @@ pub(super) async fn run(
         }
         ProviderKind::Grok => {
             let provider = configured(Grok::new, Grok::for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
+        ProviderKind::Chatgpt => {
+            let provider = configured(OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
+        ProviderKind::Supergrok => {
+            let provider = configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests);
             start(
                 provider,
                 &turn,
@@ -305,6 +331,7 @@ async fn start<P: Provider>(
     Session {
         provider: &provider,
         turn,
+        key: (turn.api_key.clone(), turn.api_key_expires_at),
         max_output_tokens: limits.max_output_tokens,
         run,
         store,
@@ -322,6 +349,8 @@ async fn start<P: Provider>(
 struct Session<'a, P> {
     provider: &'a P,
     turn: &'a Turn,
+    /// The provider key and, for a subscription, when it expires.
+    key: (String, Option<i64>),
     max_output_tokens: Option<u64>,
     run: &'a mut Run,
     store: &'a Mutex<Store>,
@@ -380,10 +409,32 @@ impl<P: Provider> Session<'_, P> {
         request: &Request<'_>,
         stream_text: bool,
     ) -> Result<(Reply, Option<Usage>), &'static str> {
+        self.renew().await;
+        let key = self.key.0.clone();
+        let request = &Request {
+            key: &key,
+            ..*request
+        };
         let mut cancel = self.cancel.clone();
         tokio::select! {
             step = self.retrying(request, stream_text) => step.map_err(|error| error.code()),
             _ = cancel.wait_for(|cancelled| *cancelled) => Err("cancelled"),
+        }
+    }
+
+    /// A long turn outlives a subscription's token, so it takes the renewed one before it lapses.
+    async fn renew(&mut self) {
+        let Some(expires) = self.key.1 else {
+            return;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_secs() as i64);
+        if expires - now > RENEW_WITHIN {
+            return;
+        }
+        if let Some(renewed) = self.collaboration.renewed_key(self.turn.provider).await {
+            self.key = renewed;
         }
     }
 

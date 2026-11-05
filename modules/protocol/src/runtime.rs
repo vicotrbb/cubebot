@@ -57,6 +57,10 @@ pub enum ProviderKind {
     Openrouter,
     Gemini,
     Grok,
+    /// A ChatGPT plan signed in through Sign in with ChatGPT; the key is a short-lived access token.
+    Chatgpt,
+    /// A SuperGrok or X Premium plan through the Grok CLI's sign-in; the key is a short-lived access token.
+    Supergrok,
 }
 impl ProviderKind {
     pub fn as_str(self) -> &'static str {
@@ -66,7 +70,13 @@ impl ProviderKind {
             Self::Openrouter => "openrouter",
             Self::Gemini => "gemini",
             Self::Grok => "grok",
+            Self::Chatgpt => "chatgpt",
+            Self::Supergrok => "supergrok",
         }
+    }
+    /// Signed in with a person's plan: personal, and its key expires within hours.
+    pub fn subscription(self) -> bool {
+        matches!(self, Self::Chatgpt | Self::Supergrok)
     }
     pub fn parse(value: &str) -> Option<Self> {
         [
@@ -75,6 +85,8 @@ impl ProviderKind {
             Self::Openrouter,
             Self::Gemini,
             Self::Grok,
+            Self::Chatgpt,
+            Self::Supergrok,
         ]
         .into_iter()
         .find(|kind| kind.as_str() == value)
@@ -92,6 +104,9 @@ pub struct Turn {
     pub provider: ProviderKind,
     pub model: String,
     pub api_key: String,
+    /// Unix seconds when a subscription's `api_key` expires; ask `GET /api/runtime/provider` before then.
+    #[serde(default)]
+    pub api_key_expires_at: Option<i64>,
     pub context_window: Option<u64>,
     pub summary: Option<String>,
     pub history: Vec<Exchange>,
@@ -115,6 +130,14 @@ pub struct Turn {
     pub broadcast: bool,
     #[serde(default)]
     pub knowledge_base: bool,
+}
+
+/// `GET /api/runtime/provider`: the agent's current provider material. Never log it.
+#[derive(Serialize, Deserialize)]
+pub struct ProviderKey {
+    pub provider: ProviderKind,
+    pub api_key: String,
+    pub api_key_expires_at: Option<i64>,
 }
 
 /// Names are unique letters, digits or hyphens, and prefix the server's tools as `<name>__<tool>`.
@@ -528,6 +551,7 @@ mod tests {
             provider: ProviderKind::Anthropic,
             model: "m".into(),
             api_key: "k".into(),
+            api_key_expires_at: None,
             context_window: None,
             summary: None,
             history: Vec::new(),
@@ -559,6 +583,8 @@ mod tests {
     fn gemini_and_grok_are_provider_kinds_and_others_are_not() {
         assert_eq!(ProviderKind::parse("gemini"), Some(ProviderKind::Gemini));
         assert_eq!(ProviderKind::parse("grok"), Some(ProviderKind::Grok));
+        assert_eq!(ProviderKind::parse("chatgpt"), Some(ProviderKind::Chatgpt));
+        assert!(ProviderKind::Supergrok.subscription() && !ProviderKind::Openai.subscription());
         assert_eq!(ProviderKind::parse("palm"), None);
     }
 

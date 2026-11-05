@@ -14,8 +14,8 @@ use axum::{
 };
 use cubebot_protocol::runtime::{
     Bootstrap, Broadcast, Broadcasted, Collaborate, Collaborated, Dream, DreamEnd, FileShare,
-    Memory, MemoryChange, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall, RuntimeSession,
-    SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
+    Memory, MemoryChange, ProviderKey, REPORT_BYTES, RequestLogin, RoutineAnswer, RoutineCall,
+    RuntimeSession, SkillChange, SkillPackage, VaultFill, VaultItem, VaultPut,
 };
 use uuid::Uuid;
 
@@ -31,6 +31,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/dreams/{run}/changes", post(commit_dream))
         .route("/api/runtime/skills/{name}", get(skill))
         .route("/api/runtime/wallpaper", get(wallpaper))
+        .route("/api/runtime/provider", get(provider))
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
         .route("/api/runtime/turns/{turn}/broadcasts", post(broadcast))
@@ -305,6 +306,26 @@ fn vault_of(identity: &RuntimeIdentity) -> Result<&crate::connections::Connectio
 fn vault_unavailable(error: crate::identity::IdentityError) -> Failure {
     tracing::warn!(?error, "runtime vault request failed");
     Failure(StatusCode::SERVICE_UNAVAILABLE)
+}
+/// The agent's current provider material: a subscription's access token, renewed when due.
+async fn provider(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<ProviderKey>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let connections = identity
+        .connections
+        .as_ref()
+        .ok_or(Failure(StatusCode::SERVICE_UNAVAILABLE))?;
+    let inference = connections.current(actor.agent).await.map_err(|error| {
+        tracing::warn!(?error, "runtime provider material unavailable");
+        Failure(StatusCode::SERVICE_UNAVAILABLE)
+    })?;
+    Ok(Json(ProviderKey {
+        provider: inference.provider,
+        api_key: inference.api_key,
+        api_key_expires_at: inference.api_key_expires_at,
+    }))
 }
 async fn vault(
     State(identity): State<RuntimeIdentity>,

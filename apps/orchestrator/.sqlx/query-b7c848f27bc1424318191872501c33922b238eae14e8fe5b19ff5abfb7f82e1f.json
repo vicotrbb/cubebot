@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT s.provider, s.account, a.login, s.owner = $1 AS \"mine!\",\n                extract(epoch FROM s.expires_at)::bigint AS \"expires_at!\", s.problem,\n                CASE WHEN EXISTS(SELECT 1 FROM provider_connection c WHERE c.provider = s.provider)\n                    THEN (SELECT count(*) FROM chat_turns t WHERE t.status = 'waiting' AND t.error = 'provider_usage_limit')\n                    ELSE 0 END AS \"waiting!\"\n            FROM provider_subscriptions s\n            JOIN human_accounts a ON a.id = s.owner\n            ORDER BY s.provider\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "account",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "login",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "mine!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "problem",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "waiting!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "b7c848f27bc1424318191872501c33922b238eae14e8fe5b19ff5abfb7f82e1f"
+}

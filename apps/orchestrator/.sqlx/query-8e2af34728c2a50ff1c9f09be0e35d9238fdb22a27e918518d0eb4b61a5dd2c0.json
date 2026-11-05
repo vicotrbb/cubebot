@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT credential AS \"credential!\", revision AS \"revision!\"\n            FROM provider_connection\n            ",
+  "query": "\n            SELECT credential AS \"credential!\", revision AS \"revision!\"\n            FROM provider_connection\n            WHERE credential IS NOT NULL\n            ",
   "describe": {
     "columns": [
       {
@@ -18,9 +18,9 @@
       "Left": []
     },
     "nullable": [
-      false,
+      true,
       false
     ]
   },
-  "hash": "e870cdf66ca5476f7ec5f4bbe5db65bc3191c41812fc9335b4c7d269c55fade3"
+  "hash": "8e2af34728c2a50ff1c9f09be0e35d9238fdb22a27e918518d0eb4b61a5dd2c0"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT credential\n        FROM provider_connection\n        ",
+  "query": "SELECT credential FROM provider_subscriptions",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "868952efa060330e7c1c4ae37e8b600e5b373b9a89c57550521494b068b47cee"
+  "hash": "937ff3168fd28d723a3f1e35d7f1c4ec070eea1c03b6b381d2068228f036d12f"
 }

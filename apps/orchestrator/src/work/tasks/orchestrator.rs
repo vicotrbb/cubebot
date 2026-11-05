@@ -102,7 +102,12 @@ async fn step(
     let agents = super::eligible(&mut tx, due.owner).await?;
     let prompt = prompt(&mut tx, &due, &settings, &agents).await?;
     let inference = connections
-        .task_orchestrator(&mut tx, settings.provider, settings.model.as_deref())
+        .task_orchestrator(
+            &mut tx,
+            due.owner,
+            settings.provider,
+            settings.model.as_deref(),
+        )
         .await
         .ok();
     tx.commit().await?;

@@ -29,6 +29,8 @@ enum Decision {
 
 struct Pending {
     id: Uuid,
+    /// Who sent the message; a personal subscription routes only its owner's.
+    sender: Uuid,
     prompt: String,
 }
 
@@ -55,7 +57,7 @@ pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Err
     let Some(pending) = pending(&mut tx).await? else {
         return Ok(false);
     };
-    let inference = connections.coordinator(&mut tx).await.ok();
+    let inference = connections.coordinator(&mut tx, pending.sender).await.ok();
     tx.commit().await?;
     dispatch(pool, &pending, inference).await
 }
@@ -77,7 +79,7 @@ async fn dispatch(
 async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Option<Pending>, Error> {
     let row = sqlx::query!(
         "
-        SELECT m.id, m.room_id, r.name, m.message, m.sequence
+        SELECT m.id, m.room_id, r.name, m.message, m.sequence, m.actor_id
         FROM room_messages m
         JOIN rooms r ON r.id=m.room_id
         WHERE m.routing='routing' AND NOT r.task
@@ -91,6 +93,7 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
         return Ok(None);
     };
     let (id, room, name, message) = (row.id, row.room_id, row.name, row.message);
+    let sender = row.actor_id;
     let members = rooms::members(tx, room).await?;
     let described = sqlx::query!(
         r#"
@@ -146,7 +149,7 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
         open.join("\n"),
         recent_text.join("\n")
     );
-    Ok(Some(Pending { id, prompt }))
+    Ok(Some(Pending { id, sender, prompt }))
 }
 
 pub(super) async fn ask(
@@ -219,6 +222,20 @@ async fn through(
         }
         ProviderKind::Grok => {
             complete(configured(Grok::new, Grok::for_loopback_tests)?, request).await
+        }
+        ProviderKind::Chatgpt => {
+            complete(
+                configured(OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests)?,
+                request,
+            )
+            .await
+        }
+        ProviderKind::Supergrok => {
+            complete(
+                configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests)?,
+                request,
+            )
+            .await
         }
     }
 }

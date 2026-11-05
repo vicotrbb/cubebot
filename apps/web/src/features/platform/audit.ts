@@ -63,6 +63,10 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
       : 'took an agent off the MCP server',
   'provider.configure': (detail) =>
     `configured the AI provider: ${text(detail.provider)} · ${text(detail.model)}${detail.key_changed ? ' with a new key' : ''}`,
+  'provider.sign_in': (detail) =>
+    `signed in their ${detail.provider === 'supergrok' ? 'Grok' : 'ChatGPT'} plan`,
+  'provider.sign_out': (detail) =>
+    `signed out the ${detail.provider === 'supergrok' ? 'Grok' : 'ChatGPT'} plan${detail.revoked === false ? ', without the vendor confirming' : ''}`,
   'task.create': () => 'started a task',
   'task.stop': () => 'stopped a task',
   'task.settings': () => 'changed the task orchestrator’s settings',
@@ -104,6 +108,8 @@ const COMPLETE = new Set([
   'invitation.revoke',
   'session.sign_in_failed',
   'provider.configure',
+  'provider.sign_in',
+  'provider.sign_out',
   'login.request',
   'broadcast.send',
 ])

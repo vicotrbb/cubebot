@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT credential, revision\n            FROM provider_subscriptions\n            WHERE provider = $1 AND refresh_after <= clock_timestamp()\n                AND problem IS DISTINCT FROM 'sign_in_again'\n            FOR UPDATE\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3a419d65c01bb4f8ed05ff37a6ed9413be707cf25add97d465bb1635ae77aab1"
+}

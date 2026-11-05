@@ -138,6 +138,9 @@ impl Controller {
                 stop.clone(),
             ))
         });
+        let refresher = connections.clone().map(|connections| {
+            tokio::spawn(crate::connections::keep_fresh(connections, stop.clone()))
+        });
         let coordinator = connections.map(|connections| {
             tokio::spawn(crate::work::coordinate(
                 self.pool.clone(),
@@ -156,6 +159,9 @@ impl Controller {
         }
         if let Some(tasks) = tasks {
             tasks.abort();
+        }
+        if let Some(refresher) = refresher {
+            refresher.abort();
         }
         routines.abort();
         prices.abort();
