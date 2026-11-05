@@ -1,4 +1,3 @@
-//! Retain a bounded, verified server-defaulted manifest before the dispatch boundary.
 mod defaults;
 use super::{AttemptId, Error, Phase, Registry, ResourceKind, ResourceObject, Row};
 use crate::agents::AgentId;

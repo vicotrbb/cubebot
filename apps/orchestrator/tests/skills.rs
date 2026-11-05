@@ -1,5 +1,3 @@
-//! The shared skill library, installations, runtime loading and dream-proposed skills, against
-//! real PostgreSQL.
 use crate::runtime_support::fixture;
 use axum::{Router, body::Body, http::Request};
 use cubebot_orchestrator::{
@@ -63,7 +61,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
     let member = identity.authenticate(&session.token).await.unwrap();
     let knowledge = Knowledge::new(f.pool.clone());
 
-    // Any active member publishes to the library; names are unique and packages validated.
     let publish = |files| PublishSkill { files };
     let skill = knowledge
         .publish_skill(&member, &publish(package("disk-triage", "Run df.")))
@@ -82,7 +79,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
     let refused = knowledge.publish_skill(&admin, &publish(escaping)).await;
     assert!(matches!(refused, Err(IdentityError::InvalidInput)));
 
-    // Installing needs agent.manage on the agent; members without it see nothing.
     let denied = knowledge.install_skill(&member, f.agent, skill.id, 1).await;
     assert!(matches!(denied, Err(IdentityError::NotFound)));
     let missing = knowledge.install_skill(&admin, f.agent, skill.id, 9).await;
@@ -92,7 +88,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
         .await
         .unwrap();
 
-    // A revision names the one it read and keeps the name; installations stay pinned.
     let revise = |files, expected_revision| ReviseSkill {
         files,
         expected_revision,
@@ -130,7 +125,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
     assert!(first.files["SKILL.md"].ends_with("Run df.\n"));
     assert_eq!(first.human, Some(member.id));
 
-    // The agent loads only its installed revision.
     Connections::new(f.pool.clone(), Credentials::new([7; 32]))
         .configure(
             &admin,
@@ -173,7 +167,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
     .await;
     assert_eq!(unknown.0, 404);
 
-    // A dream sees its installed packages and publishes new and revised skills for itself.
     knowledge
         .create(
             &admin,
@@ -199,7 +192,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
     let skills = format!("/api/runtime/dreams/{run}/skills");
     let propose =
         |files: Files, expected: Option<i64>| json!({"expected_revision":expected,"files":files});
-    // Stale against the library's revision 2, then a taken name: both dropped.
     let dropped = propose(package("disk-triage", "Stale."), Some(1));
     assert_eq!(call(&router, &token, "POST", &skills, dropped).await.0, 204);
     let duplicate = propose(package("disk-triage", "Again."), None);
@@ -252,7 +244,6 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
         .unwrap();
     assert_eq!((third.human, third.dream_run), (None, Some(run)));
 
-    // A person edits a dream's revision like any other; uninstalling keeps the library entry.
     let edited = knowledge
         .revise_skill(
             &member,

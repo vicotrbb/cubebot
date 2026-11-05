@@ -1,4 +1,3 @@
-//! The activity inbox: what needs a person, derived from the tables that already record it.
 use super::Work;
 use crate::identity::{Actor, IdentityError};
 use serde::Serialize;
@@ -22,9 +21,6 @@ pub struct ActivityItem {
 }
 
 impl Work {
-    /// Newest first, at most 100: pending logins on agents the caller may see, waiting and
-    /// failed turns in conversations they may read, pending invitations for administrators,
-    /// and skills dreams or agents published, on agents whose memory they may read or manage.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn activity(&self, actor: &Actor) -> Result<Vec<ActivityItem>, IdentityError> {
         Ok(sqlx::query_as!(
@@ -81,7 +77,6 @@ impl Work {
         .await?)
     }
 
-    /// Everything in the caller's inbox so far counts as seen, on every device they use.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn read_activity(&self, actor: &Actor) -> Result<(), IdentityError> {
         sqlx::query!(

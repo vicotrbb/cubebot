@@ -1,4 +1,3 @@
-//! Agent command authorization and atomic receipt/event publication.
 use super::AgentId;
 use crate::identity::{Actor, IdentityError, Receipt};
 use serde::Serialize;

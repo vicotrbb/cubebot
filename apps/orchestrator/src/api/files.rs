@@ -1,6 +1,4 @@
-//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api) for people. Storage authorizes every request; this adapter
-//! authenticates the person and streams bodies. An upload is the raw request body; a download
-//! is always an attachment the browser never renders in the console's origin.
+//! A download is always an attachment the browser never renders in the console's origin.
 use crate::{
     identity::{Identity, IdentityError},
     storage::{Principal, Storage, StorageError, Upload},
@@ -99,7 +97,6 @@ impl IntoResponse for Failure {
     }
 }
 
-/// The response for a storage failure; a refusal's body names the reason.
 pub(super) fn refused(error: StorageError) -> Response {
     let (status, reason) = status(&error);
     log(&error, status);
@@ -112,7 +109,6 @@ pub(super) fn refused(error: StorageError) -> Response {
     response
 }
 
-/// Integrity faults are logged as errors where they are found.
 fn log(error: &StorageError, status: StatusCode) {
     if status.is_server_error() || matches!(error, StorageError::Incomplete(_)) {
         tracing::warn!(?error, "shared file request failed");
@@ -150,8 +146,6 @@ async fn person(
     Ok((configured(storage)?, Principal::Person(actor.id)))
 }
 
-/// Streams the request body into storage: 201 with the new file, 200 with the one an earlier
-/// attempt under the same request id made.
 pub(super) async fn store(
     storage: &Storage,
     who: Principal,
@@ -296,7 +290,6 @@ async fn replace_shares(
     Ok(Json(storage.share(who, file, &input, true).await?))
 }
 
-/// Streams the file, or the one byte range asked for.
 pub(super) async fn download(
     entry: FileEntry,
     mut bytes: tokio::fs::File,
@@ -355,8 +348,6 @@ fn chunks(
     })
 }
 
-/// The single `bytes=` range of a `size`-byte file, end exclusive. `Ok(None)` serves the whole
-/// file, as for an absent or malformed header or several ranges; `Err` is unsatisfiable.
 fn byte_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()> {
     let Some((first, last)) = header
         .and_then(|value| value.strip_prefix("bytes="))
@@ -381,7 +372,6 @@ fn byte_range(header: Option<&str>, size: u64) -> Result<Option<(u64, u64)>, ()>
     }
 }
 
-/// An attachment named by the file, with an ASCII fallback for older clients.
 fn disposition(name: &str) -> String {
     let fallback: String = name
         .chars()
@@ -418,7 +408,6 @@ mod tests {
         assert_eq!(range("bytes=100-"), Err(()));
         assert_eq!(range("bytes=-0"), Err(()));
         assert_eq!(byte_range(Some("bytes=0-"), 0), Err(()));
-        // Malformed or several ranges: the whole file.
         assert_eq!(range("bytes=9-0"), Ok(None));
         assert_eq!(range("bytes=0-1,5-6"), Ok(None));
         assert_eq!(range("items=0-1"), Ok(None));

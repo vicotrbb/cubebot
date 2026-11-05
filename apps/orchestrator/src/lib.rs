@@ -1,7 +1,3 @@
-//! Installation-wide behavior, exposed through the orchestrator application.
-//!
-//! Each domain owns its rules and persistence.
-
 pub mod agents;
 pub mod api;
 pub mod connections;

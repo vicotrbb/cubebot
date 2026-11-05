@@ -171,7 +171,6 @@ async fn prove_previous(
     proof::replacement(&old, previous).map(Some)
 }
 
-/// The durable claim to replace, after refusing an active development owner or another namespace.
 async fn previous_owner(
     connection: &mut PgConnection,
     identity: &PodIdentity,

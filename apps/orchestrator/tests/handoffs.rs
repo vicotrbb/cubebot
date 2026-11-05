@@ -1,6 +1,3 @@
-//! A login handoff (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover) end to end: the real agent binary asks for a login with a scripted
-//! model, a person takes control of the desktop through the browser router against a stand-in
-//! arbiter and hands it back, and the agent's next turn reads that the login completed.
 use crate::{
     desktop_http::{ORIGIN, StandIn, ask, open},
     memory_agent::{Model, Step, call, respond, text},
@@ -20,7 +17,6 @@ use serde_json::json;
 use std::{sync::Arc, time::Duration};
 use uuid::Uuid;
 
-/// Waits until the conversation has `count` turns and the last is complete.
 async fn settled(work: &Work, admin: &Actor, agent: Uuid, count: usize) -> Vec<Turn> {
     for _ in 0..200 {
         let turns = work.history(admin, agent, 0).await.unwrap();
@@ -81,7 +77,6 @@ async fn a_person_completes_a_requested_login_and_the_next_turn_sees_it() {
         "the tool told the model to end its turn"
     );
 
-    // A controller with browser grants only: the message still reaches the agent.
     let identity = Identity::new(f.pool.clone());
     identity
         .create_account(

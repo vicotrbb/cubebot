@@ -1,12 +1,8 @@
-//! The knowledge base (migrations/0048_knowledge_base.sql): a wiki every person and agent shares.
-//! Callers authenticate and check an agent's capability; everything here is open to all of them.
-//! Bodies are Markdown, so a person's block editor and an agent's text edits meet in one format.
 use crate::storage::Principal;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-/// One author's saves this close together share a history row.
 const HISTORY_WINDOW_SECONDS: f64 = 300.0;
 const SEARCH_RESULTS: i64 = 30;
 
@@ -17,10 +13,8 @@ pub struct KnowledgeBase {
 
 #[derive(Debug)]
 pub enum BaseError {
-    /// Why the request was refused, for the caller to read.
     Invalid(&'static str),
     NotFound,
-    /// The page moved on from the revision the write read; this is the current one.
     Stale(i64),
     Database(sqlx::Error),
 }
@@ -165,7 +159,6 @@ pub struct MovePage {
     pub after: Option<Uuid>,
 }
 
-/// Where a new attachment's bytes went, from [`crate::storage::Storage::keep`].
 pub struct KeptBlob {
     pub blob: Uuid,
     pub size: i64,
@@ -192,7 +185,6 @@ fn valid_icon(icon: &str) -> Result<(), BaseError> {
     Ok(())
 }
 
-/// `text` with its one occurrence of `old` replaced.
 fn replaced(text: &str, change: &Replace) -> Result<String, BaseError> {
     if change.old_text.is_empty() {
         return Err(BaseError::Invalid("the text to replace is empty"));
@@ -208,7 +200,6 @@ fn replaced(text: &str, change: &Replace) -> Result<String, BaseError> {
     }
 }
 
-/// What a change reads and writes of a page.
 #[derive(PartialEq)]
 struct Stored {
     kind: String,
@@ -232,7 +223,6 @@ impl PageChange {
         Ok(())
     }
 
-    /// The page after this change; equal to `current` when it changes nothing.
     fn applied_to(&self, current: &Stored) -> Result<Stored, BaseError> {
         if self
             .expected_revision
@@ -274,7 +264,6 @@ impl KnowledgeBase {
         Self { pool }
     }
 
-    /// Whether an agent's capability lets it in right now.
     pub async fn agent_allowed(&self, agent: Uuid) -> Result<bool, BaseError> {
         Ok(sqlx::query_scalar!(
             "
@@ -289,13 +278,11 @@ impl KnowledgeBase {
         .unwrap_or(false))
     }
 
-    /// Everything outside the trash, in reading order.
     #[tracing::instrument(skip_all)]
     pub async fn tree(&self) -> Result<Vec<PageSummary>, BaseError> {
         self.summaries(false, None).await
     }
 
-    /// What was trashed on its own, newest first: restoring one brings back what is under it.
     #[tracing::instrument(skip_all)]
     pub async fn trash(&self) -> Result<Vec<PageSummary>, BaseError> {
         self.summaries(true, None).await
@@ -346,7 +333,6 @@ impl KnowledgeBase {
             .collect())
     }
 
-    /// Titles weigh more than bodies; a title containing the text matches while it is typed.
     #[tracing::instrument(skip_all)]
     pub async fn search(&self, query: &str) -> Result<Vec<SearchHit>, BaseError> {
         let query = query.trim();
@@ -415,7 +401,6 @@ impl KnowledgeBase {
         })
     }
 
-    /// The parent must be alive: nothing is created or moved into the trash.
     async fn live_parent(
         tx: &mut Transaction<'_, Postgres>,
         parent: Option<Uuid>,
@@ -484,7 +469,6 @@ impl KnowledgeBase {
         self.page(id).await
     }
 
-    /// Applies a change; a stale `expected_revision` changes nothing and names the current one.
     #[tracing::instrument(skip_all, fields(page = %id))]
     pub async fn update(
         &self,
@@ -515,7 +499,6 @@ impl KnowledgeBase {
         self.page(id).await
     }
 
-    /// Moves a page after `after` among `parent`'s children.
     #[tracing::instrument(skip_all, fields(page = %id))]
     pub async fn place(&self, id: Uuid, target: &MovePage) -> Result<(), BaseError> {
         let mut tx = self.pool.begin().await?;
@@ -537,7 +520,6 @@ impl KnowledgeBase {
         if cycle {
             return Err(BaseError::Invalid("a page cannot move inside itself"));
         }
-        // Between its new neighbours; a sibling that vanished puts it first.
         let moved = sqlx::query!(
             "
             WITH anchor AS (
@@ -572,7 +554,6 @@ impl KnowledgeBase {
         Ok(())
     }
 
-    /// Puts a page and everything under it in the trash.
     #[tracing::instrument(skip_all, fields(page = %id))]
     pub async fn throw_away(&self, id: Uuid) -> Result<(), BaseError> {
         let trashed = sqlx::query!(
@@ -596,8 +577,6 @@ impl KnowledgeBase {
         Ok(())
     }
 
-    /// Brings back what went into the trash with this page, at the top level when its old parent
-    /// is still there.
     #[tracing::instrument(skip_all, fields(page = %id))]
     pub async fn restore(&self, id: Uuid) -> Result<(), BaseError> {
         let restored = sqlx::query!(
@@ -631,7 +610,6 @@ impl KnowledgeBase {
         Ok(())
     }
 
-    /// Deletes a trashed page for good, returning the blobs its attachments held.
     #[tracing::instrument(skip_all, fields(page = %id))]
     pub async fn destroy(&self, id: Uuid) -> Result<Vec<Uuid>, BaseError> {
         let mut tx = self.pool.begin().await?;
@@ -715,7 +693,6 @@ impl KnowledgeBase {
         .ok_or(BaseError::NotFound)
     }
 
-    /// An attachment already made under this request id, so a resend makes no second one.
     pub async fn attachment_for(&self, request: Uuid) -> Result<Option<Attachment>, BaseError> {
         Ok(sqlx::query_as!(
             Attachment,
@@ -731,7 +708,6 @@ impl KnowledgeBase {
         .await?)
     }
 
-    /// Whether `page` can take attachments; checked before its bytes are received.
     pub async fn require_page(&self, page: Uuid) -> Result<(), BaseError> {
         sqlx::query_scalar!(
             "
@@ -785,7 +761,6 @@ impl KnowledgeBase {
         })
     }
 
-    /// What to serve for an attachment whose page is not in the trash.
     pub async fn attachment(&self, id: Uuid) -> Result<(Attachment, Uuid), BaseError> {
         let row = sqlx::query!(
             r#"
@@ -814,7 +789,6 @@ impl KnowledgeBase {
         ))
     }
 
-    /// Removes an attachment, returning its blob.
     pub async fn detach(&self, id: Uuid) -> Result<Uuid, BaseError> {
         sqlx::query_scalar!(
             "
@@ -830,7 +804,6 @@ impl KnowledgeBase {
     }
 }
 
-/// Writes a changed page; only its words reach the history, not its icon.
 async fn store(
     tx: &mut Transaction<'_, Postgres>,
     who: Principal,
@@ -863,7 +836,6 @@ async fn store(
     Ok(())
 }
 
-/// Records a save in the page's history, in the author's open row when there is one.
 async fn remember(
     tx: &mut Transaction<'_, Postgres>,
     page: Uuid,
@@ -893,7 +865,6 @@ async fn remember(
     Ok(())
 }
 
-/// Folds a save into the newest history row, when `who` opened it moments ago.
 async fn merged(
     tx: &mut Transaction<'_, Postgres>,
     page: Uuid,

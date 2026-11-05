@@ -66,7 +66,6 @@ fn controller_configuration_rejects_unsafe_workload_fields_and_implicit_connecti
             json!({"kind":"kubeconfig","path":"/trusted/config","context":""}),
         ),
         ("unexpected", json!(true)),
-        // The process backend is gone; configurations that still name it fail.
         ("backend", json!("kvm")),
         ("qualified", json!(true)),
     ] {

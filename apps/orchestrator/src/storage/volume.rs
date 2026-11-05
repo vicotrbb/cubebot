@@ -1,6 +1,5 @@
-//! Bytes on the storage volume. `staging/` holds uploads being received and `blobs/` immutable
-//! published bytes named by their row's id. Both are on one filesystem, so publication is a hard
-//! link, which never replaces an existing blob, followed by synchronizing the directory.
+//! Staging and blobs share one filesystem, so publication is a hard link, which never replaces an
+//! existing blob, followed by synchronizing the directory.
 use super::StorageError;
 use axum::body::Bytes;
 use futures_util::{Stream, StreamExt};
@@ -39,8 +38,6 @@ impl Volume {
         self.root.join("blobs").join(id.to_string())
     }
 
-    /// Streams `body` into staging, then publishes it as blob `id` once its data is on disk.
-    /// `reserve` admits each chunk against the quota. Nothing named `id` remains on failure.
     pub async fn receive<S, E>(
         &self,
         id: Uuid,
@@ -53,7 +50,6 @@ impl Volume {
     {
         let staging = self.staging(id);
         let published = self.publish(&staging, id, body, reserve).await;
-        // The staging name goes either way; a published blob keeps its own link.
         let _ = tokio::fs::remove_file(&staging).await;
         if published.is_err() {
             self.remove(id).await;
@@ -121,7 +117,6 @@ impl Volume {
         Ok(file)
     }
 
-    /// Unlinks a blob whose row is gone; a failure leaves it for startup reconciliation.
     pub async fn remove(&self, id: Uuid) {
         match tokio::fs::remove_file(self.blob(id)).await {
             Err(error) if error.kind() != io::ErrorKind::NotFound => {
@@ -131,8 +126,6 @@ impl Volume {
         }
     }
 
-    /// Before serving: drops every staged upload and every blob without a row, which a crash
-    /// between publication and commit leaves, and returns the recorded blobs with no bytes.
     pub fn reconcile(&self, recorded: &HashSet<Uuid>) -> io::Result<Vec<Uuid>> {
         for entry in std::fs::read_dir(self.root.join("staging"))? {
             std::fs::remove_file(entry?.path())?;
@@ -155,7 +148,6 @@ impl Volume {
     }
 }
 
-/// A peer that sends nothing for this long loses its upload and frees its transfer slot.
 #[cfg(not(test))]
 const IDLE: std::time::Duration = std::time::Duration::from_secs(60);
 #[cfg(test)]

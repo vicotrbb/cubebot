@@ -1,8 +1,5 @@
-//! Login handoffs (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover). An agent's running turn asks a person to log in on a site through
-//! its desktop and ends; a person takes control for it. Handing control back completes it and
-//! declining refuses it, and either queues a message telling the agent. The message is sent as
-//! the person whose turn asked, since delivery needs `conversation.send`, which the person who
-//! settled it may not hold; `settled_by` records who that was.
+//! The message is sent as the person whose turn asked, since delivery needs `conversation.send`,
+//! which the person who settled it may not hold; `settled_by` records who that was.
 use super::Work;
 use crate::{
     agents::{AgentId, kubernetes::Error, runtime::RuntimeActor},
@@ -32,8 +29,6 @@ pub struct DeclineLogin {
 }
 
 impl Work {
-    /// Records the handoff for one tool call, or nothing for a resent one. The inner error is
-    /// the refusal the model reads.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn, call = %input.call))]
     pub(crate) async fn request_login(
         &self,
@@ -123,7 +118,6 @@ impl Work {
         Ok(Ok(()))
     }
 
-    /// The caller has authorized viewing the agent's desktop.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn pending_login(
         &self,
@@ -142,7 +136,6 @@ impl Work {
         .await?)
     }
 
-    /// The caller has given `person` control of the agent's desktop.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn take_login(&self, agent: AgentId, person: Uuid) -> Result<(), IdentityError> {
         sqlx::query!(
@@ -159,9 +152,6 @@ impl Work {
         Ok(())
     }
 
-    /// Completes the pending handoff, or declines it with `declined`, and queues the message
-    /// that tells the agent; false when none was pending. The caller has authorized `person`
-    /// to control the agent's desktop.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn settle_login(
         &self,
@@ -217,9 +207,6 @@ fn valid(input: &RequestLogin) -> bool {
     text(&input.site, 255) && text(&input.reason, 2048)
 }
 
-/// The refusal for a login the vault can do: a saved login for the site that this turn has not
-/// filled yet. Once one was filled the person is asked anyway, for a code or a challenge the
-/// vault cannot answer.
 async fn unfilled_login(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     agent: AgentId,

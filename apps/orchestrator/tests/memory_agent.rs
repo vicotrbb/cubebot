@@ -1,5 +1,3 @@
-//! The real agent binary against a real orchestrator and PostgreSQL, with a scripted model that
-//! calls the memory tools across turns.
 use crate::{
     runtime_identity::{http_server, native_chat_setup, runtime_server, spawn_native_text},
     runtime_support::fixture,
@@ -24,7 +22,6 @@ const EXTRACTION: &str = "Before this turn ends";
 
 pub(crate) enum Step {
     Reply(Value),
-    /// Waits for `release` before replying; never released, it holds the turn open.
     Gated(Value),
     Reject,
 }
@@ -129,7 +126,6 @@ impl Session {
             .unwrap();
         history.into_iter().find(|turn| turn.id == id).unwrap()
     }
-    /// Waits until the turn leaves `queued` and `running`.
     async fn settled(&self, id: Uuid) -> Turn {
         for _ in 0..200 {
             let turn = self.turn(id).await;
@@ -162,7 +158,6 @@ impl Session {
     }
 }
 
-/// The tool output the model received for the search call in this request.
 fn search_results(requests: &[Value]) -> Vec<Value> {
     let output = requests
         .iter()
@@ -189,7 +184,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         agent: f.agent,
         pool: f.pool.clone(),
     };
-    // Another agent's memory shares the search words; it must never reach this agent.
     let other = Agents::new(f.pool.clone())
         .create(
             &s.admin,
@@ -221,7 +215,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
             )])),
             Step::Gated(json!([text("Noted: November 15.")])),
         ],
-        // The duplicate of the explicit save is not stored twice.
         json!([
             "The launch deadline is November 15",
             "The user wants reminders a week ahead"
@@ -236,7 +229,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
     let (origin, server) = runtime_server(auth).await;
     let child = spawn_native_text(&origin, &provider);
 
-    // Staged, not committed, while the turn is still running.
     tokio::time::timeout(Duration::from_secs(20), model.gated.notified())
         .await
         .unwrap();
@@ -285,7 +277,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         "the staged changes are kept as evidence"
     );
 
-    // Recall searches only this agent's memories, with ids and revisions.
     model.turn(
         vec![
             Step::Reply(json!([call(
@@ -309,7 +300,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         "a turn that saves nothing changes nothing"
     );
 
-    // A person corrects the memory; the agent's write against the older revision loses.
     let correction = ReviseMemory {
         content: "The launch deadline is November 22".into(),
         expected_revision: 1,
@@ -345,7 +335,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
     );
     assert!(current[0].edited_by_human);
 
-    // With the current revision, the agent revises and then forgets.
     model.turn(
         vec![
             Step::Reply(json!([remember(
@@ -385,7 +374,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
             )])),
             Step::Reply(json!([text("Forgotten.")])),
         ],
-        // A real model's extraction leaked the forgotten fact back as a note.
         json!(["The deadline was November 29 but has been forgotten"]),
     );
     let asked = model.requests().len();
@@ -431,7 +419,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         ]
     );
 
-    // A failed turn commits none of its staged changes.
     model.turn(
         vec![
             Step::Reply(json!([remember("Saved by a failed turn", None, None)])),
@@ -457,7 +444,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         .await
         .unwrap();
 
-    // Neither does a cancelled one, and it makes no extraction request.
     model.turn(
         vec![
             Step::Reply(json!([remember("Saved by a cancelled turn", None, None)])),
@@ -512,7 +498,6 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         .unwrap();
     assert_eq!(foreign.len(), 1, "the other agent's memory is untouched");
 
-    // The runtime search endpoint refuses callers without an agent credential.
     let client = openidconnect::reqwest::Client::new();
     let url = format!("{origin}/api/runtime/memories?query=launch");
     assert_eq!(client.get(&url).send().await.unwrap().status(), 401);

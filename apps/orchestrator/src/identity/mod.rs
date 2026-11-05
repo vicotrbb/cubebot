@@ -1,5 +1,3 @@
-//! Human accounts and current database-backed session authority.
-
 pub mod access;
 mod accounts;
 pub mod audit;
@@ -31,7 +29,6 @@ pub struct Identity {
 #[derive(Debug)]
 pub enum IdentityError {
     InvalidInput,
-    /// `InvalidInput` with the error that caused it.
     Invalid(Source),
     Unauthorized,
     /// `Unauthorized` with the error that caused it; clients see the same response.
@@ -43,7 +40,6 @@ pub enum IdentityError {
     Password(Source),
     Busy,
     OidcUnavailable(Source),
-    /// `None` when no usable credential exists rather than one failing to open.
     CredentialUnavailable(Option<Source>),
 }
 
@@ -112,7 +108,6 @@ impl Identity {
     }
 }
 
-/// Forbidden unless the actor is an active administrator; locks nothing.
 pub(crate) async fn administrator(
     executor: impl sqlx::PgExecutor<'_>,
     actor: Uuid,

@@ -17,7 +17,6 @@ use tokio_rustls::{
 };
 use tracing::Instrument;
 
-/// HTTPS on one TCP listener. Handshakes run concurrently, so a stalled client delays no other.
 pub struct Tls {
     incoming: mpsc::Receiver<(TlsStream<TcpStream>, SocketAddr)>,
     address: SocketAddr,

@@ -1,4 +1,3 @@
-//! Explicit reconciliation steps. Construction never discovers or connects to a cluster.
 use super::{
     Attempt, AttemptId, Error, Kubernetes, Layout, Phase, Registry, ResourceObject, ResourceSpec,
 };
@@ -16,7 +15,6 @@ pub enum ReconcileResult {
     Uncertain {
         attempt: AttemptId,
     },
-    /// Object identities are bound. This does not imply scheduling, readiness or runtime authority.
     Provisioned {
         workspace: AttemptId,
         pod: AttemptId,
@@ -44,7 +42,6 @@ impl Reconciler {
             layout,
         })
     }
-    /// The production lifecycle step, `sandbox::drive`, keeping the outcome it collapses.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn reconcile(&self, agent: AgentId) -> Result<ReconcileResult, Error> {
         let (_, _, state) = self.intent(agent).await?;
@@ -68,7 +65,6 @@ impl Reconciler {
         .map(|row| (row.revision, row.restart_generation, row.desired_state))
         .ok_or(Error::Conflict)
     }
-    /// The verified healthy pod attempt, or the outcome that holds this agent.
     pub(super) async fn settle(
         &self,
         agent: AgentId,
@@ -81,7 +77,6 @@ impl Reconciler {
             super::recovery::Inspection::Held(outcome) => Err(outcome),
         })
     }
-    /// The installation anchor and the agent's bound workspace.
     pub(super) async fn prepare_workspace(
         &self,
         agent: AgentId,
@@ -120,7 +115,6 @@ impl Reconciler {
             pod: pod_id,
         })
     }
-    /// The bound workspace attempt, or the id of one whose object is missing.
     async fn claim(
         &self,
         agent: AgentId,

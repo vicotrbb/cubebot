@@ -1,10 +1,5 @@
-//! Agent-to-agent work (docs/adr/rooms.md#explicit-agent-messaging-and-delegation, docs/adr/rooms.md#cancel-selected-work-and-its-descendants and docs/adr/rooms.md#contain-delegated-failures-and-let-the-parent-adapt). A child is a turn in its recipient's
-//! conversation with `parent_turn_id` as its ancestry. A parent with awaited children yields when
-//! its run ends and is queued again each time one settles, receiving every settled outcome,
-//! failed and cancelled ones with their evidence, and which are still open. A completed
-//! `send_message` that expects a reply is relayed back to its sender once, unless it answered
-//! explicitly. Delegation and cancellation both lock the root of the ancestry first, so a child
-//! committed before a cancel is inside its scope and none after it.
+//! Delegation and cancellation both lock the root of the ancestry first, so a child committed before
+//! a cancel is inside its scope and none after it.
 use super::{SendMessage, Work, access};
 use crate::{
     agents::{AgentId, kubernetes::Error, runtime::RuntimeActor},
@@ -15,9 +10,7 @@ use serde::Serialize;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-/// Ancestors a child may have, counting its parent.
 const DEPTH: i32 = 4;
-/// Children one turn may send, so a resumed parent cannot fan out without bound.
 const BREADTH: i64 = 16;
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
@@ -31,8 +24,6 @@ pub struct Steering {
 }
 
 impl Work {
-    /// Creates the child for one tool call, or returns the one that call already created. The
-    /// inner error is the refusal the model reads.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, attempt = %actor.attempt.0, turn = %turn, call = %input.call))]
     pub(crate) async fn collaborate(
         &self,
@@ -144,7 +135,6 @@ impl Work {
         Ok(steering)
     }
 
-    /// Steering for the turn not yet reported as incorporated, oldest first.
     #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub(crate) async fn pending_steering(&self, turn: Uuid) -> Result<Vec<(Uuid, String)>, Error> {
         Ok(sqlx::query!(
@@ -164,7 +154,6 @@ impl Work {
     }
 }
 
-/// Locks the root of an ancestry, which delegation and cancellation both take first.
 async fn lock_root(tx: &mut Transaction<'_, Postgres>, root: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "
@@ -189,7 +178,6 @@ fn valid(input: &Collaborate) -> bool {
         && !input.message.contains('\0')
 }
 
-/// Finished, failed or cancelled work is never reopened by steering.
 async fn queue_steering(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
@@ -227,8 +215,6 @@ async fn queue_steering(
     Ok(id)
 }
 
-/// Copies steering to the open work delegated under its turn, so a correction reaches the
-/// whole task. Messages are not delegated work and keep their own direction.
 async fn propagate(tx: &mut Transaction<'_, Postgres>, steering: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "
@@ -251,8 +237,6 @@ async fn propagate(tx: &mut Transaction<'_, Postgres>, steering: Uuid) -> Result
     Ok(())
 }
 
-/// The coordinator's continuation: the room message becomes steering for an open delivery of
-/// the same room. Returns the delivery's agent, or `None` when it is not one.
 pub(super) async fn continue_task(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
@@ -276,7 +260,6 @@ pub(super) async fn continue_task(
     let Some(target) = target else {
         return Ok(None);
     };
-    // The room message's id is the steering's request id, so a repeated decision adds nothing.
     let id = sqlx::query_scalar!(
         "
         INSERT INTO turn_steering (turn_id, actor_id, request_id, message)
@@ -297,9 +280,6 @@ pub(super) async fn continue_task(
     Ok(Some(target.name))
 }
 
-/// Relays a completed message's response to its sender as a new turn there, at most once,
-/// when the sender asked for a reply and the recipient did not already answer it with
-/// `send_message`. The relay expects no reply, so nothing echoes back.
 pub(super) async fn relay(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -372,7 +352,6 @@ async fn create(
     ))
 }
 
-/// The child turn in the recipient's conversation, worded with the sender's name.
 async fn insert_child(
     tx: &mut Transaction<'_, Postgres>,
     actor: &RuntimeActor,
@@ -408,9 +387,6 @@ async fn insert_child(
     .await
 }
 
-/// A resumed parent rereads its original request, which can ask it to delegate again: the
-/// same task to the same agent is refused with the task it already is, and one request
-/// sends at most `BREADTH` children.
 async fn repeated(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -441,8 +417,6 @@ async fn repeated(
     })
 }
 
-/// The root of the turn's ancestry, its number of ancestors, and whether any of the turn and
-/// its ancestors is cancelled; `None` when no such turn exists.
 async fn lineage(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -465,9 +439,6 @@ async fn lineage(
     Ok(lineage.map(|lineage| (lineage.root, lineage.depth, lineage.cancelled)))
 }
 
-/// States the agent's own name, so a mention or a message addressed to it reads as its own,
-/// and names the agents sharing a room with it, which its collaboration tools can reach.
-/// The instructions with who the agent is and who it can reach.
 pub(super) async fn briefed(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -478,8 +449,6 @@ pub(super) async fn briefed(
     with_people(tx, turn, instructions).await
 }
 
-/// Who the turn serves and everyone it can name, because a file share takes a login and a model
-/// otherwise only has whatever name a person signs with.
 async fn with_people(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -558,8 +527,6 @@ pub(super) async fn with_peers(
     ))
 }
 
-/// Where a run that ended with a response leaves its turn: queued for settled outcomes its run
-/// did not see, waiting on open children, or complete.
 pub(super) async fn after_run(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -589,7 +556,6 @@ fn next_state(open: i64, unseen: i64) -> &'static str {
     }
 }
 
-/// Queues a yielded parent as soon as one of its awaited children settles.
 pub(super) async fn resume_parent(
     tx: &mut Transaction<'_, Postgres>,
     child: Uuid,
@@ -607,14 +573,11 @@ pub(super) async fn resume_parent(
     .fetch_optional(&mut **tx)
     .await?;
     if let Some(agent) = parent {
-        // A retired parent agent keeps its queued turn as evidence.
         let _ = super::wake(tx, agent).await;
     }
     Ok(())
 }
 
-/// Every awaited child, settled ones with their outcome and evidence, marking those seen by
-/// this run; open ones are listed so the parent knows what is still coming.
 pub(super) async fn delegations(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -669,7 +632,6 @@ pub(super) async fn delegations(
     Ok(outcomes)
 }
 
-/// Cancels the turn and every unsettled descendant; the parent receives the cancelled outcome.
 pub(super) async fn cancel_subtree(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -677,7 +639,6 @@ pub(super) async fn cancel_subtree(
 ) -> Result<(), IdentityError> {
     let (root, _, _) = lineage(tx, turn).await?.ok_or(IdentityError::Conflict)?;
     lock_root(tx, root).await?;
-    // Cancelling again is accepted; finished results stay what they were.
     let changed = sqlx::query!(
         "
         UPDATE chat_turns
@@ -711,8 +672,6 @@ pub(super) async fn cancel_subtree(
     Ok(())
 }
 
-/// A retired agent never runs again: its open turns end, with what they delegated, and any parent
-/// waiting on one hears the outcome.
 pub(crate) async fn cancel_open(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,

@@ -1,5 +1,3 @@
-//! The desktop WebSocket (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device) through the configured browser router, against a
-//! stand-in sandbox whose host channel answers like the arbiter.
 use crate::{runtime_identity::http_server, support};
 use cubebot_orchestrator::{
     agents::{
@@ -22,8 +20,6 @@ use uuid::Uuid;
 
 pub(crate) const ORIGIN: &str = "https://cubebot.test";
 
-/// Its host channel keeps the arbiter's mode rules: one person holds control, and only they
-/// change the mode while they hold it.
 pub(crate) struct StandIn;
 
 impl Sandbox for StandIn {
@@ -37,7 +33,6 @@ impl Sandbox for StandIn {
         Ok(())
     }
     async fn exec_channel(&self, _: AgentId, command: &[&str]) -> Result<ExecChannel, Error> {
-        // A container runtime's host channel is the agent image's own relay.
         assert_eq!(command, ["/usr/local/bin/cubebot-agent", "desktop"]);
         let (orchestrator, sandbox) = tokio::io::duplex(1 << 16);
         let (input, output) = tokio::io::split(orchestrator);
@@ -108,7 +103,6 @@ pub(crate) async fn open(
         .map(|(socket, _)| socket)
 }
 
-/// The answer to the message sent at `t`, skipping frames.
 pub(crate) async fn ask(socket: &mut Socket, message: Value, t: f64) -> Value {
     let mut message = message;
     message["t"] = json!(t);
@@ -248,7 +242,6 @@ async fn a_person_watches_takes_control_and_hands_back_with_each_change_recorded
         "you do not have permission to control this desktop"
     );
 
-    // A screenshot before the person takes control is not a re-observation.
     let work = Work::new(pool.clone());
     let message = SendMessage {
         request_id: Uuid::new_v4(),

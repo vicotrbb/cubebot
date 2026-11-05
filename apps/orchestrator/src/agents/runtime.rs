@@ -1,4 +1,3 @@
-//! Runtime identity for one sandbox incarnation, and its channel.
 mod channel;
 mod drain;
 mod sessions;
@@ -16,7 +15,6 @@ use uuid::Uuid;
 #[derive(Clone)]
 pub struct RuntimeIdentity {
     pub(crate) pool: PgPool,
-    /// `None` serves cluster-less Docker sandboxes, which bootstrap with a per-container token.
     api: Option<Kubernetes>,
     pub(crate) connections: Option<crate::connections::Connections>,
 }

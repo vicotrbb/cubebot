@@ -1,6 +1,4 @@
-//! Voice calls (docs/adr/console.md#voice-calls-over-the-chat-pipeline): speech to text and back,
-//! behind one STT and one TTS trait. Agents never see audio; a finished sentence becomes an
-//! ordinary chat turn.
+//! Agents never see audio; a finished sentence becomes an ordinary chat turn.
 mod embedded;
 mod external;
 mod models;
@@ -18,7 +16,6 @@ use crate::connections::Connections;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// All speech enters the pipeline at this rate.
 pub const SAMPLE_RATE: u32 = 16_000;
 
 #[derive(
@@ -61,29 +58,22 @@ impl Voice {
     }
 }
 
-/// Speech a provider produced: little-endian PCM16 at `rate`, as the page plays it.
 pub struct Audio {
     pub rate: u32,
     pub pcm: Vec<u8>,
 }
 
-/// One stream of one person's speech, fed from its own thread.
 pub trait Stt: Send {
-    /// Takes samples of the current sentence; returns a partial transcript when it changed.
     fn accept(&mut self, samples: &[f32]) -> Result<Option<String>, SpeechError>;
-    /// Ends the sentence, returns its transcript and readies the stream for the next one.
     fn finish(&mut self) -> Result<String, SpeechError>;
 }
 
-/// One voice, speaking from its own thread.
 pub trait Tts: Send {
-    /// Sends `text` to `sink` as audio until `sink` returns false.
     fn speak(&self, text: &str, sink: &mut dyn FnMut(Audio) -> bool) -> Result<(), SpeechError>;
 }
 
 #[derive(Debug)]
 pub enum SpeechError {
-    /// No data directory to hold the embedded models.
     NoDirectory,
     Io(std::io::Error),
     Http(reqwest::Error),
@@ -91,7 +81,6 @@ pub enum SpeechError {
     Refused(u16),
     Checksum(&'static str),
     Model(&'static str),
-    /// The provider needs a key this agent cannot use.
     NoKey(Provider),
 }
 
@@ -145,17 +134,14 @@ impl From<reqwest::Error> for SpeechError {
     }
 }
 
-/// What one call speaks and listens with.
 pub struct Engines {
     pub vad: Box<dyn Vad>,
     pub stt: Box<dyn Stt>,
     pub tts: Box<dyn Tts>,
 }
 
-/// Builds a test's engines in place of real providers.
 pub type StandIn = Arc<dyn Fn() -> Engines + Send + Sync>;
 
-/// The installation's speech providers and the embedded models it has loaded.
 #[derive(Clone)]
 pub struct Speech {
     models: Option<Arc<Models>>,
@@ -166,7 +152,6 @@ pub struct Speech {
 }
 
 impl Speech {
-    /// Models live under the shared-file directory, beside the blobs its reconciler owns.
     pub fn environment(connections: Option<Connections>) -> Self {
         let models = std::env::var_os("CUBEBOT_STORAGE_DIRECTORY").map(|root| {
             Arc::new(Models::new(
@@ -193,7 +178,6 @@ impl Speech {
         }
     }
 
-    /// Readies a call's engines, downloading what it needs on first use.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub(crate) async fn engines(
         &self,

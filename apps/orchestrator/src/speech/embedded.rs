@@ -1,5 +1,3 @@
-//! The offline providers: Zipformer for STT, Silero for endpointing and Piper for TTS, all through
-//! sherpa-onnx. A model loads on the first call that needs it and stays resident.
 use super::models::{LESSAC, RYAN, SILERO, ZIPFORMER};
 use super::pipeline::{Activity, Vad};
 use super::{Audio, SAMPLE_RATE, Speech, SpeechError, Stt, Tts, Voice};
@@ -10,16 +8,11 @@ use sherpa_onnx::{
 use std::{path::Path, sync::Arc};
 use tokio::sync::OnceCell;
 
-/// Silero's window at 16 kHz.
 pub(super) const WINDOW: usize = 512;
-/// A sentence ends after this much silence.
 const SILENCE_SECONDS: f32 = 0.6;
-/// Speech shorter than this is noise; it also bounds how soon a person can interrupt.
 const SPEECH_SECONDS: f32 = 0.25;
-/// The recognizer holds back its last frames until it sees more audio.
 const TAIL_SECONDS: f32 = 0.66;
 
-/// Models already resident; the only cost of an idle orchestrator.
 #[derive(Default)]
 pub(super) struct Loaded {
     recognizer: OnceCell<Arc<OnlineRecognizer>>,
@@ -135,7 +128,6 @@ impl Vad for Silero {
     fn accept(&mut self, window: &[f32]) -> Activity {
         self.0.accept_waveform(window);
         let ended = !self.0.is_empty();
-        // The detector keeps a copy of each segment, which only the provider's audio needs.
         while !self.0.is_empty() {
             self.0.pop();
         }
@@ -171,7 +163,6 @@ impl Zipformer {
     }
 }
 
-/// The model writes in capitals; a transcript should read as a sentence.
 fn readable(text: &str) -> String {
     let lower = text.trim().to_lowercase();
     let mut letters = lower.chars();
@@ -212,7 +203,6 @@ impl Tts for Piper {
             .generate_with_config(text, &GenerationConfig::default(), progress)
             .ok_or(SpeechError::Model("piper"))?;
         let rate = generated.sample_rate() as u32;
-        // Interruption lands between chunks, so a long sentence stops within a fraction of a second.
         for chunk in generated.samples().chunks(rate as usize / 4) {
             let pcm = chunk
                 .iter()

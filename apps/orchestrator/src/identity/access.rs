@@ -128,7 +128,6 @@ pub struct AccessExplanation {
 }
 
 impl Identity {
-    /// Every grant in force, for the screen that shows who can do what.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn grants(&self, actor: &Actor) -> Result<Vec<GrantSummary>, IdentityError> {
         self.require_administrator(actor).await?;

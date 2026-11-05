@@ -1,6 +1,3 @@
-//! The Situation room's view: what is running, what it costs and what just happened, across the
-//! agents the viewer may read. Each person sees the installation their grants allow; only
-//! administrators see the coordinator's spend and the provider.
 use super::{
     Work,
     usage::{self, DaySpend, ModelSpend, Spend},

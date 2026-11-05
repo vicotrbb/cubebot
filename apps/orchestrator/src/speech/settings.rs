@@ -1,4 +1,3 @@
-//! Speech configuration: the installation's choice, and what an agent overrides.
 use super::{Provider, Voice};
 use crate::{
     agents::AgentId,
@@ -8,7 +7,6 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
-/// What one call uses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Route {
     pub stt: Provider,
@@ -120,7 +118,6 @@ pub async fn save_agent(
     Ok(())
 }
 
-/// The agent's overrides over the installation's settings.
 #[tracing::instrument(skip_all, fields(agent = %agent.0))]
 pub async fn route(pool: &PgPool, agent: AgentId) -> Result<Route, IdentityError> {
     let row = sqlx::query!(

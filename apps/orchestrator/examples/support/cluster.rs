@@ -1,6 +1,4 @@
-//! Explicit isolated cluster guard shared by actual-platform fixtures.
 use kube::{Api, Client};
-/// Fixture failures end the run with their cause.
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 pub fn required(key: &str) -> Result<String> {
     std::env::var(key).map_err(|error| {

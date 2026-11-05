@@ -1,6 +1,3 @@
-//! What agents spend (docs/adr/agents.md#agent-usage-and-monthly-budgets): every model response
-//! is a `usage_events` row, priced when it is written. A person with access to an agent's
-//! conversation reads its usage; the Situation room shows them only the agents they may read.
 use super::{Work, access};
 use crate::{
     agents::AgentId,
@@ -89,8 +86,7 @@ impl Work {
         Ok(usage)
     }
 
-    /// Changes the limit and, when that leaves room, requeues the work the old one paused. Turns
-    /// whose tool effects are unknown stay waiting: only a person can say they are safe to rerun.
+    /// Turns whose tool effects are unknown stay waiting: only a person can say they are safe to rerun.
     #[tracing::instrument(skip_all, fields(actor = %actor.id, agent = %agent.0))]
     pub async fn set_budget(
         &self,
@@ -188,7 +184,6 @@ async fn read(
     })
 }
 
-/// The last 30 days, day by day, of these agents and optionally the coordinator.
 pub(super) async fn days(
     tx: &mut Transaction<'_, Postgres>,
     agents: &[Uuid],
@@ -213,7 +208,6 @@ pub(super) async fn days(
     .await
 }
 
-/// The models these agents used in the last 30 days, most tokens first.
 pub(super) async fn models(
     tx: &mut Transaction<'_, Postgres>,
     agents: &[Uuid],
@@ -290,8 +284,6 @@ pub(super) async fn windows(
     })
 }
 
-/// The agent spent its monthly budget. No budget is never exhausted.
-/// A new month leaves room again: every agent with room gets the work its budget paused back.
 pub(super) async fn resume_paused(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Error> {
     let paused = sqlx::query_scalar!(
         "
@@ -348,7 +340,6 @@ pub(crate) async fn exhausted(
     .await
 }
 
-/// A turn's reported usage, once per event; a provider's own cost wins over the listed price.
 pub(super) async fn record_turn(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
@@ -377,7 +368,6 @@ pub(super) async fn record_turn(
     Ok(())
 }
 
-/// Usage outside a turn: a dream run, or the room coordinator with no agent.
 pub(crate) async fn record_duty<'e>(
     executor: impl sqlx::PgExecutor<'e>,
     agent: Option<AgentId>,
@@ -411,8 +401,6 @@ pub(crate) async fn record_duty<'e>(
     Ok(())
 }
 
-/// Keeps the prices of the providers this installation uses within a day old, checking hourly so
-/// a provider configured later is priced soon. Offline, usage stays unpriced.
 pub async fn keep_prices(pool: PgPool, mut stop: watch::Receiver<bool>) {
     loop {
         if let Err(error) = refresh(&pool).await {
@@ -425,7 +413,6 @@ pub async fn keep_prices(pool: PgPool, mut stop: watch::Receiver<bool>) {
     }
 }
 
-/// One failing provider keeps its last good prices and never stops the others.
 async fn refresh(pool: &PgPool) -> Result<(), sqlx::Error> {
     for provider in prices_due(pool).await? {
         match listed(&provider).await {
@@ -436,8 +423,6 @@ async fn refresh(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Providers with a saved connection whose prices are over a day old. No other provider ever hears
-/// from this installation.
 pub async fn prices_due(pool: &PgPool) -> Result<Vec<String>, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
@@ -459,13 +444,11 @@ async fn listed(provider: &str) -> Result<Vec<Price>, Error> {
         Some(ProviderKind::Anthropic) => Anthropic::new()?.prices().await,
         Some(ProviderKind::Openrouter) => OpenRouter::new()?.prices().await,
         Some(ProviderKind::Gemini) => Gemini::new()?.prices().await,
-        // Grok states each response's cost, so nothing is estimated from a price.
         Some(ProviderKind::Grok) => Ok(Vec::new()),
         None => Err(Error::Unavailable),
     }
 }
 
-/// Stores one provider's prices, then prices usage that had none until now.
 /// shortcut: dated model versions share their family's price; store version prices if a provider
 /// starts charging them differently.
 pub async fn store_prices(

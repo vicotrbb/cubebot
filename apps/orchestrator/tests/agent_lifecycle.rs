@@ -102,8 +102,6 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
     assert_eq!(retained, "Corrected evidence");
 }
 
-/// A new agent runs; stopping it keeps its generation, so only a later start brings up a
-/// new sandbox.
 async fn check_stop(agents: &Agents, actor: &cubebot_orchestrator::identity::Actor, id: AgentId) {
     assert_eq!(
         agents.get(actor, id).await.unwrap().desired_state,

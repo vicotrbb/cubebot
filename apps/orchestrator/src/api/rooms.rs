@@ -246,7 +246,6 @@ struct Follow {
     headers: HeaderMap,
     room: Uuid,
     after: i64,
-    /// Last sent snapshot of each message that can still change.
     sent: HashMap<Uuid, String>,
 }
 

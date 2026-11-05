@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use sqlx::{PgPool, postgres::PgPoolOptions};
 
-// The URL carries the database password, so the span records nothing.
 #[tracing::instrument(skip_all)]
 pub async fn connect(url: &str) -> Result<PgPool, sqlx::Error> {
     let pool = PgPoolOptions::new()

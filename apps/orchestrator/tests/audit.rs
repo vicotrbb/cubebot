@@ -1,6 +1,3 @@
-//! The audit log, profile pictures and person broadcasts against PostgreSQL: what people do is
-//! recorded once with its actor and never a secret, only administrators read it, a picture must
-//! be an image, and a broadcast reaches every agent that is not retired exactly once.
 use crate::support;
 use axum::{
     body::Body,
@@ -30,7 +27,6 @@ async fn the_audit_log_records_sign_ins_and_changes_for_administrators_only() {
         .await
         .unwrap();
     let admin = identity.authenticate(&session.token).await.unwrap();
-    // The failed attempt goes through the route, which is what records it.
     let refused = crate::database_router(pool.clone())
         .oneshot(
             Request::post("/api/identity/login")

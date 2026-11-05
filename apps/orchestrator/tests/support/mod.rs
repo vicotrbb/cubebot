@@ -13,8 +13,6 @@ fn admin_options() -> PgConnectOptions {
     url.parse().unwrap()
 }
 
-/// Without a template the database is unmigrated. The admin database name prefixes
-/// it so a run on a shared server can drop exactly its own.
 pub async fn create_database(template: Option<&str>) -> PgPool {
     let options = admin_options();
     let clause = template.map_or(String::new(), |name| format!("TEMPLATE {name}"));

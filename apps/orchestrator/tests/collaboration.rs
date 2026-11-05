@@ -1,6 +1,3 @@
-//! The real agent binary delegating through a real orchestrator and PostgreSQL, with a scripted
-//! model: steering at the tool boundary, a parent yielding and resuming with a cancelled
-//! child's outcome, cancellation of a whole subtree, and a failed child settling for its parent.
 use crate::{
     memory_agent::{Model, Step, call, respond, text},
     runtime_identity::{http_server, native_chat_setup, runtime_server, spawn_native_text},
@@ -21,7 +18,6 @@ async fn turn(work: &Work, admin: &Actor, conversation: Uuid, id: Uuid) -> Turn 
     history.into_iter().find(|turn| turn.id == id).unwrap()
 }
 
-/// Waits until the turn reaches `status`.
 async fn reaches(work: &Work, admin: &Actor, conversation: Uuid, id: Uuid, status: &str) -> Turn {
     for _ in 0..200 {
         let current = turn(work, admin, conversation, id).await;
@@ -83,7 +79,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
         ],
         json!([]),
     );
-    // Rereading its request, the resumed parent tries to delegate the same work again.
     model.turn(
         vec![
             Step::Reply(json!([call(
@@ -105,7 +100,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     let (origin, server) = runtime_server(auth).await;
     let child = spawn_native_text(&origin, &provider);
 
-    // Steering sent while the model is thinking enters the context after the tool results.
     tokio::time::timeout(Duration::from_secs(20), model.gated.notified())
         .await
         .unwrap();
@@ -150,7 +144,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     );
     assert!(requests[1].to_string().contains("Delegated to Bee as task"));
 
-    // Steering a yielded parent reaches the task it delegated, not the message.
     let more = SendMessage {
         request_id: Uuid::new_v4(),
         message: "Exclude test rows".into(),
@@ -166,7 +159,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
             .is_empty()
     );
 
-    // Cancelling the child settles it for the parent, which resumes with the outcome.
     work.cancel(&admin, bee, awaited.id).await.unwrap();
     let resumed = reaches(&work, &admin, lead, parent, "complete").await;
     assert_eq!(
@@ -200,7 +192,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     );
     assert_eq!(resumed.children.len(), 2, "the repeat created no child");
 
-    // Stopping a root stops what it delegated; the late child cannot resume it.
     model.turn(
         vec![
             Step::Reply(json!([call(
@@ -234,7 +225,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     );
     assert_eq!(turn(&work, &admin, lead, second).await.status, "cancelled");
 
-    // A failed child settles as failed with its error, and its yielded parent is queued again.
     model.turn(vec![Step::Reject], json!([]));
     let foreign: Uuid = sqlx::query_scalar!(
         "
@@ -273,7 +263,6 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
     f.task.abort();
 }
 
-/// Waits until the model has received `count` requests in all.
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn retiring_an_agent_ends_its_open_turns_and_frees_a_parent_waiting_on_them() {
@@ -409,9 +398,7 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
     let (origin, server) = runtime_server(auth).await;
     let child = spawn_native_text(&origin, &provider);
 
-    // The room delivery carries earlier room messages, which its stored request does not.
     let delivery = addressed.deliveries[0].turn;
-    // It settles in the room and stays out of the agent's own conversation and context.
     for _ in 0..200 {
         let messages = work.room_messages(&admin, room.id, 0).await.unwrap();
         let settled = messages
@@ -443,9 +430,6 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
         "{roomy}"
     );
 
-    // Three delegated tasks for an agent with two task lanes: two run at once, the third waits;
-    // a task's context is the task, not the main conversation. The replies are scripted first:
-    // the agent claims a task as soon as its row exists.
     let before = model.requests().len();
     model.turn(vec![Step::Gated(json!([text("done one")]))], json!([]));
     model.turn(vec![Step::Gated(json!([text("done two")]))], json!([]));
@@ -507,8 +491,6 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
         reaches(&work, &admin, lead, *task, "complete").await;
     }
 
-    // A message that expects a reply is answered back to its sender once, and the relay
-    // expects none, so nothing echoes.
     model.turn(vec![Step::Reply(json!([text("pong")]))], json!([]));
     let sender = sqlx::query_scalar!(
         "

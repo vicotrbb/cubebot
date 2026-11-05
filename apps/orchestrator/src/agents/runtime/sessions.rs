@@ -40,7 +40,6 @@ impl RuntimeIdentity {
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(Error::Unauthorized)?;
-        // The credential lasts for this sandbox incarnation; the same process may rotate it.
         let version = sqlx::query_scalar!(
             "
             INSERT INTO agent_runtime_sessions
@@ -102,9 +101,7 @@ impl RuntimeIdentity {
         .ok_or(Error::Unauthorized)
     }
 }
-/// Revokes the agent credential of every incarnation of `agent` (docs/adr/sandbox.md#agent-centric-execution-in-a-sandbox-boundary). The sandbox keeps
-/// running but can no longer write to the ledger, receive work or bootstrap again; a later
-/// incarnation gets a new credential. Returns how many credentials were revoked.
+/// Revoked, the sandbox keeps running but cannot write to the ledger, get work or bootstrap again.
 #[tracing::instrument(skip_all, fields(agent = %agent.0))]
 pub async fn revoke(pool: &sqlx::PgPool, agent: AgentId) -> Result<u64, Error> {
     let revoked = sqlx::query!(
@@ -126,7 +123,6 @@ fn token() -> String {
     format!("cb_runtime_{}", crate::identity::token())
 }
 
-/// A Docker sandbox bootstrap token: `cb_sandbox_` and 64 hex digits, minted per container.
 pub(crate) fn sandbox_token() -> String {
     format!("cb_sandbox_{}", crate::identity::token())
 }

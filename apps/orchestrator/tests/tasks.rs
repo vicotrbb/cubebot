@@ -1,5 +1,3 @@
-//! A task from request to result, with the real agent binary and a scripted model: the orchestrator
-//! plans, the agent works from a fork of its conversation, and nothing reaches that conversation.
 use crate::{
     memory_agent::{Model, Step, call, respond, text},
     runtime_identity::{http_server, native_chat_setup, runtime_server, spawn_native_text},
@@ -94,7 +92,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     };
     main.await;
 
-    // The request is recorded without a model; a repeat is the same task.
     let create = CreateTask {
         request_id: Uuid::new_v4(),
         request: "Compare two venues".into(),
@@ -150,8 +147,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     assert_eq!(progressed.items[0].note.as_deref(), Some("two found"));
     assert_eq!(progressed.items[1].status, "todo");
 
-    // The fork: the task's turn saw the agent's conversation and the task's tools, not its own
-    // collaboration tools.
     let requests = model.requests();
     let task_request = requests
         .iter()
@@ -161,7 +156,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     let tools = task_request["tools"].to_string();
     assert!(tools.contains("task_message") && !tools.contains("\"send_message\""));
 
-    // Nothing came back: the conversation holds only its own turn, and its next turn knows nothing.
     let main_turns = work.history(&admin, agent, 0).await.unwrap();
     assert_eq!(main_turns.len(), 1);
     let conversation = work.conversation(&admin, AgentId(agent)).await.unwrap();
@@ -183,8 +177,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     assert!(!later["input"].to_string().contains("Task answer"));
     assert!(!later["input"].to_string().contains("Found two venues"));
 
-    // Agents settled, so the orchestrator is due; it cannot finish past open work, and finishing
-    // closes the items the agent left.
     let finish = json!({"say":"Done: two venues compared.","action":"finish"}).to_string();
     let before = work.room_messages(&admin, task.room_id, 0).await.unwrap();
     assert!(
@@ -209,8 +201,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
             .unwrap()
     );
 
-    // Writing brings it back; an unaddressed message waits for the orchestrator, whose question
-    // puts it in the person's hands.
     let again = work
         .post_room_message(&admin, task.room_id, &message("Add a third?"))
         .await
@@ -225,7 +215,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     let question = work.room_messages(&admin, task.room_id, 0).await.unwrap();
     assert_eq!(question.last().unwrap().message, "Which city?");
 
-    // An answer the model garbles three times leaves the person told, not the task stuck.
     work.post_room_message(&admin, task.room_id, &message("Lisbon"))
         .await
         .unwrap();
@@ -250,7 +239,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     assert!(!advance(&f.pool, &connections).await.unwrap());
 }
 
-/// Waits until the room's newest delivery has this status.
 async fn delivery_is(work: &Work, admin: &Actor, room: Uuid, status: &str) {
     for _ in 0..200 {
         let messages = work.room_messages(admin, room, 0).await.unwrap();
@@ -322,7 +310,6 @@ async fn an_agent_works_on_several_tasks_and_its_chat_at_once() {
         .await
         .expect("the first task reached its model");
 
-    // Its other work goes on beside it: a second task and the main conversation.
     let (steps, extracted) = replies("Second answer");
     model.turn(steps, extracted);
     let second = start("Second task").await;
@@ -349,7 +336,6 @@ async fn an_agent_works_on_several_tasks_and_its_chat_at_once() {
     let turns = work.history(&admin, agent, 0).await.unwrap();
     assert_eq!(turns.last().unwrap().status, "complete", "chat is not held");
 
-    // A task keeps its own order: a second turn in the first task waits for the one running there.
     let name = sqlx::query_scalar!("SELECT name FROM agents WHERE id=$1", agent)
         .fetch_one(&f.pool)
         .await
@@ -365,7 +351,6 @@ async fn an_agent_works_on_several_tasks_and_its_chat_at_once() {
     let queued = work.room_messages(&admin, first.room_id, 0).await.unwrap();
     let last = queued.last().unwrap().deliveries.first().unwrap();
     assert_eq!(last.status, "queued", "one turn at a time within a task");
-    // The agent's `task_lanes` still bound it: with the second lane taken, a new task waits.
     let (steps, extracted) = (vec![Step::Gated(json!([text("Third")]))], json!([]));
     model.turn(steps, extracted);
     let third = start("Third task").await;
@@ -379,7 +364,6 @@ async fn an_agent_works_on_several_tasks_and_its_chat_at_once() {
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn when_the_model_fails_a_task_goes_to_the_least_busy_agent() {
     let f = fixture().await;
-    // `native_chat_setup` leaves its agent with a turn open; no name makes the other a worse pick.
     let (_auth, work, admin, _busy) = native_chat_setup(&f, "hello").await;
     let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
     let free = crate::rooms::agent(&f.pool, &admin, "Zed").await;
@@ -423,7 +407,6 @@ async fn tasks_belong_to_their_person_and_reach_only_agents_they_may_use() {
         request: text.into(),
     };
 
-    // No agent to hand it to, and blank requests, are refused.
     assert!(matches!(
         work.create_task(owner, &request("Do it")).await,
         Err(IdentityError::Conflict)
@@ -446,7 +429,6 @@ async fn tasks_belong_to_their_person_and_reach_only_agents_they_may_use() {
         .unwrap();
     let task = work.create_task(owner, &request("Do it")).await.unwrap();
 
-    // Its owner and administrators see it; someone else cannot find it or its room.
     assert_eq!(work.tasks(owner).await.unwrap().len(), 1);
     assert_eq!(work.tasks(&admin).await.unwrap().len(), 1);
     assert!(work.tasks(other).await.unwrap().is_empty());
@@ -463,7 +445,6 @@ async fn tasks_belong_to_their_person_and_reach_only_agents_they_may_use() {
         Err(IdentityError::NotFound)
     ));
     assert!(work.room_messages(owner, task.room_id, 0).await.is_ok());
-    // An administrator's mention still carries the owner's authority, not theirs.
     let name: String = sqlx::query_scalar("SELECT name FROM agents WHERE id=$1")
         .bind(agent)
         .fetch_one(&f.pool)
@@ -481,7 +462,6 @@ async fn tasks_belong_to_their_person_and_reach_only_agents_they_may_use() {
         .unwrap();
     assert_eq!(actor, owner.id);
 
-    // Using the agent shows it is busy, but not on what, and gives no hold on the task's turns.
     for capability in [Capability::ConversationRead, Capability::ConversationSend] {
         identity
             .grant(
@@ -533,7 +513,6 @@ async fn tasks_belong_to_their_person_and_reach_only_agents_they_may_use() {
     );
     assert!(work.stop_task(owner, task.id).await.is_ok());
 
-    // Settings are for administrators, and a stale save is refused.
     assert!(work.task_settings(owner).await.is_err());
     let settings = work.task_settings(&admin).await.unwrap();
     assert_eq!((settings.max_agents, settings.max_rounds), (3, 3));

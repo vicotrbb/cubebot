@@ -1,12 +1,6 @@
-//! Shared files (docs/adr/memory.md#orchestrator-managed-file-storage-on-a-persistent-volume and docs/adr/memory.md#native-cubebot-storage-api): bytes on an exclusively owned volume, metadata in
-//! PostgreSQL. A person or an agent owns a folder tree; a share with a person, a team or an
-//! agent grants read or write on a file and everything under it. People also reach an agent's
-//! files through `workspace.read` and `workspace.write` on it, and administrators read every
-//! file (docs/adr/identity.md#administrator-content-access). Callers authenticate; this module authorizes every operation.
-//!
-//! An upload is staged, synchronized and hard linked into place before its rows commit, so a row
-//! never names missing bytes; a crash in between leaves an unreferenced blob that [`Storage::start`]
-//! removes before anything is served. The client retries with the same request id.
+//! Callers authenticate; this module authorizes every operation.
+//! An upload is staged, synchronized and hard linked before its rows commit, so a row never names
+//! missing bytes; a crash in between leaves an unreferenced blob that [`Storage::start`] removes.
 mod volume;
 
 use crate::{agents::AgentId, identity::Source};
@@ -46,20 +40,14 @@ impl Principal {
 
 #[derive(Debug)]
 pub enum StorageError {
-    /// Why the request was refused, for the caller to read.
     Invalid(&'static str),
     Forbidden,
     NotFound,
-    /// The name is taken in that folder.
     Conflict,
     Busy,
-    /// The installation quota is used up.
     Full,
-    /// The request body failed before it was complete; nothing was stored.
     Incomplete(Source),
-    /// A recorded blob's bytes are missing or the wrong size.
     Integrity(Uuid, Source),
-    /// No storage volume is configured.
     Unavailable,
     Io(io::Error),
     Database(sqlx::Error),
@@ -106,7 +94,6 @@ impl From<sqlx::Error> for StorageError {
     }
 }
 
-/// A unique name taken is a conflict and a vanished parent a missing file.
 fn constrained(error: sqlx::Error) -> StorageError {
     match error.as_database_error() {
         Some(database) if database.is_unique_violation() => StorageError::Conflict,
@@ -119,7 +106,6 @@ pub struct Upload {
     pub parent: Option<Uuid>,
     pub name: String,
     pub content_type: Option<String>,
-    /// The caller's id for this upload, so a retry after a lost response finds the same file.
     pub request: Uuid,
 }
 
@@ -166,13 +152,11 @@ struct Inner {
     volume: Volume,
     transfers: Arc<Semaphore>,
     quota: u64,
-    /// Stored and staged bytes. One active orchestrator owns the volume (docs/adr/agents.md#one-active-orchestrator-with-automatic-restart).
+    /// Stored and staged bytes. One active orchestrator owns the volume.
     used: Mutex<u64>,
 }
 
 impl Storage {
-    /// `None` without `CUBEBOT_STORAGE_DIRECTORY`, an absolute path on the volume.
-    /// `CUBEBOT_STORAGE_QUOTA_BYTES` caps stored and staged bytes, 10 GiB by default.
     pub async fn environment(pool: PgPool) -> Result<Option<Self>, Source> {
         let Some(directory) = std::env::var_os("CUBEBOT_STORAGE_DIRECTORY").map(PathBuf::from)
         else {
@@ -189,7 +173,6 @@ impl Storage {
         Ok(Some(Self::start(pool, directory, quota).await?))
     }
 
-    /// Reconciles the volume with the recorded blobs; call it before serving.
     #[tracing::instrument(skip_all)]
     pub async fn start(pool: PgPool, directory: PathBuf, quota: u64) -> Result<Self, StorageError> {
         // shortcut: holds every blob id in memory once; scan in pages past millions of files.
@@ -251,8 +234,6 @@ impl Storage {
             .map_err(|_| StorageError::Busy)
     }
 
-    /// What `who` may do with `file`, through ownership, an agent grant, administration or a
-    /// share on it or a folder above it.
     async fn access(&self, file: Uuid, who: Principal) -> Result<FileAccess, StorageError> {
         let (account, agent) = who.parts();
         let row = sqlx::query!(
@@ -308,7 +289,6 @@ impl Storage {
         Ok(access)
     }
 
-    /// Folders first, then by name.
     async fn rows(&self, ids: &[Uuid]) -> Result<Vec<Row>, StorageError> {
         Ok(sqlx::query_as!(
             Row,
@@ -335,7 +315,6 @@ impl Storage {
         Ok(self.row(id).await?.entry(access))
     }
 
-    /// A folder's contents, or `who`'s own top level for `None`.
     #[tracing::instrument(skip_all)]
     pub async fn list(
         &self,
@@ -378,7 +357,6 @@ impl Storage {
         Ok(rows.into_iter().map(|row| row.entry(access)).collect())
     }
 
-    /// Files and folders shared with `who` directly or through a team, that it does not own.
     #[tracing::instrument(skip_all)]
     pub async fn shared(&self, who: Principal) -> Result<Vec<FileEntry>, StorageError> {
         let (account, agent) = who.parts();
@@ -406,7 +384,6 @@ impl Storage {
         Ok(entries)
     }
 
-    /// The owner of what goes into `parent`, which `who` may write; `who` at its top level.
     async fn destination(
         &self,
         who: Principal,
@@ -450,8 +427,6 @@ impl Storage {
         self.entry(id, who).await
     }
 
-    /// Streams `body` onto the volume and records it, returning it and whether this call made
-    /// it: an earlier upload with the same request id returns its file without reading `body`.
     #[tracing::instrument(skip_all, fields(request = %upload.request))]
     pub async fn upload<S, E>(
         &self,
@@ -504,7 +479,6 @@ impl Storage {
         Ok((self.entry(id, who).await?, true))
     }
 
-    /// Commits a published blob and its file; the blob shares the file's id.
     async fn record(
         &self,
         id: Uuid,
@@ -545,7 +519,6 @@ impl Storage {
         Ok(())
     }
 
-    /// A file's bytes for `who`.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn open(
         &self,
@@ -561,7 +534,6 @@ impl Storage {
         Ok((row.entry(access), bytes))
     }
 
-    /// Renames and moves a file or folder among its owner's folders.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn place(
         &self,
@@ -573,7 +545,6 @@ impl Storage {
         named(name)?;
         self.require(file, who, FileAccess::Write).await?;
         let row = self.row(file).await?;
-        // No parent is the owner's top level, which may not be `who`'s.
         let owner = (row.owner_account_id, row.owner_agent_id);
         if parent.is_some() && self.destination(who, parent).await? != owner {
             return Err(StorageError::Invalid(
@@ -604,7 +575,6 @@ impl Storage {
         self.entry(file, who).await
     }
 
-    /// Keeps a stream as a new blob no file names, for another table to refer to.
     #[tracing::instrument(skip_all)]
     pub async fn keep<S, E>(&self, body: S) -> Result<crate::knowledge::KeptBlob, StorageError>
     where
@@ -651,12 +621,10 @@ impl Storage {
         }
     }
 
-    /// A kept blob's bytes.
     pub async fn read(&self, blob: Uuid, size: i64) -> Result<tokio::fs::File, StorageError> {
         self.0.volume.open(blob, size).await
     }
 
-    /// Deletes kept blobs nothing refers to any more.
     pub async fn discard(&self, blobs: &[Uuid]) -> Result<(), StorageError> {
         let gone = sqlx::query!(
             "
@@ -675,7 +643,6 @@ impl Storage {
         Ok(())
     }
 
-    /// Deletes a file, or a folder with everything under it, then unlinks the bytes.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn delete(&self, who: Principal, file: Uuid) -> Result<(), StorageError> {
         self.require(file, who, FileAccess::Write).await?;
@@ -702,7 +669,6 @@ impl Storage {
         Ok(())
     }
 
-    /// The file's own shares, for whoever manages it.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn shares(&self, who: Principal, file: Uuid) -> Result<Vec<FileShare>, StorageError> {
         self.require(file, who, FileAccess::Manage).await?;
@@ -741,7 +707,6 @@ impl Storage {
             .collect())
     }
 
-    /// Adds or changes `shares`, first removing the file's others when `replace`.
     #[tracing::instrument(skip_all, fields(file = %file))]
     pub async fn share(
         &self,
@@ -793,7 +758,6 @@ impl Storage {
     }
 }
 
-/// The one active person, team or agent a share names.
 async fn recipient(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     share: &FileShare,
@@ -863,7 +827,6 @@ pub(crate) fn named(name: &str) -> Result<(), StorageError> {
     Ok(())
 }
 
-/// The bare `type/subtype` of a declared content type; anything else is served as octets.
 pub(crate) fn media_type(declared: Option<&str>) -> Option<String> {
     let essence = declared?.split(';').next()?.trim().to_ascii_lowercase();
     let token = |part: &str| {

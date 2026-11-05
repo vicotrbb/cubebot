@@ -1,12 +1,9 @@
-//! Desktop session records (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover and docs/adr/sandbox.md#desktop-as-a-vmm-device): the viewer, start, end and each mode change
-//! they made. Frames pass through the orchestrator and are never stored.
 use super::{AgentId, Agents};
 use crate::identity::IdentityError;
 use cubebot_protocol::desktop::Mode;
 use uuid::Uuid;
 
 impl Agents {
-    /// The caller has authorized `viewer` to watch the agent's desktop.
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn start_desktop(&self, agent: AgentId, viewer: Uuid) -> Result<Uuid, IdentityError> {
         Ok(sqlx::query_scalar!(
@@ -28,7 +25,6 @@ impl Agents {
         session: Uuid,
         mode: Mode,
     ) -> Result<(), IdentityError> {
-        // The protocol's serialized names.
         let mode = match mode {
             Mode::Agent => "agent",
             Mode::Watch => "watch",

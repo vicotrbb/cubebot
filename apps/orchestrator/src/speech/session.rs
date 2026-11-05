@@ -1,4 +1,3 @@
-//! One call on its socket: audio in, transcripts and audio out, and the agent's turns between.
 use super::pipeline::{self, Heard, Listener, Sentences};
 use super::settings::route;
 use super::{Audio, Engines, Speech, SpeechError};
@@ -18,10 +17,8 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
-/// How often a call looks for the agent's next words, only while it waits for a reply.
 const FOLLOW: Duration = Duration::from_millis(100);
 const RECHECK: Duration = Duration::from_secs(30);
-/// About 13 seconds of 100 ms frames; a listener this far behind drops audio, not memory.
 const AUDIO_BACKLOG: usize = 128;
 
 pub struct Session {
@@ -34,17 +31,14 @@ pub struct Session {
     pub token: String,
 }
 
-/// A turn whose reply the call is waiting for.
 struct Awaited {
     turn: Uuid,
     after: i64,
-    /// The person spoke over it: its words reach the transcript, not the speaker.
     muted: bool,
     sentences: Sentences,
     spoke: bool,
 }
 
-/// The call's running parts. Dropping it ends both of its threads.
 struct Line {
     call: Uuid,
     audio: mpsc::Sender<Vec<f32>>,
@@ -59,7 +53,6 @@ fn text(value: &Value) -> Message {
     Message::Text(value.to_string().into())
 }
 
-/// PCM16 as the page sent it; `None` for a frame cut mid-sample.
 fn samples(bytes: &[u8]) -> Option<Vec<f32>> {
     bytes.len().is_multiple_of(2).then(|| {
         bytes
@@ -69,7 +62,6 @@ fn samples(bytes: &[u8]) -> Option<Vec<f32>> {
     })
 }
 
-/// The rate, then the audio, as the page plays it.
 fn frame(audio: &Audio) -> Message {
     let mut frame = Vec::with_capacity(4 + audio.pcm.len());
     frame.extend_from_slice(&audio.rate.to_le_bytes());
@@ -121,7 +113,6 @@ impl Session {
         served
     }
 
-    /// Loads the engines, reporting download progress. `None` means the person hung up first.
     async fn prepare(
         &self,
         socket: &mut WebSocket,
@@ -186,7 +177,6 @@ impl Session {
         }
     }
 
-    /// Signing out or losing `conversation.send` ends the call.
     async fn recheck(&self) -> Result<(), String> {
         let ended = || "access to this agent ended".to_owned();
         let actor = self
@@ -200,7 +190,6 @@ impl Session {
             .map_err(|_| ended())
     }
 
-    /// Acts on what the listener heard and returns what the page should see.
     async fn heard(&self, line: &mut Line, heard: Heard) -> Result<Vec<Value>, String> {
         Ok(match heard {
             Heard::Speech => {
@@ -240,7 +229,6 @@ impl Session {
         Ok(json!({"kind":"user","turn":turn,"text":text}))
     }
 
-    /// Follows the oldest turn awaited; turns reply in the order they were said.
     async fn follow(&self, line: &mut Line) -> Result<Vec<Value>, String> {
         let Some(awaited) = line.awaited.front_mut() else {
             return Ok(Vec::new());
@@ -292,7 +280,6 @@ fn start(call: Uuid, engines: Engines) -> Line {
 }
 
 impl Line {
-    /// Takes what the socket delivered; false when the call is over.
     fn received(&self, message: Option<Result<Message, axum::Error>>) -> bool {
         match message {
             Some(Ok(Message::Binary(bytes))) => self.hear(&bytes),
@@ -312,7 +299,6 @@ impl Line {
         }
     }
 
-    /// The person spoke: playback stops and every reply so far stays off the speaker.
     fn interrupt(&mut self) {
         self.epoch.fetch_add(1, Ordering::SeqCst);
         for awaited in &mut self.awaited {
@@ -321,13 +307,11 @@ impl Line {
     }
 
     fn say(&self, sentence: String) {
-        // Only fails once the speaking thread has gone, which ends the call anyway.
         let _ = self
             .sentences
             .send((self.epoch.load(Ordering::SeqCst), sentence));
     }
 
-    /// Speaks and shows new progress on the oldest awaited turn, and moves on when it settles.
     fn relay(&mut self, reply: Reply) -> Vec<Value> {
         let Some(mut awaited) = self.awaited.pop_front() else {
             return Vec::new();
@@ -341,7 +325,6 @@ impl Line {
         out
     }
 
-    /// Speaks text as it arrives; the page sees it either way.
     fn show(&self, awaited: &mut Awaited, event: ReplyEvent) -> Value {
         match event {
             ReplyEvent::Tool(name) => json!({"kind":"tool","turn":awaited.turn,"name":name}),
@@ -352,7 +335,6 @@ impl Line {
         }
     }
 
-    /// Moves past a turn that has settled, or keeps following it.
     fn settle(
         &mut self,
         mut awaited: Awaited,
@@ -389,7 +371,6 @@ impl Line {
         }
     }
 
-    /// Says what is left. A provider that streamed nothing still has its whole reply said.
     fn finish_speaking(&self, awaited: &mut Awaited, whole: Option<&str>) {
         let mut rest = awaited.sentences.finish();
         if !awaited.spoke

@@ -1,4 +1,3 @@
-//! Actual CSI-backed kvm sandbox startup; the guest never reaches an orchestrator.
 #[path = "support/cluster.rs"]
 mod cluster;
 #[path = "../tests/support/registry.rs"]
@@ -26,11 +25,9 @@ use kube::{
 use serde_json::json;
 use std::{process::Stdio, time::Duration};
 use tokio::{io::AsyncWriteExt, process::Command};
-/// Fixture failures end the run with their cause.
 type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
 const MISSING: &str = "an expected fixture field is missing";
 
-/// IdentityError has no std::error::Error impl, so it ends the run as its Debug text.
 fn identity<T>(
     result: std::result::Result<T, cubebot_orchestrator::identity::IdentityError>,
 ) -> Result<T> {
@@ -254,7 +251,6 @@ async fn verify_storage(f: &Fixture, workspace: &Attempt, pod: &Pod) -> Result<(
         "hostpath.csi.k8s.io"
     );
     let name = pod.metadata.name.as_deref().ok_or(MISSING)?;
-    // The journal lives inside the guest's workspace disk, which only the root sandbox opens.
     let owner = exec(
         name,
         &[
@@ -305,8 +301,7 @@ async fn settle(f: &Fixture, attempt: &Attempt, pod: &Pod, revision: i64) -> Res
     }
     panic!("operator-stopped pod did not settle");
 }
-/// The unavailable control endpoint cannot acknowledge drain. This is an explicit
-/// fixture-operator stop, never a fabricated runtime acknowledgement.
+/// The control endpoint cannot acknowledge drain: an explicit stop, never a fabricated ack.
 async fn operator_stop(f: &Fixture, attempt: &Attempt, pod: &Pod) -> Result<()> {
     let Some(ResourceObject::Pod(current)) = f.api.fetch_candidate(&attempt.object).await? else {
         panic!("pod missing before operator stop");

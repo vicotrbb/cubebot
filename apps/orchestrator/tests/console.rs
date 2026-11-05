@@ -1,5 +1,3 @@
-//! The console contract: agent summaries by grant, read cursors, the
-//! installation stream and the activity inbox, against real PostgreSQL.
 use crate::support;
 use axum::{
     body::Body,
@@ -97,7 +95,6 @@ impl Fixture {
         self.identity.grant(&self.admin, &request).await.unwrap();
     }
 
-    /// A turn in the agent's conversation; its sequence is the conversation's newest.
     async fn turn(&self, agent: Uuid, status: &str) -> (Uuid, i64) {
         let row = sqlx::query!(
             "
@@ -154,7 +151,6 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     let agents = Agents::new(f.pool.clone());
     assert!(agents.list(&f.member, None).await.unwrap().is_empty());
 
-    // A conversation grant alone makes the agent visible, without its instructions.
     f.grant(
         Scope::Conversation { id: f.ada },
         Capability::ConversationSend,
@@ -174,14 +170,12 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     assert_eq!((ada.last_sequence, ada.read_sequence), (0, 0));
     assert!(agents.get(&f.member, AgentId(f.bob)).await.is_err());
 
-    // Managing adds the instructions and the capability.
     f.grant(Scope::Agent { id: f.ada }, Capability::AgentManage)
         .await;
     let ada = agents.get(&f.member, AgentId(f.ada)).await.unwrap();
     assert_eq!(ada.capabilities, vec!["agent_manage", "conversation_send"]);
     assert_eq!(ada.instructions.as_deref(), Some("You are Ada."));
 
-    // Administrators see everything with every capability; Bob has the default cube.
     let all = agents.list(&f.admin, None).await.unwrap();
     assert_eq!(all.len(), 2);
     let bob = all.iter().find(|agent| agent.id == AgentId(f.bob)).unwrap();
@@ -189,7 +183,6 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     assert_eq!(bob.avatar.paint, Paint::Orange);
     assert_eq!(bob.instructions.as_deref(), Some("You are Bob."));
 
-    // Live flags: a pending login, a desktop tool call in a running turn, the newest turn.
     let (turn, sequence) = f.turn(f.ada, "running").await;
     sqlx::query!(
         r#"
@@ -230,7 +223,6 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
             .desktop_active
     );
 
-    // What it is doing: the tool it is in and on what, for those who may read the conversation.
     let step = |sequence: i32, payload: Value| {
         sqlx::query("INSERT INTO turn_events (turn_id, sequence, payload) VALUES ($1, $2, $3)")
             .bind(turn)
@@ -249,7 +241,6 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     assert_eq!(ada.current_target.as_deref(), Some("docs/poem.txt"));
     let seen = agents.get(&f.member, AgentId(f.ada)).await.unwrap();
     assert_eq!((seen.current_tool, seen.current_target), (None, None));
-    // A result means the tool is done, so the agent is thinking again.
     step(3, json!({"kind":"tool_result","id":"c2","outcome":{}}))
         .await
         .unwrap();
@@ -354,7 +345,6 @@ async fn read_cursors_only_move_forward_and_need_read_access() {
     assert_eq!(rooms[0]["last_sequence"], 0);
 }
 
-/// SSE frames from the stream's first poll: (event name, data).
 async fn first_frames(router: axum::Router, token: &str, count: usize) -> Vec<(String, Value)> {
     let response = router
         .oneshot(
@@ -396,8 +386,6 @@ async fn first_frames(router: axum::Router, token: &str, count: usize) -> Vec<(S
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn quiet_streams_send_their_first_bytes_at_once() {
-    // Firefox reports an EventSource open only once body bytes arrive, and the console loads
-    // a conversation's history on open; a quiet stream must not wait for its keep-alive.
     let f = fixture().await;
     let token = f
         .identity

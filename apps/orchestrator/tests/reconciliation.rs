@@ -217,7 +217,6 @@ async fn missing_bound_objects_retain_identity_and_never_authorize_recreation() 
             .unwrap()
             .clone();
         let removed = state.lock().unwrap().objects.remove(&path).unwrap();
-        // A missing workspace refuses `create`, as in the controller; a missing pod is uncertain.
         let result = reconciler.reconcile(agent).await;
         if id == workspace {
             assert!(matches!(result, Err(Error::Conflict)));
@@ -345,8 +344,6 @@ async fn lifecycle_changes_hold_dispatched_execution_for_drain_without_cleanup()
             matches!(reconciler.reconcile(agent).await.unwrap(), ReconcileResult::AwaitingDrain { attempt } if attempt == pod)
         );
     }
-    // One pod read per pass; the two running passes (wake, restart) also reread the anchor and
-    // the workspace first, as the controller's `drive` does. Nothing is created or cleaned up.
     assert_eq!(state.lock().unwrap().requests, requests + 4 + 2 * 2);
     assert_eq!(changes(&state.lock().unwrap()), changed);
     assert_eq!(
@@ -519,7 +516,6 @@ async fn request_sleep(pool: &sqlx::PgPool, agent: cubebot_orchestrator::agents:
         .await
         .unwrap();
 }
-/// The agent started: from here a stop waits for it to drain.
 async fn start_session(
     pool: &sqlx::PgPool,
     attempt: cubebot_orchestrator::agents::kubernetes::AttemptId,
@@ -802,7 +798,6 @@ async fn a_changed_image_drains_the_old_pod_then_starts_a_new_epoch_from_the_new
         panic!("provisioned expected")
     };
     start_session(&pool, pod).await;
-    // The same generation and agent, after a Helm upgrade.
     let image = "registry.test/agent@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     let upgraded = Layout::new(
         image,

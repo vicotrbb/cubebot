@@ -1,7 +1,4 @@
-//! The vault (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) for people: no response carries a secret. Installation items are an
-//! administrator's; an agent's own items take `browser.control` on it to change, and the items
-//! an agent may fill are listed with `browser.view`. A fill types into the desktop for the person,
-//! who must hold control of it.
+//! No response carries a secret.
 use crate::{
     agents::{AgentId, sandbox::Desktop},
     connections::{Connections, SaveVaultItem, VaultSummary},
@@ -52,7 +49,6 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
         })
 }
 
-/// Installation items for `None`, or the agent's own.
 async fn allowed(
     api: &Api,
     actor: &Actor,
@@ -69,7 +65,6 @@ async fn allowed(
     }
 }
 
-/// The item's agent, `None` for an installation item, once the actor may change it.
 async fn item_scope(
     api: &Api,
     actor: &Actor,
@@ -121,7 +116,6 @@ async fn update(
     Json(input): Json<SaveVaultItem>,
 ) -> Result<Json<VaultSummary>, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
-    // An agent's own item has no access to change.
     if item_scope(&api, &actor, item).await?.is_some() && input.access.is_some() {
         return Err(IdentityError::InvalidInput);
     }

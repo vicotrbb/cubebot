@@ -1,8 +1,5 @@
-//! Broadcasts (migrations/0046_broadcasts.sql): one message to every agent that is not retired.
-//! Administrators read and send them in the console's Broadcast channel; an agent sends one from
-//! a running turn when its broadcast capability is on, at most once per turn and never from a
-//! turn that is itself a broadcast, so broadcasts cannot answer each other in a loop. Deliveries
-//! are turns in each recipient's conversation carrying the authority of the person behind them.
+//! At most one per turn and never from a broadcast's turn, so broadcasts cannot answer each other
+//! in a loop. Deliveries carry the authority of the person behind them.
 use super::{SendMessage, Work, access, rooms::Delivery};
 use crate::{
     agents::{AgentId, kubernetes::Error, runtime::RuntimeActor},
@@ -65,7 +62,6 @@ impl From<Row> for BroadcastMessage {
 }
 
 impl Work {
-    /// The newest 100 broadcasts after `after`, oldest first, with their deliveries.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn broadcasts(
         &self,
@@ -118,7 +114,6 @@ impl Work {
         })
     }
 
-    /// The newest broadcast's sequence, 0 without any; administrators only, `None` otherwise.
     pub async fn broadcast_sequence(&self, actor: &Actor) -> Result<Option<i64>, IdentityError> {
         if !actor.administrator {
             return Ok(None);
@@ -131,8 +126,6 @@ impl Work {
         )
     }
 
-    /// Sends the person's message to every agent; a retry with the same request returns the same
-    /// broadcast.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn broadcast(
         &self,
@@ -158,8 +151,6 @@ impl Work {
         Ok(message)
     }
 
-    /// As [`Self::broadcast`], from the agent's running turn. The outer error is a failure; the
-    /// inner one is the refusal the model reads. Returns how many agents it reached.
     #[tracing::instrument(skip_all, fields(agent = %actor.agent.0, turn = %turn))]
     pub(crate) async fn agent_broadcast(
         &self,
@@ -201,7 +192,6 @@ impl Work {
         Ok(Ok(agents))
     }
 
-    /// Moves the caller's broadcast read cursor forward.
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn read_broadcasts(
         &self,
@@ -217,7 +207,6 @@ impl Work {
     }
 }
 
-/// The broadcast this request already sent; a different message under it is a conflict.
 async fn previous(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
@@ -236,13 +225,11 @@ async fn previous(
     }
 }
 
-/// The message trimmed, when it is one a broadcast can carry.
 fn sendable(message: &str) -> Option<&str> {
     let trimmed = message.trim();
     (!trimmed.is_empty() && message.len() <= 16384 && !message.contains('\0')).then_some(trimmed)
 }
 
-/// How many agents a broadcast already sent under this tool call reached.
 async fn resent(
     tx: &mut Transaction<'_, Postgres>,
     actor: &RuntimeActor,
@@ -264,7 +251,6 @@ async fn resent(
     Ok(agents.map(|agents| agents as u32))
 }
 
-/// The person whose authority the agent's running turn carries, or why it may not broadcast.
 async fn sender(
     tx: &mut Transaction<'_, Postgres>,
     actor: &RuntimeActor,
@@ -293,7 +279,6 @@ async fn sender(
     )
 }
 
-/// Why an agent's turn may not broadcast, if it may not.
 fn refusal(
     enabled: bool,
     from_broadcast: Option<Uuid>,
@@ -335,8 +320,6 @@ async fn insert(
     .await?)
 }
 
-/// One turn for every agent that is not retired, except the sender; wakes stopped ones, as a
-/// room delivery does. Returns how many it reached.
 async fn deliver(
     tx: &mut Transaction<'_, Postgres>,
     broadcast: Uuid,
@@ -427,7 +410,6 @@ async fn attach(
     for delivery in deliveries {
         let delivery = Delivery {
             attachments: attachments.remove(&delivery.turn).unwrap_or_default(),
-            // The Broadcast channel shows replies only.
             terminal: Vec::new(),
             partial: None,
             turn: delivery.turn,

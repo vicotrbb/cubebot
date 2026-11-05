@@ -1,5 +1,3 @@
-//! What an agent can do from a task turn: tick its items and talk in the room. A message naming
-//! other agents starts a turn for each, so agents coordinate where people can see it.
 use super::{clipped, deliver, eligible, join, post};
 use crate::{agents::runtime::RuntimeActor, identity::IdentityError};
 use cubebot_protocol::runtime::RoutineCall;
@@ -7,7 +5,6 @@ use serde::Deserialize;
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
-/// Turns a task's agents may start each other in, so two agents cannot talk forever.
 const DELIVERIES: i64 = 64;
 
 type Answer = Result<String, String>;
@@ -27,8 +24,6 @@ struct Said {
     to: Vec<String>,
 }
 
-/// One `task_item` or `task_message` call for the running `turn`; `Err` is the refusal the model
-/// reads.
 pub(in crate::work) async fn tool(
     tx: &mut Transaction<'_, Postgres>,
     actor: &RuntimeActor,
@@ -117,8 +112,6 @@ async fn item_update(
     Ok(Ok(format!("Item #{} is {}.", item.item, item.status)))
 }
 
-/// Posts to the room and starts a turn for each named agent. The call's id makes a resent call post
-/// nothing new.
 async fn say(
     tx: &mut Transaction<'_, Postgres>,
     actor: &RuntimeActor,

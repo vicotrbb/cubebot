@@ -140,7 +140,6 @@ async fn setup(
     State(identity): State<Identity>,
     Json(input): Json<Login>,
 ) -> Result<impl IntoResponse, IdentityError> {
-    // Refuse before hashing, so a closed setup costs no password work; bootstrap's lock decides races.
     if !identity.setup_open().await? {
         return Err(IdentityError::Conflict);
     }
