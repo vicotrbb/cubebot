@@ -1,16 +1,12 @@
 ---
-import Base from '../layouts/Base.astro'
+import Page from '../layouts/Page.astro'
 import Cube from '../components/Cube.astro'
-import Logo from '../components/Logo.astro'
 import Icon from '../components/Icon.astro'
 
-const repo = 'https://github.com/vicotrbb/cubebot'
-const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-const docs = {
-  architecture: `${repo}/blob/main/ARCHITECTURE.md`,
-  manifesto: `${repo}/blob/main/MANIFESTO.md`,
-  adrs: `${repo}/tree/main/docs/adr`,
-}
+import Command from '../components/Command.astro'
+import { repo, sponsor, install, timeline, next, wall, wallLogos } from '../data/site'
+import BrandMark from '../components/BrandMark.astro'
+import { connectors } from '../data/connectors'
 
 const anatomy = [
   {
@@ -54,7 +50,7 @@ const anatomy = [
 const steps = [
   {
     title: 'Install it',
-    body: 'One command with Docker, or the Helm chart on Kubernetes. You get one Rust orchestrator, PostgreSQL, and a web console. Bring your own provider keys.',
+    body: 'One command with Docker on Linux or macOS, or the Helm chart on Kubernetes. You get one Rust orchestrator, PostgreSQL, and a web console. Bring a provider key, or sign in with a ChatGPT plan.',
   },
   {
     title: 'Create agents',
@@ -70,118 +66,14 @@ const steps = [
   },
 ]
 
-const status = {
-  today: [
-    'Sign-in, invitations, teams, scoped grants, OpenID Connect',
-    'Each agent in its own KVM guest or declared container',
-    'Install with one command, or with the Helm chart',
-    'OpenAI, Anthropic, OpenRouter, Gemini and Grok',
-    'One permanent conversation per agent',
-    'Voice calls over the same conversation',
-    'Terminal, files, browser, desktop and MCP tools',
-    'Rooms, delegation, tasks and parallel lanes',
-    'Memory, dreaming and a shared skill library',
-    'Knowledge base and shared files',
-    'Routines on schedules and webhooks',
-    'Usage, budgets and an audit log',
-  ],
-  progress: [
-    'Real-cluster fencing and isolation',
-    'Network policy on production CNIs',
-    'Scale at 100 registered, 25 working agents',
-  ],
-  planned: [
-    'Hybrid memory retrieval',
-    'Skill imports',
-    'Token-by-token streaming',
-    'Push notifications',
-    'Backup and restore from the console',
-  ],
-}
-
-const timeline = [
-  {
-    date: 'Oct 24, 2026',
-    datetime: '2026-10-24',
-    state: 'done',
-    title: 'Design baseline',
-    body: 'Manifesto, system architecture, and the first accepted decisions.',
-  },
-  {
-    date: 'Oct 26, 2026',
-    datetime: '2026-10-26',
-    state: 'done',
-    title: 'Identity and first chat',
-    body: 'Accounts, teams, scoped grants, OpenID Connect, and one permanent conversation per agent.',
-  },
-  {
-    date: 'Oct 28, 2026',
-    datetime: '2026-10-28',
-    state: 'done',
-    title: 'A sandbox of its own',
-    body: 'An in-house VMM runs each agent as a KVM guest, with native model providers.',
-  },
-  {
-    date: 'Oct 30, 2026',
-    datetime: '2026-10-30',
-    state: 'done',
-    title: 'Memory, skills, desktop',
-    body: 'Memory that dreams, a shared skill library, a browser, and a desktop you can take over.',
-  },
-  {
-    date: 'Oct 31, 2026',
-    datetime: '2026-10-31',
-    state: 'done',
-    title: 'Rooms and delegation',
-    body: 'Mentions, agent messaging, delegation, and steering.',
-  },
-  {
-    date: 'Nov 2, 2026',
-    datetime: '2026-11-02',
-    state: 'done',
-    title: 'Console and first release',
-    body: 'The full console, routines, a vault, and an install you can run with one command.',
-  },
-  {
-    date: 'Nov 5, 2026',
-    datetime: '2026-11-05',
-    state: 'done',
-    title: 'Tasks, knowledge, voice',
-    body: 'Parallel tasks, a knowledge base, usage budgets, more providers, and voice calls.',
-  },
-  {
-    date: 'Next',
-    state: 'painting',
-    title: 'Qualification',
-    body: 'Real-cluster fencing and isolation, and measured scale at 100 registered agents.',
-  },
-] as const
 ---
 
-<Base
+<Page
   title="Cubebot · A self-hosted home for your AI agents"
-  description="Self-hosted AI agents with their own sandbox, one permanent conversation, and memory that outlives every restart."
+  description="Free, open-source and self-hosted AI agents with their own sandbox, one permanent conversation, memory that outlives every restart, and 27 native connectors."
+  support={false}
 >
-  <header class="top">
-    <div class="wrap top__row">
-      <a class="brand" href="/">
-        <Logo size={34} />
-        <span>Cubebot</span>
-      </a>
-      <nav class="top__nav" aria-label="Sections">
-        <a href="#agents">Agents</a>
-        <a href="#how">How it works</a>
-        <a href="#status">Status</a>
-        <a href="#roadmap">Roadmap</a>
-      </nav>
-      <a class="btn top__cta" href={repo}>
-        <Icon name="github" />
-        <span>GitHub</span>
-      </a>
-    </div>
-  </header>
 
-  <main>
     <section class="hero">
       <div class="wrap hero__grid">
         <div class="hero__copy">
@@ -197,12 +89,12 @@ const timeline = [
               <Icon name="github" />
               <span>Star on GitHub</span>
             </a>
-            <a class="link" href={docs.architecture}>
+            <a class="link" href="/docs/architecture/">
               Read the architecture
               <Icon name="arrow" />
             </a>
           </div>
-          <pre class="install" aria-label="Install command"><code>{install}</code></pre>
+          <Command command={install} class="hero__install" />
         </div>
 
         <div class="hero__scene" aria-label="An orange block with eyes on a wooden desk, beside a sleeping sage block, a raw wood block, and a small plant" role="img">
@@ -279,11 +171,71 @@ const timeline = [
       </div>
     </section>
 
+    <section class="wall-section" id="capabilities">
+      <div class="wrap wall-section__grid">
+        <div class="wall-section__copy">
+          <h2>Give it work, not a prompt.</h2>
+          <p class="intro">
+            An agent has a computer of its own, your accounts within the
+            permissions you set, and a console where you can watch every step.
+            Here is some of what that adds up to today.
+          </p>
+          <div class="wall-section__actions">
+            <a class="btn btn--paper" href="/docs/features/">Take the feature tour</a>
+            <a class="link" href="/integrations/">
+              See all {connectors.length} connectors
+              <Icon name="arrow" />
+            </a>
+          </div>
+        </div>
+        <div class="wall">
+          {
+            wall.map((column, c) => (
+              <div class:list={['wall__col', `wall__col--${c}`]}>
+                <h3 class="visually-hidden">{column.label}</h3>
+                <p class:list={['wall__label', `chip chip--${column.tone}`]} aria-hidden="true">{column.label}</p>
+                <div class="wall__window">
+                  <ul class="wall__track">
+                    {column.items.map((item, i) => (
+                      <li class:list={['tile', `tile--${column.tone}`]}>
+                        <span class="tile__cube" aria-hidden="true">
+                          {wallLogos[item] ? (
+                            <BrandMark slug={wallLogos[item]} class="tile__logo" />
+                          ) : (
+                            <Cube size={22} tone={column.tone} eyes={i % 4 === 0 && column.tone === 'orange' ? 'open' : 'none'} />
+                          )}
+                        </span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                  <ul class="wall__track wall__track--echo" aria-hidden="true">
+                    {column.items.map((item) => (
+                      <li class:list={['tile', `tile--${column.tone}`]}>
+                        <span class="tile__cube">
+                          {wallLogos[item] ? (
+                            <BrandMark slug={wallLogos[item]} class="tile__logo" />
+                          ) : (
+                            <Cube size={22} tone={column.tone} />
+                          )}
+                        </span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
     <section class="how" id="how">
       <div class="wrap">
         <div class="how__head">
           <h2>Your hardware, with a few more residents.</h2>
-          <p>
+          <p class="intro">
             One Rust orchestrator, one PostgreSQL, one sandbox per agent. Only the
             orchestrator touches the cluster and the database. Agents talk to
             model providers themselves, inside the grants you gave them.
@@ -367,83 +319,41 @@ const timeline = [
       </div>
     </section>
 
-    <section class="status" id="status">
-      <div class="wrap">
-        <div class="status__head">
-          <div>
-            <h2>What runs today.</h2>
-            <p>
-              Honesty is cheaper than a demo. Painted blocks run today.
-              Half-painted blocks are being qualified. Raw wood is planned, with
-              no dates promised.
-            </p>
-          </div>
-          <div class="paintshop" aria-label="An orange block with eyes watches a raw wood block being painted orange, a can of paint between them" role="img">
-            <div class="slab paintshop__floor"></div>
-            <div class="can">
-              <span class="can__body"></span>
-              <span class="can__top"></span>
-              <span class="can__shadow"></span>
-            </div>
-            <div class="paintshop__painter">
-              <Cube size={92} eyes="open" contact style="--blink-delay:1.7s" />
-            </div>
-            <div class="paintshop__block">
-              <Cube size={128} tone="wood" paint="live" contact />
-            </div>
-          </div>
-        </div>
-        <div class="status__rows">
-          <div class="status__row">
-            <h3><span class="swatch swatch--orange"></span>Runs today</h3>
-            <ul class="chips" data-reveal>
-              {status.today.map((item, i) => <li class="chip chip--orange reveal-item" style={`--i:${i}`}>{item}</li>)}
-            </ul>
-          </div>
-          <div class="status__row">
-            <h3><span class="swatch swatch--half"></span>Being qualified</h3>
-            <ul class="chips" data-reveal>
-              {status.progress.map((item, i) => <li class="chip chip--half reveal-item" style={`--i:${i}`}>{item}</li>)}
-            </ul>
-          </div>
-          <div class="status__row">
-            <h3><span class="swatch swatch--wood"></span>Planned</h3>
-            <ul class="chips" data-reveal>
-              {status.planned.map((item, i) => <li class="chip chip--wood reveal-item" style={`--i:${i}`}>{item}</li>)}
-            </ul>
-          </div>
-        </div>
-        <p class="status__note">
-          Everything above has run in automated tests or real installs.
-          Cluster security, failover, and scale are not qualified yet, and this
-          page will say when they are.
-        </p>
-      </div>
-    </section>
-
     <section class="roadmap" id="roadmap">
       <div class="wrap">
-        <h2>The build, block by block.</h2>
+        <div class="roadmap__head">
+          <div>
+            <h2>The build, block by block.</h2>
+            <p class="intro">
+              Painted blocks ship today. Raw wood is next, with no dates promised.
+            </p>
+          </div>
+          <a class="link" href="/changelog/">
+            Every release in the changelog
+            <Icon name="arrow" />
+          </a>
+        </div>
         <div class="roadmap__row">
           <ol class="timeline" data-reveal>
             {
               timeline.map((entry, index) => (
-                <li class:list={['reveal-item', 'milestone', `milestone--${entry.state}`]} style={`--i:${index}`}>
+                <li class="reveal-item milestone" style={`--i:${index}`}>
                   <div class="milestone__block">
-                    <Cube
-                      size={58}
-                      tone={entry.state === 'done' ? 'orange' : 'wood'}
-                      eyes={entry.state === 'done' ? 'open' : 'none'}
-                      paint={entry.state === 'painting'}
-                      style={`--blink-delay:${index * 0.7}s`}
-                      contact
-                    />
+                    <Cube size={58} eyes="open" style={`--blink-delay:${index * 0.7}s`} contact />
                   </div>
-                  {'datetime' in entry ? (
-                    <time class="milestone__date" datetime={entry.datetime}>{entry.date}</time>
-                  ) : (
-                    <span class="milestone__date">{entry.date}</span>
-                  )}
+                  <time class="milestone__date" datetime={entry.datetime}>{entry.date}</time>
+                  <h3>{entry.title}</h3>
+                  <p>{entry.body}</p>
+                </li>
+              ))
+            }
+            {
+              next.map((entry, index) => (
+                <li class="reveal-item milestone milestone--raw" style={`--i:${timeline.length + index}`}>
+                  <div class="milestone__block">
+                    <Cube size={58} tone="wood" contact />
+                  </div>
+                  <span class="milestone__date">Next</span>
                   <h3>{entry.title}</h3>
                   <p>{entry.body}</p>
                 </li>
@@ -483,101 +393,39 @@ const timeline = [
         <div>
           <h2>Move your agents in.</h2>
           <p>
-            One command starts it on any machine with Docker. Read the manifesto
-            to see why it is built this way, or open the architecture and the
-            accepted decisions to see how.
+            One command starts it on any machine with Docker. It is free, open
+            source under Apache-2.0, and runs entirely on hardware you control.
+            If it earns a place on your desk, a star or a sponsorship keeps the
+            blocks coming.
           </p>
-          <pre class="install" aria-label="Install command"><code>{install}</code></pre>
+          <Command command={install} class="closing__install" />
           <div class="closing__actions">
             <a class="btn" href={repo}>
               <Icon name="github" />
               <span>Star on GitHub</span>
             </a>
-            <a class="btn btn--paper" href={docs.manifesto}>Read the manifesto</a>
+            <a class="btn btn--paper" href={sponsor}>
+              <Icon name="heart" class="heart" />
+              <span>Sponsor</span>
+            </a>
+            <a class="link" href="/download/">
+              Other ways to install
+              <Icon name="arrow" />
+            </a>
           </div>
         </div>
       </div>
     </section>
-  </main>
+</Page>
 
-  <footer class="foot">
-    <div class="wrap foot__grid">
-      <div class="foot__brand">
-        <Logo size={30} />
-        <div>
-          <strong>Cubebot</strong>
-          <p>Persistent AI agents on infrastructure you control.</p>
-        </div>
-      </div>
-      <nav class="foot__links" aria-label="Project">
-        <a href={repo}>GitHub</a>
-        <a href={docs.manifesto}>Manifesto</a>
-        <a href={docs.architecture}>Architecture</a>
-        <a href={docs.adrs}>Decisions</a>
-      </nav>
-      <p class="foot__note">Built in the open. © 2026 Cubebot.</p>
-    </div>
-  </footer>
-</Base>
-
-<script>
-  import '../scripts/cube'
-  import '../scripts/reveal'
-  import '../scripts/nav'
-</script>
 
 <style>
-  .top {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    padding-block: 18px;
-    background: var(--desk);
-  }
-  @supports (animation-timeline: scroll()) {
-    .top {
-      animation: top-shadow linear both;
-      animation-timeline: scroll();
-      animation-range: 0 120px;
-    }
-  }
-  @keyframes top-shadow {
-    to {
-      box-shadow: 0 12px 24px -16px rgb(var(--shadow) / 0.4);
-    }
-  }
-  .top__row {
-    display: flex;
-    align-items: center;
-    gap: 28px;
-  }
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 800;
-    font-size: 1.25rem;
-    letter-spacing: -0.02em;
-    text-decoration: none;
-  }
-  .top__nav {
-    display: flex;
-    gap: 22px;
-    margin-left: auto;
-    font-weight: 600;
-  }
-  .top__nav a {
-    text-decoration: none;
-    padding: 6px 2px;
-    border-bottom: 2px solid transparent;
-    transition: border-color 0.15s ease-out;
-  }
-  .top__nav a:hover,
-  .top__nav a.is-current {
-    border-bottom-color: var(--orange);
-  }
-  .top__cta {
-    padding: 10px 16px 12px;
+  .anatomy__intro p,
+  .closing p {
+    max-width: var(--measure);
+    margin-top: 20px;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
   }
 
   .hero {
@@ -610,20 +458,6 @@ const timeline = [
     gap: 14px 28px;
     margin-top: 36px;
   }
-  .install {
-    margin: 28px 0 0;
-    padding: 12px 16px;
-    max-width: 100%;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    border-radius: var(--radius);
-    background: var(--ink);
-    color: var(--paper);
-    font-size: 0.875rem;
-    width: fit-content;
-    user-select: all;
-  }
-
   .hero__scene {
     --desk-surface: 118px; /* distance from scene bottom to the desk's top surface */
     position: relative;
@@ -796,58 +630,6 @@ const timeline = [
     }
   }
 
-  section {
-    padding-block: clamp(56px, 9vw, 120px);
-    scroll-margin-top: 72px;
-  }
-  h2 {
-    font-size: clamp(2rem, 4.2vw, 3.1rem);
-    max-width: 18ch;
-  }
-  h2 + p,
-  .anatomy__intro p,
-  .status__head p,
-  .closing p {
-    max-width: var(--measure);
-    margin-top: 20px;
-    color: var(--ink-soft);
-    font-size: 1.1rem;
-  }
-
-  .slab {
-    position: relative;
-    height: 34px;
-  }
-  .slab::before,
-  .slab::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-  }
-  .slab::before {
-    top: 0;
-    height: 20px;
-    border-radius: 8px 8px 2px 2px;
-    background:
-      repeating-linear-gradient(
-        93deg,
-        transparent 0 22px,
-        rgb(201 162 107 / 0.22) 22px 23px,
-        transparent 23px 51px,
-        rgb(201 162 107 / 0.12) 51px 54px
-      ),
-      linear-gradient(180deg, #f3deba, #e6c99c);
-    box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.5);
-  }
-  .slab::after {
-    top: 20px;
-    height: 14px;
-    border-radius: 0 0 6px 6px;
-    background: linear-gradient(180deg, var(--wood-deep), var(--wood-grain));
-    box-shadow: 0 12px 24px -12px rgb(var(--shadow) / 0.45);
-  }
-
   .anatomy {
     background: var(--desk-deep);
   }
@@ -943,54 +725,6 @@ const timeline = [
   .anatomy__item dd {
     margin: 10px 0 0;
     color: var(--ink-soft);
-  }
-
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 12px 8px;
-    border-radius: 8px;
-    border-bottom: 3px solid var(--orange-deep);
-    background: var(--orange);
-    color: var(--ink);
-    font-size: 0.92rem;
-    font-weight: 700;
-    letter-spacing: -0.005em;
-    line-height: 1.25;
-    transition:
-      translate 0.2s var(--settle),
-      box-shadow 0.2s ease-out;
-  }
-  .chips .chip:hover {
-    translate: 0 -3px;
-    box-shadow: 0 10px 16px -8px rgb(var(--shadow) / 0.4);
-  }
-  .chip--orange {
-    background: var(--orange);
-    border-bottom-color: var(--orange-deep);
-  }
-  .chip--sage {
-    background: var(--sage);
-    border-bottom-color: var(--sage-deep);
-  }
-  .chip--paper {
-    background: var(--paper);
-    border-bottom-color: var(--paper-deep);
-  }
-  .chip--wood {
-    background: var(--wood);
-    border-bottom-color: var(--wood-deep);
-  }
-  .chip--half {
-    padding-left: 20px;
-    background: var(--wood);
-    border-bottom-color: var(--wood-deep);
-    box-shadow: inset 10px 0 0 var(--orange);
-  }
-  .chips .chip--half:hover {
-    box-shadow:
-      inset 10px 0 0 var(--orange),
-      0 10px 16px -8px rgb(var(--shadow) / 0.4);
   }
 
   .how__head {
@@ -1113,139 +847,6 @@ const timeline = [
   .step p {
     margin-top: 8px;
     color: var(--ink-soft);
-  }
-
-  .status {
-    background: var(--desk-deep);
-  }
-  .status__head {
-    display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    gap: clamp(24px, 5vw, 72px);
-    align-items: end;
-  }
-  .paintshop {
-    position: relative;
-    height: 250px;
-  }
-  .paintshop__floor {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 16px;
-  }
-  .paintshop__painter {
-    position: absolute;
-    left: 10%;
-    bottom: 64px;
-  }
-  .paintshop__painter :global(.cube) {
-    --ry: -34deg;
-    animation: bob 4.6s ease-in-out infinite;
-  }
-  .paintshop__block {
-    position: absolute;
-    left: 50%;
-    bottom: 66px;
-  }
-  .can {
-    position: absolute;
-    left: 37%;
-    bottom: 50px;
-    width: 40px;
-    height: 44px;
-  }
-  .can__body {
-    position: absolute;
-    inset: 0;
-    border-radius: 3px 3px 7px 7px;
-    background: linear-gradient(90deg, #fffdf9, #e2d9c8);
-  }
-  .can__body::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 14px;
-    height: 13px;
-    background: var(--orange);
-  }
-  .can__body::after {
-    content: '';
-    position: absolute;
-    left: 6px;
-    top: 4px;
-    width: 5px;
-    height: 16px;
-    border-radius: 0 0 3px 3px;
-    background: var(--orange-deep);
-  }
-  .can__top {
-    position: absolute;
-    left: -2px;
-    right: -2px;
-    top: -5px;
-    height: 11px;
-    border-radius: 50%;
-    background: var(--orange-deep);
-    box-shadow:
-      inset 0 -2px 0 var(--orange),
-      inset 0 2px 0 rgb(255 255 255 / 0.25);
-  }
-  .can__shadow {
-    position: absolute;
-    left: -8px;
-    right: -8px;
-    bottom: -8px;
-    height: 14px;
-    border-radius: 50%;
-    background: radial-gradient(closest-side, rgb(var(--shadow) / 0.26), transparent);
-  }
-  .status__rows {
-    display: grid;
-    gap: 28px;
-    margin-top: 44px;
-  }
-  .status__row {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 24px;
-    align-items: start;
-    padding-top: 24px;
-    border-top: 2px solid rgb(var(--shadow) / 0.1);
-  }
-  .status__row h3 {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 1.1rem;
-    padding-top: 4px;
-  }
-  .swatch {
-    width: 18px;
-    height: 18px;
-    border-radius: 5px;
-    border-bottom: 3px solid var(--orange-deep);
-    background: var(--orange);
-  }
-  .swatch--half {
-    background: linear-gradient(90deg, var(--orange) 0 50%, var(--wood) 50%);
-    border-bottom-color: var(--wood-deep);
-  }
-  .swatch--wood {
-    background: var(--wood);
-    border-bottom-color: var(--wood-deep);
-  }
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-  }
-  .status__note {
-    margin-top: 40px;
-    max-width: var(--measure);
-    color: var(--ink-soft);
-    font-size: 0.98rem;
   }
 
   .roadmap .wrap {
@@ -1435,51 +1036,119 @@ const timeline = [
     margin-top: 32px;
   }
 
-  .foot {
-    padding-block: 40px 48px;
-    border-top: 2px solid rgb(var(--shadow) / 0.1);
+  .hero :global(.hero__install) {
+    margin-top: 28px;
   }
-  .foot__grid {
+  .closing :global(.closing__install) {
+    margin-top: 28px;
+  }
+  .closing__actions {
+    align-items: center;
+  }
+
+  .wall-section {
+    overflow: clip;
+  }
+  .wall-section__grid {
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 24px 48px;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: clamp(28px, 5vw, 72px);
     align-items: center;
   }
-  .foot__brand {
-    display: flex;
-    gap: 14px;
-    align-items: center;
-  }
-  .foot__brand p {
-    color: var(--ink-soft);
-    font-size: 0.95rem;
-  }
-  .foot__links {
+  .wall-section__actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 22px;
-    font-weight: 600;
+    align-items: center;
+    gap: 14px 28px;
+    margin-top: 32px;
   }
-  .foot__links a {
-    text-decoration: none;
+  .wall {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
   }
-  .foot__links a:hover {
-    text-decoration: underline;
+  .wall__label {
+    margin-bottom: 14px;
+    font-size: 0.82rem;
   }
-  .foot__note {
-    grid-column: 1 / -1;
-    color: var(--ink-soft);
-    font-size: 0.9rem;
+  .wall__window {
+    height: 540px;
+    overflow: hidden;
+    mask-image: linear-gradient(180deg, transparent, #000 14%, #000 86%, transparent);
+  }
+  .wall__track {
+    display: grid;
+    gap: 12px;
+    padding-bottom: 12px;
+    animation: drift var(--drift, 38s) linear infinite;
+  }
+  .wall__col--1 .wall__track {
+    --drift: 46s;
+    animation-direction: reverse;
+  }
+  .wall__col--2 .wall__track {
+    --drift: 42s;
+  }
+  .wall__col--1 {
+    margin-top: 48px;
+  }
+  .wall:hover .wall__track,
+  .wall:focus-within .wall__track {
+    animation-play-state: paused;
+  }
+  @keyframes drift {
+    to {
+      translate: 0 -100%;
+    }
+  }
+  .tile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px 16px;
+    border-radius: 12px;
+    border-bottom: 4px solid var(--orange-deep);
+    background: var(--orange);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.01em;
+    box-shadow: 0 10px 18px -12px rgb(var(--shadow) / 0.45);
+  }
+  .tile--paper {
+    background: var(--paper);
+    border-bottom-color: var(--paper-deep);
+  }
+  .tile--sage {
+    background: var(--sage);
+    border-bottom-color: var(--sage-deep);
+  }
+  .tile__cube {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+  }
+  .tile__cube :global(.tile__logo) {
+    width: 22px;
+    height: 22px;
+  }
+  .tile__cube :global(.cube) {
+    --ry: 34deg;
+  }
+
+  .roadmap__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    justify-content: space-between;
+    gap: 16px 32px;
   }
 
   @media (max-width: 960px) {
-    .top__nav {
-      display: none;
-    }
     .hero__grid,
     .how__grid,
     .how__head,
-    .status__head,
     .closing__grid {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -1536,6 +1205,12 @@ const timeline = [
     .anatomy__grid {
       grid-template-columns: 1fr;
     }
+    .wall-section__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .wall__window {
+      height: 420px;
+    }
     .anatomy__intro {
       position: static;
     }
@@ -1565,9 +1240,6 @@ const timeline = [
       left: 0;
       right: 0;
       bottom: 30px;
-    }
-    .paintshop {
-      height: 230px;
     }
     .timeline {
       grid-template-columns: 1fr;
@@ -1603,10 +1275,6 @@ const timeline = [
     .slab--roadmap {
       display: none;
     }
-    .status__row {
-      grid-template-columns: 1fr;
-      gap: 12px;
-    }
     .closing__scene {
       --desk-surface: 86px;
       height: 300px;
@@ -1629,6 +1297,36 @@ const timeline = [
   }
 
   @media (max-width: 560px) {
+    .wall {
+      gap: 8px;
+    }
+    .wall__col--1 {
+      margin-top: 32px;
+    }
+    .wall__label {
+      font-size: 0.7rem;
+      padding: 4px 7px 5px;
+    }
+    .wall__track {
+      gap: 8px;
+      padding-bottom: 8px;
+    }
+    .tile {
+      padding: 10px 9px 12px;
+      font-size: 0.82rem;
+      border-radius: 10px;
+    }
+    .tile__cube:has(.cube) {
+      display: none;
+    }
+    .tile__cube {
+      width: 18px;
+      height: 18px;
+    }
+    .tile__cube :global(.tile__logo) {
+      width: 16px;
+      height: 16px;
+    }
     .tower__slot :global(.cube) {
       --size: 56px;
     }
@@ -1645,26 +1343,26 @@ const timeline = [
       text-align: center;
       line-height: 1.2;
     }
-    .paintshop__painter {
-      left: 2%;
-    }
-    .paintshop__block {
-      left: 46%;
-    }
-    .can {
-      left: 28%;
-    }
-    .paintshop__painter :global(.cube) {
-      --size: 78px;
-    }
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .wall__track {
+      animation: none;
+    }
+    .wall__track--echo {
+      display: none;
+    }
+    .wall__window {
+      height: auto;
+      mask-image: none;
+    }
+    .wall__col--1 {
+      margin-top: 0;
+    }
     .hero__big,
     .hero__big :global(.contact),
     .closing__cube--big,
     .closing__cube--big :global(.contact),
-    .paintshop__painter :global(.cube),
     .plant__leaf,
     .mug__steam i,
     .top {

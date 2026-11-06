@@ -1,0 +1,65 @@
+---
+import Icon from './Icon.astro'
+
+interface Props {
+  command: string
+  label?: string
+  class?: string
+}
+const { command, label = 'Install command', class: className } = Astro.props
+---
+
+<div class:list={['command', className]}>
+  <pre class="install" aria-label={label}><code>{command}</code></pre>
+  <button class="command__copy" type="button" data-copy={command} aria-label="Copy command" hidden>
+    <Icon name="copy" class="command__idle" />
+    <Icon name="check" class="command__done" />
+  </button>
+</div>
+
+<style>
+  .command {
+    position: relative;
+    width: fit-content;
+    max-width: 100%;
+  }
+  .command .install {
+    margin-top: 0;
+    padding-right: 52px;
+  }
+  .command__copy {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    translate: 0 -50%;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    background: rgb(255 253 249 / 0.1);
+    color: var(--paper);
+    cursor: pointer;
+    transition: background 0.15s ease-out;
+  }
+  .command__copy[hidden] {
+    display: none;
+  }
+  .command__copy:hover {
+    background: rgb(255 253 249 / 0.2);
+  }
+  .command__copy :global(svg) {
+    width: 18px;
+    height: 18px;
+  }
+  .command__copy :global(.command__done),
+  .command__copy[data-state='done'] :global(.command__idle) {
+    display: none;
+  }
+  .command__copy[data-state='done'] :global(.command__done) {
+    display: block;
+    color: var(--orange-top);
+  }
+</style>

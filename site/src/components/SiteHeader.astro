@@ -1,0 +1,301 @@
+---
+import Logo from './Logo.astro'
+import Icon from './Icon.astro'
+import { repo, sponsor, resources } from '../data/site'
+import { stars, compact } from '../data/stars'
+
+interface Props {
+  current?: 'integrations' | 'resources' | 'about'
+}
+const { current } = Astro.props
+---
+
+<header class="top">
+  <div class="wrap top__row">
+    <a class="brand" href="/">
+      <Logo size={34} />
+      <span>Cubebot</span>
+    </a>
+
+    <nav class="top__nav" aria-label="Main">
+      <a href="/integrations/" class:list={{ 'is-current': current === 'integrations' }} aria-current={current === 'integrations' ? 'page' : undefined}>Integrations</a>
+      <details class="drop" data-menu>
+        <summary class:list={{ 'is-current': current === 'resources' }}>
+          Resources <Icon name="chevron" />
+        </summary>
+        <div class="drop__panel">
+          <ul>
+            {
+              resources.map((item) => (
+                <li>
+                  <a href={item.href}>
+                    <strong>{item.title}</strong>
+                    <span>{item.body}</span>
+                  </a>
+                </li>
+              ))
+            }
+          </ul>
+          <a class="drop__more" href={repo}>
+            <Icon name="github" /> Source code and decisions on GitHub
+          </a>
+        </div>
+      </details>
+      <a href="/about/" class:list={{ 'is-current': current === 'about' }} aria-current={current === 'about' ? 'page' : undefined}>About</a>
+    </nav>
+
+    <div class="top__actions">
+      <a class="btn btn--paper btn--compact top__sponsor" href={sponsor}>
+        <Icon name="heart" class="heart" />
+        <span>Sponsor</span>
+      </a>
+      <a class="btn btn--compact top__star" href={repo} aria-label={stars === null ? 'Star Cubebot on GitHub' : `Star Cubebot on GitHub, ${stars} stars`}>
+        <Icon name="github" />
+        <span class="top__star-label">Star</span>
+        {stars !== null && <span class="count"><Icon name="star" /><span data-stars>{compact(stars)}</span></span>}
+      </a>
+      <details class="mnav" data-menu>
+        <summary aria-label="Menu"><Icon name="menu" /></summary>
+        <div class="mnav__panel">
+          <a href="/">Home</a>
+          <a href="/integrations/">Integrations</a>
+          {resources.map((item) => <a href={item.href}>{item.title}</a>)}
+          <a href="/about/">About</a>
+          <a class="btn btn--paper" href={sponsor}><Icon name="heart" class="heart" /><span>Sponsor Cubebot</span></a>
+        </div>
+      </details>
+    </div>
+  </div>
+</header>
+
+<script>
+  import '../scripts/menus'
+  import '../scripts/stars'
+</script>
+
+<style>
+  .top {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding-block: 14px;
+    background: var(--desk);
+  }
+  @supports (animation-timeline: scroll()) {
+    .top {
+      animation: top-shadow linear both;
+      animation-timeline: scroll();
+      animation-range: 0 120px;
+    }
+  }
+  @keyframes top-shadow {
+    to {
+      box-shadow: 0 12px 24px -16px rgb(var(--shadow) / 0.4);
+    }
+  }
+  .top__row {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 800;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .top__nav {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    margin-left: 12px;
+    font-weight: 600;
+  }
+  .top__nav > a,
+  .drop summary {
+    text-decoration: none;
+    padding: 6px 2px;
+    border-bottom: 2px solid transparent;
+    transition: border-color 0.15s ease-out;
+    cursor: pointer;
+  }
+  .top__nav > a:hover,
+  .top__nav > a.is-current,
+  .drop summary:hover,
+  .drop summary.is-current,
+  .drop[open] summary {
+    border-bottom-color: var(--orange);
+  }
+  .drop {
+    position: relative;
+  }
+  .drop summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    list-style: none;
+  }
+  .drop summary::-webkit-details-marker,
+  .mnav summary::-webkit-details-marker {
+    display: none;
+  }
+  .drop summary :global(svg) {
+    width: 16px;
+    height: 16px;
+    transition: rotate 0.2s var(--settle);
+  }
+  .drop[open] summary :global(svg) {
+    rotate: 180deg;
+  }
+  .drop__panel {
+    position: absolute;
+    top: calc(100% + 14px);
+    left: -18px;
+    width: 440px;
+    padding: 10px;
+    border-radius: 14px;
+    border-bottom: 4px solid var(--paper-deep);
+    background: var(--paper);
+    box-shadow: 0 24px 48px -20px rgb(var(--shadow) / 0.45);
+    animation: drop-in 0.22s var(--settle);
+  }
+  @keyframes drop-in {
+    from {
+      opacity: 0;
+      translate: 0 -6px;
+    }
+  }
+  .drop__panel ul {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+  }
+  .drop__panel li a {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    text-decoration: none;
+  }
+  .drop__panel li a:hover {
+    background: var(--desk);
+  }
+  .drop__panel strong {
+    font-weight: 700;
+  }
+  .drop__panel span {
+    color: var(--ink-soft);
+    font-size: 0.86rem;
+    font-weight: 400;
+    line-height: 1.35;
+  }
+  .drop__more {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 12px;
+    border-top: 2px solid rgb(var(--shadow) / 0.08);
+    font-size: 0.9rem;
+    text-decoration: none;
+  }
+  .drop__more :global(svg) {
+    width: 18px;
+    height: 18px;
+  }
+  .top__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+  :global(.btn--compact) {
+    padding: 9px 14px 10px;
+    font-size: 0.95rem;
+  }
+  :global(.heart) {
+    color: var(--orange);
+  }
+  .count {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 2px;
+    padding: 0 7px 1px 5px;
+    border-radius: 6px;
+    background: rgb(43 36 32 / 0.14);
+    font-variant-numeric: tabular-nums;
+  }
+  .count :global(svg) {
+    width: 14px;
+    height: 14px;
+  }
+  .mnav {
+    display: none;
+    position: relative;
+  }
+  .mnav summary {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--paper);
+    border-bottom: 3px solid var(--paper-deep);
+    list-style: none;
+    cursor: pointer;
+  }
+  .mnav summary :global(svg) {
+    width: 22px;
+    height: 22px;
+  }
+  .mnav__panel {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    display: grid;
+    width: min(300px, calc(100vw - 32px));
+    padding: 10px;
+    border-radius: 14px;
+    border-bottom: 4px solid var(--paper-deep);
+    background: var(--paper);
+    box-shadow: 0 24px 48px -20px rgb(var(--shadow) / 0.45);
+    font-weight: 600;
+  }
+  .mnav__panel > a:not(.btn) {
+    padding: 12px;
+    border-radius: 10px;
+    text-decoration: none;
+  }
+  .mnav__panel > a:not(.btn):hover {
+    background: var(--desk);
+  }
+  .mnav__panel .btn {
+    justify-content: center;
+    margin-top: 8px;
+  }
+
+  @media (max-width: 900px) {
+    .top__nav,
+    .top__sponsor {
+      display: none;
+    }
+    .mnav {
+      display: block;
+    }
+  }
+  @media (max-width: 420px) {
+    .top__star-label {
+      display: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .top,
+    .drop__panel {
+      animation: none;
+    }
+  }
+</style>

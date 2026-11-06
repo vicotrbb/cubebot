@@ -18,3 +18,4 @@ __pycache__/
 .astro/
 .cubebot/
 apps/web/.impeccable/review/
+.impeccable/review/

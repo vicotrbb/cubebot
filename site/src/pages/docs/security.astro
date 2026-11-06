@@ -1,0 +1,89 @@
+---
+import Doc from '../../layouts/Doc.astro'
+import Icon from '../../components/Icon.astro'
+import { docs } from '../../data/site'
+---
+
+<Doc
+  title="Security · Cubebot"
+  description="Cubebot's trust boundary, how credentials are kept, what each sandbox runtime isolates, and what is not qualified yet."
+  heading="Security, plainly"
+  lede="What Cubebot protects, how, and where the edges are today. If something here is wrong or missing, please open an issue."
+  tones={['sage', 'orange', 'wood']}
+  source="docs/adr/sandbox.md"
+>
+  <Fragment slot="actions">
+    <a class="btn btn--paper" href="#not-qualified"><span>What is not qualified yet</span></a>
+    <a class="link" href={docs.issues}>Report a problem <Icon name="arrow" /></a>
+  </Fragment>
+  <h2 id="boundary">The trust boundary</h2>
+  <p>
+    Each agent's sandbox is the boundary. Anything inside it, including code the
+    agent runs, can reach that agent's credentials, so a sandbox only ever holds
+    one agent's authority: one revocable agent credential and short-lived
+    provider and connection credentials. To take authority away, revoke the
+    credential or stop the sandbox.
+  </p>
+
+  <h2 id="secrets">How secrets are kept</h2>
+  <ul>
+    <li>Provider keys, plan tokens, connection credentials, MCP secrets, vault items and the single sign-on secret are encrypted with AES-256-GCM. The key is a file kept outside the database, and the orchestrator refuses to start with a key that cannot read what is stored.</li>
+    <li>Refresh tokens, client secrets and app keys never leave the orchestrator. Agents fetch a short-lived credential per call, outside the shell's reach, and every result is scrubbed of it.</li>
+    <li>Vault secrets are typed into the agent's desktop for it; the text never returns to the model.</li>
+    <li>Passwords are hashed with Argon2id, and sign-in is limited to 10 tries a minute per account.</li>
+    <li>No API response, journal entry or audit record ever carries a secret.</li>
+  </ul>
+
+  <h2 id="runtimes">What each runtime isolates</h2>
+  <div class="table">
+    <table>
+      <thead>
+        <tr><th></th><th>kvm</th><th>container</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Kernel</td><td>Its own guest kernel</td><td>Shared with the host</td></tr>
+        <tr><td>A kernel exploit inside the sandbox</td><td>Designed to stay inside the guest; escape testing is still in progress</td><td>Reaches the host kernel</td></tr>
+        <tr><td>Where it runs</td><td>x86_64 Linux with KVM</td><td>Any Docker host or cluster</td></tr>
+        <tr><td>Extra hardening</td><td>Anti-spoofing on the guest's network device</td><td>Minimal capabilities; optional gVisor or another runtime class</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="network">Network</h2>
+  <ul>
+    <li><strong>On Kubernetes,</strong> the chart gives every sandbox a default-deny network policy: DNS, the orchestrator's private port and the public internet, minus private and metadata ranges. Private addresses are reachable only when you grant them. Only the orchestrator can reach PostgreSQL. This holds only if your network plugin enforces policy.</li>
+    <li><strong>With Docker Compose,</strong> there is no firewall around agents. They cannot reach Cubebot's other containers directly, but they can reach this machine's private networks and cloud metadata. The installer says so before it installs.</li>
+    <li>Public internet access is open by default. That keeps agents useful and also means a misled agent could send data out.</li>
+  </ul>
+
+  <h2 id="prompt-injection">Untrusted content</h2>
+  <p>
+    Mail, documents, web pages and messages are treated as outside content: they
+    reach the model marked as untrusted and cannot grant tools or pick accounts.
+    That reduces the damage a prompt injection can do; it does not prevent it.
+    The real limit is what you grant. Each connection has a permission level, and
+    a Read connection cannot send anything, whatever the model is told.
+  </p>
+
+  <h2 id="console">People and the console</h2>
+  <ul>
+    <li>Sessions live in secure cookies; the API checks origins and cross-site requests.</li>
+    <li>Access is granted per agent or room to people and teams, and every grant, sign-in and sensitive action is in the audit log.</li>
+    <li>Rich previews in chat run in a sandbox with no network access.</li>
+  </ul>
+
+  <h2 id="not-qualified">Not qualified yet</h2>
+  <p>We would rather say this than have you find out:</p>
+  <ul>
+    <li>Sandbox escape testing of the VMM's guest devices.</li>
+    <li>Network enforcement for IPv6, DNS rebinding and redirects.</li>
+    <li>Real-cluster fencing, storage and failover qualification.</li>
+    <li>Signed guest kernels and root images.</li>
+    <li>Encryption key rotation.</li>
+  </ul>
+  <div class="callout">
+    <strong>Found something?</strong>
+    Please keep exploit details out of public issues. <a href={docs.issues}>Open an issue</a>
+    asking for a private channel, with no details, and the maintainer will reach out.
+  </div>
+</Doc>

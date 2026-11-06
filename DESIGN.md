@@ -257,6 +257,96 @@ components:
     textColor: '{colors.ink}'
     typography: '{typography.label}'
     padding: '6px 2px'
+  # Site pages (site/src/components, site/src/layouts; added with the multi-page site)
+  site-header:
+    backgroundColor: '{colors.desk}'
+    textColor: '{colors.ink}'
+    typography: '{typography.label}'
+    padding: '14px 0'
+  site-header-panel:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '14px'
+    padding: '10px'
+    width: '440px'
+  site-menu-button:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.block}'
+    size: '44px'
+  button-block-header:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.block}'
+    padding: '9px 14px 10px'
+  star-count:
+    backgroundColor: 'rgb(43 36 32 / 0.14)'
+    textColor: '{colors.ink}'
+    rounded: '6px'
+    padding: '0 7px 1px 5px'
+  pledge-star:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    rounded: '14px'
+    padding: '22px 26px 24px'
+  pledge-sponsor:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '14px'
+    padding: '22px 26px 24px'
+  page-head-title:
+    textColor: '{colors.ink}'
+    typography: '{typography.display}'
+    width: '16ch'
+  connector-block:
+    textColor: '{colors.ink}'
+    padding: '0 14px 8px'
+    size: '58px'
+  capability-tile:
+    backgroundColor: '{colors.orange}'
+    textColor: '{colors.ink}'
+    rounded: '12px'
+    padding: '14px 14px 16px'
+  capability-tile-paper:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '12px'
+    padding: '14px 14px 16px'
+  capability-tile-sage:
+    backgroundColor: '{colors.sage}'
+    textColor: '{colors.ink}'
+    rounded: '12px'
+    padding: '14px 14px 16px'
+  doc-sheet:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '6px 6px 2px 2px'
+    padding: 'clamp(24px, 4vw, 52px)'
+  doc-nav:
+    backgroundColor: '{colors.wood}'
+    textColor: '{colors.ink}'
+    rounded: '14px'
+    padding: '8px'
+    width: '220px'
+  doc-nav-current:
+    backgroundColor: '{colors.paper}'
+    textColor: '{colors.ink}'
+    rounded: '9px'
+    padding: '9px 12px'
+  command:
+    backgroundColor: '{colors.ink}'
+    textColor: '{colors.paper}'
+    rounded: '{rounded.block}'
+    padding: '12px 52px 12px 16px'
+  command-copy:
+    backgroundColor: 'rgb(255 253 249 / 0.1)'
+    textColor: '{colors.paper}'
+    rounded: '{rounded.chip}'
+    size: '34px'
+  changelog-rail:
+    backgroundColor: '{colors.wood}'
+    rounded: '3px'
+    width: '6px'
   # Console controls (src/styles/controls.css; shell, profile, chat, broadcast, desktop, agent, platform feature CSS)
   console-button:
     backgroundColor: '{colors.console-raised}'
@@ -631,6 +721,38 @@ One easing: `--settle: cubic-bezier(0.16, 1, 0.3, 1)`. Blocks land from 34px abo
 ### Browser surface
 
 Selection is orange with paper text; focus is a 3px orange outline offset 3px with 6px radius; `theme-color` is orange.
+
+### Site header
+
+Shared by every page (`SiteHeader.astro`). Sticky on Desk with 14px vertical padding, the same scroll-driven drop shadow as before, a 34px logo and 800-weight wordmark. Three 600-weight items: Integrations, a Resources disclosure, About; the current section and an open disclosure carry the 2px orange bottom border. Resources is a native `<details>`: its chevron turns 180° on the settle ease and it opens a Paper panel (14px radius, 4px Paper Deep bottom edge, `0 24px 48px -20px` warm drop at 0.45, lands from 6px above over 0.22s) holding a two-column list of 700-weight titles over 0.86rem Ink Soft lines, hover washing Desk, and a GitHub link under a 2px low-alpha divider. Right side: a compact paper block button (`btn--paper btn--compact`, padding 9px 14px 10px) reading Sponsor with an Orange heart, then a compact orange Star block with the GitHub mark and a count chip (`star-count`: 14% ink wash, 6px radius, star icon, tabular numerals); the count is read at build and refreshed in the browser at most hourly. Under 900px the links and Sponsor give way to a 44px Paper menu block (3px Paper Deep edge) that opens the same Paper panel as a single column ending in a full-width Sponsor block; under 420px the Star block drops its word and keeps the count.
+
+### Support band (pledge blocks)
+
+Every page but 404 closes on a Desk Deep band before the footer: a heading and intro left, two pledge blocks right. A pledge is a large block link (14px radius, 5px bottom edge, padding 22px 26px 24px, `0 16px 30px -16px` warm drop at 0.5): an 84px stage with a 64px eyed cube, an 800-weight 1.35rem title over a 600-weight line at 80% ink, and a 26px arrow. Star is Orange with the live star count; Sponsor is Paper with a paper cube and a 26px Orange heart perched on its upper right. Hover lifts 3px, deepens the shadow, turns the cube to 8° and nudges the arrow 4px. Under 560px the stage shrinks to 64px and the cube to 50px.
+
+### Page head
+
+Inner pages open with `PageHead.astro`: a 1.5fr / 1fr grid aligned to the bottom. Left, a 900-weight H1 at `clamp(2.4rem, 5.6vw, 4.4rem)`, −0.035em, line-height 1, capped at 16ch; a lede in Ink Soft at `clamp(1.08rem, 1.5vw, 1.25rem)` capped at the 62ch measure; then the actions row (14px × 24px gaps, 30px above), usually one block button and one arrow link. Right, a cube trio standing on a slab that overhangs 4% each side: 76px, 132px and 58px blocks turned 36°, default and 14°; the middle one has open eyes, follows the pointer and bobs 8px over 4.6s, a sage block sleeps, others are inert. Tones default to paper, orange, wood and change per page; a page may replace the trio through the `scene` slot but keeps the slab. Under 860px the scene moves above the copy and the blocks shrink to 58 / 96 / 46px. Under reduced motion the bob stops.
+
+### Connector shelf
+
+The integrations catalog (`ConnectorBlock.astro`) shows each connector as a 58px cube carrying the vendor's brand mark on a paper sticker (66% of the face, 18% radius, Paper Deep inner edge; marks from Simple Icons and official sources in `data/logos.ts`, drawn glyphs where a connector has no brand) standing on a plank: a slab whose corners are squared, so neighbouring planks in an `auto-fill, minmax(230px, 1fr)` grid with no column gap butt into one continuous shelf per category (36px between rows, 52px between categories, 1.35rem category heading). The cube sinks 10px into the plank. Below it: an 800-weight name, a 0.95rem Ink Soft summary, and a 0.82rem 600-weight meta row (tools, events, self-hosted). Material is the test status: a painted orange cube was tested against the live service; a half-painted wood cube (`paint`) was tested against recorded vendor responses only, and says so in visually hidden text. A legend with a 30px example of each sits above the shelves. Hover lifts the cube 8px, turns it to 6° and underlines the name in orange. Category filters are small press blocks (9px radius, 3px Desk Deep edge, 60% Paper face; pressed turns Orange with an Orange Deep edge).
+
+### Capabilities wall
+
+The home page's signature: three columns of block tiles (orange, paper, sage, each headed by a matching chip) drifting vertically inside a 540px window that fades out over its top and bottom 14%. A tile is a 12px-radius block with a 4px `*-deep` edge, padding 14px 14px 16px, 700-weight text, a `0 10px 18px -12px` warm drop at 0.45, and a 22px cube of its tone (every fourth orange one has eyes). Columns drift linearly at 38s, 46s (reversed, offset 48px down) and 42s, through a duplicated track so the loop never jumps; hovering or focusing anywhere in the wall pauses all three. Under reduced motion the tracks stop, the duplicate disappears, the window opens to full height and the offset is removed. Under 560px tiles drop their cube and tighten to 10px 9px 12px.
+
+### Docs sheet
+
+Resource pages (`Doc.astro`) set their text on a sheet of paper resting on a shelf: a page head, then a 220px sticky resource nav beside the sheet. The nav is a Wood block (14px radius, 4px Wood Deep edge, 8px padding) of 600-weight links with a 45% Paper hover wash; the current page sits as a Paper slip with a small warm drop. The sheet (max 82ch) is Paper with a 6px top and 2px bottom radius, padding `clamp(24px, 4vw, 52px)`, an inset 3px Paper Deep bottom edge and a tight `0 14px 10px -12px` drop, inset 14px from a full slab it rests on. Inside: h2 at `clamp(1.6rem, 2.6vw, 2.1rem)`, bullets as tiny orange blocks with an Orange Deep edge, ordered markers in 800 Orange Base, inline code on Desk Deep, code blocks in Ink, tables divided by 2px low-alpha ink rules, and callouts as Desk blocks with a 3px Desk Deep edge. Under 860px the nav moves below the sheet as a two-column block.
+
+### Command block
+
+`Command.astro` wraps the Ink install line (`.install`, 10px radius, Paper monospace text, 0.875rem, wraps anywhere) with a copy button inside its right end: a 34px, 8px-radius square of 10% Paper (20% on hover) holding an 18px copy icon that turns into an Orange Top check after copying. The button stays hidden until script can copy, so without JavaScript the line is still selectable whole.
+
+### Changelog rail
+
+Releases hang from a vertical wood rail: a 6px Wood bar with a 2px Wood Deep inset edge and 3px radius running down a 60px gutter. Each release sits a cube on it (44px with open eyes for the latest, 30px inert for the rest), then an 800-weight tag link and date column (160px), then the 1.5rem title and a list bulleted with 7px orange squares. The latest also carries a small orange `Latest` chip. Under 760px the meta folds into one row above the body.
 
 ## Do's and Don'ts
 

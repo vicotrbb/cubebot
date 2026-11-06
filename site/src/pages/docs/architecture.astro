@@ -1,0 +1,142 @@
+---
+import Doc from '../../layouts/Doc.astro'
+import Cube from '../../components/Cube.astro'
+import Icon from '../../components/Icon.astro'
+import { docs } from '../../data/site'
+
+const layers = [
+  { tone: 'paper', label: 'web', name: 'Console', body: 'TanStack Start and React. Pages are served here; every domain request and live stream goes to Rust.' },
+  { tone: 'orange', label: 'orch', name: 'Orchestrator', body: 'One Rust process. Owns the database, starts and watches sandboxes, routes work, encrypts secrets, and is the only thing that touches the cluster.' },
+  { tone: 'paper', label: 'pg', name: 'PostgreSQL', body: 'The source of truth: agents, conversations, memory, skills, files metadata, the audit log. Agents never connect to it.' },
+  { tone: 'orange', label: 'agent', name: 'Agent sandboxes', body: 'One per agent, always on. The agent runtime, its tools, its desktop and its journal live together inside it.' },
+] as const
+---
+
+<Doc
+  title="Architecture · Cubebot"
+  description="How Cubebot works: one Rust orchestrator, PostgreSQL, a web console, and one sandbox per agent, either a KVM guest from an in-house VMM or a declared container."
+  heading="How Cubebot is built"
+  lede="Three services and one sandbox per agent. Everything is Rust except the console, and every important decision is written down in the open."
+  tones={['paper', 'orange', 'paper']}
+  source="ARCHITECTURE.md"
+>
+  <Fragment slot="actions">
+    <a class="btn" href={docs.architecture}><span>Read ARCHITECTURE.md</span></a>
+    <a class="link" href={docs.adrs}>Browse the decisions <Icon name="arrow" /></a>
+  </Fragment>
+  <h2 id="parts">The parts</h2>
+  <ol class="layers" aria-label="Cubebot components">
+    {
+      layers.map((layer) => (
+        <li class="layer">
+          <span class="layer__cube" aria-hidden="true">
+            <Cube size={52} tone={layer.tone} label={layer.label} contact />
+          </span>
+          <div>
+            <strong>{layer.name}</strong>
+            <p>{layer.body}</p>
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+  <p>
+    Agents call model providers and your connected accounts themselves, from
+    inside their sandbox, with short-lived credentials the orchestrator hands
+    them. The orchestrator never runs an agent's tools for it.
+  </p>
+
+  <h2 id="turn">What happens when you send a message</h2>
+  <ol>
+    <li>The console sends your message to the orchestrator, which stores it and queues a turn for the agent.</li>
+    <li>The agent holds an open channel to the orchestrator and receives the turn: your message, its instructions, its history and the tools this turn may use.</li>
+    <li>It calls the model, streaming text back as it arrives. When the model asks for tools, it writes each call to its journal first, then runs them, several at once when it can.</li>
+    <li>Events wait in an outbox until the orchestrator acknowledges them, so a dropped connection loses nothing.</li>
+    <li>When the model is done, the agent saves what is worth remembering and the turn is committed.</li>
+  </ol>
+
+  <h2 id="sandbox">The sandbox</h2>
+  <p>
+    The sandbox is the trust boundary: an agent and everything it runs live in
+    it together, with only that agent's authority. The installation declares one
+    of two runtimes, and the console always shows which.
+  </p>
+  <h3>kvm: a virtual machine per agent</h3>
+  <p>
+    <code>cubebot-sandbox</code> is an in-house VMM written in Rust on KVM
+    ioctls, with no third-party VMM crates. Each guest gets a Linux kernel, a
+    read-only root image, a persistent workspace disk, a network device and a
+    vsock control channel, 2 vCPUs and 2 GiB of memory by default. Its network
+    traffic leaves through a tap device in the pod's own namespace, so network
+    policy applies to exactly one agent. It needs x86_64 Linux.
+  </p>
+  <h3>container: the same image, directly</h3>
+  <p>
+    The agent image runs as a container with a minimal set of capabilities. It
+    has the same tools, desktop and recovery, shares the host's kernel, and works
+    on any Docker host, every Mac included. An administrator can add a stronger
+    runtime class such as gVisor.
+  </p>
+
+  <h2 id="desktop">The desktop</h2>
+  <p>
+    Inside each sandbox, one arbiter owns the screen and the input. It knows
+    whether the agent, a watcher or a person is in control, refuses the agent's
+    input while a person holds it, and streams only the parts of the screen that
+    change. The orchestrator relays the picture but never stores a person's
+    session.
+  </p>
+
+  <h2 id="recovery">Recovery</h2>
+  <ul>
+    <li>One orchestrator is active at a time, holding a lock in PostgreSQL. A replacement waits for proof the old one stopped.</li>
+    <li>Interrupted turns are recovered on every reconcile pass. A tool call whose outcome is unknown waits for a person.</li>
+    <li>Sandboxes carry an epoch, so a stale one cannot write to the ledger after it was replaced.</li>
+  </ul>
+
+  <h2 id="decisions">Read the decisions</h2>
+  <p>
+    Every behavior above comes from an accepted decision record. They are short,
+    dated and honest about what is still open.
+  </p>
+  <ul>
+    <li><a href={docs.architecture}>ARCHITECTURE.md</a>, the whole system on one page</li>
+    <li><a href={docs.adrs}>Decision records</a> for agents, sandboxes, memory, rooms, identity, the console and packaging</li>
+    <li><a href={docs.manifesto}>The manifesto</a>, for why it is built this way</li>
+  </ul>
+</Doc>
+
+<style>
+  .layers {
+    display: grid;
+    gap: 12px;
+    padding: 0;
+    list-style: none;
+  }
+  .layers {
+    gap: 0;
+  }
+  .layer {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 18px;
+    align-items: center;
+    padding-block: 14px;
+    border-bottom: 2px solid rgb(var(--shadow) / 0.08);
+  }
+  .layer__cube {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+  }
+  .layer strong {
+    font-size: 1.1rem;
+    font-weight: 800;
+  }
+  .layer p {
+    margin-top: 2px;
+    color: var(--ink-soft);
+    font-size: 0.97rem;
+  }
+</style>

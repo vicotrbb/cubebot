@@ -1,0 +1,344 @@
+---
+import Page from '../../layouts/Page.astro'
+import Cube from '../../components/Cube.astro'
+import BrandMark from '../../components/BrandMark.astro'
+import Icon from '../../components/Icon.astro'
+import ConnectorBlock from '../../components/ConnectorBlock.astro'
+import { connectors, type Connector } from '../../data/connectors'
+import { docs } from '../../data/site'
+
+export function getStaticPaths() {
+  return connectors.map((connector) => ({ params: { slug: connector.slug }, props: { connector } }))
+}
+
+interface Props {
+  connector: Connector
+}
+const { connector: c } = Astro.props
+const related = connectors.filter((o) => o.category === c.category && o.slug !== c.slug).slice(0, 3)
+const steps = [
+  'Open Platform › Connections in the console and pick ' + c.name + '.',
+  `Follow the guided setup: ${c.signIn.charAt(0).toLowerCase()}${c.signIn.slice(1)}.`,
+  `Keep the default level (${c.level}) or change it, and switch off any tool you do not want offered.`,
+  'Leave it for every agent, or choose the agents that may use it.',
+]
+if (c.selfHosted) {
+  steps.push('On Kubernetes, grant the sandbox your server’s private address under sandbox.networkPolicy.privateDestinations.')
+}
+---
+
+<Page
+  title={`${c.name} integration · Cubebot`}
+  description={`Connect ${c.name} to self-hosted Cubebot agents. ${c.summary}`}
+  current="integrations"
+>
+  <section class="detail">
+    <div class="wrap">
+      <a class="back" href="/integrations/"><Icon name="arrow" /> All integrations</a>
+      <div class="detail__head">
+        <div class="detail__cube" aria-hidden="true">
+          <Cube size={120} tone={c.tested === 'live' ? 'orange' : 'wood'} paint={c.tested !== 'live'} contact>
+            <span slot="face" class="sticker">
+              <BrandMark slug={c.slug} />
+            </span>
+          </Cube>
+        </div>
+        <div>
+          <h1>{c.name}</h1>
+          <p class="detail__lede">{c.summary}</p>
+          {
+            c.products && (
+              <ul class="chips detail__products" aria-label="Products">
+                {c.products.map((product) => <li class="chip chip--paper">{product}</li>)}
+              </ul>
+            )
+          }
+        </div>
+      </div>
+
+      <div class="detail__grid">
+        <div class="detail__main">
+          <h2>What agents can do</h2>
+          <ul class="toolist">
+            {c.tools.map((tool) => <li>{tool}</li>)}
+          </ul>
+
+          {
+            c.events.length > 0 && (
+              <>
+                <h2>Events that start routines</h2>
+                <p class="muted">A routine can wait for any of these and wake its agent when one arrives. Cubebot polls for them.</p>
+                <ul class="events">
+                  {c.events.map((event) => <li><code>{event}</code></li>)}
+                </ul>
+              </>
+            )
+          }
+
+          <h2>Set it up</h2>
+          <ol class="steps">
+            {steps.map((step) => <li>{step}</li>)}
+          </ol>
+          {
+            c.uploads && (
+              <p class="muted note">Uploads come from the agent's workspace, up to 25 MiB a file, so the model never handles the raw bytes.</p>
+            )
+          }
+        </div>
+
+        <aside class="facts" aria-label="Details">
+          <dl>
+            <div>
+              <dt>Sign-in</dt>
+              <dd>{c.signIn}</dd>
+            </div>
+            <div>
+              <dt>Default level</dt>
+              <dd>{c.level}</dd>
+            </div>
+            <div>
+              <dt>Who can use it</dt>
+              <dd>Every agent by default, or only the agents you choose</dd>
+            </div>
+            <div>
+              <dt>Credentials</dt>
+              <dd>Encrypted in your database; agents get short-lived ones</dd>
+            </div>
+            <div>
+              <dt>How it is tested</dt>
+              <dd>
+                {c.tested === 'live'
+                  ? 'Against the live service and against recorded responses'
+                  : 'Against recorded vendor responses; not yet against the live service'}
+              </dd>
+            </div>
+            <div>
+              <dt>Shipped in</dt>
+              <dd><a href="/changelog/">{c.wave === 1 ? 'v0.1.14' : 'v0.1.15'}</a></dd>
+            </div>
+          </dl>
+          <a class="facts__src" href={`${docs.adrs}/identity.md#native-connectors`}>How connectors work <Icon name="external" /></a>
+        </aside>
+      </div>
+
+      {
+        related.length > 0 && (
+          <div class="related">
+            <h2>More in {c.category}</h2>
+            <ul>
+              {related.map((connector) => <ConnectorBlock connector={connector} />)}
+            </ul>
+          </div>
+        )
+      }
+    </div>
+  </section>
+</Page>
+
+<style>
+  .detail {
+    padding-top: clamp(24px, 4vw, 48px);
+  }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .back :global(svg) {
+    width: 18px;
+    height: 18px;
+    rotate: 180deg;
+  }
+  .detail__head {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: clamp(24px, 5vw, 56px);
+    align-items: center;
+    margin-top: 32px;
+  }
+  .sticker {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 64%;
+    height: 64%;
+    border-radius: 18%;
+    background: var(--paper);
+    box-shadow:
+      inset 0 -3px 0 var(--paper-deep),
+      0 3px 5px rgb(var(--shadow) / 0.25);
+  }
+  .sticker :global(svg) {
+    width: 62%;
+    height: 62%;
+  }
+  .detail__cube {
+    display: grid;
+    place-items: center;
+    width: 170px;
+    height: 170px;
+  }
+  h1 {
+    font-size: clamp(2.4rem, 5.6vw, 4.2rem);
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    line-height: 1;
+  }
+  .detail__lede {
+    max-width: var(--measure);
+    margin-top: 16px;
+    color: var(--ink-soft);
+    font-size: 1.2rem;
+  }
+  .detail__products {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 20px;
+  }
+  .detail__products .chip {
+    font-size: 0.85rem;
+  }
+  .detail__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 64px);
+    align-items: start;
+    margin-top: clamp(40px, 6vw, 72px);
+  }
+  .detail__main h2,
+  .related h2 {
+    max-width: none;
+    font-size: 1.6rem;
+  }
+  .detail__main h2 + * {
+    margin-top: 14px;
+  }
+  .detail__main * + h2 {
+    margin-top: 44px;
+  }
+  .toolist {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: 10px;
+  }
+  .toolist li {
+    padding: 12px 14px 14px;
+    border-radius: 10px;
+    border-bottom: 3px solid var(--orange-deep);
+    background: var(--orange);
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .muted {
+    color: var(--ink-soft);
+  }
+  .events {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  .events code {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.88rem;
+  }
+  .steps {
+    display: grid;
+    gap: 12px;
+    counter-reset: step;
+  }
+  .steps li {
+    position: relative;
+    padding-left: 48px;
+    counter-increment: step;
+  }
+  .steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: -2px;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border-bottom: 3px solid var(--wood-deep);
+    background: var(--wood);
+    font-weight: 800;
+  }
+  .note {
+    margin-top: 18px;
+  }
+  .facts {
+    position: sticky;
+    top: 96px;
+    padding: 24px;
+    border-radius: 16px;
+    border-bottom: 5px solid var(--paper-deep);
+    background: var(--paper);
+    box-shadow: 0 20px 36px -24px rgb(var(--shadow) / 0.5);
+  }
+  .facts dl {
+    display: grid;
+    gap: 16px;
+  }
+  .facts dt {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink-soft);
+  }
+  .facts dd {
+    margin: 2px 0 0;
+    font-weight: 600;
+  }
+  .facts__src {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 22px;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .facts__src :global(svg) {
+    width: 15px;
+    height: 15px;
+  }
+  .related {
+    margin-top: clamp(56px, 8vw, 96px);
+  }
+  .related ul {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+    gap: 36px 0;
+    margin-top: 24px;
+  }
+  @media (max-width: 560px) {
+    .related ul {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 860px) {
+    .detail__head,
+    .detail__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .detail__cube {
+      width: 120px;
+      height: 120px;
+    }
+    .detail__cube :global(.cube) {
+      --size: 84px;
+    }
+    .facts {
+      position: static;
+    }
+  }
+</style>

@@ -1,0 +1,293 @@
+---
+import Page from '../layouts/Page.astro'
+import PageHead from '../components/PageHead.astro'
+import Command from '../components/Command.astro'
+import Cube from '../components/Cube.astro'
+import Icon from '../components/Icon.astro'
+import { install, version, released, docs, repo } from '../data/site'
+
+const helm = 'helm install cubebot oci://ghcr.io/vicotrbb/charts/cubebot \\\n  --namespace cubebot --values my-values.yaml'
+const source = 'git clone https://github.com/vicotrbb/cubebot && cd cubebot\njust up'
+const runtimes = [
+  { name: 'kvm', tone: 'orange', title: 'A virtual machine per agent', needs: 'x86_64 Linux with /dev/kvm and /dev/net/tun', body: 'Each agent runs in its own KVM guest from Cubebot’s in-house VMM, with its own kernel. The strongest boundary, and the default where the hardware allows it.' },
+  { name: 'container', tone: 'paper', title: 'A container per agent', needs: 'Any Docker host, every Mac included', body: 'The same agent image, desktop and tools, sharing the host kernel. A weaker boundary that runs everywhere. The console always says which one you have.' },
+  { name: 'off', tone: 'paper', title: 'Console only', needs: 'Anything that runs Docker', body: 'Runs the console and the database without agents, to look around first.' },
+] as const
+---
+
+<Page
+  title="Download · Cubebot"
+  description="Install Cubebot with one command on Linux or macOS, with the Helm chart on Kubernetes, or from source. Free, open source, Apache-2.0."
+  current="resources"
+>
+  <PageHead
+    title="Bring Cubebot home."
+    lede={`Free and open source, with nothing to sign up for. The latest release is ${version}, published ${released}. Pick the way that fits the machine you have.`}
+    tones={['paper', 'orange', 'sage']}
+  >
+    <a class="btn" href="#installer"><Icon name="download" /><span>Install with one command</span></a>
+    <a class="link" href={docs.releases}>All releases on GitHub <Icon name="arrow" /></a>
+  </PageHead>
+
+  <section class="ways">
+    <div class="wrap ways__list">
+      <article class="way way--lead" id="installer">
+        <div class="way__head">
+          <Cube size={64} eyes="open" contact />
+          <div>
+            <h2>One command, any machine with Docker</h2>
+            <p>Linux or macOS · Docker with Compose 2.23 or later · bash and curl</p>
+          </div>
+        </div>
+        <Command command={install} />
+        <p class="way__body">
+          The installer checks Docker, finds the latest release and asks four
+          questions: where agents run, how the console is reached (this machine,
+          or a public domain with a certificate), where to install, and who the
+          administrator is. Then it pulls the images and prints the address.
+        </p>
+        <div class="way__links">
+          <a class="link" href="/docs/install/">Read the install guide <Icon name="arrow" /></a>
+        </div>
+      </article>
+
+      <article class="way">
+        <div class="way__head">
+          <Cube size={56} tone="paper" label="k8s" contact />
+          <div>
+            <h2>The Helm chart, on Kubernetes</h2>
+            <p>Published with every release · digest-pinned images · ingress or Gateway API</p>
+          </div>
+        </div>
+        <Command command={helm} label="Helm install command" />
+        <p class="way__body">
+          One namespace with the orchestrator, the console and PostgreSQL (bundled
+          or your own). Default-deny network policy for every agent, the
+          restricted Pod Security profile for the platform, and agents reaching
+          the orchestrator on a private port. Your values name the public address,
+          the ingress or Gateway, and the cluster's DNS service for
+          <code>sandbox.dns</code>.
+        </p>
+        <div class="way__links">
+          <a class="link" href={docs.deploy}>Chart values and upgrade notes <Icon name="external" /></a>
+        </div>
+      </article>
+
+      <article class="way">
+        <div class="way__head">
+          <Cube size={56} tone="wood" label="src" contact />
+          <div>
+            <h2>From source</h2>
+            <p>Rust, Bun and just · for contributors and the curious</p>
+          </div>
+        </div>
+        <Command command={source} label="Build from source" />
+        <p class="way__body">
+          Builds every image from the checkout and runs them the way an
+          installation does. The kvm runtime also builds the guest kernel and
+          root image, which needs make, gcc, flex, bison, bc and the libelf headers.
+        </p>
+        <div class="way__links">
+          <a class="link" href={repo}>Open the repository <Icon name="external" /></a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section class="runtimes" aria-labelledby="runtimes-title">
+    <div class="wrap">
+      <h2 id="runtimes-title">Where your agents will live.</h2>
+      <p class="intro">
+        You choose the sandbox runtime at install time. Cubebot never reports
+        it as stronger than it is, and never switches it behind your back.
+      </p>
+      <ul class="runtimes__list">
+        {
+          runtimes.map((runtime) => (
+            <li class:list={['runtime', `runtime--${runtime.tone}`]}>
+              <span class="runtime__name">{runtime.name}</span>
+              <h3>{runtime.title}</h3>
+              <p class="runtime__needs">{runtime.needs}</p>
+              <p>{runtime.body}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="images" aria-labelledby="images-title">
+    <div class="wrap images__grid">
+      <div>
+        <h2 id="images-title">What you are installing.</h2>
+        <p class="intro">
+          Four images on the GitHub Container Registry, built and pinned by
+          digest on every release. The installer and the chart pull the same ones.
+        </p>
+      </div>
+      <div class="table">
+        <table>
+          <thead>
+            <tr><th>Image</th><th>What it is</th><th>Platforms</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>cubebot-orchestrator</code></td><td>The Rust control plane and API</td><td>amd64, arm64</td></tr>
+            <tr><td><code>cubebot-web</code></td><td>The console</td><td>amd64, arm64</td></tr>
+            <tr><td><code>cubebot-agent</code></td><td>The agent, its tools and desktop</td><td>amd64, arm64</td></tr>
+            <tr><td><code>cubebot-sandbox</code></td><td>The VMM, guest kernel and root</td><td>amd64</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</Page>
+
+<style>
+  .ways {
+    padding-top: 0;
+  }
+  .ways__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+  }
+  .way {
+    display: grid;
+    align-content: start;
+    gap: 20px;
+    min-width: 0;
+    padding: clamp(22px, 3vw, 34px);
+    border-radius: 16px;
+    border-bottom: 5px solid var(--paper-deep);
+    background: var(--paper);
+    box-shadow: 0 20px 36px -26px rgb(var(--shadow) / 0.5);
+    scroll-margin-top: 96px;
+  }
+  .way--lead {
+    grid-column: 1 / -1;
+  }
+  .way__head {
+    display: flex;
+    align-items: center;
+    gap: 34px;
+    padding-left: 6px;
+  }
+  .way__head > :global(.cube) {
+    flex: none;
+  }
+  .way h2 {
+    max-width: none;
+    font-size: clamp(1.4rem, 2.4vw, 1.9rem);
+  }
+  .way__head p {
+    margin-top: 6px;
+    color: rgb(43 36 32 / 0.78);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+  .way__body {
+    max-width: var(--measure);
+    color: rgb(43 36 32 / 0.85);
+  }
+  .way :global(.install) {
+    font-size: 0.85rem;
+  }
+  .way code,
+  .images code {
+    padding: 0.1em 0.35em;
+    border-radius: 5px;
+    background: var(--desk-deep);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.88em;
+  }
+  .way--lead .link {
+    color: var(--ink);
+  }
+  .runtimes {
+    background: var(--desk-deep);
+  }
+  .runtimes__list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 40px;
+  }
+  .runtime {
+    padding: 24px 24px 26px;
+    border-radius: 14px;
+    border-bottom: 5px solid var(--paper-deep);
+    background: var(--paper);
+  }
+  .runtime--orange {
+    background: var(--orange);
+    border-bottom-color: var(--orange-deep);
+  }
+  .runtime__name {
+    display: inline-block;
+    padding: 3px 10px 4px;
+    border-radius: 7px;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+  }
+  .runtime h3 {
+    margin-top: 14px;
+    font-size: 1.25rem;
+  }
+  .runtime__needs {
+    margin-top: 6px;
+    font-weight: 700;
+    font-size: 0.92rem;
+  }
+  .runtime p:last-child {
+    margin-top: 10px;
+    color: rgb(43 36 32 / 0.82);
+  }
+  .images__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+  }
+  .table {
+    overflow-x: auto;
+    padding: 8px 22px;
+    border-radius: 14px;
+    border-bottom: 5px solid var(--paper-deep);
+    background: var(--paper);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+  th,
+  td {
+    padding: 13px 12px 13px 0;
+    border-bottom: 2px solid rgb(var(--shadow) / 0.08);
+    text-align: left;
+  }
+  tr:last-child td {
+    border-bottom: 0;
+  }
+  th {
+    font-weight: 800;
+  }
+  @media (max-width: 960px) {
+    .ways__list,
+    .runtimes__list,
+    .images__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 560px) {
+    .way__head {
+      align-items: flex-start;
+      gap: 26px;
+    }
+    .way__head :global(.cube) {
+      --size: 44px;
+    }
+  }
+</style>

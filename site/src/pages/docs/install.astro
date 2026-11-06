@@ -1,0 +1,112 @@
+---
+import Doc from '../../layouts/Doc.astro'
+import Command from '../../components/Command.astro'
+import { install } from '../../data/site'
+
+const unattended = 'curl -fsSL https://cubebot.io/install.sh | \\\n  CUBEBOT_RUNTIME=container CUBEBOT_ADMIN=console CUBEBOT_YES=1 bash'
+const values = `publicOrigin: https://cubebot.example.com
+admin: { login: admin, existingSecret: cubebot-admin }
+ingress: { className: traefik, host: cubebot.example.com, tlsSecret: cubebot-tls }
+sandbox:
+  dns: [10.96.0.10] # kubectl -n kube-system get service kube-dns`
+const helm = `kubectl create namespace cubebot
+kubectl label namespace cubebot pod-security.kubernetes.io/enforce=baseline  # privileged for kvm
+kubectl -n cubebot create secret generic cubebot-admin --from-literal=password="$(openssl rand -base64 24)"
+helm install cubebot oci://ghcr.io/vicotrbb/charts/cubebot --namespace cubebot --values my-values.yaml`
+---
+
+<Doc
+  title="Install guide · Cubebot"
+  description="Install Cubebot step by step: the one-line installer, its four questions, the cubebot command, and the Helm chart."
+  heading="Install guide"
+  lede="From an empty machine to your first agent in a few minutes. The installer asks four questions and every answer has a sensible default."
+  source="deploy/README.md"
+>
+  <Fragment slot="actions">
+    <Command command={install} />
+  </Fragment>
+  <h2 id="before">Before you start</h2>
+  <ul>
+    <li>Linux or macOS with Docker and Compose 2.23 or later, plus bash and curl.</li>
+    <li>For a virtual machine per agent: x86_64 Linux with <code>/dev/kvm</code> and <code>/dev/net/tun</code>. Without them, agents run as containers.</li>
+    <li>A key from OpenAI, Anthropic, Google Gemini, xAI or OpenRouter, or a ChatGPT Plus or Pro plan.</li>
+  </ul>
+  <div class="callout">
+    <strong>Agents start through the host's Docker socket.</strong>
+    That makes the orchestrator root on this machine. Install it only where you
+    would give Cubebot that, and see <a href="/docs/security/">Security</a> for
+    what a Docker installation does and does not isolate.
+  </div>
+
+  <h2 id="run">Run the installer</h2>
+  <Command command={install} />
+  <p>It checks Docker, finds the latest release and asks four questions. Move with the arrows, <code>j</code>/<code>k</code> or a digit, then press Enter.</p>
+
+  <h3>The four questions</h3>
+  <div class="table">
+    <table>
+      <thead>
+        <tr><th>Question</th><th>Choices</th><th>Variable</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Where agents run</td><td><code>kvm</code>, a virtual machine each (default on x86_64 Linux with KVM); <code>container</code>, works everywhere; <code>off</code>, console only</td><td><code>CUBEBOT_RUNTIME</code></td></tr>
+        <tr><td>How the console is reached</td><td>This machine at <code>http://localhost:3000</code>, or a public domain on ports 80 and 443 with a certificate obtained for you</td><td><code>CUBEBOT_ACCESS</code>, <code>CUBEBOT_DOMAIN</code></td></tr>
+        <tr><td>Install directory</td><td><code>~/.cubebot</code> by default</td><td><code>CUBEBOT_HOME</code></td></tr>
+        <tr><td>Administrator</td><td>Create it now in the terminal, or let the first account made at the console become it</td><td><code>CUBEBOT_ADMIN</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    A question whose variable is set is not asked. <code>CUBEBOT_YES=1</code>,
+    or no terminal at all, takes every default; <code>CUBEBOT_VERSION</code>
+    picks a release and <code>CUBEBOT_PORT</code> changes the local port.
+  </p>
+  <Command command={unattended} label="Unattended install" />
+  <p>
+    With a public domain, the domain must already point at this machine, and
+    creating the administrator now is preselected, since otherwise whoever opens
+    the console first claims it.
+  </p>
+
+  <h2 id="first-agent">Your first agent</h2>
+  <ol>
+    <li>Open the address the installer printed and sign in as the administrator.</li>
+    <li>Open the gear beside your name, then <strong>AI providers</strong>. Paste a key and pick a model, or sign in with your ChatGPT plan.</li>
+    <li>Press <strong>+</strong> and choose <strong>New agent</strong>. Give it a name, instructions, a voice and a face. It starts right away and sleeps while it has no work.</li>
+    <li>Say hello in its conversation. Open <strong>Desktop</strong> to watch its computer, or <strong>Call</strong> to talk.</li>
+    <li>Connect accounts under <strong>Platform › Connections</strong> and they are offered to every agent by default.</li>
+  </ol>
+
+  <h2 id="command">The cubebot command</h2>
+  <p>The installer leaves a <code>cubebot</code> script in the install directory.</p>
+  <div class="table">
+    <table>
+      <tbody>
+        <tr><td><code>cubebot up</code></td><td>Start everything and wait until it answers</td></tr>
+        <tr><td><code>cubebot down</code></td><td>Stop everything; your data stays in Docker volumes</td></tr>
+        <tr><td><code>cubebot update [version]</code></td><td>Move to the latest release, or the one named</td></tr>
+        <tr><td><code>cubebot logs [-f]</code></td><td>Follow the logs</td></tr>
+        <tr><td><code>cubebot admin [login]</code></td><td>Create the administrator from the terminal while nobody has</td></tr>
+        <tr><td><code>cubebot uninstall [--yes]</code></td><td>Remove every agent, workspace, volume and image this installation created</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Running the installer again updates the installation in place and never replaces its <code>.env</code>.</p>
+
+  <h2 id="kubernetes">On Kubernetes</h2>
+  <p>
+    The chart installs one installation into one namespace: the orchestrator,
+    the console, PostgreSQL (bundled, or yours through
+    <code>externalDatabase</code>), the shared-files volume, network policies
+    and, for <code>kvm</code>, a device plugin. Bring an ingress controller or a
+    Gateway with TLS; the chart does not install one.
+  </p>
+  <pre><code>{values}</code></pre>
+  <pre><code>{helm}</code></pre>
+  <ul>
+    <li>Both volumes use <code>ReadWriteOncePod</code>, so the storage driver must support it.</li>
+    <li>Network policy is only as good as your network plugin: plain flannel ignores it; EKS and GKE enforce it once it is turned on.</li>
+    <li>Agents reach self-hosted servers on private addresses only when you list them under <code>sandbox.networkPolicy.privateDestinations</code>.</li>
+    <li>Back up the database with <code>pg_dump</code>, together with the shared-files volume and the credentials Secret.</li>
+  </ul>
+</Doc>

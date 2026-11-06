@@ -1,0 +1,155 @@
+---
+import Page from '../layouts/Page.astro'
+import PageHead from '../components/PageHead.astro'
+import Cube from '../components/Cube.astro'
+import Icon from '../components/Icon.astro'
+import { releases, docs } from '../data/site'
+
+const format = (date: string) =>
+  new Date(`${date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+---
+
+<Page
+  title="Changelog · Cubebot"
+  description="Every Cubebot release, newest first: connectors, plan sign-ins, voice calls, tasks, the knowledge base and more."
+  current="resources"
+>
+  <PageHead
+    title="Changelog"
+    lede={`${releases.length} releases since the first one on November 3, 2026. Each is built, tested and published from a tag, with its images pinned by digest.`}
+    tones={['wood', 'orange', 'sage']}
+  >
+    <a class="link" href={docs.releases}>Release notes on GitHub <Icon name="arrow" /></a>
+  </PageHead>
+
+  <section class="log">
+    <div class="wrap">
+      <ol class="log__list">
+        {
+          releases.map((release, index) => (
+            <li class="entry" id={release.tag}>
+              <div class="entry__rail" aria-hidden="true">
+                <Cube size={index === 0 ? 44 : 30} eyes={index === 0 ? 'open' : 'none'} contact />
+              </div>
+              <div class="entry__meta">
+                <a class="entry__tag" href={`${docs.releases}/tag/${release.tag}`}>{release.tag}</a>
+                <time datetime={release.date}>{format(release.date)}</time>
+                {index === 0 && <span class="chip chip--orange entry__latest">Latest</span>}
+              </div>
+              <div class="entry__body">
+                <h2>{release.title}</h2>
+                <ul>
+                  {release.items.map((item) => <li>{item}</li>)}
+                </ul>
+              </div>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+</Page>
+
+<style>
+  .log {
+    padding-top: 0;
+  }
+  .log__list {
+    position: relative;
+    display: grid;
+    gap: 0;
+    max-width: 920px;
+  }
+  .log__list::before {
+    content: '';
+    position: absolute;
+    left: 27px;
+    top: 24px;
+    bottom: 24px;
+    width: 6px;
+    border-radius: 3px;
+    background: var(--wood);
+    box-shadow: inset -2px 0 0 var(--wood-deep);
+  }
+  .entry {
+    position: relative;
+    display: grid;
+    grid-template-columns: 60px 160px minmax(0, 1fr);
+    gap: 8px 28px;
+    padding-block: 28px;
+    scroll-margin-top: 96px;
+  }
+  .entry + .entry {
+    border-top: 2px solid rgb(var(--shadow) / 0.08);
+  }
+  .entry__rail {
+    display: grid;
+    justify-items: center;
+    padding-top: 4px;
+  }
+  .entry__meta {
+    display: grid;
+    align-content: start;
+    gap: 4px;
+  }
+  .entry__tag {
+    font-size: 1.15rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-decoration: none;
+  }
+  .entry__tag:hover {
+    text-decoration: underline;
+  }
+  .entry time {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .entry__latest {
+    width: fit-content;
+    margin-top: 6px;
+    font-size: 0.8rem;
+    padding: 3px 9px 4px;
+  }
+  .entry h2 {
+    max-width: none;
+    font-size: 1.5rem;
+  }
+  .entry ul {
+    display: grid;
+    gap: 6px;
+    margin-top: 12px;
+    color: var(--ink-soft);
+  }
+  .entry ul li {
+    position: relative;
+    padding-left: 18px;
+  }
+  .entry ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0.6em;
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+    background: var(--orange);
+  }
+  @media (max-width: 760px) {
+    .entry {
+      grid-template-columns: 60px minmax(0, 1fr);
+    }
+    .entry__body {
+      grid-column: 2;
+    }
+    .entry__meta {
+      grid-template-columns: auto auto 1fr;
+      align-items: center;
+      gap: 10px;
+    }
+    .entry__latest {
+      margin-top: 0;
+    }
+  }
+</style>

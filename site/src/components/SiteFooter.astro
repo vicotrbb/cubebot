@@ -1,0 +1,280 @@
+---
+import Logo from './Logo.astro'
+import Icon from './Icon.astro'
+import Cube from './Cube.astro'
+import { repo, sponsor, docs, version } from '../data/site'
+import { stars, compact } from '../data/stars'
+
+interface Props {
+  support?: boolean
+}
+const { support = true } = Astro.props
+---
+
+{
+  support && (
+    <section class="support" aria-labelledby="support-title">
+      <div class="wrap support__grid">
+        <div class="support__copy">
+          <h2 id="support-title">Free, open and yours to keep.</h2>
+          <p class="intro">
+            Cubebot is Apache-2.0 and self-hosted, with no paid tier and no
+            account to create. One person builds it in the open. A star helps
+            others find it; a sponsorship buys the time to keep building.
+          </p>
+        </div>
+        <div class="support__blocks">
+          <a class="pledge pledge--star" href={repo}>
+            <span class="pledge__cube">
+              <Cube size={64} eyes="open" contact style="--blink-delay:1.1s" />
+            </span>
+            <span class="pledge__text">
+              <strong>Star on GitHub</strong>
+              {stars === null ? (
+                <span>Help others find it</span>
+              ) : (
+                <span>
+                  <Icon name="star" /> <span data-stars>{compact(stars)}</span> stars so far
+                </span>
+              )}
+            </span>
+            <Icon name="arrow" class="pledge__arrow" />
+          </a>
+          <a class="pledge pledge--sponsor" href={sponsor}>
+            <span class="pledge__cube">
+              <Cube size={64} tone="paper" eyes="open" contact style="--blink-delay:2.6s" />
+              <Icon name="heart" class="pledge__heart" />
+            </span>
+            <span class="pledge__text">
+              <strong>Sponsor the work</strong>
+              <span>GitHub Sponsors, monthly or once</span>
+            </span>
+            <Icon name="arrow" class="pledge__arrow" />
+          </a>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+<footer class="foot">
+  <div class="wrap foot__grid">
+    <div class="foot__brand">
+      <a class="foot__logo" href="/">
+        <Logo size={34} />
+        <strong>Cubebot</strong>
+      </a>
+      <p>A self-hosted home for persistent AI agents.</p>
+      <p class="foot__license">
+        Free and open source under <a href={docs.license}>Apache-2.0</a>. Latest release {version}.
+      </p>
+    </div>
+    <nav class="foot__col" aria-label="Product">
+      <h2>Product</h2>
+      <a href="/">Home</a>
+      <a href="/integrations/">Integrations</a>
+      <a href="/download/">Download</a>
+      <a href="/docs/features/">Feature tour</a>
+      <a href="/changelog/">Changelog</a>
+    </nav>
+    <nav class="foot__col" aria-label="Resources">
+      <h2>Resources</h2>
+      <a href="/docs/install/">Install guide</a>
+      <a href="/docs/architecture/">Architecture</a>
+      <a href="/docs/security/">Security</a>
+      <a href={docs.manifesto}>Manifesto</a>
+      <a href={docs.adrs}>Decisions</a>
+    </nav>
+    <nav class="foot__col" aria-label="Community">
+      <h2>Community</h2>
+      <a href={repo}><Icon name="github" /> Star on GitHub</a>
+      <a href={sponsor}><Icon name="heart" class="heart" /> Sponsor</a>
+      <a href={docs.issues}>Report an issue</a>
+      <a href={docs.contributing}>Contribute</a>
+      <a href="/about/">About</a>
+    </nav>
+    <p class="foot__note">
+      © 2026 Cubebot. Built in the open by <a href="/about/#creator">Victor Bona</a>.
+    </p>
+  </div>
+</footer>
+
+<style>
+  .support {
+    background: var(--desk-deep);
+  }
+  .support__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+  }
+  .support__blocks {
+    display: grid;
+    gap: 18px;
+  }
+  .pledge {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 22px;
+    padding: 22px 26px 24px;
+    border-radius: 14px;
+    border-bottom: 5px solid var(--orange-deep);
+    background: var(--orange);
+    text-decoration: none;
+    box-shadow: 0 16px 30px -16px rgb(var(--shadow) / 0.5);
+    transition:
+      translate 0.2s var(--settle),
+      box-shadow 0.2s ease-out;
+  }
+  .pledge--sponsor {
+    background: var(--paper);
+    border-bottom-color: var(--paper-deep);
+  }
+  .pledge:hover {
+    translate: 0 -3px;
+    box-shadow: 0 22px 34px -16px rgb(var(--shadow) / 0.5);
+  }
+  .pledge:hover :global(.cube) {
+    --ry: 8deg;
+  }
+  .pledge__cube {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 84px;
+    height: 84px;
+  }
+  .pledge :global(.pledge__heart) {
+    position: absolute;
+    right: -2px;
+    top: -4px;
+    width: 26px;
+    height: 26px;
+    color: var(--orange);
+    filter: drop-shadow(0 3px 3px rgb(var(--shadow) / 0.3));
+  }
+  .pledge__text {
+    display: grid;
+    gap: 4px;
+  }
+  .pledge__text strong {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+  }
+  .pledge__text > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: rgb(43 36 32 / 0.8);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .pledge__text > span :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+  .pledge :global(.pledge__arrow) {
+    width: 26px;
+    height: 26px;
+    transition: translate 0.2s var(--settle);
+  }
+  .pledge:hover :global(.pledge__arrow) {
+    translate: 4px 0;
+  }
+
+  .foot {
+    padding-block: 56px 40px;
+    border-top: 2px solid rgb(var(--shadow) / 0.1);
+  }
+  .foot__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+    gap: 36px 40px;
+  }
+  .foot__logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  .foot__brand p {
+    max-width: 34ch;
+    margin-top: 12px;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+  }
+  p.foot__license {
+    margin-top: 8px;
+  }
+  .foot__col {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+  .foot__col h2 {
+    max-width: none;
+    margin-bottom: 4px;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .foot__col a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    text-decoration: none;
+  }
+  .foot__col a:hover {
+    text-decoration: underline;
+  }
+  .foot__col :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+  .foot__note {
+    grid-column: 1 / -1;
+    padding-top: 24px;
+    border-top: 2px solid rgb(var(--shadow) / 0.08);
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 960px) {
+    .support__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .foot__grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .foot__brand {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (max-width: 560px) {
+    .foot__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+    .pledge {
+      gap: 14px;
+      padding: 18px;
+    }
+    .pledge__cube {
+      width: 64px;
+      height: 64px;
+    }
+    .pledge__cube :global(.cube) {
+      --size: 50px;
+    }
+    .pledge__text strong {
+      font-size: 1.15rem;
+    }
+  }
+</style>

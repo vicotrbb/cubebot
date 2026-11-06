@@ -1,0 +1,28 @@
+---
+import Base from './Base.astro'
+import SiteHeader from '../components/SiteHeader.astro'
+import SiteFooter from '../components/SiteFooter.astro'
+
+interface Props {
+  title: string
+  description: string
+  current?: 'integrations' | 'resources' | 'about'
+  support?: boolean
+}
+const { title, description, current, support } = Astro.props
+---
+
+<Base title={title} description={description}>
+  <a class="skip" href="#main">Skip to content</a>
+  <SiteHeader current={current} />
+  <main id="main">
+    <slot />
+  </main>
+  <SiteFooter support={support} />
+</Base>
+
+<script>
+  import '../scripts/cube'
+  import '../scripts/reveal'
+  import '../scripts/copy'
+</script>

@@ -284,8 +284,9 @@ svg {
 }
 
 .face__label {
+  position: relative;
   font-weight: 800;
-  font-size: calc(var(--size) * 0.2);
+  font-size: calc(var(--size) * var(--label-scale, 0.2));
   letter-spacing: -0.02em;
   color: var(--ink);
   text-transform: lowercase;
@@ -550,6 +551,119 @@ svg {
   pointer-events: none;
 }
 
+section {
+  padding-block: clamp(56px, 9vw, 120px);
+  scroll-margin-top: 88px;
+}
+
+h2 {
+  font-size: clamp(2rem, 4.2vw, 3.1rem);
+  max-width: 18ch;
+}
+
+.intro {
+  max-width: var(--measure);
+  margin-top: 20px;
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+}
+
+.slab {
+  position: relative;
+  height: 34px;
+}
+.slab::before,
+.slab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.slab::before {
+  top: 0;
+  height: 20px;
+  border-radius: 8px 8px 2px 2px;
+  background:
+    repeating-linear-gradient(
+      93deg,
+      transparent 0 22px,
+      rgb(201 162 107 / 0.22) 22px 23px,
+      transparent 23px 51px,
+      rgb(201 162 107 / 0.12) 51px 54px
+    ),
+    linear-gradient(180deg, #f3deba, #e6c99c);
+  box-shadow: inset 0 2px 0 rgb(255 255 255 / 0.5);
+}
+.slab::after {
+  top: 20px;
+  height: 14px;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(180deg, var(--wood-deep), var(--wood-grain));
+  box-shadow: 0 12px 24px -12px rgb(var(--shadow) / 0.45);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px 8px;
+  border-radius: 8px;
+  border-bottom: 3px solid var(--orange-deep);
+  background: var(--orange);
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  transition:
+    translate 0.2s var(--settle),
+    box-shadow 0.2s ease-out;
+}
+.chips .chip:hover {
+  translate: 0 -3px;
+  box-shadow: 0 10px 16px -8px rgb(var(--shadow) / 0.4);
+}
+.chip--orange {
+  background: var(--orange);
+  border-bottom-color: var(--orange-deep);
+}
+.chip--sage {
+  background: var(--sage);
+  border-bottom-color: var(--sage-deep);
+}
+.chip--paper {
+  background: var(--paper);
+  border-bottom-color: var(--paper-deep);
+}
+.chip--wood {
+  background: var(--wood);
+  border-bottom-color: var(--wood-deep);
+}
+.chip--half {
+  padding-left: 20px;
+  background: var(--wood);
+  border-bottom-color: var(--wood-deep);
+  box-shadow: inset 10px 0 0 var(--orange);
+}
+.chips .chip--half:hover {
+  box-shadow:
+    inset 10px 0 0 var(--orange),
+    0 10px 16px -8px rgb(var(--shadow) / 0.4);
+}
+
+.install {
+  margin: 28px 0 0;
+  padding: 12px 16px;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.875rem;
+  width: fit-content;
+  user-select: all;
+}
+
 /* Scroll reveal: visible by default, hidden only when JS can reveal it. */
 .js [data-reveal] .reveal-item {
   opacity: 0;
@@ -590,4 +704,37 @@ svg {
   .zz {
     display: none;
   }
+}
+
+.skip {
+  position: absolute;
+  left: 16px;
+  top: -60px;
+  z-index: 50;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  text-decoration: none;
+}
+.skip:focus {
+  top: 12px;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid var(--desk);
+  border-radius: 8px;
+  background: var(--wood-deep);
+}
+::-webkit-scrollbar-track {
+  background: var(--desk);
+}
+html {
+  scrollbar-color: var(--wood-deep) var(--desk);
+  caret-color: var(--orange);
 }
