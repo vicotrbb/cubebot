@@ -254,7 +254,7 @@ pub struct Step {
 /// (docs/adr/sandbox.md#public-internet-access-with-grants-for-private-destinations).
 pub const PRIVATE_ADDRESS: Step = Step {
     title: "Let agents reach a server on your network",
-    body: "Cubebot tests the connection from its own server, but agents call it from their sandboxes. Installed with Docker, sandboxes already reach this machine's network. Installed with the Helm chart, they reach no private address (10.x, 172.16–31.x, 192.168.x, 100.64–127.x) until you grant this server: add its address and port under sandbox.networkPolicy.privateDestinations in your values, as below, and upgrade the release. A public address needs no grant.",
+    body: "Cubebot tests the connection from its own server, but agents call it from their sandboxes. Installed with Docker, sandboxes already reach this machine's network. Installed with the Helm chart, they reach no private address (10.x, 172.16–31.x, 192.168.x or 100.64–100.127.x) until you grant this server: add its address and port under sandbox.networkPolicy.privateDestinations in your values, as below, and upgrade the release. A public address needs no grant.",
     link: None,
     copy: Some("privateDestinations:\n  - cidr: 192.168.1.20/32\n    ports: [8123]"),
 };

@@ -3,7 +3,8 @@
 {{- if not $controller.podSelector }}
 {{- fail "sandbox.networkPolicy.ingressController.podSelector is required" }}
 {{- end }}
-# Sandboxes accept nothing and reach only DNS, the ingress controller and the outside.
+# Sandboxes accept nothing and reach only DNS, the ingress controller, the outside and the private
+# destinations an administrator granted.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -44,3 +45,15 @@ spec:
         - ipBlock:
             cidr: 0.0.0.0/0
             except: {{- toYaml $policy.blockedRanges | nindent 14 }}
+    {{- range $policy.privateDestinations }}
+    - to:
+        - ipBlock:
+            cidr: {{ required "each private destination needs a cidr" .cidr }}
+      {{- with .ports }}
+      ports:
+        {{- range . }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+      {{- end }}
+    {{- end }}

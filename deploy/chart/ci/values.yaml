@@ -20,3 +20,7 @@ sandbox:
         matchLabels:
           app.kubernetes.io/name: traefik
       port: 8443
+    privateDestinations:
+      - cidr: 192.168.1.20/32
+        ports: [8123]
+      - cidr: 10.0.5.0/24
