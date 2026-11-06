@@ -534,6 +534,47 @@ export const connectors: Connector[] = [
     tested: 'recorded',
     wave: 2,
   },
+  {
+    slug: 'ntfy',
+    name: 'ntfy',
+    category: 'Notifications',
+    summary: 'Push notifications through ntfy.sh or your own ntfy server.',
+    signIn:
+      'No sign-in for open topics, or an access token or username and password',
+    level: 'Full',
+    tools: ['Publish a notification', 'Read recent messages'],
+    events: [],
+    selfHosted: true,
+    tested: 'live',
+    wave: 2,
+  },
+  {
+    slug: 'pushover',
+    name: 'Pushover',
+    category: 'Notifications',
+    summary:
+      'Push notifications to your phones and desktops, including emergency alerts.',
+    signIn: 'Application token and user key',
+    level: 'Full',
+    tools: ['Send a notification'],
+    events: [],
+    tested: 'recorded',
+    wave: 2,
+  },
+  {
+    slug: 'gotify',
+    name: 'Gotify',
+    category: 'Notifications',
+    summary: 'Send and read notifications on your own Gotify server.',
+    signIn:
+      'Application token, plus a client token to read, and server address',
+    level: 'Full',
+    tools: ['Send a message', 'List messages (with a client token)'],
+    events: [],
+    selfHosted: true,
+    tested: 'live',
+    wave: 2,
+  },
 ]
 
 export const providers = [

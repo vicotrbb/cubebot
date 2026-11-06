@@ -1,4 +1,6 @@
 import {
+  Bell,
+  BellRing,
   BookText,
   Building2,
   CalendarCheck,
@@ -17,6 +19,7 @@ import {
   ListChecks,
   ListTodo,
   Mail,
+  Megaphone,
   MessageCircle,
   MessagesSquare,
   Plug,
@@ -59,6 +62,9 @@ const GLYPHS: Record<string, LucideIcon> = {
   stripe: CreditCard,
   readwise: Highlighter,
   rss: Rss,
+  ntfy: Bell,
+  pushover: BellRing,
+  gotify: Megaphone,
 }
 
 export function Mark({ id, size = 'md' }: { id: string; size?: 'md' | 'lg' }) {

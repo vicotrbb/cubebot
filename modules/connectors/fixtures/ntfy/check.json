@@ -1,0 +1,40 @@
+{
+  "config": {},
+  "credential": { "kind": "fields", "fields": {} },
+  "account": "anonymous on ntfy.sh",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/ntfy.sh/v1/account",
+      "body": {
+        "username": "*",
+        "role": "anonymous",
+        "limits": {
+          "basis": "ip",
+          "messages": 250,
+          "messages_expiry_duration": 43200,
+          "emails": 5,
+          "calls": 0,
+          "reservations": 0,
+          "attachment_total_size": 20971520,
+          "attachment_file_size": 2097152,
+          "attachment_expiry_duration": 10800,
+          "attachment_bandwidth": 367001600
+        },
+        "stats": {
+          "messages": 1,
+          "messages_remaining": 249,
+          "emails": 0,
+          "emails_remaining": 5,
+          "calls": 0,
+          "calls_remaining": 0,
+          "reservations": 0,
+          "reservations_remaining": 0,
+          "attachment_total_size": 0,
+          "attachment_total_size_remaining": 20971520,
+          "reset_at": 1793996292
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": {
+      "token": "azGDORePK8gMaC0QOYAMyEEuzJnyUi",
+      "user": "uQiRzpo4DXghDmr9QzzfQu27cmVRsG"
+    }
+  },
+  "account": "Pushover: iphone, desktop",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/api.pushover.net/1/users/validate.json",
+      "body": {
+        "status": 1,
+        "group": 0,
+        "devices": ["iphone", "desktop"],
+        "licenses": ["iOS", "Desktop"],
+        "request": "5042853c-402d-4a18-abcb-168734a801de"
+      }
+    }
+  ]
+}
