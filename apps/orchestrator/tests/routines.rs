@@ -133,6 +133,7 @@ async fn a_new_month_requeues_turns_its_budget_paused() {
         agent,
         &cubebot_orchestrator::work::SetBudget {
             monthly_budget_usd: Some(1.0),
+            daily_budget_usd: None,
         },
     )
     .await

@@ -42,7 +42,7 @@ impl Work {
                 SELECT CASE t.status WHEN 'waiting' THEN 'turn_waiting' ELSE 'turn_failed' END, g.id, m.room_id, t.id,
                        t.status_at,
                        CASE
-                           WHEN t.error='budget_exhausted' THEN format('%s spent its monthly budget; work is paused', g.name)
+                           WHEN t.error='budget_exhausted' THEN format('%s spent its budget; work is paused', g.name)
                            WHEN t.status='waiting' THEN format('%s is waiting for your reply', g.name)
                            ELSE format('%s failed: %s', g.name, left(COALESCE(t.error, ''), 200))
                        END

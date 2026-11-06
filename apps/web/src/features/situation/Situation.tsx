@@ -306,9 +306,11 @@ function AgentRow({ row, agent }: { row: Row; agent: AgentSummary }) {
 export function BudgetMeter({
   spent,
   budget,
+  period = 'monthly',
 }: {
   spent: number
   budget: number | null | undefined
+  period?: 'daily' | 'monthly'
 }) {
   const state = pace(spent, budget)
   if (state === 'none' || !budget)
@@ -328,7 +330,7 @@ export function BudgetMeter({
       <span
         className="meter__track"
         role="meter"
-        aria-label="Share of monthly budget spent"
+        aria-label={`Share of ${period} budget spent`}
         aria-valuemin={0}
         aria-valuemax={budget}
         aria-valuenow={Math.min(spent, budget)}

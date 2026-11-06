@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.monthly_budget_usd, g.daily_budget_usd,\n            (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status='waiting' AND t.error='budget_exhausted') AS \"paused!\",\n            (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days') AS \"turns!\",\n            (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days' AND (t.status='failed' OR (t.status='waiting' AND t.error<>'budget_exhausted'))) AS \"failed!\"\n        FROM agents g\n        WHERE g.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "monthly_budget_usd",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "daily_budget_usd",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 2,
+        "name": "paused!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "turns!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "failed!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cfcd87c69f3926d71208af5b870e2320e9ba493cd237e63b04122f68a845d95b"
+}

@@ -173,12 +173,19 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     let after = work.agent_usage(&admin, AgentId(agent)).await.unwrap();
     assert_eq!(after.month.cost_usd, other.month.cost_usd);
 
-    let limited = SetBudget {
-        monthly_budget_usd: Some(1e-6),
+    // The daily cap pauses on its own, with no monthly cap set.
+    let daily = SetBudget {
+        monthly_budget_usd: None,
+        daily_budget_usd: Some(1e-6),
     };
-    work.set_budget(&admin, AgentId(agent), &limited)
+    let usage = work
+        .set_budget(&admin, AgentId(agent), &daily)
         .await
         .unwrap();
+    assert_eq!(
+        (usage.monthly_budget_usd, usage.daily_budget_usd),
+        (None, Some(1e-6))
+    );
     let before = model.requests().len();
     work.send(&admin, agent, &send("One more")).await.unwrap();
     let paused = reaches(&work, &admin, agent, "waiting").await;
@@ -188,10 +195,11 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     assert!(
         activity
             .iter()
-            .any(|item| item.text.contains("monthly budget"))
+            .any(|item| item.text.contains("spent its budget"))
     );
     let lifted = SetBudget {
         monthly_budget_usd: None,
+        daily_budget_usd: None,
     };
     work.set_budget(&admin, AgentId(agent), &lifted)
         .await
@@ -199,6 +207,10 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     let resumed = reaches(&work, &admin, agent, "complete").await;
     assert_eq!(resumed.id, paused.id);
 
+    let limited = SetBudget {
+        monthly_budget_usd: Some(1e-6),
+        daily_budget_usd: None,
+    };
     work.set_budget(&admin, AgentId(agent), &limited)
         .await
         .unwrap();
@@ -209,6 +221,12 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     for invalid in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         let bad = SetBudget {
             monthly_budget_usd: Some(invalid),
+            daily_budget_usd: None,
+        };
+        assert!(work.set_budget(&admin, AgentId(agent), &bad).await.is_err());
+        let bad = SetBudget {
+            monthly_budget_usd: None,
+            daily_budget_usd: Some(invalid),
         };
         assert!(work.set_budget(&admin, AgentId(agent), &bad).await.is_err());
     }
@@ -222,6 +240,7 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
     store_prices(&f.pool, "openai", &prices()).await.unwrap();
     let limited = SetBudget {
         monthly_budget_usd: Some(5e-5),
+        daily_budget_usd: None,
     };
     work.set_budget(&admin, AgentId(agent), &limited)
         .await

@@ -5753,6 +5753,10 @@
           "failed_turns"
         ],
         "properties": {
+          "daily_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
           "days": {
             "type": "array",
             "items": {
@@ -9182,6 +9186,11 @@
       "SetBudget": {
         "type": "object",
         "properties": {
+          "daily_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double",
+            "description": "US dollars per UTC day; `null` removes the limit."
+          },
           "monthly_budget_usd": {
             "type": ["number", "null"],
             "format": "double",

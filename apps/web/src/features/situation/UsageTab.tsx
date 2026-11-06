@@ -43,23 +43,36 @@ export function UsageTab({
   return (
     <>
       <section className="panel__section usage">
-        <h2>This month</h2>
-        <BudgetMeter
-          spent={data.month.cost_usd}
-          budget={data.monthly_budget_usd}
-        />
+        <h2>Budgets</h2>
+        <div className="usage__limits">
+          <div className="usage__limit">
+            <span className="usage__period">Today</span>
+            <BudgetMeter
+              spent={data.today.cost_usd}
+              budget={data.daily_budget_usd}
+              period="daily"
+            />
+          </div>
+          <div className="usage__limit">
+            <span className="usage__period">This month</span>
+            <BudgetMeter
+              spent={data.month.cost_usd}
+              budget={data.monthly_budget_usd}
+            />
+          </div>
+        </div>
         {data.paused_turns > 0 && (
           <p className="notice notice--danger small" role="status">
             {data.paused_turns}{' '}
-            {data.paused_turns === 1 ? 'turn is' : 'turns are'} paused by this
-            budget. Raising it, or a new month, resumes them.
+            {data.paused_turns === 1 ? 'turn is' : 'turns are'} paused by a
+            budget. Raising it, or a new day or month, resumes them.
           </p>
         )}
         {can(agent, 'agent_manage', session) && (
           <BudgetForm
-            key={data.monthly_budget_usd ?? 'none'}
             agent={agent.id}
-            budget={data.monthly_budget_usd ?? null}
+            daily={data.daily_budget_usd ?? null}
+            monthly={data.monthly_budget_usd ?? null}
           />
         )}
       </section>
@@ -123,19 +136,34 @@ export function UsageTab({
   )
 }
 
+const shown = (budget: number | null) => (budget === null ? '' : String(budget))
+/** `undefined` when the entry is neither empty nor an amount above zero. */
+const amount = (entry: string) => {
+  if (entry.trim() === '') return null
+  const value = Number(entry)
+  return value > 0 && Number.isFinite(value) ? value : undefined
+}
+
 function BudgetForm({
   agent,
-  budget,
+  daily,
+  monthly,
 }: {
   agent: string
-  budget: number | null
+  daily: number | null
+  monthly: number | null
 }) {
   const client = useQueryClient()
-  const [value, setValue] = useState(budget === null ? '' : String(budget))
+  const [day, setDay] = useState(shown(daily))
+  const [month, setMonth] = useState(shown(monthly))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  async function save(next: number | null) {
+  const changed = day !== shown(daily) || month !== shown(monthly)
+  async function save(body: {
+    daily_budget_usd: number | null
+    monthly_budget_usd: number | null
+  }) {
     setBusy(true)
     setError('')
     setNotice('')
@@ -143,11 +171,11 @@ function BudgetForm({
       const saved = await ok(
         api.PUT('/api/agents/{agent}/budget', {
           params: { path: { agent } },
-          body: { monthly_budget_usd: next },
+          body,
         }),
       )
       client.setQueryData(['agent-usage', agent], saved)
-      setNotice(next === null ? 'Limit removed.' : 'Budget saved.')
+      setNotice('Budgets saved.')
     } catch (error) {
       setError(failure(error))
     } finally {
@@ -159,35 +187,50 @@ function BudgetForm({
       className="form usage__budgetform"
       onSubmit={(event) => {
         event.preventDefault()
-        const next = value.trim() === '' ? null : Number(value)
-        if (next !== null && !(next > 0)) {
-          setError(
+        const daily_budget_usd = amount(day)
+        const monthly_budget_usd = amount(month)
+        if (daily_budget_usd === undefined || monthly_budget_usd === undefined)
+          return setError(
             'Enter an amount above zero, or leave it empty for no limit.',
           )
-          return
-        }
-        void save(next)
+        if (
+          daily_budget_usd !== null &&
+          monthly_budget_usd !== null &&
+          daily_budget_usd > monthly_budget_usd
+        )
+          return setError('A day cannot allow more than the whole month.')
+        void save({ daily_budget_usd, monthly_budget_usd })
       }}
     >
       <div className="usage__budget">
-        <Field label="Monthly budget (USD)">
+        <Field label="Per day (USD)">
           <input
             inputMode="decimal"
-            value={value}
+            value={day}
             placeholder="No limit"
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => setDay(event.target.value)}
           />
         </Field>
-        <button className="btn btn--sm" disabled={busy}>
-          {busy ? 'Saving…' : 'Save'}
-        </button>
+        <Field label="Per month (USD)">
+          <input
+            inputMode="decimal"
+            value={month}
+            placeholder="No limit"
+            onChange={(event) => setMonth(event.target.value)}
+          />
+        </Field>
       </div>
       <p className="board-section__note">
-        Past it, the agent pauses its work until you raise this. Empty means no
-        limit.
+        Past either, the agent pauses its work until the next UTC day or month,
+        or until you raise it. Empty means no limit.
       </p>
       <Alert>{error}</Alert>
       <Status>{notice}</Status>
+      <div className="actions">
+        <button className="btn btn--sm" disabled={busy || !changed}>
+          {busy ? 'Saving…' : 'Save budgets'}
+        </button>
+      </div>
     </form>
   )
 }

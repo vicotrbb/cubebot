@@ -2349,6 +2349,8 @@ export interface components {
     }
     /** @description One agent's usage: its windows, this month against its budget, the last 30 days by day. */
     AgentUsage: {
+      /** Format: double */
+      daily_budget_usd?: number | null
       days: components['schemas']['DaySpend'][]
       /** Format: int64 */
       failed_turns: number
@@ -3716,6 +3718,11 @@ export interface components {
       request_id: string
     }
     SetBudget: {
+      /**
+       * Format: double
+       * @description US dollars per UTC day; `null` removes the limit.
+       */
+      daily_budget_usd?: number | null
       /**
        * Format: double
        * @description US dollars per calendar month in UTC; `null` removes the limit.

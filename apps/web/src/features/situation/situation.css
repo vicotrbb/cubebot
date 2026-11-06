@@ -527,15 +527,31 @@
 .usage__month strong {
   font-size: var(--t-2xl);
 }
-.usage__budget {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+.usage__limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
-.usage__budget .field {
-  flex: 1;
-  min-width: 120px;
+.usage__limit {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 10px 12px 12px;
+  border-radius: var(--r-lg);
+  background: var(--inset);
+}
+.usage__limit .meter strong {
+  font-size: var(--t-xl);
+}
+.usage__period {
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  color: var(--ink-faint);
+}
+.usage__budget {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 .usage__budgetform {
   display: grid;
