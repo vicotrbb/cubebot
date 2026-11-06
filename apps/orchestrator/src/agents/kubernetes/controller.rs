@@ -202,15 +202,10 @@ impl Controller {
             }
             self.owner.check().await?;
             // Each effect is durably reserved before dispatch. Cancellation never replays it.
-            match tokio::time::timeout(Duration::from_secs(60), self.reconcile(*agent)).await {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    tracing::warn!(agent = %agent.0, ?error, "agent lifecycle reconciliation held or failed");
-                }
-                Err(_) => {
-                    tracing::warn!(agent = %agent.0, "agent lifecycle reconciliation timed out");
-                }
-            }
+            report(
+                *agent,
+                tokio::time::timeout(Duration::from_secs(60), self.reconcile(*agent)).await,
+            );
         }
         Ok(())
     }
@@ -246,6 +241,15 @@ impl Controller {
     }
     pub async fn release(self) -> Result<(), Error> {
         self.owner.release().await
+    }
+}
+fn report(agent: AgentId, outcome: Result<Result<(), Error>, tokio::time::error::Elapsed>) {
+    match outcome {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => {
+            tracing::warn!(agent = %agent.0, ?error, "agent lifecycle reconciliation held or failed");
+        }
+        Err(_) => tracing::warn!(agent = %agent.0, "agent lifecycle reconciliation timed out"),
     }
 }
 fn credentials(runtime: RuntimeIdentity) -> Result<RuntimeIdentity, Error> {
