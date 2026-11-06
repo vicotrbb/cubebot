@@ -27,11 +27,20 @@ const NAMES: Record<Provider, string> = {
   grok: 'xAI Grok',
   chatgpt: 'ChatGPT plan',
   supergrok: 'Grok plan',
+  minimax: 'MiniMax',
+  minimax_cn: 'MiniMax (mainland China)',
+  minimax_plan: 'MiniMax M Plan',
+  minimax_plan_cn: 'MiniMax M Plan (mainland China)',
 }
 const SAME = 'same'
+const PLANS: Provider[] = [
+  'chatgpt',
+  'supergrok',
+  'minimax_plan',
+  'minimax_plan_cn',
+]
 /** A plan is personal, so it never becomes the installation's task orchestrator by choice. */
-const keyed = (provider: Provider) =>
-  provider !== 'chatgpt' && provider !== 'supergrok'
+const keyed = (provider: Provider) => !PLANS.includes(provider)
 
 function TaskSettingsPage() {
   const settings = useQuery({

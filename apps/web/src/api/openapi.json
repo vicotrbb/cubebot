@@ -4468,6 +4468,73 @@
         }
       }
     },
+    "/api/provider/subscriptions/minimax": {
+      "post": {
+        "tags": [],
+        "summary": "Saves the caller's M Plan key. The plan is personal like a signed-in one; 409 while someone\nelse's key for the same platform is saved.",
+        "operationId": "save_minimax_plan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanKey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/provider/subscriptions/minimax/{provider}": {
+      "delete": {
+        "tags": [],
+        "summary": "Forgets the M Plan key and stops agents using it. MiniMax cannot be asked to revoke it, so\n`revoked` is false; its owner deletes the key in MiniMax's console.",
+        "operationId": "sign_out_minimax",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderKind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/provider/subscriptions/supergrok": {
       "post": {
         "tags": [],
@@ -8317,6 +8384,21 @@
         },
         "additionalProperties": false
       },
+      "PlanKey": {
+        "type": "object",
+        "description": "A plan's own API key, pasted by the person whose plan it is: MiniMax's M Plan key.",
+        "required": ["provider", "api_key"],
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind",
+            "description": "`minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform."
+          }
+        },
+        "additionalProperties": false
+      },
       "Preferences": {
         "type": "object",
         "properties": {
@@ -8476,7 +8558,11 @@
           "gemini",
           "grok",
           "chatgpt",
-          "supergrok"
+          "supergrok",
+          "minimax",
+          "minimax_cn",
+          "minimax_plan",
+          "minimax_plan_cn"
         ]
       },
       "ProviderSummary": {

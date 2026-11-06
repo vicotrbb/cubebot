@@ -1840,6 +1840,46 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/provider/subscriptions/minimax': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Saves the caller's M Plan key. The plan is personal like a signed-in one; 409 while someone
+     *     else's key for the same platform is saved.
+     */
+    post: operations['save_minimax_plan']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/subscriptions/minimax/{provider}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /**
+     * Forgets the M Plan key and stops agents using it. MiniMax cannot be asked to revoke it, so
+     *     `revoked` is false; its owner deletes the key in MiniMax's console.
+     */
+    delete: operations['sign_out_minimax']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/provider/subscriptions/supergrok': {
     parameters: {
       query?: never
@@ -3382,6 +3422,12 @@ export interface components {
       /** Format: uuid */
       parent?: string | null
     }
+    /** @description A plan's own API key, pasted by the person whose plan it is: MiniMax's M Plan key. */
+    PlanKey: {
+      api_key: string
+      /** @description `minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform. */
+      provider: components['schemas']['ProviderKind']
+    }
     Preferences: {
       /** @description Sidebar sections the person collapsed. */
       collapsed?: string[]
@@ -3456,6 +3502,10 @@ export interface components {
       | 'grok'
       | 'chatgpt'
       | 'supergrok'
+      | 'minimax'
+      | 'minimax_cn'
+      | 'minimax_plan'
+      | 'minimax_plan_cn'
     ProviderSummary: {
       access: components['schemas']['ProviderAccess']
       /** Format: int64 */
@@ -7627,6 +7677,68 @@ export interface operations {
         content?: never
       }
       502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  save_minimax_plan: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlanKey']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SubscriptionSummary']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  sign_out_minimax: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        provider: components['schemas']['ProviderKind']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SignedOut']
+        }
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

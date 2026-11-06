@@ -187,6 +187,30 @@ pub(super) async fn run(
             )
             .await
         }
+        ProviderKind::Minimax | ProviderKind::MinimaxPlan => {
+            let provider = configured(Anthropic::minimax, Anthropic::minimax_for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
+        ProviderKind::MinimaxCn | ProviderKind::MinimaxPlanCn => {
+            let provider = configured(Anthropic::minimax_cn, Anthropic::minimax_for_loopback_tests);
+            start(
+                provider,
+                &turn,
+                &mut run,
+                &store,
+                (tools, knowledge),
+                cancel,
+            )
+            .await
+        }
     };
     run.emit(end, None);
 }

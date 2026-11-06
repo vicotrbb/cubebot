@@ -22,9 +22,29 @@ fn model_id(name: &str) -> String {
 
 pub struct Anthropic {
     http: Client,
-    base: Url,
+    pub(crate) base: Url,
     pricing: Url,
+    dialect: Dialect,
 }
+
+/// How an Anthropic-compatible endpoint differs from Anthropic's own.
+#[derive(Clone, Copy)]
+pub(crate) struct Dialect {
+    pub provider: &'static str,
+    /// Anthropic's own extensions: the computer toolset, strict tools, the cache breakpoint,
+    /// `tool_choice: none` and limits read from the Models API.
+    pub native: bool,
+    /// The context window and output limit of a non-native endpoint, which reports neither.
+    pub limits: (u64, u64),
+    pub prices: fn(&str) -> Result<Vec<crate::Price>, Error>,
+}
+
+const API: Dialect = Dialect {
+    provider: "anthropic",
+    native: true,
+    limits: (0, 0),
+    prices: |page| crate::prices::from_markdown(page, "## Model pricing", &PRICES, model_id),
+};
 
 impl Anthropic {
     pub fn new() -> Result<Self, Error> {
@@ -43,18 +63,23 @@ impl Anthropic {
         Self::base(base, pricing)
     }
 
-    fn base(base: Url, pricing: Url) -> Result<Self, Error> {
+    pub(crate) fn base(base: Url, pricing: Url) -> Result<Self, Error> {
         Ok(Self {
             http: crate::client()?,
             base,
             pricing,
+            dialect: API,
         })
     }
 
-    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic"))]
+    pub(crate) fn with(self, dialect: Dialect) -> Self {
+        Self { dialect, ..self }
+    }
+
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = self.dialect.provider))]
     pub async fn prices(&self) -> Result<Vec<crate::Price>, Error> {
         let page = crate::prices::page(&self.http, self.pricing.clone()).await?;
-        crate::prices::from_markdown(&page, "## Model pricing", &PRICES, model_id)
+        (self.dialect.prices)(&page)
     }
 
     fn authorized(&self, request: RequestBuilder, key: &str) -> RequestBuilder {
@@ -72,8 +97,15 @@ impl Provider for Anthropic {
         }
     }
 
-    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic", model = model))]
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = self.dialect.provider, model = model))]
     async fn limits(&self, model: &str, key: &str) -> Result<Limits, Error> {
+        if !self.dialect.native {
+            let (window, output) = self.dialect.limits;
+            return Ok(Limits {
+                context_window: Some(window),
+                max_output_tokens: Some(output),
+            });
+        }
         let mut url = self
             .base
             .join("models/")
@@ -91,7 +123,7 @@ impl Provider for Anthropic {
         })
     }
 
-    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = "anthropic"))]
+    #[tracing::instrument(name = "provider_request", skip_all, fields(provider = self.dialect.provider))]
     async fn models(&self, key: &str) -> Result<Vec<Model>, Error> {
         let mut url = self
             .base
@@ -100,19 +132,20 @@ impl Provider for Anthropic {
         url.query_pairs_mut().append_pair("limit", "1000");
         let response = crate::send(self.authorized(self.http.get(url), key)).await?;
         let body = crate::json(response).await?;
-        crate::models(&body, |entry| entry["max_input_tokens"].as_u64())
+        let fixed = (!self.dialect.native).then_some(self.dialect.limits.0);
+        crate::models(&body, |entry| entry["max_input_tokens"].as_u64().or(fixed))
     }
 
     fn stream<'a>(
         &'a self,
         request: &'a Request<'a>,
     ) -> impl Stream<Item = Result<Event, Error>> + Send + 'a {
-        crate::events::<Messages>("anthropic", request.model, async move {
+        crate::events::<Messages>(self.dialect.provider, request.model, async move {
             let url = self
                 .base
                 .join("messages")
                 .map_err(|error| Error::Configuration(Some(error.into())))?;
-            let body = body(request)?;
+            let body = body(request, self.dialect.native)?;
             crate::send(
                 self.authorized(self.http.post(url), request.key)
                     .json(&body),
@@ -122,7 +155,7 @@ impl Provider for Anthropic {
     }
 }
 
-fn body(request: &Request) -> Result<Value, Error> {
+fn body(request: &Request, native: bool) -> Result<Value, Error> {
     // The Messages API requires an output limit; callers pass the model's own.
     let limit = request
         .max_output_tokens
@@ -163,32 +196,56 @@ fn body(request: &Request) -> Result<Value, Error> {
         };
         messages.push(value);
     }
-    // One breakpoint moves to the end of the history each turn, so the resent prefix is read from cache.
-    let mut body = json!({"model":request.model,"max_tokens":limit,"messages":messages,
-        "stream":true,"cache_control":{"type":"ephemeral"}});
+    let mut body =
+        json!({"model":request.model,"max_tokens":limit,"messages":messages,"stream":true});
+    if native {
+        // One breakpoint moves to the end of the history each turn, so the resent prefix is read from cache.
+        body["cache_control"] = json!({"type":"ephemeral"});
+    }
     if !request.system.is_empty() {
         body["system"] = json!(request.system);
     }
     if !request.tools.is_empty() {
-        body["tools"] = request
-            .tools
-            .iter()
-            .zip(strict_within_limits(request.tools))
-            .map(|(tool, strict)| {
-                if tool.computer {
-                    json!({"type":"computer_toolset_20260801","configs":unserved()})
-                } else {
-                    json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":strict})
-                }
-            })
-            .collect();
-        body["tool_choice"] = if request.tools_disabled {
+        body["tools"] = if native {
+            native_tools(request.tools)
+        } else {
+            plain_tools(request.tools)
+        };
+        // A compatible endpoint may accept only `auto`; a call made anyway is an ordinary stray call.
+        body["tool_choice"] = if request.tools_disabled && native {
             json!({"type":"none"})
         } else {
             json!({"type":"auto"})
         };
     }
     Ok(body)
+}
+
+fn native_tools(tools: &[crate::Tool]) -> Value {
+    tools
+        .iter()
+        .zip(strict_within_limits(tools))
+        .map(|(tool, strict)| {
+            if tool.computer {
+                json!({"type":"computer_toolset_20260801","configs":unserved()})
+            } else {
+                json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":strict})
+            }
+        })
+        .collect()
+}
+
+/// Without the computer toolset the computer is the ordinary function Chat Completions providers
+/// get, and its calls still arrive as `{"action": member, ...input}`.
+fn plain_tools(tools: &[crate::Tool]) -> Value {
+    tools
+        .iter()
+        .map(|tool| {
+            let function = crate::completions::function(tool);
+            let function = &function["function"];
+            json!({"name":function["name"],"description":function["description"],"input_schema":function["parameters"]})
+        })
+        .collect()
 }
 
 /// The API refuses a request with more than 20 strict tools, or 24 optional or 16 union
@@ -464,7 +521,10 @@ mod tests {
             tools_disabled: false,
             max_output_tokens: Some(1),
         };
-        body(&request).unwrap()["tools"].as_array().unwrap().clone()
+        body(&request, true).unwrap()["tools"]
+            .as_array()
+            .unwrap()
+            .clone()
     }
 
     #[test]

@@ -583,6 +583,10 @@ export const providers = [
   { name: 'Google Gemini', note: 'Context windows read from the API' },
   { name: 'xAI Grok', note: 'Chat completions' },
   { name: 'OpenRouter', note: 'Many vendors behind one key' },
+  {
+    name: 'MiniMax',
+    note: 'Anthropic-compatible API, global or mainland China',
+  },
 ] as const
 
 export const plans = [
@@ -593,5 +597,9 @@ export const plans = [
   {
     name: 'SuperGrok and X Premium',
     note: 'Opt-in device sign-in; it identifies as the Grok CLI, so it carries an account-risk warning',
+  },
+  {
+    name: 'MiniMax M Plan',
+    note: 'The plan’s own key, kept personal as MiniMax asks; pay-as-you-go is for shared use',
   },
 ] as const

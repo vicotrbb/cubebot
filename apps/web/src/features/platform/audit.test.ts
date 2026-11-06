@@ -76,4 +76,8 @@ test('plan sign-ins name the plan and an unconfirmed revocation', () => {
     'signed out the ChatGPT plan, without the vendor confirming',
   )
   assert.equal(target('provider.sign_out', {}, 'x', 'y'), null)
+  assert.equal(
+    phrase('provider.sign_in', { provider: 'minimax_plan_cn' }),
+    'signed in their MiniMax plan',
+  )
 })

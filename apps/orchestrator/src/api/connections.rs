@@ -31,7 +31,9 @@ struct Api {
     start_supergrok,
     poll_supergrok,
     sign_out_chatgpt,
-    sign_out_supergrok
+    sign_out_supergrok,
+    save_minimax_plan,
+    sign_out_minimax
 ))]
 pub(super) struct Doc;
 
@@ -58,6 +60,14 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
         .route(
             "/api/provider/subscriptions/supergrok/{sign_in}",
             post(poll_supergrok),
+        )
+        .route(
+            "/api/provider/subscriptions/minimax",
+            post(save_minimax_plan),
+        )
+        .route(
+            "/api/provider/subscriptions/minimax/{provider}",
+            delete(sign_out_minimax),
         )
         .layer(DefaultBodyLimit::max(8192))
         .with_state(Api {
@@ -220,6 +230,19 @@ async fn poll_supergrok(
     signed_in(&api, &actor, polled).await
 }
 
+/// Saves the caller's M Plan key. The plan is personal like a signed-in one; 409 while someone
+/// else's key for the same platform is saved.
+#[utoipa::path(post, path = "/api/provider/subscriptions/minimax", request_body = crate::connections::PlanKey, responses((status = 200, body = crate::connections::SubscriptionSummary), (status = 400), (status = 409)))]
+async fn save_minimax_plan(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Json(input): Json<crate::connections::PlanKey>,
+) -> Result<Response, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let saved = api.connections.save_plan_key(&actor, &input).await;
+    signed_in(&api, &actor, saved.map(Some).map_err(SignInError::from)).await
+}
+
 async fn signed_in(
     api: &Api,
     actor: &crate::identity::Actor,
@@ -284,6 +307,24 @@ async fn sign_out_supergrok(
         cubebot_protocol::runtime::ProviderKind::Supergrok,
     )
     .await
+}
+
+/// Forgets the M Plan key and stops agents using it. MiniMax cannot be asked to revoke it, so
+/// `revoked` is false; its owner deletes the key in MiniMax's console.
+#[utoipa::path(delete, path = "/api/provider/subscriptions/minimax/{provider}", params(("provider" = cubebot_protocol::runtime::ProviderKind, Path)), responses((status = 200, body = SignedOut), (status = 404)))]
+async fn sign_out_minimax(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(provider): Path<cubebot_protocol::runtime::ProviderKind>,
+) -> Result<Json<SignedOut>, IdentityError> {
+    use cubebot_protocol::runtime::ProviderKind;
+    if !matches!(
+        provider,
+        ProviderKind::MinimaxPlan | ProviderKind::MinimaxPlanCn
+    ) {
+        return Err(IdentityError::NotFound);
+    }
+    sign_out(&api, &headers, provider).await
 }
 
 async fn sign_out(

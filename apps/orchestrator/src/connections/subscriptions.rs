@@ -1,6 +1,6 @@
-//! Personal subscription connections: a person's ChatGPT or SuperGrok plan serving only their own
-//! work. The orchestrator alone holds the refresh token and refreshes; agents get the access token
-//! (docs/adr/identity.md#personal-subscription-connections).
+//! Personal subscription connections: a person's ChatGPT or SuperGrok plan, or MiniMax M Plan key,
+//! serving only their own work. The orchestrator alone holds the refresh token and refreshes;
+//! agents get the access token (docs/adr/identity.md#personal-subscription-connections).
 use super::{Connections, administrator};
 use crate::identity::{Actor, IdentityError, Source};
 use cubebot_protocol::runtime::ProviderKind;
@@ -440,6 +440,18 @@ pub(super) async fn device_tokens(
     }
 }
 
+/// A plan's own API key, pasted by the person whose plan it is: MiniMax's M Plan key.
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PlanKey {
+    /// `minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform.
+    pub provider: ProviderKind,
+    pub api_key: String,
+}
+
+/// A plan key does not expire, so it is stored as a token no renewal ever comes due for.
+const KEY_LIFETIME: i64 = 100 * 365 * 24 * 3600;
+
 /// Seconds before expiry when a renewal starts, unless the vendor says later.
 const LEAD: i64 = 10 * 60;
 /// Agents ask for a fresh token this long before expiry, so a token handed out has this long left.
@@ -572,6 +584,33 @@ impl Connections {
             .into_iter()
             .find(|summary| summary.provider == provider)
             .ok_or(IdentityError::NotFound)
+    }
+
+    /// Saves the caller's plan key; like a sign-in, it serves only the caller's work.
+    pub async fn save_plan_key(
+        &self,
+        actor: &Actor,
+        input: &PlanKey,
+    ) -> Result<SubscriptionSummary, IdentityError> {
+        let keyed = matches!(
+            input.provider,
+            ProviderKind::MinimaxPlan | ProviderKind::MinimaxPlanCn
+        );
+        if !keyed || !super::key_valid(&input.api_key) {
+            return Err(IdentityError::InvalidInput);
+        }
+        let grant = Grant {
+            tokens: Tokens {
+                access_token: input.api_key.clone(),
+                refresh_token: String::new(),
+                id_token: None,
+            },
+            expires_in: KEY_LIFETIME,
+            earliest_refresh: None,
+            scope: None,
+        };
+        self.signed_in(actor, input.provider, "M Plan key", grant)
+            .await
     }
 
     /// Renews the subscription if it is due. Its row lock serializes callers: one that waited
@@ -724,7 +763,9 @@ impl Connections {
             ProviderKind::Chatgpt => {
                 super::chatgpt::revoke(self.vendor(), client.as_deref(), &tokens).await
             }
-            _ => super::supergrok::revoke(self.vendor(), &tokens).await,
+            ProviderKind::Supergrok => super::supergrok::revoke(self.vendor(), &tokens).await,
+            // A pasted plan key has no revocation endpoint; its owner deletes it at the vendor.
+            _ => return Ok(false),
         };
         Ok(revoked.is_ok())
     }
