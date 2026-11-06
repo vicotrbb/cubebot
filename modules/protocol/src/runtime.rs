@@ -61,6 +61,12 @@ pub enum ProviderKind {
     Chatgpt,
     /// A SuperGrok or X Premium plan through the Grok CLI's sign-in; the key is a short-lived access token.
     Supergrok,
+    /// MiniMax pay-as-you-go through its Anthropic-compatible API; `_cn` is the mainland China platform.
+    Minimax,
+    MinimaxCn,
+    /// A MiniMax M Plan key: personal like a signed-in plan, though the key itself does not expire.
+    MinimaxPlan,
+    MinimaxPlanCn,
 }
 impl ProviderKind {
     pub fn as_str(self) -> &'static str {
@@ -72,11 +78,18 @@ impl ProviderKind {
             Self::Grok => "grok",
             Self::Chatgpt => "chatgpt",
             Self::Supergrok => "supergrok",
+            Self::Minimax => "minimax",
+            Self::MinimaxCn => "minimax_cn",
+            Self::MinimaxPlan => "minimax_plan",
+            Self::MinimaxPlanCn => "minimax_plan_cn",
         }
     }
-    /// Signed in with a person's plan: personal, and its key expires within hours.
+    /// A person's plan: personal, held in `provider_subscriptions` rather than as an installation key.
     pub fn subscription(self) -> bool {
-        matches!(self, Self::Chatgpt | Self::Supergrok)
+        matches!(
+            self,
+            Self::Chatgpt | Self::Supergrok | Self::MinimaxPlan | Self::MinimaxPlanCn
+        )
     }
     pub fn parse(value: &str) -> Option<Self> {
         [
@@ -87,6 +100,10 @@ impl ProviderKind {
             Self::Grok,
             Self::Chatgpt,
             Self::Supergrok,
+            Self::Minimax,
+            Self::MinimaxCn,
+            Self::MinimaxPlan,
+            Self::MinimaxPlanCn,
         ]
         .into_iter()
         .find(|kind| kind.as_str() == value)
@@ -617,6 +634,11 @@ mod tests {
         assert_eq!(ProviderKind::parse("grok"), Some(ProviderKind::Grok));
         assert_eq!(ProviderKind::parse("chatgpt"), Some(ProviderKind::Chatgpt));
         assert!(ProviderKind::Supergrok.subscription() && !ProviderKind::Openai.subscription());
+        assert_eq!(
+            ProviderKind::parse("minimax_plan_cn"),
+            Some(ProviderKind::MinimaxPlanCn)
+        );
+        assert!(ProviderKind::MinimaxPlan.subscription() && !ProviderKind::Minimax.subscription());
         assert_eq!(ProviderKind::parse("palm"), None);
     }
 

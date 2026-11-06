@@ -85,6 +85,20 @@ async fn listed(
             )
             .await
         }
+        ProviderKind::Minimax | ProviderKind::MinimaxPlan => {
+            list(
+                configured(Anthropic::minimax, Anthropic::minimax_for_loopback_tests),
+                key,
+            )
+            .await
+        }
+        ProviderKind::MinimaxCn | ProviderKind::MinimaxPlanCn => {
+            list(
+                configured(Anthropic::minimax_cn, Anthropic::minimax_for_loopback_tests),
+                key,
+            )
+            .await
+        }
     }
 }
 

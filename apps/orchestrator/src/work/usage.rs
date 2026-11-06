@@ -444,10 +444,17 @@ async fn listed(provider: &str) -> Result<Vec<Price>, Error> {
         Some(ProviderKind::Anthropic) => Anthropic::new()?.prices().await,
         Some(ProviderKind::Openrouter) => OpenRouter::new()?.prices().await,
         Some(ProviderKind::Gemini) => Gemini::new()?.prices().await,
-        // A plan has no per-token price.
-        Some(ProviderKind::Grok | ProviderKind::Chatgpt | ProviderKind::Supergrok) => {
-            Ok(Vec::new())
-        }
+        Some(ProviderKind::Minimax) => Anthropic::minimax()?.prices().await,
+        // A plan has no per-token price, and Grok reports its own cost.
+        // shortcut: mainland MiniMax bills in yuan, so its turns stay unpriced; convert if anyone needs those estimates.
+        Some(
+            ProviderKind::Grok
+            | ProviderKind::Chatgpt
+            | ProviderKind::Supergrok
+            | ProviderKind::MinimaxCn
+            | ProviderKind::MinimaxPlan
+            | ProviderKind::MinimaxPlanCn,
+        ) => Ok(Vec::new()),
         None => Err(Error::Unavailable),
     }
 }

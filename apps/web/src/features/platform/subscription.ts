@@ -1,9 +1,14 @@
 import type { components } from '../../api/schema'
 
 type Subscription = components['schemas']['SubscriptionSummary']
-type Plan = 'chatgpt' | 'supergrok'
+type Plan = 'chatgpt' | 'supergrok' | 'minimax_plan' | 'minimax_plan_cn'
 
-const NAME: Record<Plan, string> = { chatgpt: 'ChatGPT', supergrok: 'Grok' }
+const NAME: Record<Plan, string> = {
+  chatgpt: 'ChatGPT',
+  supergrok: 'Grok',
+  minimax_plan: 'MiniMax',
+  minimax_plan_cn: 'MiniMax',
+}
 
 /** What a signed-in plan needs a person to know, most urgent first. */
 export function planProblem(plan: Plan, subscription: Subscription) {
@@ -44,6 +49,8 @@ export function signInProblem(
 ) {
   const name = NAME[plan]
   if (status === 422 && code && REFUSED[code]) return REFUSED[code]
+  if (status === 400 && plan.startsWith('minimax'))
+    return 'That key has characters a key cannot hold.'
   if (status === 400)
     return 'That is not this sign-in’s address. Copy the whole address of the page that failed to load; it starts with http://127.0.0.1:1456/auth/callback.'
   if (status === 409)

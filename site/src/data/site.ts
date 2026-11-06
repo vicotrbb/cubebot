@@ -54,8 +54,8 @@ export const status = {
   today: [
     'Each agent in its own KVM guest or declared container',
     'One-command install, Docker Compose or Helm',
-    'OpenAI, Anthropic, Gemini, Grok and OpenRouter',
-    'Sign in with a ChatGPT or SuperGrok plan',
+    'OpenAI, Anthropic, Gemini, Grok, OpenRouter and MiniMax',
+    'Use a ChatGPT, SuperGrok or MiniMax M Plan',
     'One permanent conversation per agent',
     'Terminal, files, browser and a desktop you can take over',
     '27 native connectors and MCP servers',
