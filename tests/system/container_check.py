@@ -90,6 +90,19 @@ def connected(request, outputs):
             lambda: ("find_tools", {"query": "github issue"}),
             lambda: ("github__get_issue", {"repo": "rust-lang/rust", "number": 1}),
         ]
+    if "with-feed" in request:
+        steps += [
+            lambda: ("find_tools", {"query": "news feed"}),
+            lambda: ("news__read_feed", {"feed": 1, "limit": 3}),
+        ]
+    if "with-nextcloud" in request:
+        upload = {"path": "cubebot-check.txt", "workspace_file": "upload-check.txt"}
+        steps += [
+            lambda: ("bash", {"command": "printf cubebot-upload > upload-check.txt"}),
+            lambda: ("find_tools", {"query": "cloud upload download"}),
+            lambda: ("cloud__upload", upload | {"overwrite": True}),
+            lambda: ("cloud__download", {"path": "cubebot-check.txt"}),
+        ]
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
 
@@ -284,6 +297,7 @@ def connections_turn(api, postgres, identity, marker, database):
             check=True,
             stdout=subprocess.DEVNULL,
         )
+    extras = wave_two_connections(api, postgres)
     github = os.environ.get("CUBEBOT_CHECK_GITHUB_TOKEN")
     if github:
         made = api(
@@ -296,8 +310,10 @@ def connections_turn(api, postgres, identity, marker, database):
             },
         )
         assert made["status"] == "connected", made
-    request = f"Check the status page, connections-{marker}" + (
-        " with-github" if github else ""
+    request = (
+        f"Check the status page, connections-{marker}"
+        + (" with-github" if github else "")
+        + "".join(f" with-{name}" for name in extras)
     )
     path = f"/api/conversations/{identity}/messages"
     turn = api(path, command(message=request), expected=202)["id"]
@@ -334,7 +350,78 @@ def connections_turn(api, postgres, identity, marker, database):
         issue = calls[4]
         assert issue["outcome"]["code"] == 0 and github not in journal, issue
         print("PASS an agent read a real GitHub issue through its connection")
+    outcome = {call["name"]: call["outcome"] for call in calls}
+    if "feed" in extras:
+        read = outcome["news__read_feed"]
+        assert read["code"] == 0 and "title" in json.dumps(read), read
+        print("PASS an agent read a real feed through a connection with no credential")
+    if "nextcloud" in extras:
+        uploaded = outcome["cloud__upload"]
+        downloaded = outcome["cloud__download"]
+        assert uploaded["code"] == 0, uploaded
+        assert "cubebot-upload" in json.dumps(downloaded), downloaded
+        assert extras["nextcloud"] not in journal, "a credential leaked"
+        print("PASS an agent uploaded a workspace file to Nextcloud and read it back")
     echo.shutdown()
+
+
+def wave_two_connections(api, postgres):
+    """Optional connections to real services, reachable from this host.
+
+    CUBEBOT_CHECK_FEED is a feed address; CUBEBOT_CHECK_NEXTCLOUD is
+    `<address> <user> <app password>`.
+    """
+    extras = {}
+    feed = os.environ.get("CUBEBOT_CHECK_FEED")
+    if feed:
+        made = api(
+            "/api/connections",
+            {
+                "connector": "rss",
+                "slug": "news",
+                "auth": "public",
+                "config": {"feeds": [feed]},
+            },
+        )
+        assert made["status"] == "connected", made
+        extras["feed"] = feed
+    nextcloud = os.environ.get("CUBEBOT_CHECK_NEXTCLOUD")
+    if nextcloud:
+        url, user, password = nextcloud.split()
+        made = api(
+            "/api/connections",
+            {
+                "connector": "nextcloud",
+                "slug": "cloud",
+                "auth": "password",
+                "config": {"url": url, "username": user},
+                "secrets": {"password": password},
+            },
+        )
+        assert made["status"] == "connected", made
+        moved = json.dumps(reachable(url))
+        update = (
+            f"UPDATE connections SET config = config || '{{\"url\": {moved}}}' "
+            "WHERE slug = 'cloud'"
+        )
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                postgres,
+                "psql",
+                "-U",
+                "cubebot",
+                "-d",
+                "cubebot_test",
+                "-c",
+                update,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        extras["nextcloud"] = password
+    return extras
 
 
 def stand_in(name, marker):

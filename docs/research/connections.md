@@ -122,8 +122,30 @@ Joining Google Meet is _not_ something a connection can do: no Meet API lets a b
 | Telegram bot                                           | Lets you reach your agents from your phone            | Token                  |
 | HTTP API (generic)                                     | Anything else: base URL + auth header + allowed paths | Key                    |
 
-**Wave 2: mostly token-paste connectors, each one quick to build.**
-Linear, Jira/Confluence, Todoist, Home Assistant (popular with self-hosters), Nextcloud Files, Discord, Trello, Asana, Airtable, Dropbox, Cal.com/Calendly, Zoom (recordings), HubSpot, Stripe (read-only by default), Readwise, Paperless-ngx, RSS.
+**Wave 2 (built 2026-11-05): mostly token-paste connectors, each one quick to build.**
+
+| Connector                           | Sign-in                                                    | Default level | Events                              |
+| ----------------------------------- | ---------------------------------------------------------- | ------------- | ----------------------------------- |
+| Linear                              | API key                                                    | Full          | issue assigned, comment mentions me |
+| Jira + Confluence (Atlassian Cloud) | Email + API token, site URL                                | Write         | issue assigned                      |
+| Todoist                             | API token                                                  | Write         | task due                            |
+| Trello                              | API key + token                                            | Write         |                                     |
+| Asana                               | Personal access token                                      | Write         | task assigned                       |
+| Airtable                            | Personal access token, base list                           | Write         |                                     |
+| Home Assistant                      | URL + long-lived token                                     | Write         | watched entity changes              |
+| Nextcloud Files                     | URL + app password (WebDAV)                                | Write         |                                     |
+| Paperless-ngx                       | URL + token                                                | Write         |                                     |
+| Discord bot                         | Bot token                                                  | Full          | message mentions the bot            |
+| Dropbox                             | The person's own app, OAuth PKCE                           | Write         |                                     |
+| Cal.com                             | API key, base URL for self-hosted                          | Write         | booking created, cancelled          |
+| Calendly                            | Personal access token                                      | Read          | invitee created                     |
+| Zoom                                | The person's own Server-to-Server app (client credentials) | Read          | recording ready                     |
+| HubSpot                             | Service key or legacy private app token                    | Write         |                                     |
+| Stripe                              | Restricted key; refunds are Send                           | Read          | payment succeeded, failed           |
+| Readwise                            | Token                                                      | Read          |                                     |
+| RSS / Atom                          | None; feed list                                            | Read          | new item                            |
+
+Two sign-ins were added for them, once and generically: the client-credentials grant (Zoom) and no credential (RSS).
 
 **Not in the catalog (D3):** vendor remote-MCP servers stay in Platform › MCP servers. OAuth support for remote MCP servers is still worth doing, but as an improvement to that tab, not as Connections cards.
 
@@ -141,7 +163,7 @@ Linear, Jira/Confluence, Todoist, Home Assistant (popular with self-hosters), Ne
 2. **Delivery.** Add `Turn.connections` with short-lived credentials and a refresh endpoint, run tools in the agent, and add the Platform tab and the agent tab.
 3. **Wave 1 connectors**, in this order: HTTP API and Notion (the simplest, to prove the trait), Email, Google, Microsoft, CalDAV, GitHub, Slack, Telegram.
 4. **Events:** `poll()` → routine triggers.
-5. Wave 2 connectors. Remote-MCP OAuth is separate work on the MCP servers tab.
+5. Wave 2 connectors (done 2026-11-05). Remote-MCP OAuth is separate work on the MCP servers tab.
 
 ## Decisions (user, 2026-11-05)
 

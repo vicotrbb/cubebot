@@ -1,0 +1,21 @@
+{
+  "data": [
+    {
+      "gid": "1209000000000020",
+      "resource_type": "story",
+      "resource_subtype": "assigned",
+      "created_at": "2026-11-01T08:00:00.000Z",
+      "created_by": { "gid": "1201000000000002", "name": "Ada Lovelace" },
+      "text": "assigned to you"
+    },
+    {
+      "gid": "1209000000000021",
+      "resource_type": "story",
+      "resource_subtype": "comment_added",
+      "created_at": "2026-11-04T12:00:00.000Z",
+      "created_by": { "gid": "1201000000000002", "name": "Ada Lovelace" },
+      "text": "First draft is up."
+    }
+  ],
+  "next_page": null
+}

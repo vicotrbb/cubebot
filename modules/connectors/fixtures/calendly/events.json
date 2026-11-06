@@ -1,0 +1,37 @@
+{
+  "collection": [
+    {
+      "uri": "https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2",
+      "name": "30 Minute Meeting",
+      "meeting_notes_plain": "Internal meeting notes",
+      "meeting_notes_html": "<p>Internal meeting notes</p>",
+      "status": "active",
+      "start_time": "2026-11-06T15:00:00.000000Z",
+      "end_time": "2026-11-06T15:30:00.000000Z",
+      "event_type": "https://api.calendly.com/event_types/BBBBBBBBBBBBBBBB",
+      "location": {
+        "type": "zoom",
+        "status": "pushed",
+        "join_url": "https://calendly.zoom.us/j/123"
+      },
+      "invitees_counter": { "total": 1, "active": 1, "limit": 1 },
+      "created_at": "2026-11-05T13:00:00.000000Z",
+      "updated_at": "2026-11-05T13:00:00.000000Z",
+      "event_memberships": [
+        {
+          "user": "https://api.calendly.com/users/AAAAAAAAAAAAAAAA",
+          "user_email": "ana@example.com",
+          "user_name": "Ana Lima"
+        }
+      ],
+      "event_guests": []
+    }
+  ],
+  "pagination": {
+    "count": 1,
+    "next_page": "https://api.calendly.com/scheduled_events?count=1&page_token=VJs2rfDYeY8ahZpq0QI1O114LJkNjd7H",
+    "previous_page": null,
+    "next_page_token": "VJs2rfDYeY8ahZpq0QI1O114LJkNjd7H",
+    "previous_page_token": null
+  }
+}

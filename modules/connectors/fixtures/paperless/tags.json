@@ -1,0 +1,56 @@
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "slug": "invoices",
+      "name": "Invoices",
+      "color": "#a6cee3",
+      "text_color": "#000000",
+      "match": "",
+      "matching_algorithm": 1,
+      "is_insensitive": true,
+      "is_inbox_tag": false,
+      "document_count": 1,
+      "owner": 2,
+      "user_can_change": true,
+      "parent": null,
+      "children": []
+    },
+    {
+      "id": 3,
+      "slug": "taxes",
+      "name": "Taxes",
+      "color": "#a6cee3",
+      "text_color": "#000000",
+      "match": "",
+      "matching_algorithm": 1,
+      "is_insensitive": true,
+      "is_inbox_tag": false,
+      "document_count": 1,
+      "owner": 2,
+      "user_can_change": true,
+      "parent": null,
+      "children": []
+    },
+    {
+      "id": 2,
+      "slug": "utilities",
+      "name": "Utilities",
+      "color": "#a6cee3",
+      "text_color": "#000000",
+      "match": "",
+      "matching_algorithm": 1,
+      "is_insensitive": true,
+      "is_inbox_tag": false,
+      "document_count": 0,
+      "owner": 2,
+      "user_can_change": true,
+      "parent": null,
+      "children": []
+    }
+  ],
+  "display_count": 3
+}

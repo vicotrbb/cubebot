@@ -1,0 +1,50 @@
+{
+  "collection": [
+    {
+      "uri": "https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2/invitees/IIIIIIIIIIIIIIII",
+      "email": "john@example.com",
+      "first_name": "John",
+      "last_name": "Doe",
+      "name": "John Doe",
+      "status": "active",
+      "questions_and_answers": [
+        {
+          "question": "What should we talk about?",
+          "answer": "The roadmap",
+          "position": 0
+        }
+      ],
+      "timezone": "America/New_York",
+      "event": "https://api.calendly.com/scheduled_events/GBGBDCAADAEDCRZ2",
+      "created_at": "2026-11-05T13:00:00.000000Z",
+      "updated_at": "2026-11-05T13:00:00.000000Z",
+      "tracking": {
+        "utm_campaign": null,
+        "utm_source": null,
+        "utm_medium": null,
+        "utm_content": null,
+        "utm_term": null,
+        "salesforce_uuid": null
+      },
+      "text_reminder_number": null,
+      "rescheduled": false,
+      "old_invitee": null,
+      "new_invitee": null,
+      "cancel_url": "https://calendly.com/cancellations/IIIIIIIIIIIIIIII",
+      "reschedule_url": "https://calendly.com/reschedulings/IIIIIIIIIIIIIIII",
+      "routing_form_submission": null,
+      "payment": null,
+      "no_show": null,
+      "reconfirmation": null,
+      "scheduling_method": null,
+      "invitee_scheduled_by": null
+    }
+  ],
+  "pagination": {
+    "count": 1,
+    "next_page": null,
+    "previous_page": null,
+    "next_page_token": null,
+    "previous_page_token": null
+  }
+}

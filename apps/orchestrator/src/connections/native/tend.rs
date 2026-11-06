@@ -1,7 +1,7 @@
 //! Keeping connections usable: renewing access tokens before they lapse, checking health, and
 //! polling for the events that start routines. Only the orchestrator holds refresh tokens and
 //! app keys (docs/adr/identity.md#orchestrator-owned-provider-authentication-refresh).
-use super::{ConnectError, SPARE, Sealed, Stored, now, refusal};
+use super::{ConnectError, SPARE, Sealed, Stored, now, refusal, sign_in::filled};
 use crate::{
     connections::{
         Connections,
@@ -9,7 +9,7 @@ use crate::{
     },
     identity::IdentityError,
 };
-use cubebot_connectors::{Auth, Credential, Event, github};
+use cubebot_connectors::{Auth, Connector, Credential, Event, github};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use uuid::Uuid;
@@ -78,6 +78,10 @@ impl Connections {
                 .minted(&mut stored.config, &stored.sealed)
                 .await
                 .map(|(token, expires_at)| (token, None, expires_at - now())),
+            "client_credentials" => self
+                .granted(stored.connector, &stored.config, &stored.sealed)
+                .await
+                .map(|(token, expires_in)| (token, None, expires_in)),
             _ => return Ok(()),
         };
         let (status, problem) = match renewed {
@@ -173,6 +177,44 @@ impl Connections {
             Some(grant.tokens.refresh_token),
             grant.expires_in,
         ))
+    }
+
+    /// A token from the person's own app by the client-credentials grant, such as Zoom's
+    /// Server-to-Server OAuth; with no refresh token, renewal asks again.
+    pub(super) async fn granted(
+        &self,
+        connector: &dyn Connector,
+        config: &Value,
+        sealed: &Sealed,
+    ) -> Result<(String, i64), Renewal> {
+        let refused = |problem: &str| Renewal::Refused(problem.into());
+        let app = connector
+            .manifest()
+            .auth
+            .iter()
+            .find_map(|auth| match auth {
+                Auth::ClientCredentials(app) => Some(app),
+                _ => None,
+            })
+            .ok_or_else(|| refused("This connector no longer signs in with an app's secret."))?;
+        let secret = sealed
+            .fields
+            .get("client_secret")
+            .ok_or_else(|| refused("The app's secret is not saved; enter it again."))?;
+        let missing = || refused("A setting the sign-in needs is missing.");
+        let url = self.endpoint(app.token, config).map_err(|_| missing())?;
+        let params = app
+            .params
+            .iter()
+            .map(|(key, template)| Some((*key, filled(template, config)?)))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(missing)?;
+        let mut form = vec![("grant_type", app.grant)];
+        form.extend(params.iter().map(|(key, value)| (*key, value.as_str())));
+        let client_id = config["client_id"].as_str().unwrap_or_default();
+        subscriptions::client_token(url, &form, (client_id, secret))
+            .await
+            .map_err(renewal)
     }
 
     /// An hour-long GitHub App installation token, recording which installation it is for.

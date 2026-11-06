@@ -1,0 +1,16 @@
+{
+  "config": {},
+  "credential": { "kind": "fields", "fields": { "token": "lin_api_secret" } },
+  "account": "victor@acme.dev",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/api.linear.app/graphql",
+      "body": {
+        "data": {
+          "viewer": { "name": "Victor Bona", "email": "victor@acme.dev" }
+        }
+      }
+    }
+  ]
+}

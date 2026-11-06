@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/rust-lang/rust/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/rust-lang/rust/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/rust-lang/rust/releases.atom"/>
+  <title>Release notes from rust</title>
+  <updated>2026-10-15T17:41:01Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/724712/1.99.1</id>
+    <updated>2026-10-16T04:47:44Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/rust-lang/rust/releases/tag/1.99.1"/>
+    <title>Rust 1.99.1</title>
+    <content type="html">&lt;ul&gt;
+&lt;li&gt;&lt;a href=&quot;https://github.com/rust-lang/rust/issues/163614&quot;&gt;library: fix missing symbol &lt;code&gt;wcslen&lt;/code&gt; on UEFI&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;rustc: fix miscompilation of FFI &lt;code&gt;bool&lt;/code&gt; return values&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>rustbot</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/47979223?s=60&amp;v=4"/>
+  </entry>
+</feed>

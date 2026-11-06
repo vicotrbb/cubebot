@@ -1,0 +1,28 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "eyJraWQiOiJ0ZXN0In0.calendly-test-token" }
+  },
+  "account": "ana@example.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.calendly.com/users/me",
+      "body": {
+        "resource": {
+          "uri": "https://api.calendly.com/users/AAAAAAAAAAAAAAAA",
+          "name": "Ana Lima",
+          "slug": "ana",
+          "email": "ana@example.com",
+          "scheduling_url": "https://calendly.com/ana",
+          "timezone": "America/Sao_Paulo",
+          "avatar_url": null,
+          "created_at": "2024-01-02T03:04:05.678123Z",
+          "updated_at": "2026-08-07T06:05:04.321123Z",
+          "current_organization": "https://api.calendly.com/organizations/AAAAAAAAAAAAAAAA"
+        }
+      }
+    }
+  ]
+}

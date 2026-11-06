@@ -138,22 +138,8 @@ impl From<Failure> for ConnectError {
 impl Connections {
     /// An OAuth endpoint, with `{key}` filled from the connection's settings, or a test's loopback.
     pub(super) fn endpoint(&self, template: &str, config: &Value) -> Result<Url, ConnectError> {
-        let mut filled = template.to_owned();
-        for (key, value) in config.as_object().into_iter().flatten() {
-            let Some(value) = value.as_str() else {
-                continue;
-            };
-            let safe = (1..=64).contains(&value.len())
-                && value
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"-.".contains(&b));
-            if safe {
-                filled = filled.replace(&format!("{{{key}}}"), value);
-            }
-        }
-        let url = Url::parse(&filled)
-            .ok()
-            .filter(|_| !filled.contains('{'))
+        let url = filled(template, config)
+            .and_then(|filled| Url::parse(&filled).ok())
             .ok_or_else(|| {
                 ConnectError::Invalid("a setting the sign-in needs is missing".into())
             })?;
@@ -576,6 +562,25 @@ impl Connections {
 }
 
 /// Where the vendor sends the browser: this installation's callback, or the loopback address.
+/// `template` with each `{key}` replaced by the connection's setting of that name, when every one
+/// is set and plain enough to sit in a URL or form.
+pub(super) fn filled(template: &str, config: &Value) -> Option<String> {
+    let mut filled = template.to_owned();
+    for (key, value) in config.as_object().into_iter().flatten() {
+        let Some(value) = value.as_str() else {
+            continue;
+        };
+        let safe = (1..=64).contains(&value.len())
+            && value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"-.".contains(&b));
+        if safe {
+            filled = filled.replace(&format!("{{{key}}}"), value);
+        }
+    }
+    (!filled.contains('{')).then_some(filled)
+}
+
 fn redirect_to(callback_wanted: bool, origin: Option<&str>) -> Result<Url, ConnectError> {
     let redirect = match (callback_wanted, origin) {
         (true, Some(origin)) => callback(origin),

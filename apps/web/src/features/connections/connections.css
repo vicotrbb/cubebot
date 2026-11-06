@@ -1,5 +1,7 @@
 .connectors {
   display: grid;
+  /* The category chips scroll inside the column instead of widening it on a phone. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   max-width: 1100px;
 }
@@ -338,6 +340,8 @@ dialog.sheet::backdrop {
   min-width: 0;
   font-size: var(--t-xs);
   overflow-wrap: anywhere;
+  /* Copied text can be several lines, such as Helm values. */
+  white-space: pre-wrap;
 }
 .setup__callback {
   align-items: flex-start;

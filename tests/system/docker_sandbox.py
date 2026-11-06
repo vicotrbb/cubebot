@@ -270,7 +270,11 @@ def tool_calls(postgres, turn):
     calls = {}
     for event in map(json.loads, rows.splitlines()):
         if event["kind"] == "tool_call":
-            calls[event["id"]] = {"input": event["input"], "outcome": None}
+            calls[event["id"]] = {
+                "name": event["name"],
+                "input": event["input"],
+                "outcome": None,
+            }
         else:
             calls[event["id"]]["outcome"] = event["outcome"]
     return list(calls.values())

@@ -11,20 +11,38 @@ mod settings;
 #[cfg(test)]
 mod testing;
 
+pub mod airtable;
+pub mod asana;
+pub mod atlassian;
+pub mod cal_com;
+pub mod calendly;
 pub mod dav;
+pub mod discord;
+pub mod dropbox;
 pub mod email;
 pub mod github;
 pub mod google;
+pub mod home_assistant;
 pub mod http_api;
+pub mod hubspot;
+pub mod linear;
 pub mod microsoft;
+pub mod nextcloud;
 pub mod notion;
+pub mod paperless;
+pub mod readwise;
+pub mod rss;
 pub mod slack;
+pub mod stripe;
 pub mod telegram;
+pub mod todoist;
+pub mod trello;
+pub mod zoom;
 
-pub use context::{Context, Credential, FILE, file, input};
+pub use context::{ATTACH, Attachment, Context, Credential, FILE, LARGEST, file, input};
 pub use manifest::{
-    Auth, Category, Choice, EventSpec, Field, FieldKind, Level, Manifest, OAuth2, Product, Risk,
-    Scope, Step, ToolSpec,
+    Auth, Category, Choice, ClientCredentials, EventSpec, Field, FieldKind, Level, Manifest,
+    OAuth2, PRIVATE_ADDRESS, Product, Risk, Scope, Step, ToolSpec,
 };
 pub use registry::{all, find};
 pub use settings::{problem, slug_valid};

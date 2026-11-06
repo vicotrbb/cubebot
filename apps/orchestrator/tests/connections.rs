@@ -190,7 +190,25 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
             "notion",
             "slack",
             "telegram",
-            "http-api"
+            "http-api",
+            "linear",
+            "atlassian",
+            "asana",
+            "todoist",
+            "trello",
+            "airtable",
+            "hubspot",
+            "discord",
+            "readwise",
+            "rss",
+            "calendly",
+            "home-assistant",
+            "nextcloud",
+            "paperless",
+            "dropbox",
+            "cal-com",
+            "zoom",
+            "stripe"
         ]
     );
     assert_eq!(
@@ -770,4 +788,151 @@ async fn polled_events_start_the_routines_waiting_for_them_once() {
     assert_eq!((activity.events.len(), activity.events[0].routines), (1, 1));
     assert_eq!(activity.routines[0].event, "message.received");
     assert!(vendor.seen(&format!("{bot}/getUpdates")).len() >= 2);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_apps_client_credentials_are_traded_for_tokens_again_before_they_lapse() {
+    let f = fixture().await;
+    let (_auth, _work, admin, _agent) = native_chat_setup(&f, "Hello").await;
+    let vendor = Vendor::default();
+    let origin = vendor.serve().await;
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]))
+        .with_vendor_for_loopback_tests(&origin);
+    let token = "/zoom.us/oauth/token";
+    let me = "/api.zoom.us/v2/users/jchill%40example.com";
+    let zoom = |secret: &str| {
+        serde_json::from_value(json!({"connector": "zoom", "slug": "zoom", "auth": "client_credentials",
+            "config": {"account_id": "acct-1", "client_id": "zoom-client", "user": "jchill@example.com"},
+            "secrets": {"client_secret": secret}}))
+        .unwrap()
+    };
+
+    vendor.answer(token, 400, json!({"error": "invalid_client"}));
+    let refused = connections.create_connection(admin.id, zoom("wrong")).await;
+    assert!(matches!(refused, Err(ConnectError::Refused(_))));
+    assert!(connections.connections().await.unwrap().is_empty());
+
+    let granted =
+        |access: &str| json!({"access_token": access, "token_type": "bearer", "expires_in": 3599});
+    vendor.answer(token, 200, granted("zoom-access-1"));
+    vendor.answer(me, 200, json!({"email": "jchill@example.com"}));
+    let saved = connections
+        .create_connection(admin.id, zoom("zoom-secret-1"))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            saved.auth.as_str(),
+            saved.account.as_deref(),
+            saved.level.as_str()
+        ),
+        ("client_credentials", Some("jchill@example.com"), "read")
+    );
+    assert!(saved.expires_at.is_some());
+    let asked = vendor.seen(token).pop().unwrap();
+    // `zoom-client:zoom-secret-1` in Basic authentication.
+    let basic = "em9vbS1jbGllbnQ6em9vbS1zZWNyZXQtMQ==";
+    assert_eq!(
+        asked,
+        format!("Basic {basic} grant_type=account_credentials&account_id=acct-1")
+    );
+    assert_eq!(vendor.seen(me).pop().unwrap(), "Bearer zoom-access-1 ");
+    let stored: Vec<u8> = sqlx::query_scalar!("SELECT credential FROM connections")
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert!(sealed_free_of(&stored, &["zoom-secret-1", "zoom-access-1"]));
+
+    // A token about to lapse is granted again; there is no refresh token to use.
+    sqlx::query!("UPDATE connections SET expires_at = clock_timestamp() + interval '1 minute'")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    vendor.answer(token, 200, granted("zoom-access-2"));
+    vendor.answer(me, 200, json!({"email": "jchill@example.com"}));
+    let checked = connections.check_connection(saved.id).await.unwrap();
+    assert_eq!(checked.status, "connected");
+    assert_eq!(vendor.seen(me).pop().unwrap(), "Bearer zoom-access-2 ");
+
+    // A new secret is used at once, not after the old token lapses.
+    vendor.answer(token, 200, granted("zoom-access-3"));
+    vendor.answer(me, 200, json!({"email": "jchill@example.com"}));
+    let update =
+        serde_json::from_value(json!({"secrets": {"client_secret": "zoom-secret-2"}})).unwrap();
+    connections
+        .update_connection(saved.id, update)
+        .await
+        .unwrap();
+    let basic = "em9vbS1jbGllbnQ6em9vbS1zZWNyZXQtMg==";
+    assert!(
+        vendor
+            .seen(token)
+            .pop()
+            .unwrap()
+            .starts_with(&format!("Basic {basic} "))
+    );
+    assert_eq!(vendor.seen(me).pop().unwrap(), "Bearer zoom-access-3 ");
+
+    // A revoked app needs its secret entered again.
+    sqlx::query!("UPDATE connections SET expires_at = clock_timestamp()")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    vendor.answer(token, 401, json!({"error": "invalid_client"}));
+    let checked = connections.check_connection(saved.id).await.unwrap();
+    assert_eq!(checked.status, "sign_in_again");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_connection_with_nothing_to_sign_in_with_still_checks_its_settings() {
+    let f = fixture().await;
+    let (_auth, _work, admin, _agent) = native_chat_setup(&f, "Hello").await;
+    const FEED: &str = r#"<?xml version="1.0"?><rss version="2.0"><channel><title>Kale news</title><item><title>Harvest</title><link>https://example.com/harvest</link><guid>1</guid></item></channel></rss>"#;
+    let router = Router::new().route(
+        "/feed.xml",
+        axum::routing::get(|| async { ([("content-type", "application/rss+xml")], FEED) }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let feed = format!("http://{}/feed.xml", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let rss = |feeds: Value, secrets: Value| {
+        serde_json::from_value(json!({"connector": "rss", "slug": "news", "auth": "public",
+            "config": {"feeds": feeds}, "secrets": secrets}))
+        .unwrap()
+    };
+
+    let smuggled = connections
+        .create_connection(admin.id, rss(json!([feed]), json!({"token": "x"})))
+        .await;
+    assert!(
+        matches!(smuggled, Err(ConnectError::Invalid(_))),
+        "a public sign-in holds no secret"
+    );
+    let missing = format!("{}missing.xml", &feed[..feed.len() - "feed.xml".len()]);
+    let unreachable = connections
+        .create_connection(admin.id, rss(json!([missing]), json!({})))
+        .await;
+    assert!(
+        unreachable.is_err(),
+        "a feed that does not answer saves nothing"
+    );
+
+    let saved = connections
+        .create_connection(admin.id, rss(json!([feed]), json!({})))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            saved.auth.as_str(),
+            saved.account.as_deref(),
+            saved.level.as_str()
+        ),
+        ("public", Some("1 feed"), "read")
+    );
+    assert_eq!(saved.expires_at, None);
+    let checked = connections.check_connection(saved.id).await.unwrap();
+    assert_eq!(checked.status, "connected");
 }

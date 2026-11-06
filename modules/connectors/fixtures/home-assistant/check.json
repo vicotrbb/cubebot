@@ -1,0 +1,58 @@
+{
+  "config": { "url": "{origin}" },
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "ha-long-lived-token" }
+  },
+  "account": "Home",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api/config",
+      "body": {
+        "allowlist_external_dirs": ["/media", "/config/www"],
+        "allowlist_external_urls": [],
+        "components": [
+          "zone",
+          "frontend",
+          "blueprint",
+          "media_player",
+          "date",
+          "alarm_control_panel",
+          "datetime",
+          "energy"
+        ],
+        "config_dir": "/config",
+        "config_source": "default",
+        "country": null,
+        "currency": "EUR",
+        "debug": false,
+        "elevation": 0,
+        "external_url": null,
+        "internal_url": null,
+        "language": "en",
+        "latitude": 0,
+        "location_name": "Home",
+        "logging": { "log_file_disabled_reason": null },
+        "longitude": 0,
+        "radius": 100,
+        "recovery_mode": false,
+        "safe_mode": false,
+        "state": "RUNNING",
+        "time_zone": "UTC",
+        "unit_system": {
+          "length": "km",
+          "accumulated_precipitation": "mm",
+          "area": "m\u00b2",
+          "mass": "g",
+          "pressure": "Pa",
+          "temperature": "\u00b0C",
+          "volume": "L",
+          "wind_speed": "m/s"
+        },
+        "version": "2026.11.0",
+        "whitelist_external_dirs": ["/media", "/config/www"]
+      }
+    }
+  ]
+}

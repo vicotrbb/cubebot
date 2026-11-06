@@ -1,0 +1,24 @@
+[
+  {
+    "id": "5abbe4b7ddc1b351ef961400",
+    "name": "To buy",
+    "cards": [
+      {
+        "id": "5abbe4b7ddc1b351ef961414",
+        "name": "Milk",
+        "due": "2026-11-06T12:00:00.000Z",
+        "dueComplete": false,
+        "shortUrl": "https://trello.com/c/DRbmOQ1k",
+        "labels": [
+          {
+            "id": "5abbe4b7ddc1b351ef961600",
+            "idBoard": "5abbe4b7ddc1b351ef961500",
+            "name": "dairy",
+            "color": "blue"
+          }
+        ]
+      }
+    ]
+  },
+  { "id": "5abbe4b7ddc1b351ef961401", "name": "Bought", "cards": [] }
+]

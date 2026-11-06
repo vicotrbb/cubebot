@@ -1,0 +1,69 @@
+{
+  "results": [
+    {
+      "id": "6X7rM8997g3RQmvh",
+      "user_id": "2671355",
+      "project_id": "6Jf8VQXxpwv56VQ7",
+      "section_id": null,
+      "parent_id": null,
+      "added_by_uid": "2671355",
+      "assigned_by_uid": null,
+      "responsible_uid": null,
+      "labels": ["errands"],
+      "deadline": null,
+      "duration": null,
+      "checked": false,
+      "is_deleted": false,
+      "added_at": "2026-11-01T12:00:00.000000Z",
+      "completed_at": null,
+      "updated_at": "2026-11-04T08:00:00.000000Z",
+      "due": {
+        "date": "2026-11-05",
+        "timezone": null,
+        "string": "every day",
+        "lang": "en",
+        "is_recurring": true
+      },
+      "priority": 4,
+      "child_order": 1,
+      "content": "Buy milk",
+      "description": "Whole milk",
+      "note_count": 0,
+      "day_order": 1,
+      "is_collapsed": false
+    },
+    {
+      "id": "6X7rPPJ6pmxWHmvr",
+      "user_id": "2671355",
+      "project_id": "6Jf8VQXxpwv56VQ7",
+      "section_id": null,
+      "parent_id": null,
+      "added_by_uid": "2671355",
+      "assigned_by_uid": null,
+      "responsible_uid": null,
+      "labels": [],
+      "deadline": null,
+      "duration": null,
+      "checked": false,
+      "is_deleted": false,
+      "added_at": "2026-10-30T09:00:00.000000Z",
+      "completed_at": null,
+      "updated_at": "2026-10-30T09:00:00.000000Z",
+      "due": {
+        "date": "2026-11-03",
+        "timezone": null,
+        "string": "Nov 3",
+        "lang": "en",
+        "is_recurring": false
+      },
+      "priority": 1,
+      "child_order": 2,
+      "content": "Send the invoice",
+      "description": "",
+      "note_count": 0,
+      "day_order": -1,
+      "is_collapsed": false
+    }
+  ],
+  "next_cursor": "eyJsYXN0X2lkIjoiNlg3ck04OTk3ZzNSUW12aCJ9"
+}

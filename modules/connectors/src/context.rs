@@ -10,10 +10,37 @@ use std::{collections::BTreeMap, time::Duration};
 /// A tool result holding this key is a file: the agent saves it in its workspace and answers
 /// with the path, so the model never reads raw bytes.
 pub const FILE: &str = "$file";
-/// The most a JSON answer or a download may hold.
-const LARGEST: usize = 25 * 1024 * 1024;
+/// A tool input property naming a workspace file to upload. The agent replaces the path with an
+/// [`Attachment`] holding its bytes, read as the tool user, so a call reaches only what `bash` can.
+pub const ATTACH: &str = "workspace_file";
+/// The most a JSON answer, a download or an upload may hold.
+pub const LARGEST: usize = 25 * 1024 * 1024;
 const RETRIES: u32 = 2;
 const LONGEST_WAIT: Duration = Duration::from_secs(10);
+
+/// A workspace file the agent attached under [`ATTACH`].
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Attachment {
+    /// The file's name, without its folder.
+    pub name: String,
+    base64: String,
+}
+
+impl Attachment {
+    pub fn new(name: &str, bytes: &[u8]) -> Self {
+        Self {
+            name: name.into(),
+            base64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        }
+    }
+
+    pub fn bytes(&self) -> Result<Vec<u8>, Error> {
+        base64::engine::general_purpose::STANDARD
+            .decode(&self.base64)
+            .map_err(|_| Error::Invalid(format!("{ATTACH} must be a path in the workspace")))
+    }
+}
 
 /// One connection's credential as an agent holds it; never logged, journaled or shown to the model.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -271,7 +298,12 @@ fn message(body: &[u8]) -> String {
         &parsed["message"],
         &parsed["error_description"],
         &parsed["description"],
+        // Django REST framework's, such as Readwise's.
+        &parsed["detail"],
         &parsed["error"],
+        // GraphQL and Atlassian error bodies.
+        &parsed["errors"][0]["message"],
+        &parsed["errorMessages"][0],
     ];
     let text = candidates
         .into_iter()
@@ -315,6 +347,17 @@ mod tests {
         );
         assert_eq!(token().redact("Bearer secret-token"), "Bearer [credential]");
         assert_eq!(format!("{:?}", token()), "Credential { .. }");
+    }
+
+    #[test]
+    fn an_attachment_carries_its_bytes_and_a_bare_path_is_refused() {
+        let attached = serde_json::to_value(Attachment::new("a.pdf", b"%PDF")).unwrap();
+        let read: Attachment = input(attached).unwrap();
+        assert_eq!(
+            (read.name.as_str(), read.bytes().unwrap()),
+            ("a.pdf", b"%PDF".to_vec())
+        );
+        assert!(input::<Attachment>(json!("notes/a.pdf")).is_err());
     }
 
     #[test]

@@ -1,0 +1,29 @@
+{
+  "config": {},
+  "credential": { "kind": "fields", "fields": { "token": "cal_live_secret" } },
+  "account": "jane@example.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.cal.com/v2/me",
+      "body": {
+        "status": "success",
+        "data": {
+          "id": 1,
+          "uuid": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+          "username": "jane",
+          "email": "jane@example.com",
+          "name": "Jane Doe",
+          "avatarUrl": null,
+          "bio": null,
+          "timeFormat": 24,
+          "defaultScheduleId": 7,
+          "weekStart": "Monday",
+          "timeZone": "America/Los_Angeles",
+          "locale": "en",
+          "organizationId": null
+        }
+      }
+    }
+  ]
+}

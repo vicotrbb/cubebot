@@ -1,0 +1,29 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "2/1201/1209:secret" }
+  },
+  "account": "victor@acme.dev",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/app.asana.com/api/1.0/users/me",
+      "body": {
+        "data": {
+          "gid": "1201000000000001",
+          "resource_type": "user",
+          "name": "Victor Bona",
+          "email": "victor@acme.dev",
+          "workspaces": [
+            {
+              "gid": "1204000000000001",
+              "resource_type": "workspace",
+              "name": "Acme"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

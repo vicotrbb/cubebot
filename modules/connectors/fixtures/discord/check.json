@@ -1,0 +1,27 @@
+{
+  "config": { "channels": ["1100000000000000001"] },
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "MTA5ODc2NTQzMjEwOTg3NjU0Mw.GaBcDe.test-token" }
+  },
+  "account": "cubebot",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/discord.com/api/v10/users/@me",
+      "body": {
+        "id": "1098765432109876543",
+        "username": "cubebot",
+        "avatar": null,
+        "discriminator": "0",
+        "public_flags": 0,
+        "flags": 0,
+        "bot": true,
+        "global_name": null,
+        "mfa_enabled": true,
+        "verified": true,
+        "email": null
+      }
+    }
+  ]
+}

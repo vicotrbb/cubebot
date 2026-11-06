@@ -1,0 +1,30 @@
+{
+  "count": 1,
+  "nextPageCursor": "01gm6kjzefgh",
+  "results": [
+    {
+      "id": "01gwfvp9pyaabcdgmx14f6ha0",
+      "url": "https://read.readwise.io/new/read/01gwfvp9pyaabcdgmx14f6ha0",
+      "source_url": "https://example.com/article/",
+      "title": "Foo Bar",
+      "author": "Jane Doe",
+      "source": "Reader add from import URL",
+      "category": "article",
+      "location": "later",
+      "tags": {},
+      "site_name": "example.com",
+      "word_count": 2819,
+      "created_at": "2026-11-03T10:00:00.000000+00:00",
+      "updated_at": "2026-11-03T10:05:00.000000+00:00",
+      "published_date": "2026-10-30",
+      "summary": "A short summary of the article.",
+      "image_url": "https://example.com/image.png",
+      "parent_id": null,
+      "reading_progress": 0.15,
+      "first_opened_at": null,
+      "last_opened_at": null,
+      "saved_at": "2026-11-03T10:00:00.000000+00:00",
+      "last_moved_at": "2026-11-03T10:00:00.000000+00:00"
+    }
+  ]
+}

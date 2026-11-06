@@ -312,7 +312,12 @@ fn site(url: &Url) -> Option<String> {
 }
 
 /// A request to `url` with the connection's Basic credential, refused off the server's site.
-fn authed(cx: &Context, method: Method, base: &Url, url: &Url) -> Result<RequestBuilder, Error> {
+pub(crate) fn authed(
+    cx: &Context,
+    method: Method,
+    base: &Url,
+    url: &Url,
+) -> Result<RequestBuilder, Error> {
     if !trusted(base, url) {
         return Err(Error::Invalid(
             "that address is not on the connection's server".into(),
@@ -335,7 +340,7 @@ fn address(text: &str) -> Result<Url, Error> {
 
 /// A PROPFIND or REPORT, following up to [`REDIRECTS`] redirects within the server's site, which
 /// the HTTP client does not. Answers where it ended, which relative hrefs are resolved against.
-async fn read(
+pub(crate) async fn read(
     cx: &Context,
     base: &Url,
     method: &str,
@@ -408,8 +413,8 @@ fn refused(status: StatusCode) -> Error {
 }
 
 /// One `DAV:response` of a multistatus: its href and the properties it carries.
-struct Entry {
-    href: String,
+pub(crate) struct Entry {
+    pub(crate) href: String,
     props: Vec<Prop>,
 }
 
@@ -422,7 +427,7 @@ struct Prop {
 }
 
 impl Entry {
-    fn text(&self, name: &str) -> Option<&str> {
+    pub(crate) fn text(&self, name: &str) -> Option<&str> {
         self.props
             .iter()
             .filter(|prop| prop.name == name)
@@ -435,7 +440,7 @@ impl Entry {
             .filter(|prop| prop.name == name)
             .find_map(|prop| prop.href.as_deref())
     }
-    fn is(&self, kind: &str) -> bool {
+    pub(crate) fn is(&self, kind: &str) -> bool {
         self.props
             .iter()
             .any(|prop| prop.name == "resourcetype" && prop.children.iter().any(|c| c == kind))
@@ -705,7 +710,7 @@ fn clip(text: &str) -> String {
     text.chars().take(LONGEST).collect()
 }
 
-fn escape_xml(text: &str) -> String {
+pub(crate) fn escape_xml(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
@@ -893,7 +898,7 @@ fn fold(line: &str) -> String {
     folded + "\r\n"
 }
 
-fn now_nanos() -> u128 {
+pub(crate) fn now_nanos() -> u128 {
     let since = SystemTime::now().duration_since(UNIX_EPOCH);
     since.map(|since| since.as_nanos()).unwrap_or_default()
 }
@@ -950,7 +955,7 @@ fn days(year: i64, month: i64, day: i64) -> i64 {
 }
 
 /// `2026-11-05T09:30:00Z` for seconds since the epoch (Hinnant's `civil_from_days`).
-fn stamp(seconds: i64) -> String {
+pub(crate) fn stamp(seconds: i64) -> String {
     let (day, time) = (
         seconds.div_euclid(86_400) + 719_468,
         seconds.rem_euclid(86_400),

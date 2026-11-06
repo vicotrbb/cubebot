@@ -1,0 +1,46 @@
+{
+  "status": "success",
+  "data": [
+    {
+      "id": 123,
+      "uid": "2NtaeaVcKfpmSZ4CthFdfk",
+      "title": "Consultation",
+      "description": "Intro call",
+      "hosts": [
+        {
+          "id": 1,
+          "uuid": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+          "name": "Jane Doe",
+          "email": "jane@example.com",
+          "displayEmail": "jane@example.com",
+          "username": "jane",
+          "timeZone": "America/Los_Angeles"
+        }
+      ],
+      "status": "accepted",
+      "start": "2025-03-07T10:00:00Z",
+      "end": "2025-03-07T11:00:00Z",
+      "duration": 60,
+      "eventTypeId": 50,
+      "eventType": { "id": 50, "slug": "consultation" },
+      "location": "https://example.com/meeting",
+      "absentHost": false,
+      "createdAt": "2025-03-01T09:00:00Z",
+      "updatedAt": "2025-03-01T09:00:00Z",
+      "attendees": [
+        {
+          "name": "John Doe",
+          "email": "john@example.com",
+          "displayEmail": "john@example.com",
+          "timeZone": "America/New_York",
+          "absent": false
+        }
+      ],
+      "bookingFieldsResponses": { "notes": "Looking forward to it" }
+    }
+  ],
+  "pagination": {
+    "nextCursor": "eyJ2IjoxLCJzb3J0VXVpZCI6IjAx",
+    "hasMore": true
+  }
+}

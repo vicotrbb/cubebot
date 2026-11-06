@@ -1,0 +1,13 @@
+[
+  [
+    {
+      "entity_id": "input_boolean.guest_mode",
+      "state": "off",
+      "attributes": {},
+      "last_changed": "2026-11-06T02:04:10.815019+00:00",
+      "last_updated": "2026-11-06T02:04:10.815019+00:00"
+    },
+    { "state": "on", "last_changed": "2026-11-06T02:04:22.660825+00:00" },
+    { "state": "off", "last_changed": "2026-11-06T02:04:28.139692+00:00" }
+  ]
+]

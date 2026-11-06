@@ -1,0 +1,27 @@
+{
+  "id": "98306",
+  "status": "current",
+  "title": "2027 roadmap",
+  "spaceId": "65538",
+  "parentId": "98000",
+  "parentType": "page",
+  "authorId": "5b10ac8d82e05b22cc7d4ef5",
+  "createdAt": "2026-11-04T18:00:00.000Z",
+  "version": {
+    "number": 3,
+    "createdAt": "2026-11-04T18:00:00.000Z",
+    "authorId": "5b10ac8d82e05b22cc7d4ef5"
+  },
+  "body": {
+    "atlas_doc_format": {
+      "representation": "atlas_doc_format",
+      "value": "{\"type\":\"doc\",\"version\":1,\"content\":[{\"type\":\"heading\",\"attrs\":{\"level\":2},\"content\":[{\"type\":\"text\",\"text\":\"Goals\"}]},{\"type\":\"paragraph\",\"content\":[{\"type\":\"text\",\"text\":\"Ship the sandbox.\"}]},{\"type\":\"blockCard\",\"attrs\":{\"url\":\"https://acme.atlassian.net/browse/PROJ-7\"}}]}"
+    }
+  },
+  "_links": {
+    "webui": "/spaces/ENG/pages/98306/2027+roadmap",
+    "editui": "/pages/resumedraft.action?draftId=98306",
+    "tinyui": "/x/AoAB",
+    "base": "https://acme.atlassian.net/wiki"
+  }
+}

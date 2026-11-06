@@ -47,6 +47,11 @@ sandbox:
       - 192.168.0.0/16
       - 169.254.0.0/16
       - 100.64.0.0/10
+    # Private servers agents may reach despite the ranges above, such as a Home Assistant or
+    # Nextcloud a connection uses: a cidr and, optionally, its TCP ports (all when absent).
+    privateDestinations: []
+    # - cidr: 192.168.1.20/32
+    #   ports: [8123]
 
 # The orchestrator's shared files; ReadWriteOncePod needs a CSI driver that supports it.
 storage:

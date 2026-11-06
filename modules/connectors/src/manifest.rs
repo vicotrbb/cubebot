@@ -107,6 +107,11 @@ pub enum Auth {
         /// The product that connection needs switched on.
         product: &'static str,
     },
+    /// The person's own app trading its id and secret for short-lived tokens without a browser
+    /// (the client-credentials grant), such as a Zoom Server-to-Server app.
+    ClientCredentials(ClientCredentials),
+    /// Nothing to sign in with, such as public feeds.
+    Public,
 }
 
 impl Auth {
@@ -117,6 +122,8 @@ impl Auth {
             Self::OAuth2(_) => "oauth2",
             Self::GithubApp { .. } => "github_app",
             Self::Linked { .. } => "linked",
+            Self::ClientCredentials(_) => "client_credentials",
+            Self::Public => "public",
         }
     }
     pub fn fields(&self) -> &'static [Field] {
@@ -125,7 +132,8 @@ impl Auth {
                 fields
             }
             Self::OAuth2(oauth) => oauth.fields,
-            Self::Linked { .. } => &[],
+            Self::ClientCredentials(app) => app.fields,
+            Self::Linked { .. } | Self::Public => &[],
         }
     }
 }
@@ -143,6 +151,20 @@ pub struct OAuth2 {
     #[cfg_attr(feature = "openapi", schema(value_type = Vec<Vec<String>>))]
     pub params: &'static [(&'static str, &'static str)],
     /// The client id, and the secret when the client has one.
+    pub fields: &'static [Field],
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+pub struct ClientCredentials {
+    /// The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1).
+    pub token: &'static str,
+    /// The form's `grant_type`: `client_credentials` unless the vendor names its own.
+    pub grant: &'static str,
+    /// Extra form fields; `{key}` in a value is the connection's setting of that name.
+    #[cfg_attr(feature = "openapi", schema(value_type = Vec<Vec<String>>))]
+    pub params: &'static [(&'static str, &'static str)],
+    /// The client id, its secret (key `client_secret`) and any setting the params name.
     pub fields: &'static [Field],
 }
 
@@ -226,6 +248,16 @@ pub struct Step {
     /// Text the person copies into the vendor's form.
     pub copy: Option<&'static str>,
 }
+
+/// The guide step of a connector whose server usually sits on a private network, such as Home
+/// Assistant: agents call it from their sandbox, which reaches private addresses only when granted
+/// (docs/adr/sandbox.md#public-internet-access-with-grants-for-private-destinations).
+pub const PRIVATE_ADDRESS: Step = Step {
+    title: "Let agents reach a server on your network",
+    body: "Cubebot tests the connection from its own server, but agents call it from their sandboxes. Installed with Docker, sandboxes already reach this machine's network. Installed with the Helm chart, they reach no private address (10.x, 172.16–31.x, 192.168.x or 100.64–100.127.x) until you grant this server: add its address and port under sandbox.networkPolicy.privateDestinations in your values, as below, and upgrade the release. A public address needs no grant.",
+    link: None,
+    copy: Some("privateDestinations:\n  - cidr: 192.168.1.20/32\n    ports: [8123]"),
+};
 
 impl Manifest {
     pub fn tool(&self, name: &str) -> Option<&'static ToolSpec> {

@@ -1,0 +1,15 @@
+{
+  "data": {
+    "gid": "1209000000000011",
+    "resource_type": "task",
+    "name": "Draft the launch post",
+    "completed": false,
+    "due_on": "2026-11-20",
+    "assignee": { "gid": "1201000000000001", "name": "Victor Bona" },
+    "projects": [{ "gid": "1205000000000002", "name": "Launch" }],
+    "permalink_url": "https://app.asana.com/1/1204000000000001/project/1205000000000002/task/1209000000000011",
+    "modified_at": "2026-11-05T09:30:00.000Z",
+    "created_at": "2026-11-01T08:00:00.000Z",
+    "notes": "Outline in the doc."
+  }
+}

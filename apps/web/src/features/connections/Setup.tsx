@@ -413,7 +413,8 @@ async function save(
     if (products.length === 0) throw new Error('Choose at least one product.')
     config.products = products
   }
-  if (replacing && (auth.kind === 'api_key' || auth.kind === 'password')) {
+  const pasted = ['api_key', 'password', 'client_credentials', 'public']
+  if (replacing && pasted.includes(auth.kind)) {
     const body = { secrets }
     const params = { path: { id: replacing.id } }
     const connection = await answer(
