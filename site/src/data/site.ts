@@ -1,7 +1,7 @@
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.1'
+export const version = 'v0.2.2'
 export const released = '2026-11-06'
 
 export const docs = {
@@ -131,6 +131,15 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.2',
+    date: '2026-11-06',
+    title: 'Anthropic models work with every agent tool',
+    items: [
+      "Agent requests stay within Anthropic's limits on strict tools",
+      "A refused provider request logs the provider's reason",
+    ],
+  },
   {
     tag: 'v0.2.1',
     date: '2026-11-06',
