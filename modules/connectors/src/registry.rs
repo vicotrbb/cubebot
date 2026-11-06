@@ -1,7 +1,11 @@
 //! Every compiled-in connector. Adding one is its file and one line here.
 use crate::Connector;
 
-static ALL: &[&dyn Connector] = &[&crate::notion::Notion];
+static ALL: &[&dyn Connector] = &[
+    &crate::notion::Notion,
+    &crate::microsoft::Microsoft,
+    &crate::telegram::Telegram,
+];
 
 pub fn all() -> &'static [&'static dyn Connector] {
     ALL

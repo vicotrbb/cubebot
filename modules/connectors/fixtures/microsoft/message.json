@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/messages(subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments,webLink)/$entity",
+  "@odata.etag": "W/\"CQAAABYAAADHcgC8Hl9tRZ/hc1wEUs1TAAAwR4Hg\"",
+  "id": "AAMkAD1",
+  "receivedDateTime": "2026-11-04T18:02:11Z",
+  "hasAttachments": true,
+  "subject": "Lunch on Friday?",
+  "webLink": "https://outlook.office365.com/owa/?ItemID=AAMkAD1&exvsurl=1&viewmodel=ReadMessageItem",
+  "body": { "contentType": "text", "content": "Shall we get pizza on Friday?\r\n" },
+  "from": { "emailAddress": { "name": "Megan Bowen", "address": "megan@contoso.com" } },
+  "toRecipients": [{ "emailAddress": { "name": "Adele Vance", "address": "adele@contoso.com" } }],
+  "ccRecipients": []
+}

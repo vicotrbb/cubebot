@@ -1,0 +1,13 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/messages(id,from,subject,receivedDateTime,bodyPreview)",
+  "value": [
+    {
+      "@odata.etag": "W/\"CQAAABYAAADHcgC8Hl9tRZ/hc1wEUs1TAAAwR4Hg\"",
+      "id": "AAMkAD1",
+      "receivedDateTime": "2026-11-04T18:02:11Z",
+      "subject": "Lunch on Friday?",
+      "bodyPreview": "Shall we get pizza on Friday?",
+      "from": { "emailAddress": { "name": "Megan Bowen", "address": "megan@contoso.com" } }
+    }
+  ]
+}

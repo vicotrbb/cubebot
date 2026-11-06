@@ -10,7 +10,9 @@ mod registry;
 #[cfg(test)]
 mod testing;
 
+pub mod microsoft;
 pub mod notion;
+pub mod telegram;
 
 pub use context::{Context, Credential, FILE, file, input};
 pub use manifest::{
