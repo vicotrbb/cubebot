@@ -21,7 +21,7 @@ pub mod notion;
 pub mod slack;
 pub mod telegram;
 
-pub use context::{Context, Credential, FILE, file, input};
+pub use context::{ATTACH, Attachment, Context, Credential, FILE, LARGEST, file, input};
 pub use manifest::{
     Auth, Category, Choice, ClientCredentials, EventSpec, Field, FieldKind, Level, Manifest,
     OAuth2, PRIVATE_ADDRESS, Product, Risk, Scope, Step, ToolSpec,
