@@ -33,6 +33,9 @@ static ALL: &[&dyn Connector] = &[
     &crate::ntfy::Ntfy,
     &crate::pushover::Pushover,
     &crate::gotify::Gotify,
+    &crate::sql::Sql,
+    &crate::s3::S3,
+    &crate::sftp::Sftp,
 ];
 
 pub fn all() -> &'static [&'static dyn Connector] {

@@ -1,5 +1,6 @@
 //! Rules every registered connector must keep, so a new one learns them from a failing test.
-//! Each also needs `fixtures/<id>/check.json`: a recorded `check` with the account it names.
+//! Each also needs `fixtures/<id>/check.json`: a recorded `check` with the account it names, or,
+//! for a protocol whose traffic cannot be replayed, such as SSH's random key exchange, why not.
 use crate::{
     Auth, Connector, Context, Credential, Error, FieldKind, Manifest, Risk, ToolSpec, all,
     testing::{Exchange, Fixture, Script},
@@ -244,6 +245,9 @@ struct Recorded {
     exchanges: Vec<Exchange>,
     #[serde(default)]
     script: Vec<String>,
+    /// Why the check cannot be replayed; it then runs only in the connector's live test.
+    #[serde(default)]
+    unrecorded: Option<String>,
 }
 
 fn recorded(id: &str) -> Recorded {
@@ -263,6 +267,11 @@ fn placed(config: &Value, origin: &str, port: u16) -> Value {
 
 async fn check(connector: &dyn Connector) -> Result<String, Error> {
     let recorded = recorded(connector.manifest().id);
+    if let Some(reason) = recorded.unrecorded {
+        let replayable = recorded.exchanges.is_empty() && recorded.script.is_empty();
+        assert!(replayable && reason.contains("live_"), "{reason}");
+        return Ok(recorded.account);
+    }
     let fixture = Fixture::start(recorded.exchanges).await;
     let script = Script::start(recorded.script.clone()).await;
     let config = placed(&recorded.config, &fixture.origin(), script.port());

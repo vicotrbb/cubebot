@@ -30,7 +30,8 @@ export interface Connector {
   selfHosted?: boolean
   uploads?: boolean
   tested: Tested
-  wave: 1 | 2
+  /** 3: not in a release yet. */
+  wave: 1 | 2 | 3
 }
 
 export const connectors: Connector[] = [
@@ -546,7 +547,7 @@ export const connectors: Connector[] = [
     events: [],
     selfHosted: true,
     tested: 'live',
-    wave: 2,
+    wave: 3,
   },
   {
     slug: 'pushover',
@@ -559,7 +560,7 @@ export const connectors: Connector[] = [
     tools: ['Send a notification'],
     events: [],
     tested: 'recorded',
-    wave: 2,
+    wave: 3,
   },
   {
     slug: 'gotify',
@@ -573,7 +574,69 @@ export const connectors: Connector[] = [
     events: [],
     selfHosted: true,
     tested: 'live',
-    wave: 2,
+    wave: 3,
+  },
+  {
+    slug: 'sql',
+    name: 'SQL database',
+    category: 'Data',
+    summary: 'Query and change PostgreSQL, MySQL and MariaDB databases.',
+    signIn: 'Database user and password, host and TLS mode',
+    level: 'Read',
+    tools: [
+      'List tables',
+      'Describe a table',
+      'Run a read-only query',
+      'Execute a statement (Read and write)',
+    ],
+    events: [],
+    selfHosted: true,
+    tested: 'live',
+    wave: 3,
+  },
+  {
+    slug: 's3',
+    name: 'S3-compatible storage',
+    category: 'Data',
+    summary: 'Objects in AWS S3, Cloudflare R2, Backblaze B2 or MinIO.',
+    signIn: 'Access key and secret, endpoint and region',
+    level: 'Read',
+    tools: [
+      'List buckets',
+      'List objects',
+      'Inspect an object',
+      'Download an object',
+      'Upload an object',
+      'Copy an object',
+      'Delete an object',
+    ],
+    events: [],
+    selfHosted: true,
+    uploads: true,
+    tested: 'live',
+    wave: 3,
+  },
+  {
+    slug: 'sftp',
+    name: 'SFTP',
+    category: 'Data',
+    summary: 'Files on an SSH server, with its host key pinned.',
+    signIn: 'Password or private key, and the host key fingerprint',
+    level: 'Read',
+    tools: [
+      'List a folder',
+      'Inspect a path',
+      'Download a file',
+      'Upload a file',
+      'Create a folder',
+      'Move or rename',
+      'Delete',
+    ],
+    events: [],
+    selfHosted: true,
+    uploads: true,
+    tested: 'live',
+    wave: 3,
   },
 ]
 

@@ -1,0 +1,22 @@
+{
+  "config": {
+    "endpoint": "{origin}",
+    "region": "us-east-1",
+    "access_key_id": "cubebot-reader"
+  },
+  "credential": {
+    "kind": "fields",
+    "fields": {
+      "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    }
+  },
+  "account": "minio",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/",
+      "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>reports</Name><CreationDate>2026-11-06T10:00:00.000Z</CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": [["content-type", "application/xml"]]
+    }
+  ]
+}
