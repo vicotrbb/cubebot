@@ -112,6 +112,10 @@ export async function uploadAttachment(page: string, file: File) {
     throw new Error('File storage is not configured on this installation.')
   if (response.status === 507)
     throw new Error('The installation is out of file storage.')
+  if (response.status === 413)
+    throw new Error(
+      `${file.name} is larger than this installation’s upload limit.`,
+    )
   if (!response.ok) throw new ApiError(response.status)
   return (await response.json()) as Attachment
 }

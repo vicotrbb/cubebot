@@ -1257,6 +1257,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/oidc': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Whether the sign-in page offers single sign-on; needs no session. */
+    get: operations['single_sign_on_status']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/oidc/bindings': {
     parameters: {
       query?: never
@@ -1301,6 +1318,29 @@ export interface paths {
     put?: never
     post: operations['revoke_oidc']
     delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/oidc/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Administrators only. */
+    get: operations['single_sign_on_settings']
+    /**
+     * Administrators only. Checks the issuer before saving and applies at once; a changed provider
+     *     ends the sessions the previous one started. 409 when the deployment sets single sign-on,
+     *     503 when the issuer's discovery fails.
+     */
+    put: operations['save_single_sign_on']
+    post?: never
+    /** Administrators only; ends single sign-on and its sessions. 409 when the deployment sets it. */
+    delete: operations['disable_single_sign_on']
     options?: never
     head?: never
     patch?: never
@@ -1413,6 +1453,24 @@ export interface paths {
     }
     get: operations['installation']
     put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/installation/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Administrators only. */
+    get: operations['installation_settings']
+    /** Administrators only; applies at once. 409 when `revision` is not the current one. */
+    put: operations['save_installation_settings']
     post?: never
     delete?: never
     options?: never
@@ -2905,7 +2963,7 @@ export interface components {
       computer_use_enabled: boolean
       /** @description `kubernetes`, `docker` or `database_only`. */
       controller: string
-      /** @description `CUBEBOT_INSTALLATION_NAME`, or "Cubebot". */
+      /** @description The administrator's name for it, else `CUBEBOT_INSTALLATION_NAME`, else "Cubebot". */
       name: string
       /**
        * @description The declared sandbox runtime: `kvm` (a virtual machine) or `container`; none without a
@@ -3549,6 +3607,14 @@ export interface components {
       schedule?: string | null
       trigger?: null | components['schemas']['Trigger']
     }
+    SaveSingleSignOn: {
+      admit_email_domains?: string[]
+      admit_subjects?: string[]
+      client_id: string
+      /** @description Absent keeps the stored secret; empty removes it, for a public client. */
+      client_secret?: string | null
+      issuer: string
+    }
     SaveSpeech: {
       /** @description `None` keeps the stored ElevenLabs key. */
       elevenlabs_key?: string | null
@@ -3620,6 +3686,24 @@ export interface components {
        */
       monthly_budget_usd?: number | null
     }
+    Settings: {
+      /** @description Shown in the console and to agents; the deployment's name when empty. */
+      name?: string | null
+      /** Format: int64 */
+      revision: number
+      /** Format: int64 */
+      storage_quota_bytes?: number | null
+      /**
+       * Format: int64
+       * @description The largest file one upload may store.
+       */
+      upload_limit_bytes?: number | null
+    }
+    SettingsView: components['schemas']['Settings'] & {
+      /** @description The deployment's name, used while `name` is empty. */
+      default_name: string
+      storage?: null | components['schemas']['StorageView']
+    }
     Setup: {
       open: boolean
     }
@@ -3659,6 +3743,21 @@ export interface components {
         }
     SignedOut: {
       revoked: boolean
+    }
+    /** @description What an administrator sees; never the client secret itself. */
+    SingleSignOnSettings: {
+      admit_email_domains: string[]
+      admit_subjects: string[]
+      /** @description Whether a client secret can be stored, which needs the installation's credential key. */
+      can_store_secret: boolean
+      client_id?: string | null
+      enabled: boolean
+      has_client_secret: boolean
+      issuer?: string | null
+      /** @description Set by the deployment's `CUBEBOT_OIDC_CONFIG`; the console cannot change it. */
+      managed: boolean
+      /** @description The callback to register with the identity provider; absent without a public origin. */
+      redirect_uri?: string | null
     }
     Situation: {
       agents: components['schemas']['SituationAgent'][]
@@ -3775,6 +3874,9 @@ export interface components {
       }
       slug: string
     }
+    Status: {
+      enabled: boolean
+    }
     Steering: {
       /** Format: uuid */
       id: string
@@ -3791,6 +3893,29 @@ export interface components {
       /** @description A page to open, such as the vendor console's credentials screen. */
       link?: string | null
       title: string
+    }
+    StorageView: {
+      /**
+       * Format: int64
+       * @description The volume's size, when the filesystem reports it.
+       */
+      capacity_bytes?: number | null
+      /** Format: int64 */
+      default_quota_bytes: number
+      /** Format: int64 */
+      default_upload_limit_bytes?: number | null
+      /**
+       * Format: int64
+       * @description The quota in force: the setting or the deployment's, within 90% of the volume.
+       */
+      quota_bytes: number
+      /**
+       * Format: int64
+       * @description The per-file limit in force; absent when uploads are unlimited.
+       */
+      upload_limit_bytes?: number | null
+      /** Format: int64 */
+      used_bytes: number
     }
     Subject: {
       /** Format: int64 */
@@ -6285,6 +6410,25 @@ export interface operations {
       }
     }
   }
+  single_sign_on_status: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Status']
+        }
+      }
+    }
+  }
   oidc_bindings: {
     parameters: {
       query?: {
@@ -6345,6 +6489,83 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Receipt']
         }
+      }
+    }
+  }
+  single_sign_on_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SingleSignOnSettings']
+        }
+      }
+    }
+  }
+  save_single_sign_on: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveSingleSignOn']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SingleSignOnSettings']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  disable_single_sign_on: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }
@@ -6544,6 +6765,54 @@ export interface operations {
         content: {
           'application/json': components['schemas']['InstallationSummary']
         }
+      }
+    }
+  }
+  installation_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SettingsView']
+        }
+      }
+    }
+  }
+  save_installation_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Settings']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SettingsView']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

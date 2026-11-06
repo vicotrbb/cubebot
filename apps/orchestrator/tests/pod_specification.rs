@@ -146,10 +146,80 @@ fn terminal_flag_and_control_ca_are_explicit() {
         .iter()
         .find(|item| item["name"] == "control-ca")
         .unwrap();
+    // Only the certificate authority, never the listener's private key in the same Secret.
+    assert_eq!(volume["secret"]["secretName"], "control-ca");
     assert_eq!(
-        volume["configMap"]["items"],
+        volume["secret"]["items"],
         json!([{"key":"ca.crt","path":"ca.crt"}])
     );
+}
+
+#[test]
+fn resource_overrides_replace_only_the_named_defaults() {
+    let configured = layout()
+        .with_runtime(Runtime::Container { class: None })
+        .unwrap();
+    let defaults = serde_json::to_value(configured.pod("workspace").unwrap()).unwrap()["containers"]
+        [0]["resources"]
+        .clone();
+    assert_eq!(
+        defaults,
+        json!({"requests":{"cpu":"100m","memory":"256Mi","ephemeral-storage":"64Mi"},"limits":{"cpu":"2","memory":"3Gi","ephemeral-storage":"1Gi"}})
+    );
+    let resources = serde_json::from_value(
+        json!({"requests":{"memory":"1Gi"},"limits":{"cpu":"4","memory":"8Gi"}}),
+    )
+    .unwrap();
+    let spec = serde_json::to_value(
+        configured
+            .with_resources(resources)
+            .unwrap()
+            .pod("workspace")
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        spec["containers"][0]["resources"],
+        json!({"requests":{"cpu":"100m","memory":"1Gi","ephemeral-storage":"64Mi"},"limits":{"cpu":"4","memory":"8Gi","ephemeral-storage":"1Gi"}})
+    );
+    let kvm = serde_json::from_value(json!({"limits":{"memory":"6Gi"}})).unwrap();
+    let spec = serde_json::to_value(
+        layout()
+            .with_resources(kvm)
+            .unwrap()
+            .pod("workspace")
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        spec["containers"][0]["resources"]["limits"]["memory"],
+        "6Gi"
+    );
+    assert_eq!(
+        spec["containers"][0]["resources"]["limits"]["devices.kubevirt.io/kvm"],
+        "1"
+    );
+}
+
+#[test]
+fn resource_overrides_refuse_unknown_keys_bad_quantities_and_requests_over_limits() {
+    for resources in [
+        json!({"limits":{"nvidia.com/gpu":"1"}}),
+        json!({"limits":{"devices.kubevirt.io/kvm":"2"}}),
+        json!({"limits":{"memory":"lots"}}),
+        json!({"limits":{"memory":"1.Gi"}}),
+        json!({"limits":{"memory":".5Gi"}}),
+        json!({"limits":{"memory":"Gi"}}),
+        json!({"limits":{"memory":"-1Gi"}}),
+        json!({"requests":{"memory":"4Gi"}}),
+        json!({"requests":{"cpu":"3"}}),
+        json!({"requests":{"cpu":"1"},"limits":{"cpu":"500m"}}),
+    ] {
+        let parsed = serde_json::from_value(resources.clone()).unwrap();
+        assert!(layout().with_resources(parsed).is_err(), "{resources}");
+    }
+    let fine = serde_json::from_value(json!({"requests":{"cpu":"1.5"},"limits":{"cpu":"2"}}));
+    assert!(layout().with_resources(fine.unwrap()).is_ok());
 }
 
 #[test]

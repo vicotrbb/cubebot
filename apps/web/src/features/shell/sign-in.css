@@ -37,3 +37,21 @@
 .sign-in .btn {
   width: 100%;
 }
+.sign-in__sso {
+  display: grid;
+  gap: 12px;
+}
+.sign-in__or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+}
+.sign-in__or::before,
+.sign-in__or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}

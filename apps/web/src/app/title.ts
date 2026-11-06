@@ -2,6 +2,7 @@ const PAGES: [string, string][] = [
   ['/activity', 'Activity'],
   ['/agents/new', 'New agent'],
   ['/rooms/new', 'New room'],
+  ['/platform/general', 'General'],
   ['/platform/people', 'People'],
   ['/platform/teams', 'Teams and access'],
   ['/platform/sign-in', 'Sign-in'],

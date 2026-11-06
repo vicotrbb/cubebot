@@ -1,26 +1,105 @@
 use crate::identity::{
     IdentityError,
-    oidc::{Oidc, Started},
+    audit::Event,
+    oidc::{Oidc, SaveSingleSignOn, SingleSignOn, SingleSignOnSettings, Started},
 };
 use axum::{
     Json, Router,
     extract::{Query, State},
-    http::{HeaderMap, HeaderValue},
+    http::{HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Redirect},
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(start, link))]
+#[openapi(paths(start, link, status, settings, save, disable))]
 pub(super) struct Doc;
 
-pub(super) fn router(oidc: Oidc) -> Router {
+pub(super) fn router(sso: SingleSignOn) -> Router {
     Router::new()
+        .route("/api/identity/oidc", get(status))
+        .route(
+            "/api/identity/oidc/settings",
+            get(settings).put(save).delete(disable),
+        )
         .route("/api/identity/oidc/start", post(start))
         .route("/api/identity/oidc/link", post(link))
         .route("/api/identity/oidc/callback", get(callback))
-        .with_state(oidc)
+        .with_state(sso)
+}
+
+/// 404 while single sign-on is off, as when its routes did not exist.
+async fn current(sso: &SingleSignOn) -> Result<Oidc, IdentityError> {
+    sso.current().await.ok_or(IdentityError::NotFound)
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct Status {
+    enabled: bool,
+}
+
+/// Whether the sign-in page offers single sign-on; needs no session.
+#[utoipa::path(get, path = "/api/identity/oidc", operation_id = "single_sign_on_status", responses((status = 200, body = Status)))]
+async fn status(State(sso): State<SingleSignOn>) -> impl IntoResponse {
+    let enabled = sso.current().await.is_some();
+    ([("cache-control", "no-store")], Json(Status { enabled }))
+}
+
+async fn administrator(
+    sso: &SingleSignOn,
+    headers: &HeaderMap,
+) -> Result<uuid::Uuid, IdentityError> {
+    let actor = super::identity::actor(&sso.identity(), headers).await?;
+    if !actor.administrator {
+        return Err(IdentityError::Forbidden);
+    }
+    Ok(actor.id)
+}
+
+/// Administrators only.
+#[utoipa::path(get, path = "/api/identity/oidc/settings", operation_id = "single_sign_on_settings", responses((status = 200, body = SingleSignOnSettings)))]
+async fn settings(
+    State(sso): State<SingleSignOn>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    administrator(&sso, &headers).await?;
+    Ok(([("cache-control", "no-store")], Json(sso.settings().await?)))
+}
+
+/// Administrators only. Checks the issuer before saving and applies at once; a changed provider
+/// ends the sessions the previous one started. 409 when the deployment sets single sign-on,
+/// 503 when the issuer's discovery fails.
+#[utoipa::path(put, path = "/api/identity/oidc/settings", operation_id = "save_single_sign_on", request_body = SaveSingleSignOn, responses((status = 200, body = SingleSignOnSettings), (status = 409), (status = 503)))]
+async fn save(
+    State(sso): State<SingleSignOn>,
+    headers: HeaderMap,
+    Json(input): Json<SaveSingleSignOn>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = administrator(&sso, &headers).await?;
+    let secret_changed = input.client_secret.is_some();
+    let saved = sso.save(input).await?;
+    let detail = serde_json::json!({
+        "issuer": saved.issuer,
+        "client_id": saved.client_id,
+        "secret_changed": secret_changed,
+    });
+    sso.identity()
+        .audit(Event::by(actor, "oidc.configure").detail(detail))
+        .await;
+    Ok(([("cache-control", "no-store")], Json(saved)))
+}
+
+/// Administrators only; ends single sign-on and its sessions. 409 when the deployment sets it.
+#[utoipa::path(delete, path = "/api/identity/oidc/settings", operation_id = "disable_single_sign_on", responses((status = 204), (status = 409)))]
+async fn disable(
+    State(sso): State<SingleSignOn>,
+    headers: HeaderMap,
+) -> Result<StatusCode, IdentityError> {
+    let actor = administrator(&sso, &headers).await?;
+    sso.disable().await?;
+    sso.identity().audit(Event::by(actor, "oidc.disable")).await;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -80,16 +159,18 @@ fn started(oidc: &Oidc, flow: Started) -> Result<axum::response::Response, Ident
 
 /// Starts a sign-in; the browser follows `authorization_url`.
 #[utoipa::path(post, path = "/api/identity/oidc/start", responses((status = 200, body = Authorization)))]
-async fn start(State(oidc): State<Oidc>) -> Result<impl IntoResponse, IdentityError> {
+async fn start(State(sso): State<SingleSignOn>) -> Result<impl IntoResponse, IdentityError> {
+    let oidc = current(&sso).await?;
     started(&oidc, oidc.start(None).await?)
 }
 
 /// Starts linking the signed-in account to the identity provider.
 #[utoipa::path(post, path = "/api/identity/oidc/link", responses((status = 200, body = Authorization)))]
 async fn link(
-    State(oidc): State<Oidc>,
+    State(sso): State<SingleSignOn>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, IdentityError> {
+    let oidc = current(&sso).await?;
     let token = super::browser::credential(&oidc.identity, &headers)?;
     started(&oidc, oidc.start(Some(token)).await?)
 }
@@ -101,10 +182,11 @@ struct Callback {
 }
 
 async fn callback(
-    State(oidc): State<Oidc>,
+    State(sso): State<SingleSignOn>,
     headers: HeaderMap,
     Query(input): Query<Callback>,
 ) -> Result<impl IntoResponse, IdentityError> {
+    let oidc = current(&sso).await?;
     let name = flow_name(&oidc, &input.state);
     let browser = super::browser::cookie(&headers, &name)?.to_owned();
     let session = oidc.finish(&input.state, browser, input.code).await?;

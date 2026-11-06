@@ -25,7 +25,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let listener = TcpListener::bind(address).await?;
     let address = listener.local_addr()?;
     let listening = listening(listener)?;
-    run(listening, address).await
+    let control = control_listener().await?;
+    run(listening, control, address).await
 }
 
 struct Failure {
@@ -81,8 +82,28 @@ fn listening(listener: TcpListener) -> Result<Listening, Box<dyn Error + Send + 
     }
 }
 
+/// Agents' own HTTPS listener, so they never route through the public ingress.
+async fn control_listener() -> Result<Option<Tls>, Box<dyn Error + Send + Sync>> {
+    let (address, chain, key) = match (
+        std::env::var("CUBEBOT_CONTROL_BIND_ADDR"),
+        std::env::var_os("CUBEBOT_CONTROL_TLS_CERT_FILE"),
+        std::env::var_os("CUBEBOT_CONTROL_TLS_KEY_FILE"),
+    ) {
+        (Ok(address), Some(chain), Some(key)) => (address.parse::<SocketAddr>()?, chain, key),
+        (Err(std::env::VarError::NotPresent), None, None) => return Ok(None),
+        _ => {
+            return Err("set CUBEBOT_CONTROL_BIND_ADDR, CUBEBOT_CONTROL_TLS_CERT_FILE and CUBEBOT_CONTROL_TLS_KEY_FILE together, or none".into());
+        }
+    };
+    let listener = TcpListener::bind(address).await?;
+    tracing::info!(address = %listener.local_addr()?, "control listener ready");
+    let (chain, key) = (std::fs::read(chain)?, std::fs::read(key)?);
+    Ok(Some(Tls::new(listener, &chain, &key)?))
+}
+
 async fn run(
     listening: Listening,
+    control: Option<Tls>,
     address: SocketAddr,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let (router, controller) = application().await?;
@@ -93,8 +114,12 @@ async fn run(
     };
     tracing::info!(%address, scheme, "orchestrator server listening");
     let served = match listening {
-        Listening::Tls(listener) => serve(listener, router, controller, shutdown_signal()).await,
-        Listening::Plain(listener) => serve(listener, router, controller, shutdown_signal()).await,
+        Listening::Tls(listener) => {
+            serve(listener, control, router, controller, shutdown_signal()).await
+        }
+        Listening::Plain(listener) => {
+            serve(listener, control, router, controller, shutdown_signal()).await
+        }
     };
     served.map_err(failure("orchestrator ownership or service failed"))?;
     Ok(())
@@ -167,6 +192,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
 
 async fn startup_records(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send + Sync>> {
     credential_key(pool).await?;
+    initial_administrator(pool).await?;
     cubebot_orchestrator::knowledge::Knowledge::seed_shipped_skills(pool)
         .await
         .map_err(failure("shipped skills could not be seeded"))?;
@@ -174,6 +200,43 @@ async fn startup_records(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send
         .close_open_calls()
         .await
         .map_err(failure("open calls could not be closed"))?;
+    Ok(())
+}
+
+/// Creates the first administrator from the deployment while setup is still open; the password
+/// comes from a file, such as a mounted Secret, never from the environment.
+async fn initial_administrator(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let Some(path) = std::env::var_os("CUBEBOT_BOOTSTRAP_PASSWORD_FILE") else {
+        return Ok(());
+    };
+    let login = std::env::var("CUBEBOT_BOOTSTRAP_LOGIN")
+        .map_err(|_| "CUBEBOT_BOOTSTRAP_PASSWORD_FILE needs CUBEBOT_BOOTSTRAP_LOGIN")?;
+    let password = std::fs::read_to_string(path)
+        .map_err(failure("CUBEBOT_BOOTSTRAP_PASSWORD_FILE could not be read"))?;
+    let identity = cubebot_orchestrator::identity::Identity::new(pool.clone());
+    if !identity
+        .setup_open()
+        .await
+        .map_err(failure("installation setup state unavailable"))?
+    {
+        return Ok(());
+    }
+    match identity
+        .bootstrap(&login, password.trim_end_matches(['\r', '\n']))
+        .await
+    {
+        Ok(id) => tracing::info!(account = %id, "initial administrator created"),
+        // Another path created the administrator first.
+        Err(cubebot_orchestrator::identity::IdentityError::Conflict) => {}
+        Err(cubebot_orchestrator::identity::IdentityError::InvalidInput) => {
+            return Err("the initial administrator was refused: a login is 3 to 64 lowercase letters, digits, '.', '_' or '-', and a password 12 to 1024 characters".into());
+        }
+        Err(error) => {
+            return Err(failure("the initial administrator could not be created")(
+                error,
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -199,13 +262,20 @@ async fn credential_key(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send 
 async fn shared_files(
     pool: &sqlx::PgPool,
 ) -> Result<Option<cubebot_orchestrator::storage::Storage>, Box<dyn Error + Send + Sync>> {
-    let storage = cubebot_orchestrator::storage::Storage::environment(pool.clone()).await;
-    storage.map_err(|source| {
-        Box::new(Failure {
+    let storage = cubebot_orchestrator::storage::Storage::environment(pool.clone())
+        .await
+        .map_err(|source| Failure {
             message: "shared-file storage unavailable or reconciliation failed",
             source,
-        }) as _
-    })
+        })?;
+    if let Some(storage) = &storage {
+        let settings = cubebot_orchestrator::operations::settings::Settings::load(pool)
+            .await
+            .map_err(failure("installation settings unavailable"))?;
+        let (quota, upload) = settings.limits();
+        storage.limit(quota, upload);
+    }
+    Ok(storage)
 }
 
 fn with_storage(

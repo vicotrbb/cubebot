@@ -1,3 +1,4 @@
+use crate::quota;
 use crate::{
     memory_agent::{Model, Step, call, respond, text},
     runtime_identity::{http_server, native_chat_setup, runtime_server, spawn_native_text},
@@ -416,7 +417,7 @@ async fn an_attachment_is_read_through_the_reply_and_only_by_who_may_read_it() {
     let (auth, work, admin, agent) = native_chat_setup(&f, "Draw me a chart").await;
     let identity = Identity::new(f.pool.clone());
     let directory = std::env::temp_dir().join(format!("cubebot-attach-{}", Uuid::new_v4()));
-    let storage = Storage::start(f.pool.clone(), directory.clone(), 1 << 30)
+    let storage = Storage::start(f.pool.clone(), directory.clone(), quota(1 << 30))
         .await
         .unwrap();
     let token = auth

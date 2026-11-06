@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT config, client_secret FROM identity_oidc_policy",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 1,
+        "name": "client_secret",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "775aca69997c0e46e467f133d8e3023c35cf87e70644c720875980053f58d959"
+}

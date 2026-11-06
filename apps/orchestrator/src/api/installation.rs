@@ -1,6 +1,8 @@
 use crate::{
     agents::{Agent, AgentId, Agents},
-    identity::{Identity, IdentityError},
+    identity::{Identity, IdentityError, audit::Event},
+    operations::settings::{Settings, deployment_name},
+    storage::Storage,
     work::Work,
 };
 use axum::{
@@ -29,20 +31,26 @@ struct Api {
     identity: Identity,
     agents: Agents,
     work: Work,
+    pool: sqlx::PgPool,
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(installation, events))]
+#[openapi(paths(installation, events, settings, save_settings))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/installation", get(installation))
+        .route(
+            "/api/installation/settings",
+            get(settings).put(save_settings),
+        )
         .route("/api/events", get(events))
         .with_state(Api {
             identity,
             agents: Agents::new(pool.clone()),
-            work: Work::new(pool),
+            work: Work::new(pool.clone()),
+            pool,
         })
 }
 
@@ -67,7 +75,7 @@ impl Default for Installation {
 
 #[derive(Serialize, utoipa::ToSchema)]
 struct InstallationSummary {
-    /// `CUBEBOT_INSTALLATION_NAME`, or "Cubebot".
+    /// The administrator's name for it, else `CUBEBOT_INSTALLATION_NAME`, else "Cubebot".
     name: String,
     terminal_enabled: bool,
     computer_use_enabled: bool,
@@ -91,10 +99,7 @@ async fn installation(
     Ok((
         [("cache-control", "no-store")],
         Json(InstallationSummary {
-            name: std::env::var("CUBEBOT_INSTALLATION_NAME")
-                .ok()
-                .filter(|name| !name.trim().is_empty())
-                .unwrap_or_else(|| "Cubebot".into()),
+            name: Settings::load(&api.pool).await?.name(),
             terminal_enabled: flags.terminal_enabled,
             computer_use_enabled: flags.computer_use_enabled,
             controller: flags.controller,
@@ -107,6 +112,100 @@ async fn installation(
                 .as_ref()
                 .and_then(|runtime| runtime.class().map(str::to_owned)),
         }),
+    ))
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct SettingsView {
+    #[serde(flatten)]
+    settings: Settings,
+    /// The deployment's name, used while `name` is empty.
+    default_name: String,
+    /// The shared-file volume; absent when the installation has none.
+    storage: Option<StorageView>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct StorageView {
+    /// The volume's size, when the filesystem reports it.
+    capacity_bytes: Option<u64>,
+    /// The quota in force: the setting or the deployment's, within 90% of the volume.
+    quota_bytes: u64,
+    default_quota_bytes: u64,
+    /// The per-file limit in force; absent when uploads are unlimited.
+    upload_limit_bytes: Option<u64>,
+    default_upload_limit_bytes: Option<u64>,
+    used_bytes: u64,
+}
+
+fn view(settings: Settings, storage: Option<&Storage>) -> SettingsView {
+    SettingsView {
+        settings,
+        default_name: deployment_name(),
+        storage: storage.map(|storage| {
+            let usage = storage.usage();
+            StorageView {
+                capacity_bytes: usage.capacity,
+                quota_bytes: usage.quota,
+                default_quota_bytes: usage.defaults.quota,
+                upload_limit_bytes: usage.upload,
+                default_upload_limit_bytes: usage.defaults.upload,
+                used_bytes: usage.used,
+            }
+        }),
+    }
+}
+
+async fn administrator(api: &Api, headers: &HeaderMap) -> Result<Uuid, IdentityError> {
+    let actor = super::identity::actor(&api.identity, headers).await?;
+    if !actor.administrator {
+        return Err(IdentityError::Forbidden);
+    }
+    Ok(actor.id)
+}
+
+/// Administrators only.
+#[utoipa::path(get, path = "/api/installation/settings", operation_id = "installation_settings", responses((status = 200, body = SettingsView)))]
+async fn settings(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    storage: Option<Extension<Storage>>,
+) -> Result<impl IntoResponse, IdentityError> {
+    administrator(&api, &headers).await?;
+    let settings = Settings::load(&api.pool).await?;
+    let storage = storage.map(|Extension(storage)| storage);
+    Ok((
+        [("cache-control", "no-store")],
+        Json(view(settings, storage.as_ref())),
+    ))
+}
+
+/// Administrators only; applies at once. 409 when `revision` is not the current one.
+#[utoipa::path(put, path = "/api/installation/settings", operation_id = "save_installation_settings", request_body = Settings, responses((status = 200, body = SettingsView), (status = 409)))]
+async fn save_settings(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    storage: Option<Extension<Storage>>,
+    Json(input): Json<Settings>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = administrator(&api, &headers).await?;
+    let saved = Settings::save(&api.pool, &input).await?;
+    let storage = storage.map(|Extension(storage)| storage);
+    if let Some(storage) = &storage {
+        let (quota, upload) = saved.limits();
+        storage.limit(quota, upload);
+    }
+    let detail = serde_json::json!({
+        "name": saved.name,
+        "storage_quota_bytes": saved.storage_quota_bytes,
+        "upload_limit_bytes": saved.upload_limit_bytes,
+    });
+    api.identity
+        .audit(Event::by(actor, "installation.settings").detail(detail))
+        .await;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(view(saved, storage.as_ref())),
     ))
 }
 
@@ -140,7 +239,7 @@ async fn events(
         .flat_map(stream::iter)
         .map(Ok::<_, Infallible>);
     Ok((
-        [("cache-control", "no-store")],
+        super::STREAM_HEADERS,
         Sse::new(frames).keep_alive(KeepAlive::default()),
     ))
 }

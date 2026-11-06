@@ -33,11 +33,11 @@ fn controller_requires_a_declared_runtime() {
     }
 }
 #[test]
-fn controller_accepts_only_explicit_valid_ca_config_map_names() {
+fn controller_accepts_only_explicit_valid_ca_secret_names() {
     let mut config = valid();
-    config["control_ca_config_map"] = json!("control-ca");
+    config["control_ca_secret"] = json!("control-ca");
     assert!(ControllerConfig::parse(&config.to_string()).is_ok());
-    config["control_ca_config_map"] = json!("kube-root-ca.crt");
+    config["control_ca_secret"] = json!("kube-root-ca.crt");
     assert!(ControllerConfig::parse(&config.to_string()).is_ok());
     for name in [
         "",
@@ -49,7 +49,7 @@ fn controller_accepts_only_explicit_valid_ca_config_map_names() {
         "ca-.crt",
         &"a".repeat(254),
     ] {
-        config["control_ca_config_map"] = json!(name);
+        config["control_ca_secret"] = json!(name);
         assert!(ControllerConfig::parse(&config.to_string()).is_err());
     }
 }
@@ -77,6 +77,24 @@ fn controller_configuration_rejects_unsafe_workload_fields_and_implicit_connecti
         );
     }
     assert!(ControllerConfig::parse(&" ".repeat(65537)).is_err());
+}
+
+#[test]
+fn controller_validates_sandbox_resources() {
+    let mut input = valid();
+    input["sandbox_resources"] = json!({"limits":{"memory":"6Gi"}});
+    assert!(ControllerConfig::parse(&input.to_string()).is_ok());
+    for resources in [
+        json!({"limits":{"memory":"6 Gi"}}),
+        json!({"limits":{"gpu":"1"}}),
+        json!({"limits":{"memory":"6Gi"},"extra":{}}),
+    ] {
+        input["sandbox_resources"] = resources.clone();
+        assert!(
+            ControllerConfig::parse(&input.to_string()).is_err(),
+            "{resources}"
+        );
+    }
 }
 
 #[test]

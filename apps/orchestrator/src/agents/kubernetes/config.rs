@@ -12,7 +12,9 @@ pub struct ControllerConfig {
     orchestrator_origin: String,
     network: cubebot_protocol::network::NetworkPolicy,
     runtime: crate::agents::sandbox::Runtime,
-    control_ca_config_map: Option<String>,
+    control_ca_secret: Option<String>,
+    #[serde(default)]
+    sandbox_resources: super::Resources,
     #[serde(default)]
     terminal_enabled: bool,
     #[serde(default)]
@@ -69,8 +71,9 @@ impl ControllerConfig {
         )?
         .with_terminal(self.terminal_enabled)
         .with_computer_use(self.computer_use_enabled)
-        .with_runtime(self.runtime.clone())?;
-        match &self.control_ca_config_map {
+        .with_runtime(self.runtime.clone())?
+        .with_resources(self.sandbox_resources.clone())?;
+        match &self.control_ca_secret {
             Some(name) => layout.with_control_ca(name),
             None => Ok(layout),
         }

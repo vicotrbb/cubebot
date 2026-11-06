@@ -12,7 +12,7 @@ mod sandbox;
 mod shutdown;
 pub use reconcile::{ReconcileResult, Reconciler};
 mod layout;
-pub use layout::Layout;
+pub use layout::{Layout, Resources};
 mod registry;
 pub use registry::{
     Attempt, AttemptId, Phase, Registry, ResourceKind, ResourceObject, ResourceSpec,

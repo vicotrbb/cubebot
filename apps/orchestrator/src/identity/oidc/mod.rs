@@ -5,9 +5,11 @@ pub use bindings::Binding;
 mod config;
 mod http;
 mod provider;
+mod single_sign_on;
 mod storage;
 pub use config::Config;
 pub use config::environment;
+pub use single_sign_on::{SaveSingleSignOn, SingleSignOn, SingleSignOnSettings};
 
 use super::{Identity, IdentityError, Session, passwords};
 use openidconnect::{
