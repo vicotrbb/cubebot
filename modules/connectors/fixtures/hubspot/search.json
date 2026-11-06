@@ -1,0 +1,39 @@
+{
+  "total": 2,
+  "results": [
+    {
+      "id": "8801",
+      "properties": {
+        "amount": "15000",
+        "closedate": "2026-10-30T00:00:00Z",
+        "createdate": "2026-09-01T12:00:00Z",
+        "dealname": "Acme renewal",
+        "dealstage": "closedwon",
+        "hs_lastmodifieddate": "2026-10-30T15:00:00Z",
+        "hs_object_id": "8801",
+        "pipeline": "default"
+      },
+      "createdAt": "2026-09-01T12:00:00Z",
+      "updatedAt": "2026-10-30T15:00:00Z",
+      "archived": false,
+      "url": "https://app.hubspot.com/contacts/62515/record/0-3/8801"
+    },
+    {
+      "id": "8802",
+      "properties": {
+        "amount": "4200",
+        "closedate": "2026-11-02T00:00:00Z",
+        "createdate": "2026-10-01T12:00:00Z",
+        "dealname": "Acme add-on seats",
+        "dealstage": "closedwon",
+        "hs_lastmodifieddate": "2026-11-02T09:00:00Z",
+        "hs_object_id": "8802",
+        "pipeline": "default"
+      },
+      "createdAt": "2026-10-01T12:00:00Z",
+      "updatedAt": "2026-11-02T09:00:00Z",
+      "archived": false
+    }
+  ],
+  "paging": { "next": { "after": "30", "link": "?after=30" } }
+}

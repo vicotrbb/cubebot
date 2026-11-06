@@ -1,0 +1,15 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "key": "trello-api-key", "token": "trello-user-token" }
+  },
+  "account": "victorbona",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.trello.com/1/members/me?fields=username",
+      "body": { "id": "5abbe4b7ddc1b351ef961300", "username": "victorbona" }
+    }
+  ]
+}
