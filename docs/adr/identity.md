@@ -365,3 +365,13 @@ The vault's secrets ([A vault the desktop arbiter fills](#a-vault-the-desktop-ar
 **Open details.** Cryptographic library and record format; key generation and provisioning; rotation mechanics (including for vault records); recovery custody; protected export; bootstrap permissions; and agent-local secret storage and deletion.
 
 **Validation scenarios.** Encrypt and retrieve an authorized credential; deny ungranted distribution; keep the key out of agent sandboxes; reject altered ciphertext; report missing or wrong keys; resume interrupted key rotation alongside refresh; and restore records with the correct key version without claiming revoked external credentials are usable.
+
+## Profiles agents read
+
+Accepted 2026-11-06.
+
+**Decision.** A person keeps a profile for agents: what to call them, pronouns, role, time zone, reply language and free text on what to know about them (`human_accounts.profile`, edited only by its owner on the Profile page). Every turn's instructions end with the profile of the person the turn is for, with their local time when a time zone is set. An agent's `people_lookup` tool reads the profiles of the people who can reach it: administrators and anyone granted on the agent or its conversation, directly or through a team. The user asked on 2026-11-06 for profile data that is relevant to people and that agents can look up.
+
+**Rationale.** Agents act for people they otherwise know only by login. Handing over the speaker with each turn needs no protocol change and costs a few lines of context; a lookup tool covers everyone else the agent works with without exposing the whole installation's people to every agent. The text is the person's own words about themselves; the tool tells the model it describes them and is not instructions.
+
+**Open details.** A person choosing which agents see their profile; profiles for people in rooms the agent shares but holds no grant from.

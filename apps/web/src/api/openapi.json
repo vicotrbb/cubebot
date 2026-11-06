@@ -3135,6 +3135,55 @@
         }
       }
     },
+    "/api/identity/me/profile": {
+      "get": {
+        "tags": [],
+        "summary": "What the caller tells agents about themselves.",
+        "operationId": "profile",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Replaces the caller's whole profile; agents that person reaches read it.",
+        "operationId": "set_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Profile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/identity/oidc": {
       "get": {
         "tags": [],
@@ -8301,6 +8350,42 @@
             "type": "string"
           }
         }
+      },
+      "Profile": {
+        "type": "object",
+        "description": "Every field is optional; empty means not given.",
+        "properties": {
+          "about": {
+            "type": "string",
+            "description": "Free text: what agents should know about them.",
+            "default": ""
+          },
+          "language": {
+            "type": "string",
+            "description": "The language they want replies in.",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "description": "What to call them, such as \"Victor\".",
+            "default": ""
+          },
+          "pronouns": {
+            "type": "string",
+            "default": ""
+          },
+          "role": {
+            "type": "string",
+            "description": "What they do, such as \"Platform engineer\".",
+            "default": ""
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "An IANA zone such as `Europe/Lisbon`.",
+            "default": ""
+          }
+        },
+        "additionalProperties": false
       },
       "Progress": {
         "type": "object",

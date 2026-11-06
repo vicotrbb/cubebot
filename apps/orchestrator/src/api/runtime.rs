@@ -31,6 +31,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/dreams/{run}/changes", post(commit_dream))
         .route("/api/runtime/skills/{name}", get(skill))
         .route("/api/runtime/wallpaper", get(wallpaper))
+        .route("/api/runtime/people", get(people))
         .route("/api/runtime/provider", get(provider))
         .route(
             "/api/runtime/connections/{id}/credential",
@@ -193,6 +194,17 @@ async fn wallpaper(
         .ok_or(Failure(StatusCode::NOT_FOUND))?;
     let content_type = crate::agents::content_type(&image).unwrap_or("application/octet-stream");
     Ok(([(header::CONTENT_TYPE, content_type)], image).into_response())
+}
+/// The people who can reach this agent, with what they tell agents about themselves.
+async fn people(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let people = crate::identity::profiles::people(&identity.pool, actor.agent.0)
+        .await
+        .map_err(unavailable)?;
+    Ok(Json(people).into_response())
 }
 async fn collaborate(
     State(identity): State<RuntimeIdentity>,

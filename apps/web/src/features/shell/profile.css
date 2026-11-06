@@ -45,7 +45,40 @@
   font-size: var(--t-md);
   font-weight: var(--w-strong);
 }
+.profile__about {
+  display: grid;
+  gap: 14px;
+  padding: 18px 0 24px;
+  border-top: 1px solid var(--line);
+}
+.profile__about h3 {
+  font-size: var(--t-md);
+  font-weight: var(--w-strong);
+}
+.profile__about > div > p {
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+.profile__form {
+  gap: 14px;
+}
+.profile__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.profile__zone {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+.profile__zone > .field {
+  justify-self: stretch;
+}
 @media (max-width: 560px) {
+  .profile__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .profile__card {
     gap: 16px;
   }

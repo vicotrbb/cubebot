@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT profile AS \"profile: sqlx::types::Json<Profile>\" FROM human_accounts WHERE id = $1 AND active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile: sqlx::types::Json<Profile>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "07c52e9b03a5ccc17ac44a3569bf73eb82d4f02f41a2051c62614e3e984b1fc1"
+}

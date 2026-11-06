@@ -1257,6 +1257,24 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/me/profile': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** What the caller tells agents about themselves. */
+    get: operations['profile']
+    /** Replaces the caller's whole profile; agents that person reaches read it. */
+    put: operations['set_profile']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/oidc': {
     parameters: {
       query?: never
@@ -3373,6 +3391,36 @@ export interface components {
     Product: {
       id: string
       name: string
+    }
+    /** @description Every field is optional; empty means not given. */
+    Profile: {
+      /**
+       * @description Free text: what agents should know about them.
+       * @default
+       */
+      about: string
+      /**
+       * @description The language they want replies in.
+       * @default
+       */
+      language: string
+      /**
+       * @description What to call them, such as "Victor".
+       * @default
+       */
+      name: string
+      /** @default  */
+      pronouns: string
+      /**
+       * @description What they do, such as "Platform engineer".
+       * @default
+       */
+      role: string
+      /**
+       * @description An IANA zone such as `Europe/Lisbon`.
+       * @default
+       */
+      time_zone: string
     }
     Progress: {
       command: string
@@ -6450,6 +6498,54 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Preferences']
         }
+      }
+    }
+  }
+  profile: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Profile']
+        }
+      }
+    }
+  }
+  set_profile: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Profile']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Profile']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

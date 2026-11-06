@@ -94,6 +94,7 @@ impl Work {
         let instructions =
             super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
         let instructions = super::calls::spoken(instructions, on_call);
+        let instructions = crate::identity::profiles::introduced(tx, turn, instructions).await?;
         let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let mcp_servers = mcp_servers(tx, connections, actor).await;

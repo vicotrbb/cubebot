@@ -293,6 +293,7 @@ async fn start<P: Provider>(
     }
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
+    tools.extend(crate::people::definitions());
     tools.extend(crate::files::definitions(registry.is_some()));
     if turn.knowledge_base {
         tools.extend(crate::knowledge_base::definitions(registry.is_some()));

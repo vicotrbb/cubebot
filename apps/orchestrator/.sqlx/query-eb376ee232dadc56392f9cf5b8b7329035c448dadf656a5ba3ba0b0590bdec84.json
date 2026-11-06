@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT $1 = '' OR EXISTS(SELECT 1 FROM pg_timezone_names WHERE name = $1) AS \"known!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "known!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eb376ee232dadc56392f9cf5b8b7329035c448dadf656a5ba3ba0b0590bdec84"
+}

@@ -96,7 +96,8 @@ impl Skills {
             return crate::files::call(self.client.as_ref(), self.turn, name, id, input, tools)
                 .or_else(|| {
                     crate::knowledge_base::call(self.client.as_ref(), name, id, input, tools)
-                });
+                })
+                .or_else(|| crate::people::call(self.client.as_ref(), name, input));
         }
         let load = Load::deserialize(input)
             .ok()
