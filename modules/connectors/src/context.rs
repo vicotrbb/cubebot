@@ -299,6 +299,9 @@ fn message(body: &[u8]) -> String {
         &parsed["error_description"],
         &parsed["description"],
         &parsed["error"],
+        // GraphQL and Atlassian error bodies.
+        &parsed["errors"][0]["message"],
+        &parsed["errorMessages"][0],
     ];
     let text = candidates
         .into_iter()
