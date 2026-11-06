@@ -1,6 +1,9 @@
 {
   "config": {},
-  "credential": { "kind": "fields", "fields": { "token": "123456:TEST-token" } },
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "123456:TEST-token" }
+  },
   "account": "@cubebot_test_bot",
   "exchanges": [
     {

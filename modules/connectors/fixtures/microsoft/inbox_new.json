@@ -6,21 +6,33 @@
       "receivedDateTime": "2026-11-05T10:00:00Z",
       "subject": "Earlier",
       "bodyPreview": "Already seen.",
-      "from": { "emailAddress": { "name": "Megan Bowen", "address": "megan@contoso.com" } }
+      "from": {
+        "emailAddress": {
+          "name": "Megan Bowen",
+          "address": "megan@contoso.com"
+        }
+      }
     },
     {
       "id": "AAMkNew1",
       "receivedDateTime": "2026-11-05T10:00:00Z",
       "subject": "Quarterly report",
       "bodyPreview": "Attached is the report.",
-      "from": { "emailAddress": { "name": "Lee Gu", "address": "lee@contoso.com" } }
+      "from": {
+        "emailAddress": { "name": "Lee Gu", "address": "lee@contoso.com" }
+      }
     },
     {
       "id": "AAMkNew2",
       "receivedDateTime": "2026-11-05T10:05:00Z",
       "subject": "Re: Quarterly report",
       "bodyPreview": "Thanks!",
-      "from": { "emailAddress": { "name": "Adele Vance", "address": "adele@contoso.com" } }
+      "from": {
+        "emailAddress": {
+          "name": "Adele Vance",
+          "address": "adele@contoso.com"
+        }
+      }
     }
   ]
 }

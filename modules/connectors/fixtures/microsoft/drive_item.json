@@ -6,7 +6,10 @@
   "size": 4,
   "webUrl": "https://contoso-my.sharepoint.com/personal/adele/Documents/photo.png",
   "lastModifiedDateTime": "2026-11-01T09:12:00Z",
-  "file": { "mimeType": "image/png", "hashes": { "quickXorHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAA=" } },
+  "file": {
+    "mimeType": "image/png",
+    "hashes": { "quickXorHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAA=" }
+  },
   "parentReference": {
     "driveId": "b!-RIj2DuyvEyV1T4NlOaMHk8XkS",
     "id": "01BYE5RZ56Y2GOVW7725BZO354PWSELRRZ",

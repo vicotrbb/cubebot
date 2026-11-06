@@ -6,7 +6,10 @@
     "imap_port": "{port}",
     "security": "none"
   },
-  "credential": { "kind": "fields", "fields": { "password": "app-password-123" } },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "app-password-123" }
+  },
   "account": "ada@example.com",
   "script": [
     "S: * OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE LITERAL+ AUTH=PLAIN] Dovecot ready.",

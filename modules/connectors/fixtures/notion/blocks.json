@@ -7,7 +7,14 @@
       "type": "heading_2",
       "has_children": false,
       "heading_2": {
-        "rich_text": [{ "type": "text", "text": { "content": "Ingredients", "link": null }, "plain_text": "Ingredients", "href": null }],
+        "rich_text": [
+          {
+            "type": "text",
+            "text": { "content": "Ingredients", "link": null },
+            "plain_text": "Ingredients",
+            "href": null
+          }
+        ],
         "color": "default",
         "is_toggleable": false
       }
@@ -18,7 +25,14 @@
       "type": "bulleted_list_item",
       "has_children": false,
       "bulleted_list_item": {
-        "rich_text": [{ "type": "text", "text": { "content": "Kale", "link": null }, "plain_text": "Kale", "href": null }],
+        "rich_text": [
+          {
+            "type": "text",
+            "text": { "content": "Kale", "link": null },
+            "plain_text": "Kale",
+            "href": null
+          }
+        ],
         "color": "default"
       }
     },
@@ -28,7 +42,14 @@
       "type": "to_do",
       "has_children": false,
       "to_do": {
-        "rich_text": [{ "type": "text", "text": { "content": "Wash it", "link": null }, "plain_text": "Wash it", "href": null }],
+        "rich_text": [
+          {
+            "type": "text",
+            "text": { "content": "Wash it", "link": null },
+            "plain_text": "Wash it",
+            "href": null
+          }
+        ],
         "checked": true,
         "color": "default"
       }
@@ -40,8 +61,18 @@
       "has_children": false,
       "paragraph": {
         "rich_text": [
-          { "type": "text", "text": { "content": "Lacinato kale", "link": null }, "plain_text": "Lacinato kale", "href": null },
-          { "type": "text", "text": { "content": " is a variety of kale.", "link": null }, "plain_text": " is a variety of kale.", "href": null }
+          {
+            "type": "text",
+            "text": { "content": "Lacinato kale", "link": null },
+            "plain_text": "Lacinato kale",
+            "href": null
+          },
+          {
+            "type": "text",
+            "text": { "content": " is a variety of kale.", "link": null },
+            "plain_text": " is a variety of kale.",
+            "href": null
+          }
         ],
         "color": "default"
       }
@@ -51,7 +82,10 @@
       "id": "acc7eb06-05cd-4603-a384-5e1e4f1f4e74",
       "type": "image",
       "has_children": false,
-      "image": { "type": "external", "external": { "url": "https://example.com/kale.png" } }
+      "image": {
+        "type": "external",
+        "external": { "url": "https://example.com/kale.png" }
+      }
     }
   ],
   "next_cursor": null,

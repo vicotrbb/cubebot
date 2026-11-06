@@ -1,6 +1,9 @@
 {
   "config": {},
-  "credential": { "kind": "fields", "fields": { "token": "github_pat_secret" } },
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "github_pat_secret" }
+  },
   "account": "octocat",
   "exchanges": [
     {

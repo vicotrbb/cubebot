@@ -5,9 +5,7 @@
     {
       "id": "18c2f0a1b2c3d4e5",
       "threadId": "18c2f0a1b2c3d4e5",
-      "labelIds": [
-        "INBOX"
-      ],
+      "labelIds": ["INBOX"],
       "snippet": "Hi Victor",
       "payload": {
         "partId": "",
@@ -82,9 +80,7 @@
     {
       "id": "18c2f1ffeeddccbb",
       "threadId": "18c2f0a1b2c3d4e5",
-      "labelIds": [
-        "SENT"
-      ],
+      "labelIds": ["SENT"],
       "snippet": "Thanks Ana",
       "payload": {
         "partId": "",

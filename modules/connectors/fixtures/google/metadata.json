@@ -1,12 +1,7 @@
 {
   "id": "18c2f0a1b2c3d4e5",
   "threadId": "18c2f0a1b2c3d4e5",
-  "labelIds": [
-    "UNREAD",
-    "IMPORTANT",
-    "CATEGORY_PERSONAL",
-    "INBOX"
-  ],
+  "labelIds": ["UNREAD", "IMPORTANT", "CATEGORY_PERSONAL", "INBOX"],
   "snippet": "Hi Victor, the Q3 report is attached. Let me know what you think.",
   "payload": {
     "partId": "",

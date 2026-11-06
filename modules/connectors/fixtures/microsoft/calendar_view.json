@@ -14,10 +14,15 @@
         {
           "type": "required",
           "status": { "response": "none", "time": "0001-01-01T00:00:00Z" },
-          "emailAddress": { "name": "Alex Wilber", "address": "alex@contoso.com" }
+          "emailAddress": {
+            "name": "Alex Wilber",
+            "address": "alex@contoso.com"
+          }
         }
       ],
-      "organizer": { "emailAddress": { "name": "Dana Swope", "address": "dana@contoso.com" } },
+      "organizer": {
+        "emailAddress": { "name": "Dana Swope", "address": "dana@contoso.com" }
+      },
       "onlineMeeting": null
     }
   ]

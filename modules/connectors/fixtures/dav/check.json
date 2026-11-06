@@ -1,6 +1,13 @@
 {
-  "config": { "server": "other", "caldav_url": "{origin}dav/", "username": "victor" },
-  "credential": { "kind": "fields", "fields": { "password": "abcd-efgh-ijkl-mnop" } },
+  "config": {
+    "server": "other",
+    "caldav_url": "{origin}dav/",
+    "username": "victor"
+  },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "abcd-efgh-ijkl-mnop" }
+  },
   "account": "victor",
   "exchanges": [
     {

@@ -13,10 +13,7 @@
           "message": {
             "id": "18c2f0a1b2c3d4e5",
             "threadId": "18c2f0a1b2c3d4e5",
-            "labelIds": [
-              "UNREAD",
-              "INBOX"
-            ]
+            "labelIds": ["UNREAD", "INBOX"]
           }
         }
       ]

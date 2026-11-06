@@ -6,8 +6,17 @@
   "hasAttachments": true,
   "subject": "Lunch on Friday?",
   "webLink": "https://outlook.office365.com/owa/?ItemID=AAMkAD1&exvsurl=1&viewmodel=ReadMessageItem",
-  "body": { "contentType": "text", "content": "Shall we get pizza on Friday?\r\n" },
-  "from": { "emailAddress": { "name": "Megan Bowen", "address": "megan@contoso.com" } },
-  "toRecipients": [{ "emailAddress": { "name": "Adele Vance", "address": "adele@contoso.com" } }],
+  "body": {
+    "contentType": "text",
+    "content": "Shall we get pizza on Friday?\r\n"
+  },
+  "from": {
+    "emailAddress": { "name": "Megan Bowen", "address": "megan@contoso.com" }
+  },
+  "toRecipients": [
+    {
+      "emailAddress": { "name": "Adele Vance", "address": "adele@contoso.com" }
+    }
+  ],
   "ccRecipients": []
 }
