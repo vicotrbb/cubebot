@@ -199,9 +199,9 @@ def isolation(f, identity, other, evidence):
     )
     assert all(code == 0 for code, _ in control.values()), control
     turn = send(f, identity, probes(targets))
-    outcome(f, identity, turn)
+    done = outcome(f, identity, turn)
     call = called(f, turn, "/dev/tcp", finished=True)
-    assert call, "the probe command did not run"
+    assert call, ("the probe command did not run", done, tools(f, turn))
     results = reach(call["outcome"]["output"])
     assert set(results) == set(targets), results
     assert results["gateway"][0] == 0, results
