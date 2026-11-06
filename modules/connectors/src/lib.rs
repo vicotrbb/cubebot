@@ -10,6 +10,7 @@ mod registry;
 #[cfg(test)]
 mod testing;
 
+pub mod google;
 pub mod microsoft;
 pub mod notion;
 pub mod telegram;

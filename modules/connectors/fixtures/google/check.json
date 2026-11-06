@@ -1,0 +1,22 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "token",
+    "token": "ya29.fake"
+  },
+  "account": "victor@example.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/openidconnect.googleapis.com/v1/userinfo",
+      "body": {
+        "sub": "110169484474386276334",
+        "name": "Victor",
+        "given_name": "Victor",
+        "picture": "https://lh3.googleusercontent.com/a/photo.jpg",
+        "email": "victor@example.com",
+        "email_verified": true
+      }
+    }
+  ]
+}

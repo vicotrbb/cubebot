@@ -1,0 +1,20 @@
+{
+  "range": "Budget!A1:C3",
+  "majorDimension": "ROWS",
+  "values": [
+    [
+      "Item",
+      "Cost",
+      "Paid"
+    ],
+    [
+      "Laptop",
+      "1200",
+      "TRUE"
+    ],
+    [
+      "Desk",
+      "300"
+    ]
+  ]
+}

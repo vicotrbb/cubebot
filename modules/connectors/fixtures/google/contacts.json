@@ -1,0 +1,37 @@
+{
+  "results": [
+    {
+      "person": {
+        "resourceName": "people/c8723456789012345678",
+        "etag": "%EgcBAgkLLjc9GgQBAgUHIgxWZk1aeUZ6R3B1Yz0=",
+        "names": [
+          {
+            "metadata": {
+              "primary": true
+            },
+            "displayName": "Ana Souza",
+            "givenName": "Ana",
+            "familyName": "Souza"
+          }
+        ],
+        "emailAddresses": [
+          {
+            "metadata": {
+              "primary": true
+            },
+            "value": "ana@example.org"
+          }
+        ],
+        "phoneNumbers": [
+          {
+            "metadata": {
+              "primary": true
+            },
+            "value": "+55 11 91234-5678",
+            "type": "mobile"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "id": "18c2f0a1b2c3d4e5",
+  "threadId": "18c2f0a1b2c3d4e5",
+  "labelIds": [
+    "UNREAD",
+    "IMPORTANT",
+    "CATEGORY_PERSONAL",
+    "INBOX"
+  ],
+  "snippet": "Hi Victor, the Q3 report is attached. Let me know what you think.",
+  "payload": {
+    "partId": "",
+    "headers": [
+      {
+        "name": "Date",
+        "value": "Wed, 4 Nov 2026 14:03:11 -0300"
+      },
+      {
+        "name": "Subject",
+        "value": "Q3 report"
+      },
+      {
+        "name": "From",
+        "value": "Ana Souza <ana@example.org>"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<CAF=abc123@mail.gmail.com>"
+      }
+    ]
+  },
+  "sizeEstimate": 48211,
+  "historyId": "1002",
+  "internalDate": "1793811791000"
+}

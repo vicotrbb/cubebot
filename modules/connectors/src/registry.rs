@@ -1,9 +1,11 @@
 //! Every compiled-in connector. Adding one is its file and one line here.
 use crate::Connector;
 
+/// In the order the console lists them: the most useful first.
 static ALL: &[&dyn Connector] = &[
-    &crate::notion::Notion,
+    &crate::google::Google,
     &crate::microsoft::Microsoft,
+    &crate::notion::Notion,
     &crate::telegram::Telegram,
 ];
 
