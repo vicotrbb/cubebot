@@ -1,10 +1,7 @@
 {{- $policy := .Values.sandbox.networkPolicy }}
 {{- $controller := $policy.ingressController }}
-{{- if not $controller.podSelector }}
-{{- fail "sandbox.networkPolicy.ingressController.podSelector is required" }}
-{{- end }}
-# Sandboxes accept nothing and reach only DNS, the ingress controller, the outside and the private
-# destinations an administrator granted.
+# Sandboxes accept nothing and reach only DNS, the orchestrator's control port, the outside and
+# the private destinations an administrator granted.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -36,11 +33,20 @@ spec:
         - protocol: TCP
           port: 53
     - to:
+        - podSelector:
+            matchLabels:
+              app: orchestrator
+      ports:
+        - protocol: TCP
+          port: 8443
+    {{- if $controller.podSelector }}
+    - to:
         - namespaceSelector: {{- toYaml $controller.namespaceSelector | nindent 12 }}
           podSelector: {{- toYaml $controller.podSelector | nindent 12 }}
       ports:
         - protocol: TCP
           port: {{ $controller.port }}
+    {{- end }}
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -57,3 +63,50 @@ spec:
         {{- end }}
       {{- end }}
     {{- end }}
+---
+# The console API stays open to the ingress controller, wherever it runs; the control port takes
+# only sandboxes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: orchestrator
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: orchestrator
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: cubebot.dev/agent
+                operator: Exists
+      ports:
+        - protocol: TCP
+          port: 8443
+{{- if not .Values.externalDatabase.existingSecret }}
+---
+# Only the orchestrator talks to the bundled database.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: orchestrator
+      ports:
+        - protocol: TCP
+          port: 5432
+{{- end }}

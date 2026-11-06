@@ -169,6 +169,7 @@ def isolation(f, identity, other, evidence):
     database = address(f, "pod", "postgres-0")
     targets = {
         "gateway": f"{f.controller()}/{CONTROL_PORT}",
+        "orchestrator_console": f"{f.controller()}/8080",
         "sandbox": f"{other['status']['podIP']}/22",
         "database": f"{database}/5432",
         "database_service": f"{address(f, 'service', 'postgres')}/5432",
@@ -208,8 +209,8 @@ def isolation(f, identity, other, evidence):
         assert blocked(results[name]), (name, results[name])
     evidence["isolation"] = {"targets": targets, "guest": results, "control": control}
     print(
-        "PASS a guest reaches its gateway but not another sandbox, the database "
-        "or the Kubernetes API",
+        "PASS a guest reaches its gateway but not another sandbox, the console API, "
+        "the database or the Kubernetes API",
         flush=True,
     )
 

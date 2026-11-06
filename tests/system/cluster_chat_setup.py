@@ -14,10 +14,10 @@ import cluster_admission as admission
 
 NAMESPACE = "cubebot-chat"
 ORIGIN = "https://127.0.0.1:33443"
-# The fixture's ingress controller; sandboxes reach the orchestrator through it.
+# The fixture's ingress controller, in front of the console.
 TRAEFIK = "oci://ghcr.io/traefik/helm/traefik"
 TRAEFIK_VERSION = "41.7.1"
-CONTROL = "https://traefik.traefik.svc.cluster.local"
+# The orchestrator's control port, where sandboxes reach it directly.
 CONTROL_PORT = 8443
 RUNTIME = os.environ.get("CUBEBOT_SANDBOX_RUNTIME") or (
     "kvm" if os.path.exists("/dev/kvm") else "container"
@@ -67,21 +67,8 @@ class Fixture:
         return item
 
     def controller(self):
-        items = json.loads(
-            admission.kubectl(
-                self.config,
-                "-n",
-                "traefik",
-                "get",
-                "pods",
-                "-l",
-                "app.kubernetes.io/name=traefik",
-                "-o",
-                "json",
-            )
-        )
-        (item,) = items["items"]
-        return item["status"]["podIP"]
+        """Where sandboxes reach the orchestrator: its pod, on CONTROL_PORT."""
+        return self.platform("orchestrator")["status"]["podIP"]
 
     def sql(self, statement):
         return self.k(
@@ -165,7 +152,7 @@ def certificate(f):
         "basicConstraints=critical,CA:FALSE\nextendedKeyUsage=serverAuth\n"
         "keyUsage=critical,digitalSignature,keyEncipherment\n"
         "subjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n"
-        f"subjectAltName=IP:127.0.0.1,DNS:{CONTROL.removeprefix('https://')}\n"
+        "subjectAltName=IP:127.0.0.1\n"
     )
     admission.run(
         "openssl",
@@ -239,7 +226,7 @@ def ingress_controller(f):
 
 def setup(f, dns, **sandbox):
     """`sandbox` adds to the chart's sandbox values, e.g. terminalEnabled."""
-    ca = certificate(f)
+    certificate(f)
     ingress_controller(f)
     image = f.images["sandbox" if RUNTIME == "kvm" else "agent"]
     values = {
@@ -249,25 +236,14 @@ def setup(f, dns, **sandbox):
             "sandbox" if RUNTIME == "kvm" else "agent": image,
         },
         "publicOrigin": ORIGIN,
-        "controlOrigin": CONTROL,
-        "controlCA": ca,
+        # The orchestrator creates this administrator itself at its first start.
+        "admin": {"login": "admin", "password": f.password},
         "ingress": {"tlsSecret": "tls"},
         "storage": {"size": "2Gi"},
         "postgres": {"size": "2Gi"},
         "sandbox": {
             "runtime": RUNTIME,
             "dns": [dns],
-            "networkPolicy": {
-                "ingressController": {
-                    "namespaceSelector": {
-                        "matchLabels": {"kubernetes.io/metadata.name": "traefik"}
-                    },
-                    "podSelector": {
-                        "matchLabels": {"app.kubernetes.io/name": "traefik"}
-                    },
-                    "port": CONTROL_PORT,
-                }
-            },
             **sandbox,
         },
     }
@@ -282,17 +258,6 @@ def setup(f, dns, **sandbox):
         NAMESPACE,
         "--values",
         str(path),
-    )
-    f.k(
-        "exec",
-        "-i",
-        "deploy/orchestrator",
-        "--",
-        "/bin/sh",
-        "-c",
-        "read -r CUBEBOT_BOOTSTRAP_PASSWORD && export CUBEBOT_BOOTSTRAP_PASSWORD && "
-        "CUBEBOT_BOOTSTRAP_LOGIN=admin exec cubebot-admin bootstrap",
-        input=f.password + "\n",
     )
 
 

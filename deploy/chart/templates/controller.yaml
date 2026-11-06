@@ -12,12 +12,13 @@
   "connection" (dict "kind" "in_cluster")
   "sandbox_image" $image
   "runtime_service_account" "cubebot-runtime"
-  "orchestrator_origin" (required "controlOrigin is required" .Values.controlOrigin)
+  "orchestrator_origin" (printf "https://%s:8443" (include "cubebot.controlHost" .))
+  "control_ca_secret" (include "cubebot.controlSecret" .)
   "network" (dict "dns" (required "sandbox.dns is required" .Values.sandbox.dns))
   "runtime" $runtime
+  "sandbox_resources" .Values.sandbox.resources
   "terminal_enabled" .Values.sandbox.terminalEnabled
   "computer_use_enabled" .Values.sandbox.computerUseEnabled }}
-{{- with .Values.controlCA }}{{ $_ := set $config "control_ca_config_map" "control-ca" }}{{ end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -25,13 +26,3 @@ metadata:
   labels: {{- include "cubebot.labels" . | nindent 4 }}
 data:
   config.json: {{ toJson $config | quote }}
-{{- with .Values.controlCA }}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: control-ca
-  labels: {{- include "cubebot.labels" $ | nindent 4 }}
-data:
-  ca.crt: {{ . | quote }}
-{{- end }}

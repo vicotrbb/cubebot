@@ -33,18 +33,24 @@ spec:
       labels:
         app: orchestrator
         {{- include "cubebot.labels" . | nindent 8 }}
+      annotations:
+        # It reads its controller configuration once, at start.
+        checksum/controller: {{ include (print $.Template.BasePath "/controller.yaml") . | sha256sum }}
     spec:
       serviceAccountName: orchestrator
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
         fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         # The key leaves the Secret volume for a tmpfs only this user can read.
         - name: private-key
           image: {{ include "cubebot.image" (list $ "orchestrator") }}
           command: [/bin/sh, -c, umask 077; cp /source/key /private/key]
-          securityContext:
-            runAsUser: 65532
-            runAsGroup: 65532
+          securityContext: {{- include "cubebot.restricted" . | nindent 12 }}
           volumeMounts:
             - name: source-key
               mountPath: /source
@@ -54,14 +60,21 @@ spec:
       containers:
         - name: orchestrator
           image: {{ include "cubebot.image" (list $ "orchestrator") }}
-          securityContext:
-            runAsUser: 65532
-            runAsGroup: 65532
+          securityContext: {{- include "cubebot.restricted" . | nindent 12 }}
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
+            - name: control
+              containerPort: 8443
           env:
             - name: CUBEBOT_BIND_ADDR
               value: 0.0.0.0:8080
+            - name: CUBEBOT_CONTROL_BIND_ADDR
+              value: 0.0.0.0:8443
+            - name: CUBEBOT_CONTROL_TLS_CERT_FILE
+              value: /etc/cubebot/control/tls.crt
+            - name: CUBEBOT_CONTROL_TLS_KEY_FILE
+              value: /etc/cubebot/control/tls.key
             - name: CUBEBOT_PUBLIC_ORIGIN
               value: {{ required "publicOrigin is required" .Values.publicOrigin | quote }}
             - name: CUBEBOT_CONTROLLER_CONFIG
@@ -70,6 +83,27 @@ spec:
               value: /etc/credentials/key
             - name: CUBEBOT_STORAGE_DIRECTORY
               value: /var/lib/cubebot/files
+            {{- with .Values.storage.quotaBytes }}
+            - name: CUBEBOT_STORAGE_QUOTA_BYTES
+              value: {{ . | int64 | quote }}
+            {{- end }}
+            {{- with .Values.uploads.maxBytes }}
+            - name: CUBEBOT_UPLOAD_LIMIT_BYTES
+              value: {{ . | int64 | quote }}
+            {{- end }}
+            {{- with .Values.installationName }}
+            - name: CUBEBOT_INSTALLATION_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if or .Values.admin.password .Values.admin.existingSecret }}
+            - name: CUBEBOT_BOOTSTRAP_LOGIN
+              value: {{ required "admin.login is required with an admin password" .Values.admin.login | quote }}
+            - name: CUBEBOT_BOOTSTRAP_PASSWORD_FILE
+              value: /etc/cubebot/admin/password
+            {{- end }}
+            # The read-only root keeps no home; libraries that cache write here.
+            - name: HOME
+              value: /tmp
             - name: CUBEBOT_DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -87,6 +121,30 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.uid
+          # Migrations and proof that the previous orchestrator stopped run before it serves.
+          startupProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 120
+          livenessProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          # The database answers; a database outage takes it out of the Service, never restarts it.
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources: {{- toYaml .Values.orchestrator.resources | nindent 12 }}
           volumeMounts:
             - name: controller
               mountPath: /etc/controller
@@ -94,8 +152,18 @@ spec:
             - name: credentials
               mountPath: /etc/credentials
               readOnly: true
+            - name: control
+              mountPath: /etc/cubebot/control
+              readOnly: true
+            {{- if or .Values.admin.password .Values.admin.existingSecret }}
+            - name: admin
+              mountPath: /etc/cubebot/admin
+              readOnly: true
+            {{- end }}
             - name: shared-files
               mountPath: /var/lib/cubebot/files
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: controller
           configMap:
@@ -107,9 +175,30 @@ spec:
           secret:
             secretName: {{ include "cubebot.credentialsSecret" . }}
             defaultMode: 0440
+        - name: control
+          secret:
+            secretName: {{ include "cubebot.controlSecret" . }}
+            defaultMode: 0440
+            items:
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key
+        {{- if or .Values.admin.password .Values.admin.existingSecret }}
+        - name: admin
+          secret:
+            secretName: {{ include "cubebot.adminSecret" . }}
+            defaultMode: 0440
+            items:
+              - key: password
+                path: password
+        {{- end }}
         - name: shared-files
           persistentVolumeClaim:
             claimName: shared-files
+        - name: tmp
+          emptyDir:
+            sizeLimit: 1Gi
 ---
 apiVersion: v1
 kind: Service
@@ -120,4 +209,20 @@ spec:
   selector:
     app: orchestrator
   ports:
-    - port: 8080
+    - name: http
+      port: 8080
+      targetPort: http
+---
+# Sandboxes reach the orchestrator here, over TLS from the control certificate authority.
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestrator-control
+  labels: {{- include "cubebot.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: orchestrator
+  ports:
+    - name: control
+      port: 8443
+      targetPort: control

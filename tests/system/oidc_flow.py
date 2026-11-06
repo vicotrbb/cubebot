@@ -28,16 +28,16 @@ class Browser:
             NoRedirect(), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
         )
 
-    def request(self, path, value=None, origin=True):
+    def request(self, path, value=None, origin=True, method=None):
         url = path if path.startswith("http") else self.base + path
         headers = {}
         data = None
         if value is not None:
             data = json.dumps(value).encode()
             headers["Content-Type"] = "application/json"
-            if origin:
-                headers["Origin"] = self.base
-        request = urllib.request.Request(url, data=data, headers=headers)
+        if (value is not None or method) and origin:
+            headers["Origin"] = self.base
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
             response = self.opener.open(request, timeout=10)
         except urllib.error.HTTPError as error:
@@ -209,6 +209,86 @@ def exercise(environment, issuer, directory):
             )[0]
             == 200
         )
+    return password
+
+
+def operator(base, password):
+    browser = Browser(base)
+    login = {"login": "operator", "password": password}
+    assert browser.request("/api/identity/login", login)[0] == 200
+    return browser
+
+
+def exercise_console(environment, issuer, directory, password):
+    """Single sign-on set up in the console, applied without a restart."""
+    base = f"http://127.0.0.1:{unused_port()}"
+    key = Path(directory) / "credential.key"
+    key.write_bytes(secrets.token_bytes(32))
+    key.chmod(0o600)
+    env = environment | {
+        "CUBEBOT_DATABASE_URL": environment["CUBEBOT_TEST_DATABASE_URL"],
+        "CUBEBOT_BIND_ADDR": base.removeprefix("http://"),
+        "CUBEBOT_PUBLIC_ORIGIN": base,
+        "CUBEBOT_CREDENTIAL_KEY_FILE": str(key),
+    }
+    settings = "/api/identity/oidc/settings"
+    provider = {
+        "issuer": issuer.url,
+        "client_id": "cubebot-test",
+        "client_secret": issuer.client_secret,
+        "admit_subjects": ["console-member"],
+    }
+    issuer.subject = "console-member"
+    with running([str(BINARY)], ROOT, env) as process:
+        await_ready(process, base + "/api/health/ready")
+        assert Browser(base).request("/api/identity/oidc")[2] == {"enabled": False}
+        assert Browser(base).request("/api/identity/oidc/start", {})[0] == 404
+        admin = operator(base, password)
+        current = admin.request(settings)[2]
+        assert current["managed"] is False and current["enabled"] is False
+        assert current["redirect_uri"] == base + "/api/identity/oidc/callback"
+        assert current["can_store_secret"] is True
+        member = Browser(base)
+        assert member.request(settings, provider, method="PUT")[0] == 401
+        issuer.discovery_status = 500
+        assert admin.request(settings, provider, method="PUT")[0] == 503
+        issuer.discovery_status = 200
+        assert admin.request(settings)[2]["enabled"] is False
+        status, _, saved = admin.request(settings, provider, method="PUT")
+        assert status == 200, saved
+        assert saved["enabled"] is True and saved["has_client_secret"] is True
+        assert "client_secret" not in saved
+        assert Browser(base).request("/api/identity/oidc")[2] == {"enabled": True}
+        account = member.sign_in()
+        assert account["administrator"] is False
+    with running([str(BINARY)], ROOT, env) as process:
+        await_ready(process, base + "/api/health/ready")
+        # The stored provider and its encrypted secret outlive a restart.
+        assert member.request("/api/identity/me")[2] == account
+        assert Browser(base).sign_in() == account
+        admin = operator(base, password)
+        assert admin.request(settings, method="DELETE")[0] == 204
+        assert member.request("/api/identity/me")[0] == 401
+        assert Browser(base).request("/api/identity/oidc/start", {})[0] == 404
+    deployment = Path(directory) / "deployment.json"
+    deployment.write_text(
+        json.dumps(
+            {
+                "issuer": issuer.url,
+                "client_id": "cubebot-test",
+                "redirect_uri": base + "/api/identity/oidc/callback",
+            }
+        )
+    )
+    env["CUBEBOT_OIDC_CONFIG"] = str(deployment)
+    with running([str(BINARY)], ROOT, env) as process:
+        await_ready(process, base + "/api/health/ready")
+        admin = operator(base, password)
+        current = admin.request(settings)[2]
+        assert current["managed"] is True and current["enabled"] is True
+        assert admin.request(settings, provider, method="PUT")[0] == 409
+        assert admin.request(settings, method="DELETE")[0] == 409
+    issuer.subject = "employee-1"
 
 
 def check_domain_admission(base, issuer, password):
@@ -267,10 +347,12 @@ def check_oidc(environment):
     issuer = Issuer()
     try:
         with tempfile.TemporaryDirectory(prefix="cubebot-oidc-config-") as directory:
-            exercise(environment, issuer, directory)
+            password = exercise(environment, issuer, directory)
+            exercise_console(environment, issuer, directory, password)
     finally:
         issuer.close()
     print(
         "OIDC workflow passed: signed tokens, PKCE, browser binding, replay, "
-        "rotation, admission, linking, revocation, CSRF, restart, policy invalidation"
+        "rotation, admission, linking, revocation, CSRF, restart, policy invalidation, "
+        "console setup"
     )

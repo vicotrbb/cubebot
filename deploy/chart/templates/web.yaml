@@ -15,11 +15,42 @@ spec:
         {{- include "cubebot.labels" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        # The image's bun user.
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: web
           image: {{ include "cubebot.image" (list $ "web") }}
+          securityContext: {{- include "cubebot.restricted" . | nindent 12 }}
           ports:
-            - containerPort: 3000
+            - name: http
+              containerPort: 3000
+          # A static file: answering it needs neither the orchestrator nor a session.
+          livenessProbe:
+            httpGet:
+              path: /manifest.webmanifest
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /manifest.webmanifest
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources: {{- toYaml .Values.web.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: Service
@@ -30,4 +61,6 @@ spec:
   selector:
     app: web
   ports:
-    - port: 3000
+    - name: http
+      port: 3000
+      targetPort: http

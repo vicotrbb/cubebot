@@ -20,3 +20,23 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "cubebot.credentialsSecret" -}}
 {{- .Values.credentials.existingSecret | default "credentials" -}}
 {{- end -}}
+
+{{- define "cubebot.controlSecret" -}}
+{{- .Values.control.existingSecret | default "control-tls" -}}
+{{- end -}}
+
+{{- define "cubebot.adminSecret" -}}
+{{- .Values.admin.existingSecret | default "admin" -}}
+{{- end -}}
+
+{{- define "cubebot.controlHost" -}}
+{{- printf "orchestrator-control.%s.svc.%s" .Release.Namespace .Values.clusterDomain -}}
+{{- end -}}
+
+{{/* The restricted Pod Security profile for a container. */}}
+{{- define "cubebot.restricted" -}}
+allowPrivilegeEscalation: false
+readOnlyRootFilesystem: true
+capabilities:
+  drop: [ALL]
+{{- end -}}
