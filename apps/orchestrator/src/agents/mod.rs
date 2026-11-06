@@ -11,7 +11,7 @@ pub use status::AgentStatus;
 pub use wallpaper::{WALLPAPER_BYTES, content_type, wallpaper};
 pub mod runtime;
 pub mod sandbox;
-pub use definitions::{Accessory, Agent, AgentId, Avatar, CreateAgent, Eyes, Paint};
+pub use definitions::{Accessory, Agent, AgentId, Avatar, Color, CreateAgent, Eyes, Paint};
 pub use lifecycle::{LifecycleAction, LifecycleCommand};
 pub use revisions::{DefinitionRevision, IdlePolicy, UpdateAgent};
 use sqlx::PgPool;

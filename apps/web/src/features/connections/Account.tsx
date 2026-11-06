@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, LogIn, RotateCw, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure } from '../../api/client'
-import { useAgents } from '../../app/queries'
+import { notRetired, useAgents } from '../../app/queries'
 import {
   Alert,
   confirmAction,
@@ -241,9 +241,7 @@ function Access({
         agents: on ? [...granted, id] : granted.filter((agent) => agent !== id),
       },
     })
-  const live = (agents.data ?? []).filter(
-    (agent) => agent.desired_state !== 'retired',
-  )
+  const live = notRetired(agents.data)
   return (
     <section className="account__part">
       <div className="account__row">

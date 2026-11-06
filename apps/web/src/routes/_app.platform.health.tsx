@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { admin } from '../api/admin'
-import { useAgents, useInstallation } from '../app/queries'
+import { notRetired, useAgents, useInstallation } from '../app/queries'
+import type { AgentSummary } from '../api/types'
 import { Cube, moodOf } from '../components/Cube'
 import { sandboxLabel } from '../features/platform/sandbox'
 import '../features/platform/platform.css'
@@ -25,6 +26,9 @@ function Health() {
       return acc
     },
     {},
+  )
+  const retired = (agents.data ?? []).filter(
+    (agent) => agent.desired_state === 'retired',
   )
   return (
     <div className="platform">
@@ -61,54 +65,19 @@ function Health() {
           </dd>
         </dl>
         <h2 className="platform__h2">Agents</h2>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Agent</th>
-              <th>Activity</th>
-              <th>Desired</th>
-              <th className="num">Lanes</th>
-              <th>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.data?.map((agent) => (
-              <tr key={agent.id}>
-                <td>
-                  <span
-                    className="actions"
-                    style={{ gap: 8, flexWrap: 'nowrap' }}
-                  >
-                    <Cube
-                      agentId={agent.id}
-                      avatar={agent.avatar}
-                      mood={moodOf(agent)}
-                      size={20}
-                    />
-                    {agent.name}
-                  </span>
-                </td>
-                <td>
-                  <span className={`dot dot--${agent.activity}`} />{' '}
-                  {agent.activity}
-                </td>
-                <td>{agent.desired_state}</td>
-                <td className="num">{agent.task_lanes}</td>
-                <td className="num">
-                  <Link
-                    to="/agents/$agentId/status"
-                    params={{ agentId: agent.id }}
-                    className="small"
-                  >
-                    Status
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <AgentTable agents={notRetired(agents.data)} />
+        {retired.length > 0 && (
+          <details className="disclosure health__retired">
+            <summary>
+              Retired agents <span className="chip">{retired.length}</span>
+            </summary>
+            <p className="small muted">
+              Retired agents keep their history but no longer run or appear in
+              the sidebar.
+            </p>
+            <AgentTable agents={retired} />
+          </details>
+        )}
       </div>
       <aside className="platform__editor">
         <h2>Not covered here</h2>
@@ -117,5 +86,56 @@ function Health() {
         </p>
       </aside>
     </div>
+  )
+}
+
+function AgentTable({ agents }: { agents: AgentSummary[] }) {
+  if (agents.length === 0)
+    return <p className="small muted">No agents are running.</p>
+  return (
+    <table className="table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Activity</th>
+          <th>Desired</th>
+          <th className="num">Lanes</th>
+          <th>
+            <span className="sr-only">Actions</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {agents.map((agent) => (
+          <tr key={agent.id}>
+            <td>
+              <span className="actions" style={{ gap: 8, flexWrap: 'nowrap' }}>
+                <Cube
+                  agentId={agent.id}
+                  avatar={agent.avatar}
+                  mood={moodOf(agent)}
+                  size={20}
+                />
+                {agent.name}
+              </span>
+            </td>
+            <td>
+              <span className={`dot dot--${agent.activity}`} /> {agent.activity}
+            </td>
+            <td>{agent.desired_state}</td>
+            <td className="num">{agent.task_lanes}</td>
+            <td className="num">
+              <Link
+                to="/agents/$agentId/status"
+                params={{ agentId: agent.id }}
+                className="small"
+              >
+                Status
+              </Link>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }

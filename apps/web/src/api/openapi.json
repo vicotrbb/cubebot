@@ -5263,7 +5263,18 @@
       },
       "Accessory": {
         "type": "string",
-        "enum": ["none", "cap", "glasses", "bow", "antenna"]
+        "enum": [
+          "none",
+          "cap",
+          "glasses",
+          "bow",
+          "antenna",
+          "crown",
+          "headphones",
+          "sprout",
+          "party_hat",
+          "monocle"
+        ]
       },
       "Account": {
         "type": "object",
@@ -5997,6 +6008,17 @@
           "accessory": {
             "$ref": "#/components/schemas/Accessory"
           },
+          "color": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Color",
+                "description": "A custom paint chosen with the color picker; when set it replaces `paint` on the cube."
+              }
+            ]
+          },
           "eyes": {
             "$ref": "#/components/schemas/Eyes"
           },
@@ -6307,6 +6329,12 @@
             "description": "The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1)."
           }
         }
+      },
+      "Color": {
+        "type": "string",
+        "description": "An opaque `#rrggbb` color, stored lowercase.",
+        "example": "#3fa7a0",
+        "pattern": "^#[0-9a-f]{6}$"
       },
       "ConfigureProvider": {
         "type": "object",
@@ -6937,7 +6965,16 @@
       },
       "Eyes": {
         "type": "string",
-        "enum": ["round", "wide", "sleepy", "dot"]
+        "enum": [
+          "round",
+          "wide",
+          "sleepy",
+          "dot",
+          "happy",
+          "wink",
+          "star",
+          "heart"
+        ]
       },
       "Favorite": {
         "type": "object",
@@ -8201,7 +8238,11 @@
           "sky",
           "rose",
           "lemon",
-          "plum"
+          "plum",
+          "coral",
+          "mint",
+          "ocean",
+          "charcoal"
         ]
       },
       "Phase": {

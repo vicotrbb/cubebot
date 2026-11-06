@@ -2160,7 +2160,17 @@ export interface components {
       team_id?: null | components['schemas']['TeamId']
     }
     /** @enum {string} */
-    Accessory: 'none' | 'cap' | 'glasses' | 'bow' | 'antenna'
+    Accessory:
+      | 'none'
+      | 'cap'
+      | 'glasses'
+      | 'bow'
+      | 'antenna'
+      | 'crown'
+      | 'headphones'
+      | 'sprout'
+      | 'party_hat'
+      | 'monocle'
     Account: {
       administrator: boolean
       /** Format: uuid */
@@ -2433,6 +2443,7 @@ export interface components {
     /** @description The agent's cube; mood is derived from activity, never stored. */
     Avatar: {
       accessory: components['schemas']['Accessory']
+      color?: null | components['schemas']['Color']
       eyes: components['schemas']['Eyes']
       paint: components['schemas']['Paint']
     }
@@ -2570,6 +2581,11 @@ export interface components {
       /** @description The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1). */
       token: string
     }
+    /**
+     * @description An opaque `#rrggbb` color, stored lowercase.
+     * @example #3fa7a0
+     */
+    Color: string
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
       /** @description `None` keeps the key saved for this provider. A subscription has none: its owner signs in. */
@@ -2798,7 +2814,8 @@ export interface components {
       scope: components['schemas']['Scope']
     }
     /** @enum {string} */
-    Eyes: 'round' | 'wide' | 'sleepy' | 'dot'
+    Eyes:
+      'round' | 'wide' | 'sleepy' | 'dot' | 'happy' | 'wink' | 'star' | 'heart'
     Favorite: {
       /** Format: uuid */
       id: string
@@ -3325,7 +3342,18 @@ export interface components {
     }
     /** @enum {string} */
     Paint:
-      'orange' | 'sage' | 'paper' | 'wood' | 'sky' | 'rose' | 'lemon' | 'plum'
+      | 'orange'
+      | 'sage'
+      | 'paper'
+      | 'wood'
+      | 'sky'
+      | 'rose'
+      | 'lemon'
+      | 'plum'
+      | 'coral'
+      | 'mint'
+      | 'ocean'
+      | 'charcoal'
     /** @enum {string} */
     Phase: 'planned' | 'creating' | 'bound' | 'stopped'
     /** @description A new folder, or where a file goes: `parent` null or absent is the owner's top level. */

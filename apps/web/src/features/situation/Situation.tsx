@@ -11,7 +11,12 @@ import { useState } from 'react'
 import { admin } from '../../api/admin'
 import type { components } from '../../api/schema'
 import type { AgentSummary } from '../../api/types'
-import { useAgents, useInstallation, useSituation } from '../../app/queries'
+import {
+  notRetired,
+  useAgents,
+  useInstallation,
+  useSituation,
+} from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Empty, Skeleton, when } from '../../components/primitives'
 import { doingOf } from '../agent/doing'
@@ -43,7 +48,7 @@ export function Situation() {
         )}
         {situation.isPending && <Skeleton lines={6} width="60%" />}
         {situation.data && (
-          <Board data={situation.data} agents={agents.data ?? []} />
+          <Board data={situation.data} agents={notRetired(agents.data)} />
         )}
       </div>
     </div>

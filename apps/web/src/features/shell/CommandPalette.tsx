@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { Hash } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useAgents, useRooms, useSession } from '../../app/queries'
+import { notRetired, useAgents, useRooms, useSession } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { PLATFORM } from './Sidebar'
 
@@ -45,7 +45,7 @@ export function CommandPalette({
       void navigate({ to })
     }
     const all: Hit[] = [
-      ...(agents.data ?? []).map((agent) => ({
+      ...notRetired(agents.data).map((agent) => ({
         key: `a:${agent.id}`,
         label: agent.name,
         hint: 'Agent',

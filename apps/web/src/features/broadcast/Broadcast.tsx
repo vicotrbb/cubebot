@@ -6,7 +6,7 @@ import { ChevronLeft, Megaphone } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, ok } from '../../api/client'
 import type { AgentSummary, Session } from '../../api/types'
-import { keys, useAgents, useBroadcasts } from '../../app/queries'
+import { keys, notRetired, useAgents, useBroadcasts } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Empty, Skeleton, when } from '../../components/primitives'
@@ -38,9 +38,7 @@ export function Broadcast({ session }: { session: Session }) {
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
   const messages = feed.data?.messages
-  const live = (agents.data ?? []).filter(
-    (agent) => agent.desired_state !== 'retired',
-  )
+  const live = notRetired(agents.data)
   useMarkRead(feed.data)
   useEffect(() => {
     const element = scroller.current

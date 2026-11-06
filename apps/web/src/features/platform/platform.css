@@ -999,3 +999,12 @@
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.health__retired {
+  margin-top: 24px;
+  display: grid;
+  gap: 10px;
+}
+.health__retired > summary .chip {
+  margin-left: 2px;
+}

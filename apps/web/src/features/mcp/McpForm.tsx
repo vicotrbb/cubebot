@@ -1,7 +1,7 @@
 import { Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
-import { useAgents } from '../../app/queries'
+import { notRetired, useAgents } from '../../app/queries'
 import { Alert, Field } from '../../components/primitives'
 import { AccessChoice } from '../vault/InstallationVault'
 import type { McpServer, SaveMcpServer } from './McpServers'
@@ -105,9 +105,7 @@ export function McpForm({
       <AccessChoice
         legend="Which agents may use it"
         access={access}
-        agents={(agents.data ?? []).filter(
-          (agent) => agent.desired_state !== 'retired',
-        )}
+        agents={notRetired(agents.data)}
         onChange={setAccess}
       />
       <Alert>{error}</Alert>

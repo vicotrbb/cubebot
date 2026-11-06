@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use cubebot_orchestrator::{
-    agents::{Accessory, AgentId, Agents, Avatar, CreateAgent, Eyes, Paint},
+    agents::{Accessory, AgentId, Agents, Avatar, Color, CreateAgent, Eyes, Paint},
     identity::{
         Actor, Identity,
         access::{Capability, GrantRequest, Recipient, Scope},
@@ -57,8 +57,9 @@ async fn fixture() -> Fixture {
             "Ada",
             Some(Avatar {
                 paint: Paint::Sky,
-                eyes: Eyes::Wide,
-                accessory: Accessory::Glasses,
+                eyes: Eyes::Heart,
+                accessory: Accessory::PartyHat,
+                color: Some(Color::try_from("#3FA7A0".to_owned()).unwrap()),
             }),
         ),
         ("Bob", None),
@@ -164,7 +165,7 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     assert_eq!(ada.instructions, None);
     assert_eq!(
         serde_json::to_value(ada.avatar.0).unwrap(),
-        json!({"paint":"sky","eyes":"wide","accessory":"glasses"})
+        json!({"paint":"sky","eyes":"heart","accessory":"party_hat","color":"#3fa7a0"})
     );
     assert!(!ada.desktop_active && !ada.pending_login);
     assert_eq!((ada.last_sequence, ada.read_sequence), (0, 0));
@@ -181,6 +182,9 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     let bob = all.iter().find(|agent| agent.id == AgentId(f.bob)).unwrap();
     assert_eq!(bob.capabilities.len(), 9);
     assert_eq!(bob.avatar.paint, Paint::Orange);
+    assert_eq!(serde_json::to_value(bob.avatar.0).unwrap().get("color"), None);
+    assert!(Color::try_from("#12345g".to_owned()).is_err());
+    assert!(Color::try_from("123456".to_owned()).is_err());
     assert_eq!(bob.instructions.as_deref(), Some("You are Bob."));
 
     let (turn, sequence) = f.turn(f.ada, "running").await;
