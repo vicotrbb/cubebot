@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "cubebot-agent"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -633,7 +633,7 @@ dependencies = [
 
 [[package]]
 name = "cubebot-connectors"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "async-imap",
  "base64 0.22.1",
@@ -656,7 +656,7 @@ dependencies = [
 
 [[package]]
 name = "cubebot-orchestrator"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -691,7 +691,7 @@ dependencies = [
 
 [[package]]
 name = "cubebot-protocol"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "cubebot-providers"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "futures-util",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "cubebot-sandbox"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "cubebot-protocol",
  "nix",
