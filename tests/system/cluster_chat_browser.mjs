@@ -58,7 +58,7 @@ try {
       null,
       { timeout: 100000 },
     )
-    const reply = '.agent-message p.msg__text'
+    const reply = '.agent-message .msg__body > .md'
     const replies = await page.locator(reply).allTextContents()
     assert.equal(replies.length, 2)
     assert.match(replies[1], /cedar/i)
