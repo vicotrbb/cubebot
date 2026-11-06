@@ -4,6 +4,7 @@ Runs in CI and on any Docker host. Proves the container runtime boots and wires 
 is not agent qualification.
 """
 
+import http.server
 import json
 import os
 import secrets
@@ -11,6 +12,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -29,6 +31,7 @@ from docker_sandbox import (
     command,
     configure,
     live,
+    reachable,
     remove,
     sign_in,
     tool_calls,
@@ -74,7 +77,25 @@ def scripted(system, outputs):
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
 
+# A request through connected accounts: find the tools, call one, then look for the
+# credential from the tool user's shell, where it must not be.
+def connected(request, outputs):
+    steps = [
+        lambda: ("find_tools", {"query": "status-page get"}),
+        lambda: ("status-page__get", {"path": "/echo", "query": {}}),
+        lambda: ("bash", {"command": "env; ps -eo args"}),
+    ]
+    if "with-github" in request:
+        steps += [
+            lambda: ("find_tools", {"query": "github issue"}),
+            lambda: ("github__get_issue", {"repo": "rust-lang/rust", "number": 1}),
+        ]
+    return steps[len(outputs)]() if len(outputs) < len(steps) else None
+
+
 def step(request, outputs):
+    if "connections-" + MARKER in request:
+        return connected(request, outputs)
     if SCRIPT in request:
         return scripted(request, outputs)
     if MARKER in request and not outputs:
@@ -203,6 +224,117 @@ def openrouter_turn(api, postgres, identity, marker):
     api("/api/provider", provider)
     bash_turn(api, postgres, identity, marker)
     assert [p["provider"] for p in api("/api/provider/saved")] == ["openai"]
+
+
+class Echo(http.server.BaseHTTPRequestHandler):
+    """A service an HTTP API connection reaches; it answers with the header sent."""
+
+    seen = []
+
+    def do_GET(self):
+        Echo.seen.append(self.headers.get("Authorization", ""))
+        body = json.dumps({"authorization": self.headers.get("Authorization")})
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body.encode())
+
+    def log_message(self, *_):
+        pass
+
+
+def connections_turn(api, postgres, identity, marker, database):
+    """A connection's tools run in the agent with a credential bash never sees."""
+    echo = http.server.HTTPServer((bridge(), 0), Echo)
+    threading.Thread(target=echo.serve_forever, daemon=True).start()
+    secret = "echo-" + secrets.token_hex(12)
+    origin = f"http://{bridge()}:{echo.server_port}/"
+    made = api(
+        "/api/connections",
+        {
+            "connector": "http-api",
+            "slug": "status-page",
+            "auth": "api_key",
+            "config": {"base_url": origin, "allowed_paths": ["/echo"]},
+            "secrets": {"token": secret},
+        },
+    )
+    assert made["status"] == "connected", made
+    # The orchestrator checked it from the host; the agent names the host differently.
+    container_origin = reachable(origin)
+    if container_origin != origin:
+        moved = json.dumps(container_origin)
+        update = (
+            f"UPDATE connections SET config = config || '{{\"base_url\": {moved}}}'"
+        )
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                postgres,
+                "psql",
+                "-U",
+                "cubebot",
+                "-d",
+                "cubebot_test",
+                "-c",
+                update,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+    github = os.environ.get("CUBEBOT_CHECK_GITHUB_TOKEN")
+    if github:
+        made = api(
+            "/api/connections",
+            {
+                "connector": "github",
+                "slug": "github",
+                "auth": "api_key",
+                "secrets": {"token": github},
+            },
+        )
+        assert made["status"] == "connected", made
+    request = f"Check the status page, connections-{marker}" + (
+        " with-github" if github else ""
+    )
+    path = f"/api/conversations/{identity}/messages"
+    turn = api(path, command(message=request), expected=202)["id"]
+    wait_for("the connections turn", lambda: finished(api, identity, turn), timeout=180)
+    calls = tool_calls(postgres, turn)
+    found, called, shell = calls[0], calls[1], calls[2]
+    assert "status-page__get" in json.dumps(found["outcome"]), found
+    assert called["outcome"]["code"] == 0, called
+    assert "[credential]" in json.dumps(called["outcome"]), called
+    # The orchestrator's check when it was saved, then the agent's own call.
+    assert Echo.seen == [f"Bearer {secret}"] * 2, Echo.seen
+    journal = subprocess.run(
+        [
+            "docker",
+            "exec",
+            postgres,
+            "psql",
+            "-U",
+            "cubebot",
+            "-d",
+            "cubebot_test",
+            "-Atc",
+            "SELECT string_agg(payload::text, '') FROM turn_events "
+            f"WHERE turn_id = '{turn}'",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert secret not in journal and secret not in json.dumps(shell), (
+        "a credential leaked"
+    )
+    if github:
+        issue = calls[4]
+        assert issue["outcome"]["code"] == 0 and github not in journal, issue
+        print("PASS an agent read a real GitHub issue through its connection")
+    echo.shutdown()
 
 
 def stand_in(name, marker):
@@ -361,6 +493,11 @@ def qualify(directory: Path, network):
                 print(
                     "PASS an agent shared a file by login and wrote the knowledge base"
                 )
+                connections_turn(api, postgres, identity, marker, database)
+                print(
+                    "PASS an agent found and called a connection tool with a credential"
+                )
+                print("     that the model, the journal and the tool user never saw")
                 openrouter_turn(api, postgres, identity, marker)
                 print("PASS one turn through the OpenRouter adapter")
             except BaseException:
