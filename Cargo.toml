@@ -5,6 +5,7 @@ members = [
     "apps/sandbox",
     "modules/protocol",
     "modules/providers",
+    "modules/connectors",
 ]
 resolver = "3"
 
