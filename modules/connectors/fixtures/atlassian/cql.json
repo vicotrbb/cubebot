@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "content": {
+        "id": "98306",
+        "type": "page",
+        "status": "current",
+        "title": "2027 roadmap"
+      },
+      "title": "@@@hl@@@2027 roadmap@@@endhl@@@",
+      "excerpt": "What we ship next year: the @@@hl@@@roadmap@@@endhl@@@ for the sandbox",
+      "url": "/spaces/ENG/pages/98306/2027+roadmap",
+      "resultGlobalContainer": {
+        "title": "Engineering",
+        "displayUrl": "/spaces/ENG"
+      },
+      "entityType": "content",
+      "lastModified": "2026-11-04T18:00:00.000Z",
+      "friendlyLastModified": "yesterday at 6:00 PM",
+      "score": 1.5
+    }
+  ],
+  "start": 0,
+  "limit": 1,
+  "size": 1,
+  "totalSize": 3,
+  "cqlQuery": "type = page AND text ~ \"roadmap\"",
+  "searchDuration": 42,
+  "_links": {
+    "base": "https://acme.atlassian.net/wiki",
+    "context": "/wiki",
+    "next": "/rest/api/search?next=true&cursor=_sa_WyJcdDk4MzA2&limit=1&cql=type+%3D+page+AND+text+~+%22roadmap%22"
+  }
+}

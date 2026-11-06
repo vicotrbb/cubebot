@@ -1,0 +1,17 @@
+{
+  "expand": "transitions",
+  "transitions": [
+    {
+      "id": "21",
+      "name": "Start review",
+      "to": { "id": "10001", "name": "In Review" },
+      "isAvailable": true
+    },
+    {
+      "id": "31",
+      "name": "Resolve",
+      "to": { "id": "10002", "name": "Done" },
+      "isAvailable": true
+    }
+  ]
+}

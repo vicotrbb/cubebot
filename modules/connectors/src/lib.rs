@@ -11,11 +11,14 @@ mod settings;
 #[cfg(test)]
 mod testing;
 
+pub mod asana;
+pub mod atlassian;
 pub mod dav;
 pub mod email;
 pub mod github;
 pub mod google;
 pub mod http_api;
+pub mod linear;
 pub mod microsoft;
 pub mod notion;
 pub mod slack;

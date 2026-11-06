@@ -1,0 +1,43 @@
+{
+  "issues": [
+    {
+      "expand": "",
+      "id": "10006",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10006",
+      "key": "PROJ-7",
+      "fields": {
+        "summary": "Checkout fails on Safari",
+        "status": {
+          "name": "In Progress",
+          "statusCategory": { "key": "indeterminate" }
+        },
+        "assignee": {
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "displayName": "Victor Bona"
+        },
+        "priority": { "name": "High" },
+        "issuetype": { "name": "Bug" },
+        "updated": "2026-11-05T09:12:44.512+0000"
+      }
+    },
+    {
+      "expand": "",
+      "id": "10003",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10003",
+      "key": "PROJ-4",
+      "fields": {
+        "summary": "Write the release notes",
+        "status": { "name": "To Do", "statusCategory": { "key": "new" } },
+        "assignee": {
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "displayName": "Victor Bona"
+        },
+        "priority": { "name": "Medium" },
+        "issuetype": { "name": "Task" },
+        "updated": "2026-11-02T14:00:00.000+0000"
+      }
+    }
+  ],
+  "nextPageToken": "CAEaAggD",
+  "isLast": false
+}

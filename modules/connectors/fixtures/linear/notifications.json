@@ -1,0 +1,35 @@
+{
+  "data": {
+    "notifications": {
+      "nodes": [
+        {
+          "id": "7f0d3c52-9a1e-4c55-8f0e-2b6f2d1c9a01",
+          "type": "issueCommentMention",
+          "createdAt": "2026-11-05T10:15:00.000Z",
+          "actor": { "name": "Ada Lovelace" },
+          "issue": {
+            "identifier": "ENG-123",
+            "title": "Login fails on Safari",
+            "url": "https://linear.app/acme/issue/ENG-123/login-fails-on-safari"
+          },
+          "comment": {
+            "body": "@victor can you take a look?",
+            "url": "https://linear.app/acme/issue/ENG-123/login-fails-on-safari#comment-5e1a"
+          }
+        },
+        {
+          "id": "3b9e8a10-4c2d-4f6a-9d7e-1a2b3c4d5e6f",
+          "type": "issueAssignedToYou",
+          "createdAt": "2026-11-05T09:00:00.000Z",
+          "actor": { "name": "Grace Hopper" },
+          "issue": {
+            "identifier": "ENG-118",
+            "title": "Session expires too early",
+            "url": "https://linear.app/acme/issue/ENG-118/session-expires-too-early"
+          },
+          "comment": null
+        }
+      ]
+    }
+  }
+}
