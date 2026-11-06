@@ -1,0 +1,43 @@
+{
+  "config": { "url": "{origin}" },
+  "credential": {
+    "kind": "fields",
+    "fields": {
+      "app_token": "gtfya.-mxrJv0Tr1glsErM3scFC8sdkdJjPSPebYExxsGZ2kI",
+      "client_token": "gtfyc.7jrATKDQ4TfED5Gyn-O1Xji_d1qhczdbSjMu5muj64U"
+    }
+  },
+  "account": "admin on Gotify 3.1.1",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/version",
+      "body": {
+        "version": "3.1.1",
+        "commit": "e6361caa512547052b1013dbf4544e6d7ff32604",
+        "buildDate": "2026-09-15-18:26:53"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/message",
+      "status": 400,
+      "body": {
+        "error": "Bad Request",
+        "errorCode": 400,
+        "errorDescription": "json: cannot unmarshal string into Go struct field CreateMessage.priority of type int"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/current/user",
+      "body": {
+        "id": 1,
+        "name": "admin",
+        "admin": true,
+        "createdAt": "2026-11-06T20:07:53.262858333Z",
+        "clientId": 1
+      }
+    }
+  ]
+}

@@ -300,10 +300,14 @@ fn message(body: &[u8]) -> String {
         &parsed["description"],
         // Django REST framework's, such as Readwise's.
         &parsed["detail"],
+        // Gotify's, whose `error` is only the status's name.
+        &parsed["errorDescription"],
         &parsed["error"],
         // GraphQL and Atlassian error bodies.
         &parsed["errors"][0]["message"],
         &parsed["errorMessages"][0],
+        // Pushover's.
+        &parsed["errors"][0],
     ];
     let text = candidates
         .into_iter()
