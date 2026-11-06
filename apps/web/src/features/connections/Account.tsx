@@ -130,9 +130,7 @@ export function Account({
               <RotateCw className={busy === 'test' ? 'spin' : undefined} />
               {busy === 'test' ? 'Testing…' : 'Test connection'}
             </button>
-            {(vendor ||
-              (connection.status === 'sign_in_again' &&
-                connection.auth !== 'public')) && (
+            {(vendor || replaceable(connection)) && (
               <button
                 type="button"
                 className="btn btn--sm"
@@ -411,4 +409,9 @@ function Events({
       )}
     </section>
   )
+}
+
+/** A refused credential can be pasted again; a public connection has none. */
+function replaceable(connection: Connection) {
+  return connection.status === 'sign_in_again' && connection.auth !== 'public'
 }
