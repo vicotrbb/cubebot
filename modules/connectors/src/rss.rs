@@ -254,8 +254,12 @@ pub(crate) fn html_text(html: &str) -> String {
             .collect();
         if matches!(name.as_str(), "script" | "style") && !tag.starts_with('/') {
             let end = format!("</{name}");
-            let lower = rest.to_ascii_lowercase();
-            rest = lower.find(&end).map_or("", |at| &rest[at..]);
+            // Searched without copying the rest, so many script tags stay linear in the input.
+            let at = rest
+                .as_bytes()
+                .windows(end.len())
+                .position(|window| window.eq_ignore_ascii_case(end.as_bytes()));
+            rest = at.map_or("", |at| &rest[at..]);
         } else if matches!(
             name.as_str(),
             "br" | "p" | "div" | "li" | "tr" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
@@ -279,7 +283,8 @@ fn entities(text: &str) -> String {
     while let Some(at) = rest.find('&') {
         out.push_str(&rest[..at]);
         rest = &rest[at..];
-        let end = rest.find(';').filter(|end| *end <= 10);
+        // Only the next few bytes can end an entity; looking further is quadratic on `&&&…`.
+        let end = rest.bytes().take(11).position(|b| b == b';');
         let decoded = end.and_then(|end| entity(&rest[1..end]));
         match (end, decoded) {
             (Some(end), Some(c)) => {
@@ -641,6 +646,16 @@ mod tests {
         assert_eq!(after[short(RELEASES)], "0011aabb");
         assert_eq!(after[short(TWIR)].as_str().unwrap().len(), 16);
         fixture.finish().await;
+    }
+
+    #[test]
+    fn hostile_html_is_read_in_linear_time() {
+        let started = std::time::Instant::now();
+        let scripts = "<script></script>".repeat(100_000);
+        let ampersands = "&".repeat(2_000_000);
+        assert_eq!(html_text(&scripts), "");
+        assert_eq!(html_text(&ampersands).len(), 2_000_000);
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 
     #[test]

@@ -73,10 +73,17 @@ static MANIFEST: Manifest = Manifest {
         },
         ToolSpec {
             name: "call_service",
-            description: "Run an action such as light.turn_on or lock.unlock on entities, with its data. Answers the states it changed.",
+            description: "Run an action such as light.turn_on or lock.unlock on entities, with its data. Answers the states it changed. Notifications go through send_notification.",
             risk: Risk::Write,
             product: None,
             input: r#"{"type":"object","properties":{"service":{"type":"string","description":"domain.service, such as light.turn_on."},"entity_id":{"type":"array","items":{"type":"string"},"description":"The entities to act on."},"data":{"type":"object","description":"The action's other fields, such as {\"brightness_pct\": 40}."}},"required":["service"],"additionalProperties":false}"#,
+        },
+        ToolSpec {
+            name: "send_notification",
+            description: "Send a message through a notify action, such as a push to someone's phone with mobile_app_pixel.",
+            risk: Risk::Send,
+            product: None,
+            input: r#"{"type":"object","properties":{"target":{"type":"string","description":"The notify action's name without notify., such as mobile_app_pixel."},"message":{"type":"string"},"title":{"type":"string"}},"required":["target","message"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "history",
@@ -162,6 +169,7 @@ impl Connector for HomeAssistant {
                 "list_states" => list(cx, input).await,
                 "read_state" => read(cx, input).await,
                 "call_service" => call(cx, input).await,
+                "send_notification" => notify(cx, input).await,
                 "history" => history(cx, input).await,
                 _ => Err(Error::UnknownTool),
             }
@@ -258,9 +266,50 @@ async fn read(cx: &Context, input: Value) -> Result<Value, Error> {
     Ok(shown)
 }
 
+/// Actions `call_service` refuses: these reach people, which is `send_notification`'s (a `Send`
+/// tool), or administer the server itself and cannot be undone.
+const REFUSED: &[&str] = &[
+    "notify.",
+    "tts.",
+    "recorder.",
+    "shell_command.",
+    "hassio.",
+    "homeassistant.restart",
+    "homeassistant.stop",
+];
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Notify {
+    target: String,
+    message: String,
+    title: Option<String>,
+}
+
+async fn notify(cx: &Context, input: Value) -> Result<Value, Error> {
+    let notify: Notify = crate::input(input)?;
+    let service = checked(&format!("notify.{}", notify.target), "notify action")?;
+    let mut body = json!({"message": notify.message});
+    if let Some(title) = notify.title {
+        body["title"] = json!(title);
+    }
+    let path = format!("services/{}", service.replacen('.', "/", 1));
+    cx.json(api(cx, Method::POST, &path)?.json(&body)).await?;
+    Ok(json!({"sent": service}))
+}
+
 async fn call(cx: &Context, input: Value) -> Result<Value, Error> {
     let call: Call = crate::input(input)?;
-    let service = checked(&call.service, "service")?.replacen('.', "/", 1);
+    let service = checked(&call.service, "service")?;
+    if let Some(refused) = REFUSED
+        .iter()
+        .find(|refused| service.starts_with(**refused))
+    {
+        return Err(Error::Forbidden(format!(
+            "{refused} actions are not offered here; notifications go through send_notification"
+        )));
+    }
+    let service = service.replacen('.', "/", 1);
     let mut body = call.data.unwrap_or_default();
     if !call.entity_id.is_empty() {
         for id in &call.entity_id {
@@ -435,6 +484,59 @@ mod tests {
         assert_eq!(
             sent,
             json!({"note": 1, "entity_id": ["input_boolean.guest_mode"]})
+        );
+    }
+
+    #[tokio::test]
+    async fn notifications_are_their_own_send_tool_and_call_service_refuses_them() {
+        let fixture = Fixture::start(vec![Exchange::new(
+            "POST",
+            "/api/services/notify/mobile_app_pixel",
+            200,
+            json!([]),
+        )])
+        .await;
+        let cx = cx(&fixture, json!([]));
+        let sent = HomeAssistant
+            .call(
+                &cx,
+                "send_notification",
+                json!({"target": "mobile_app_pixel", "message": "Door open", "title": "Home"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(sent["sent"], "notify.mobile_app_pixel");
+        for service in [
+            "notify.mobile_app_pixel",
+            "tts.speak",
+            "recorder.purge",
+            "homeassistant.restart",
+        ] {
+            let refused = HomeAssistant
+                .call(&cx, "call_service", json!({"service": service}))
+                .await;
+            assert!(matches!(refused, Err(Error::Forbidden(_))), "{service}");
+        }
+        let bad = HomeAssistant
+            .call(
+                &cx,
+                "send_notification",
+                json!({"target": "../config", "message": "x"}),
+            )
+            .await;
+        assert!(matches!(bad, Err(Error::Invalid(_))));
+        let seen = fixture.finish().await;
+        assert_eq!(
+            seen[0].json(),
+            json!({"message": "Door open", "title": "Home"})
+        );
+        assert_eq!(
+            HomeAssistant
+                .manifest()
+                .tool("send_notification")
+                .unwrap()
+                .risk,
+            Risk::Send
         );
     }
 
