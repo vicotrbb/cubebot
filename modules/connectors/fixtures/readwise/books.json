@@ -1,0 +1,39 @@
+{
+  "count": 3,
+  "next": "https://readwise.io/api/v2/books/?page=2&page_size=2&category=books",
+  "previous": null,
+  "results": [
+    {
+      "id": 1776,
+      "title": "Range",
+      "author": "David Epstein",
+      "category": "books",
+      "source": "kindle",
+      "num_highlights": 2,
+      "last_highlight_at": "2026-11-02T18:30:00Z",
+      "updated": "2026-11-02T18:30:00Z",
+      "cover_image_url": "https://images-na.ssl-images-amazon.com/images/I/41dGFbVJcbL._SL75_.jpg",
+      "highlights_url": "https://readwise.io/bookreview/1776",
+      "source_url": null,
+      "asin": "B07H4N5D41",
+      "tags": [],
+      "document_note": ""
+    },
+    {
+      "id": 1777,
+      "title": "Deep Work",
+      "author": "Cal Newport",
+      "category": "books",
+      "source": "kindle",
+      "num_highlights": 14,
+      "last_highlight_at": "2026-11-01T09:00:00Z",
+      "updated": "2026-11-01T09:00:00Z",
+      "cover_image_url": "https://images-na.ssl-images-amazon.com/images/I/41dGFbVJcbM._SL75_.jpg",
+      "highlights_url": "https://readwise.io/bookreview/1777",
+      "source_url": null,
+      "asin": "B00X47ZVXM",
+      "tags": [],
+      "document_note": ""
+    }
+  ]
+}

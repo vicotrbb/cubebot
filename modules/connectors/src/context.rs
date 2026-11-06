@@ -298,6 +298,8 @@ fn message(body: &[u8]) -> String {
         &parsed["message"],
         &parsed["error_description"],
         &parsed["description"],
+        // Django REST framework's, such as Readwise's.
+        &parsed["detail"],
         &parsed["error"],
         // GraphQL and Atlassian error bodies.
         &parsed["errors"][0]["message"],

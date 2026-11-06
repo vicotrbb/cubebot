@@ -1,0 +1,11 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "rw-test-token-1234" }
+  },
+  "account": "Readwise",
+  "exchanges": [
+    { "method": "GET", "path": "/readwise.io/api/v2/auth/", "status": 204 }
+  ]
+}
