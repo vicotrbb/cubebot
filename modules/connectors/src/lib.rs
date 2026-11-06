@@ -15,9 +15,12 @@ pub mod dav;
 pub mod email;
 pub mod github;
 pub mod google;
+pub mod home_assistant;
 pub mod http_api;
 pub mod microsoft;
+pub mod nextcloud;
 pub mod notion;
+pub mod paperless;
 pub mod slack;
 pub mod telegram;
 

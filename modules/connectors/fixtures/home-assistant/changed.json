@@ -1,0 +1,15 @@
+[
+  {
+    "entity_id": "input_boolean.guest_mode",
+    "state": "on",
+    "attributes": { "editable": true, "friendly_name": "Guest mode" },
+    "last_changed": "2026-11-06T02:04:22.660825+00:00",
+    "last_reported": "2026-11-06T02:04:22.660825+00:00",
+    "last_updated": "2026-11-06T02:04:22.660825+00:00",
+    "context": {
+      "id": "01M6Q9K4QNT6TCAV8AP848SHBN",
+      "parent_id": null,
+      "user_id": "66ff7dff982b4c03a6d2c91110382454"
+    }
+  }
+]

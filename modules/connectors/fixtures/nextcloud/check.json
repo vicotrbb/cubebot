@@ -1,0 +1,17 @@
+{
+  "config": { "url": "{origin}cloud", "username": "admin" },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx" }
+  },
+  "account": "admin",
+  "exchanges": [
+    {
+      "method": "PROPFIND",
+      "path": "/cloud/remote.php/dav/files/admin/",
+      "status": 207,
+      "raw": "<?xml version=\"1.0\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:s=\"http://sabredav.org/ns\" xmlns:oc=\"http://owncloud.org/ns\" xmlns:nc=\"http://nextcloud.org/ns\"><d:response><d:href>/cloud/remote.php/dav/files/admin/</d:href><d:propstat><d:prop><d:displayname>admin</d:displayname><d:getlastmodified>Fri, 06 Nov 2026 02:03:19 GMT</d:getlastmodified><d:resourcetype><d:collection/></d:resourcetype><oc:size>65646129</oc:size></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat><d:propstat><d:prop><d:getcontenttype/></d:prop><d:status>HTTP/1.1 404 Not Found</d:status></d:propstat></d:response></d:multistatus>\n",
+      "headers": [["content-type", "application/xml; charset=utf-8"]]
+    }
+  ]
+}

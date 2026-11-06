@@ -1,0 +1,41 @@
+{
+  "config": { "url": "{origin}" },
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "0123456789abcdef0123456789abcdef01234567" }
+  },
+  "account": "admin",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api/ui_settings/",
+      "body": {
+        "user": {
+          "id": 2,
+          "username": "admin",
+          "is_staff": true,
+          "is_superuser": true,
+          "groups": []
+        },
+        "settings": {
+          "update_checking": { "backend_setting": "default" },
+          "trash_delay": 30,
+          "version": "3.4.2",
+          "app_title": null,
+          "app_logo": null,
+          "auditlog_enabled": true,
+          "remote_ocr": { "configured": false, "mode": "always" },
+          "email_enabled": false,
+          "ai_enabled": false
+        },
+        "permissions": [
+          "view_correspondent",
+          "change_applicationconfiguration",
+          "view_socialaccount",
+          "change_documenttype",
+          "add_permission"
+        ]
+      }
+    }
+  ]
+}

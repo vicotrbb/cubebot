@@ -298,6 +298,7 @@ fn message(body: &[u8]) -> String {
         &parsed["message"],
         &parsed["error_description"],
         &parsed["description"],
+        &parsed["detail"],
         &parsed["error"],
     ];
     let text = candidates
