@@ -6,8 +6,10 @@ static ALL: &[&dyn Connector] = &[
     &crate::email::Email,
     &crate::google::Google,
     &crate::microsoft::Microsoft,
+    &crate::dav::Dav,
     &crate::github::Github,
     &crate::notion::Notion,
+    &crate::slack::Slack,
     &crate::telegram::Telegram,
     &crate::http_api::HttpApi,
 ];

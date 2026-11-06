@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "channels": [
+    {
+      "id": "D0C0F7S8Y",
+      "created": 1498500348,
+      "is_im": true,
+      "is_org_shared": false,
+      "user": "U0BS9U4SV",
+      "is_user_deleted": false,
+      "priority": 0
+    }
+  ],
+  "response_metadata": {
+    "next_cursor": ""
+  }
+}

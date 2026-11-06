@@ -10,12 +10,14 @@ mod registry;
 #[cfg(test)]
 mod testing;
 
+pub mod dav;
 pub mod email;
 pub mod github;
 pub mod google;
 pub mod http_api;
 pub mod microsoft;
 pub mod notion;
+pub mod slack;
 pub mod telegram;
 
 pub use context::{Context, Credential, FILE, file, input};
