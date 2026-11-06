@@ -10,7 +10,9 @@ mod registry;
 #[cfg(test)]
 mod testing;
 
+pub mod github;
 pub mod google;
+pub mod http_api;
 pub mod microsoft;
 pub mod notion;
 pub mod telegram;

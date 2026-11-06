@@ -5,8 +5,10 @@ use crate::Connector;
 static ALL: &[&dyn Connector] = &[
     &crate::google::Google,
     &crate::microsoft::Microsoft,
+    &crate::github::Github,
     &crate::notion::Notion,
     &crate::telegram::Telegram,
+    &crate::http_api::HttpApi,
 ];
 
 pub fn all() -> &'static [&'static dyn Connector] {

@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "node_id": "MDEyOklzc3VlQ29tbWVudDE=",
+    "url": "https://api.github.com/repos/octocat/Hello-World/issues/comments/1",
+    "html_url": "https://github.com/octocat/Hello-World/issues/1347#issuecomment-1",
+    "body": "Me too",
+    "user": { "login": "octocat", "id": 1, "type": "User" },
+    "created_at": "2011-04-14T16:00:49Z",
+    "updated_at": "2011-04-14T16:00:49Z",
+    "issue_url": "https://api.github.com/repos/octocat/Hello-World/issues/1347",
+    "author_association": "COLLABORATOR"
+  },
+  {
+    "id": 2,
+    "node_id": "MDEyOklzc3VlQ29tbWVudDI=",
+    "url": "https://api.github.com/repos/octocat/Hello-World/issues/comments/2",
+    "html_url": "https://github.com/octocat/Hello-World/issues/1347#issuecomment-2",
+    "body": "Fixed in the next release.",
+    "user": { "login": "hubot", "id": 2, "type": "User" },
+    "created_at": "2011-04-15T09:12:01Z",
+    "updated_at": "2011-04-15T09:12:01Z",
+    "issue_url": "https://api.github.com/repos/octocat/Hello-World/issues/1347",
+    "author_association": "MEMBER"
+  }
+]

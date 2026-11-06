@@ -1,0 +1,6 @@
+{
+  "config": { "base_url": "{origin}api/" },
+  "credential": { "kind": "fields", "fields": { "token": "api-secret" } },
+  "account": "127.0.0.1",
+  "exchanges": [{ "method": "GET", "path": "/api/", "body": { "ok": true } }]
+}

@@ -1,0 +1,15 @@
+{
+  "total_count": 1,
+  "repositories": [
+    {
+      "id": 1296269,
+      "node_id": "MDEwOlJlcG9zaXRvcnkxMjk2MjY5",
+      "name": "cubebot",
+      "full_name": "vicotrbb/cubebot",
+      "owner": { "login": "vicotrbb", "id": 1, "type": "User" },
+      "private": true,
+      "html_url": "https://github.com/vicotrbb/cubebot",
+      "default_branch": "main"
+    }
+  ]
+}
