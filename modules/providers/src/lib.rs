@@ -254,6 +254,13 @@ async fn send(request: RequestBuilder) -> Result<Response, Error> {
     }
     eprintln!("Provider HTTP failure: status={status}");
     Err(match status {
+        // A malformed request's reason names the field; authentication errors can echo the key.
+        400 => {
+            if let Ok(body) = json(response).await {
+                eprintln!("Provider refused the request: {}", body["error"]["message"]);
+            }
+            Error::Rejected
+        }
         429 => {
             let delay = retry_after(&response);
             match json(response).await {

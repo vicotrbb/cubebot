@@ -173,11 +173,12 @@ fn body(request: &Request) -> Result<Value, Error> {
         body["tools"] = request
             .tools
             .iter()
-            .map(|tool| {
+            .zip(strict_within_limits(request.tools))
+            .map(|(tool, strict)| {
                 if tool.computer {
                     json!({"type":"computer_toolset_20260801","configs":unserved()})
                 } else {
-                    json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":tool.strict})
+                    json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":strict})
                 }
             })
             .collect();
@@ -188,6 +189,69 @@ fn body(request: &Request) -> Result<Value, Error> {
         };
     }
     Ok(body)
+}
+
+/// The API refuses a request with more than 20 strict tools, or 24 optional or 16 union
+/// parameters across their schemas; tools past those limits are sent advisory.
+fn strict_within_limits(tools: &[crate::Tool]) -> Vec<bool> {
+    let mut spent = Cost::default();
+    tools
+        .iter()
+        .map(|tool| {
+            if !tool.strict || tool.computer {
+                return false;
+            }
+            let next = spent.add(&cost(&tool.parameters));
+            let fits = next.tools <= 20 && next.optional <= 24 && next.unions <= 16;
+            if fits {
+                spent = next;
+            }
+            fits
+        })
+        .collect()
+}
+
+#[derive(Default)]
+struct Cost {
+    tools: usize,
+    optional: usize,
+    unions: usize,
+}
+
+impl Cost {
+    fn add(&self, other: &Cost) -> Cost {
+        Cost {
+            tools: self.tools + 1,
+            optional: self.optional + other.optional,
+            unions: self.unions + other.unions,
+        }
+    }
+    fn merge(&mut self, other: Cost) {
+        self.optional += other.optional;
+        self.unions += other.unions;
+    }
+}
+
+fn cost(schema: &Value) -> Cost {
+    let mut total = Cost::default();
+    match schema {
+        Value::Object(node) => {
+            if node.get("anyOf").is_some() || node.get("type").is_some_and(Value::is_array) {
+                total.unions += 1;
+            }
+            if let Some(Value::Object(properties)) = node.get("properties") {
+                let required = node.get("required").and_then(Value::as_array);
+                total.optional += properties
+                    .keys()
+                    .filter(|name| !required.is_some_and(|names| names.iter().any(|n| n == *name)))
+                    .count();
+            }
+            node.values().for_each(|child| total.merge(cost(child)));
+        }
+        Value::Array(items) => items.iter().for_each(|child| total.merge(cost(child))),
+        _ => {}
+    }
+    total
 }
 
 fn tool_use(block: &Value) -> Result<crate::FunctionCall, Error> {
@@ -372,5 +436,66 @@ impl Messages {
             reply: reply(text, calls, Value::Array(std::mem::take(&mut self.blocks)))?,
             usage,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Tool;
+
+    fn tool(name: String, parameters: Value) -> Tool {
+        Tool {
+            name,
+            description: String::new(),
+            parameters,
+            strict: true,
+            computer: false,
+        }
+    }
+
+    fn sent(tools: &[Tool]) -> Vec<Value> {
+        let request = Request {
+            model: "claude-sonnet-5-5",
+            key: "",
+            system: "",
+            messages: &[],
+            tools,
+            tools_disabled: false,
+            max_output_tokens: Some(1),
+        };
+        body(&request).unwrap()["tools"].as_array().unwrap().clone()
+    }
+
+    #[test]
+    fn strict_tools_stay_within_the_api_limits() {
+        let union = json!({"type":"object","properties":{"a":{"type":["string","null"]}},"required":["a"],"additionalProperties":false});
+        let optional = json!({"type":"object","properties":{"a":{"type":"string"},"b":{"type":"string"}},"additionalProperties":false});
+        let tools: Vec<Tool> = (0..46)
+            .map(|index| match index % 3 {
+                0 => tool(format!("union{index}"), union.clone()),
+                1 => tool(format!("optional{index}"), optional.clone()),
+                _ => tool(format!("plain{index}"), json!({"type":"object"})),
+            })
+            .collect();
+        let sent = sent(&tools);
+        assert_eq!(sent.len(), 46);
+        let strict: Vec<&Value> = sent.iter().filter(|tool| tool["strict"] == true).collect();
+        assert_eq!(strict.len(), 20);
+        let named = |prefix: &str| {
+            strict
+                .iter()
+                .filter(|tool| tool["name"].as_str().unwrap().starts_with(prefix))
+                .count()
+        };
+        assert!(named("union") <= 16);
+        assert!(named("optional") * 2 <= 24);
+        assert_eq!(sent[0]["strict"], true);
+    }
+
+    #[test]
+    fn a_few_strict_tools_are_all_sent_strict() {
+        let tools = vec![tool("one".into(), json!({"type":"object"}))];
+        assert_eq!(sent(&tools)[0]["strict"], true);
     }
 }
