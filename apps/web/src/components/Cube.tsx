@@ -97,6 +97,17 @@ export function paintOf(
   }
 }
 
+function cubeClasses(
+  paint: string,
+  mood: Mood,
+  follow: boolean,
+  className: string | undefined,
+) {
+  return ['cube', paint, `cube--${mood}`]
+    .concat(follow ? 'cube--follow' : [], className ?? [])
+    .join(' ')
+}
+
 export function Cube({
   avatar = DEFAULT_AVATAR,
   mood = 'idle',
@@ -117,9 +128,7 @@ export function Cube({
   const look = avatar ?? DEFAULT_AVATAR
   const paint = paintOf(look, mood === 'retired')
   const eyes = mood === 'retired' ? null : look.eyes
-  const classes = ['cube', paint.classes, `cube--${mood}`]
-    .concat(follow ? 'cube--follow' : [], className ?? [])
-    .join(' ')
+  const classes = cubeClasses(paint.classes, mood, follow, className)
   return (
     <div
       ref={ref}

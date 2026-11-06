@@ -15,7 +15,7 @@ import {
 import { applyTheme, type Theme } from '../app/theme'
 import { PersonAvatar } from '../components/PersonAvatar'
 import { Alert } from '../components/primitives'
-import { AboutYou, useProfile } from '../features/shell/AboutYou'
+import { AboutYou, useDisplayName } from '../features/shell/AboutYou'
 import '../features/shell/profile.css'
 
 export const Route = createFileRoute('/_app/you')({ component: You })
@@ -33,9 +33,7 @@ function You() {
   const save = useSavePreferences()
   const navigate = useNavigate()
   const theme = preferences.data?.theme ?? 'system'
-  const profile = useProfile()
-  const name =
-    profile.data?.name || session.data?.name || session.data?.login || 'You'
+  const name = useDisplayName()
   return (
     <div className="page">
       <header className="page__head">

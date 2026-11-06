@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
+import { useSession } from '../../app/queries'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
 
 type Profile = components['schemas']['Profile']
@@ -14,6 +15,15 @@ export function useProfile() {
     queryKey: PROFILE_KEY,
     queryFn: () => ok(api.GET('/api/identity/me/profile')),
   })
+}
+
+/** The name a person chose for agents, else their sign-in name. */
+export function useDisplayName() {
+  const profile = useProfile()
+  const session = useSession()
+  return (
+    profile.data?.name || session.data?.name || session.data?.login || 'You'
+  )
 }
 
 /** The profile agents read: who you are, when you are, and how you like to work. */
