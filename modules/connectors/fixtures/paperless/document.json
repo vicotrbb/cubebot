@@ -1,0 +1,35 @@
+{
+  "id": 2,
+  "correspondent": null,
+  "document_type": null,
+  "storage_path": null,
+  "title": "Tax assessment 2025",
+  "content": "Tax assessment 2025 Amount 1234 EUR",
+  "tags": [3],
+  "created": "2026-11-06",
+  "created_date": "2026-11-06",
+  "modified": "2026-11-06T02:11:04.232815Z",
+  "added": "2026-11-06T02:11:04.130566Z",
+  "deleted_at": null,
+  "archive_serial_number": null,
+  "original_file_name": "tax.pdf",
+  "archived_file_name": "2026-11-06 Tax assessment 2025.pdf",
+  "duplicate_documents": [],
+  "owner": 2,
+  "user_can_change": true,
+  "is_shared_by_requester": false,
+  "notes": [],
+  "custom_fields": [],
+  "page_count": 1,
+  "mime_type": "application/pdf",
+  "root_document": null,
+  "versions": [
+    {
+      "id": 2,
+      "added": "2026-11-06T02:11:04.130566Z",
+      "version_label": null,
+      "checksum": "03dda576c4ebaf55d9fbddee799c8b5834785fbe4263b8c349dbed7b303ca59b",
+      "is_root": true
+    }
+  ]
+}

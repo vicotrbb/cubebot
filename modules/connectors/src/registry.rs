@@ -23,6 +23,9 @@ static ALL: &[&dyn Connector] = &[
     &crate::readwise::Readwise,
     &crate::rss::Rss,
     &crate::calendly::Calendly,
+    &crate::home_assistant::HomeAssistant,
+    &crate::nextcloud::Nextcloud,
+    &crate::paperless::Paperless,
 ];
 
 pub fn all() -> &'static [&'static dyn Connector] {
