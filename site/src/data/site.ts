@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.2'
+export const version = 'v0.2.3'
 export const released = '2026-11-06'
 
 export const docs = {
@@ -134,6 +134,19 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.3',
+    date: '2026-11-06',
+    title: 'Data, notifications, MiniMax and profiles',
+    items: [
+      'SQL databases, S3-compatible storage and SFTP as connections',
+      'ntfy, Pushover and Gotify notifications',
+      'MiniMax with a pay-as-you-go key or a personal M Plan key',
+      'Profiles agents read, and daily budgets beside monthly ones',
+      'More cube paints, eyes and accessories, and any color you pick',
+      'A clearer agent Access tab; retired agents move to Health',
+    ],
+  },
   {
     tag: 'v0.2.2',
     date: '2026-11-06',
