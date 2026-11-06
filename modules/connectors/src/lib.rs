@@ -11,7 +11,9 @@ mod settings;
 #[cfg(test)]
 mod testing;
 
+pub mod cal_com;
 pub mod dav;
+pub mod dropbox;
 pub mod email;
 pub mod github;
 pub mod google;
@@ -19,7 +21,9 @@ pub mod http_api;
 pub mod microsoft;
 pub mod notion;
 pub mod slack;
+pub mod stripe;
 pub mod telegram;
+pub mod zoom;
 
 pub use context::{ATTACH, Attachment, Context, Credential, FILE, LARGEST, file, input};
 pub use manifest::{

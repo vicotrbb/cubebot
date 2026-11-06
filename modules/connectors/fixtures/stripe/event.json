@@ -1,0 +1,24 @@
+{
+  "id": "evt_2",
+  "object": "event",
+  "api_version": "2025-03-31.basil",
+  "created": 1680800510,
+  "data": {
+    "object": {
+      "id": "pi_3MtwBwLkdIwHu7ix28a3tqPa",
+      "object": "payment_intent",
+      "amount": 2000,
+      "amount_received": 2000,
+      "created": 1680800504,
+      "currency": "usd",
+      "customer": "cus_NffrFeUfNV2Hib",
+      "description": "Rocket ride",
+      "last_payment_error": null,
+      "status": "succeeded"
+    }
+  },
+  "livemode": false,
+  "pending_webhooks": 0,
+  "request": { "id": "req_6cF9UIIM5Ycj8T", "idempotency_key": null },
+  "type": "payment_intent.succeeded"
+}

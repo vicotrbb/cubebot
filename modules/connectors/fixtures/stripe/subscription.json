@@ -1,0 +1,33 @@
+{
+  "id": "sub_1MowQVLkdIwHu7ixeRlqHVzs",
+  "object": "subscription",
+  "billing_cycle_anchor": 1679609767,
+  "cancel_at_period_end": false,
+  "collection_method": "charge_automatically",
+  "created": 1679609767,
+  "currency": "usd",
+  "customer": "cus_NffrFeUfNV2Hib",
+  "items": {
+    "object": "list",
+    "data": [
+      {
+        "id": "si_Na6dzxczY5fwHx",
+        "object": "subscription_item",
+        "current_period_end": 1699999999,
+        "current_period_start": 1697407999,
+        "price": {
+          "id": "price_1MowQULkdIwHu7ixraBm864M",
+          "object": "price",
+          "currency": "usd",
+          "product": "prod_Na6dGcTsmU0I4R",
+          "recurring": { "interval": "month", "interval_count": 1 },
+          "unit_amount": 1000
+        },
+        "quantity": 1
+      }
+    ],
+    "has_more": false
+  },
+  "livemode": false,
+  "status": "active"
+}

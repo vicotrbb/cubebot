@@ -1,0 +1,34 @@
+{
+  "config": {},
+  "credential": { "kind": "token", "token": "sl.dropbox-token" },
+  "account": "franz@dropbox.com",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/api.dropboxapi.com/2/users/get_current_account",
+      "body": {
+        "account_id": "dbid:AAH4f99T0taONIb-OurWxbNQ6ywGRopQngc",
+        "account_type": { ".tag": "basic" },
+        "country": "US",
+        "disabled": false,
+        "email": "franz@dropbox.com",
+        "email_verified": true,
+        "is_paired": false,
+        "locale": "en",
+        "name": {
+          "abbreviated_name": "FF",
+          "display_name": "Franz Ferdinand (Personal)",
+          "familiar_name": "Franz",
+          "given_name": "Franz",
+          "surname": "Ferdinand"
+        },
+        "referral_link": "https://db.tt/ZITNuhtI",
+        "root_info": {
+          ".tag": "user",
+          "home_namespace_id": "3235641",
+          "root_namespace_id": "3235641"
+        }
+      }
+    }
+  ]
+}

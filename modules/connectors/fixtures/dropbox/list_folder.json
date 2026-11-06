@@ -1,0 +1,26 @@
+{
+  "cursor": "ZtkX9_EHj3x7PMkVuFIhwKYXEpwpLwyxp9vMKomUhllil9q7eWiAu",
+  "entries": [
+    {
+      ".tag": "file",
+      "client_modified": "2015-05-12T15:50:38Z",
+      "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "id": "id:a4ayc_80_OEAAAAAAAAAXw",
+      "is_downloadable": true,
+      "name": "Prime_Numbers.txt",
+      "path_display": "/Homework/math/Prime_Numbers.txt",
+      "path_lower": "/homework/math/prime_numbers.txt",
+      "rev": "a1c10ce0dd78",
+      "server_modified": "2015-05-12T15:50:38Z",
+      "size": 7212
+    },
+    {
+      ".tag": "folder",
+      "id": "id:a4ayc_80_OEAAAAAAAAAXz",
+      "name": "math",
+      "path_display": "/Homework/math",
+      "path_lower": "/homework/math"
+    }
+  ],
+  "has_more": true
+}

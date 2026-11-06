@@ -1,0 +1,26 @@
+{
+  "assistant_id": "kFFvsJc-Q1OSxaJQLvaa_A",
+  "host_email": "jchill@example.com",
+  "id": 85746065432,
+  "registration_url": "https://example.com/meeting/register/7ksAkRCoEpt1Jm0wa-E6lICLur9e7Lde5oW6",
+  "agenda": "Quarterly planning",
+  "created_at": "2022-03-25T07:29:29Z",
+  "duration": 60,
+  "join_url": "https://example.com/j/85746065432?pwd=8uQ0k0ZsWnp1Rm9aTFFoSVpqdz09",
+  "password": "123456",
+  "pmi": "97891943927",
+  "pre_schedule": false,
+  "settings": {
+    "auto_recording": "cloud",
+    "host_video": true,
+    "join_before_host": false,
+    "mute_upon_entry": false,
+    "waiting_room": true
+  },
+  "start_time": "2022-03-25T07:29:29Z",
+  "status": "waiting",
+  "timezone": "America/Los_Angeles",
+  "topic": "My Meeting",
+  "type": 2,
+  "uuid": "aDYlohsHRtCd4ii1uC2+hA=="
+}
