@@ -244,12 +244,8 @@ impl Controller {
     }
 }
 fn report(agent: AgentId, outcome: Result<Result<(), Error>, tokio::time::error::Elapsed>) {
-    match outcome {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => {
-            tracing::warn!(agent = %agent.0, ?error, "agent lifecycle reconciliation held or failed");
-        }
-        Err(_) => tracing::warn!(agent = %agent.0, "agent lifecycle reconciliation timed out"),
+    if let Err(error) = outcome.map_err(|_| Error::DeadlineExceeded).flatten() {
+        tracing::warn!(agent = %agent.0, ?error, "agent lifecycle reconciliation held or failed");
     }
 }
 fn credentials(runtime: RuntimeIdentity) -> Result<RuntimeIdentity, Error> {
