@@ -1,0 +1,118 @@
+---
+import Cube from './Cube.astro'
+import BrandMark from './BrandMark.astro'
+import type { Connector } from '../data/connectors'
+
+interface Props {
+  connector: Connector
+}
+const { connector: c } = Astro.props
+const text = [c.name, c.summary, c.category, ...(c.products ?? []), ...c.tools]
+  .join(' ')
+  .toLowerCase()
+const live = c.tested === 'live'
+---
+
+<li class="cblock" data-category={c.category} data-text={text}>
+  <a href={`/integrations/${c.slug}/`}>
+    <span class="cblock__stand" aria-hidden="true">
+      <span class="cblock__cube">
+        <Cube size={58} tone={live ? 'orange' : 'wood'} paint={!live} contact>
+          <span slot="face" class="sticker">
+            <BrandMark slug={c.slug} />
+          </span>
+        </Cube>
+      </span>
+      <span class="slab cblock__plank"></span>
+    </span>
+    <strong>{c.name}</strong>
+    <span class="cblock__summary">{c.summary}</span>
+    <span class="cblock__meta">
+      <span>{c.tools.length} tools</span>
+      {c.events.length > 0 && <span>{c.events.length === 1 ? '1 event' : `${c.events.length} events`}</span>}
+      {c.selfHosted && <span>Self-hosted</span>}
+      <span class="visually-hidden">
+        {live ? 'Tested against the live service.' : 'Tested against recorded responses.'}
+      </span>
+    </span>
+  </a>
+</li>
+
+<style>
+  .cblock a {
+    display: grid;
+    align-content: start;
+    gap: 6px;
+    height: 100%;
+    padding: 0 14px 8px;
+    text-decoration: none;
+  }
+  .cblock__stand {
+    display: grid;
+    justify-items: center;
+    margin-inline: -14px;
+    margin-bottom: 12px;
+  }
+  .sticker {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 66%;
+    height: 66%;
+    border-radius: 18%;
+    background: var(--paper);
+    box-shadow:
+      inset 0 -2px 0 var(--paper-deep),
+      0 2px 3px rgb(var(--shadow) / 0.25);
+  }
+  .sticker :global(svg) {
+    width: 64%;
+    height: 64%;
+  }
+  .cblock__cube {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    height: 78px;
+    margin-bottom: -10px;
+    transition: translate 0.25s var(--settle);
+  }
+  .cblock__plank {
+    width: 100%;
+  }
+  .cblock__plank::before,
+  .cblock__plank::after {
+    border-radius: 0;
+  }
+  .cblock a:hover .cblock__cube {
+    translate: 0 -8px;
+  }
+  .cblock a:hover :global(.cube) {
+    --ry: 6deg;
+  }
+  .cblock strong {
+    font-size: 1.12rem;
+    font-weight: 800;
+    letter-spacing: -0.015em;
+  }
+  .cblock a:hover strong {
+    text-decoration: underline;
+    text-decoration-color: var(--orange);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.18em;
+  }
+  .cblock__summary {
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    line-height: 1.45;
+  }
+  .cblock__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+</style>

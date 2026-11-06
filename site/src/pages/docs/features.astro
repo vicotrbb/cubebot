@@ -1,0 +1,105 @@
+---
+import Doc from '../../layouts/Doc.astro'
+import Icon from '../../components/Icon.astro'
+import { connectors } from '../../data/connectors'
+import { status } from '../../data/site'
+---
+
+<Doc
+  title="Feature tour · Cubebot"
+  description="Everything Cubebot agents and the console can do today: sandboxes, desktop takeover, memory and dreams, rooms, tasks, routines, 27 connectors, voice calls, access control and budgets."
+  heading="Feature tour"
+  lede="What runs today, in plain words. Everything on this page has run in automated tests or real installs; what has not is listed at the end."
+  tones={['sage', 'orange', 'paper']}
+>
+  <Fragment slot="actions">
+    <a class="btn" href="/download/"><span>Install Cubebot</span></a>
+    <a class="link" href="/integrations/">See all {connectors.length} connectors <Icon name="arrow" /></a>
+  </Fragment>
+  <h2 id="agents">Agents that last</h2>
+  <ul>
+    <li><strong>One permanent conversation.</strong> No sessions to lose. Long histories are summarized automatically when the model's context fills up.</li>
+    <li><strong>Always on.</strong> An agent keeps its sandbox running and sleeps while idle. Any message, routine or call wakes it.</li>
+    <li><strong>A workspace that stays.</strong> Its files live on a persistent volume that survives restarts, upgrades and a replaced sandbox.</li>
+    <li><strong>A journal before every action.</strong> Each tool call is written down before it runs. After a crash, unfinished calls are shown as uncertain instead of being run again blindly.</li>
+    <li><strong>Steer or stop mid-turn.</strong> Send a correction while it works and it applies it at the next safe point. Cancelling also stops everything it delegated.</li>
+    <li><strong>Parallel lanes.</strong> Besides its main conversation, an agent can work up to four delegated tasks at once.</li>
+  </ul>
+
+  <h2 id="computer">A computer of its own</h2>
+  <ul>
+    <li><strong>Terminal and files.</strong> A real Linux shell with Python, Node, git and build tools, plus reading, writing and editing files. Full output is kept for a week.</li>
+    <li><strong>Browser and desktop.</strong> Chromium on a full desktop, driven through the page's accessibility tree or by native computer use with Anthropic and OpenAI models. Logins persist.</li>
+    <li><strong>Take over at any time.</strong> Watch the desktop live, take the mouse and keyboard, hand it back, and the agent looks again before it continues.</li>
+    <li><strong>Login hand-off.</strong> When a site needs you, the agent asks; you sign in or type the one-time code yourself.</li>
+    <li><strong>A vault it cannot read.</strong> Passwords and secrets are typed into the page for the agent. The model never sees them.</li>
+  </ul>
+
+  <h2 id="memory">Memory, dreams and skills</h2>
+  <ul>
+    <li><strong>One memory per agent.</strong> Shared by every room and task. It saves what matters at the end of a turn, and you can search, edit or delete any memory in the console.</li>
+    <li><strong>Dreams.</strong> While idle, an agent consolidates and corrects its memories and may write a new skill. Every dream leaves a report you can read.</li>
+    <li><strong>A shared skill library.</strong> Skills are folders with a <code>SKILL.md</code>, revisioned and installed per agent. People, agents and dreams can all write them. A skill never grants permissions.</li>
+    <li><strong>A knowledge base.</strong> One wiki for people and agents, with a block editor, Mermaid diagrams, version history and trash.</li>
+  </ul>
+
+  <h2 id="together">Working together</h2>
+  <ul>
+    <li><strong>Rooms.</strong> Chat with several agents. Mention one by name, or let a coordinator pick who should answer.</li>
+    <li><strong>Delegation.</strong> Agents hand work to each other and wait for the results, up to four levels deep.</li>
+    <li><strong>Tasks.</strong> Describe what you want done. The orchestrator picks agents, writes each a brief and a checklist, and tracks the plan until it is finished or needs you.</li>
+    <li><strong>Broadcast.</strong> One message to every agent, each answering in its own conversation.</li>
+  </ul>
+
+  <h2 id="routines">Routines</h2>
+  <ul>
+    <li><strong>On a schedule</strong> with cron (UTC), <strong>on demand</strong>, <strong>from a webhook</strong> with its own secret, or <strong>on an account event</strong> like new mail or an assigned issue.</li>
+    <li>A routine is a prompt, a shell command, or both. A command alone runs without calling the model at all.</li>
+    <li>Agents can create and manage their own routines, up to 32 each.</li>
+  </ul>
+
+  <h2 id="connections">Connections</h2>
+  <ul>
+    <li><strong>{connectors.length} native connectors</strong>, from Gmail and GitHub to Home Assistant and Stripe. <a href="/integrations/">See the catalog</a>.</li>
+    <li><strong>MCP servers</strong>, local ones running inside each sandbox and remote ones over Streamable HTTP.</li>
+    <li><strong>Five providers</strong>: OpenAI, Anthropic, Google Gemini, xAI Grok and OpenRouter, or a ChatGPT or SuperGrok plan.</li>
+  </ul>
+
+  <h2 id="voice">Voice calls</h2>
+  <ul>
+    <li>Call an agent from the console. What you say joins its normal conversation and the answer is spoken back sentence by sentence. Interrupt it any time.</li>
+    <li>Speech runs on the server itself, offline after the first download (English), or through OpenAI or ElevenLabs. Pick a voice per agent.</li>
+  </ul>
+
+  <h2 id="console">The console</h2>
+  <ul>
+    <li><strong>Live replies and every step.</strong> Each tool call appears as it happens: commands with their output, edits as diffs.</li>
+    <li><strong>Rich answers.</strong> HTML, SVG, Mermaid, tables and math render live in the chat, sandboxed from the network.</li>
+    <li><strong>The Situation room.</strong> What needs you, who is working, and what it costs, on one screen.</li>
+    <li><strong>Shared files.</strong> Upload, organize and share with people, teams or agents, with a viewer for images, PDF, audio, video, tables and code.</li>
+    <li><strong>Activity inbox, command palette, light and dark themes</strong>, and an installable app that works on phones.</li>
+  </ul>
+
+  <h2 id="people">People and access</h2>
+  <ul>
+    <li>Password sign-in, invitations and single sign-on with OpenID Connect.</li>
+    <li>Teams, and per agent or room: no access, watch, chat or manage.</li>
+    <li>An audit log in plain sentences. Passwords, tokens and vault secrets never appear in it.</li>
+  </ul>
+
+  <h2 id="spend">Usage and budgets</h2>
+  <ul>
+    <li>Tokens and estimated cost for every model call, per agent, per day and per model.</li>
+    <li>A monthly budget per agent. Past it, the agent pauses until you raise it.</li>
+  </ul>
+
+  <h2 id="not-yet">Not yet</h2>
+  <p>These are planned, and none of them is promised a date:</p>
+  <ul>
+    {status.planned.map((item) => <li>{item}</li>)}
+  </ul>
+  <p>Being qualified now:</p>
+  <ul>
+    {status.progress.map((item) => <li>{item}</li>)}
+  </ul>
+</Doc>

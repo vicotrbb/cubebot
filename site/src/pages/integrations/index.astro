@@ -1,0 +1,490 @@
+---
+import Page from '../../layouts/Page.astro'
+import PageHead from '../../components/PageHead.astro'
+import ConnectorBlock from '../../components/ConnectorBlock.astro'
+import Cube from '../../components/Cube.astro'
+import Icon from '../../components/Icon.astro'
+import { connectors, categories, providers, plans } from '../../data/connectors'
+
+const shelves = categories.map((category) => ({
+  category,
+  items: connectors.filter((c) => c.category === category),
+}))
+const levels = [
+  { name: 'Read', tone: 'paper', body: 'Look things up: search mail, read issues, list files. Nothing changes.' },
+  { name: 'Read and write', tone: 'paper', body: 'Also change things: create issues, file documents, add events.' },
+  { name: 'Full', tone: 'orange', body: 'Also reach people or move money: send mail, post messages, refund.' },
+] as const
+---
+
+<Page
+  title="Integrations · Cubebot"
+  description="27 native connectors, any MCP server, and five AI providers. Gmail, GitHub, Slack, Notion, Linear, Home Assistant, Stripe and more, with permission levels you control."
+  current="integrations"
+>
+  <PageHead
+    title="Everything your agents can reach."
+    lede={`${connectors.length} native connectors built into Cubebot, any MCP server you add, and five AI providers. You connect an account once; you decide which agents may use it, and how far they may go.`}
+    tones={['sage', 'orange', 'paper']}
+  >
+    <a class="btn" href="#catalog">Browse the catalog</a>
+    <a class="link" href="#mcp">Bring an MCP server <Icon name="arrow" /></a>
+  </PageHead>
+
+  <section class="catalog" id="catalog" aria-labelledby="catalog-title">
+    <div class="wrap">
+      <h2 id="catalog-title" class="visually-hidden">Connector catalog</h2>
+      <div class="tools" data-catalog-tools hidden>
+        <label class="search">
+          <Icon name="search" />
+          <span class="visually-hidden">Search connectors</span>
+          <input type="search" placeholder="Search Gmail, issues, invoices…" autocomplete="off" data-catalog-search />
+        </label>
+        <div class="filters" role="group" aria-label="Filter by category">
+          <button type="button" class="filter" aria-pressed="true" data-filter="">All</button>
+          {categories.map((category) => <button type="button" class="filter" aria-pressed="false" data-filter={category}>{category}</button>)}
+        </div>
+        <p class="count" aria-live="polite" data-catalog-count>{connectors.length} connectors</p>
+      </div>
+
+      <ul class="legend" aria-label="How each connector is tested">
+        <li>
+          <Cube size={30} contact />
+          <span><strong>Painted</strong> tested against the live service</span>
+        </li>
+        <li>
+          <Cube size={30} tone="wood" paint contact />
+          <span><strong>Half-painted</strong> tested against recorded vendor responses</span>
+        </li>
+      </ul>
+
+      {
+        shelves.map((shelf) => (
+          <div class="shelf" data-shelf>
+            <h3>{shelf.category}</h3>
+            <ul class="shelf__items">
+              {shelf.items.map((connector) => <ConnectorBlock connector={connector} />)}
+            </ul>
+          </div>
+        ))
+      }
+      <div class="empty" data-catalog-empty hidden>
+        <Cube size={72} tone="wood" contact />
+        <div>
+          <strong>No connector matches that yet.</strong>
+          <p>
+            An <a href="#mcp">MCP server</a> or the <a href="/integrations/http-api/">HTTP API</a> connector
+            may cover it. Or <a href="https://github.com/vicotrbb/cubebot/issues">ask for it on GitHub</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="access" aria-labelledby="access-title">
+    <div class="wrap access__grid">
+      <div>
+        <h2 id="access-title">You set how far each account goes.</h2>
+        <p class="intro">
+          Every connection has a permission level, and agents are only offered
+          the tools at or below it. Switch single tools off, share a connection
+          with every agent or only the ones you choose, and connect several
+          accounts of the same kind, like work and personal mail.
+        </p>
+        <ul class="facts">
+          <li><strong>Your own apps.</strong> Sign-in uses your API key or your own OAuth app. Cubebot registers no app of its own between you and the vendor.</li>
+          <li><strong>Short-lived credentials.</strong> Agents fetch a credential for each call. Refresh tokens and client secrets never leave the orchestrator, and secrets are struck from every result.</li>
+          <li><strong>Events start routines.</strong> New mail, an assigned issue or a finished recording can wake an agent. Events are polled, not pushed.</li>
+          <li><strong>Untrusted by default.</strong> Mail, documents and messages reach the model marked as outside content that cannot grant tools.</li>
+        </ul>
+      </div>
+      <ol class="levels" aria-label="Permission levels">
+        {
+          levels.map((level, i) => (
+            <li class:list={['level', `level--${level.tone}`]} style={`--i:${i}`}>
+              <span class="level__steps" aria-hidden="true">
+                {levels.map((_, k) => <span class:list={{ on: k <= i }} />)}
+              </span>
+              <strong>{level.name}</strong>
+              <p>{level.body}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="mcp" id="mcp" aria-labelledby="mcp-title">
+    <div class="wrap mcp__grid">
+      <div class="mcp__scene" aria-hidden="true">
+        <div class="mcp__plug">
+          <Cube size={110} eyes="open" contact />
+        </div>
+        <div class="mcp__plug mcp__plug--b">
+          <Cube size={70} tone="paper" label="mcp" contact />
+        </div>
+        <div class="slab mcp__shelf"></div>
+      </div>
+      <div>
+        <h2 id="mcp-title">And anything that speaks MCP.</h2>
+        <p class="intro">
+          Add a Model Context Protocol server once under Platform › MCP servers.
+          Local servers run inside each agent's sandbox as its tool user; remote
+          servers are reached over Streamable HTTP. Secrets go in as encrypted
+          environment variables or headers, and only their names are ever shown.
+        </p>
+        <pre class="install mcp__example" aria-label="Example MCP server command"><code>npx -y @modelcontextprotocol/server-github</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="models" aria-labelledby="models-title">
+    <div class="wrap">
+      <h2 id="models-title">Five AI providers, two plans.</h2>
+      <p class="intro">
+        Agents call the model themselves, with a key or plan token the
+        orchestrator hands them for a short time. One provider and model run the
+        whole installation at a time; switch between saved keys whenever you like.
+      </p>
+      <div class="models__grid">
+        <ul class="models__list" aria-label="AI providers with an API key">
+          {
+            providers.map((p) => (
+              <li>
+                <Cube size={30} contact />
+                <div>
+                  <strong>{p.name}</strong>
+                  <span>{p.note}</span>
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+        <ul class="models__list models__list--plans" aria-label="Sign in with a plan">
+          {
+            plans.map((p) => (
+              <li>
+                <Cube size={30} tone="paper" contact />
+                <div>
+                  <strong>{p.name}</strong>
+                  <span>{p.note}</span>
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </section>
+</Page>
+
+<script>
+  import '../../scripts/catalog'
+</script>
+
+<style>
+  .catalog {
+    padding-top: 0;
+  }
+  .tools {
+    position: sticky;
+    top: 72px;
+    z-index: 20;
+    box-shadow: 0 0 0 100vmax var(--desk);
+    clip-path: inset(0 -100vmax);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 20px;
+    margin-bottom: 40px;
+    padding: 14px 0;
+    background: var(--desk);
+  }
+  .tools[hidden] {
+    display: none;
+  }
+  .search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 260px;
+    max-width: 360px;
+  }
+  .search :global(svg) {
+    position: absolute;
+    left: 14px;
+    width: 18px;
+    height: 18px;
+    color: var(--ink-soft);
+    pointer-events: none;
+  }
+  .search input {
+    width: 100%;
+    padding: 12px 14px 12px 42px;
+    border: 2px solid transparent;
+    border-radius: 12px;
+    border-bottom: 4px solid var(--paper-deep);
+    background: var(--paper);
+    color: var(--ink);
+    font: inherit;
+    font-size: 1rem;
+    box-shadow: 0 8px 16px -12px rgb(var(--shadow) / 0.4);
+  }
+  .search input::placeholder {
+    color: #7d7066;
+  }
+  .search input:focus {
+    outline: none;
+    border-color: var(--orange);
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .filter {
+    padding: 7px 12px 8px;
+    border: 0;
+    border-radius: 9px;
+    border-bottom: 3px solid var(--desk-deep);
+    background: rgb(255 253 249 / 0.6);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background 0.15s ease-out,
+      translate 0.15s var(--settle);
+  }
+  .filter:hover {
+    background: var(--paper);
+  }
+  .filter[aria-pressed='true'] {
+    background: var(--orange);
+    border-bottom-color: var(--orange-deep);
+  }
+  .count {
+    margin-left: auto;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .legend,
+  .shelf {
+    position: relative;
+    z-index: 0;
+  }
+  .shelf + .shelf {
+    margin-top: 52px;
+  }
+  .shelf[hidden] {
+    display: none;
+  }
+  .shelf h3 {
+    margin-bottom: 18px;
+    font-size: 1.35rem;
+  }
+  .shelf__items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+    gap: 36px 0;
+  }
+  .shelf__items :global(.cblock[hidden]) {
+    display: none;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 32px;
+    margin-bottom: 44px;
+    color: var(--ink-soft);
+    font-size: 0.92rem;
+  }
+  .legend li {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .legend strong {
+    margin-right: 4px;
+    color: var(--ink);
+  }
+  .empty {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    padding: 32px 4px;
+  }
+  .empty[hidden] {
+    display: none;
+  }
+  .empty strong {
+    font-size: 1.2rem;
+  }
+  .empty p {
+    margin-top: 6px;
+    color: var(--ink-soft);
+  }
+
+  .access {
+    background: var(--desk-deep);
+  }
+  .access__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+  }
+  .facts {
+    display: grid;
+    gap: 14px;
+    margin-top: 28px;
+    max-width: var(--measure);
+  }
+  .facts li {
+    color: var(--ink-soft);
+  }
+  .facts strong {
+    color: var(--ink);
+  }
+  .levels {
+    display: grid;
+    gap: 16px;
+  }
+  .level {
+    padding: 20px 22px 22px;
+    border-radius: 14px;
+    border-bottom: 5px solid var(--paper-deep);
+    background: var(--paper);
+    box-shadow: 0 14px 26px -18px rgb(var(--shadow) / 0.5);
+  }
+  .level:nth-child(2) {
+    margin-left: 22px;
+  }
+  .level--orange {
+    background: var(--orange);
+    border-bottom-color: var(--orange-deep);
+    margin-left: 44px;
+  }
+  .level strong {
+    display: block;
+    margin-top: 10px;
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+  .level p {
+    margin-top: 4px;
+    color: rgb(43 36 32 / 0.82);
+    font-size: 0.97rem;
+  }
+  .level__steps {
+    display: flex;
+    gap: 5px;
+  }
+  .level__steps span {
+    width: 22px;
+    height: 8px;
+    border-radius: 3px;
+    background: rgb(43 36 32 / 0.14);
+  }
+  .level__steps span.on {
+    background: var(--ink);
+  }
+
+  .mcp__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+  }
+  .mcp__scene {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 36px;
+    min-height: 220px;
+    padding-bottom: 40px;
+  }
+  .mcp__plug {
+    position: relative;
+    z-index: 1;
+  }
+  .mcp__plug--b :global(.cube) {
+    --ry: -24deg;
+  }
+  .mcp__shelf {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+  .mcp__example {
+    margin-top: 24px;
+  }
+
+  .models {
+    background: var(--desk-deep);
+  }
+  .models__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 40px;
+  }
+  .models__list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: 0 28px;
+    align-content: start;
+  }
+  .models__list--plans {
+    grid-template-columns: 1fr;
+  }
+  .models__list li {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 4px;
+    border-bottom: 2px solid rgb(var(--shadow) / 0.1);
+  }
+  .models__list li > div {
+    display: grid;
+    gap: 2px;
+  }
+  .models__list strong {
+    font-weight: 800;
+  }
+  .models__list span {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  @media (max-width: 960px) {
+    .access__grid,
+    .mcp__grid,
+    .models__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .tools {
+      position: static;
+    }
+    .count {
+      margin-left: 0;
+    }
+  }
+  @media (max-width: 560px) {
+    .shelf__items {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .level:nth-child(2) {
+      margin-left: 12px;
+    }
+    .level--orange {
+      margin-left: 24px;
+    }
+  }
+</style>

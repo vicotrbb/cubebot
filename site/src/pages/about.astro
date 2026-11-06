@@ -1,0 +1,421 @@
+---
+import Page from '../layouts/Page.astro'
+import PageHead from '../components/PageHead.astro'
+import Cube from '../components/Cube.astro'
+import Icon from '../components/Icon.astro'
+import { repo, sponsor, docs } from '../data/site'
+
+const beliefs = [
+  { tone: 'orange', eyes: 'open', title: 'Agents should last.', body: 'An agent keeps its name, its conversation, its memory and its workspace through restarts, upgrades and replaced hardware. Something you work with every day should not forget you overnight.' },
+  { tone: 'paper', label: 'keys', title: 'Your infrastructure, your keys.', body: 'Cubebot runs on a machine or cluster you control, with your database, your model providers and your accounts. There is no hosted tier to depend on.' },
+  { tone: 'wood', paint: true, title: 'Honesty over demos.', body: 'What runs, what is being qualified and what is only planned are kept apart, on this site and in the code. Uncertain outcomes are shown, never replayed blindly.' },
+  { tone: 'paper', label: 'grant', title: 'Grant, do not babysit.', body: 'You decide what an agent may touch and spend. Inside those grants it works without asking for every step, and leaves a record of what it did.' },
+  { tone: 'sage', eyes: 'closed', title: 'Warm, not hype.', body: 'The cube has a face because this is software you are meant to live with. It should feel like a colleague on the desk, not a dashboard of alarms.' },
+] as const
+
+const posts = [
+  { title: 'io_uring vs epoll, measured: what completion I/O actually buys an HTTP server', href: 'https://blog.victorbona.dev/blog/io-uring-vs-epoll-measured', date: '2026-10-29' },
+  { title: 'A file can replace your tile server: the engineering behind PMTiles', href: 'https://blog.victorbona.dev/blog/a-file-can-replace-your-tile-server', date: '2026-09-08' },
+  { title: 'Designing data pipelines that stay within a memory budget', href: 'https://blog.victorbona.dev/blog/data-pipelines-within-a-memory-budget', date: '2026-09-08' },
+]
+const avatar = 'https://avatars.githubusercontent.com/u/26542434?v=4&s=400'
+---
+
+<Page
+  title="About · Cubebot"
+  description="Why Cubebot exists, what it believes, and who builds it. Free, open source under Apache-2.0, and self-hosted."
+  current="about"
+  support={false}
+>
+  <PageHead
+    title="A home for agents, built in the open."
+    lede="Cubebot exists so that anyone, one person or a whole organization, can run AI agents that persist on infrastructure they control. It is free, open source under Apache-2.0, and made to be self-hosted."
+    tones={['sage', 'orange', 'wood']}
+  >
+    <a class="btn btn--paper" href={docs.manifesto}>Read the manifesto</a>
+    <a class="link" href="#creator">Meet the maker <Icon name="arrow" /></a>
+  </PageHead>
+
+  <section class="beliefs" aria-labelledby="beliefs-title">
+    <div class="wrap">
+      <div class="beliefs__head">
+        <h2 id="beliefs-title">What it believes.</h2>
+        <p class="intro">
+          Five ideas decide most of the trade-offs. When a feature fights one of
+          them, the feature waits.
+        </p>
+      </div>
+      <ol class="beliefs__shelf" data-reveal>
+        {
+          beliefs.map((belief, i) => (
+            <li class="belief">
+              <span class="belief__stand" aria-hidden="true">
+                <span class="belief__cube reveal-item" style={`--i:${i}`}>
+                  <Cube
+                    size={74}
+                    tone={belief.tone}
+                    eyes={'eyes' in belief ? belief.eyes : 'none'}
+                    label={'label' in belief ? belief.label : undefined}
+                    paint={'paint' in belief}
+                    contact
+                    style={`--blink-delay:${i * 0.8}s`}
+                  />
+                </span>
+                <span class="slab belief__plank"></span>
+              </span>
+              <h3>{belief.title}</h3>
+              <p>{belief.body}</p>
+            </li>
+          ))
+        }
+      </ol>
+    </div>
+  </section>
+
+  <section class="open" aria-labelledby="open-title">
+    <div class="wrap open__grid">
+      <div>
+        <h2 id="open-title">Free means free.</h2>
+        <p class="intro">
+          No paid edition, no account with us, no usage limits beyond the ones
+          you set. The whole thing, from the VMM to the console, is in one public
+          repository under the Apache License 2.0. Use it at home or at work,
+          change it, ship it.
+        </p>
+      </div>
+      <ul class="open__facts">
+        <li><strong>Apache-2.0</strong><span>Use, modify and redistribute, commercially too</span></li>
+        <li><strong>Self-hosted</strong><span>Your machine or cluster, your data, your keys</span></li>
+        <li><strong>Rust</strong><span>Orchestrator, agent runtime and VMM; TypeScript for the console</span></li>
+        <li><strong>Decisions in the open</strong><span><a href={docs.adrs}>Every accepted decision</a> is in the repository</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="creator" id="creator" aria-labelledby="creator-title">
+    <div class="wrap creator__grid">
+      <div class="creator__card">
+        <div class="creator__photo">
+          <img src={avatar} alt="Victor Bona" width="200" height="200" loading="lazy" decoding="async" />
+          <span class="creator__mascot" aria-hidden="true">
+            <Cube size={58} eyes="open" contact />
+          </span>
+        </div>
+        <div class="creator__id">
+          <h2 id="creator-title">Victor Bona</h2>
+          <p class="creator__role">Senior Software Engineer at Hopper · Blumenau, Brazil</p>
+        </div>
+        <p class="creator__bio">
+          Victor builds Cubebot in the open, alongside a day job in production
+          software. Victor works on distributed systems, Kubernetes, observability
+          and platform engineering, and writes about infrastructure, performance
+          and AI systems.
+        </p>
+        <div class="creator__links">
+          <a class="btn btn--compact" href="https://github.com/vicotrbb">
+            <Icon name="github" /><span>@vicotrbb</span>
+          </a>
+          <a class="btn btn--paper btn--compact" href="https://blog.victorbona.dev">
+            <span>blog.victorbona.dev</span><Icon name="external" />
+          </a>
+          <a class="btn btn--paper btn--compact" href="https://x.com/BonaVictor">
+            <span>@BonaVictor on X</span>
+          </a>
+        </div>
+      </div>
+
+      <div class="creator__side">
+        <h2>From the blog</h2>
+        <ul class="posts">
+          {
+            posts.map((post) => (
+              <li>
+                <a href={post.href}>
+                  <time datetime={post.date}>
+                    {new Date(`${post.date}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </time>
+                  <strong>{post.title}</strong>
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+        <a class="link" href="https://blog.victorbona.dev">All posts and papers <Icon name="arrow" /></a>
+
+        <div class="creator__ask">
+          <p>
+            Cubebot is built by one person, in the open. If it is useful to you,
+            sponsoring is the most direct way to keep it moving.
+          </p>
+          <div class="creator__ask-actions">
+            <a class="btn" href={sponsor}><Icon name="heart" /><span>Sponsor Victor</span></a>
+            <a class="link" href={repo}>Or star the repository <Icon name="arrow" /></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+</Page>
+
+<style>
+  .beliefs {
+    background: var(--desk-deep);
+  }
+  .beliefs__head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: end;
+  }
+  .beliefs__head .intro {
+    margin-top: 0;
+  }
+  .beliefs__shelf {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0;
+    margin-top: clamp(40px, 6vw, 72px);
+  }
+  .belief {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    padding-inline: 14px;
+  }
+  .belief__stand {
+    display: grid;
+    justify-items: center;
+    margin-inline: -14px;
+    margin-bottom: 14px;
+  }
+  .belief__cube {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    height: 100px;
+    margin-bottom: -10px;
+  }
+  .belief__plank {
+    width: 100%;
+  }
+  .belief__plank::before,
+  .belief__plank::after {
+    border-radius: 0;
+  }
+  .belief:first-child .belief__plank::before {
+    border-top-left-radius: 8px;
+  }
+  .belief:last-child .belief__plank::before {
+    border-top-right-radius: 8px;
+  }
+  .belief:first-child .belief__plank::after {
+    border-bottom-left-radius: 6px;
+  }
+  .belief:last-child .belief__plank::after {
+    border-bottom-right-radius: 6px;
+  }
+  .belief:hover .belief__cube :global(.cube) {
+    --ry: 8deg;
+  }
+  .belief h3 {
+    font-size: 1.25rem;
+  }
+  .belief p {
+    color: var(--ink-soft);
+    font-size: 0.97rem;
+    line-height: 1.5;
+  }
+
+  .open__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: center;
+  }
+  .open__facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .open__facts li {
+    display: grid;
+    gap: 4px;
+    padding: 18px 20px 20px;
+    border-radius: 12px;
+    border-bottom: 4px solid var(--orange-deep);
+    background: var(--orange);
+  }
+  .open__facts li:nth-child(even) {
+    background: var(--paper);
+    border-bottom-color: var(--paper-deep);
+  }
+  .open__facts strong {
+    font-size: 1.2rem;
+    font-weight: 800;
+  }
+  .open__facts span {
+    color: rgb(43 36 32 / 0.8);
+    font-size: 0.93rem;
+  }
+
+  .creator {
+    background: var(--desk-deep);
+    scroll-margin-top: 72px;
+  }
+  .creator__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 72px);
+    align-items: start;
+  }
+  .creator__card {
+    padding: clamp(24px, 3.5vw, 40px);
+    border-radius: 18px;
+    border-bottom: 6px solid var(--paper-deep);
+    background: var(--paper);
+    box-shadow: 0 28px 48px -30px rgb(var(--shadow) / 0.55);
+  }
+  .creator__photo {
+    position: relative;
+    width: fit-content;
+  }
+  .creator__photo img {
+    width: 132px;
+    height: 132px;
+    border-radius: 16px;
+    border-bottom: 5px solid var(--orange-deep);
+    background: var(--orange);
+    object-fit: cover;
+    box-shadow: 0 14px 24px -14px rgb(var(--shadow) / 0.55);
+  }
+  .creator__mascot {
+    position: absolute;
+    right: -46px;
+    bottom: -2px;
+  }
+  .creator__mascot :global(.cube) {
+    --ry: -26deg;
+  }
+  .creator__id {
+    margin-top: 24px;
+  }
+  .creator__id h2 {
+    max-width: none;
+    font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+  }
+  .creator__role {
+    margin-top: 6px;
+    font-weight: 700;
+  }
+  .creator__bio {
+    margin-top: 16px;
+    color: var(--ink-soft);
+  }
+  .creator__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .creator__links :global(svg) {
+    width: 17px;
+    height: 17px;
+  }
+  .creator__side h2 {
+    font-size: 1.6rem;
+  }
+  .posts {
+    display: grid;
+    gap: 2px;
+    margin-block: 18px 18px;
+  }
+  .posts a {
+    display: grid;
+    gap: 4px;
+    padding: 16px 0;
+    border-bottom: 2px solid rgb(var(--shadow) / 0.1);
+    text-decoration: none;
+  }
+  .posts a:hover strong {
+    text-decoration: underline;
+    text-decoration-color: var(--orange);
+  }
+  .posts time {
+    color: var(--ink-soft);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .posts strong {
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .creator__ask {
+    margin-top: 36px;
+    padding: 22px 24px 24px;
+    border-radius: 14px;
+    border-bottom: 4px solid var(--wood-deep);
+    background: var(--wood);
+  }
+  .creator__ask-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 24px;
+    margin-top: 16px;
+  }
+  .creator__ask .btn :global(svg) {
+    color: var(--ink);
+  }
+
+  @media (max-width: 960px) {
+    .open__grid,
+    .creator__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .beliefs__head {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .beliefs__head .intro {
+      margin-top: 20px;
+    }
+    .beliefs__shelf {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      row-gap: 40px;
+    }
+    .belief .belief__plank::before,
+    .belief .belief__plank::after {
+      border-radius: 0;
+    }
+  }
+  @media (max-width: 560px) {
+    .beliefs__shelf {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .belief {
+      grid-template-columns: 96px minmax(0, 1fr);
+      grid-template-areas:
+        'stand title'
+        'stand body';
+      column-gap: 18px;
+      padding-inline: 0;
+    }
+    .belief__stand {
+      grid-area: stand;
+      margin: 0;
+    }
+    .belief__plank {
+      display: none;
+    }
+    .belief h3 {
+      grid-area: title;
+      align-self: end;
+    }
+    .belief p {
+      grid-area: body;
+    }
+    .open__facts {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

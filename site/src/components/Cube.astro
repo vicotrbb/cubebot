@@ -98,6 +98,7 @@ const strokes = [0, 1, 2, 3]
         )
       }
       {label && <span class="face__label">{label}</span>}
+      <slot name="face" />
     </div>
     {
       sides.map((side, f) => (

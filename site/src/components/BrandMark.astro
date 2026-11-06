@@ -1,0 +1,12 @@
+---
+import { logos } from '../data/logos'
+
+interface Props {
+  slug: string
+  class?: string
+}
+const { slug, class: className } = Astro.props
+const logo = logos[slug]
+---
+
+{logo && <svg class={className} viewBox={logo.viewBox} aria-hidden="true" set:html={logo.svg} />}

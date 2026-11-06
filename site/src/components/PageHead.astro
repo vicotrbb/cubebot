@@ -1,0 +1,126 @@
+---
+import Cube from './Cube.astro'
+
+interface Props {
+  title: string
+  lede: string
+  tones?: ('orange' | 'sage' | 'paper' | 'wood')[]
+}
+const { title, lede, tones = ['paper', 'orange', 'wood'] } = Astro.props
+const sizes = [76, 132, 58]
+---
+
+<section class="head">
+  <div class="wrap head__grid">
+    <div>
+      <h1>{title}</h1>
+      <p class="head__lede">{lede}</p>
+      {Astro.slots.has('default') && <div class="head__actions"><slot /></div>}
+    </div>
+    <div class="head__scene" aria-hidden="true">
+      <slot name="scene">
+        <div class="head__blocks">
+          {
+            tones.map((tone, i) => (
+              <div class:list={['head__block', `head__block--${i}`]} data-follow={i === 1 ? '' : undefined}>
+                <Cube size={sizes[i] ?? 60} tone={tone} eyes={i === 1 ? 'open' : tone === 'sage' ? 'closed' : 'none'} contact />
+              </div>
+            ))
+          }
+        </div>
+      </slot>
+      <div class="slab head__shelf"></div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .head {
+    padding-block: clamp(32px, 6vw, 72px) clamp(40px, 6vw, 80px);
+    overflow-x: clip;
+  }
+  .head__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    gap: clamp(24px, 5vw, 72px);
+    align-items: end;
+  }
+  h1 {
+    max-width: 16ch;
+    font-size: clamp(2.4rem, 5.6vw, 4.4rem);
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    line-height: 1;
+  }
+  .head__lede {
+    max-width: var(--measure);
+    margin-top: 22px;
+    color: var(--ink-soft);
+    font-size: clamp(1.08rem, 1.5vw, 1.25rem);
+    line-height: 1.5;
+  }
+  .head__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px 24px;
+    margin-top: 30px;
+  }
+  .head__scene {
+    position: relative;
+    min-height: 220px;
+    display: grid;
+    align-content: end;
+  }
+  .head__blocks {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 26px;
+    padding-bottom: 6px;
+  }
+  .head__block--0 :global(.cube) {
+    --ry: 36deg;
+  }
+  .head__block--2 :global(.cube) {
+    --ry: 14deg;
+  }
+  .head__block--1 {
+    animation: bob 4.6s ease-in-out infinite;
+  }
+  @keyframes bob {
+    0%,
+    100% {
+      translate: 0 0;
+    }
+    50% {
+      translate: 0 -8px;
+    }
+  }
+  .head__shelf {
+    margin-inline: -4%;
+  }
+  @media (max-width: 860px) {
+    .head__grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .head__scene {
+      order: -1;
+      min-height: 160px;
+    }
+    .head__block--1 :global(.cube) {
+      --size: 96px;
+    }
+    .head__block--0 :global(.cube) {
+      --size: 58px;
+    }
+    .head__block--2 :global(.cube) {
+      --size: 46px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .head__block--1 {
+      animation: none;
+    }
+  }
+</style>
