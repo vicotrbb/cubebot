@@ -222,8 +222,11 @@ pub(super) fn http() -> Result<reqwest::Client, Failure> {
 
 /// POSTs a form to an OAuth endpoint. Bodies and URLs carry secrets, so causes never keep them.
 pub(super) async fn post(url: Url, form: &[(&str, &str)]) -> Result<Vec<u8>, Failure> {
-    let response = http()?
-        .post(url)
+    posted(http()?.post(url), form).await
+}
+
+async fn posted(request: reqwest::RequestBuilder, form: &[(&str, &str)]) -> Result<Vec<u8>, Failure> {
+    let response = request
         .header("accept", "application/json")
         .form(form)
         .send()
@@ -290,6 +293,22 @@ pub(super) async fn tokens(
         earliest_refresh: response.earliest_refresh_at,
         scope: response.scope,
     })
+}
+
+/// The client-credentials grant (RFC 6749 §4.4): the app's id and secret in Basic authentication,
+/// answering an access token and its lifetime in seconds. There is no refresh token; renewal asks again.
+pub(super) async fn client_token(
+    url: Url,
+    form: &[(&str, &str)],
+    (id, secret): (&str, &str),
+) -> Result<(String, i64), Failure> {
+    let body = posted(http()?.post(url).basic_auth(id, Some(secret)), form).await?;
+    let response: TokenResponse =
+        serde_json::from_slice(&body).map_err(|error| Failure::Unavailable(Some(error.into())))?;
+    if !token_valid(&response.access_token) || !(60..=31 * 24 * 3600).contains(&response.expires_in) {
+        return Err(Failure::Unavailable(None));
+    }
+    Ok((response.access_token, response.expires_in))
 }
 
 /// Tokens become HTTP headers and form fields: bounded, printable, no spaces.

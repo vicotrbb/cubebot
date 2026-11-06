@@ -5814,6 +5814,36 @@
                 "description": "The product that connection needs switched on."
               }
             }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ClientCredentials",
+                "description": "The person's own app trading its id and secret for short-lived tokens without a browser\n(the client-credentials grant), such as a Zoom Server-to-Server app."
+              },
+              {
+                "type": "object",
+                "required": ["kind"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["client_credentials"]
+                  }
+                }
+              }
+            ],
+            "description": "The person's own app trading its id and secret for short-lived tokens without a browser\n(the client-credentials grant), such as a Zoom Server-to-Server app."
+          },
+          {
+            "type": "object",
+            "description": "Nothing to sign in with, such as public feeds.",
+            "required": ["kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["public"]
+              }
+            }
           }
         ]
       },
@@ -6112,6 +6142,37 @@
           }
         }
       },
+      "ClientCredentials": {
+        "type": "object",
+        "required": ["token", "grant", "params", "fields"],
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            },
+            "description": "The client id, its secret (key `client_secret`) and any setting the params name."
+          },
+          "grant": {
+            "type": "string",
+            "description": "The form's `grant_type`: `client_credentials` unless the vendor names its own."
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Extra form fields; `{key}` in a value is the connection's setting of that name."
+          },
+          "token": {
+            "type": "string",
+            "description": "The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1)."
+          }
+        }
+      },
       "ConfigureProvider": {
         "type": "object",
         "required": ["request_id", "expected_revision", "model"],
@@ -6226,7 +6287,7 @@
           },
           "auth": {
             "type": "string",
-            "description": "How it signs in: `api_key`, `password`, `oauth2`, `github_app` or `linked`."
+            "description": "How it signs in: `api_key`, `password`, `oauth2`, `github_app`, `linked`,\n`client_credentials` or `public`."
           },
           "checked_at": {
             "type": ["string", "null"]
@@ -8603,7 +8664,7 @@
       },
       "SaveConnection": {
         "type": "object",
-        "description": "A connection signed in with pasted secrets or another connection; OAuth and GitHub Apps sign\nin through `POST /api/connections/sign-ins`.",
+        "description": "A connection signed in with pasted secrets, an app's own client credentials, another\nconnection or nothing; OAuth and GitHub Apps sign in through `POST /api/connections/sign-ins`.",
         "required": ["connector", "slug", "auth"],
         "properties": {
           "access": {
@@ -8619,7 +8680,7 @@
           },
           "auth": {
             "type": "string",
-            "description": "`api_key`, `password` or `linked`, as the connector offers."
+            "description": "`api_key`, `password`, `linked`, `client_credentials` or `public`, as the connector offers."
           },
           "config": {
             "type": "object"

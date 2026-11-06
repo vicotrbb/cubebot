@@ -130,7 +130,9 @@ export function Account({
               <RotateCw className={busy === 'test' ? 'spin' : undefined} />
               {busy === 'test' ? 'Testing…' : 'Test connection'}
             </button>
-            {(vendor || connection.status === 'sign_in_again') && (
+            {(vendor ||
+              (connection.status === 'sign_in_again' &&
+                connection.auth !== 'public')) && (
               <button
                 type="button"
                 className="btn btn--sm"

@@ -46,6 +46,8 @@ export const AUTH_LABEL: Record<Auth['kind'], string> = {
   oauth2: 'Sign in',
   github_app: 'GitHub App',
   linked: 'Another connection',
+  client_credentials: 'App credentials',
+  public: 'No sign-in',
 }
 
 export type Tone = 'none' | 'ok' | 'again' | 'error'

@@ -77,7 +77,8 @@ pub struct ConnectionSummary {
     pub connector: String,
     /// Prefixes the connection's tools as `<slug>__<tool>`.
     pub slug: String,
-    /// How it signs in: `api_key`, `password`, `oauth2`, `github_app` or `linked`.
+    /// How it signs in: `api_key`, `password`, `oauth2`, `github_app`, `linked`,
+    /// `client_credentials` or `public`.
     pub auth: String,
     /// The account as its vendor names it.
     pub account: Option<String>,
@@ -99,15 +100,15 @@ pub struct ConnectionSummary {
     pub polled_at: Option<String>,
 }
 
-/// A connection signed in with pasted secrets or another connection; OAuth and GitHub Apps sign
-/// in through `POST /api/connections/sign-ins`.
+/// A connection signed in with pasted secrets, an app's own client credentials, another
+/// connection or nothing; OAuth and GitHub Apps sign in through `POST /api/connections/sign-ins`.
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SaveConnection {
     pub connector: String,
     /// Lowercase letters, digits and hyphens, at most 32.
     pub slug: String,
-    /// `api_key`, `password` or `linked`, as the connector offers.
+    /// `api_key`, `password`, `linked`, `client_credentials` or `public`, as the connector offers.
     pub auth: String,
     #[serde(default)]
     #[schema(value_type = Object)]
@@ -367,16 +368,11 @@ impl Connections {
                 "choose the connection to sign in with".into(),
             ));
         }
-        let sealed = Sealed {
+        let mut sealed = Sealed {
             fields: input.secrets,
             ..Sealed::default()
         };
-        let credential = match auth {
-            Auth::Linked { .. } => self.linked(&config).await?.0,
-            _ => Credential::Fields {
-                fields: sealed.fields.clone(),
-            },
-        };
+        let (credential, expires_in) = self.first(connector, auth, &config, &mut sealed).await?;
         let account = self.check(connector, &config, credential).await?;
         let draft = Draft {
             connector,
@@ -386,8 +382,33 @@ impl Connections {
             access: input.access.unwrap_or_default(),
             level: input.level.unwrap_or(manifest.level),
         };
-        self.insert(actor, draft, &sealed, (Some(account), None, None))
+        self.insert(actor, draft, &sealed, (Some(account), expires_in, None))
             .await
+    }
+
+    /// The credential a new connection is checked with, and how long it lasts; an app's own
+    /// token is kept in `sealed`.
+    async fn first(
+        &self,
+        connector: &dyn Connector,
+        auth: &Auth,
+        config: &Value,
+        sealed: &mut Sealed,
+    ) -> Result<(Credential, Option<i64>), ConnectError> {
+        let fields = sealed.fields.clone();
+        match auth {
+            Auth::Linked { .. } => return Ok((self.linked(config).await?.0, None)),
+            Auth::ClientCredentials(_) => (),
+            _ => return Ok((Credential::Fields { fields }, None)),
+        }
+        let (token, expires_in) = self
+            .granted(connector, config, sealed)
+            .await
+            .map_err(|(tend::Renewal::Refused(problem) | tend::Renewal::Failing(problem))| {
+                ConnectError::Refused(problem)
+            })?;
+        sealed.access_token = Some(token.clone());
+        Ok((Credential::Token { token }, Some(expires_in)))
     }
 
     /// Proves a credential and names its account; a refusal is the person's to read.
@@ -575,7 +596,7 @@ impl Connections {
         let stored = self.stored(&mut tx, id, false).await?;
         tx.commit().await?;
         match stored.auth.as_str() {
-            "api_key" | "password" => Ok((
+            "api_key" | "password" | "public" => Ok((
                 Credential::Fields {
                     fields: stored.sealed.fields,
                 },
@@ -843,6 +864,10 @@ fn changed(
             stored.sealed.fields.clone()
         };
         stored.config = settings(manifest, auth, config, &secrets, &stored.config)?;
+        // An app's token was granted to the old secret or settings; the next use asks again.
+        if matches!(auth, Auth::ClientCredentials(_)) {
+            stored.sealed.access_token = None;
+        }
     }
     if let Some(name) = &input.slug {
         slug(name)?;

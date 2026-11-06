@@ -2361,6 +2361,14 @@ export interface components {
           /** @description The product that connection needs switched on. */
           product: string
         }
+      | (components['schemas']['ClientCredentials'] & {
+          /** @enum {string} */
+          kind: 'client_credentials'
+        })
+      | {
+          /** @enum {string} */
+          kind: 'public'
+        }
     Authorization: {
       authorization_url: string
     }
@@ -2486,6 +2494,16 @@ export interface components {
       label: string
       value: string
     }
+    ClientCredentials: {
+      /** @description The client id, its secret (key `client_secret`) and any setting the params name. */
+      fields: components['schemas']['Field'][]
+      /** @description The form's `grant_type`: `client_credentials` unless the vendor names its own. */
+      grant: string
+      /** @description Extra form fields; `{key}` in a value is the connection's setting of that name. */
+      params: string[][]
+      /** @description The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1). */
+      token: string
+    }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
       /** @description `None` keeps the key saved for this provider. A subscription has none: its owner signs in. */
@@ -2527,7 +2545,10 @@ export interface components {
       access: components['schemas']['ProviderAccess']
       /** @description The account as its vendor names it. */
       account?: string | null
-      /** @description How it signs in: `api_key`, `password`, `oauth2`, `github_app` or `linked`. */
+      /**
+       * @description How it signs in: `api_key`, `password`, `oauth2`, `github_app`, `linked`,
+       *     `client_credentials` or `public`.
+       */
       auth: string
       checked_at?: string | null
       /** @description Settings that are not secret. */
@@ -3473,12 +3494,12 @@ export interface components {
       request_id: string
     }
     /**
-     * @description A connection signed in with pasted secrets or another connection; OAuth and GitHub Apps sign
-     *     in through `POST /api/connections/sign-ins`.
+     * @description A connection signed in with pasted secrets, an app's own client credentials, another
+     *     connection or nothing; OAuth and GitHub Apps sign in through `POST /api/connections/sign-ins`.
      */
     SaveConnection: {
       access?: null | components['schemas']['ProviderAccess']
-      /** @description `api_key`, `password` or `linked`, as the connector offers. */
+      /** @description `api_key`, `password`, `linked`, `client_credentials` or `public`, as the connector offers. */
       auth: string
       config?: Record<string, never>
       connector: string
