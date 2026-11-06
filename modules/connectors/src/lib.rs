@@ -10,6 +10,7 @@ mod registry;
 #[cfg(test)]
 mod testing;
 
+pub mod email;
 pub mod github;
 pub mod google;
 pub mod http_api;
