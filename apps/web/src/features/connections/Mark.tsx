@@ -1,4 +1,5 @@
 import {
+  Archive,
   BookText,
   Building2,
   CalendarCheck,
@@ -9,8 +10,10 @@ import {
   Columns3,
   Contact,
   CreditCard,
+  Database,
   FolderGit2,
   FolderOpen,
+  HardDrive,
   Highlighter,
   House,
   Inbox,
@@ -58,6 +61,9 @@ const GLYPHS: Record<string, LucideIcon> = {
   hubspot: Contact,
   stripe: CreditCard,
   readwise: Highlighter,
+  sql: Database,
+  s3: Archive,
+  sftp: HardDrive,
   rss: Rss,
 }
 

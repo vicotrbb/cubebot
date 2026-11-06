@@ -1,0 +1,15 @@
+{
+  "config": {
+    "engine": "postgres",
+    "host": "127.0.0.1",
+    "port": 9,
+    "database": "app",
+    "username": "cubebot"
+  },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "choose-a-password" }
+  },
+  "account": "cubebot on app",
+  "unrecorded": "PostgreSQL and MySQL salt each login, so sql::tests::live_sql runs the check against real servers"
+}

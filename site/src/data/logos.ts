@@ -1,6 +1,6 @@
 // Brand marks for the connector catalog. Marks are trademarks of their owners, shown only to identify integrations.
 // Sources: Simple Icons 16.36.0 (CC0, simpleicons.org); Slack: Wikimedia Commons Slack_icon_2019.svg;
-// Readwise: readwise.io logo; Microsoft: drawn from the official four-square colors; email, dav, http-api: drawn for Cubebot.
+// Readwise: readwise.io logo; Microsoft: drawn from the official four-square colors; email, dav, http-api, sql, s3, sftp: drawn for Cubebot.
 
 export interface Logo {
   viewBox: string
@@ -115,6 +115,18 @@ export const logos: Record<string, Logo> = {
   dav: {
     viewBox: '0 0 24 24',
     svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></g><g fill="#F26A1B"><rect x="6.5" y="12.5" width="3" height="3" rx=".6"/><rect x="10.5" y="12.5" width="3" height="3" rx=".6"/></g>',
+  },
+  sql: {
+    viewBox: '0 0 24 24',
+    svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g><circle cx="16.5" cy="18" r="1.4" fill="#F26A1B"/>',
+  },
+  s3: {
+    viewBox: '0 0 24 24',
+    svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="12" cy="6" rx="8.5" ry="2.8"/><path d="M3.5 6l2 13c.2 1.4 3 2.5 6.5 2.5s6.3-1.1 6.5-2.5l2-13"/></g><rect x="9.5" y="11.5" width="5" height="5" rx="1" fill="#F26A1B"/>',
+  },
+  sftp: {
+    viewBox: '0 0 24 24',
+    svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M7 9.5l3 2.5-3 2.5"/></g><path d="M12.5 15h4.5" stroke="#F26A1B" stroke-width="2.2" stroke-linecap="round"/>',
   },
   'http-api': {
     viewBox: '0 0 24 24',

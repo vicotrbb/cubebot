@@ -103,6 +103,11 @@ def connected(request, outputs):
             lambda: ("cloud__upload", upload | {"overwrite": True}),
             lambda: ("cloud__download", {"path": "cubebot-check.txt"}),
         ]
+    if "with-sql" in request:
+        steps += [
+            lambda: ("find_tools", {"query": "database sql query"}),
+            lambda: ("data__query", {"sql": "SELECT current_user AS who"}),
+        ]
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
 
@@ -362,6 +367,12 @@ def connections_turn(api, postgres, identity, marker, database):
         assert "cubebot-upload" in json.dumps(downloaded), downloaded
         assert extras["nextcloud"] not in journal, "a credential leaked"
         print("PASS an agent uploaded a workspace file to Nextcloud and read it back")
+    if "sql" in extras:
+        user, password = extras["sql"]
+        queried = outcome["data__query"]
+        assert queried["code"] == 0 and user in json.dumps(queried), queried
+        assert password not in journal, "a credential leaked"
+        print("PASS an agent queried PostgreSQL over its own port from the sandbox")
     echo.shutdown()
 
 
@@ -369,7 +380,8 @@ def wave_two_connections(api, postgres):
     """Optional connections to real services, reachable from this host.
 
     CUBEBOT_CHECK_FEED is a feed address; CUBEBOT_CHECK_NEXTCLOUD is
-    `<address> <user> <app password>`.
+    `<address> <user> <app password>`; CUBEBOT_CHECK_SQL is a PostgreSQL server with
+    TLS as `<host> <port> <database> <user> <password>`.
     """
     extras = {}
     feed = os.environ.get("CUBEBOT_CHECK_FEED")
@@ -421,6 +433,44 @@ def wave_two_connections(api, postgres):
             stdout=subprocess.DEVNULL,
         )
         extras["nextcloud"] = password
+    sql = os.environ.get("CUBEBOT_CHECK_SQL")
+    if sql:
+        host, port, database, user, password = sql.split()
+        config = {"engine": "postgres", "host": host, "port": int(port)}
+        made = api(
+            "/api/connections",
+            {
+                "connector": "sql",
+                "slug": "data",
+                "auth": "password",
+                "config": config
+                | {"database": database, "username": user, "tls": "require"},
+                "secrets": {"password": password},
+            },
+        )
+        assert made["status"] == "connected", made
+        moved = json.dumps(reachable(host))
+        update = (
+            f"UPDATE connections SET config = config || '{{\"host\": {moved}}}' "
+            "WHERE slug = 'data'"
+        )
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                postgres,
+                "psql",
+                "-U",
+                "cubebot",
+                "-d",
+                "cubebot_test",
+                "-c",
+                update,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        extras["sql"] = (user, password)
     return extras
 
 
