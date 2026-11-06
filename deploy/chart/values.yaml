@@ -82,7 +82,7 @@ sandbox:
   #   limits:
   #     memory: 6Gi
   networkPolicy:
-    # Upgrades from charts before 0.1.16 only: agents started then reach the orchestrator through
+    # Upgrades from charts before 0.2.0 only: agents started then reach the orchestrator through
     # the ingress controller until they are replaced. Remove once every agent has restarted.
     ingressController:
       namespaceSelector: {}

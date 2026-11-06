@@ -18,7 +18,7 @@ Agents in Docker cannot reach each other or Cubebot's other containers directly,
 kubectl create namespace cubebot
 kubectl label namespace cubebot pod-security.kubernetes.io/enforce=baseline  # privileged for kvm
 kubectl -n cubebot create secret generic cubebot-admin --from-literal=password="$(openssl rand -base64 24)"
-helm install cubebot oci://ghcr.io/vicotrbb/charts/cubebot --version 0.1.16 --namespace cubebot --values my-values.yaml
+helm install cubebot oci://ghcr.io/vicotrbb/charts/cubebot --version 0.2.0 --namespace cubebot --values my-values.yaml
 ```
 
 ```yaml
