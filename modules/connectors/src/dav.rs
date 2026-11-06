@@ -950,7 +950,7 @@ fn days(year: i64, month: i64, day: i64) -> i64 {
 }
 
 /// `2026-11-05T09:30:00Z` for seconds since the epoch (Hinnant's `civil_from_days`).
-fn stamp(seconds: i64) -> String {
+pub(crate) fn stamp(seconds: i64) -> String {
     let (day, time) = (
         seconds.div_euclid(86_400) + 719_468,
         seconds.rem_euclid(86_400),

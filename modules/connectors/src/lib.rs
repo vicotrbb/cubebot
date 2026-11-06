@@ -11,13 +11,17 @@ mod settings;
 #[cfg(test)]
 mod testing;
 
+pub mod calendly;
 pub mod dav;
+pub mod discord;
 pub mod email;
 pub mod github;
 pub mod google;
 pub mod http_api;
 pub mod microsoft;
 pub mod notion;
+pub mod readwise;
+pub mod rss;
 pub mod slack;
 pub mod telegram;
 

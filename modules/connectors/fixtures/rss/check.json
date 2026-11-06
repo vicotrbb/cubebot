@@ -1,0 +1,22 @@
+{
+  "config": {
+    "feeds": [
+      "https://this-week-in-rust.org/rss.xml",
+      "https://github.com/rust-lang/rust/releases.atom"
+    ]
+  },
+  "credential": { "kind": "fields", "fields": {} },
+  "account": "2 feeds",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/this-week-in-rust.org/rss.xml",
+      "raw": "<?xml version=\"1.0\" encoding=\"utf-8\"?><rss version=\"2.0\"><channel><title>This Week in Rust</title><link>https://this-week-in-rust.org/</link><item><title>This Week in Rust 676</title><link>https://this-week-in-rust.org/blog/2026/11/04/this-week-in-rust-676/</link><pubDate>Wed, 04 Nov 2026 00:00:00 -0500</pubDate></item></channel></rss>"
+    },
+    {
+      "method": "GET",
+      "path": "/github.com/rust-lang/rust/releases.atom",
+      "raw": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><id>tag:github.com,2008:https://github.com/rust-lang/rust/releases</id><title>Release notes from rust</title><updated>2026-10-15T17:41:01Z</updated></feed>"
+    }
+  ]
+}

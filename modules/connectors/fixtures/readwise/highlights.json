@@ -1,0 +1,21 @@
+{
+  "count": 26,
+  "next": null,
+  "previous": "https://readwise.io/api/v2/highlights/?page=1&page_size=25&book_id=1776",
+  "results": [
+    {
+      "id": 59758950,
+      "text": "The best way to learn is to try.",
+      "note": "Try it",
+      "location": 1294,
+      "location_type": "location",
+      "highlighted_at": "2026-11-02T18:30:00Z",
+      "created_at": "2026-11-02T18:31:12Z",
+      "url": null,
+      "color": "yellow",
+      "updated": "2026-11-02T18:31:12Z",
+      "book_id": 1776,
+      "tags": [{ "id": 123456, "name": "favorite" }]
+    }
+  ]
+}
