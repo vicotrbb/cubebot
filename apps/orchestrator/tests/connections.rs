@@ -211,7 +211,10 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
             "stripe",
             "ntfy",
             "pushover",
-            "gotify"
+            "gotify",
+            "sql",
+            "s3",
+            "sftp",
         ]
     );
     assert_eq!(

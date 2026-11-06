@@ -1,3 +1,5 @@
+import { connectors } from './connectors'
+
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
@@ -58,14 +60,15 @@ export const status = {
     'Use a ChatGPT, SuperGrok or MiniMax M Plan',
     'One permanent conversation per agent',
     'Terminal, files, browser and a desktop you can take over',
-    '27 native connectors and MCP servers',
+    `${connectors.length} native connectors and MCP servers`,
     'Rooms, delegation, tasks and parallel lanes',
     'Memory, dreaming and a shared skill library',
     'Knowledge base, shared files and a vault',
     'Routines on schedules, webhooks and account events',
     'Voice calls, with speech that runs offline',
     'Teams, scoped grants, OpenID Connect, audit log',
-    'Usage tracking and monthly budgets per agent',
+    'Usage tracking, daily and monthly budgets per agent',
+    'Profiles agents read: who you are and how you work',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -323,6 +326,9 @@ export const wallLogos: Record<string, string> = {
   Discord: 'discord',
   Nextcloud: 'nextcloud',
   Zoom: 'zoom',
+  'PostgreSQL and MySQL': 'sql',
+  'S3 buckets': 's3',
+  'ntfy and Pushover': 'ntfy',
 }
 
 export const wall = [
@@ -361,6 +367,9 @@ export const wall = [
       'Discord',
       'Nextcloud',
       'Zoom',
+      'PostgreSQL and MySQL',
+      'S3 buckets',
+      'ntfy and Pushover',
       'Any MCP server',
     ],
   },
