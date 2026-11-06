@@ -1,7 +1,7 @@
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.1.15'
+export const version = 'v0.2.0'
 export const released = '2026-11-06'
 
 export const docs = {
@@ -131,6 +131,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.0',
+    date: '2026-11-06',
+    title: 'Ready for exposed clusters',
+    items: [
+      'Agents reach the orchestrator on their own listener, never through the public ingress',
+      'Installation settings and single sign-on move into the console',
+      'A hardened Helm chart, published with every release',
+      'A new website with the integrations catalog and resources',
+    ],
+  },
   {
     tag: 'v0.1.15',
     date: '2026-11-06',
