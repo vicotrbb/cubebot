@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE connections SET polled_at = clock_timestamp(), status = COALESCE($2, status), problem = COALESCE($3, problem) WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9e7238595f65db02e95c91ef04c4b43bb2917fd7e161eda81b88a59952bfbcb1"
+}

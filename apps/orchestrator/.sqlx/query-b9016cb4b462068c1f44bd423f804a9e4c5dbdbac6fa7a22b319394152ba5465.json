@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, connector, slug, auth, account, config AS \"config!: _\", access AS \"access!: Access\",\n                level, disabled_tools AS \"disabled_tools!: _\", status, problem,\n                (to_jsonb(checked_at) #>> '{}') AS checked_at, (to_jsonb(expires_at) #>> '{}') AS expires_at,\n                (to_jsonb(polled_at) #>> '{}') AS polled_at\n            FROM connections\n            WHERE $1::uuid IS NULL OR id = $1\n            ORDER BY connector, slug\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "connector",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "auth",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "account",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "config!: _",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "level",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "disabled_tools!: _",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "problem",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "checked_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "expires_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "polled_at",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b9016cb4b462068c1f44bd423f804a9e4c5dbdbac6fa7a22b319394152ba5465"
+}

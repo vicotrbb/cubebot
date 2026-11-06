@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT connector, auth, config FROM connections WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connector",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "auth",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "config",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f9bd0ae118fcc0e9a070278992eee3a0c987af661067bb8d98bc2eb68c9e37ea"
+}

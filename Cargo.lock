@@ -611,6 +611,7 @@ version = "0.1.13"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "cubebot-connectors",
  "cubebot-protocol",
  "cubebot-providers",
  "futures-util",
@@ -661,6 +662,7 @@ dependencies = [
  "argon2",
  "axum",
  "bzip2 0.4.4",
+ "cubebot-connectors",
  "cubebot-protocol",
  "cubebot-providers",
  "futures-util",

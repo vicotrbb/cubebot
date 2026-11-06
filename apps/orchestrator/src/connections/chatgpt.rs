@@ -170,37 +170,13 @@ fn authorize_url(
     Ok(url)
 }
 
-/// Checks a pasted address is our callback for this sign-in. `Identity` errors are the person's
-/// paste; `Refused` ones are the vendor's answer.
+/// Checks a pasted address is our callback for this sign-in.
 fn callback(landed: &str, state: &str) -> Result<Callback, SignInError> {
-    let url = Url::parse(landed.trim()).map_err(|_| IdentityError::InvalidInput)?;
-    if landed.len() > 8192
-        || url.scheme() != "http"
-        || url.host_str() != Some("127.0.0.1")
-        || url.port() != Some(1456)
-        || url.path() != "/auth/callback"
-    {
-        return Err(IdentityError::InvalidInput.into());
-    }
-    let field = |name: &str| {
-        url.query_pairs()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value.into_owned())
-    };
-    if field("state").as_deref() != Some(state) {
-        return Err(IdentityError::InvalidInput.into());
-    }
-    if field("error").is_some() {
-        return Err(SignInError::Refused("sign_in_denied"));
-    }
-    let code = field("code")
-        .filter(|code| {
-            (1..=2048).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_graphic())
-        })
-        .ok_or(SignInError::Refused("sign_in_refused"))?;
+    let redirect = Url::parse(REDIRECT).map_err(|_| IdentityError::InvalidInput)?;
+    let fields = super::subscriptions::landed(landed, &redirect, state)?;
     Ok(Callback {
-        code,
-        client_id: field("client_id"),
+        code: super::subscriptions::code(&fields)?,
+        client_id: fields.get("client_id").cloned(),
     })
 }
 

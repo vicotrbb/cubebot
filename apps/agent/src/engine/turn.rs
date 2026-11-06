@@ -1,7 +1,7 @@
 use super::attempts::{Entry, Store};
 use crate::{
-    collaboration::Collaboration, context::Context, memory::Memories, skills::Skills,
-    tools::Registry,
+    collaboration::Collaboration, connections::Connections, context::Context, memory::Memories,
+    skills::Skills, tools::Registry,
 };
 use cubebot_protocol::{
     runtime::{EVENT_BYTES, ProviderKind, Turn, TurnEvent},
@@ -27,6 +27,7 @@ const LONGEST_WAIT: Duration = Duration::from_secs(60);
 const RENEW_WITHIN: i64 = 5 * 60;
 
 pub(super) type Event = (Entry, Option<u64>);
+type Knowledge<'a> = (&'a Memories, &'a Skills, &'a Collaboration, &'a Connections);
 
 struct Run {
     turn: Uuid,
@@ -79,11 +80,11 @@ pub(super) async fn run(
     events: UnboundedSender<Event>,
     store: Arc<Mutex<Store>>,
     tools: Option<Arc<Registry>>,
-    (memories, skills, collaboration): (Memories, Skills, Collaboration),
+    (memories, skills, collaboration, connections): (Memories, Skills, Collaboration, Connections),
     cancel: watch::Receiver<bool>,
 ) {
     let tools = tools.as_deref();
-    let knowledge = (&memories, &skills, &collaboration);
+    let knowledge = (&memories, &skills, &collaboration, &connections);
     let mut run = Run {
         turn: turn.turn,
         next: turn.sequence,
@@ -276,10 +277,7 @@ async fn start<P: Provider>(
     turn: &Turn,
     run: &mut Run,
     store: &Mutex<Store>,
-    (registry, (memories, skills, collaboration)): (
-        Option<&Registry>,
-        (&Memories, &Skills, &Collaboration),
-    ),
+    (registry, (memories, skills, collaboration, connections)): (Option<&Registry>, Knowledge<'_>),
     mut cancel: watch::Receiver<bool>,
 ) -> TurnEvent {
     let provider = match provider {
@@ -300,6 +298,7 @@ async fn start<P: Provider>(
         tools.extend(crate::knowledge_base::definitions(registry.is_some()));
     }
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
+    tools.extend(connections.definitions());
     tools.extend(crate::collaboration::definitions(
         desktop,
         turn.broadcast,
@@ -328,6 +327,9 @@ async fn start<P: Provider>(
         return failed("provider_invalid_response");
     };
     let mut context = Context::assemble(turn, tools, window);
+    if let Some(connected) = connections.prompt() {
+        context.system = format!("{}\n\n{connected}", context.system);
+    }
     Session {
         provider: &provider,
         turn,
@@ -339,6 +341,7 @@ async fn start<P: Provider>(
         memories,
         skills,
         collaboration,
+        connections,
         cancel,
         desktop: None,
     }
@@ -358,6 +361,7 @@ struct Session<'a, P> {
     memories: &'a Memories,
     skills: &'a Skills,
     collaboration: &'a Collaboration,
+    connections: &'a Connections,
     cancel: watch::Receiver<bool>,
     /// Held from this turn's first desktop call to its end, so another lane cannot move the mouse between its steps.
     desktop: Option<tokio::sync::OwnedMutexGuard<()>>,
@@ -391,6 +395,7 @@ impl<P: Provider> Session<'_, P> {
                 Ok(outputs) => outputs,
                 Err(code) => return failed(code),
             };
+            self.load(context, &calls);
             for (call, (output, image)) in calls.into_iter().zip(outputs) {
                 context.messages.push(Message::ToolResult {
                     call_id: call.call_id,
@@ -483,6 +488,24 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
+    /// Connection tools a search found join the context for the rest of the turn.
+    fn load(&self, context: &mut Context, calls: &[FunctionCall]) {
+        let queries = calls
+            .iter()
+            .filter(|call| call.name == crate::connections::FIND)
+            .filter_map(|call| serde_json::from_str::<serde_json::Value>(&call.arguments).ok());
+        for query in queries {
+            for tool in self
+                .connections
+                .search(query["query"].as_str().unwrap_or_default())
+            {
+                if !context.tools.iter().any(|loaded| loaded.name == tool.name) {
+                    context.tools.push(tool);
+                }
+            }
+        }
+    }
+
     fn steer(&mut self, context: &mut Context) {
         for (id, message) in self.collaboration.take_steering() {
             context.messages.push(Message::User(format!(
@@ -513,7 +536,12 @@ impl<P: Provider> Session<'_, P> {
         self.hold_desktop(calls).await?;
         let prepared = prepare(
             self.tools,
-            (self.memories, self.skills, self.collaboration),
+            (
+                self.memories,
+                self.skills,
+                self.collaboration,
+                self.connections,
+            ),
             calls,
             self.turn.task,
         );
@@ -662,7 +690,7 @@ fn done(response: String, memories: Vec<cubebot_protocol::runtime::MemoryChange>
 #[allow(clippy::type_complexity)]
 fn prepare<'a>(
     tools: Option<&'a Registry>,
-    (memories, skills, collaboration): (&'a Memories, &'a Skills, &'a Collaboration),
+    (memories, skills, collaboration, connections): Knowledge<'a>,
     calls: &[FunctionCall],
     task: bool,
 ) -> Vec<(Uuid, String, serde_json::Value, crate::tools::Running<'a>)> {
@@ -677,6 +705,7 @@ fn prepare<'a>(
                         .call(&call.name, input)
                         .or_else(|| skills.call(&call.name, id, input, tools))
                         .or_else(|| collaboration.call(&call.name, id, input))
+                        .or_else(|| connections.call(&call.name, id, input, tools))
                         .unwrap_or_else(|| {
                             tools
                                 .ok_or("no tool has this name")
@@ -775,6 +804,7 @@ mod tests {
             Memories::new(None),
             Skills::new(None, Uuid::nil()),
             Collaboration::new(None, Uuid::nil(), Default::default()),
+            Connections::new(None, &[]),
         );
         let call = FunctionCall {
             call_id: "call".into(),
@@ -783,7 +813,7 @@ mod tests {
         };
         let prepared = prepare(
             None,
-            (&knowledge.0, &knowledge.1, &knowledge.2),
+            (&knowledge.0, &knowledge.1, &knowledge.2, &knowledge.3),
             &[call],
             true,
         );
@@ -803,6 +833,7 @@ mod tests {
             Memories::new(None),
             Skills::new(None, Uuid::nil()),
             Collaboration::new(None, Uuid::nil(), Default::default()),
+            Connections::new(None, &[]),
         );
         let call = |session: &str| FunctionCall {
             call_id: "call".into(),
@@ -810,7 +841,7 @@ mod tests {
             arguments: format!(r#"{{"session":"{session}","url":"https://example.com"}}"#),
         };
         let calls = [call("main"), call("research")];
-        let knowledge = (&knowledge.0, &knowledge.1, &knowledge.2);
+        let knowledge = (&knowledge.0, &knowledge.1, &knowledge.2, &knowledge.3);
         let mut prepared = prepare(None, knowledge, &calls, true).into_iter();
         let outputs = [
             prepared.next().unwrap().3.await,

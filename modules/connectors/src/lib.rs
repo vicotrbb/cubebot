@@ -7,6 +7,7 @@ mod context;
 mod contract;
 mod manifest;
 mod registry;
+mod settings;
 #[cfg(test)]
 mod testing;
 
@@ -26,6 +27,7 @@ pub use manifest::{
     Scope, Step, ToolSpec,
 };
 pub use registry::{all, find};
+pub use settings::{problem, slug_valid};
 
 use serde::Serialize;
 use serde_json::Value;

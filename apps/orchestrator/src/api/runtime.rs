@@ -32,6 +32,10 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/skills/{name}", get(skill))
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/provider", get(provider))
+        .route(
+            "/api/runtime/connections/{id}/credential",
+            get(connection_credential),
+        )
         .route("/api/runtime/turns/{turn}/messages", post(collaborate))
         .route("/api/runtime/turns/{turn}/logins", post(request_login))
         .route("/api/runtime/turns/{turn}/broadcasts", post(broadcast))
@@ -326,6 +330,29 @@ async fn provider(
         api_key: inference.api_key,
         api_key_expires_at: inference.api_key_expires_at,
     }))
+}
+/// 404 when the agent may no longer use the connection, 409 when it needs signing in again.
+async fn connection_credential(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<Json<cubebot_protocol::runtime::ConnectionCredential>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let connections = identity
+        .connections
+        .as_ref()
+        .ok_or(Failure(StatusCode::SERVICE_UNAVAILABLE))?;
+    match connections.runtime_credential(actor.agent, id).await {
+        Ok(credential) => Ok(Json(credential)),
+        Err(crate::connections::ConnectError::Identity(
+            crate::identity::IdentityError::NotFound,
+        )) => Err(Failure(StatusCode::NOT_FOUND)),
+        Err(crate::connections::ConnectError::Identity(error)) => {
+            tracing::warn!(?error, "connection credential unavailable");
+            Err(Failure(StatusCode::SERVICE_UNAVAILABLE))
+        }
+        Err(_) => Err(Failure(StatusCode::CONFLICT)),
+    }
 }
 async fn vault(
     State(identity): State<RuntimeIdentity>,

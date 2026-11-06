@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, connector, slug, account, level, status,\n                access->>'mode' = 'all_agents' AS \"all_agents!\",\n                (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)) AS \"enabled!\"\n            FROM connections\n            ORDER BY connector, slug\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "connector",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "account",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "level",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "all_agents!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "enabled!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "669a43f7cd5d1860f12d55dc563902f62069967dbf383099a229bdd67313d780"
+}

@@ -2,6 +2,7 @@ mod chatgpt;
 mod credentials;
 mod mcp;
 mod models;
+mod native;
 mod subscriptions;
 mod supergrok;
 mod vault;
@@ -10,6 +11,11 @@ pub use credentials::{CredentialError, Credentials};
 pub use mcp::{AgentMcpServer, McpServerSummary, McpTransport, SaveMcpServer};
 pub(crate) use models::configured;
 pub use models::{ListModels, ModelChoice, ModelsError};
+pub use native::{
+    AgentConnection, Catalog, ConnectError, ConnectionActivity, ConnectionEvent, ConnectionSummary,
+    EventRoutine, FinishSignIn, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,
+    callback as callback_address,
+};
 pub(crate) use subscriptions::For;
 pub use subscriptions::{SignInError, SubscriptionSummary, keep_fresh};
 pub use supergrok::SupergrokSignIn;
@@ -126,6 +132,11 @@ impl Connections {
 
     fn vendor(&self) -> Option<&reqwest::Url> {
         self.vendor.as_ref()
+    }
+
+    /// A test controls the vendors, so their pages need not be their own or use HTTPS.
+    fn controlled(&self) -> bool {
+        self.vendor.is_some() || std::env::var_os("CUBEBOT_TEST_PROVIDER_ORIGIN").is_some()
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]

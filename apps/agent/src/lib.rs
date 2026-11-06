@@ -1,4 +1,5 @@
 pub mod collaboration;
+pub mod connections;
 #[cfg(target_os = "linux")]
 pub mod container;
 pub mod context;

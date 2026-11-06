@@ -4,6 +4,7 @@ mod agents;
 mod browser;
 mod calls;
 mod connections;
+mod connectors;
 mod desktop;
 mod files;
 mod identity;
@@ -79,6 +80,7 @@ pub fn openapi() -> String {
     doc.merge(skills::Doc::openapi());
     doc.merge(vault::Doc::openapi());
     doc.merge(mcp::Doc::openapi());
+    doc.merge(connectors::Doc::openapi());
     doc.merge(files::Doc::openapi());
     doc.merge(knowledge_base::Doc::openapi());
     doc.merge(routines::Doc::openapi());
@@ -176,7 +178,8 @@ pub async fn configured_router_with_credentials(
         routes = routes
             .merge(connections::router(identity.clone(), connections.clone()))
             .merge(vault::router(identity.clone(), connections.clone()))
-            .merge(mcp::router(identity.clone(), connections));
+            .merge(mcp::router(identity.clone(), connections.clone()))
+            .merge(connectors::router(identity.clone(), connections));
     }
     Ok(routes.layer(axum::middleware::from_fn_with_state(
         identity,

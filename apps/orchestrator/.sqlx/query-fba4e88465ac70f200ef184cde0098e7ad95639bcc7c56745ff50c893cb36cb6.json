@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE connections\n            SET status = $2, account = COALESCE($3, account), problem = $4, checked_at = clock_timestamp()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fba4e88465ac70f200ef184cde0098e7ad95639bcc7c56745ff50c893cb36cb6"
+}

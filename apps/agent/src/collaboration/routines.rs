@@ -22,12 +22,17 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
         "schedule":nullable("Five-field cron in UTC, such as \"0 9 * * 1-5\"; null to run only on demand."),
         "coalesce":{"type":"boolean","description":"True to skip a run while another is still waiting to start."},
         "enabled":{"type":"boolean","description":"False pauses the schedule."},
-    },"required":["name","prompt","command","schedule","coalesce","enabled"],"additionalProperties":false});
+        "trigger":{"anyOf":[{"type":"object","properties":{
+            "connection":{"type":"string","description":"The connection's name, such as gmail-work."},
+            "event":{"type":"string","description":"One of the events listed with that connection, such as mail.received."},
+        },"required":["connection","event"],"additionalProperties":false},{"type":"null"}],
+        "description":"Also run each time one of your connected accounts reports this event, with the event in the run's message; null for none."},
+    },"required":["name","prompt","command","schedule","coalesce","enabled","trigger"],"additionalProperties":false});
     let id = json!({"type":"string","description":"The routine's id from routine_list."});
     vec![
         tool(
             "routine_create",
-            "Create a routine for yourself: a prompt and/or a command that runs on a schedule or on demand, each run a new message in this conversation.",
+            "Create a routine for yourself: a prompt and/or a command that runs on a schedule, when a connected account reports an event, or on demand, each run a new message in this conversation.",
             json!({"routine":routine}),
         ),
         tool(
