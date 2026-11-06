@@ -1008,3 +1008,52 @@
 .health__retired > summary .chip {
   margin-left: 2px;
 }
+
+/* The agent panel's Access tab: the platform's access rows, narrowed to one agent. */
+.agent-access {
+  display: grid;
+  gap: 12px;
+}
+.agent-access__legend {
+  display: grid;
+  gap: 2px;
+}
+.agent-access__legend div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+}
+.agent-access__avatar {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+}
+.agent-access .access__level {
+  width: 136px;
+}
+.agent-access__add {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+.agent-access__add h3 {
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  color: var(--ink-faint);
+}
+.agent-access__add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.agent-access__add-row > select:first-child {
+  grid-column: 1 / -1;
+}
+.agent-access__add-row .access__level {
+  width: 100%;
+}
+.agent-access__add-row .btn {
+  align-self: stretch;
+  height: auto;
+}
