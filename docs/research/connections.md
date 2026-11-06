@@ -1,6 +1,6 @@
 # Native connections: research and proposal
 
-Researched 2026-11-05. A proposal; D1–D4 were decided by the user on 2026-11-05 (see the end). Nothing is an accepted ADR yet.
+Researched 2026-11-05. D1–D4 were decided by the user on 2026-11-05 (see the end), and the design is accepted as [Native connectors](../adr/identity.md#native-connectors).
 
 ## What already exists
 
