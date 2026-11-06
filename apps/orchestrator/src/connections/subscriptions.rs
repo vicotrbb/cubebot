@@ -225,7 +225,10 @@ pub(super) async fn post(url: Url, form: &[(&str, &str)]) -> Result<Vec<u8>, Fai
     posted(http()?.post(url), form).await
 }
 
-async fn posted(request: reqwest::RequestBuilder, form: &[(&str, &str)]) -> Result<Vec<u8>, Failure> {
+async fn posted(
+    request: reqwest::RequestBuilder,
+    form: &[(&str, &str)],
+) -> Result<Vec<u8>, Failure> {
     let response = request
         .header("accept", "application/json")
         .form(form)
@@ -305,7 +308,8 @@ pub(super) async fn client_token(
     let body = posted(http()?.post(url).basic_auth(id, Some(secret)), form).await?;
     let response: TokenResponse =
         serde_json::from_slice(&body).map_err(|error| Failure::Unavailable(Some(error.into())))?;
-    if !token_valid(&response.access_token) || !(60..=31 * 24 * 3600).contains(&response.expires_in) {
+    if !token_valid(&response.access_token) || !(60..=31 * 24 * 3600).contains(&response.expires_in)
+    {
         return Err(Failure::Unavailable(None));
     }
     Ok((response.access_token, response.expires_in))

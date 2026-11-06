@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE connections SET expires_at = clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "1b2a1cea86360175d9fdbb8e9bfee67fa895f3499127b3cc09c9d34da5b95d88"
+}

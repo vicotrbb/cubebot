@@ -401,12 +401,11 @@ impl Connections {
             Auth::ClientCredentials(_) => (),
             _ => return Ok((Credential::Fields { fields }, None)),
         }
-        let (token, expires_in) = self
-            .granted(connector, config, sealed)
-            .await
-            .map_err(|(tend::Renewal::Refused(problem) | tend::Renewal::Failing(problem))| {
+        let (token, expires_in) = self.granted(connector, config, sealed).await.map_err(
+            |(tend::Renewal::Refused(problem) | tend::Renewal::Failing(problem))| {
                 ConnectError::Refused(problem)
-            })?;
+            },
+        )?;
         sealed.access_token = Some(token.clone());
         Ok((Credential::Token { token }, Some(expires_in)))
     }
