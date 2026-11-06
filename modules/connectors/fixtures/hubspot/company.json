@@ -1,0 +1,14 @@
+{
+  "id": "2341",
+  "properties": {
+    "city": "Porto Alegre",
+    "createdate": "2026-11-05T10:00:00.000Z",
+    "domain": "acme.example",
+    "hs_lastmodifieddate": "2026-11-05T10:00:00.000Z",
+    "hs_object_id": "2341",
+    "name": "Acme"
+  },
+  "createdAt": "2026-11-05T10:00:00.000Z",
+  "updatedAt": "2026-11-05T10:00:00.000Z",
+  "archived": false
+}

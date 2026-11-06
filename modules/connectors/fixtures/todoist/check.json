@@ -1,0 +1,25 @@
+{
+  "config": {},
+  "credential": { "kind": "fields", "fields": { "token": "todoist-secret" } },
+  "account": "victor@example.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.todoist.com/api/v1/user",
+      "body": {
+        "id": "2671355",
+        "email": "victor@example.com",
+        "full_name": "Victor Bona",
+        "tz_info": {
+          "timezone": "America/Sao_Paulo",
+          "gmt_string": "-03:00",
+          "hours": -3,
+          "minutes": 0,
+          "is_dst": 0
+        },
+        "is_premium": true,
+        "inbox_project_id": "6Jf8VQXxpwv56VQ7"
+      }
+    }
+  ]
+}

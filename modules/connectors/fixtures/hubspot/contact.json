@@ -1,0 +1,27 @@
+{
+  "id": "151",
+  "properties": {
+    "createdate": "2026-02-11T15:35:08.001Z",
+    "email": "bh@hubspot.com",
+    "firstname": "Brian",
+    "hs_object_id": "151",
+    "lastmodifieddate": "2026-10-20T13:18:14.468Z"
+  },
+  "createdAt": "2026-02-11T15:35:08.001Z",
+  "updatedAt": "2026-10-20T13:18:14.468Z",
+  "archived": false,
+  "associations": {
+    "companies": {
+      "results": [
+        { "id": "2341", "type": "contact_to_company" },
+        { "id": "2341", "type": "contact_to_company_unlabeled" }
+      ]
+    },
+    "deals": {
+      "results": [
+        { "id": "8802", "type": "contact_to_deal" },
+        { "id": "8801", "type": "contact_to_deal" }
+      ]
+    }
+  }
+}

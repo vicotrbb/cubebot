@@ -1,0 +1,24 @@
+{
+  "config": { "bases": ["appLkNDICXNqxSDhG"] },
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "patAirtableSecret" }
+  },
+  "account": "victor@example.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.airtable.com/v0/meta/whoami",
+      "body": {
+        "id": "usrL2PNC5o3H4lBEi",
+        "email": "victor@example.com",
+        "scopes": [
+          "data.records:read",
+          "data.records:write",
+          "schema.bases:read",
+          "user.email:read"
+        ]
+      }
+    }
+  ]
+}

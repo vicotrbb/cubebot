@@ -15,6 +15,10 @@ static ALL: &[&dyn Connector] = &[
     &crate::linear::Linear,
     &crate::atlassian::Atlassian,
     &crate::asana::Asana,
+    &crate::todoist::Todoist,
+    &crate::trello::Trello,
+    &crate::airtable::Airtable,
+    &crate::hubspot::Hubspot,
 ];
 
 pub fn all() -> &'static [&'static dyn Connector] {

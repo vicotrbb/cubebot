@@ -13,16 +13,20 @@ mod testing;
 
 pub mod asana;
 pub mod atlassian;
+pub mod airtable;
 pub mod dav;
 pub mod email;
 pub mod github;
 pub mod google;
 pub mod http_api;
 pub mod linear;
+pub mod hubspot;
 pub mod microsoft;
 pub mod notion;
 pub mod slack;
 pub mod telegram;
+pub mod todoist;
+pub mod trello;
 
 pub use context::{ATTACH, Attachment, Context, Credential, FILE, LARGEST, file, input};
 pub use manifest::{

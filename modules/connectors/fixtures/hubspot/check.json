@@ -1,0 +1,25 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "pat-na1-hubspot-secret" }
+  },
+  "account": "HubSpot account 62515",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.hubapi.com/account-info/2026-09/details",
+      "body": {
+        "portalId": 62515,
+        "accountType": "STANDARD",
+        "timeZone": "America/Sao_Paulo",
+        "companyCurrency": "BRL",
+        "additionalCurrencies": [],
+        "utcOffset": "-03:00",
+        "utcOffsetMilliseconds": -10800000,
+        "uiDomain": "app.hubspot.com",
+        "dataHostingLocation": "na1"
+      }
+    }
+  ]
+}
