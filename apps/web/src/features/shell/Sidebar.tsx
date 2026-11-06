@@ -468,7 +468,7 @@ function AccountMenu() {
       }
     >
       <Link to="/you" className="menu__item">
-        <UserRound /> Profile and preferences
+        <UserRound /> Profile
       </Link>
       <button
         type="button"
