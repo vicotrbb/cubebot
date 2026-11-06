@@ -29,7 +29,7 @@ pub(super) enum Renewal {
 
 impl Connections {
     /// One pass of upkeep; the subscriptions' refresher runs it every half minute.
-    pub(crate) async fn tend(&self) {
+    pub async fn tend(&self) {
         for (what, result) in [
             ("renewal", self.renew_due().await),
             ("poll", self.poll_due().await),
@@ -81,27 +81,8 @@ impl Connections {
             _ => return Ok(()),
         };
         let (status, problem) = match renewed {
-            Ok((access, refresh, expires_in)) => {
-                stored.sealed.access_token = Some(access);
-                if let Some(refresh) = refresh {
-                    stored.sealed.refresh_token = Some(refresh);
-                }
-                let credential = self.seal_connection(&mut *tx, id, &stored.sealed).await?;
-                sqlx::query!(
-                    "
-                    UPDATE connections
-                    SET credential = $2, config = $3,
-                        expires_at = clock_timestamp() + make_interval(secs => $4),
-                        refresh_after = clock_timestamp() + make_interval(secs => $4 - LEAST(600, $4 / 2))
-                    WHERE id = $1
-                    ",
-                    id,
-                    credential,
-                    stored.config,
-                    expires_in as f64,
-                )
-                .execute(&mut *tx)
-                .await?;
+            Ok(renewed) => {
+                self.save_renewed(&mut tx, &mut stored, renewed).await?;
                 (None, None)
             }
             Err(Renewal::Refused(problem)) => (Some("sign_in_again"), Some(problem)),
@@ -120,6 +101,37 @@ impl Connections {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
+        Ok(())
+    }
+
+    async fn save_renewed(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        stored: &mut Stored,
+        (access, refresh, expires_in): (String, Option<String>, i64),
+    ) -> Result<(), IdentityError> {
+        stored.sealed.access_token = Some(access);
+        if let Some(refresh) = refresh {
+            stored.sealed.refresh_token = Some(refresh);
+        }
+        let credential = self
+            .seal_connection(&mut **tx, stored.id, &stored.sealed)
+            .await?;
+        sqlx::query!(
+            "
+            UPDATE connections
+            SET credential = $2, config = $3,
+                expires_at = clock_timestamp() + make_interval(secs => $4),
+                refresh_after = clock_timestamp() + make_interval(secs => $4 - LEAST(600, $4 / 2))
+            WHERE id = $1
+            ",
+            stored.id,
+            credential,
+            stored.config,
+            expires_in as f64,
+        )
+        .execute(&mut **tx)
+        .await?;
         Ok(())
     }
 
@@ -280,6 +292,16 @@ impl Connections {
                 return Ok(());
             }
         };
+        self.record(id, cursor, events).await
+    }
+
+    /// Saves the poll's cursor and new events, and starts the routines waiting for them.
+    async fn record(
+        &self,
+        id: Uuid,
+        cursor: Option<String>,
+        events: Vec<Event>,
+    ) -> Result<(), IdentityError> {
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
             "UPDATE connections SET cursor = $2, polled_at = clock_timestamp() WHERE id = $1",

@@ -177,17 +177,7 @@ impl Connections {
         origin: Option<&str>,
     ) -> Result<SignInStarted, ConnectError> {
         let (draft, secrets, replacing) = self.draft(input.connection, &input).await?;
-        let redirect = match (input.callback, origin) {
-            (true, Some(origin)) => callback(origin),
-            (true, None) => {
-                return Err(ConnectError::Invalid(
-                    "this installation has no public address".into(),
-                ));
-            }
-            (false, _) => LOOPBACK.into(),
-        };
-        let redirect =
-            Url::parse(&redirect).map_err(|_| ConnectError::Invalid("a bad address".into()))?;
+        let redirect = redirect_to(input.callback, origin)?;
         let auth = method(draft.connector.manifest(), draft.auth)?;
         let (step, started) = match auth {
             Auth::OAuth2(oauth) if oauth.device.is_some() => self.device(&draft, oauth).await?,
@@ -583,6 +573,20 @@ impl Connections {
         tx.commit().await?;
         Ok(self.connection_summary(id).await?)
     }
+}
+
+/// Where the vendor sends the browser: this installation's callback, or the loopback address.
+fn redirect_to(callback_wanted: bool, origin: Option<&str>) -> Result<Url, ConnectError> {
+    let redirect = match (callback_wanted, origin) {
+        (true, Some(origin)) => callback(origin),
+        (true, None) => {
+            return Err(ConnectError::Invalid(
+                "this installation has no public address".into(),
+            ));
+        }
+        (false, _) => LOOPBACK.into(),
+    };
+    Url::parse(&redirect).map_err(|_| ConnectError::Invalid("a bad address".into()))
 }
 
 /// A sign-in the vendor finished, ready to save.

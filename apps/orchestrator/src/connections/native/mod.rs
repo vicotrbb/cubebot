@@ -44,8 +44,10 @@ pub enum ConnectError {
     Identity(IdentityError),
     /// What they entered is not valid.
     Invalid(String),
-    /// The vendor refused the credential or the sign-in.
+    /// The vendor refused the sign-in or the request.
     Refused(String),
+    /// The vendor refused the credential itself: a person must sign in again.
+    SignInAgain,
 }
 impl From<IdentityError> for ConnectError {
     fn from(error: IdentityError) -> Self {
@@ -396,7 +398,10 @@ impl Connections {
         let cx = self.context(config.clone(), credential);
         let account = connector.check(&cx).await.map_err(|error| {
             tracing::info!(connector = connector.manifest().id, %error, "connection check refused");
-            ConnectError::Refused(refusal(&error))
+            match error {
+                cubebot_connectors::Error::Unauthorized => ConnectError::SignInAgain,
+                error => ConnectError::Refused(refusal(&error)),
+            }
         })?;
         super::subscriptions::account(&account.name)
             .ok_or_else(|| ConnectError::Refused("the vendor named no account".into()))
@@ -455,56 +460,17 @@ impl Connections {
     ) -> Result<ConnectionSummary, ConnectError> {
         let mut tx = self.pool.begin().await?;
         let mut stored = self.stored(&mut tx, id, true).await?;
-        let manifest = stored.connector.manifest();
-        let auth = method(manifest, &stored.auth)?;
-        let rechecked = input.config.is_some() || input.secrets.is_some();
-        if let Some(secrets) = input.secrets {
-            stored.sealed.fields.extend(secrets);
-        }
-        if let Some(config) = input.config {
-            stored.config = settings(
-                manifest,
-                auth,
-                config,
-                &stored.sealed.fields,
-                &stored.config,
-            )?;
-        }
+        let disabled = changed(&mut stored, &input)?;
         if let Some(access) = &input.access {
             validate_access(&mut tx, access).await?;
         }
-        if let Some(slug_) = &input.slug {
-            slug(slug_)?;
-        }
-        let disabled = input
-            .disabled_tools
-            .map(|tools| tools_known(manifest, tools))
-            .transpose()?;
         let credential = self.seal_connection(&mut *tx, id, &stored.sealed).await?;
-        sqlx::query!(
-            r#"
-            UPDATE connections
-            SET slug = COALESCE($2, slug), config = $3, credential = $4, access = COALESCE($5, access),
-                level = COALESCE($6, level), disabled_tools = COALESCE($7, disabled_tools),
-                updated_at = clock_timestamp()
-            WHERE id = $1 AND NOT EXISTS(SELECT 1 FROM connections o WHERE o.slug = $2 AND o.id <> $1)
-            "#,
-            id,
-            input.slug,
-            stored.config,
-            credential,
-            input.access.as_ref().map(sqlx::types::Json) as _,
-            input.level.map(Level::as_str),
-            disabled.map(sqlx::types::Json) as _,
-        )
-        .execute(&mut *tx)
-        .await?
-        .rows_affected()
-        .eq(&1)
-        .then_some(())
-        .ok_or(IdentityError::Conflict)?;
+        let changes = (&stored.config, credential, disabled);
+        if !updated(&mut tx, id, &input, changes).await? {
+            return Err(IdentityError::Conflict.into());
+        }
         tx.commit().await?;
-        if rechecked {
+        if input.config.is_some() || input.secrets.is_some() {
             self.check_connection(id).await?;
         }
         Ok(self.connection_summary(id).await?)
@@ -542,9 +508,11 @@ impl Connections {
         };
         let (status, account, problem) = match &checked {
             Ok(account) => ("connected", Some(account.as_str()), None),
-            Err(ConnectError::Refused(problem)) if problem.starts_with("The account refused") => {
-                ("sign_in_again", None, Some(problem.as_str()))
-            }
+            Err(ConnectError::SignInAgain) => (
+                "sign_in_again",
+                None,
+                Some("The account refused the credential; sign in again."),
+            ),
             Err(ConnectError::Refused(problem) | ConnectError::Invalid(problem)) => {
                 ("error", None, Some(problem.as_str()))
             }
@@ -829,6 +797,74 @@ pub(super) struct Draft {
     config: Value,
     access: ProviderAccess,
     level: Level,
+}
+
+/// Applies an update's settings, secrets and switched-off tools to `stored`, checked against the
+/// manifest; answers the switched-off tools to save.
+fn changed(
+    stored: &mut Stored,
+    input: &UpdateConnection,
+) -> Result<Option<Vec<String>>, ConnectError> {
+    let manifest = stored.connector.manifest();
+    let auth = method(manifest, &stored.auth)?;
+    let app = matches!(auth, Auth::GithubApp { .. });
+    if let Some(secrets) = &input.secrets {
+        if app {
+            return Err(ConnectError::Invalid(
+                "a GitHub App's key comes from GitHub; sign in again".into(),
+            ));
+        }
+        stored.sealed.fields.extend(secrets.clone());
+    }
+    if input.config.is_some() || input.secrets.is_some() {
+        let mut config = input
+            .config
+            .clone()
+            .unwrap_or_else(|| stored.config.as_object().cloned().unwrap_or_default());
+        config.retain(|key, _| !MANAGED.contains(&key.as_str()));
+        let secrets = if app {
+            BTreeMap::new()
+        } else {
+            stored.sealed.fields.clone()
+        };
+        stored.config = settings(manifest, auth, config, &secrets, &stored.config)?;
+    }
+    if let Some(name) = &input.slug {
+        slug(name)?;
+    }
+    input
+        .disabled_tools
+        .clone()
+        .map(|tools| tools_known(manifest, tools))
+        .transpose()
+}
+
+/// Saves an update; false when another connection has the slug.
+async fn updated(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+    input: &UpdateConnection,
+    (config, credential, disabled): (&Value, Vec<u8>, Option<Vec<String>>),
+) -> Result<bool, sqlx::Error> {
+    let done = sqlx::query!(
+        r#"
+        UPDATE connections
+        SET slug = COALESCE($2, slug), config = $3, credential = $4, access = COALESCE($5, access),
+            level = COALESCE($6, level), disabled_tools = COALESCE($7, disabled_tools),
+            updated_at = clock_timestamp()
+        WHERE id = $1 AND NOT EXISTS(SELECT 1 FROM connections o WHERE o.slug = $2 AND o.id <> $1)
+        "#,
+        id,
+        input.slug,
+        config,
+        credential,
+        input.access.as_ref().map(sqlx::types::Json) as _,
+        input.level.map(Level::as_str),
+        disabled.map(sqlx::types::Json) as _,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
 }
 
 /// The new row, unless its slug is taken.

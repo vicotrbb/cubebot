@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE connections\n        SET slug = COALESCE($2, slug), config = $3, credential = $4, access = COALESCE($5, access),\n            level = COALESCE($6, level), disabled_tools = COALESCE($7, disabled_tools),\n            updated_at = clock_timestamp()\n        WHERE id = $1 AND NOT EXISTS(SELECT 1 FROM connections o WHERE o.slug = $2 AND o.id <> $1)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Bytea",
+        "Jsonb",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c58204c0178d9514337533d68c6237a643f525f84722b9f6290efd9cf11d62f7"
+}

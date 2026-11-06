@@ -84,6 +84,11 @@ impl IntoResponse for ConnectError {
             Self::Identity(error) => return error.into_response(),
             Self::Invalid(message) => (StatusCode::BAD_REQUEST, "invalid_input", message),
             Self::Refused(message) => (StatusCode::UNPROCESSABLE_ENTITY, "refused", message),
+            Self::SignInAgain => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "refused",
+                "The account refused the credential.".into(),
+            ),
         };
         let body = Json(json!({"error": error, "message": message}));
         (status, [("cache-control", "no-store")], body).into_response()

@@ -15,6 +15,7 @@ mod authentication_limits;
 mod calls;
 mod chat;
 mod collaboration;
+mod connections;
 mod console;
 mod controller_config;
 mod credential_encryption;
