@@ -23,8 +23,8 @@ pub mod telegram;
 
 pub use context::{Context, Credential, FILE, file, input};
 pub use manifest::{
-    Auth, Category, Choice, EventSpec, Field, FieldKind, Level, Manifest, OAuth2, Product, Risk,
-    Scope, Step, ToolSpec,
+    Auth, Category, Choice, ClientCredentials, EventSpec, Field, FieldKind, Level, Manifest,
+    OAuth2, PRIVATE_ADDRESS, Product, Risk, Scope, Step, ToolSpec,
 };
 pub use registry::{all, find};
 pub use settings::{problem, slug_valid};

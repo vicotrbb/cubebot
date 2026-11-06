@@ -114,9 +114,12 @@ fn field_problems(manifest: &Manifest) -> Vec<String> {
 
 fn auth_problems(manifest: &Manifest, auth: &Auth) -> Vec<String> {
     let mut found = Vec::new();
-    let guided = matches!(auth, Auth::OAuth2(_) | Auth::GithubApp { .. });
+    let guided = matches!(
+        auth,
+        Auth::OAuth2(_) | Auth::GithubApp { .. } | Auth::ClientCredentials(_)
+    );
     if guided && manifest.guide.is_empty() {
-        found.push("an OAuth or GitHub app sign-in needs a setup guide".into());
+        found.push("a sign-in with the person's own app needs a setup guide".into());
     }
     if let Auth::OAuth2(oauth) = auth {
         if oauth
@@ -128,6 +131,25 @@ fn auth_problems(manifest: &Manifest, auth: &Auth) -> Vec<String> {
         }
         if !oauth.fields.iter().any(|field| field.key == "client_id") {
             found.push("OAuth uses the person's own client, so it asks for a client_id".into());
+        }
+    }
+    if let Auth::ClientCredentials(app) = auth {
+        let keys: Vec<&str> = app.fields.iter().map(|field| field.key).collect();
+        let secret = app
+            .fields
+            .iter()
+            .any(|field| field.key == "client_secret" && matches!(field.kind, FieldKind::Secret));
+        let named = app.params.iter().all(|(_, value)| {
+            value
+                .strip_prefix('{')
+                .and_then(|value| value.strip_suffix('}'))
+                .is_none_or(|key| keys.contains(&key))
+        });
+        if !keys.contains(&"client_id") || !secret || !named {
+            found.push(
+                "a client-credentials sign-in asks for a client_id, a secret client_secret and every setting its params name"
+                    .into(),
+            );
         }
     }
     if let Auth::Linked { connectors, .. } = auth
@@ -185,6 +207,31 @@ fn the_rules_catch_a_send_tool_marked_as_a_write() {
     let found = problems(&manifest).join("\n");
     assert!(found.contains("risk is Send"), "{found}");
     assert!(found.contains("required to"), "{found}");
+}
+
+#[test]
+fn the_rules_catch_a_client_credentials_app_without_a_secret_or_a_named_setting() {
+    static AUTH: [Auth; 1] = [Auth::ClientCredentials(crate::ClientCredentials {
+        token: "https://vendor.example/oauth/token",
+        grant: "client_credentials",
+        params: &[("account_id", "{account_id}")],
+        fields: &[crate::Field {
+            key: "client_id",
+            label: "Client ID",
+            kind: FieldKind::Text,
+            required: true,
+            placeholder: "",
+            help: "",
+        }],
+    })];
+    let manifest = Manifest {
+        auth: &AUTH,
+        guide: &[],
+        ..*crate::notion::Notion.manifest()
+    };
+    let found = problems(&manifest).join("\n");
+    assert!(found.contains("secret client_secret"), "{found}");
+    assert!(found.contains("needs a setup guide"), "{found}");
 }
 
 #[derive(Deserialize)]
