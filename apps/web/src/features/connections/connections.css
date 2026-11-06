@@ -1,5 +1,7 @@
 .connectors {
   display: grid;
+  /* The category chips scroll inside the column instead of widening it on a phone. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   max-width: 1100px;
 }

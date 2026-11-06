@@ -310,9 +310,11 @@ def connections_turn(api, postgres, identity, marker, database):
             },
         )
         assert made["status"] == "connected", made
-    request = f"Check the status page, connections-{marker}" + (
-        " with-github" if github else ""
-    ) + "".join(f" with-{name}" for name in extras)
+    request = (
+        f"Check the status page, connections-{marker}"
+        + (" with-github" if github else "")
+        + "".join(f" with-{name}" for name in extras)
+    )
     path = f"/api/conversations/{identity}/messages"
     turn = api(path, command(message=request), expected=202)["id"]
     wait_for("the connections turn", lambda: finished(api, identity, turn), timeout=180)
@@ -348,14 +350,14 @@ def connections_turn(api, postgres, identity, marker, database):
         issue = calls[4]
         assert issue["outcome"]["code"] == 0 and github not in journal, issue
         print("PASS an agent read a real GitHub issue through its connection")
-    by_tool = [(json.dumps(call["input"]), call["outcome"]) for call in calls]
+    outcome = {call["name"]: call["outcome"] for call in calls}
     if "feed" in extras:
-        read = next(o for i, o in by_tool if "news__read_feed" in i)
+        read = outcome["news__read_feed"]
         assert read["code"] == 0 and "title" in json.dumps(read), read
         print("PASS an agent read a real feed through a connection with no credential")
     if "nextcloud" in extras:
-        uploaded = next(o for i, o in by_tool if "cloud__upload" in i)
-        downloaded = next(o for i, o in by_tool if "cloud__download" in i)
+        uploaded = outcome["cloud__upload"]
+        downloaded = outcome["cloud__download"]
         assert uploaded["code"] == 0, uploaded
         assert "cubebot-upload" in json.dumps(downloaded), downloaded
         assert extras["nextcloud"] not in journal, "a credential leaked"
@@ -364,15 +366,22 @@ def connections_turn(api, postgres, identity, marker, database):
 
 
 def wave_two_connections(api, postgres):
-    """Optional connections to real services: CUBEBOT_CHECK_FEED is a feed address and
-    CUBEBOT_CHECK_NEXTCLOUD is `<address> <user> <app password>`, reachable from this host."""
+    """Optional connections to real services, reachable from this host.
+
+    CUBEBOT_CHECK_FEED is a feed address; CUBEBOT_CHECK_NEXTCLOUD is
+    `<address> <user> <app password>`.
+    """
     extras = {}
     feed = os.environ.get("CUBEBOT_CHECK_FEED")
     if feed:
         made = api(
             "/api/connections",
-            {"connector": "rss", "slug": "news", "auth": "public",
-             "config": {"feeds": [feed]}},
+            {
+                "connector": "rss",
+                "slug": "news",
+                "auth": "public",
+                "config": {"feeds": [feed]},
+            },
         )
         assert made["status"] == "connected", made
         extras["feed"] = feed
@@ -381,15 +390,33 @@ def wave_two_connections(api, postgres):
         url, user, password = nextcloud.split()
         made = api(
             "/api/connections",
-            {"connector": "nextcloud", "slug": "cloud", "auth": "password",
-             "config": {"url": url, "username": user},
-             "secrets": {"password": password}},
+            {
+                "connector": "nextcloud",
+                "slug": "cloud",
+                "auth": "password",
+                "config": {"url": url, "username": user},
+                "secrets": {"password": password},
+            },
         )
         assert made["status"] == "connected", made
         moved = json.dumps(reachable(url))
-        update = f"UPDATE connections SET config = config || '{{\"url\": {moved}}}' WHERE slug = 'cloud'"
+        update = (
+            f"UPDATE connections SET config = config || '{{\"url\": {moved}}}' "
+            "WHERE slug = 'cloud'"
+        )
         subprocess.run(
-            ["docker", "exec", postgres, "psql", "-U", "cubebot", "-d", "cubebot_test", "-c", update],
+            [
+                "docker",
+                "exec",
+                postgres,
+                "psql",
+                "-U",
+                "cubebot",
+                "-d",
+                "cubebot_test",
+                "-c",
+                update,
+            ],
             check=True,
             stdout=subprocess.DEVNULL,
         )
