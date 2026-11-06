@@ -74,6 +74,7 @@ fn pod_defaults(expected: &mut PodSpec, actual: &PodSpec) {
             name.clone(),
         );
     }
+    admitted_priority(expected, actual);
     fill(&mut expected.priority, &actual.priority, 0);
     fill(
         &mut expected.preemption_policy,
@@ -135,6 +136,14 @@ fn pod_defaults(expected: &mut PodSpec, actual: &PodSpec) {
             .is_some_and(|values| default_tolerations(values))
     {
         expected.tolerations = actual.tolerations.clone();
+    }
+}
+// A cluster's global default PriorityClass names itself and sets its value and preemption policy.
+fn admitted_priority(expected: &mut PodSpec, actual: &PodSpec) {
+    if expected.priority_class_name.is_none() && actual.priority_class_name.is_some() {
+        expected.priority_class_name = actual.priority_class_name.clone();
+        expected.priority = actual.priority;
+        expected.preemption_policy = actual.preemption_policy.clone();
     }
 }
 fn container_defaults(expected: &mut Container, actual: &Container) {
@@ -332,6 +341,19 @@ mod tests {
         assert!(verify(&intent, &admitted).is_ok());
         let other = mutate(&admitted, "/spec/runtimeClassName", json!("kata"));
         assert!(verify(&intent, &other).is_err());
+    }
+    #[test]
+    fn a_global_default_priority_class_may_set_only_its_priority() {
+        let intent = pod();
+        let admitted = mutate(&intent, "/spec/priorityClassName", json!("homelab-low"));
+        let admitted = mutate(&admitted, "/spec/priority", json!(1000));
+        let admitted = mutate(&admitted, "/spec/preemptionPolicy", json!("Never"));
+        assert!(verify(&intent, &admitted).is_ok());
+        let unclassed = mutate(&intent, "/spec/priority", json!(1000));
+        assert!(verify(&intent, &unclassed).is_err());
+        let chosen = mutate(&intent, "/spec/priorityClassName", json!("agents"));
+        let replaced = mutate(&chosen, "/spec/priorityClassName", json!("homelab-low"));
+        assert!(verify(&chosen, &replaced).is_err());
     }
     #[test]
     fn only_bounded_standard_node_tolerations_are_accepted() {

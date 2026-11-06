@@ -202,11 +202,14 @@ impl Controller {
             }
             self.owner.check().await?;
             // Each effect is durably reserved before dispatch. Cancellation never replays it.
-            if !matches!(
-                tokio::time::timeout(Duration::from_secs(60), self.reconcile(*agent)).await,
-                Ok(Ok(()))
-            ) {
-                tracing::warn!(agent = %agent.0,"agent lifecycle reconciliation held or failed");
+            match tokio::time::timeout(Duration::from_secs(60), self.reconcile(*agent)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(agent = %agent.0, ?error, "agent lifecycle reconciliation held or failed");
+                }
+                Err(_) => {
+                    tracing::warn!(agent = %agent.0, "agent lifecycle reconciliation timed out");
+                }
             }
         }
         Ok(())
