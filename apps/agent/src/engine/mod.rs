@@ -291,6 +291,7 @@ impl Agent {
             crate::memory::Memories::new(self.memory.clone()),
             crate::skills::Skills::new(self.memory.clone(), turn),
             crate::collaboration::Collaboration::new(self.memory.clone(), turn, steering.clone()),
+            crate::connections::Connections::new(self.memory.clone(), &work.connections),
         );
         let task = tokio::spawn(turn::run(
             work,

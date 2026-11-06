@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT status FROM connections\n            WHERE id = $1 AND (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($2::uuid))\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f4718db7685ee88818527b4e49c3186db2ea97c56a373afebbe9a8d317e6e50e"
+}

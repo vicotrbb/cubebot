@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO connection_events (connection_id, kind, event_id, summary)\n        VALUES ($1, $2, $3, $4)\n        ON CONFLICT DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9a0c5fb197a2458d634c05bdfa4d9106311805480f7613d6d852b92c7d273fd9"
+}

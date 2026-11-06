@@ -1,0 +1,76 @@
+<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:s="http://sabredav.org/ns" xmlns:cal="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:oc="http://owncloud.org/ns" xmlns:nc="http://nextcloud.org/ns">
+ <d:response>
+  <d:href>/dav/victor/personal/6f1c2a3e-1b6d-4c9e-9a51-0d2f6b3c8e41.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <d:getetag>&quot;8a7c1f0e2d3b4a596877e1d2c3b4a596&quot;</d:getetag>
+    <cal:calendar-data>BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//IDN nextcloud.com//Calendar app 4.7.6//EN
+CALSCALE:GREGORIAN
+BEGIN:VTIMEZONE
+TZID:Europe/Berlin
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0100
+TZOFFSETTO:+0200
+TZNAME:CEST
+DTSTART:19700329T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0100
+TZNAME:CET
+DTSTART:19701025T030000
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+CREATED:20261101T101500Z
+DTSTAMP:20261101T101500Z
+LAST-MODIFIED:20261101T101500Z
+SEQUENCE:2
+UID:6f1c2a3e-1b6d-4c9e-9a51-0d2f6b3c8e41
+DTSTART;TZID=Europe/Berlin:20261106T093000
+DTEND;TZID=Europe/Berlin:20261106T100000
+STATUS:CONFIRMED
+SUMMARY:Planning\, Q1
+LOCATION:Room 4
+DESCRIPTION:Agenda: budget\, hiring and the roadmap for the first quarter o
+ f next year.\nBring numbers.
+BEGIN:VALARM
+ACTION:DISPLAY
+DESCRIPTION:Reminder
+TRIGGER:-PT15M
+END:VALARM
+END:VEVENT
+END:VCALENDAR
+</cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+ <d:response>
+  <d:href>/dav/victor/personal/B5F2A6D1-4C3E-4E0B-9C1A-2F7D8E9A0B12.ics</d:href>
+  <d:propstat>
+   <d:prop>
+    <d:getetag>"C=12@U=6e1c3b2a"</d:getetag>
+    <cal:calendar-data><![CDATA[BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Apple Inc.//iOS 18.1//EN
+BEGIN:VEVENT
+UID:B5F2A6D1-4C3E-4E0B-9C1A-2F7D8E9A0B12
+DTSTAMP:20261030T120000Z
+DTSTART;VALUE=DATE:20261107
+DTEND;VALUE=DATE:20261108
+SUMMARY:Holiday
+RRULE:FREQ=YEARLY
+END:VEVENT
+END:VCALENDAR
+]]></cal:calendar-data>
+   </d:prop>
+   <d:status>HTTP/1.1 200 OK</d:status>
+  </d:propstat>
+ </d:response>
+</d:multistatus>

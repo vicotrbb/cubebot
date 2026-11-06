@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE connection_events SET routines = $4 WHERE connection_id = $1 AND kind = $2 AND event_id = ANY($3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "TextArray",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "212ff042be3fb27a8813d22253c02e54ce557766eed4075131f09aa8275da625"
+}

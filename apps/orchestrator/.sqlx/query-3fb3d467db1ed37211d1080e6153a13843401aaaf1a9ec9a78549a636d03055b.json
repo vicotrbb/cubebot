@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE connections\n            SET credential = $2, config = $3, account = COALESCE($4, account),\n                expires_at = clock_timestamp() + make_interval(secs => $5),\n                refresh_after = clock_timestamp() + make_interval(secs => $5 - LEAST(600, $5 / 2)),\n                status = CASE WHEN $6::text IS NULL THEN 'connected' ELSE 'error' END, problem = $6,\n                checked_at = clock_timestamp(), updated_at = clock_timestamp()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Jsonb",
+        "Text",
+        "Float8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3fb3d467db1ed37211d1080e6153a13843401aaaf1a9ec9a78549a636d03055b"
+}

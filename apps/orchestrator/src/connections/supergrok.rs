@@ -3,7 +3,9 @@
 //! (docs/adr/identity.md#personal-subscription-connections).
 use super::{
     Connections, administrator,
-    subscriptions::{Failure, Flow, Grant, SignIn, SignInError, SubscriptionSummary, Tokens},
+    subscriptions::{
+        Failure, Flow, Grant, SignIn, SignInError, SubscriptionSummary, Tokens, Waiting,
+    },
 };
 use crate::identity::Actor;
 use cubebot_protocol::runtime::ProviderKind;
@@ -12,7 +14,6 @@ use openidconnect::{
     core::{CoreIdToken, CoreIdTokenVerifier},
 };
 use reqwest::Url;
-use serde::Deserialize;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -31,18 +32,6 @@ pub struct SupergrokSignIn {
     pub interval: u64,
 }
 
-#[derive(Deserialize)]
-struct Device {
-    device_code: String,
-    user_code: String,
-    verification_uri: String,
-    #[serde(default)]
-    verification_uri_complete: Option<String>,
-    expires_in: u64,
-    #[serde(default)]
-    interval: Option<u64>,
-}
-
 impl Connections {
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn start_supergrok(&self, actor: &Actor) -> Result<SupergrokSignIn, SignInError> {
@@ -50,13 +39,13 @@ impl Connections {
         administrator(&mut tx, actor).await?;
         tx.commit().await?;
         let url = super::subscriptions::endpoint(self.vendor(), ISSUER, "oauth2/device/code")?;
-        let body =
-            super::subscriptions::post(url, &[("client_id", CLIENT_ID), ("scope", SCOPE)]).await?;
-        let device: Device = serde_json::from_slice(&body)
-            .map_err(|error| Failure::Unavailable(Some(error.into())))?;
-        let controlled =
-            self.vendor().is_some() || std::env::var_os("CUBEBOT_TEST_PROVIDER_ORIGIN").is_some();
-        let (page, interval) = validated(&device, controlled).ok_or(Failure::Unavailable(None))?;
+        let device =
+            super::subscriptions::device(url, &[("client_id", CLIENT_ID), ("scope", SCOPE)])
+                .await?;
+        let ours = |host: &str| host == "x.ai" || host.ends_with(".x.ai");
+        let (page, interval) = device
+            .validated(ours, self.controlled())
+            .ok_or(Failure::Unavailable(None))?;
         let sign_in = self.sign_ins.start(SignIn {
             actor: actor.id,
             until: Instant::now() + Duration::from_secs(device.expires_in),
@@ -104,10 +93,9 @@ impl Connections {
             ("client_id", CLIENT_ID),
             ("device_code", &device_code),
         ];
-        let grant = match super::subscriptions::tokens(url, &form, None).await {
+        let grant = match super::subscriptions::device_tokens(url, &form).await? {
             Ok(grant) => grant,
-            Err(Failure::Oauth(code)) => return self.waiting(actor, sign_in, &code),
-            Err(failure) => return Err(failure.into()),
+            Err(waiting) => return self.waiting(actor, sign_in, waiting),
         };
         self.sign_ins.finish(sign_in);
         let account = account(&grant).ok_or(SignInError::Refused("sign_in_refused"))?;
@@ -121,51 +109,24 @@ impl Connections {
         &self,
         actor: &Actor,
         sign_in: Uuid,
-        code: &str,
+        waiting: Waiting,
     ) -> Result<Option<SubscriptionSummary>, SignInError> {
-        let refused = match code {
-            "authorization_pending" => return Ok(None),
-            "slow_down" => {
+        match waiting {
+            Waiting::Pending { slower } => {
                 self.sign_ins.with(sign_in, actor.id, |pending| {
-                    if let Flow::Supergrok { interval, .. } = &mut pending.flow {
+                    if let (true, Flow::Supergrok { interval, .. }) = (slower, &mut pending.flow) {
                         *interval += Duration::from_secs(5);
                     }
                     (false, ())
                 })?;
-                return Ok(None);
+                Ok(None)
             }
-            "access_denied" | "authorization_denied" => "sign_in_denied",
-            "expired_token" => "sign_in_expired",
-            _ => "sign_in_refused",
-        };
-        self.sign_ins.finish(sign_in);
-        Err(SignInError::Refused(refused))
+            Waiting::Refused(code) => {
+                self.sign_ins.finish(sign_in);
+                Err(SignInError::Refused(code))
+            }
+        }
     }
-}
-
-/// The page shown to the person must be xAI's own, over HTTPS, unless a test controls the vendor.
-fn validated(device: &Device, controlled: bool) -> Option<(String, Duration)> {
-    let page = device
-        .verification_uri_complete
-        .as_deref()
-        .unwrap_or(&device.verification_uri);
-    let url = Url::parse(page).ok()?;
-    let host = url.host_str()?;
-    let ours = host == "x.ai" || host.ends_with(".x.ai") || controlled;
-    let printable = |text: &str, most: usize| {
-        (1..=most).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_graphic())
-    };
-    (ours
-        && (url.scheme() == "https" || controlled)
-        && printable(&device.device_code, 1024)
-        && printable(&device.user_code, 32)
-        && (60..=3600).contains(&device.expires_in))
-    .then(|| {
-        (
-            page.to_owned(),
-            Duration::from_secs(device.interval.unwrap_or(5).clamp(1, 60)),
-        )
-    })
 }
 
 /// The ID token came straight from xAI's token endpoint over TLS, which OpenID Connect accepts in

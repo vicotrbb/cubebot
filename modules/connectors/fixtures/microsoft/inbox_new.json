@@ -1,0 +1,38 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/mailFolders('inbox')/messages(id,from,subject,receivedDateTime,bodyPreview)",
+  "value": [
+    {
+      "id": "AAMkOld",
+      "receivedDateTime": "2026-11-05T10:00:00Z",
+      "subject": "Earlier",
+      "bodyPreview": "Already seen.",
+      "from": {
+        "emailAddress": {
+          "name": "Megan Bowen",
+          "address": "megan@contoso.com"
+        }
+      }
+    },
+    {
+      "id": "AAMkNew1",
+      "receivedDateTime": "2026-11-05T10:00:00Z",
+      "subject": "Quarterly report",
+      "bodyPreview": "Attached is the report.",
+      "from": {
+        "emailAddress": { "name": "Lee Gu", "address": "lee@contoso.com" }
+      }
+    },
+    {
+      "id": "AAMkNew2",
+      "receivedDateTime": "2026-11-05T10:05:00Z",
+      "subject": "Re: Quarterly report",
+      "bodyPreview": "Thanks!",
+      "from": {
+        "emailAddress": {
+          "name": "Adele Vance",
+          "address": "adele@contoso.com"
+        }
+      }
+    }
+  ]
+}

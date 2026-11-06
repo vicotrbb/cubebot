@@ -52,6 +52,7 @@ fn routine(schedule: Option<&str>, coalesce: bool) -> CreateRoutine {
             schedule: schedule.map(Into::into),
             coalesce,
             enabled: true,
+            trigger: None,
         },
     }
 }

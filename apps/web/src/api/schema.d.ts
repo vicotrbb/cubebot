@@ -275,6 +275,43 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/connections': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Every connection with whether this agent may use it; needs `agent.manage` on the agent. */
+    get: operations['agent_connections']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/connections/{connection}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Grants or withdraws the agent's use of a connection with explicit grants, for administrators;
+     *     409 for a connection every agent may use, whose access is changed on the connection.
+     */
+    put: operations['grant_connection']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/definition': {
     parameters: {
       query?: never
@@ -546,6 +583,131 @@ export interface paths {
     }
     get?: never
     put: operations['read_broadcasts']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connections': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_connections']
+    put?: never
+    /**
+     * Saves a connection signed in with pasted secrets or another connection, once its check
+     *     passes; 422 with the vendor's reason when it does not, 409 when the slug is taken.
+     */
+    post: operations['create_connection']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connections/sign-ins': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Starts an OAuth, device-code or GitHub App sign-in with the person's own app. */
+    post: operations['start_connection_sign_in']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connections/sign-ins/{sign_in}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Finishes with the pasted address the browser landed on, or polls a device sign-in: 202 until
+     *     the person approves, then the saved connection.
+     */
+    post: operations['finish_connection_sign_in']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connections/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Changed settings or secrets are checked again; the result is in the status. */
+    put: operations['update_connection']
+    post?: never
+    /** Forgets the connection and asks the vendor to revoke an OAuth sign-in. */
+    delete: operations['delete_connection']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connections/{id}/activity': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['connection_activity']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connections/{id}/check': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Tests the connection: renews its credential when due and runs the connector's check. */
+    post: operations['check_connection']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/connectors': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Every connector, and the redirect addresses an OAuth client must allow. */
+    get: operations['catalog']
+    put?: never
     post?: never
     delete?: never
     options?: never
@@ -2051,6 +2213,22 @@ export interface components {
       tts_provider?: null | components['schemas']['Provider']
       voice?: null | components['schemas']['Voice']
     }
+    /** @description A connection as one agent's Connections tab shows it. */
+    AgentConnection: {
+      account?: string | null
+      /** @description Every agent may use it; access is changed on the connection, not per agent. */
+      all_agents: boolean
+      connector: string
+      /** @description This agent may use it. */
+      enabled: boolean
+      /** @description The events it reports, for routine triggers. */
+      events: string[]
+      /** Format: uuid */
+      id: string
+      level: components['schemas']['Level']
+      slug: string
+      status: string
+    }
     /** Format: uuid */
     AgentId: string
     /** @description A server as one agent's Connections tab shows it. */
@@ -2156,6 +2334,33 @@ export interface components {
       /** Format: int64 */
       sequence: number
     }
+    Auth:
+      | {
+          fields: components['schemas']['Field'][]
+          /** @enum {string} */
+          kind: 'api_key'
+        }
+      | {
+          fields: components['schemas']['Field'][]
+          /** @enum {string} */
+          kind: 'password'
+        }
+      | (components['schemas']['OAuth2'] & {
+          /** @enum {string} */
+          kind: 'oauth2'
+        })
+      | {
+          fields: components['schemas']['Field'][]
+          /** @enum {string} */
+          kind: 'github_app'
+        }
+      | {
+          connectors: string[]
+          /** @enum {string} */
+          kind: 'linked'
+          /** @description The product that connection needs switched on. */
+          product: string
+        }
     Authorization: {
       authorization_url: string
     }
@@ -2248,6 +2453,17 @@ export interface components {
       | 'browser_view'
       | 'browser_control'
       | 'room_manage'
+    /** @description Every connector, and the addresses an OAuth client must allow. */
+    Catalog: {
+      /** @description This installation's own callback, when it has a public address. */
+      callback_redirect?: string | null
+      connectors: components['schemas']['Manifest'][]
+      /** @description The loopback address a sign-in lands on and the person pastes back. */
+      loopback_redirect: string
+    }
+    /** @enum {string} */
+    Category:
+      'mail_calendar' | 'files' | 'dev' | 'work' | 'chat' | 'home' | 'finance'
     ChatgptSignIn: {
       /** Format: uuid */
       sign_in: string
@@ -2266,6 +2482,10 @@ export interface components {
       response?: string | null
       status: string
     }
+    Choice: {
+      label: string
+      value: string
+    }
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
       /** @description `None` keeps the key saved for this provider. A subscription has none: its owner signs in. */
@@ -2282,6 +2502,49 @@ export interface components {
       provider?: components['schemas']['ProviderKind']
       /** Format: uuid */
       request_id: string
+    }
+    /** @description What a connection reported recently and which routines it starts. */
+    ConnectionActivity: {
+      events: components['schemas']['ConnectionEvent'][]
+      routines: components['schemas']['EventRoutine'][]
+    }
+    ConnectionEvent: {
+      kind: string
+      received_at: string
+      /**
+       * Format: int32
+       * @description Routines it started.
+       */
+      routines: number
+      /** @description Untrusted vendor text. */
+      summary: string
+    }
+    ConnectionGrant: {
+      /** @description Whether the agent may use the connection. */
+      enabled: boolean
+    }
+    ConnectionSummary: {
+      access: components['schemas']['ProviderAccess']
+      /** @description The account as its vendor names it. */
+      account?: string | null
+      /** @description How it signs in: `api_key`, `password`, `oauth2`, `github_app` or `linked`. */
+      auth: string
+      checked_at?: string | null
+      /** @description Settings that are not secret. */
+      config: Record<string, never>
+      connector: string
+      disabled_tools: string[]
+      /** @description When the current access token expires; the orchestrator renews it before then. */
+      expires_at?: string | null
+      /** Format: uuid */
+      id: string
+      level: components['schemas']['Level']
+      polled_at?: string | null
+      problem?: string | null
+      /** @description Prefixes the connection's tools as `<slug>__<tool>`. */
+      slug: string
+      /** @description `connected`, `sign_in_again` or `error`. */
+      status: string
     }
     CreateAccount: {
       administrator?: boolean
@@ -2427,6 +2690,22 @@ export interface components {
       /** Format: uuid */
       turn_id: string
     }
+    EventRoutine: {
+      /** Format: uuid */
+      agent: string
+      agent_name: string
+      enabled: boolean
+      event: string
+      /** Format: uuid */
+      id: string
+      name: string
+    }
+    EventSpec: {
+      description: string
+      /** @description Such as `mail.received`. */
+      kind: string
+      product?: string | null
+    }
     Explain: {
       capability: components['schemas']['Capability']
       scope: components['schemas']['Scope']
@@ -2440,6 +2719,41 @@ export interface components {
     }
     /** @enum {string} */
     FavoriteKind: 'agent' | 'room'
+    Field: {
+      help: string
+      /** @description The setting's name; a secret's is its name in the sealed credential. */
+      key: string
+      kind: components['schemas']['FieldKind']
+      label: string
+      placeholder: string
+      required: boolean
+    }
+    FieldKind:
+      | {
+          /** @enum {string} */
+          type: 'text'
+        }
+      | {
+          /** @enum {string} */
+          type: 'secret'
+        }
+      | {
+          /** @enum {string} */
+          type: 'lines'
+        }
+      | {
+          /** @enum {string} */
+          type: 'url'
+        }
+      | {
+          /** @enum {string} */
+          type: 'number'
+        }
+      | {
+          choices: components['schemas']['Choice'][]
+          /** @enum {string} */
+          type: 'choice'
+        }
     /**
      * @description `write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.
      * @enum {string}
@@ -2491,6 +2805,10 @@ export interface components {
     }
     FillVaultItem: {
       field: components['schemas']['VaultField']
+    }
+    FinishSignIn: {
+      /** @description The address the browser landed on; absent while a device sign-in waits. */
+      url?: string | null
     }
     /** Format: uuid */
     GrantId: string
@@ -2615,6 +2933,12 @@ export interface components {
       /** @description The `http://127.0.0.1:1456/auth/callback?...` address the browser landed on. */
       url: string
     }
+    /**
+     * @description A connection's permission level: the tools at or below it are offered. With no approval queue,
+     *     this is the safety control (docs/adr/agents.md#autonomous-tool-use-within-granted-permissions).
+     * @enum {string}
+     */
+    Level: 'read' | 'write' | 'full'
     /** @enum {string} */
     LifecycleAction: 'start' | 'stop' | 'restart' | 'retire'
     LifecycleCommand: {
@@ -2648,6 +2972,28 @@ export interface components {
       /** @description The agent's words: untrusted text to show, never markup. */
       reason: string
       site: string
+    }
+    Manifest: {
+      /** @description The ways to sign in, the first being the one suggested. */
+      auth: components['schemas']['Auth'][]
+      category: components['schemas']['Category']
+      /** @description Settings every sign-in method shares, such as a server address. */
+      config: components['schemas']['Field'][]
+      /** @description One line for the catalog card. */
+      description: string
+      events: components['schemas']['EventSpec'][]
+      /** @description The setup wizard. `{redirect_uri}` in a step stands for this installation's address. */
+      guide: components['schemas']['Step'][]
+      /** @description Letters, digits and hyphens; stored on every connection, so it never changes. */
+      id: string
+      /** @description The level a new connection gets. */
+      level: components['schemas']['Level']
+      name: string
+      /** @description Parts of a suite a connection can switch on, such as Gmail and Calendar. */
+      products: components['schemas']['Product'][]
+      tools: components['schemas']['ToolSpec'][]
+      /** @description Something the person must know before relying on the connection. */
+      warning?: string | null
     }
     McpGrant: {
       /** @description Whether the agent may use the server. */
@@ -2770,6 +3116,18 @@ export interface components {
        */
       request_id: string
       title: string
+    }
+    OAuth2: {
+      authorize: string
+      /** @description A device-code endpoint: sign-in without any redirect, for public clients. */
+      device?: string | null
+      /** @description The client id, and the secret when the client has one. */
+      fields: components['schemas']['Field'][]
+      /** @description Extra authorization parameters, such as Google's `access_type=offline`. */
+      params: string[][]
+      revoke?: string | null
+      scopes: components['schemas']['Scope'][]
+      token: string
     }
     /** @description One occurrence that made a turn: its origin and the turn's outcome so far. */
     Occurrence: {
@@ -2894,6 +3252,10 @@ export interface components {
       collapsed?: string[]
       favorites?: components['schemas']['Favorite'][]
       theme?: components['schemas']['Theme']
+    }
+    Product: {
+      id: string
+      name: string
     }
     Progress: {
       command: string
@@ -3034,6 +3396,11 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    /**
+     * @description What a tool can do. `Send` is irreversible or reaches other people: email, a chat post, a comment.
+     * @enum {string}
+     */
+    Risk: 'read' | 'write' | 'send'
     Room: {
       /** Format: uuid */
       id: string
@@ -3097,12 +3464,36 @@ export interface components {
       /** Format: int64 */
       revision: number
       schedule?: string | null
+      trigger?: null | components['schemas']['Trigger']
       /** @description A webhook secret is set; it is shown only when made. */
       webhook: boolean
     }
     RunRoutine: {
       /** Format: uuid */
       request_id: string
+    }
+    /**
+     * @description A connection signed in with pasted secrets or another connection; OAuth and GitHub Apps sign
+     *     in through `POST /api/connections/sign-ins`.
+     */
+    SaveConnection: {
+      access?: null | components['schemas']['ProviderAccess']
+      /** @description `api_key`, `password` or `linked`, as the connector offers. */
+      auth: string
+      config?: Record<string, never>
+      connector: string
+      level?: null | components['schemas']['Level']
+      /**
+       * Format: uuid
+       * @description A linked sign-in's connection, such as the Google account Email signs in with.
+       */
+      linked?: string | null
+      /** @description The sign-in method's secret fields; never returned. */
+      secrets?: {
+        [key: string]: string
+      }
+      /** @description Lowercase letters, digits and hyphens, at most 32. */
+      slug: string
     }
     SaveMcpServer: {
       access?: null | components['schemas']['ProviderAccess']
@@ -3135,6 +3526,7 @@ export interface components {
       prompt?: string | null
       /** @description Five-field cron in UTC; `null` runs only by hand or webhook. */
       schedule?: string | null
+      trigger?: null | components['schemas']['Trigger']
     }
     SaveSpeech: {
       /** @description `None` keeps the stored ElevenLabs key. */
@@ -3214,6 +3606,36 @@ export interface components {
     ShareKind: 'user' | 'team' | 'agent'
     /** @enum {string} */
     SharePermission: 'read' | 'write'
+    SignInStarted:
+      | {
+          /** @enum {string} */
+          kind: 'redirect'
+          redirect_uri: string
+          /** Format: uuid */
+          sign_in: string
+          url: string
+        }
+      | {
+          /** Format: int64 */
+          expires_in: number
+          /** Format: int64 */
+          interval: number
+          /** @enum {string} */
+          kind: 'device'
+          /** Format: uuid */
+          sign_in: string
+          url: string
+          user_code: string
+        }
+      | {
+          /** @enum {string} */
+          kind: 'form'
+          manifest: string
+          redirect_uri: string
+          /** Format: uuid */
+          sign_in: string
+          url: string
+        }
     SignedOut: {
       revoked: boolean
     }
@@ -3312,6 +3734,26 @@ export interface components {
       /** Format: int64 */
       unpriced: number
     }
+    StartSignIn: {
+      access?: null | components['schemas']['ProviderAccess']
+      /** @description `oauth2` or `github_app`, as the connector offers. */
+      auth: string
+      /** @description Lands on this installation's callback instead of a loopback address to paste back. */
+      callback?: boolean
+      config?: Record<string, never>
+      /**
+       * Format: uuid
+       * @description Signs in this connection again, keeping its access, level and any secret not given.
+       */
+      connection?: string | null
+      connector: string
+      level?: null | components['schemas']['Level']
+      /** @description The client secret, when the person's OAuth client has one. */
+      secrets?: {
+        [key: string]: string
+      }
+      slug: string
+    }
     Steering: {
       /** Format: uuid */
       id: string
@@ -3320,6 +3762,14 @@ export interface components {
       message: string
       /** @description Copied from steering of the work that delegated this. */
       propagated: boolean
+    }
+    Step: {
+      body: string
+      /** @description Text the person copies into the vendor's form. */
+      copy?: string | null
+      /** @description A page to open, such as the vendor console's credentials screen. */
+      link?: string | null
+      title: string
     }
     Subject: {
       /** Format: int64 */
@@ -3433,6 +3883,20 @@ export interface components {
     Token: {
       token: string
     }
+    ToolSpec: {
+      description: string
+      /** @description Offered to agents as `<slug>__<name>`. */
+      name: string
+      product?: string | null
+      risk: components['schemas']['Risk']
+    }
+    /** @description A connection event that runs a routine (docs/adr/agents.md#scheduled-and-event-triggered-work). */
+    Trigger: {
+      /** @description The connection's slug. */
+      connection: string
+      /** @description One of its connector's event kinds, such as `mail.received`. */
+      event: string
+    }
     Turn: {
       /** @description Files the agent sent with this reply. */
       attachments: components['schemas']['ReplyAttachment'][]
@@ -3529,6 +3993,17 @@ export interface components {
        * @description Concurrent delegated tasks, one to four; `None` keeps the current setting.
        */
       task_lanes?: number | null
+    }
+    /** @description Each field present replaces the current one; changed settings or secrets are checked again. */
+    UpdateConnection: {
+      access?: null | components['schemas']['ProviderAccess']
+      config?: Record<string, never> | null
+      disabled_tools?: string[] | null
+      level?: null | components['schemas']['Level']
+      secrets?: {
+        [key: string]: string
+      } | null
+      slug?: string | null
     }
     UpdateRoutine: {
       /** Format: int64 */
@@ -4101,6 +4576,57 @@ export interface operations {
       }
     }
   }
+  agent_connections: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentConnection'][]
+        }
+      }
+    }
+  }
+  grant_connection: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        connection: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ConnectionGrant']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   update: {
     parameters: {
       query?: never
@@ -4556,6 +5082,267 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['ReadCursor']
+        }
+      }
+    }
+  }
+  list_connections: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConnectionSummary'][]
+        }
+      }
+    }
+  }
+  create_connection: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveConnection']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConnectionSummary']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  start_connection_sign_in: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StartSignIn']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SignInStarted']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  finish_connection_sign_in: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        sign_in: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['FinishSignIn']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConnectionSummary']
+        }
+      }
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  update_connection: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateConnection']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConnectionSummary']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  delete_connection: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  connection_activity: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConnectionActivity']
+        }
+      }
+    }
+  }
+  check_connection: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ConnectionSummary']
+        }
+      }
+    }
+  }
+  catalog: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Catalog']
         }
       }
     }

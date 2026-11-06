@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT origin, message FROM chat_turns WHERE routine_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "origin",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "message",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "4c17ac639f8892394444129a6256ac3fab325cc8d7570250c287b4484745f91e"
+}

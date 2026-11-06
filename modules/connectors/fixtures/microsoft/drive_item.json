@@ -1,0 +1,18 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/drive/items/$entity",
+  "@microsoft.graph.downloadUrl": "https://public.dm.files.1drv.com/y4mPhoto",
+  "id": "01BYE5RZ",
+  "name": "photo.png",
+  "size": 4,
+  "webUrl": "https://contoso-my.sharepoint.com/personal/adele/Documents/photo.png",
+  "lastModifiedDateTime": "2026-11-01T09:12:00Z",
+  "file": {
+    "mimeType": "image/png",
+    "hashes": { "quickXorHash": "AAAAAAAAAAAAAAAAAAAAAAAAAAA=" }
+  },
+  "parentReference": {
+    "driveId": "b!-RIj2DuyvEyV1T4NlOaMHk8XkS",
+    "id": "01BYE5RZ56Y2GOVW7725BZO354PWSELRRZ",
+    "path": "/drive/root:"
+  }
+}

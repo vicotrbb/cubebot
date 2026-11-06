@@ -1,0 +1,110 @@
+{
+  "id": "18c2f0a1b2c3d4e5",
+  "historyId": "1003",
+  "messages": [
+    {
+      "id": "18c2f0a1b2c3d4e5",
+      "threadId": "18c2f0a1b2c3d4e5",
+      "labelIds": ["INBOX"],
+      "snippet": "Hi Victor",
+      "payload": {
+        "partId": "",
+        "mimeType": "multipart/mixed",
+        "filename": "",
+        "headers": [
+          {
+            "name": "From",
+            "value": "Ana Souza <ana@example.org>"
+          },
+          {
+            "name": "To",
+            "value": "victor@example.com"
+          },
+          {
+            "name": "Subject",
+            "value": "Q3 report"
+          },
+          {
+            "name": "Date",
+            "value": "Wed, 4 Nov 2026 14:03:11 -0300"
+          }
+        ],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "partId": "0",
+            "mimeType": "multipart/alternative",
+            "filename": "",
+            "headers": [],
+            "body": {
+              "size": 0
+            },
+            "parts": [
+              {
+                "partId": "0.0",
+                "mimeType": "text/plain",
+                "filename": "",
+                "headers": [],
+                "body": {
+                  "size": 71,
+                  "data": "SGkgVmljdG9yLA0KDQpUaGUgUTMgcmVwb3J0IGlzIGF0dGFjaGVkIOKAlCBudW1iZXJzIGxvb2sgZ29vZD8NCg0KQW5hDQo"
+                }
+              },
+              {
+                "partId": "0.1",
+                "mimeType": "text/html",
+                "filename": "",
+                "headers": [],
+                "body": {
+                  "size": 77,
+                  "data": "PGRpdj5IaSBWaWN0b3IsPGJyPlRoZSBRMyByZXBvcnQgaXMgYXR0YWNoZWQgJm1kYXNoOyBudW1iZXJzIGxvb2sgZ29vZD88L2Rpdj4"
+                }
+              }
+            ]
+          },
+          {
+            "partId": "1",
+            "mimeType": "application/pdf",
+            "filename": "q3-report.pdf",
+            "headers": [],
+            "body": {
+              "attachmentId": "ANGjdJ8report",
+              "size": 40211
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "18c2f1ffeeddccbb",
+      "threadId": "18c2f0a1b2c3d4e5",
+      "labelIds": ["SENT"],
+      "snippet": "Thanks Ana",
+      "payload": {
+        "partId": "",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [
+          {
+            "name": "From",
+            "value": "victor@example.com"
+          },
+          {
+            "name": "To",
+            "value": "Ana Souza <ana@example.org>"
+          },
+          {
+            "name": "Subject",
+            "value": "Re: Q3 report"
+          }
+        ],
+        "body": {
+          "size": 50,
+          "data": "PHA-VGhhbmtzIEFuYSAmYW1wOyB0ZWFtITwvcD4NCjxwPkxvb2tzIGdyZWF0LjwvcD4"
+        }
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
 mod http;
 mod stdio;
 
-use super::{Job, Running, Sandbox, Tool};
+use super::{Running, Sandbox, Tool};
 use cubebot_protocol::terminal::Outcome;
 use serde_json::{Value, json};
 use std::{
@@ -196,20 +196,8 @@ impl Tool for McpTool {
 
 /// Code 1 marks a result the server flagged as an error.
 async fn keep(sandbox: &Sandbox, id: Uuid, result: &Value) -> Outcome {
-    let job = Job {
-        argv: vec!["cat".into()],
-        stdin: Some(text(result).into_bytes()),
-    };
-    match sandbox.run(id, job).await {
-        Outcome::Exited {
-            code: Some(0),
-            output,
-        } => Outcome::Exited {
-            code: Some(i32::from(result["isError"] == true)),
-            output,
-        },
-        other => other,
-    }
+    let code = i32::from(result["isError"] == true);
+    sandbox.retain(id, text(result), code).await
 }
 
 fn text(result: &Value) -> String {

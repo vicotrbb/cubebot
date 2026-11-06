@@ -97,6 +97,7 @@ impl Work {
         let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let mcp_servers = mcp_servers(tx, connections, actor).await;
+        let connections = native_connections(tx, connections, actor).await;
         Ok(Some(Turn {
             turn,
             sequence: last as u64 + 1,
@@ -115,6 +116,7 @@ impl Work {
             command,
             command_only,
             mcp_servers,
+            connections,
             broadcast,
             knowledge_base,
             in_task,
@@ -286,6 +288,23 @@ async fn mcp_servers(
         .await
         .unwrap_or_else(|error| {
             tracing::warn!(?error, "MCP servers unavailable for the turn");
+            Vec::new()
+        })
+}
+
+async fn native_connections(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    connections: Option<&Connections>,
+    actor: &RuntimeActor,
+) -> Vec<cubebot_protocol::runtime::Connection> {
+    let Some(connections) = connections else {
+        return Vec::new();
+    };
+    connections
+        .runtime_connections(tx, actor.agent)
+        .await
+        .unwrap_or_else(|error| {
+            tracing::warn!(?error, "connections unavailable for the turn");
             Vec::new()
         })
 }

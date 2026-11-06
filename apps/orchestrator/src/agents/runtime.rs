@@ -52,6 +52,10 @@ impl RuntimeIdentity {
             connections: None,
         }
     }
+    pub fn with_connections(mut self, connections: crate::connections::Connections) -> Self {
+        self.connections = Some(connections);
+        self
+    }
     pub fn with_credentials(mut self, credentials: crate::connections::Credentials) -> Self {
         self.connections = Some(crate::connections::Connections::new(
             self.pool.clone(),

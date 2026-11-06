@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE connections\n            SET credential = $2, config = $3,\n                expires_at = clock_timestamp() + make_interval(secs => $4),\n                refresh_after = clock_timestamp() + make_interval(secs => $4 - LEAST(600, $4 / 2))\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Jsonb",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "219ebb4060da0115c590d86e2b52a093c6c7fa979338d20214c059119038fafb"
+}

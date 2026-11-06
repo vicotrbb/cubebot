@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT connector, auth, config, credential, extract(epoch FROM expires_at)::bigint AS expires_at\n            FROM connections WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connector",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "auth",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "credential",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "63a50e198226010f5b8d9c461604c2a32806a6bfa92f4d6c03f7ae357fd99b93"
+}

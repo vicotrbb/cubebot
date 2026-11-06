@@ -1,0 +1,40 @@
+Return-Path: <grace@example.org>
+Delivered-To: ada@example.com
+Received: from mail.example.org (mail.example.org [203.0.113.25])
+	by mx.example.com (Postfix) with ESMTPS id 4XyZ1k2abcz9sWq
+	for <ada@example.com>; Wed, 04 Nov 2026 09:12:44 +0000 (UTC)
+MIME-Version: 1.0
+Date: Wed, 4 Nov 2026 10:12:31 +0100
+Message-ID: <CAF3k9xQ1@mail.example.org>
+Subject: Q3 report
+From: Grace Hopper <grace@example.org>
+To: Ada Lovelace <ada@example.com>
+Content-Type: multipart/mixed; boundary="000000000000a1b2c3d4e5f60718"
+
+--000000000000a1b2c3d4e5f60718
+Content-Type: multipart/alternative; boundary="000000000000a1b2c3d4e5f60717"
+
+--000000000000a1b2c3d4e5f60717
+Content-Type: text/plain; charset="UTF-8"
+
+Hi Ada,
+
+The Q3 numbers are attached. Revenue is up 12%.
+
+Grace
+
+--000000000000a1b2c3d4e5f60717
+Content-Type: text/html; charset="UTF-8"
+
+<div dir="ltr">Hi Ada,<br><br>The Q3 numbers are attached. Revenue is up 12%.<br><br>Grace</div>
+
+--000000000000a1b2c3d4e5f60717--
+--000000000000a1b2c3d4e5f60718
+Content-Type: text/csv; charset="US-ASCII"; name="q3.csv"
+Content-Disposition: attachment; filename="q3.csv"
+Content-Transfer-Encoding: base64
+Content-ID: <f_lq3x1>
+X-Attachment-Id: f_lq3x1
+
+cXVhcnRlcixyZXZlbnVlClEzLDExMgo=
+--000000000000a1b2c3d4e5f60718--

@@ -237,7 +237,7 @@ Consequences: permission and cancellation changes cannot be assumed immediately 
 
 ## Autonomous tool use within granted permissions
 
-Accepted 2026-10-23. Amended 2026-10-27: tools run with the runtime inside one sandbox, and disconnected use follows the sandbox's long-lived authority ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)).
+Accepted 2026-10-23. Amended 2026-10-27: tools run with the runtime inside one sandbox, and disconnected use follows the sandbox's long-lived authority ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)). Amended 2026-11-05: a connection's permission level, *Read*, *Read and write* or *Full*, is the grant's scope for its tools ([Native connectors](identity.md#native-connectors)).
 
 **Decision.** Agents act autonomously within granted permissions. The user selected this model on 2026-10-23. Once an authorized manager grants a capability, the agent may use it without human approval for each invocation. The initial design does not include a per-action approval queue or agent-specific approval mode.
 
@@ -493,7 +493,7 @@ Protocol reference reviewed during design: [MCP transport specification](https:/
 
 ## Tool allowlists with supported resource restrictions
 
-Accepted 2026-10-23.
+Accepted 2026-10-23. Amended 2026-11-05: native connections carry a permission level and switched-off tools, enforced by the agent runtime, which offers and runs only the remaining tools ([Native connectors](identity.md#native-connectors)).
 
 **Decision.** Combine named tool allowlists with Cubebot-enforced resource restrictions where an integration supports them, alongside external credential scopes. The user selected this model on 2026-10-23. Each integration must expose which restrictions Cubebot can actually enforce. Unsupported restrictions require an adequately scoped external credential or configuration rejection; they must not be represented as enforced prompt instructions.
 
@@ -521,7 +521,7 @@ Consequences: fine-grained restrictions require integration-specific support and
 
 ## Explicit tool search with on-demand discovery
 
-Accepted 2026-10-23.
+Accepted 2026-10-23. Amended 2026-11-05: native connection tools are found with `find_tools`, which loads the matching definitions for the rest of the turn; only it and the instructions' list of connected accounts start in context. MCP server tools are still offered up front.
 
 **Decision.** Expose a small core tool set and provide explicit tool search that remains available throughout execution. Agents search the eligible catalog and load relevant tool definitions on demand. The user selected this model and explicitly required tool search analogous to memory search on 2026-10-23.
 
@@ -545,7 +545,7 @@ Loaded definitions are bounded context material that can be released and resolve
 
 ## Scheduled and event-triggered work
 
-Accepted 2026-10-23. Amended 2026-11-01: [Routines](#routines) settles the open mechanics with one shape.
+Accepted 2026-10-23. Amended 2026-11-01: [Routines](#routines) settles the open mechanics with one shape. Amended 2026-11-05: native connections are an event source; the orchestrator polls the connections a routine waits on and runs it with the new events, quoted as untrusted data ([Native connectors](identity.md#native-connectors)).
 
 **Decision.** Support both schedules and incoming external events as triggers for agent work. The user selected both on 2026-10-23. Trigger occurrences create durable work through the orchestrator and use the existing assignment, admission, and execution machinery. The concrete form is the [routine](#routines): each occurrence is a turn in the agent's permanent conversation, and the supported event source is a webhook.
 
@@ -565,7 +565,7 @@ Schedule occurrences and repeated event deliveries need stable identities and de
 
 **What changed.** [Routines](#routines) settled these open details: schedule syntax and time zones (five-field cron in UTC); missed-occurrence policy (an overdue routine runs once and is not replayed); grouping mechanics (coalescing); event authentication (a per-routine bearer secret), replay protection (an `Idempotency-Key` seen in the last day) and payload limits (8 KiB of UTF-8); supported sources (webhooks); trigger destinations (the routine's one agent, as a turn in its permanent conversation); rate limits (60 deliveries a minute per routine, then 429); trigger edit scope (an agent changes only routines it manages); and cancellation (deleting a routine cancels its queued and waiting turns and keeps the history). Room destinations are not part of routines.
 
-**Open details.** Time zones other than UTC; event sources other than webhooks; payloads beyond the message, such as files; per-installation limits and backpressure; and occurrence retention.
+**Open details.** Time zones other than UTC; event sources other than webhooks and polled connections; payloads beyond the message, such as files; per-installation limits and backpressure; and occurrence retention.
 
 **Validation scenarios.** Admit scheduled and event-triggered work; wake a sleeping agent; preserve accepted work across orchestrator restart; deduplicate a repeated identifiable occurrence; reject an unauthenticated event; bound a burst; report an unavailable target; and prevent event content from expanding authority.
 

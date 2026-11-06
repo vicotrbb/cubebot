@@ -1,0 +1,14 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/messages('AAMkAD1')/attachments(id,name,contentType,size,isInline)",
+  "value": [
+    {
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      "@odata.mediaContentType": "application/pdf",
+      "id": "AAMkAD1AAABEgAQ",
+      "name": "menu.pdf",
+      "contentType": "application/pdf",
+      "size": 4785,
+      "isInline": false
+    }
+  ]
+}

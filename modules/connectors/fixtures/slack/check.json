@@ -1,0 +1,19 @@
+{
+  "config": {},
+  "credential": { "kind": "fields", "fields": { "token": "xoxb-secret" } },
+  "account": "Subarachnoid Workspace (@grace)",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/slack.com/api/auth.test",
+      "body": {
+        "ok": true,
+        "url": "https://subarachnoid.slack.com/",
+        "team": "Subarachnoid Workspace",
+        "user": "grace",
+        "team_id": "T12345678",
+        "user_id": "W12345678"
+      }
+    }
+  ]
+}

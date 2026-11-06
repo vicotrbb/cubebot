@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM connection_events WHERE received_at < clock_timestamp() - interval '30 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "cbb4742532cfdfc05eb1175804287a976a81db3ebe121ae0e45cfb00361a057c"
+}

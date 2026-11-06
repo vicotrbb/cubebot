@@ -849,6 +849,84 @@
         }
       }
     },
+    "/api/agents/{id}/connections": {
+      "get": {
+        "tags": [],
+        "summary": "Every connection with whether this agent may use it; needs `agent.manage` on the agent.",
+        "operationId": "agent_connections",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AgentConnection"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/connections/{connection}": {
+      "put": {
+        "tags": [],
+        "summary": "Grants or withdraws the agent's use of a connection with explicit grants, for administrators;\n409 for a connection every agent may use, whose access is changed on the connection.",
+        "operationId": "grant_connection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "connection",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectionGrant"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/definition": {
       "post": {
         "tags": [],
@@ -1514,6 +1592,295 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReadCursor"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections": {
+      "get": {
+        "tags": [],
+        "operationId": "list_connections",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConnectionSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "Saves a connection signed in with pasted secrets or another connection, once its check\npasses; 422 with the vendor's reason when it does not, 409 when the slug is taken.",
+        "operationId": "create_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveConnection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/connections/sign-ins": {
+      "post": {
+        "tags": [],
+        "summary": "Starts an OAuth, device-code or GitHub App sign-in with the person's own app.",
+        "operationId": "start_connection_sign_in",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartSignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignInStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/connections/sign-ins/{sign_in}": {
+      "post": {
+        "tags": [],
+        "summary": "Finishes with the pasted address the browser landed on, or polls a device sign-in: 202 until\nthe person approves, then the saved connection.",
+        "operationId": "finish_connection_sign_in",
+        "parameters": [
+          {
+            "name": "sign_in",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishSignIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSummary"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/connections/{id}": {
+      "put": {
+        "tags": [],
+        "summary": "Changed settings or secrets are checked again; the result is in the status.",
+        "operationId": "update_connection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateConnection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Forgets the connection and asks the vendor to revoke an OAuth sign-in.",
+        "operationId": "delete_connection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/connections/{id}/activity": {
+      "get": {
+        "tags": [],
+        "operationId": "connection_activity",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionActivity"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connections/{id}/check": {
+      "post": {
+        "tags": [],
+        "summary": "Tests the connection: renews its credential when due and runs the connector's check.",
+        "operationId": "check_connection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectionSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connectors": {
+      "get": {
+        "tags": [],
+        "summary": "Every connector, and the redirect addresses an OAuth client must allow.",
+        "operationId": "catalog",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
                 }
               }
             }
@@ -4993,6 +5360,56 @@
           }
         }
       },
+      "AgentConnection": {
+        "type": "object",
+        "description": "A connection as one agent's Connections tab shows it.",
+        "required": [
+          "id",
+          "connector",
+          "slug",
+          "level",
+          "status",
+          "all_agents",
+          "enabled",
+          "events"
+        ],
+        "properties": {
+          "account": {
+            "type": ["string", "null"]
+          },
+          "all_agents": {
+            "type": "boolean",
+            "description": "Every agent may use it; access is changed on the connection, not per agent."
+          },
+          "connector": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "This agent may use it."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The events it reports, for routine triggers."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "level": {
+            "$ref": "#/components/schemas/Level"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "AgentId": {
         "type": "string",
         "format": "uuid"
@@ -5305,6 +5722,101 @@
           }
         }
       },
+      "Auth": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "A pasted token or key.",
+            "required": ["fields", "kind"],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["api_key"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "A username and a password, usually an app password.",
+            "required": ["fields", "kind"],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["password"]
+              }
+            }
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OAuth2",
+                "description": "The person's own OAuth client (no Cubebot-registered apps). `{key}` in an endpoint is the\nconnection's setting of that name, such as a Microsoft tenant."
+              },
+              {
+                "type": "object",
+                "required": ["kind"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["oauth2"]
+                  }
+                }
+              }
+            ],
+            "description": "The person's own OAuth client (no Cubebot-registered apps). `{key}` in an endpoint is the\nconnection's setting of that name, such as a Microsoft tenant."
+          },
+          {
+            "type": "object",
+            "description": "GitHub creates an app on the person's account from a manifest, and the orchestrator mints\nhour-long installation tokens with its key.",
+            "required": ["fields", "kind"],
+            "properties": {
+              "fields": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Field"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["github_app"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Borrows another connection's access token, such as Email signing in to Gmail with XOAUTH2.",
+            "required": ["connectors", "product", "kind"],
+            "properties": {
+              "connectors": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["linked"]
+              },
+              "product": {
+                "type": "string",
+                "description": "The product that connection needs switched on."
+              }
+            }
+          }
+        ]
+      },
       "Authorization": {
         "type": "object",
         "required": ["authorization_url"],
@@ -5511,6 +6023,39 @@
           "room_manage"
         ]
       },
+      "Catalog": {
+        "type": "object",
+        "description": "Every connector, and the addresses an OAuth client must allow.",
+        "required": ["connectors", "loopback_redirect"],
+        "properties": {
+          "callback_redirect": {
+            "type": ["string", "null"],
+            "description": "This installation's own callback, when it has a public address."
+          },
+          "connectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Manifest"
+            }
+          },
+          "loopback_redirect": {
+            "type": "string",
+            "description": "The loopback address a sign-in lands on and the person pastes back."
+          }
+        }
+      },
+      "Category": {
+        "type": "string",
+        "enum": [
+          "mail_calendar",
+          "files",
+          "dev",
+          "work",
+          "chat",
+          "home",
+          "finance"
+        ]
+      },
       "ChatgptSignIn": {
         "type": "object",
         "required": ["sign_in", "url"],
@@ -5555,6 +6100,18 @@
           }
         }
       },
+      "Choice": {
+        "type": "object",
+        "required": ["value", "label"],
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
       "ConfigureProvider": {
         "type": "object",
         "required": ["request_id", "expected_revision", "model"],
@@ -5594,6 +6151,125 @@
           }
         },
         "additionalProperties": false
+      },
+      "ConnectionActivity": {
+        "type": "object",
+        "description": "What a connection reported recently and which routines it starts.",
+        "required": ["events", "routines"],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionEvent"
+            }
+          },
+          "routines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventRoutine"
+            }
+          }
+        }
+      },
+      "ConnectionEvent": {
+        "type": "object",
+        "required": ["kind", "summary", "received_at", "routines"],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "received_at": {
+            "type": "string"
+          },
+          "routines": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Routines it started."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Untrusted vendor text."
+          }
+        }
+      },
+      "ConnectionGrant": {
+        "type": "object",
+        "required": ["enabled"],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the agent may use the connection."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConnectionSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "connector",
+          "slug",
+          "auth",
+          "config",
+          "access",
+          "level",
+          "disabled_tools",
+          "status"
+        ],
+        "properties": {
+          "access": {
+            "$ref": "#/components/schemas/ProviderAccess"
+          },
+          "account": {
+            "type": ["string", "null"],
+            "description": "The account as its vendor names it."
+          },
+          "auth": {
+            "type": "string",
+            "description": "How it signs in: `api_key`, `password`, `oauth2`, `github_app` or `linked`."
+          },
+          "checked_at": {
+            "type": ["string", "null"]
+          },
+          "config": {
+            "type": "object",
+            "description": "Settings that are not secret."
+          },
+          "connector": {
+            "type": "string"
+          },
+          "disabled_tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expires_at": {
+            "type": ["string", "null"],
+            "description": "When the current access token expires; the orchestrator renews it before then."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "level": {
+            "$ref": "#/components/schemas/Level"
+          },
+          "polled_at": {
+            "type": ["string", "null"]
+          },
+          "problem": {
+            "type": ["string", "null"]
+          },
+          "slug": {
+            "type": "string",
+            "description": "Prefixes the connection's tools as `<slug>__<tool>`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`connected`, `sign_in_again` or `error`."
+          }
+        }
       },
       "CreateAccount": {
         "type": "object",
@@ -6008,6 +6684,48 @@
           }
         }
       },
+      "EventRoutine": {
+        "type": "object",
+        "required": ["id", "name", "agent", "agent_name", "event", "enabled"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent_name": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "event": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "EventSpec": {
+        "type": "object",
+        "required": ["kind", "description"],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "description": "Such as `mail.received`."
+          },
+          "product": {
+            "type": ["string", "null"]
+          }
+        }
+      },
       "Explain": {
         "type": "object",
         "required": ["scope", "capability"],
@@ -6042,6 +6760,103 @@
       "FavoriteKind": {
         "type": "string",
         "enum": ["agent", "room"]
+      },
+      "Field": {
+        "type": "object",
+        "required": ["key", "label", "kind", "required", "placeholder", "help"],
+        "properties": {
+          "help": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "description": "The setting's name; a secret's is its name in the sealed credential."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/FieldKind"
+          },
+          "label": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FieldKind": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["text"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Sealed with the credential and never shown again.",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["secret"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Several lines, such as a list of allowed paths; stored as an array of strings.",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["lines"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["url"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["number"]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["choices", "type"],
+            "properties": {
+              "choices": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Choice"
+                }
+              },
+              "type": {
+                "type": "string",
+                "enum": ["choice"]
+              }
+            }
+          }
+        ]
       },
       "FileAccess": {
         "type": "string",
@@ -6122,6 +6937,16 @@
         "properties": {
           "field": {
             "$ref": "#/components/schemas/VaultField"
+          }
+        },
+        "additionalProperties": false
+      },
+      "FinishSignIn": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": ["string", "null"],
+            "description": "The address the browser landed on; absent while a device sign-in waits."
           }
         },
         "additionalProperties": false
@@ -6403,6 +7228,11 @@
         },
         "additionalProperties": false
       },
+      "Level": {
+        "type": "string",
+        "description": "A connection's permission level: the tools at or below it are offered. With no approval queue,\nthis is the safety control (docs/adr/agents.md#autonomous-tool-use-within-granted-permissions).",
+        "enum": ["read", "write", "full"]
+      },
       "LifecycleAction": {
         "type": "string",
         "enum": ["start", "stop", "restart", "retire"]
@@ -6480,6 +7310,86 @@
           },
           "site": {
             "type": "string"
+          }
+        }
+      },
+      "Manifest": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "category",
+          "auth",
+          "config",
+          "products",
+          "tools",
+          "events",
+          "level",
+          "guide"
+        ],
+        "properties": {
+          "auth": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Auth"
+            },
+            "description": "The ways to sign in, the first being the one suggested."
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "config": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            },
+            "description": "Settings every sign-in method shares, such as a server address."
+          },
+          "description": {
+            "type": "string",
+            "description": "One line for the catalog card."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventSpec"
+            }
+          },
+          "guide": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "description": "The setup wizard. `{redirect_uri}` in a step stands for this installation's address."
+          },
+          "id": {
+            "type": "string",
+            "description": "Letters, digits and hyphens; stored on every connection, so it never changes."
+          },
+          "level": {
+            "$ref": "#/components/schemas/Level",
+            "description": "The level a new connection gets."
+          },
+          "name": {
+            "type": "string"
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Product"
+            },
+            "description": "Parts of a suite a connection can switch on, such as Gmail and Calendar."
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolSpec"
+            }
+          },
+          "warning": {
+            "type": ["string", "null"],
+            "description": "Something the person must know before relying on the connection."
           }
         }
       },
@@ -6757,6 +7667,48 @@
           }
         },
         "additionalProperties": false
+      },
+      "OAuth2": {
+        "type": "object",
+        "required": ["authorize", "token", "scopes", "params", "fields"],
+        "properties": {
+          "authorize": {
+            "type": "string"
+          },
+          "device": {
+            "type": ["string", "null"],
+            "description": "A device-code endpoint: sign-in without any redirect, for public clients."
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Field"
+            },
+            "description": "The client id, and the secret when the client has one."
+          },
+          "params": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Extra authorization parameters, such as Google's `access_type=offline`."
+          },
+          "revoke": {
+            "type": ["string", "null"]
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            }
+          },
+          "token": {
+            "type": "string"
+          }
+        }
       },
       "Occurrence": {
         "type": "object",
@@ -7096,6 +8048,18 @@
           }
         },
         "additionalProperties": false
+      },
+      "Product": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       },
       "Progress": {
         "type": "object",
@@ -7446,6 +8410,11 @@
         },
         "additionalProperties": false
       },
+      "Risk": {
+        "type": "string",
+        "description": "What a tool can do. `Send` is irreversible or reaches other people: email, a chat post, a comment.",
+        "enum": ["read", "write", "send"]
+      },
       "Room": {
         "type": "object",
         "required": [
@@ -7604,6 +8573,17 @@
           "schedule": {
             "type": ["string", "null"]
           },
+          "trigger": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Trigger",
+                "description": "Runs when this connection reports this kind of event."
+              }
+            ]
+          },
           "webhook": {
             "type": "boolean",
             "description": "A webhook secret is set; it is shown only when made."
@@ -7617,6 +8597,65 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveConnection": {
+        "type": "object",
+        "description": "A connection signed in with pasted secrets or another connection; OAuth and GitHub Apps sign\nin through `POST /api/connections/sign-ins`.",
+        "required": ["connector", "slug", "auth"],
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess",
+                "description": "All agents when absent."
+              }
+            ]
+          },
+          "auth": {
+            "type": "string",
+            "description": "`api_key`, `password` or `linked`, as the connector offers."
+          },
+          "config": {
+            "type": "object"
+          },
+          "connector": {
+            "type": "string"
+          },
+          "level": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Level",
+                "description": "The connector's default when absent."
+              }
+            ]
+          },
+          "linked": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "A linked sign-in's connection, such as the Google account Email signs in with."
+          },
+          "secrets": {
+            "type": "object",
+            "description": "The sign-in method's secret fields; never returned.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "slug": {
+            "type": "string",
+            "description": "Lowercase letters, digits and hyphens, at most 32."
           }
         },
         "additionalProperties": false
@@ -7696,6 +8735,17 @@
           "schedule": {
             "type": ["string", "null"],
             "description": "Five-field cron in UTC; `null` runs only by hand or webhook."
+          },
+          "trigger": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Trigger",
+                "description": "Also runs when a connection reports an event."
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -7890,6 +8940,93 @@
       "SharePermission": {
         "type": "string",
         "enum": ["read", "write"]
+      },
+      "SignInStarted": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Open `url`; the browser ends on `redirect_uri`, which the person pastes back unless it is\nthis installation's callback.",
+            "required": ["sign_in", "url", "redirect_uri", "kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["redirect"]
+              },
+              "redirect_uri": {
+                "type": "string"
+              },
+              "sign_in": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Enter `user_code` at `url`, then finish until it answers.",
+            "required": [
+              "sign_in",
+              "url",
+              "user_code",
+              "expires_in",
+              "interval",
+              "kind"
+            ],
+            "properties": {
+              "expires_in": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "interval": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["device"]
+              },
+              "sign_in": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string"
+              },
+              "user_code": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Submit `manifest` as the form field `manifest` to `url` in a new tab; the vendor then sends\nthe browser to `redirect_uri`.",
+            "required": ["sign_in", "url", "manifest", "redirect_uri", "kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["form"]
+              },
+              "manifest": {
+                "type": "string"
+              },
+              "redirect_uri": {
+                "type": "string"
+              },
+              "sign_in": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string"
+              }
+            }
+          }
+        ]
       },
       "SignedOut": {
         "type": "object",
@@ -8150,6 +9287,65 @@
           }
         }
       },
+      "StartSignIn": {
+        "type": "object",
+        "required": ["connector", "slug", "auth"],
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess"
+              }
+            ]
+          },
+          "auth": {
+            "type": "string",
+            "description": "`oauth2` or `github_app`, as the connector offers."
+          },
+          "callback": {
+            "type": "boolean",
+            "description": "Lands on this installation's callback instead of a loopback address to paste back."
+          },
+          "config": {
+            "type": "object"
+          },
+          "connection": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "Signs in this connection again, keeping its access, level and any secret not given."
+          },
+          "connector": {
+            "type": "string"
+          },
+          "level": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Level"
+              }
+            ]
+          },
+          "secrets": {
+            "type": "object",
+            "description": "The client secret, when the person's OAuth client has one.",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "slug": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Steering": {
         "type": "object",
         "required": ["id", "message", "incorporated", "propagated"],
@@ -8168,6 +9364,26 @@
           "propagated": {
             "type": "boolean",
             "description": "Copied from steering of the work that delegated this."
+          }
+        }
+      },
+      "Step": {
+        "type": "object",
+        "required": ["title", "body"],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "copy": {
+            "type": ["string", "null"],
+            "description": "Text the person copies into the vendor's form."
+          },
+          "link": {
+            "type": ["string", "null"],
+            "description": "A page to open, such as the vendor console's credentials screen."
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -8442,6 +9658,41 @@
             "type": "string"
           }
         }
+      },
+      "ToolSpec": {
+        "type": "object",
+        "required": ["name", "description", "risk"],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Offered to agents as `<slug>__<name>`."
+          },
+          "product": {
+            "type": ["string", "null"]
+          },
+          "risk": {
+            "$ref": "#/components/schemas/Risk"
+          }
+        }
+      },
+      "Trigger": {
+        "type": "object",
+        "description": "A connection event that runs a routine (docs/adr/agents.md#scheduled-and-event-triggered-work).",
+        "required": ["connection", "event"],
+        "properties": {
+          "connection": {
+            "type": "string",
+            "description": "The connection's slug."
+          },
+          "event": {
+            "type": "string",
+            "description": "One of its connector's event kinds, such as `mail.received`."
+          }
+        },
+        "additionalProperties": false
       },
       "Turn": {
         "type": "object",
@@ -8731,6 +9982,54 @@
             "type": ["integer", "null"],
             "format": "int32",
             "description": "Concurrent delegated tasks, one to four; `None` keeps the current setting."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateConnection": {
+        "type": "object",
+        "description": "Each field present replaces the current one; changed settings or secrets are checked again.",
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess"
+              }
+            ]
+          },
+          "config": {
+            "type": ["object", "null"]
+          },
+          "disabled_tools": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            }
+          },
+          "level": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Level"
+              }
+            ]
+          },
+          "secrets": {
+            "type": ["object", "null"],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "slug": {
+            "type": ["string", "null"]
           }
         },
         "additionalProperties": false

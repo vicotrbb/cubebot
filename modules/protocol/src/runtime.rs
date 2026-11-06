@@ -130,6 +130,37 @@ pub struct Turn {
     pub broadcast: bool,
     #[serde(default)]
     pub knowledge_base: bool,
+    /// Native connections the agent may use; their credentials are fetched when a tool needs one.
+    #[serde(default)]
+    pub connections: Vec<Connection>,
+}
+
+/// A native connection (docs/adr/identity.md#native-connectors) as one turn sees it: no secret.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Connection {
+    pub id: Uuid,
+    /// The compiled-in connector, such as `google`.
+    pub connector: String,
+    /// Prefixes the connection's tools as `<slug>__<tool>`.
+    pub slug: String,
+    pub account: Option<String>,
+    /// Settings that are not secret, such as a server address or the products switched on.
+    pub config: serde_json::Value,
+    /// `read`, `write` or `full`: the agent is offered the tools at or below it.
+    pub level: String,
+    #[serde(default)]
+    pub disabled_tools: Vec<String>,
+}
+
+/// `GET /api/runtime/connections/{id}/credential`: short-lived where the vendor allows. The agent
+/// runtime holds it in its own process; never log it or show it to the model.
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConnectionCredential {
+    pub credential: serde_json::Value,
+    /// Unix seconds; ask again before then.
+    pub expires_at: Option<i64>,
 }
 
 /// `GET /api/runtime/provider`: the agent's current provider material. Never log it.
@@ -567,6 +598,7 @@ mod tests {
             }],
             broadcast: false,
             knowledge_base: false,
+            connections: Vec::new(),
             in_task: false,
         }));
         let text = serde_json::to_string(&turn).unwrap();

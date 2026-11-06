@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<multistatus xmlns="DAV:"><response><href>/1234567890/carddavhome/card/A1B2C3D4-0000-1111-2222-333344445555.vcf</href><propstat><prop><getetag>"lu4o5zxo"</getetag><address-data xmlns="urn:ietf:params:xml:ns:carddav"><![CDATA[BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//iOS 18.1//EN
+N:Lovelace;Ada;;;
+FN:Ada Lovelace
+ORG:Analytical Engines\, Ltd;Research;
+item1.EMAIL;type=INTERNET;type=pref:ada@example.com
+item1.X-ABLabel:_$!<Work>!$_
+EMAIL;type=INTERNET;type=HOME:ada.home@example.org
+TEL;type=CELL;type=VOICE;type=pref:+44 20 7946 0000
+REV:2026-10-30T12:00:00Z
+UID:A1B2C3D4-0000-1111-2222-333344445555
+END:VCARD
+]]></address-data></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>

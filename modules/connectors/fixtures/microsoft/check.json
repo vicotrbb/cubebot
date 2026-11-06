@@ -1,0 +1,16 @@
+{
+  "config": { "tenant": "common" },
+  "credential": { "kind": "token", "token": "graph-token" },
+  "account": "AdeleV@contoso.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/graph.microsoft.com/v1.0/me",
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users(mail,userPrincipalName)/$entity",
+        "mail": "AdeleV@contoso.com",
+        "userPrincipalName": "AdeleV@contoso.com"
+      }
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "token": "123456:TEST-token" }
+  },
+  "account": "@cubebot_test_bot",
+  "exchanges": [
+    {
+      "method": "POST",
+      "path": "/api.telegram.org/bot123456:TEST-token/getMe",
+      "body": {
+        "ok": true,
+        "result": {
+          "id": 123456,
+          "is_bot": true,
+          "first_name": "Cubebot",
+          "username": "cubebot_test_bot",
+          "can_join_groups": true,
+          "can_read_all_group_messages": false,
+          "supports_inline_queries": false
+        }
+      }
+    }
+  ]
+}

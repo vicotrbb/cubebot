@@ -1,0 +1,21 @@
+{
+  "config": {
+    "server": "other",
+    "caldav_url": "{origin}dav/",
+    "username": "victor"
+  },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "abcd-efgh-ijkl-mnop" }
+  },
+  "account": "victor",
+  "exchanges": [
+    {
+      "method": "PROPFIND",
+      "path": "/dav/",
+      "status": 207,
+      "raw": "<?xml version='1.0' encoding='utf-8'?>\n<multistatus xmlns=\"DAV:\"><response><href>/dav/</href><propstat><prop><current-user-principal><href>/dav/victor/</href></current-user-principal></prop><status>HTTP/1.1 200 OK</status></propstat></response></multistatus>",
+      "headers": [["content-type", "text/xml; charset=utf-8"]]
+    }
+  ]
+}

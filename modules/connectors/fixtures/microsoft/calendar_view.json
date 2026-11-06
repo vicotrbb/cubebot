@@ -1,0 +1,29 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/calendarView",
+  "value": [
+    {
+      "@odata.etag": "W/\"ZlnW4RIAV06KYYwlrfNZvQAALfZeRQ==\"",
+      "id": "AAMkAGI1AAAt9AHjAAA=",
+      "subject": "Plan summer company picnic",
+      "isAllDay": false,
+      "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI1AAAt9AHjAAA%3D&exvsurl=1&path=/calendar/item",
+      "start": { "dateTime": "2026-11-05T15:00:00.0000000", "timeZone": "UTC" },
+      "end": { "dateTime": "2026-11-05T16:00:00.0000000", "timeZone": "UTC" },
+      "location": { "displayName": "Conf Room 3", "locationType": "default" },
+      "attendees": [
+        {
+          "type": "required",
+          "status": { "response": "none", "time": "0001-01-01T00:00:00Z" },
+          "emailAddress": {
+            "name": "Alex Wilber",
+            "address": "alex@contoso.com"
+          }
+        }
+      ],
+      "organizer": {
+        "emailAddress": { "name": "Dana Swope", "address": "dana@contoso.com" }
+      },
+      "onlineMeeting": null
+    }
+  ]
+}

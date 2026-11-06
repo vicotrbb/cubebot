@@ -300,3 +300,246 @@ Competitors
 - https://kilo.ai/docs/ai-providers/xai
 - https://railway.com/deploy/openmausbot-open-source-ai-bot-team-on-claude-code-codex--openmausbot
 - https://skillsllm.com/skill/tucano
+
+---
+
+## Coding plans: Z.ai, Moonshot, MiniMax
+
+Research date: 2026-11-05. Question: can a Cubebot user power agents with a Z.ai GLM Coding Plan (and the mainland bigmodel.cn equivalent), a Moonshot Kimi membership with Kimi Code, or a MiniMax coding plan (now called **M Plan**)?
+
+Method: vendor docs fetched as Markdown (`docs.z.ai/*.md`, `docs.bigmodel.cn/*.md`, `platform.minimax.io/docs/*.md`, `platform.minimaxi.com/docs/*.md`) or as HTML with curl (`kimi.com`), on 2026-11-05. Same tags as above: **[V]** read on the vendor's own page, **[C]** community or secondary.
+
+Unlike ChatGPT and SuperGrok above, none of these three uses OAuth for third-party tools. Each issues a **plan-specific API key** that works on dedicated base URLs. The question is therefore not "can we build the sign-in" (we can, it is a key field) but "do the terms allow Cubebot to be the client".
+
+### TL;DR
+
+| Vendor                                                  | Mechanism                                                                                             | Which clients the terms allow                                                                                                                         | Always-on general agent                                                                                                                   | Verdict for Cubebot                                                                                   |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Z.ai / Zhipu (GLM Coding Plan)**                      | Plan API key. Anthropic Messages, OpenAI chat completions, or OpenAI Responses on plan-only base URLs | **Only a named list** ("strictly limited to … officially supported tools"). Own apps, bots and "other systems" are banned without a written agreement | Not allowed unless Cubebot is listed. The list does include general-purpose agents (OpenClaw, Hermes Agent, SillyTavern) on "best-effort" | **(b) Works, against terms.** Path to (a): ask Z.ai to list Cubebot                                   |
+| **Moonshot (Kimi Code, inside Kimi membership)**        | Membership API key (max 5). OpenAI chat completions / Responses or Anthropic Messages                 | Open-ended "mainstream coding tools and agent frameworks", but **"for interactive use only"**, and the client must not spoof its User-Agent           | **Background, scheduled or batch work is excluded** ("Don't use Kimi Code for non-interactive automation")                                | **Interactive chat with an agent: grey but defensible. Always-on autonomous work: (b) against terms** |
+| **MiniMax (M Plan, formerly Token Plan / Coding Plan)** | M Plan key. Anthropic Messages or OpenAI chat completions                                             | **"Any AI tool that supports the OpenAI-compatible or Anthropic-compatible protocol"**                                                                | Allowed for a single person; "designed for individual, interactive developer use"; "Pay-as-you-go is recommended for production use"      | **(a) Officially fine** for a personal installation. Not for multi-user or production                 |
+
+All three: personal use only, no sharing, no reselling. That rules out a subscription connection shared by several people in one installation, and any hosted Cubebot.
+
+Adapter work: small for all three. Each is "same wire format, different base URL and key". Cubebot's adapters hard-code their base URLs today (`Anthropic::new` uses `api.anthropic.com/v1/`, `Grok::new` uses `api.x.ai/v1/`), so each vendor needs a preset, not a new adapter. See "What Cubebot would need" below.
+
+### Z.ai (international) and Zhipu bigmodel.cn (mainland): GLM Coding Plan
+
+**Plans** [V] ([overview](https://docs.z.ai/devpack/overview.md), [bigmodel overview](https://docs.bigmodel.cn/cn/coding-plan/overview.md)):
+
+- Individual tiers Lite, Pro, Max. Since 2026-07-30 usage is in credits, with a 5-hour and a weekly window ([plan update notice](https://docs.z.ai/devpack/notice/usage-revision.md)):
+
+  | Tier | 5-hour credits | Weekly credits |
+  | ---- | -------------- | -------------- |
+  | Lite | 2,000          | 10,000         |
+  | Pro  | 12,000         | 60,000         |
+  | Max  | 28,000         | 140,000        |
+
+  Credits = (input × 6.9 + cached × 1.7 + output × 24) / 10,000 for GLM-5.3 (Flash: 2.3 / 0.56 / 8). Off-peak usage costs 50 %; peak is Mon–Fri 14:00–18:00 UTC+8. The overview estimates 48–97 M GLM-5.3 tokens per week on Lite at 95 % cache hit. The bigmodel.cn credit table is identical.
+
+- Price: the docs say only "Starting at just 18 USD per month" [V]. The subscribe page ([z.ai/subscribe](https://z.ai/subscribe)) renders prices with JavaScript and I could not read them. Secondary sources give Pro $72→$80 and Max $160→$168 per month, with annual discounts [C] ([morphllm](https://www.morphllm.com/coding-plan), [usagepricing](https://www.usagepricing.com/blueprint/activity/zhipu-ai-2026-09-07-coding-plan-team-pricing)).
+- Team plan: Standard seat (15,000 / 66,000) and Premium seat (35,000 / 155,000), with optional pay-as-you-go overage ([teamplan](https://docs.z.ai/devpack/teamplan.md)) [V].
+- Models: "All plans support GLM-5.3, GLM-5.3-Flash." Requests for GLM-5.2/5.1 are routed to GLM-5.3, and GLM-4.7 to GLM-5.3-Flash [V].
+
+**Mechanism** [V] ([tool integration](https://docs.z.ai/devpack/tool/others.md), [bigmodel tool integration](https://docs.bigmodel.cn/cn/coding-plan/tool/others.md), [FAQ](https://docs.z.ai/devpack/faq.md)):
+
+| Protocol                | International                         | Mainland                                      |
+| ----------------------- | ------------------------------------- | --------------------------------------------- |
+| Anthropic Messages      | `https://api.z.ai/api/anthropic`      | `https://open.bigmodel.cn/api/anthropic`      |
+| OpenAI chat completions | `https://api.z.ai/api/coding/paas/v4` | `https://open.bigmodel.cn/api/coding/paas/v4` |
+| OpenAI Responses        | `https://api.z.ai/api/v1`             | `https://open.bigmodel.cn/api/v1`             |
+
+- Auth is an API key, not OAuth. Since 2026-10-16, plan keys are created separately under "API Keys → Personal Coding Plan", and **the key type decides billing**: "using a Standard API Key in a coding tool does not consume your Coding Plan quota" ([API key notice](https://docs.z.ai/devpack/notice/api-key-management.md)) [V].
+- The pay-as-you-go chat-completions endpoint is `https://api.z.ai/api/paas/v4`. The plan endpoint differs only in the `/coding/` segment. An older "Compatible" key on the standard endpoint is billed to account balance "even while plan quota remains" [V].
+- When quota is exhausted, the plan stops; it does not fall back to balance ("The system will not deduct from your account balance") [V]. FAQ: a "1113 Insufficient Balance" error usually means the wrong base URL or model [V].
+- Model ids in the Cline example are lower-case (`glm-5.2`, or `glm-5.3`); the docs say to uncheck "Support Images" for Cline on the OpenAI endpoint [V]. Tool calling and streaming are not stated on the plan pages. They are implied, because the listed clients (Claude Code, Cline, Codex) depend on both. I did not test them [inference].
+- No extra headers are documented.
+
+**Policy** [V]:
+
+- Usage policy ([usage-policy](https://docs.z.ai/devpack/usage-policy.md)):
+
+  > **Use limited to supported tools**: GLM Coding Plan may only be used within officially supported tools and products. Use in unsupported tools may result in restricted benefits.
+
+  > **Subscription benefits are exclusive to the subscriber**: Account sharing or multi-user access is prohibited.
+
+  > Violations of the Usage Rules may trigger risk control measures, including rate limiting, account freezing, or other restrictions. Accounts with more than three violations may be banned.
+
+- Subscription terms §4 "Usage Rules" ([subscription-terms](https://docs.z.ai/legal-agreement/subscription-terms.md)):
+
+  > If the system detects usage through unauthorized or unsupported tools (such as SDK-based access or other third-party integrations), some subscription benefits may be restricted to ensure fairness and service stability.
+
+  > You shall not use the GLM Coding Plan quota for general-purpose API access or any scenarios outside such tools, including but not limited to directly invoking model APIs from your own applications, bots, websites, SaaS products or other systems, unless you have entered into a separate written agreement with Z.ai.
+
+  > Unless otherwise agreed in writing, you may not resell, sub-resell, repackage, aggregate, proxy or otherwise provide the GLM Coding Plan to any third party …
+
+  > The GLM Coding Plan subscription is tied to a single account and is licensed only to the individual natural person associated with such account.
+
+  > If Z.ai reasonably suspects that you are engaging in account sharing, bulk or automated usage on behalf of others, resale of access … Z.ai is entitled to take measures including … suspending or terminating the service, reclaiming any remaining quota …
+
+- FAQ: "The subscriber shall not use the subscription benefits in any unsupported tools or scenarios." [V]
+- The supported list ([tool integration](https://docs.z.ai/devpack/tool/others.md)) [V]. Coding agents: ZCode, Claude Code, Claude for IDE, Codex, OpenCode, Pi, Cursor, Cline, TRAE, Qoder, Droid, Kilo Code, Roo Code, Crush, Goose, Eigent. **"General-purpose Agent Tool"**: AutoClaw, OpenClaw, Hermes Agent, SillyTavern, "served on a best-effort basis. Under high inference load, some requests may face temporary rate limits." The overview advertises "both coding and office scenarios". So non-coding use is allowed _inside listed tools_; the restriction is the client, not the task.
+- Mainland terms say the same in Chinese ([订阅及自动续费协议 §六](https://docs.bigmodel.cn/cn/terms/subscription-agreement.md)): use outside official tools may lead to "限制、暂停或封禁" (restriction, suspension or ban), and "不得…在自建应用、机器人、网站、SaaS 产品或其他系统中直接调用相关模型接口" (no direct calls from self-built apps, bots, websites, SaaS or other systems) without a written agreement [V]. Its usage notes ([使用须知](https://docs.bigmodel.cn/cn/coding-plan/usage-notes.md)) add that a permanent ban follows "倒卖、中转、套利" (reselling, relaying, arbitrage), decided on several signals plus human review [V]. OpenClaw is supported there with "次级调度" (secondary scheduling): coding agents get priority, and OpenClaw tasks are queued or throttled under load [V].
+
+**Enforcement:** the vendor describes detection ("If the system detects usage through … SDK-based access") and a console risk notice with an appeal [V]. It does not say how it detects the client. Press reported a Z.ai crackdown on "OpenClaw-like non-coding usage" ([officechai](https://officechai.com/ai/after-claude-google-z-ai-restricts-openclaw-like-non-coding-usage-on-its-coding-plans-/)) [C]; OpenClaw is now on the best-effort list. Reddit users report "Fair Use Policy" restrictions and bans [C, unverified].
+
+**Verdict: (b) works, but against the terms.** Technically it is a base URL and a key on the existing Anthropic or chat-completions adapter. But Cubebot is not on the list, and §4 names "your own applications, bots … or other systems". An always-on general agent would fit only if Z.ai lists Cubebot (as it lists OpenClaw and Hermes Agent) or signs a written agreement. **Recommended:** ask Z.ai to list Cubebot before shipping a preset. Until then, document Z.ai only as a pay-as-you-go provider (`api/paas/v4` with a Standard key), which carries none of these limits.
+
+### Moonshot: Kimi Code (part of Kimi membership)
+
+**Plans** [V] ([membership benefits](https://www.kimi.com/code/docs/en/kimi-code/membership.html), [pricing help](https://www.kimi.com/en/help/membership/membership-pricing)):
+
+- There is no separate coding plan. Kimi Code is a benefit of Kimi membership and shares its monthly credit pool: "Requests from the CLI, VS Code, Desktop, and third-party tools all count toward that quota."
+- New plans (Sept–Oct 2026): Go (no Kimi Code), Plus, Pro, Max, Ultra. Legacy Andante, Moderato, Allegretto and Allegro remain for existing subscribers.
+- Quota: new plans have a **rolling 5-hour window, no weekly window**, plus the shared monthly pool. Legacy plans keep the weekly window. Optional "Extra Usage" is pay-per-use from a prepaid RMB balance "close to the official API pricing".
+- China prices (captured by Moonshot on 2026-10-19): Go ¥49, Plus ¥99, Pro ¥199, Max ¥699, Ultra ¥1,399 per month [V]. International USD prices (Plus $19, Pro $39, Max $99, Ultra $199) come only from secondary sources [C] ([usagepricing](https://www.usagepricing.com/blueprint/activity/moonshot-ai-2026-09-28-kimi-plus-pro-max-ultra-plans)); [kimi.com/code/en](https://www.kimi.com/code/en) renders its table client-side.
+- Models (two docs pages disagree on the count) [V]:
+  - `k3.1-pro`: Plus and above; thinking only, "requests that disable thinking will be rejected" (Chinese page).
+  - `k3.1-pro-highspeed`: Pro and above; about 2× quota.
+  - `k3` / `k3-256k`: Plus and above; 1M context on Pro and above.
+  - `kimi-for-coding`: K2.8 Preview.
+  - `kimi-for-coding-highspeed`: K2.7 Code HighSpeed, Pro and above.
+
+**Mechanism** [V] ([Kimi Code overview](https://www.kimi.com/en/help/kimi-code/membership-guide), [docs](https://www.kimi.com/code/docs/en/)):
+
+| Protocol                                               | China                                             | Overseas                        |
+| ------------------------------------------------------ | ------------------------------------------------- | ------------------------------- |
+| OpenAI-compatible (chat completions **and** Responses) | `https://api.kimi.com/coding/v1`                  | `https://api.kimi.ai/coding/v1` |
+| Anthropic-compatible                                   | `https://api.kimi.com/coding/` (→ `/v1/messages`) | `https://api.kimi.ai/coding/`   |
+
+- Auth: a membership API key from the Kimi Code console, "up to 5 keys". Official clients (Desktop, CLI, VS Code) sign in with a Kimi account instead.
+- The pay-as-you-go Moonshot Open Platform uses `api.moonshot.ai/v1` (overseas) or `api.moonshot.cn/v1`, billed per token. The docs steer integrations there: "If you need to call large model capabilities in your own product … please visit the Kimi Platform."
+- Required behaviour: "Please maintain the tool's real identity identifier when using. Tampering with the client identifier (User-Agent) is considered a violation and may result in suspension of membership benefits." [V] There is no list of allowed User-Agents, so a truthful `cubebot/<version>` UA is the compliant choice.
+- Errors: HTTP 429 for 5-hour, weekly or monthly quota, and a separate risk-control "You've reached your concurrent request limit" ([error reference](https://www.kimi.com/code/docs/en/kimi-code/error-reference.html)) [V].
+
+**Policy** [V] ([Kimi Code Community Guidelines](https://www.kimi.com/code/docs/en/kimi-code/community-guidelines.html)):
+
+> Kimi Code subscriptions are for interactive use only. We're compatible with mainstream coding tools and agent frameworks (Kimi CLI, VS Code, Claude Code, OpenCode, OpenClaw, etc.), so you can call Kimi Code's AI capabilities from the tools you already use. For enterprise integrations, commercial services, or other platform-related inquiries, visit the Kimi Platform …
+
+> **Don't use Kimi Code for non-interactive automation.** Kimi Code subscriptions are for personal interactive use only. Using it for non-interactive purposes — such as scripted batch execution or data annotation pipelines — goes beyond normal use.
+
+> **Don't resell Kimi Code's capabilities as a service.** … **Don't spoof or alter client identity information.** … **Don't resell your account or API access.**
+
+> Sharing your account with others through a reverse proxy is a violation.
+
+- Sanction: "take appropriate action—such as limiting concurrent access—based on the severity". Accounts bought through resellers "may be suspended".
+- The Kimi user agreement ([modelUse v2](https://www.kimi.com/user/agreement/modelUse?version=v2), Chinese, updated 2026-11-05, effective 2026-11-12) also forbids "通过编写或使用任何自动化脚本、程序、工具（包括但不限于机器人、爬虫、定时任务等）来模拟人工操作，以实现自动、批量使用" (using automated scripts, programs or tools, including bots, crawlers and scheduled tasks, to simulate human operation for automated, bulk use), and lending or renting the account [V]. I read it through WebFetch's summary of the Chinese page, not the raw page.
+- Listed third-party guides: Claude Code, OpenCode, Codex, Hermes Agent [V]. The list is illustrative ("etc."), not exhaustive.
+
+**Enforcement:** concurrency limiting and benefit suspension per the guidelines [V]. I found no documented bans beyond that.
+
+**Verdict: split.** Moonshot does not limit Kimi Code to a fixed client list, and it names an agent framework (OpenClaw). So a person chatting with their own Cubebot agent, with an honest User-Agent, is arguably inside "personal interactive use" [interpretation]. Cubebot's always-on behaviour is outside it: agents that keep working in the background, scheduled tasks, dreaming and task lanes are "non-interactive automation" and "定时任务" (scheduled tasks). That is **(b) against terms** for always-on use. If Cubebot offers Kimi Code at all, gate it to work a human started and is waiting on, and keep background and scheduled work on a pay-as-you-go key (`api.moonshot.ai`). Safer still: ship only the Moonshot Open Platform key.
+
+### MiniMax: M Plan (formerly Token Plan / Coding Plan)
+
+**Plans** [V] ([intro](https://platform.minimax.io/docs/m-plan/intro.md), [FAQ](https://platform.minimax.io/docs/m-plan/faq.md), [usage](https://platform.minimax.io/docs/m-plan/usage-rules.md), [Token Plan notice](https://platform.minimax.io/docs/m-plan/token-plan-notice.md)):
+
+- M Plan replaced Token Plan (Plus / Max / Ultra). Token Plan is closed to new buyers; existing subscribers keep it at the same price. Secondary sources date the switch to 2026-10-15 [C] ([usagepricing](https://www.usagepricing.com/blueprint/activity/minimax-2026-10-15-m-plan-replaces-token-plan)).
+- Tiers Go, Explore and Build, with 1×, 3× and 7.5× usage relative to Go. Annual billing means "pay for 10 months and get 2 months free".
+- Text model on every tier: `MiniMax-M3.1-Flash`. Explore and Build add the H3 video model. Image, audio, web search and multimodal understanding are included.
+- Limits: a 5-hour and a weekly window, both starting at first use. Video has only the weekly window. Separate RPM/TPM limits "may tighten during peak traffic". Optional credit packs absorb overflow. The quota endpoint is `GET https://www.minimax.io/v1/token_plan/remains` with a Bearer key.
+- Prices: [minimax.io/m-plan](https://www.minimax.io/m-plan) renders client-side and I could not read prices. **Not verified.**
+
+**Mechanism** [V] ([other tools](https://platform.minimax.io/docs/m-plan/other-tools.md), [quickstart](https://platform.minimax.io/docs/m-plan/quickstart.md), [China other tools](https://platform.minimaxi.com/docs/m-plan/other-tools.md)):
+
+| Protocol             | International                      | Mainland                           |
+| -------------------- | ---------------------------------- | ---------------------------------- |
+| OpenAI-compatible    | `https://api.minimax.io/v1`        | `https://api.minimax.cn/v1`        |
+| Anthropic-compatible | `https://api.minimax.io/anthropic` | `https://api.minimax.cn/anthropic` |
+
+- Auth: the M Plan API key from Plan Details. The quickstart sets it as `ANTHROPIC_API_KEY` (so `x-api-key` works) or as Bearer for OpenAI. The official MiniMax Code app uses account sign-in instead; the FAQ mentions "sign in with MiniMax where supported" for other tools.
+- **The base URLs are the same as pay-as-you-go**; the key decides billing: "M Plan API keys are separate from standard pay-as-you-go API Keys and cannot be used interchangeably." Anthropic-compatible is "recommended for prompt-cache benefits".
+- The Anthropic endpoint supports streaming, tools and thinking blocks ([Create Message](https://platform.minimax.io/docs/api-reference/text-chat-anthropic.md)) [V]. `MiniMax-M3.1-Flash` thinks by default and thinking cannot be turned off (China docs); effort is set with `output_config.effort`. MiniMax also documents a Responses endpoint, but the M Plan pages do not list it.
+- No special headers or client identity rules are documented.
+
+**Policy** [V]:
+
+- FAQ, "Which tools can I use my M Plan API key with?":
+
+  > Any AI tool that supports the OpenAI-compatible or Anthropic-compatible protocol, such as Claude Code, Codex, Cursor, OpenCode, Hermes Agent, and OpenClaw.
+
+  The China FAQ says the same ("支持 OpenAI 兼容或 Anthropic 兼容协议的 AI 工具都可以使用"). The "Other tools" page includes Dify, a general LLM application platform.
+
+- FAQ, "Is it suitable for production?":
+  > M Plan is designed for individual, interactive developer use, with higher tiers offering higher usage limits. Pay-as-you-go is recommended for production use.
+- Quickstart: "Keep your M Plan API key secure. Do not share it with others."
+- MiniMax Subscription Service Terms (updated 2025-09-12, Nanonoble Pte. Ltd.; [payment-policy](https://agent.minimax.io/doc/en/payment-policy.html)): "You may not obtain or use Credits for profit, commercial transactions, transfers, sales, or other non-personal purposes." These terms are hosted under the MiniMax Agent product. **Whether they govern M Plan is not stated** [V for the text; open question for the scope]. The umbrella ToS ([terms-of-service-v2](https://www.minimax.io/terms-of-service-v2.html), updated 2026-04-15) defers to product terms; I found no M Plan-specific clause on automation or client restrictions there. The platform ToS page at `platform.minimax.io/docs/guides/terms-of-service` rendered empty to both curl and WebFetch: **not read**.
+
+**Enforcement:** none documented beyond dynamic rate limits [V]. None found in community sources.
+
+**Verdict: (a) officially fine** for one person's own self-hosted Cubebot. MiniMax names "any" OpenAI- or Anthropic-compatible tool, including general agents (OpenClaw, Hermes, Dify). Caveats: it is "designed for individual, interactive developer use", so heavy always-on autonomous load is outside the stated design, though not explicitly banned. Production, multi-user and commercial use should use a pay-as-you-go key. Mark the connection personal.
+
+### What Cubebot would need
+
+Today's adapters, read on 2026-11-05:
+
+- `modules/providers/src/anthropic.rs` sends `x-api-key` plus `anthropic-version` to a hard-coded `https://api.anthropic.com/v1/`. Its `limits` call hits `models/`, and `prices` scrapes Anthropic's pricing page.
+- `completions.rs` builds the chat-completions body (system message, `tools` as functions, `stream:true`, `max_tokens`). `grok.rs` shows the preset pattern: a hard-coded base URL, Bearer auth, `models` from `/models`, and `limits` returning the default.
+- `openai.rs` is the Responses adapter for `api.openai.com`.
+
+| Vendor                               | Smallest viable adapter work                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MiniMax                              | A chat-completions preset modelled on `grok.rs`: base `https://api.minimax.io/v1/` (or `api.minimax.cn`), Bearer key. Or reuse the Anthropic adapter with a configurable base `https://api.minimax.io/anthropic/v1/`, skipping Anthropic's pricing scrape and `models` limits. Handle always-on thinking (`reasoning` or `thinking` blocks must be replayed, which `completions.rs` already does for whole assistant messages). Map 429 to the existing wait state. Model id `MiniMax-M3.1-Flash` |
+| Kimi Code (if offered)               | Chat-completions preset with base `https://api.kimi.ai/coding/v1/` (or `api.kimi.com`), Bearer key, a truthful `User-Agent`. Thinking cannot be disabled on `k3.1-pro`; check that `tools_disabled` does not imply thinking off. Treat the "concurrent request limit" 429 as non-retryable risk control, not a plain rate limit. Plus product gating to interactive runs only                                                                                                                     |
+| Z.ai (only after Z.ai lists Cubebot) | Chat-completions preset with base `https://api.z.ai/api/coding/paas/v4/` (or `open.bigmodel.cn`), Bearer key, model `glm-5.3`. The pay-as-you-go preset is the same code with base `…/api/paas/v4/`                                                                                                                                                                                                                                                                                               |
+
+Common to all three:
+
+- One base-URL parameter per preset, plus an international/mainland region choice.
+- A connection marked **personal** (see §6). This contradicts the installation-wide default in the [identity ADR](../adr/identity.md#installation-wide-connection-access-by-default), as the ChatGPT plan already does.
+- No OAuth, refresh or token propagation: a plan key behaves like an API key in the existing vault.
+
+### Open questions
+
+1. **Z.ai:** will Z.ai add Cubebot to the supported list ("General-purpose Agent Tool"), as it did for OpenClaw and Hermes Agent? Is a self-hosted platform an "other system" under §4?
+2. **Moonshot:** does an always-on agent that a human messages count as "interactive", and are background turns it starts by itself "non-interactive automation"? Is there an English-language Kimi membership agreement with the same clauses as the Chinese `modelUse` page?
+3. **MiniMax:** do the 2025 Subscription Service Terms ("non-personal purposes") govern M Plan? What are the current M Plan prices? I could not render the page.
+4. Prices for Z.ai Pro/Max and Kimi USD tiers come only from secondary sources.
+5. Nothing in this section was exercised against a live endpoint. Tool calling and streaming on the Z.ai and Kimi plan endpoints are inferred from the listed clients, not tested.
+
+### Sources
+
+Z.ai / Zhipu
+
+- https://docs.z.ai/devpack/overview.md
+- https://docs.z.ai/devpack/faq.md
+- https://docs.z.ai/devpack/usage-policy.md
+- https://docs.z.ai/devpack/tool/others.md
+- https://docs.z.ai/devpack/teamplan.md
+- https://docs.z.ai/devpack/notice/api-key-management.md
+- https://docs.z.ai/devpack/notice/usage-revision.md
+- https://docs.z.ai/legal-agreement/subscription-terms.md
+- https://z.ai/subscribe (prices not rendered)
+- https://docs.bigmodel.cn/cn/coding-plan/overview.md
+- https://docs.bigmodel.cn/cn/coding-plan/usage-notes.md
+- https://docs.bigmodel.cn/cn/coding-plan/tool/others.md
+- https://docs.bigmodel.cn/cn/terms/subscription-agreement.md
+- Secondary: https://www.morphllm.com/coding-plan , https://www.usagepricing.com/blueprint/activity/zhipu-ai-2026-09-07-coding-plan-team-pricing , https://officechai.com/ai/after-claude-google-z-ai-restricts-openclaw-like-non-coding-usage-on-its-coding-plans-/
+
+Moonshot / Kimi
+
+- https://www.kimi.com/code/docs/en/ and https://www.kimi.com/en/help/kimi-code/membership-guide
+- https://www.kimi.com/code/docs/en/kimi-code/membership.html
+- https://www.kimi.com/code/docs/en/kimi-code/community-guidelines.html
+- https://www.kimi.com/code/docs/en/kimi-code/error-reference.html
+- https://www.kimi.com/en/help/membership/membership-pricing
+- https://www.kimi.com/en/help/kimi-code/third-party-agents
+- https://www.kimi.com/user/agreement/modelUse?version=v2 (read through WebFetch summary)
+- https://www.kimi.com/code/en (prices not rendered)
+- Secondary: https://www.usagepricing.com/blueprint/activity/moonshot-ai-2026-09-28-kimi-plus-pro-max-ultra-plans
+
+MiniMax
+
+- https://platform.minimax.io/docs/m-plan/intro.md
+- https://platform.minimax.io/docs/m-plan/faq.md
+- https://platform.minimax.io/docs/m-plan/usage-rules.md
+- https://platform.minimax.io/docs/m-plan/quickstart.md
+- https://platform.minimax.io/docs/m-plan/other-tools.md
+- https://platform.minimax.io/docs/m-plan/token-plan-notice.md
+- https://platform.minimax.io/docs/api-reference/text-chat-anthropic.md
+- https://platform.minimaxi.com/docs/m-plan/faq.md and https://platform.minimaxi.com/docs/m-plan/other-tools.md
+- https://agent.minimax.io/doc/en/payment-policy.html
+- https://www.minimax.io/terms-of-service-v2.html
+- https://platform.minimax.io/docs/guides/terms-of-service (empty render, not read)
+- https://www.minimax.io/m-plan (prices not rendered)
+- Secondary: https://www.usagepricing.com/blueprint/activity/minimax-2026-10-15-m-plan-replaces-token-plan

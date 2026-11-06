@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO connections (id, connector, slug, auth, account, config, credential, access, level,\n            checked_at, created_by, expires_at, refresh_after, status, problem)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp(), $10,\n            clock_timestamp() + make_interval(secs => $11),\n            clock_timestamp() + make_interval(secs => $11 - LEAST(600, $11 / 2)),\n            CASE WHEN $12::text IS NULL THEN 'connected' ELSE 'error' END, $12)\n        ON CONFLICT (slug) DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Bytea",
+        "Jsonb",
+        "Text",
+        "Uuid",
+        "Float8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e60c26279218a065043d86af086a5cf7763a17617575230dc986ecf990e78eeb"
+}

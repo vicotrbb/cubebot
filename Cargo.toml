@@ -5,6 +5,7 @@ members = [
     "apps/sandbox",
     "modules/protocol",
     "modules/providers",
+    "modules/connectors",
 ]
 resolver = "3"
 
@@ -21,6 +22,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 cubebot-protocol = { path = "modules/protocol" }
+cubebot-connectors = { path = "modules/connectors" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

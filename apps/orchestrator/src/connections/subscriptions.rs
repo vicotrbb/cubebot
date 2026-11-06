@@ -133,6 +133,7 @@ pub(super) enum Flow {
         interval: Duration,
         next: Instant,
     },
+    Connection(Box<super::native::SignIn>),
 }
 
 impl Pending {
@@ -171,6 +172,16 @@ impl Pending {
             pending.remove(&id);
         }
         Ok(value)
+    }
+
+    /// The live sign-in whose flow `matches`, such as the one a callback's state names.
+    pub fn find(&self, matches: impl Fn(&Flow) -> bool) -> Option<Uuid> {
+        let pending = self.0.lock().ok()?;
+        let now = Instant::now();
+        pending
+            .iter()
+            .find(|(_, sign_in)| sign_in.until > now && matches(&sign_in.flow))
+            .map(|(id, _)| *id)
     }
 
     pub fn finish(&self, id: Uuid) {
@@ -291,6 +302,119 @@ pub(super) fn account(name: &str) -> Option<String> {
     let name = name.trim();
     ((1..=320).contains(&name.len()) && !name.chars().any(char::is_control))
         .then(|| name.to_owned())
+}
+
+/// The query of a pasted (or called-back) address, once it is shown to be `redirect`'s, for the
+/// sign-in that sent `state`. `Identity` errors are the person's paste; `Refused` ones the vendor's.
+pub(super) fn landed(
+    landed: &str,
+    redirect: &Url,
+    state: &str,
+) -> Result<HashMap<String, String>, SignInError> {
+    let url = Url::parse(landed.trim()).map_err(|_| IdentityError::InvalidInput)?;
+    if landed.len() > 8192
+        || url.scheme() != redirect.scheme()
+        || url.host_str() != redirect.host_str()
+        || url.port_or_known_default() != redirect.port_or_known_default()
+        || url.path() != redirect.path()
+    {
+        return Err(IdentityError::InvalidInput.into());
+    }
+    let fields: HashMap<String, String> = url.query_pairs().into_owned().collect();
+    if fields.get("state").map(String::as_str) != Some(state) {
+        return Err(IdentityError::InvalidInput.into());
+    }
+    if fields.contains_key("error") {
+        return Err(SignInError::Refused("sign_in_denied"));
+    }
+    Ok(fields)
+}
+
+/// An authorization code from a landed address, bounded and printable.
+pub(super) fn code(fields: &HashMap<String, String>) -> Result<String, SignInError> {
+    fields
+        .get("code")
+        .filter(|code| {
+            (1..=2048).contains(&code.len()) && code.bytes().all(|b| b.is_ascii_graphic())
+        })
+        .cloned()
+        .ok_or(SignInError::Refused("sign_in_refused"))
+}
+
+/// A device-code grant's start (RFC 8628).
+#[derive(Deserialize)]
+pub(super) struct Device {
+    pub device_code: String,
+    pub user_code: String,
+    pub verification_uri: String,
+    #[serde(default)]
+    pub verification_uri_complete: Option<String>,
+    pub expires_in: u64,
+    #[serde(default)]
+    pub interval: Option<u64>,
+}
+
+pub(super) async fn device(url: Url, form: &[(&str, &str)]) -> Result<Device, Failure> {
+    let body = post(url, form).await?;
+    serde_json::from_slice(&body).map_err(|error| Failure::Unavailable(Some(error.into())))
+}
+
+impl Device {
+    /// The page to show, which must be the vendor's own (`ours`) over HTTPS unless a test controls
+    /// the vendor, and the polling interval.
+    pub fn validated(
+        &self,
+        ours: impl Fn(&str) -> bool,
+        controlled: bool,
+    ) -> Option<(String, Duration)> {
+        let page = self
+            .verification_uri_complete
+            .as_deref()
+            .unwrap_or(&self.verification_uri);
+        let url = Url::parse(page).ok()?;
+        let printable = |text: &str, most: usize| {
+            (1..=most).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_graphic())
+        };
+        ((controlled || (ours(url.host_str()?) && url.scheme() == "https"))
+            && printable(&self.device_code, 1024)
+            && printable(&self.user_code, 32)
+            && (60..=3600).contains(&self.expires_in))
+        .then(|| {
+            (
+                page.to_owned(),
+                Duration::from_secs(self.interval.unwrap_or(5).clamp(1, 60)),
+            )
+        })
+    }
+}
+
+/// A device-grant poll's answer short of tokens.
+pub(super) enum Waiting {
+    /// Not approved yet; `slower` when the vendor asked to poll less often.
+    Pending {
+        slower: bool,
+    },
+    Refused(&'static str),
+}
+
+/// Polls the token endpoint for a device grant.
+pub(super) async fn device_tokens(
+    url: Url,
+    form: &[(&str, &str)],
+) -> Result<Result<Grant, Waiting>, Failure> {
+    match tokens(url, form, None).await {
+        Ok(grant) => Ok(Ok(grant)),
+        Err(Failure::Oauth(code)) => Ok(Err(match code.as_str() {
+            "authorization_pending" => Waiting::Pending { slower: false },
+            "slow_down" => Waiting::Pending { slower: true },
+            "access_denied" | "authorization_denied" | "authorization_declined" => {
+                Waiting::Refused("sign_in_denied")
+            }
+            "expired_token" | "code_expired" => Waiting::Refused("sign_in_expired"),
+            _ => Waiting::Refused("sign_in_refused"),
+        })),
+        Err(failure) => Err(failure),
+    }
 }
 
 /// Seconds before expiry when a renewal starts, unless the vendor says later.
@@ -641,18 +765,24 @@ async fn context(
     .into_bytes())
 }
 
-/// Renews due subscriptions every half minute, ahead of agents needing them.
+async fn refresh_subscriptions(connections: &Connections) {
+    for provider in [ProviderKind::Chatgpt, ProviderKind::Supergrok] {
+        if let Err(error) = connections.refresh_due(provider).await {
+            tracing::warn!(
+                ?error,
+                provider = provider.as_str(),
+                "subscription refresh failed"
+            );
+        }
+    }
+}
+
+/// Renews due subscriptions and tends native connections every half minute, ahead of agents
+/// needing them.
 pub async fn keep_fresh(connections: Connections, mut stop: watch::Receiver<bool>) {
     loop {
-        for provider in [ProviderKind::Chatgpt, ProviderKind::Supergrok] {
-            if let Err(error) = connections.refresh_due(provider).await {
-                tracing::warn!(
-                    ?error,
-                    provider = provider.as_str(),
-                    "subscription refresh failed"
-                );
-            }
-        }
+        refresh_subscriptions(&connections).await;
+        connections.tend().await;
         tokio::select! {
             _ = stop.changed() => return,
             () = tokio::time::sleep(Duration::from_secs(30)) => (),

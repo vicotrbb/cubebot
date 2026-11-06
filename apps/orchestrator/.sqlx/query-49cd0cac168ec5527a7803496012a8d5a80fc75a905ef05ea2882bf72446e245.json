@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.id, r.name, r.agent_id AS agent, a.name AS agent_name, r.trigger_event AS \"event!\", r.enabled\n            FROM routines r JOIN agents a ON a.id = r.agent_id\n            WHERE r.trigger_connection = $1\n            ORDER BY a.name, r.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "event!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "49cd0cac168ec5527a7803496012a8d5a80fc75a905ef05ea2882bf72446e245"
+}

@@ -183,6 +183,25 @@ impl Sandbox {
         Ok(child.wait().await?.code())
     }
 
+    /// Keeps a result in the call's output file, as a program's output would be, and answers with
+    /// its preview: `code` 1 marks a failure.
+    pub async fn retain(&self, id: Uuid, text: String, code: i32) -> Outcome {
+        let job = Job {
+            argv: vec!["cat".into()],
+            stdin: Some(text.into_bytes()),
+        };
+        match self.run(id, job).await {
+            Outcome::Exited {
+                code: Some(0),
+                output,
+            } => Outcome::Exited {
+                code: Some(code),
+                output,
+            },
+            other => other,
+        }
+    }
+
     pub fn preview(&self, id: Uuid) -> String {
         let path = self.output(id);
         let shown = self.read_preview(&path).unwrap_or_else(|_| {
@@ -350,7 +369,11 @@ impl Registry {
 
     /// As the tool user, so the agent's own writes have the same reach as a tool call's.
     pub async fn write(&self, path: &str, content: &str) -> bool {
-        let job = builtin::write(path, content.as_bytes().to_vec());
+        self.write_bytes(path, content.as_bytes().to_vec()).await
+    }
+
+    pub async fn write_bytes(&self, path: &str, content: Vec<u8>) -> bool {
+        let job = builtin::write(path, content);
         let mut command = self.sandbox.command(&job.argv[0]);
         command
             .args(&job.argv[1..])
@@ -417,6 +440,10 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
 
     pub fn preview(&self, id: Uuid) -> String {
         self.sandbox.preview(id)
+    }
+
+    pub async fn retain(&self, id: Uuid, text: String, code: i32) -> Outcome {
+        self.sandbox.retain(id, text, code).await
     }
 }
 

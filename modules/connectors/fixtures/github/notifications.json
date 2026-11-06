@@ -1,0 +1,46 @@
+[
+  {
+    "id": "2",
+    "repository": {
+      "id": 1296269,
+      "name": "Hello-World",
+      "full_name": "octocat/Hello-World",
+      "owner": { "login": "octocat", "id": 1 },
+      "private": false
+    },
+    "subject": {
+      "title": "Greetings",
+      "url": "https://api.github.com/repos/octocat/Hello-World/issues/123",
+      "latest_comment_url": "https://api.github.com/repos/octocat/Hello-World/issues/comments/123",
+      "type": "Issue"
+    },
+    "reason": "mention",
+    "unread": true,
+    "updated_at": "2014-11-07T22:01:45Z",
+    "last_read_at": null,
+    "url": "https://api.github.com/notifications/threads/2",
+    "subscription_url": "https://api.github.com/notifications/threads/2/subscription"
+  },
+  {
+    "id": "1",
+    "repository": {
+      "id": 1296269,
+      "name": "Hello-World",
+      "full_name": "octocat/Hello-World",
+      "owner": { "login": "octocat", "id": 1 },
+      "private": false
+    },
+    "subject": {
+      "title": "Fix the build",
+      "url": "https://api.github.com/repos/octocat/Hello-World/pulls/124",
+      "latest_comment_url": null,
+      "type": "PullRequest"
+    },
+    "reason": "review_requested",
+    "unread": true,
+    "updated_at": "2014-11-06T10:00:00Z",
+    "last_read_at": null,
+    "url": "https://api.github.com/notifications/threads/1",
+    "subscription_url": "https://api.github.com/notifications/threads/1/subscription"
+  }
+]

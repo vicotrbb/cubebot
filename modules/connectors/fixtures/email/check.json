@@ -1,0 +1,22 @@
+{
+  "config": {
+    "provider": "other",
+    "address": "ada@example.com",
+    "imap_host": "127.0.0.1",
+    "imap_port": "{port}",
+    "security": "none"
+  },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "app-password-123" }
+  },
+  "account": "ada@example.com",
+  "script": [
+    "S: * OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE LITERAL+ AUTH=PLAIN] Dovecot ready.",
+    "C: A0001 LOGIN \"ada@example.com\" \"app-password-123\"",
+    "S: A0001 OK [CAPABILITY IMAP4rev1 SASL-IR LOGIN-REFERRALS ID ENABLE IDLE SORT THREAD=REFERENCES MOVE UIDPLUS SPECIAL-USE] Logged in",
+    "C: A0002 LOGOUT",
+    "S: * BYE Logging out",
+    "S: A0002 OK Logout completed (0.001 + 0.000 secs)."
+  ]
+}
