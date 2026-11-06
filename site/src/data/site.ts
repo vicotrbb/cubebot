@@ -136,8 +136,8 @@ export const releases = [
     date: '2026-11-06',
     title: 'Anthropic models work with every agent tool',
     items: [
-      'Agent requests stay within Anthropic\'s limits on strict tools',
-      'A refused provider request logs the provider\'s reason',
+      "Agent requests stay within Anthropic's limits on strict tools",
+      "A refused provider request logs the provider's reason",
     ],
   },
   {
