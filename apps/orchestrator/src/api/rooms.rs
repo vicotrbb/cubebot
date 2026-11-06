@@ -236,7 +236,7 @@ async fn room_events(
         .flat_map(stream::iter)
         .map(Ok::<_, Infallible>);
     Ok((
-        [("cache-control", "no-store")],
+        super::STREAM_HEADERS,
         Sse::new(frames).keep_alive(KeepAlive::default()),
     ))
 }

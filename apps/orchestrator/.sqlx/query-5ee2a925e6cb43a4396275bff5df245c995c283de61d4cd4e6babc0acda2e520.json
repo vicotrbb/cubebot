@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, config, client_secret IS NOT NULL AS \"secret!\" FROM identity_oidc_policy",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "secret!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "5ee2a925e6cb43a4396275bff5df245c995c283de61d4cd4e6babc0acda2e520"
+}

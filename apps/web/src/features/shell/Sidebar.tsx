@@ -56,6 +56,7 @@ export const ACTIVITY: Record<string, string> = {
 }
 
 export const PLATFORM = [
+  ['/platform/general', 'General'],
   ['/platform/people', 'People'],
   ['/platform/teams', 'Teams and access'],
   ['/platform/sign-in', 'Sign-in'],

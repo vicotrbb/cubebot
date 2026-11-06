@@ -154,17 +154,16 @@ pub async fn configured_router_with_credentials(
     if let Some(origin) = origin {
         identity.browser_origin = Some(crate::identity::oidc::Config::public_origin(&origin)?);
     }
-    let mut routes = if let Some((config, secret)) = config {
-        if identity.browser_origin.is_some() && identity.browser_origin != Some(config.origin()?) {
-            return Err(crate::identity::IdentityError::InvalidInput);
-        }
-        let oidc = crate::identity::oidc::Oidc::configure(identity, config, secret).await?;
-        identity = oidc.identity.clone();
-        identity_router(pool.clone(), identity.clone()).merge(self::oidc::router(oidc))
-    } else {
-        crate::identity::oidc::disable(&pool).await?;
-        identity_router(pool.clone(), identity.clone())
-    };
+    if let Some((config, _)) = &config
+        && identity.browser_origin.is_some()
+        && identity.browser_origin != Some(config.origin()?)
+    {
+        return Err(crate::identity::IdentityError::InvalidInput);
+    }
+    let sso =
+        crate::identity::oidc::SingleSignOn::start(identity, config, credentials.clone()).await?;
+    let identity = sso.identity();
+    let mut routes = identity_router(pool.clone(), identity.clone()).merge(self::oidc::router(sso));
     let connections = credentials
         .map(|credentials| crate::connections::Connections::new(pool.clone(), credentials));
     let speech = crate::speech::Speech::environment(connections.clone());
@@ -186,6 +185,10 @@ pub async fn configured_router_with_credentials(
         browser::csrf,
     )))
 }
+
+/// Proxies that buffer responses, such as nginx, would hold event streams back.
+const STREAM_HEADERS: [(&str, &str); 2] =
+    [("cache-control", "no-store"), ("x-accel-buffering", "no")];
 
 /// Firefox reports an EventSource open only once body bytes arrive, and the console loads history
 /// on open, so a quiet stream would otherwise wait 15 s for its first keep-alive.

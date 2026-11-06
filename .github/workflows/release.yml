@@ -87,6 +87,17 @@ jobs:
           done | jq -s --arg tag "$TAG" '{tag: $tag, images: add}' > digests.json
           cat digests.json
       - run: just release-check digests.json
+      - name: Install Helm
+        run: |
+          curl -fsSLo "$RUNNER_TEMP/helm.tgz" https://get.helm.sh/helm-v4.2.2-linux-amd64.tar.gz
+          echo "9adafecab4d406853bba163a70e9f104f47dbbf65ce24b7653bae7e36150bcb6  $RUNNER_TEMP/helm.tgz" | sha256sum --check
+          sudo tar -xzf "$RUNNER_TEMP/helm.tgz" -C /usr/local/bin --strip-components=1 linux-amd64/helm
+      - name: Publish the chart to GHCR
+        run: |
+          helm registry login ghcr.io -u "$GITHUB_ACTOR" --password-stdin <<< "$GITHUB_TOKEN"
+          just release-chart digests.json push
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Create the GitHub release
         run: gh release create "$TAG" digests.json --target "$GITHUB_SHA" --title "$TAG" --generate-notes ${{ github.event_name == 'workflow_dispatch' && '--draft' || '' }}
         env:

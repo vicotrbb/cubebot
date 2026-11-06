@@ -58,3 +58,11 @@ fn database_router(pool: sqlx::PgPool) -> axum::Router {
     let identity = cubebot_orchestrator::identity::Identity::new(pool.clone());
     cubebot_orchestrator::api::identity_router(pool, identity)
 }
+
+/// Shared-file limits with this quota and no per-file upload limit.
+fn quota(bytes: u64) -> cubebot_orchestrator::storage::Limits {
+    cubebot_orchestrator::storage::Limits {
+        quota: bytes,
+        upload: None,
+    }
+}

@@ -5,7 +5,6 @@ images:
   agent: ghcr.io/vicotrbb/cubebot-agent@sha256:0000000000000000000000000000000000000000000000000000000000000000
   sandbox: ghcr.io/vicotrbb/cubebot-sandbox@sha256:0000000000000000000000000000000000000000000000000000000000000000
 publicOrigin: https://cubebot.example.com
-controlOrigin: https://cubebot.example.com
 ingress:
   host: cubebot.example.com
   tlsSecret: tls

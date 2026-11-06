@@ -38,7 +38,7 @@ lint: complexity
     shellcheck deploy/install.sh deploy/cubebot
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/platform/subscription.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts apps/web/src/features/chat/Markdown.test.tsx apps/web/src/app/stream.test.ts apps/web/src/features/knowledge/useSave.test.ts apps/web/src/app/title.test.ts apps/web/src/features/connections/model.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/limits.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/platform/subscription.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts apps/web/src/features/chat/Markdown.test.tsx apps/web/src/app/stream.test.ts apps/web/src/features/knowledge/useSave.test.ts apps/web/src/app/title.test.ts apps/web/src/features/connections/model.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
     uv run --project tooling/quality --locked python tests/system/install_widgets.py
@@ -62,7 +62,9 @@ api:
 chart:
     helm lint --strict deploy/chart --values deploy/chart/ci/values.yaml
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml > /dev/null
-    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.runtime=kvm,controlCA=pem > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.runtime=kvm > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set admin.login=admin,admin.existingSecret=admin,control.existingSecret=control,ingress.enabled=false,httpRoute.enabled=true,httpRoute.parentRefs[0].name=public > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.networkPolicy.ingressController.podSelector=null,uploads.maxBytes=null > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set externalDatabase.existingSecret=database > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set credentials.existingSecret=key,postgres.existingSecret=database > /dev/null
 
@@ -79,6 +81,24 @@ release-check file="digests.json":
         [ "$want" = "$have" ] || { echo "$image:$tag is $have in GHCR, $want in {{ file }}" >&2; exit 1; }; \
         echo "$image:$tag $have"; \
     done
+
+# Packages the chart with a release's image digests into target/chart; `push` sends it to GHCR.
+release-chart file="digests.json" push="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tag=$(jq -er .tag "{{ file }}")
+    out=target/chart
+    rm -rf "$out" && mkdir -p "$out" && cp -R deploy/chart "$out/cubebot"
+    for image in orchestrator web agent sandbox; do
+        digest=$(jq -er --arg image "cubebot-$image" '.images[$image]' "{{ file }}")
+        sed -i.bak "s|^  $image: ''$|  $image: ghcr.io/vicotrbb/cubebot-$image@$digest|" "$out/cubebot/values.yaml"
+        grep -q "^  $image: ghcr.io/vicotrbb/cubebot-$image@sha256:" "$out/cubebot/values.yaml"
+    done
+    rm -rf "$out/cubebot/values.yaml.bak" "$out/cubebot/ci"
+    helm lint --strict "$out/cubebot" --set publicOrigin=https://cubebot.example.com,sandbox.dns[0]=10.96.0.10
+    helm package "$out/cubebot" --version "${tag#v}" --app-version "$tag" --destination "$out"
+    helm template cubebot "$out/cubebot-${tag#v}.tgz" --set publicOrigin=https://cubebot.example.com,sandbox.dns[0]=10.96.0.10 > /dev/null
+    if [ -n "{{ push }}" ]; then helm push "$out/cubebot-${tag#v}.tgz" oci://ghcr.io/vicotrbb/charts; fi
 
 # Installs this checkout from a local registry, twice (defaults, then pty answers); Docker only.
 install-check:

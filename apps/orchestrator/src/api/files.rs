@@ -124,6 +124,7 @@ fn status(error: &StorageError) -> (StatusCode, &'static str) {
         StorageError::Conflict => (StatusCode::CONFLICT, "name_taken"),
         StorageError::Busy => (StatusCode::TOO_MANY_REQUESTS, "storage_busy"),
         StorageError::Full => (StatusCode::INSUFFICIENT_STORAGE, "storage_full"),
+        StorageError::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "file_too_large"),
         StorageError::Integrity(..) => (StatusCode::INTERNAL_SERVER_ERROR, "integrity_fault"),
         StorageError::Unavailable | StorageError::Io(_) | StorageError::Database(_) => {
             (StatusCode::SERVICE_UNAVAILABLE, "storage_unavailable")

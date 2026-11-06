@@ -100,6 +100,16 @@ fn pod_defaults(expected: &mut PodSpec, actual: &PodSpec) {
         &actual.security_context,
         Default::default(),
     );
+    // Clusters with SupplementalGroupsPolicy (beta in 1.33) default it to Merge.
+    if let (Some(expected), Some(actual)) =
+        (&mut expected.security_context, &actual.security_context)
+    {
+        fill(
+            &mut expected.supplemental_groups_policy,
+            &actual.supplemental_groups_policy,
+            "Merge".into(),
+        );
+    }
     fill(
         &mut expected.enable_service_links,
         &actual.enable_service_links,
@@ -291,6 +301,26 @@ mod tests {
                 "{path}"
             );
         }
+    }
+    #[test]
+    fn accepts_only_the_merge_supplemental_groups_default() {
+        let intent = mutate(
+            &pod(),
+            "/spec/securityContext",
+            json!({"runAsNonRoot":true}),
+        );
+        let merged = mutate(
+            &intent,
+            "/spec/securityContext",
+            json!({"runAsNonRoot":true,"supplementalGroupsPolicy":"Merge"}),
+        );
+        assert!(verify(&intent, &merged).is_ok());
+        let strict = mutate(
+            &intent,
+            "/spec/securityContext",
+            json!({"runAsNonRoot":true,"supplementalGroupsPolicy":"Strict"}),
+        );
+        assert!(verify(&intent, &strict).is_err());
     }
     #[test]
     fn a_runtime_class_may_add_only_its_overhead() {

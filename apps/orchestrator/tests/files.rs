@@ -1,3 +1,4 @@
+use crate::quota;
 use crate::runtime_support::fixture;
 use axum::{
     Extension, Router,
@@ -119,7 +120,7 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
         .token;
     let alice = person(&identity, &admin, "alice").await;
     let bob = person(&identity, &admin, "bob").await;
-    let storage = Storage::start(f.pool.clone(), directory.clone(), 1 << 30)
+    let storage = Storage::start(f.pool.clone(), directory.clone(), quota(1 << 30))
         .await
         .unwrap();
     let router = console(&f.pool, storage.clone()).await;
@@ -313,11 +314,11 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let staged = directory.join("staging").join(Uuid::new_v4().to_string());
     std::fs::write(&staged, b"partial").unwrap();
     let used = report.len() as u64 + b"agent summary".len() as u64;
-    let storage = Storage::start(f.pool.clone(), directory.clone(), used + 10)
+    let storage = Storage::start(f.pool.clone(), directory.clone(), quota(used + 10))
         .await
         .unwrap();
     assert!(!orphan.exists() && !staged.exists());
-    let router = console(&f.pool, storage).await;
+    let router = console(&f.pool, storage.clone()).await;
     assert!(get(&router, &alice, &content).await.body == report);
 
     let query = |name: &str| format!("name={name}&request_id={}", Uuid::new_v4());
@@ -329,8 +330,26 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
             .count(),
         0
     );
+    // The per-file upload limit refuses with its own status and leaves nothing staged.
+    storage.limit(None, Some(4));
+    let large = upload(&router, &alice, "/api/files", &query("large"), &[1; 5]).await;
+    assert_eq!(large.status, 413);
+    assert_eq!(large.json()["error"], "file_too_large");
+    assert_eq!(
+        std::fs::read_dir(directory.join("staging"))
+            .unwrap()
+            .count(),
+        0
+    );
+    storage.limit(None, None);
     let fits = upload(&router, &alice, "/api/files", &query("fits"), &[1; 10]).await;
     assert_eq!(fits.status, 201);
+    // An administrator's quota applies at once, within 90% of the volume's own size.
+    storage.limit(Some(u64::MAX), None);
+    let capacity = storage.usage().capacity.unwrap();
+    assert_eq!(storage.usage().quota, capacity / 10 * 9);
+    storage.limit(None, None);
+    assert_eq!(storage.usage().quota, used + 10);
 
     let removed = send(
         &router,
@@ -347,4 +366,83 @@ async fn files_round_trip_stay_in_scope_and_survive_a_crash_before_commit() {
     let again = upload(&router, &alice, "/api/files", &query("again"), &report).await;
     assert_eq!(again.status, 201);
     std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn administrators_change_the_name_quota_and_upload_limit_at_once() {
+    let f = fixture().await;
+    let directory: PathBuf =
+        std::env::temp_dir().join(format!("cubebot-settings-{}", Uuid::new_v4()));
+    let identity = Identity::new(f.pool.clone());
+    let admin = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap()
+        .token;
+    let alice = person(&identity, &admin, "alice").await;
+    let storage = Storage::start(f.pool.clone(), directory.clone(), quota(1 << 30))
+        .await
+        .unwrap();
+    let router = console(&f.pool, storage.clone()).await;
+    const PATH: &str = "/api/installation/settings";
+
+    assert_eq!(get(&router, &alice, PATH).await.status, 403);
+    let current = get(&router, &admin, PATH).await.json();
+    assert_eq!(current["name"], Value::Null);
+    assert_eq!(current["storage"]["quota_bytes"], 1u64 << 30);
+    assert_eq!(current["storage"]["default_quota_bytes"], 1u64 << 30);
+    assert_eq!(current["storage"]["upload_limit_bytes"], Value::Null);
+    let revision = current["revision"].as_i64().unwrap();
+
+    let settings = |name: Value, quota: Value, upload: Value, revision: i64| json!({"name":name,"storage_quota_bytes":quota,"upload_limit_bytes":upload,"revision":revision});
+    for invalid in [
+        settings(json!("  "), Value::Null, Value::Null, revision),
+        settings(json!("x".repeat(65)), Value::Null, Value::Null, revision),
+        settings(Value::Null, json!(1024), Value::Null, revision),
+        settings(Value::Null, Value::Null, json!(1024), revision),
+    ] {
+        let refused = json(&router, &admin, "PUT", PATH, invalid.clone()).await;
+        assert_eq!(refused.status, 400, "{invalid}");
+    }
+    let stale = settings(json!("Acme"), Value::Null, Value::Null, revision - 1);
+    assert_eq!(json(&router, &admin, "PUT", PATH, stale).await.status, 409);
+    let denied = settings(json!("Acme"), Value::Null, Value::Null, revision);
+    assert_eq!(json(&router, &alice, "PUT", PATH, denied).await.status, 403);
+
+    let wanted = settings(json!(" Acme "), Value::Null, json!(1 << 20), revision);
+    let saved = json(&router, &admin, "PUT", PATH, wanted).await;
+    assert_eq!(saved.status, 200);
+    assert_eq!(saved.json()["name"], "Acme");
+    assert_eq!(saved.json()["storage"]["upload_limit_bytes"], 1 << 20);
+    assert_eq!(saved.json()["revision"], revision + 1);
+    assert_eq!(
+        get(&router, &alice, "/api/installation").await.json()["name"],
+        "Acme"
+    );
+
+    let query = |name: &str| format!("name={name}&request_id={}", Uuid::new_v4());
+    let over = vec![1; (1 << 20) + 1];
+    let large = upload(&router, &alice, "/api/files", &query("large"), &over).await;
+    assert_eq!(large.status, 413);
+    let fits = upload(&router, &alice, "/api/files", &query("fits"), &over[1..]).await;
+    assert_eq!(fits.status, 201);
+
+    // Clearing a value returns to the deployment's.
+    let cleared = settings(Value::Null, Value::Null, Value::Null, revision + 1);
+    assert_eq!(
+        json(&router, &admin, "PUT", PATH, cleared).await.status,
+        200
+    );
+    assert_eq!(
+        get(&router, &alice, "/api/installation").await.json()["name"],
+        "Cubebot"
+    );
+    assert_eq!(storage.usage().upload, None);
+    let audited: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE kind = 'installation.settings'")
+            .fetch_one(&f.pool)
+            .await
+            .unwrap();
+    assert_eq!(audited, 2);
 }

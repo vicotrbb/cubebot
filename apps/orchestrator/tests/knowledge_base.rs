@@ -1,3 +1,4 @@
+use crate::quota;
 use crate::runtime_support::fixture;
 use axum::{Extension, Router, body::Body, http::Request};
 use cubebot_orchestrator::{identity::Identity, storage::Storage};
@@ -85,7 +86,7 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
         .unwrap()
         .token;
     let directory = std::env::temp_dir().join(format!("cubebot-kb-{}", Uuid::new_v4()));
-    let storage = Storage::start(f.pool.clone(), directory.clone(), 1 << 30)
+    let storage = Storage::start(f.pool.clone(), directory.clone(), quota(1 << 30))
         .await
         .unwrap();
     let console = cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None)
@@ -334,7 +335,7 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
 async fn a_file_share_finds_a_person_by_login_in_any_case_and_says_why_not_otherwise() {
     let f = fixture().await;
     let directory = std::env::temp_dir().join(format!("cubebot-share-{}", Uuid::new_v4()));
-    let storage = Storage::start(f.pool.clone(), directory.clone(), 1 << 30)
+    let storage = Storage::start(f.pool.clone(), directory.clone(), quota(1 << 30))
         .await
         .unwrap();
     let token = f

@@ -515,6 +515,10 @@ async function uploadFile(file: File, parent: string | undefined) {
     throw new Error(
       'The installation is out of file storage. Delete files or ask an administrator.',
     )
+  if (response.status === 413)
+    throw new Error(
+      `${file.name} is larger than this installation’s upload limit. An administrator can raise it under Platform › General.`,
+    )
   if (response.status === 409)
     throw new Error(`A file named ${file.name} is already in this folder.`)
   if (!response.ok) throw new ApiError(response.status)

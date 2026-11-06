@@ -1,5 +1,5 @@
 # Every image is name@sha256:<digest>; a tag alone is refused. A release's digests.json lists
-# the four Cubebot images.
+# the four Cubebot images, and the chart published with a release has them filled in.
 images:
   orchestrator: ''
   web: ''
@@ -12,17 +12,59 @@ images:
 
 # The origin people open, e.g. https://cubebot.example.com.
 publicOrigin: ''
-# The HTTPS origin sandboxes reach the orchestrator at, through the ingress controller.
-controlOrigin: ''
-# PEM of the CA that signs controlOrigin's certificate, when the sandbox does not trust it already.
-controlCA: ''
+# The cluster's DNS domain; sandboxes reach the orchestrator at
+# orchestrator-control.<namespace>.svc.<clusterDomain>.
+clusterDomain: cluster.local
+# Shown across the console until an administrator renames it under Platform › General.
+installationName: ''
+
+# The first administrator, created when the orchestrator starts and only while the installation
+# has no account. Without it, the first person to open the console becomes the administrator.
+admin:
+  login: ''
+  # Stored in a Secret the chart writes; prefer existingSecret.
+  password: ''
+  # A Secret in this namespace whose password key holds the administrator's password.
+  existingSecret: ''
+
+# The orchestrator's TLS listener for sandboxes, on port 8443 of the orchestrator-control
+# Service. The chart makes a private certificate authority and certificate once and keeps them.
+control:
+  # Set it under Argo CD or helm template, where a generated certificate changes on every render:
+  # a kubernetes.io/tls Secret with tls.crt, tls.key and ca.crt, valid for
+  # orchestrator-control.<namespace>.svc.<clusterDomain>, such as one cert-manager issues.
+  existingSecret: ''
 
 ingress:
+  enabled: true
   className: ''
   host: ''
+  # Controller-specific settings, such as a body-size limit (see deploy/README.md).
   annotations: {}
   # An existing kubernetes.io/tls Secret in this namespace.
   tlsSecret: ''
+
+# Gateway API routing, instead of or beside the Ingress, for a Gateway such as Envoy Gateway,
+# Traefik, Cilium or Istio.
+httpRoute:
+  enabled: false
+  annotations: {}
+  # The Gateway listeners to attach to, e.g. [{name: public, namespace: gateways}].
+  parentRefs: []
+  hostnames: []
+
+# Shared files people and agents keep.
+storage:
+  size: 10Gi
+  storageClass: ''
+  # Bytes; empty keeps 10 GiB. The orchestrator never applies more than 90% of the volume, and
+  # an administrator may change it under Platform › General.
+  quotaBytes: ''
+
+uploads:
+  # The largest file one upload may store, in bytes (25 MiB); empty means no limit. An
+  # administrator may change it under Platform › General.
+  maxBytes: 26214400
 
 sandbox:
   # container: the agent image runs as the pod. kvm: each agent is a KVM guest of cubebot-sandbox,
@@ -34,13 +76,20 @@ sandbox:
   dns: []
   terminalEnabled: false
   computerUseEnabled: false
+  # Overrides for each agent's cpu, memory and ephemeral-storage. Defaults: requests 100m, 256Mi,
+  # 64Mi; limits 2, 3Gi, 1Gi. A change replaces running agents once their work settles.
+  resources: {}
+  #   limits:
+  #     memory: 6Gi
   networkPolicy:
-    # Sandboxes reach the orchestrator only through these pods, on the pods' own HTTPS port.
+    # Upgrades from charts before 0.1.16 only: agents started then reach the orchestrator through
+    # the ingress controller until they are replaced. Remove once every agent has restarted.
     ingressController:
       namespaceSelector: {}
       podSelector: {}
       port: 443
-    # Outside cluster DNS and the ingress controller, sandboxes reach everything but these.
+    # Outside cluster DNS and the orchestrator, sandboxes reach everything but these. Add your
+    # nodes' public addresses here when they have any (see deploy/README.md).
     blockedRanges:
       - 10.0.0.0/8
       - 172.16.0.0/12
@@ -53,14 +102,9 @@ sandbox:
     # - cidr: 192.168.1.20/32
     #   ports: [8123]
 
-# The orchestrator's shared files; ReadWriteOncePod needs a CSI driver that supports it.
-storage:
-  size: 10Gi
-  storageClass: ''
-
-# A Secret in this namespace whose key key holds the 32 raw bytes that encrypt stored provider
-# and vault credentials; generated when empty. Set it under Argo CD or helm template, where a
-# generated key changes on every render.
+# A Secret in this namespace whose key key holds the 32 raw bytes that encrypt stored provider,
+# vault and single sign-on credentials; generated when empty. Set it under Argo CD or helm
+# template, where a generated key changes on every render.
 credentials:
   existingSecret: ''
 
@@ -71,7 +115,30 @@ postgres:
   existingSecret: ''
   size: 10Gi
   storageClass: ''
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
 
 externalDatabase:
   # A Secret in this namespace whose database_url key is the PostgreSQL connection URL.
   existingSecret: ''
+
+orchestrator:
+  # Speech models run in this process, so memory grows with calls.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 2Gi
+
+web:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi

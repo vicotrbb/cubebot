@@ -1131,9 +1131,15 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin = format!("http://{}", listener.local_addr().unwrap());
     let (stop, stopped) = tokio::sync::oneshot::channel();
-    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
-        stopped.await.unwrap();
-    }));
+    let serving = tokio::spawn(server::serve(
+        listener,
+        None,
+        routes,
+        Some(controller),
+        async {
+            stopped.await.unwrap();
+        },
+    ));
     wait_bound_pod(&pool).await;
     let http = openidconnect::reqwest::Client::new();
     assert_eq!(
@@ -1175,6 +1181,7 @@ async fn owned_server_reconciles_intent_and_releases_only_after_shutdown() {
         .unwrap();
     server::serve(
         tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap(),
+        None,
         cubebot_orchestrator::api::router(),
         Some(next),
         async {},
@@ -1398,9 +1405,15 @@ async fn clean_owner_release_waits_for_in_flight_http_handlers() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let (stop, stopped) = tokio::sync::oneshot::channel();
-    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
-        stopped.await.unwrap();
-    }));
+    let serving = tokio::spawn(server::serve(
+        listener,
+        None,
+        routes,
+        Some(controller),
+        async {
+            stopped.await.unwrap();
+        },
+    ));
     let request = tokio::spawn(async move {
         openidconnect::reqwest::get(format!("http://{address}/hold"))
             .await
@@ -1463,9 +1476,15 @@ async fn clean_owner_release_does_not_wait_for_a_response_that_never_ends() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let (stop, stopped) = tokio::sync::oneshot::channel();
-    let serving = tokio::spawn(server::serve(listener, routes, Some(controller), async {
-        stopped.await.unwrap();
-    }));
+    let serving = tokio::spawn(server::serve(
+        listener,
+        None,
+        routes,
+        Some(controller),
+        async {
+            stopped.await.unwrap();
+        },
+    ));
     let request = tokio::spawn(openidconnect::reqwest::get(format!(
         "http://{address}/hold"
     )));
@@ -1507,6 +1526,7 @@ async fn lost_owner_session_stops_http_and_controller_without_releasing_claim() 
     let address = listener.local_addr().unwrap();
     let serving = tokio::spawn(server::serve(
         listener,
+        None,
         cubebot_orchestrator::api::router(),
         Some(controller),
         std::future::pending(),

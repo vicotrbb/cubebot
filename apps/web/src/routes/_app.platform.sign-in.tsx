@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { admin } from '../api/admin'
 import { Alert, Skeleton, Status } from '../components/primitives'
+import { SingleSignOnEditor } from '../features/platform/SingleSignOn'
 import { useAdminAction } from '../features/platform/useAdminAction'
 import '../features/platform/platform.css'
 
@@ -16,15 +17,14 @@ function SignInSettings() {
     <div className="platform">
       <div>
         <p className="platform__lead">
-          OpenID Connect is configured on the orchestrator. Bindings tie an
-          account to an issuer and subject; revoking one ends its OIDC sessions
-          and keeps the record as a tombstone.
+          Single sign-on lets people sign in through your identity provider with
+          OpenID Connect. Bindings tie an account to an issuer and subject;
+          revoking one ends its single sign-on sessions and keeps the record as
+          a tombstone.
         </p>
         {bindings.isPending && <Skeleton lines={3} />}
         {bindings.isError && (
-          <Alert>
-            OpenID Connect is not configured, or bindings could not be loaded.
-          </Alert>
+          <Alert>Single sign-on is off, or bindings could not be loaded.</Alert>
         )}
         <table className="table">
           <thead>
@@ -82,6 +82,8 @@ function SignInSettings() {
         <Status>{notice}</Status>
       </div>
       <aside className="platform__editor">
+        <h2>Single sign-on</h2>
+        <SingleSignOnEditor />
         <h2>Built-in sign-in</h2>
         <p className="small muted">
           Built-in credentials always work for installation recovery. Password

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE identity_oidc_policy SET config=NULL, client_secret=NULL WHERE singleton",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "678ea01902da9effce4918e328c004acf91c753fc9bbf87cdbec6eef0935e228"
+}

@@ -17,9 +17,18 @@ spec:
         {{- include "cubebot.labels" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
+      # A probe the kubelet kills on timeout would otherwise be reaped by the postmaster as PID 1,
+      # which restarts every connection; the pause container reaps it instead.
+      shareProcessNamespace: true
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: postgres
           image: {{ include "cubebot.image" (list $ "postgres") }}
+          # The image's entrypoint prepares the data directory as root, then drops to postgres.
+          securityContext:
+            allowPrivilegeEscalation: false
           env:
             - name: POSTGRES_USER
               value: cubebot
@@ -32,9 +41,25 @@ spec:
                   key: password
           ports:
             - containerPort: 5432
+          # Crash recovery after an unclean stop can take minutes.
+          startupProbe:
+            exec:
+              command: [pg_isready, -U, cubebot, -d, cubebot]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 120
+          livenessProbe:
+            exec:
+              command: [pg_isready, -U, cubebot, -d, cubebot]
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
           readinessProbe:
             exec:
-              command: [pg_isready, -U, cubebot]
+              command: [pg_isready, -U, cubebot, -d, cubebot]
+            periodSeconds: 5
+            timeoutSeconds: 5
+          resources: {{- toYaml .Values.postgres.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql

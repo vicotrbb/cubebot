@@ -7,6 +7,7 @@ export const FILTERS = [
   { label: 'Agents', areas: 'agent,broadcast,room' },
   { label: 'Desktop and vault', areas: 'desktop,login,vault' },
   { label: 'Connections', areas: 'provider,mcp' },
+  { label: 'Installation', areas: 'installation,task' },
 ] as const
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -35,6 +36,11 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
   'access.grant': (detail) => `granted ${capability(detail)} on`,
   'access.revoke': () => 'revoked a grant on',
   'oidc.revoke': () => 'revoked a single sign-on identity of',
+  'oidc.configure': (detail) =>
+    `set up single sign-on with ${text(detail.issuer) || 'an identity provider'}${detail.secret_changed ? ' and a new client secret' : ''}`,
+  'oidc.disable': () => 'turned off single sign-on',
+  'installation.settings': () =>
+    'changed the installation’s name or storage limits',
   'oidc.link': () => 'linked a single sign-on identity to',
   'session.sign_in': (detail) =>
     detail.method === 'oidc'

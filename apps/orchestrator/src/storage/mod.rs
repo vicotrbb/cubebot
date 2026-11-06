@@ -12,7 +12,10 @@ use std::{
     collections::HashSet,
     io,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
@@ -46,6 +49,7 @@ pub enum StorageError {
     Conflict,
     Busy,
     Full,
+    TooLarge,
     Incomplete(Source),
     Integrity(Uuid, Source),
     Unavailable,
@@ -62,6 +66,7 @@ impl std::fmt::Display for StorageError {
             Self::Conflict => formatter.write_str("name taken"),
             Self::Busy => formatter.write_str("storage busy"),
             Self::Full => formatter.write_str("storage quota exhausted"),
+            Self::TooLarge => formatter.write_str("file over the upload limit"),
             Self::Incomplete(_) => formatter.write_str("upload incomplete"),
             Self::Integrity(blob, _) => write!(formatter, "blob {blob} failed its integrity check"),
             Self::Unavailable | Self::Io(_) | Self::Database(_) => {
@@ -144,6 +149,13 @@ impl Row {
 
 type Owner = (Option<Uuid>, Option<Uuid>);
 
+/// The volume's size in bytes; `fsblkcnt_t` is 32 bits on macOS and 64 on Linux.
+#[allow(clippy::useless_conversion)]
+fn capacity(directory: &std::path::Path) -> Option<u64> {
+    let stats = nix::sys::statvfs::statvfs(directory).ok()?;
+    u64::from(stats.blocks()).checked_mul(u64::from(stats.fragment_size()))
+}
+
 #[derive(Clone)]
 pub struct Storage(Arc<Inner>);
 
@@ -151,9 +163,44 @@ struct Inner {
     pool: PgPool,
     volume: Volume,
     transfers: Arc<Semaphore>,
-    quota: u64,
+    /// The volume's size; a quota above 90% of it would fill the disk before refusing uploads.
+    capacity: Option<u64>,
+    defaults: Limits,
+    quota: AtomicU64,
+    upload: AtomicU64,
     /// Stored and staged bytes. One active orchestrator owns the volume.
     used: Mutex<u64>,
+}
+
+/// The deployment's storage quota and per-file upload limit; `None` uploads are unlimited.
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    pub quota: u64,
+    pub upload: Option<u64>,
+}
+
+impl Limits {
+    pub fn environment() -> Result<Self, Source> {
+        let bytes = |key| match std::env::var(key) {
+            Ok(value) => value.parse::<u64>().map(Some).map_err(Source::from),
+            Err(std::env::VarError::NotPresent) => Ok(None),
+            Err(error) => Err(error.into()),
+        };
+        Ok(Self {
+            quota: bytes("CUBEBOT_STORAGE_QUOTA_BYTES")?.unwrap_or(DEFAULT_QUOTA),
+            upload: bytes("CUBEBOT_UPLOAD_LIMIT_BYTES")?,
+        })
+    }
+}
+
+/// What the console shows about the volume and the limits in force.
+#[derive(Clone, Copy, Debug)]
+pub struct Usage {
+    pub capacity: Option<u64>,
+    pub quota: u64,
+    pub upload: Option<u64>,
+    pub used: u64,
+    pub defaults: Limits,
 }
 
 impl Storage {
@@ -165,16 +212,16 @@ impl Storage {
         if !directory.is_absolute() {
             return Err("CUBEBOT_STORAGE_DIRECTORY must be an absolute path".into());
         }
-        let quota = match std::env::var("CUBEBOT_STORAGE_QUOTA_BYTES") {
-            Ok(quota) => quota.parse()?,
-            Err(std::env::VarError::NotPresent) => DEFAULT_QUOTA,
-            Err(error) => return Err(error.into()),
-        };
-        Ok(Some(Self::start(pool, directory, quota).await?))
+        let limits = Limits::environment()?;
+        Ok(Some(Self::start(pool, directory, limits).await?))
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn start(pool: PgPool, directory: PathBuf, quota: u64) -> Result<Self, StorageError> {
+    pub async fn start(
+        pool: PgPool,
+        directory: PathBuf,
+        defaults: Limits,
+    ) -> Result<Self, StorageError> {
         // shortcut: holds every blob id in memory once; scan in pages past millions of files.
         let blobs = sqlx::query!(
             "
@@ -186,6 +233,7 @@ impl Storage {
         .await?;
         let used = blobs.iter().map(|blob| blob.size as u64).sum();
         let recorded: HashSet<Uuid> = blobs.iter().map(|blob| blob.id).collect();
+        let capacity = capacity(&directory);
         let (volume, missing) = tokio::task::spawn_blocking(move || {
             let volume = Volume::new(directory)?;
             let missing = volume.reconcile(&recorded)?;
@@ -196,13 +244,45 @@ impl Storage {
         for blob in missing {
             tracing::error!(blob = %blob, "a recorded blob has no bytes on the storage volume");
         }
-        Ok(Self(Arc::new(Inner {
+        let storage = Self(Arc::new(Inner {
             pool,
             volume,
             transfers: Arc::new(Semaphore::new(TRANSFERS)),
-            quota,
+            capacity,
+            defaults,
+            quota: AtomicU64::new(0),
+            upload: AtomicU64::new(0),
             used: Mutex::new(used),
-        })))
+        }));
+        storage.limit(None, None);
+        Ok(storage)
+    }
+
+    /// Applies an administrator's overrides; `None` keeps the deployment's value.
+    pub fn limit(&self, quota: Option<u64>, upload: Option<u64>) {
+        let quota = quota.unwrap_or(self.0.defaults.quota);
+        let ceiling = self
+            .0
+            .capacity
+            .map_or(u64::MAX, |capacity| capacity / 10 * 9);
+        self.0.quota.store(quota.min(ceiling), Ordering::Relaxed);
+        let upload = upload.or(self.0.defaults.upload).unwrap_or(u64::MAX);
+        self.0.upload.store(upload, Ordering::Relaxed);
+    }
+
+    pub fn usage(&self) -> Usage {
+        let upload = self.0.upload.load(Ordering::Relaxed);
+        Usage {
+            capacity: self.0.capacity,
+            quota: self.0.quota.load(Ordering::Relaxed),
+            upload: (upload != u64::MAX).then_some(upload),
+            used: *self
+                .0
+                .used
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            defaults: self.0.defaults,
+        }
     }
 
     fn reserve(&self, bytes: u64) -> bool {
@@ -211,7 +291,7 @@ impl Storage {
             .used
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let admitted = used.saturating_add(bytes) <= self.0.quota;
+        let admitted = used.saturating_add(bytes) <= self.0.quota.load(Ordering::Relaxed);
         if admitted {
             *used += bytes;
         }
@@ -455,12 +535,15 @@ impl Storage {
         let _transfer = self.transfer()?;
         let owner = self.destination(who, upload.parent).await?;
         let id = Uuid::new_v4();
-        let mut reserved = 0;
+        let mut reserved: u64 = 0;
+        let mut too_large = false;
+        let limit = self.0.upload.load(Ordering::Relaxed);
         let received = self
             .0
             .volume
             .receive(id, body, |bytes| {
-                let admitted = self.reserve(bytes);
+                too_large = reserved.saturating_add(bytes) > limit;
+                let admitted = !too_large && self.reserve(bytes);
                 if admitted {
                     reserved += bytes;
                 }
@@ -469,6 +552,7 @@ impl Storage {
             .await;
         let recorded = match received {
             Ok(published) => self.record(id, owner, upload, &published).await,
+            Err(StorageError::Full) if too_large => Err(StorageError::TooLarge),
             Err(error) => Err(error),
         };
         if let Err(error) = recorded {
@@ -583,12 +667,15 @@ impl Storage {
     {
         let _transfer = self.transfer()?;
         let id = Uuid::new_v4();
-        let mut reserved = 0;
+        let mut reserved: u64 = 0;
+        let mut too_large = false;
+        let limit = self.0.upload.load(Ordering::Relaxed);
         let received = self
             .0
             .volume
             .receive(id, body, |bytes| {
-                let admitted = self.reserve(bytes);
+                too_large = reserved.saturating_add(bytes) > limit;
+                let admitted = !too_large && self.reserve(bytes);
                 if admitted {
                     reserved += bytes;
                 }
@@ -609,6 +696,7 @@ impl Storage {
             .await
             .map(|_| published.size as i64)
             .map_err(StorageError::from),
+            Err(StorageError::Full) if too_large => Err(StorageError::TooLarge),
             Err(error) => Err(error),
         };
         match recorded {

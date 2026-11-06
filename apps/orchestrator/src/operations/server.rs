@@ -74,8 +74,10 @@ impl Listener for Tls {
 /// kill that follows leaves the ownership claim unreleased.
 const DRAIN: Duration = Duration::from_secs(5);
 
+/// `control`, when present, serves the same routes to agents on their own TLS listener.
 pub async fn serve<L>(
     listener: L,
+    control: Option<Tls>,
     router: Router,
     mut controller: Option<Controller>,
     shutdown: impl Future<Output = ()>,
@@ -84,7 +86,7 @@ where
     L: Listener,
     L::Addr: Debug,
 {
-    coordinate(listener, router, &mut controller, shutdown).await?;
+    coordinate(listener, control, router, &mut controller, shutdown).await?;
     if let Some(controller) = controller {
         controller.release().await?;
     }
@@ -92,6 +94,7 @@ where
 }
 async fn coordinate<L>(
     listener: L,
+    control: Option<Tls>,
     router: Router,
     controller: &mut Option<Controller>,
     shutdown: impl Future<Output = ()>,
@@ -101,9 +104,11 @@ where
     L::Addr: Debug,
 {
     let (stop, receiver) = watch::channel(false);
-    let server = axum::serve(listener, router)
+    let public = axum::serve(listener, router.clone())
         .with_graceful_shutdown(wait_stop(receiver.clone()))
         .into_future();
+    let control = serve_control(control, router, receiver.clone());
+    let server = async { tokio::try_join!(public, control).map(|_| ()) };
     let lifecycle = run_controller(controller, receiver);
     tokio::pin!(server, lifecycle, shutdown);
     let (server_done, controller_done, first) = tokio::select! {
@@ -132,6 +137,23 @@ where
         }
     );
     first.and(server_result).and(controller_result)
+}
+async fn serve_control(
+    control: Option<Tls>,
+    router: Router,
+    receiver: watch::Receiver<bool>,
+) -> io::Result<()> {
+    match control {
+        Some(listener) => {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(wait_stop(receiver))
+                .await
+        }
+        None => {
+            wait_stop(receiver).await;
+            Ok(())
+        }
+    }
 }
 async fn run_controller(
     controller: &mut Option<Controller>,

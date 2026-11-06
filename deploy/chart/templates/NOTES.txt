@@ -1,0 +1,20 @@
+Cubebot is installing in {{ .Release.Namespace }}. Open {{ .Values.publicOrigin }} once the orchestrator is ready:
+
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/orchestrator
+
+{{- if or .Values.admin.password .Values.admin.existingSecret }}
+
+Sign in as {{ .Values.admin.login }} with the password from the admin Secret.
+{{- else }}
+
+No administrator is set, so the first person to open the console becomes it. Before the console is
+reachable by others, create it here instead:
+
+  kubectl -n {{ .Release.Namespace }} exec -it deploy/orchestrator -- sh -c \
+    'read -rs CUBEBOT_BOOTSTRAP_PASSWORD && export CUBEBOT_BOOTSTRAP_PASSWORD && CUBEBOT_BOOTSTRAP_LOGIN=admin cubebot-admin bootstrap'
+{{- end }}
+{{- if not .Values.control.existingSecret }}
+
+The chart keeps the agents' control certificate authority in the control-tls Secret. Under Argo CD
+or helm template, set control.existingSecret, credentials.existingSecret and postgres.existingSecret.
+{{- end }}

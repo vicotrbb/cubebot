@@ -21,6 +21,13 @@ describe('audit sentences', () => {
       phrase('desktop.take_control', { login: 'amazon.com.br' }),
       'took control to log in to amazon.com.br on',
     )
+    assert.equal(
+      phrase('oidc.configure', {
+        issuer: 'https://id.example.com',
+        secret_changed: true,
+      }),
+      'set up single sign-on with https://id.example.com and a new client secret',
+    )
   })
 
   test('a person acting on their own account names no resource', () => {

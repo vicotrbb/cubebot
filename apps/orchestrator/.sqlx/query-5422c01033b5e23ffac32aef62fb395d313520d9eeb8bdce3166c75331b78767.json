@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT name, storage_quota_bytes, upload_limit_bytes, revision FROM installation_settings",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "storage_quota_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "upload_limit_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "5422c01033b5e23ffac32aef62fb395d313520d9eeb8bdce3166c75331b78767"
+}
