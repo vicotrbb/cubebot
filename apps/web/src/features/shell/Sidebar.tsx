@@ -62,6 +62,7 @@ export const PLATFORM = [
   ['/platform/providers', 'AI providers'],
   ['/platform/speech', 'Speech'],
   ['/platform/tasks', 'Tasks'],
+  ['/platform/connections', 'Connections'],
   ['/platform/mcp', 'MCP servers'],
   ['/platform/vault', 'Vault'],
   ['/platform/audit', 'Audit log'],

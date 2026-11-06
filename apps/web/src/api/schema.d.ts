@@ -2221,6 +2221,8 @@ export interface components {
       connector: string
       /** @description This agent may use it. */
       enabled: boolean
+      /** @description The events it reports, for routine triggers. */
+      events: string[]
       /** Format: uuid */
       id: string
       level: components['schemas']['Level']

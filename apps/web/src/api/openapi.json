@@ -5370,7 +5370,8 @@
           "level",
           "status",
           "all_agents",
-          "enabled"
+          "enabled",
+          "events"
         ],
         "properties": {
           "account": {
@@ -5386,6 +5387,13 @@
           "enabled": {
             "type": "boolean",
             "description": "This agent may use it."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The events it reports, for routine triggers."
           },
           "id": {
             "type": "string",

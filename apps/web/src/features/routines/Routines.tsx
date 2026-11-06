@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { CalendarClock, Play, Webhook } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { CalendarClock, Play, Webhook, Zap } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import {
   api,
@@ -33,6 +34,7 @@ const ORIGINS: Record<string, string> = {
   agent: 'Run by the agent',
   schedule: 'Scheduled',
   webhook: 'Webhook',
+  event: 'Connection event',
 }
 type Secret = { id: string; secret: string }
 type HookDelivery = components['schemas']['HookDelivery']
@@ -246,9 +248,11 @@ function describe(routine: Routine) {
       : 'Managed by a person'
   const schedule = routine.schedule
     ? `next ${routine.next_at ? when(routine.next_at) : 'never'}`
-    : routine.webhook
-      ? 'Runs from its webhook or by hand'
-      : 'Runs by hand'
+    : routine.trigger
+      ? `Runs on ${routine.trigger.connection}'s ${routine.trigger.event}`
+      : routine.webhook
+        ? 'Runs from its webhook or by hand'
+        : 'Runs by hand'
   const last = routine.last_run_at
     ? `, last run ${when(routine.last_run_at)}`
     : ''
@@ -494,7 +498,7 @@ function RoutineForm({
           defaultValue={existing?.command ?? ''}
         />
       </Field>
-      <Triggers existing={existing} />
+      <Triggers agent={agent.id} existing={existing} />
       <label className="check">
         <input
           type="checkbox"
@@ -531,7 +535,13 @@ function RoutineForm({
   )
 }
 
-function Triggers({ existing }: { existing: Routine | undefined }) {
+function Triggers({
+  agent,
+  existing,
+}: {
+  agent: string
+  existing: Routine | undefined
+}) {
   const [scheduled, setScheduled] = useState(Boolean(existing?.schedule))
   const [cron, setCron] = useState<string>(
     existing?.schedule ?? SCHEDULES[0][1],
@@ -540,8 +550,8 @@ function Triggers({ existing }: { existing: Routine | undefined }) {
     <fieldset className="triggers">
       <legend>When it runs</legend>
       <p className="small faint">
-        You can always run it by hand. Add a schedule, a webhook, both or
-        neither.
+        You can always run it by hand. Add a schedule, a webhook, a connected
+        account’s events, any of them or none.
       </p>
       <label className="trigger">
         <input
@@ -610,7 +620,80 @@ function Triggers({ existing }: { existing: Routine | undefined }) {
           </span>
         </label>
       )}
+      <EventTrigger agent={agent} existing={existing} />
     </fieldset>
+  )
+}
+
+/** Connections this agent may use and the events they report; hidden when it may use none. */
+function EventTrigger({
+  agent,
+  existing,
+}: {
+  agent: string
+  existing: Routine | undefined
+}) {
+  const connections = useQuery({
+    queryKey: ['agent-connections', agent],
+    queryFn: () =>
+      ok(
+        api.GET('/api/agents/{id}/connections', {
+          params: { path: { id: agent } },
+        }),
+      ),
+    retry: false,
+  })
+  const current = existing?.trigger
+    ? `${existing.trigger.connection} ${existing.trigger.event}`
+    : ''
+  const [chosen, setChosen] = useState(current)
+  const options = (connections.data ?? [])
+    .filter((connection) => connection.enabled)
+    .flatMap((connection) =>
+      connection.events.map((event) => ({
+        value: `${connection.slug} ${event}`,
+        label: `${connection.slug}: ${event}`,
+      })),
+    )
+  if (options.length === 0 && !current) return null
+  return (
+    <>
+      <label className="trigger">
+        <input
+          type="checkbox"
+          checked={chosen !== ''}
+          onChange={(event) =>
+            setChosen(event.target.checked ? (options[0]?.value ?? '') : '')
+          }
+        />
+        <Zap aria-hidden="true" />
+        <span>
+          When a connected account reports an event
+          <span className="small faint">
+            Such as new mail; the event arrives in the run’s message
+          </span>
+        </span>
+      </label>
+      {chosen && (
+        <div className="trigger__more">
+          <Field label="Event">
+            <select
+              name="trigger"
+              value={chosen}
+              onChange={(event) => setChosen(event.target.value)}
+            >
+              {!options.some((option) => option.value === current) &&
+                current && <option value={current}>{current}</option>}
+              {options.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -651,7 +734,13 @@ function routineBody(data: FormData) {
     schedule: text('schedule'),
     coalesce: data.has('coalesce'),
     enabled: data.has('enabled'),
+    trigger: trigger(text('trigger')),
   }
+}
+
+function trigger(chosen: string | null) {
+  const [connection, event] = chosen?.split(' ') ?? []
+  return connection && event ? { connection, event } : null
 }
 
 function listRoutines(agent: string) {

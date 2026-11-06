@@ -161,6 +161,8 @@ pub struct AgentConnection {
     pub all_agents: bool,
     /// This agent may use it.
     pub enabled: bool,
+    /// The events it reports, for routine triggers.
+    pub events: Vec<String>,
 }
 
 /// What a connection reported recently and which routines it starts.
@@ -634,10 +636,9 @@ impl Connections {
         &self,
         agent: AgentId,
     ) -> Result<Vec<AgentConnection>, IdentityError> {
-        Ok(sqlx::query_as!(
-            AgentConnection,
+        let rows = sqlx::query!(
             r#"
-            SELECT id, connector, slug, account, level, status,
+            SELECT id, connector, slug, account, level, status, config,
                 access->>'mode' = 'all_agents' AS "all_agents!",
                 (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)) AS "enabled!"
             FROM connections
@@ -646,7 +647,21 @@ impl Connections {
             agent.0,
         )
         .fetch_all(&self.pool)
-        .await?)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| AgentConnection {
+                events: events(&row.connector, &row.config),
+                id: row.id,
+                connector: row.connector,
+                slug: row.slug,
+                account: row.account,
+                level: row.level,
+                status: row.status,
+                all_agents: row.all_agents,
+                enabled: row.enabled,
+            })
+            .collect())
     }
 
     /// Grants or withdraws one agent's use of a connection with explicit grants.
@@ -901,6 +916,24 @@ async fn insert_row(
     )
     .fetch_optional(&mut **tx)
     .await
+}
+
+/// The event kinds a connection reports, given the products it has switched on.
+fn events(connector: &str, config: &Value) -> Vec<String> {
+    let Some(manifest) = cubebot_connectors::find(connector).map(|c| c.manifest()) else {
+        return Vec::new();
+    };
+    let enabled = manifest.enabled(config);
+    manifest
+        .events
+        .iter()
+        .filter(|event| {
+            event
+                .product
+                .is_none_or(|product| enabled.contains(&product))
+        })
+        .map(|event| event.kind.to_owned())
+        .collect()
 }
 
 fn tools_known(manifest: &Manifest, tools: Vec<String>) -> Result<Vec<String>, ConnectError> {

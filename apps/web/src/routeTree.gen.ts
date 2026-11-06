@@ -24,6 +24,7 @@ import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
 import { Route as AppKbIndexRouteImport } from './routes/_app.kb.index'
 import { Route as AppKbPageIdRouteImport } from './routes/_app.kb.$pageId'
 import { Route as AppPlatformAuditRouteImport } from './routes/_app.platform.audit'
+import { Route as AppPlatformConnectionsRouteImport } from './routes/_app.platform.connections'
 import { Route as AppPlatformHealthRouteImport } from './routes/_app.platform.health'
 import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
 import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
@@ -126,6 +127,11 @@ const AppKbPageIdRoute = AppKbPageIdRouteImport.update({
 const AppPlatformAuditRoute = AppPlatformAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformConnectionsRoute = AppPlatformConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
   getParentRoute: () => AppPlatformRoute,
 } as any)
 const AppPlatformHealthRoute = AppPlatformHealthRouteImport.update({
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/agents/new': typeof AppAgentsNewRoute
   '/kb/$pageId': typeof AppKbPageIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
+  '/platform/connections': typeof AppPlatformConnectionsRoute
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
   '/platform/people': typeof AppPlatformPeopleRoute
@@ -336,6 +343,7 @@ export interface FileRoutesByTo {
   '/agents/new': typeof AppAgentsNewRoute
   '/kb/$pageId': typeof AppKbPageIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
+  '/platform/connections': typeof AppPlatformConnectionsRoute
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
   '/platform/people': typeof AppPlatformPeopleRoute
@@ -383,6 +391,7 @@ export interface FileRoutesById {
   '/_app/agents/new': typeof AppAgentsNewRoute
   '/_app/kb/$pageId': typeof AppKbPageIdRoute
   '/_app/platform/audit': typeof AppPlatformAuditRoute
+  '/_app/platform/connections': typeof AppPlatformConnectionsRoute
   '/_app/platform/health': typeof AppPlatformHealthRoute
   '/_app/platform/mcp': typeof AppPlatformMcpRoute
   '/_app/platform/people': typeof AppPlatformPeopleRoute
@@ -430,6 +439,7 @@ export interface FileRouteTypes {
     | '/agents/new'
     | '/kb/$pageId'
     | '/platform/audit'
+    | '/platform/connections'
     | '/platform/health'
     | '/platform/mcp'
     | '/platform/people'
@@ -474,6 +484,7 @@ export interface FileRouteTypes {
     | '/agents/new'
     | '/kb/$pageId'
     | '/platform/audit'
+    | '/platform/connections'
     | '/platform/health'
     | '/platform/mcp'
     | '/platform/people'
@@ -520,6 +531,7 @@ export interface FileRouteTypes {
     | '/_app/agents/new'
     | '/_app/kb/$pageId'
     | '/_app/platform/audit'
+    | '/_app/platform/connections'
     | '/_app/platform/health'
     | '/_app/platform/mcp'
     | '/_app/platform/people'
@@ -662,6 +674,13 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/platform/audit'
       preLoaderRoute: typeof AppPlatformAuditRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/connections': {
+      id: '/_app/platform/connections'
+      path: '/connections'
+      fullPath: '/platform/connections'
+      preLoaderRoute: typeof AppPlatformConnectionsRouteImport
       parentRoute: typeof AppPlatformRoute
     }
     '/_app/platform/health': {
@@ -884,6 +903,7 @@ const AppKbRouteWithChildren = AppKbRoute._addFileChildren(AppKbRouteChildren)
 
 interface AppPlatformRouteChildren {
   AppPlatformAuditRoute: typeof AppPlatformAuditRoute
+  AppPlatformConnectionsRoute: typeof AppPlatformConnectionsRoute
   AppPlatformHealthRoute: typeof AppPlatformHealthRoute
   AppPlatformMcpRoute: typeof AppPlatformMcpRoute
   AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
@@ -897,6 +917,7 @@ interface AppPlatformRouteChildren {
 
 const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformAuditRoute: AppPlatformAuditRoute,
+  AppPlatformConnectionsRoute: AppPlatformConnectionsRoute,
   AppPlatformHealthRoute: AppPlatformHealthRoute,
   AppPlatformMcpRoute: AppPlatformMcpRoute,
   AppPlatformPeopleRoute: AppPlatformPeopleRoute,
