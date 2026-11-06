@@ -2529,7 +2529,15 @@ export interface components {
     }
     /** @enum {string} */
     Category:
-      'mail_calendar' | 'files' | 'dev' | 'work' | 'chat' | 'home' | 'finance'
+      | 'mail_calendar'
+      | 'files'
+      | 'dev'
+      | 'work'
+      | 'chat'
+      | 'home'
+      | 'finance'
+      | 'notifications'
+      | 'data'
     ChatgptSignIn: {
       /** Format: uuid */
       sign_in: string

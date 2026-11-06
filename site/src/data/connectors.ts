@@ -11,6 +11,8 @@ export const categories = [
   'Projects and CRM',
   'Home and feeds',
   'Payments',
+  'Notifications',
+  'Data',
 ] as const
 
 export type Category = (typeof categories)[number]

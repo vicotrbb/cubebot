@@ -6216,7 +6216,9 @@
           "work",
           "chat",
           "home",
-          "finance"
+          "finance",
+          "notifications",
+          "data"
         ]
       },
       "ChatgptSignIn": {

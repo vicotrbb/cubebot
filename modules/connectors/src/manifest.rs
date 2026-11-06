@@ -59,6 +59,9 @@ pub enum Category {
     Chat,
     Home,
     Finance,
+    Notifications,
+    /// Databases, object storage and file servers.
+    Data,
 }
 
 #[derive(Debug, Serialize)]
