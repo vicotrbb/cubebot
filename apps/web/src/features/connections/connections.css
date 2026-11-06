@@ -338,6 +338,8 @@ dialog.sheet::backdrop {
   min-width: 0;
   font-size: var(--t-xs);
   overflow-wrap: anywhere;
+  /* Copied text can be several lines, such as Helm values. */
+  white-space: pre-wrap;
 }
 .setup__callback {
   align-items: flex-start;

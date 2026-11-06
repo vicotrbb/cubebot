@@ -620,15 +620,24 @@ impl Connections {
                     .sealed
                     .access_token
                     .filter(|_| renewed.expires_at.is_some_and(|at| at - now() > SPARE));
-                (
-                    token.ok_or_else(|| {
-                        ConnectError::Refused("the sign-in could not be renewed".into())
-                    })?,
-                    renewed.expires_at,
-                )
+                let Some(token) = token else {
+                    return Err(self.unrenewed(stored.id).await?);
+                };
+                (token, renewed.expires_at)
             }
         };
         Ok((Credential::Token { token }, expires_at))
+    }
+
+    /// Why no token came of a renewal: the vendor refused the saved sign-in, or it is retried.
+    async fn unrenewed(&self, id: Uuid) -> Result<ConnectError, IdentityError> {
+        let status = sqlx::query_scalar!("SELECT status FROM connections WHERE id = $1", id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(match status.as_str() {
+            "sign_in_again" => ConnectError::SignInAgain,
+            _ => ConnectError::Refused("the sign-in could not be renewed".into()),
+        })
     }
 
     /// The access token of the connection a linked sign-in borrows.
