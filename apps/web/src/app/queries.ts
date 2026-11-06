@@ -88,6 +88,10 @@ export function useAgents() {
     queryFn: (): Promise<AgentSummary[]> => listAgents(),
   })
 }
+/** Retired agents stay listed only on Platform › Health. */
+export function notRetired(agents: AgentSummary[] = []) {
+  return agents.filter((agent) => agent.desired_state !== 'retired')
+}
 export function useAgent(id: string) {
   const list = useAgents()
   return { ...list, agent: list.data?.find((agent) => agent.id === id) }

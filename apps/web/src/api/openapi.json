@@ -3135,6 +3135,55 @@
         }
       }
     },
+    "/api/identity/me/profile": {
+      "get": {
+        "tags": [],
+        "summary": "What the caller tells agents about themselves.",
+        "operationId": "profile",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Replaces the caller's whole profile; agents that person reaches read it.",
+        "operationId": "set_profile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Profile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/identity/oidc": {
       "get": {
         "tags": [],
@@ -4419,6 +4468,73 @@
         }
       }
     },
+    "/api/provider/subscriptions/minimax": {
+      "post": {
+        "tags": [],
+        "summary": "Saves the caller's M Plan key. The plan is personal like a signed-in one; 409 while someone\nelse's key for the same platform is saved.",
+        "operationId": "save_minimax_plan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanKey"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/provider/subscriptions/minimax/{provider}": {
+      "delete": {
+        "tags": [],
+        "summary": "Forgets the M Plan key and stops agents using it. MiniMax cannot be asked to revoke it, so\n`revoked` is false; its owner deletes the key in MiniMax's console.",
+        "operationId": "sign_out_minimax",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderKind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedOut"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/provider/subscriptions/supergrok": {
       "post": {
         "tags": [],
@@ -5263,7 +5379,18 @@
       },
       "Accessory": {
         "type": "string",
-        "enum": ["none", "cap", "glasses", "bow", "antenna"]
+        "enum": [
+          "none",
+          "cap",
+          "glasses",
+          "bow",
+          "antenna",
+          "crown",
+          "headphones",
+          "sprout",
+          "party_hat",
+          "monocle"
+        ]
       },
       "Account": {
         "type": "object",
@@ -5742,6 +5869,10 @@
           "failed_turns"
         ],
         "properties": {
+          "daily_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
           "days": {
             "type": "array",
             "items": {
@@ -5997,6 +6128,17 @@
           "accessory": {
             "$ref": "#/components/schemas/Accessory"
           },
+          "color": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Color",
+                "description": "A custom paint chosen with the color picker; when set it replaces `paint` on the cube."
+              }
+            ]
+          },
           "eyes": {
             "$ref": "#/components/schemas/Eyes"
           },
@@ -6216,7 +6358,9 @@
           "work",
           "chat",
           "home",
-          "finance"
+          "finance",
+          "notifications",
+          "data"
         ]
       },
       "ChatgptSignIn": {
@@ -6305,6 +6449,12 @@
             "description": "The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1)."
           }
         }
+      },
+      "Color": {
+        "type": "string",
+        "description": "An opaque `#rrggbb` color, stored lowercase.",
+        "example": "#3fa7a0",
+        "pattern": "^#[0-9a-f]{6}$"
       },
       "ConfigureProvider": {
         "type": "object",
@@ -6935,7 +7085,16 @@
       },
       "Eyes": {
         "type": "string",
-        "enum": ["round", "wide", "sleepy", "dot"]
+        "enum": [
+          "round",
+          "wide",
+          "sleepy",
+          "dot",
+          "happy",
+          "wink",
+          "star",
+          "heart"
+        ]
       },
       "Favorite": {
         "type": "object",
@@ -8199,7 +8358,11 @@
           "sky",
           "rose",
           "lemon",
-          "plum"
+          "plum",
+          "coral",
+          "mint",
+          "ocean",
+          "charcoal"
         ]
       },
       "Phase": {
@@ -8217,6 +8380,21 @@
           "parent": {
             "type": ["string", "null"],
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PlanKey": {
+        "type": "object",
+        "description": "A plan's own API key, pasted by the person whose plan it is: MiniMax's M Plan key.",
+        "required": ["provider", "api_key"],
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind",
+            "description": "`minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform."
           }
         },
         "additionalProperties": false
@@ -8254,6 +8432,42 @@
             "type": "string"
           }
         }
+      },
+      "Profile": {
+        "type": "object",
+        "description": "Every field is optional; empty means not given.",
+        "properties": {
+          "about": {
+            "type": "string",
+            "description": "Free text: what agents should know about them.",
+            "default": ""
+          },
+          "language": {
+            "type": "string",
+            "description": "The language they want replies in.",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "description": "What to call them, such as \"Victor\".",
+            "default": ""
+          },
+          "pronouns": {
+            "type": "string",
+            "default": ""
+          },
+          "role": {
+            "type": "string",
+            "description": "What they do, such as \"Platform engineer\".",
+            "default": ""
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "An IANA zone such as `Europe/Lisbon`.",
+            "default": ""
+          }
+        },
+        "additionalProperties": false
       },
       "Progress": {
         "type": "object",
@@ -8344,7 +8558,11 @@
           "gemini",
           "grok",
           "chatgpt",
-          "supergrok"
+          "supergrok",
+          "minimax",
+          "minimax_cn",
+          "minimax_plan",
+          "minimax_plan_cn"
         ]
       },
       "ProviderSummary": {
@@ -9139,6 +9357,11 @@
       "SetBudget": {
         "type": "object",
         "properties": {
+          "daily_budget_usd": {
+            "type": ["number", "null"],
+            "format": "double",
+            "description": "US dollars per UTC day; `null` removes the limit."
+          },
           "monthly_budget_usd": {
             "type": ["number", "null"],
             "format": "double",

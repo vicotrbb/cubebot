@@ -7,6 +7,7 @@ mod anthropic;
 mod completions;
 mod gemini;
 mod grok;
+mod minimax;
 mod openai;
 mod openrouter;
 mod prices;

@@ -47,11 +47,25 @@ const PROVIDERS: {
     note: 'A SuperGrok plan, or a key from the xAI console.',
     plan: 'supergrok',
   },
+  {
+    id: 'minimax',
+    name: 'MiniMax',
+    note: 'An M Plan key, or a pay-as-you-go key from platform.minimax.io.',
+    plan: 'minimax_plan',
+  },
+  {
+    id: 'minimax_cn',
+    name: 'MiniMax mainland China',
+    note: 'Keys from platform.minimaxi.com, served from api.minimax.cn.',
+    plan: 'minimax_plan_cn',
+  },
 ]
 const NAMES = {
   ...Object.fromEntries(PROVIDERS.map(({ id, name }) => [id, name])),
   chatgpt: 'your ChatGPT plan',
   supergrok: 'your Grok plan',
+  minimax_plan: 'your MiniMax plan',
+  minimax_plan_cn: 'your MiniMax plan',
 } as Record<Provider, string>
 
 type Standing = 'active' | 'plan' | 'saved' | 'none'
@@ -220,7 +234,7 @@ function ProviderCard({
                   onForgotten={() => onDone('')}
                 />
               </PlanBlock>
-              <h3 className="provider-card__or">Or use an API key</h3>
+              <h3 className="provider-card__or">{orKey(plan)}</h3>
             </>
           )}
           <ProviderForm
@@ -252,6 +266,9 @@ function cardStanding(
   if (subscription) return 'plan'
   return saved ? 'saved' : 'none'
 }
+
+const orKey = (plan: PlanKind) =>
+  PLANS[plan].keyed ? 'Or use a pay-as-you-go key' : 'Or use an API key'
 
 export function useModels(provider: Provider, key: string, saved: boolean) {
   const [asked, setAsked] = useState<string | null>(null)

@@ -15,6 +15,7 @@ import {
 import { applyTheme, type Theme } from '../app/theme'
 import { PersonAvatar } from '../components/PersonAvatar'
 import { Alert } from '../components/primitives'
+import { AboutYou, useDisplayName } from '../features/shell/AboutYou'
 import '../features/shell/profile.css'
 
 export const Route = createFileRoute('/_app/you')({ component: You })
@@ -32,7 +33,7 @@ function You() {
   const save = useSavePreferences()
   const navigate = useNavigate()
   const theme = preferences.data?.theme ?? 'system'
-  const name = session.data?.name || session.data?.login || 'You'
+  const name = useDisplayName()
   return (
     <div className="page">
       <header className="page__head">
@@ -54,6 +55,8 @@ function You() {
             {session.data && <PictureControls account={session.data.id} />}
           </div>
         </section>
+
+        <AboutYou />
 
         <section className="profile__section" aria-labelledby="appearance">
           <div>

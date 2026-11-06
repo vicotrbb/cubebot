@@ -58,9 +58,10 @@ export function ConnectionsPage() {
   return (
     <div className="connectors">
       <p className="platform__lead">
-        Accounts your agents act through, such as a mailbox, a calendar or a
-        repository. Each signs in with an app you own; agents find its tools
-        when they need them and never see its password or token.
+        Accounts and services your agents act through: a mailbox, a repository,
+        a database, a bucket or the app that buzzes your phone. Each signs in
+        with credentials you own; agents find its tools when they need them and
+        never see its password or token.
       </p>
       <Notices returned={returned} error={catalog.error ?? connections.error} />
       <Toolbar

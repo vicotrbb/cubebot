@@ -20,6 +20,35 @@ pub struct Avatar {
     pub paint: Paint,
     pub eyes: Eyes,
     pub accessory: Accessory,
+    /// A custom paint chosen with the color picker; when set it replaces `paint` on the cube.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
+}
+
+/// An opaque `#rrggbb` color, stored lowercase.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(try_from = "String", into = "String")]
+#[schema(value_type = String, pattern = "^#[0-9a-f]{6}$", example = "#3fa7a0")]
+pub struct Color([u8; 3]);
+
+impl TryFrom<String> for Color {
+    type Error = String;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        let invalid = || format!("{value} is not a #rrggbb color");
+        let hex = value.strip_prefix('#').filter(|hex| hex.len() == 6);
+        let hex = hex.ok_or_else(invalid)?;
+        let byte = |at: usize| u8::from_str_radix(hex.get(at..at + 2).unwrap_or("-"), 16);
+        match (byte(0), byte(2), byte(4)) {
+            (Ok(r), Ok(g), Ok(b)) => Ok(Self([r, g, b])),
+            _ => Err(invalid()),
+        }
+    }
+}
+
+impl From<Color> for String {
+    fn from(Color([r, g, b]): Color) -> Self {
+        format!("#{r:02x}{g:02x}{b:02x}")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
@@ -33,6 +62,10 @@ pub enum Paint {
     Rose,
     Lemon,
     Plum,
+    Coral,
+    Mint,
+    Ocean,
+    Charcoal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
@@ -42,6 +75,10 @@ pub enum Eyes {
     Wide,
     Sleepy,
     Dot,
+    Happy,
+    Wink,
+    Star,
+    Heart,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
@@ -52,6 +89,11 @@ pub enum Accessory {
     Glasses,
     Bow,
     Antenna,
+    Crown,
+    Headphones,
+    Sprout,
+    PartyHat,
+    Monocle,
 }
 
 /// What the caller may know about an agent: everyone holding any capability on it sees it,

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(g.monthly_budget_usd <= spent.month, false)\n            OR COALESCE(g.daily_budget_usd <= spent.day, false) AS \"exhausted!\"\n        FROM agents g\n        CROSS JOIN LATERAL (\n            SELECT COALESCE(sum(u.cost_usd), 0) AS month,\n                COALESCE(sum(u.cost_usd) FILTER (WHERE u.created_at >= date_trunc('day', clock_timestamp(), 'UTC')), 0) AS day\n            FROM usage_events u\n            WHERE u.agent_id=g.id AND u.created_at >= date_trunc('month', clock_timestamp(), 'UTC')\n        ) spent\n        WHERE g.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exhausted!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b04f8b12af4f66b54e5cd379ef1c13523ff77050ffe43ea1f85313995deb5d75"
+}

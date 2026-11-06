@@ -7,7 +7,7 @@ import { status } from '../../data/site'
 
 <Doc
   title="Feature tour · Cubebot"
-  description="Everything Cubebot agents and the console can do today: sandboxes, desktop takeover, memory and dreams, rooms, tasks, routines, 27 connectors, voice calls, access control and budgets."
+  description={`Everything Cubebot agents and the console can do today: sandboxes, desktop takeover, memory and dreams, rooms, tasks, routines, ${connectors.length} connectors, voice calls, profiles, access control and budgets.`}
   heading="Feature tour"
   lede="What runs today, in plain words. Everything on this page has run in automated tests or real installs; what has not is listed at the end."
   tones={['sage', 'orange', 'paper']}
@@ -61,8 +61,10 @@ import { status } from '../../data/site'
   <h2 id="connections">Connections</h2>
   <ul>
     <li><strong>{connectors.length} native connectors</strong>, from Gmail and GitHub to Home Assistant and Stripe. <a href="/integrations/">See the catalog</a>.</li>
+    <li><strong>Data</strong>: query PostgreSQL, MySQL and MariaDB, work with objects in S3, R2, B2 or MinIO, and files on any SFTP server.</li>
+    <li><strong>Notifications</strong>: agents can buzz your phone through ntfy, Pushover or Gotify.</li>
     <li><strong>MCP servers</strong>, local ones running inside each sandbox and remote ones over Streamable HTTP.</li>
-    <li><strong>Five providers</strong>: OpenAI, Anthropic, Google Gemini, xAI Grok and OpenRouter, or a ChatGPT or SuperGrok plan.</li>
+    <li><strong>Six providers</strong>: OpenAI, Anthropic, Google Gemini, xAI Grok, OpenRouter and MiniMax, or a ChatGPT, SuperGrok or MiniMax M Plan.</li>
   </ul>
 
   <h2 id="voice">Voice calls</h2>
@@ -83,14 +85,15 @@ import { status } from '../../data/site'
   <h2 id="people">People and access</h2>
   <ul>
     <li>Password sign-in, invitations and single sign-on with OpenID Connect.</li>
-    <li>Teams, and per agent or room: no access, watch, chat or manage.</li>
+    <li>Teams, and per agent or room: no access, watch, chat or manage, set from the platform or from the agent itself.</li>
+    <li>A profile agents read: what to call you, your role, time zone, language and what they should know about you.</li>
     <li>An audit log in plain sentences. Passwords, tokens and vault secrets never appear in it.</li>
   </ul>
 
   <h2 id="spend">Usage and budgets</h2>
   <ul>
     <li>Tokens and estimated cost for every model call, per agent, per day and per model.</li>
-    <li>A monthly budget per agent. Past it, the agent pauses until you raise it.</li>
+    <li>A daily and a monthly budget per agent. Past either, the agent pauses until the next day or month, or until you raise it.</li>
   </ul>
 
   <h2 id="not-yet">Not yet</h2>

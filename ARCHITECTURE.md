@@ -122,7 +122,7 @@ repeat:
 
 Native OpenAI and Anthropic adapters and a defined OpenAI-compatible protocol subset are initial scope. Capabilities are explicit. Visual tools require suitable image input; unsupported capabilities do not silently downgrade the workflow. A provider outage retries within bounds and then waits for the selected model, without fallback.
 
-The orchestrator owns credential refresh and propagates the agent's eligible provider material for the sandbox's lifetime. Credentials stay out of model-visible results and logs; tools in the sandbox can reach them, so each agent receives only its own. A person can instead sign in with a ChatGPT or SuperGrok plan; that connection is personal, serving only that person's agents, and its refresh token stays in the orchestrator ([Personal subscription connections](docs/adr/identity.md#personal-subscription-connections)). Claude subscriptions remain a qualification gate: supervising its CLI engine would contradict the accepted native-loop choice.
+The orchestrator owns credential refresh and propagates the agent's eligible provider material for the sandbox's lifetime. Credentials stay out of model-visible results and logs; tools in the sandbox can reach them, so each agent receives only its own. A person can instead sign in with a ChatGPT or SuperGrok plan, or paste a MiniMax M Plan key; that connection is personal, serving only that person's agents, and its refresh token stays in the orchestrator ([Personal subscription connections](docs/adr/identity.md#personal-subscription-connections)). Claude subscriptions remain a qualification gate: supervising its CLI engine would contradict the accepted native-loop choice.
 
 ## Memory and skills
 

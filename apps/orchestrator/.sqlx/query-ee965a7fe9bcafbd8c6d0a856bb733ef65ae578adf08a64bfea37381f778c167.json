@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                provider AS \"provider!\",\n                model AS \"model!\",\n                credential AS \"credential?\",\n                revision AS \"revision!\",\n                context_window AS \"context_window?\"\n            FROM provider_connection\n            WHERE $1::uuid IS NULL\n                -- A subscription holds no key here; its owner check comes with the token.\n                OR credential IS NULL\n                OR access->>'mode' = 'all_agents'\n                OR (access->>'mode' = 'explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "model!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "credential?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "context_window?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ee965a7fe9bcafbd8c6d0a856bb733ef65ae578adf08a64bfea37381f778c167"
+}

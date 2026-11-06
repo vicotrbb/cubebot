@@ -1,6 +1,6 @@
 // Brand marks for the connector catalog. Marks are trademarks of their owners, shown only to identify integrations.
 // Sources: Simple Icons 16.36.0 (CC0, simpleicons.org); Slack: Wikimedia Commons Slack_icon_2019.svg;
-// Readwise: readwise.io logo; Microsoft: drawn from the official four-square colors; email, dav, http-api: drawn for Cubebot.
+// Readwise: readwise.io logo; Microsoft: drawn from the official four-square colors; email, dav, http-api, sql, s3, sftp: drawn for Cubebot.
 
 export interface Logo {
   viewBox: string
@@ -72,6 +72,10 @@ export const logos: Record<string, Logo> = {
     viewBox: '0 0 24 24',
     svg: '<path fill="#0082C9" d="M12.018 6.537c-2.5 0-4.6 1.712-5.241 4.015-.56-1.232-1.793-2.105-3.225-2.105A3.569 3.569 0 0 0 0 12a3.569 3.569 0 0 0 3.552 3.553c1.432 0 2.664-.874 3.224-2.106.641 2.304 2.742 4.016 5.242 4.016 2.487 0 4.576-1.693 5.231-3.977.569 1.21 1.783 2.067 3.198 2.067A3.568 3.568 0 0 0 24 12a3.569 3.569 0 0 0-3.553-3.553c-1.416 0-2.63.858-3.199 2.067-.654-2.284-2.743-3.978-5.23-3.977zm0 2.085c1.878 0 3.378 1.5 3.378 3.378 0 1.878-1.5 3.378-3.378 3.378A3.362 3.362 0 0 1 8.641 12c0-1.878 1.5-3.378 3.377-3.378zm-8.466 1.91c.822 0 1.467.645 1.467 1.468s-.644 1.467-1.467 1.468A1.452 1.452 0 0 1 2.085 12c0-.823.644-1.467 1.467-1.467zm16.895 0c.823 0 1.468.645 1.468 1.468s-.645 1.468-1.468 1.468A1.452 1.452 0 0 1 18.98 12c0-.823.644-1.467 1.467-1.467z"/>',
   },
+  ntfy: {
+    viewBox: '0 0 24 24',
+    svg: '<path fill="#317F6F" d="M12.597 13.693v2.156h6.205v-2.156ZM5.183 6.549v2.363l3.591 1.901.023.01-.023.009-3.591 1.901v2.35l.386-.211 5.456-2.969V9.729ZM3.659 2.037C1.915 2.037.42 3.41.42 5.154v.002L.438 18.73 0 21.963l5.956-1.583h14.806c1.744 0 3.238-1.374 3.238-3.118V5.154c0-1.744-1.493-3.116-3.237-3.117h-.001zm0 2.2h17.104c.613.001 1.037.447 1.037.917v12.108c0 .47-.424.916-1.038.916H5.633l-3.026.915.031-.179-.017-13.76c0-.47.424-.917 1.038-.917z"/>',
+  },
   paperless: {
     viewBox: '0 0 24 24',
     svg: '<path fill="#17541F" d="M6.338 23.028c-.117-.56-.353-1.678-.382-1.678-4.977-2.975-4.388-8.128-2.739-11.073.353 3.71 6.92 6.273 3.092 10.808-.03.059.177.765.353 1.413.766-1.296 1.915-2.856 1.856-3.004C3.806 8.01 18.53 7.126 21.592 0c1.385 6.89-.706 17.55-12.544 20.26-.06.03-2.15 3.71-2.238 3.74 0-.059-.884-.03-.766-.324.059-.177.177-.412.294-.648zm-.147-2.768c1.502-1.737-.265-4.712-1.325-5.683 1.796 3.092 1.679 4.888 1.325 5.683z"/>',
@@ -115,6 +119,18 @@ export const logos: Record<string, Logo> = {
   dav: {
     viewBox: '0 0 24 24',
     svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="4.5" width="18" height="16" rx="2.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></g><g fill="#F26A1B"><rect x="6.5" y="12.5" width="3" height="3" rx=".6"/><rect x="10.5" y="12.5" width="3" height="3" rx=".6"/></g>',
+  },
+  sql: {
+    viewBox: '0 0 24 24',
+    svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.66 3.58 3 8 3s8-1.34 8-3v-13M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3"/></g><circle cx="16.5" cy="18" r="1.4" fill="#F26A1B"/>',
+  },
+  s3: {
+    viewBox: '0 0 24 24',
+    svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><ellipse cx="12" cy="6" rx="8.5" ry="2.8"/><path d="M3.5 6l2 13c.2 1.4 3 2.5 6.5 2.5s6.3-1.1 6.5-2.5l2-13"/></g><rect x="9.5" y="11.5" width="5" height="5" rx="1" fill="#F26A1B"/>',
+  },
+  sftp: {
+    viewBox: '0 0 24 24',
+    svg: '<g fill="none" stroke="#2B2420" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M7 9.5l3 2.5-3 2.5"/></g><path d="M12.5 15h4.5" stroke="#F26A1B" stroke-width="2.2" stroke-linecap="round"/>',
   },
   'http-api': {
     viewBox: '0 0 24 24',

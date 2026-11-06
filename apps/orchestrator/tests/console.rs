@@ -4,7 +4,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use cubebot_orchestrator::{
-    agents::{Accessory, AgentId, Agents, Avatar, CreateAgent, Eyes, Paint},
+    agents::{Accessory, AgentId, Agents, Avatar, Color, CreateAgent, Eyes, Paint},
     identity::{
         Actor, Identity,
         access::{Capability, GrantRequest, Recipient, Scope},
@@ -57,8 +57,9 @@ async fn fixture() -> Fixture {
             "Ada",
             Some(Avatar {
                 paint: Paint::Sky,
-                eyes: Eyes::Wide,
-                accessory: Accessory::Glasses,
+                eyes: Eyes::Heart,
+                accessory: Accessory::PartyHat,
+                color: Some(Color::try_from("#3FA7A0".to_owned()).unwrap()),
             }),
         ),
         ("Bob", None),
@@ -164,7 +165,7 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     assert_eq!(ada.instructions, None);
     assert_eq!(
         serde_json::to_value(ada.avatar.0).unwrap(),
-        json!({"paint":"sky","eyes":"wide","accessory":"glasses"})
+        json!({"paint":"sky","eyes":"heart","accessory":"party_hat","color":"#3fa7a0"})
     );
     assert!(!ada.desktop_active && !ada.pending_login);
     assert_eq!((ada.last_sequence, ada.read_sequence), (0, 0));
@@ -181,6 +182,12 @@ async fn summaries_show_every_agent_the_caller_holds_a_capability_on() {
     let bob = all.iter().find(|agent| agent.id == AgentId(f.bob)).unwrap();
     assert_eq!(bob.capabilities.len(), 9);
     assert_eq!(bob.avatar.paint, Paint::Orange);
+    assert_eq!(
+        serde_json::to_value(bob.avatar.0).unwrap().get("color"),
+        None
+    );
+    assert!(Color::try_from("#12345g".to_owned()).is_err());
+    assert!(Color::try_from("123456".to_owned()).is_err());
     assert_eq!(bob.instructions.as_deref(), Some("You are Bob."));
 
     let (turn, sequence) = f.turn(f.ada, "running").await;
@@ -677,4 +684,55 @@ async fn preferences_and_installation_are_per_session() {
     assert_eq!(body["controller"], "database_only");
     assert_eq!(body["terminal_enabled"], false);
     assert!(body["name"].is_string());
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_profile_reaches_only_the_agents_its_person_can_reach() {
+    use cubebot_orchestrator::identity::profiles::{introduced, people};
+    let f = fixture().await;
+    let profile = json!({"name":"Maya","pronouns":"she/her","time_zone":"Europe/Lisbon","about":"Keep it short."});
+    let path = "/api/identity/me/profile";
+    let (status, saved) = request(f.router(), "PUT", path, &f.member_token, profile).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(saved["role"], "");
+    let (_, read) = request(f.router(), "GET", path, &f.member_token, Value::Null).await;
+    assert_eq!(read["name"], "Maya");
+    for refused in [
+        json!({"time_zone":"Mars/Olympus_Mons"}),
+        json!({"about":"x".repeat(4001)}),
+        json!({"nickname":"M"}),
+    ] {
+        let (status, _) = request(f.router(), "PUT", path, &f.member_token, refused).await;
+        assert!(status.is_client_error(), "{status}");
+    }
+
+    let logins = |people: Vec<cubebot_orchestrator::identity::profiles::Person>| {
+        people
+            .into_iter()
+            .map(|person| person.login)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(logins(people(&f.pool, f.ada).await.unwrap()), ["admin"]);
+    f.grant(
+        Scope::Conversation { id: f.ada },
+        Capability::ConversationSend,
+    )
+    .await;
+    let reaching = people(&f.pool, f.ada).await.unwrap();
+    assert_eq!(logins(people(&f.pool, f.bob).await.unwrap()), ["admin"]);
+    let maya = reaching
+        .iter()
+        .find(|person| person.login == "member")
+        .unwrap();
+    assert_eq!(maya.profile.name, "Maya");
+    assert!(!maya.administrator);
+
+    let (turn, _) = f.turn(f.ada, "queued").await;
+    let mut tx = f.pool.begin().await.unwrap();
+    let text = introduced(&mut tx, turn, "Be useful.".into())
+        .await
+        .unwrap();
+    assert!(text.starts_with("Be useful.\n\n## Who you are working with"));
+    assert!(text.contains("This turn is for admin (@admin)."));
 }

@@ -13,6 +13,7 @@ pub mod guest;
 mod init;
 pub mod knowledge_base;
 pub mod memory;
+pub mod people;
 pub mod skills;
 pub mod tools;
 

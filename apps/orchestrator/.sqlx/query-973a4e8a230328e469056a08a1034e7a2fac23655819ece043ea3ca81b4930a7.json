@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.login, a.role = 'administrator' AS \"administrator!\",\n            a.profile AS \"profile: sqlx::types::Json<Profile>\"\n        FROM human_accounts a\n        WHERE a.active AND (\n            a.role = 'administrator'\n            OR EXISTS(\n                SELECT 1 FROM effective_human_grants g\n                WHERE g.actor_id = a.id AND g.scope_id = $1 AND g.scope_kind IN ('agent', 'conversation')\n            )\n        )\n        ORDER BY a.login\n        LIMIT 200\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "administrator!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "profile: sqlx::types::Json<Profile>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "973a4e8a230328e469056a08a1034e7a2fac23655819ece043ea3ca81b4930a7"
+}

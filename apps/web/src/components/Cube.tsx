@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { agentHover } from './agentHover'
+import { isDark } from './paint'
 import './cube.css'
 
 export const PAINTS = [
@@ -11,13 +12,43 @@ export const PAINTS = [
   'rose',
   'lemon',
   'plum',
+  'coral',
+  'mint',
+  'ocean',
+  'charcoal',
 ] as const
-export const EYES = ['round', 'wide', 'sleepy', 'dot'] as const
-export const ACCESSORIES = ['none', 'cap', 'glasses', 'bow', 'antenna'] as const
+export const EYES = [
+  'round',
+  'wide',
+  'sleepy',
+  'dot',
+  'happy',
+  'wink',
+  'star',
+  'heart',
+] as const
+export const ACCESSORIES = [
+  'none',
+  'cap',
+  'glasses',
+  'bow',
+  'antenna',
+  'crown',
+  'headphones',
+  'sprout',
+  'party_hat',
+  'monocle',
+] as const
 export type Paint = (typeof PAINTS)[number]
 export type Eyes = (typeof EYES)[number]
 export type Accessory = (typeof ACCESSORIES)[number]
-export type Avatar = { paint: Paint; eyes: Eyes; accessory: Accessory }
+export type Avatar = {
+  paint: Paint
+  eyes: Eyes
+  accessory: Accessory
+  /** A picked `#rrggbb` that replaces the paint. */
+  color?: string | null
+}
 export type Mood =
   | 'idle'
   | 'working'
@@ -49,20 +80,31 @@ export function moodOf(agent: {
   return 'idle'
 }
 
+/** The paint classes and the custom color variable for a look; retired cubes are bare wood. */
+export function paintOf(
+  look: Avatar,
+  retired = false,
+): { classes: string; style: Record<string, string> } {
+  if (retired) return { classes: 'cube--wood', style: {} }
+  if (!look.color)
+    return {
+      classes: `cube--${look.paint}${look.paint === 'charcoal' ? ' cube--dark' : ''}`,
+      style: {},
+    }
+  return {
+    classes: `cube--custom${isDark(look.color) ? ' cube--dark' : ''}`,
+    style: { '--custom': look.color },
+  }
+}
+
 function cubeClasses(
-  paint: Paint,
+  paint: string,
   mood: Mood,
   follow: boolean,
   className: string | undefined,
 ) {
-  return [
-    'cube',
-    `cube--${paint}`,
-    `cube--${mood}`,
-    follow && 'cube--follow',
-    className,
-  ]
-    .filter(Boolean)
+  return ['cube', paint, `cube--${mood}`]
+    .concat(follow ? 'cube--follow' : [], className ?? [])
     .join(' ')
 }
 
@@ -84,14 +126,14 @@ export function Cube({
   const ref = useRef<HTMLDivElement>(null)
   useFollow(ref, follow)
   const look = avatar ?? DEFAULT_AVATAR
-  const paint = mood === 'retired' ? 'wood' : look.paint
+  const paint = paintOf(look, mood === 'retired')
   const eyes = mood === 'retired' ? null : look.eyes
-  const classes = cubeClasses(paint, mood, follow, className)
+  const classes = cubeClasses(paint.classes, mood, follow, className)
   return (
     <div
       ref={ref}
       className={classes}
-      style={{ '--size': `${size}px` } as React.CSSProperties}
+      style={{ '--size': `${size}px`, ...paint.style } as React.CSSProperties}
       aria-hidden="true"
       {...(agentId ? agentHover(agentId) : {})}
     >
@@ -123,6 +165,31 @@ export function Cube({
   )
 }
 
+/** A flat front face showing one part of a look, for the avatar builder's choices. */
+export function Face({
+  look,
+  part,
+  size = 28,
+}: {
+  look: Avatar
+  part: 'eyes' | 'accessory'
+  size?: number
+}) {
+  const paint = paintOf(look)
+  return (
+    <span
+      className={`cube cube-face ${paint.classes}`}
+      style={{ '--size': `${size}px`, ...paint.style } as React.CSSProperties}
+      aria-hidden="true"
+    >
+      <span className="cube__face">
+        <EyePair eyes={look.eyes} mood="idle" />
+        {part === 'accessory' && <Wear accessory={look.accessory} />}
+      </span>
+    </span>
+  )
+}
+
 function EyePair({ eyes, mood }: { eyes: Eyes; mood: Mood }) {
   const closed = mood === 'sleeping' || mood === 'stopped'
   const lid = mood === 'dreaming'
@@ -151,38 +218,46 @@ function Eye({
   closed: boolean
   side: 'l' | 'r'
 }) {
-  if (closed)
+  if (closed || (shape === 'wink' && side === 'r') || shape === 'happy')
+    return closed ? <Lid /> : <Smile />
+  const glint = <circle className="cube__glint" cx="14" cy="14" r="4.2" />
+  if (shape === 'star')
     return (
-      <svg
-        viewBox="0 0 40 40"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="5"
-        strokeLinecap="round"
-      >
-        <path d="M6 22c5 6 23 6 28 0" />
+      <svg viewBox="0 0 40 40" fill="currentColor">
+        <path d="M20 2l5 11.6 12.4 1.1-9.4 8.3 2.8 12.2L20 28.8 9.2 35.2 12 23 2.6 14.7 15 13.6z" />
+        <circle className="cube__glint" cx="16" cy="15" r="2.8" />
       </svg>
     )
-  const glint = <circle cx="14" cy="14" r="4.2" fill="#fffdf9" />
+  if (shape === 'heart')
+    return (
+      <svg viewBox="0 0 40 40">
+        <path
+          d="M20 35C7 26 2 18 5.5 11.2 8.7 5 16.4 5.2 20 11c3.6-5.8 11.3-6 14.5.2C38 18 33 26 20 35z"
+          fill="#d64561"
+        />
+        <circle cx="13" cy="13" r="3.2" fill="#fffdf9" />
+      </svg>
+    )
+
   if (shape === 'wide')
     return (
       <svg viewBox="0 0 40 40" fill="currentColor">
         <circle cx="20" cy="20" r="18" />
-        <circle cx="13" cy="13" r="5" fill="#fffdf9" />
+        <circle className="cube__glint" cx="13" cy="13" r="5" />
       </svg>
     )
   if (shape === 'dot')
     return (
       <svg viewBox="0 0 40 40" fill="currentColor">
         <circle cx="20" cy="22" r="9" />
-        <circle cx="17" cy="19" r="2.6" fill="#fffdf9" />
+        <circle className="cube__glint" cx="17" cy="19" r="2.6" />
       </svg>
     )
   if (shape === 'sleepy')
     return (
       <svg viewBox="0 0 40 40" fill="currentColor">
         <path d="M3 20c0-6 8-10 17-10s17 4 17 10c-1 9-8 16-17 16S4 29 3 20z" />
-        <circle cx="14" cy="18" r="3.4" fill="#fffdf9" />
+        <circle className="cube__glint" cx="14" cy="18" r="3.4" />
       </svg>
     )
   return (
@@ -197,18 +272,57 @@ function Eye({
   )
 }
 
+function Lid() {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="5"
+      strokeLinecap="round"
+    >
+      <path d="M6 22c5 6 23 6 28 0" />
+    </svg>
+  )
+}
+
+/** A happy closed eye, the arc turned up. */
+function Smile() {
+  return (
+    <svg
+      viewBox="0 0 40 40"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="5"
+      strokeLinecap="round"
+    >
+      <path d="M6 26c5-10 23-10 28 0" />
+    </svg>
+  )
+}
+
 function Wear({ accessory }: { accessory: Accessory }) {
   if (accessory === 'none') return null
   return (
     <svg className="cube__wear" viewBox="0 0 100 100" aria-hidden="true">
       {accessory === 'cap' && (
         <>
-          <path d="M6 20 Q50 -4 94 20 L94 30 Q50 8 6 30z" fill="#2b2420" />
-          <rect x="-8" y="25" width="60" height="9" rx="4.5" fill="#2b2420" />
+          <path
+            d="M6 20 Q50 -4 94 20 L94 30 Q50 8 6 30z"
+            fill="var(--wear, #2b2420)"
+          />
+          <rect
+            x="-8"
+            y="25"
+            width="60"
+            height="9"
+            rx="4.5"
+            fill="var(--wear, #2b2420)"
+          />
         </>
       )}
       {accessory === 'glasses' && (
-        <g fill="none" stroke="#2b2420" strokeWidth="4.5">
+        <g fill="none" stroke="var(--wear, #2b2420)" strokeWidth="4.5">
           <circle cx="33" cy="52" r="15.5" />
           <circle cx="67" cy="52" r="15.5" />
           <path d="M48.5 52h3" />
@@ -243,6 +357,100 @@ function Wear({ accessory }: { accessory: Accessory }) {
             fill="var(--orange)"
             stroke="#2b2420"
             strokeWidth="3"
+          />
+        </g>
+      )}
+      {accessory === 'crown' && (
+        <g strokeLinejoin="round">
+          <path
+            d="M28 4 L28 -18 L39 -7 L50 -24 L61 -7 L72 -18 L72 4z"
+            fill="#f0cf5a"
+            stroke="#2b2420"
+            strokeWidth="3.5"
+          />
+          <circle
+            cx="50"
+            cy="-4"
+            r="4"
+            fill="#e5a0b4"
+            stroke="#2b2420"
+            strokeWidth="2"
+          />
+        </g>
+      )}
+      {accessory === 'headphones' && (
+        <g stroke="#2b2420" strokeWidth="3.5" strokeLinejoin="round">
+          <path
+            d="M6 44 C6 -12 94 -12 94 44"
+            fill="none"
+            stroke="var(--wear, #2b2420)"
+            strokeWidth="7"
+          />
+          <rect
+            x="-6"
+            y="34"
+            width="17"
+            height="30"
+            rx="7"
+            fill="var(--orange)"
+          />
+          <rect
+            x="89"
+            y="34"
+            width="17"
+            height="30"
+            rx="7"
+            fill="var(--orange)"
+          />
+        </g>
+      )}
+      {accessory === 'sprout' && (
+        <g stroke="#2b2420" strokeWidth="3" strokeLinejoin="round">
+          <path
+            d="M50 2 C50 -6 51 -12 50 -18"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M50 -14 C42 -28 26 -24 27 -13 C35 -7 45 -9 50 -14z"
+            fill="#9bb7a4"
+          />
+          <path
+            d="M50 -18 C56 -32 74 -30 72 -19 C65 -12 55 -13 50 -18z"
+            fill="#b4cbbb"
+          />
+        </g>
+      )}
+      {accessory === 'party_hat' && (
+        <g
+          transform="translate(70 4) rotate(16)"
+          stroke="#2b2420"
+          strokeWidth="3"
+          strokeLinejoin="round"
+        >
+          <path d="M-15 0 L0 -40 L15 0z" fill="#e5a0b4" />
+          <path
+            d="M-9 -15 L7 -9 M-4 -28 L4 -25"
+            fill="none"
+            stroke="#fffdf9"
+            strokeWidth="3.5"
+          />
+          <circle cx="0" cy="-43" r="5.5" fill="#f0cf5a" />
+        </g>
+      )}
+      {accessory === 'monocle' && (
+        <g fill="none" stroke="var(--wear, #2b2420)">
+          <circle
+            cx="67"
+            cy="52"
+            r="16"
+            strokeWidth="4.5"
+            fill="rgb(255 255 255 / 0.18)"
+          />
+          <path
+            d="M80 62 C84 76 90 82 98 84"
+            strokeWidth="2.2"
+            strokeLinecap="round"
           />
         </g>
       )}

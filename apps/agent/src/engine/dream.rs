@@ -135,6 +135,18 @@ async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
                 super::turn::configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests);
             reply(provider, &request).await
         }
+        ProviderKind::Minimax | ProviderKind::MinimaxPlan => {
+            let provider =
+                super::turn::configured(Anthropic::minimax, Anthropic::minimax_for_loopback_tests);
+            reply(provider, &request).await
+        }
+        ProviderKind::MinimaxCn | ProviderKind::MinimaxPlanCn => {
+            let provider = super::turn::configured(
+                Anthropic::minimax_cn,
+                Anthropic::minimax_for_loopback_tests,
+            );
+            reply(provider, &request).await
+        }
     };
     let (reply, usage) = match reply {
         Ok(answered) => answered,

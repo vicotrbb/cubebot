@@ -53,3 +53,12 @@ test('sign-in problems name the recovery', () => {
     /could not be reached/,
   )
 })
+
+test('a refused M Plan key says why without naming a sign-in address', () => {
+  assert.match(signInProblem('minimax_plan', 400, undefined), /characters/)
+  assert.match(signInProblem('minimax_plan_cn', 409, undefined), /MiniMax plan/)
+  assert.match(
+    planProblem('minimax_plan', plan({ waiting: 1 }))?.text ?? '',
+    /MiniMax usage resets/,
+  )
+})

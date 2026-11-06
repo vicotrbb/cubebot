@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE agents\n            SET monthly_budget_usd=$2, daily_budget_usd=$3\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d0725b014813fe2044d6a21e0383caf9f51a01fa2fb5cf3ec1d13afa75ccebc0"
+}

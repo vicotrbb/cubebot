@@ -208,7 +208,13 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
             "dropbox",
             "cal-com",
             "zoom",
-            "stripe"
+            "stripe",
+            "ntfy",
+            "pushover",
+            "gotify",
+            "sql",
+            "s3",
+            "sftp",
         ]
     );
     assert_eq!(

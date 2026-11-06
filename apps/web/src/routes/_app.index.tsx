@@ -1,5 +1,5 @@
 import { createFileRoute, Navigate } from '@tanstack/react-router'
-import { useAgents, usePreferences } from '../app/queries'
+import { notRetired, useAgents, usePreferences } from '../app/queries'
 import { Cube } from '../components/Cube'
 import { Sidebar } from '../features/shell/Sidebar'
 import { useIsPhone } from '../features/shell/viewport'
@@ -14,9 +14,10 @@ function Home() {
   if (agents.isPending) return null
   const favorite = preferences.data?.favorites.find(
     (item) =>
-      item.kind === 'agent' && agents.data?.some((a) => a.id === item.id),
+      item.kind === 'agent' &&
+      notRetired(agents.data).some((a) => a.id === item.id),
   )
-  const first = favorite?.id ?? agents.data?.[0]?.id
+  const first = favorite?.id ?? notRetired(agents.data)[0]?.id
   if (first)
     return (
       <Navigate to="/agents/$agentId" params={{ agentId: first }} replace />

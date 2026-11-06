@@ -1257,6 +1257,24 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/me/profile': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** What the caller tells agents about themselves. */
+    get: operations['profile']
+    /** Replaces the caller's whole profile; agents that person reaches read it. */
+    put: operations['set_profile']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/oidc': {
     parameters: {
       query?: never
@@ -1822,6 +1840,46 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/provider/subscriptions/minimax': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Saves the caller's M Plan key. The plan is personal like a signed-in one; 409 while someone
+     *     else's key for the same platform is saved.
+     */
+    post: operations['save_minimax_plan']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/provider/subscriptions/minimax/{provider}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /**
+     * Forgets the M Plan key and stops agents using it. MiniMax cannot be asked to revoke it, so
+     *     `revoked` is false; its owner deletes the key in MiniMax's console.
+     */
+    delete: operations['sign_out_minimax']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/provider/subscriptions/supergrok': {
     parameters: {
       query?: never
@@ -2160,7 +2218,17 @@ export interface components {
       team_id?: null | components['schemas']['TeamId']
     }
     /** @enum {string} */
-    Accessory: 'none' | 'cap' | 'glasses' | 'bow' | 'antenna'
+    Accessory:
+      | 'none'
+      | 'cap'
+      | 'glasses'
+      | 'bow'
+      | 'antenna'
+      | 'crown'
+      | 'headphones'
+      | 'sprout'
+      | 'party_hat'
+      | 'monocle'
     Account: {
       administrator: boolean
       /** Format: uuid */
@@ -2339,6 +2407,8 @@ export interface components {
     }
     /** @description One agent's usage: its windows, this month against its budget, the last 30 days by day. */
     AgentUsage: {
+      /** Format: double */
+      daily_budget_usd?: number | null
       days: components['schemas']['DaySpend'][]
       /** Format: int64 */
       failed_turns: number
@@ -2433,6 +2503,7 @@ export interface components {
     /** @description The agent's cube; mood is derived from activity, never stored. */
     Avatar: {
       accessory: components['schemas']['Accessory']
+      color?: null | components['schemas']['Color']
       eyes: components['schemas']['Eyes']
       paint: components['schemas']['Paint']
     }
@@ -2529,7 +2600,15 @@ export interface components {
     }
     /** @enum {string} */
     Category:
-      'mail_calendar' | 'files' | 'dev' | 'work' | 'chat' | 'home' | 'finance'
+      | 'mail_calendar'
+      | 'files'
+      | 'dev'
+      | 'work'
+      | 'chat'
+      | 'home'
+      | 'finance'
+      | 'notifications'
+      | 'data'
     ChatgptSignIn: {
       /** Format: uuid */
       sign_in: string
@@ -2562,6 +2641,11 @@ export interface components {
       /** @description The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1). */
       token: string
     }
+    /**
+     * @description An opaque `#rrggbb` color, stored lowercase.
+     * @example #3fa7a0
+     */
+    Color: string
     ConfigureProvider: {
       access?: null | components['schemas']['ProviderAccess']
       /** @description `None` keeps the key saved for this provider. A subscription has none: its owner signs in. */
@@ -2790,7 +2874,8 @@ export interface components {
       scope: components['schemas']['Scope']
     }
     /** @enum {string} */
-    Eyes: 'round' | 'wide' | 'sleepy' | 'dot'
+    Eyes:
+      'round' | 'wide' | 'sleepy' | 'dot' | 'happy' | 'wink' | 'star' | 'heart'
     Favorite: {
       /** Format: uuid */
       id: string
@@ -3317,7 +3402,18 @@ export interface components {
     }
     /** @enum {string} */
     Paint:
-      'orange' | 'sage' | 'paper' | 'wood' | 'sky' | 'rose' | 'lemon' | 'plum'
+      | 'orange'
+      | 'sage'
+      | 'paper'
+      | 'wood'
+      | 'sky'
+      | 'rose'
+      | 'lemon'
+      | 'plum'
+      | 'coral'
+      | 'mint'
+      | 'ocean'
+      | 'charcoal'
     /** @enum {string} */
     Phase: 'planned' | 'creating' | 'bound' | 'stopped'
     /** @description A new folder, or where a file goes: `parent` null or absent is the owner's top level. */
@@ -3325,6 +3421,12 @@ export interface components {
       name: string
       /** Format: uuid */
       parent?: string | null
+    }
+    /** @description A plan's own API key, pasted by the person whose plan it is: MiniMax's M Plan key. */
+    PlanKey: {
+      api_key: string
+      /** @description `minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform. */
+      provider: components['schemas']['ProviderKind']
     }
     Preferences: {
       /** @description Sidebar sections the person collapsed. */
@@ -3335,6 +3437,36 @@ export interface components {
     Product: {
       id: string
       name: string
+    }
+    /** @description Every field is optional; empty means not given. */
+    Profile: {
+      /**
+       * @description Free text: what agents should know about them.
+       * @default
+       */
+      about: string
+      /**
+       * @description The language they want replies in.
+       * @default
+       */
+      language: string
+      /**
+       * @description What to call them, such as "Victor".
+       * @default
+       */
+      name: string
+      /** @default  */
+      pronouns: string
+      /**
+       * @description What they do, such as "Platform engineer".
+       * @default
+       */
+      role: string
+      /**
+       * @description An IANA zone such as `Europe/Lisbon`.
+       * @default
+       */
+      time_zone: string
     }
     Progress: {
       command: string
@@ -3370,6 +3502,10 @@ export interface components {
       | 'grok'
       | 'chatgpt'
       | 'supergrok'
+      | 'minimax'
+      | 'minimax_cn'
+      | 'minimax_plan'
+      | 'minimax_plan_cn'
     ProviderSummary: {
       access: components['schemas']['ProviderAccess']
       /** Format: int64 */
@@ -3680,6 +3816,11 @@ export interface components {
       request_id: string
     }
     SetBudget: {
+      /**
+       * Format: double
+       * @description US dollars per UTC day; `null` removes the limit.
+       */
+      daily_budget_usd?: number | null
       /**
        * Format: double
        * @description US dollars per calendar month in UTC; `null` removes the limit.
@@ -6410,6 +6551,54 @@ export interface operations {
       }
     }
   }
+  profile: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Profile']
+        }
+      }
+    }
+  }
+  set_profile: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Profile']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Profile']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   single_sign_on_status: {
     parameters: {
       query?: never
@@ -7488,6 +7677,68 @@ export interface operations {
         content?: never
       }
       502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  save_minimax_plan: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlanKey']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SubscriptionSummary']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  sign_out_minimax: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        provider: components['schemas']['ProviderKind']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SignedOut']
+        }
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

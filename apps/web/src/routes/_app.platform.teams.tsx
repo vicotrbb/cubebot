@@ -14,7 +14,6 @@ import {
   Status,
 } from '../components/primitives'
 import {
-  changesTo,
   grantsOn,
   LABEL,
   levelOf,
@@ -24,6 +23,7 @@ import {
   type Level,
   type Target,
 } from '../features/platform/access'
+import { applyLevel } from '../features/platform/applyLevel'
 import { useAdminAction } from '../features/platform/useAdminAction'
 import '../features/platform/platform.css'
 
@@ -379,18 +379,10 @@ function AccessTable({
     name.toLowerCase().includes(search.trim().toLowerCase())
   const set = (target: Target, name: string, level: Level) => {
     if (level === 'custom') return
-    const { grant, revoke } = changesTo(grantsOn(own, target), target, level)
-    void action.run(async () => {
-      for (const item of revoke) await admin.revokeGrant(item.id, item.revision)
-      for (const need of grant)
-        await admin.grant(
-          recipient,
-          { kind: need.scope, id: target.id } as Parameters<
-            typeof admin.grant
-          >[1],
-          need.capability,
-        )
-    }, `${LABEL[level]} on ${name}.`)
+    void action.run(
+      () => applyLevel(recipient, own, target, level),
+      `${LABEL[level]} on ${name}.`,
+    )
   }
   const row = (target: Target, name: string, icon: React.ReactNode) => {
     const level = levelOf(grantsOn(own, target), target)

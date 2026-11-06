@@ -22,9 +22,9 @@ import {
 import { type ReactNode } from 'react'
 import type { AgentSummary, RoomSummary } from '../../api/types'
 import {
+  notRetired,
   signOut,
   unread,
-  useUnreadActivity,
   useAgents,
   useBroadcasts,
   useInstallation,
@@ -33,6 +33,7 @@ import {
   useSavePreferences,
   useSession,
   useTasks,
+  useUnreadActivity,
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
 import { agentHover, taskHover } from '../../components/agentHover'
@@ -257,7 +258,9 @@ function Favorites() {
   const favorites = preferences.data?.favorites ?? []
   const favoriteAgents = favorites
     .filter((item) => item.kind === 'agent')
-    .map((item) => agents.data?.find((agent) => agent.id === item.id))
+    .map((item) =>
+      notRetired(agents.data).find((agent) => agent.id === item.id),
+    )
     .filter((agent): agent is AgentSummary => Boolean(agent))
   const favoriteRooms = favorites
     .filter((item) => item.kind === 'room')
@@ -281,12 +284,12 @@ function AgentsSection({ administrator }: { administrator: boolean }) {
   return (
     <Section id="agents" title="Agents" label="Agents">
       {agents.isPending && <RowSkeleton />}
-      {agents.data?.length === 0 && (
+      {agents.isSuccess && notRetired(agents.data).length === 0 && (
         <p className="row row--note faint">
           {administrator ? 'No agents yet.' : 'No agents shared with you.'}
         </p>
       )}
-      {agents.data?.map((agent) => (
+      {notRetired(agents.data).map((agent) => (
         <AgentRow key={agent.id} agent={agent} />
       ))}
     </Section>

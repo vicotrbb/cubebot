@@ -11,6 +11,8 @@ export const categories = [
   'Projects and CRM',
   'Home and feeds',
   'Payments',
+  'Notifications',
+  'Data',
 ] as const
 
 export type Category = (typeof categories)[number]
@@ -28,7 +30,8 @@ export interface Connector {
   selfHosted?: boolean
   uploads?: boolean
   tested: Tested
-  wave: 1 | 2
+  /** 3: not in a release yet. */
+  wave: 1 | 2 | 3
 }
 
 export const connectors: Connector[] = [
@@ -532,6 +535,109 @@ export const connectors: Connector[] = [
     tested: 'recorded',
     wave: 2,
   },
+  {
+    slug: 'ntfy',
+    name: 'ntfy',
+    category: 'Notifications',
+    summary: 'Push notifications through ntfy.sh or your own ntfy server.',
+    signIn:
+      'No sign-in for open topics, or an access token or username and password',
+    level: 'Full',
+    tools: ['Publish a notification', 'Read recent messages'],
+    events: [],
+    selfHosted: true,
+    tested: 'live',
+    wave: 3,
+  },
+  {
+    slug: 'pushover',
+    name: 'Pushover',
+    category: 'Notifications',
+    summary:
+      'Push notifications to your phones and desktops, including emergency alerts.',
+    signIn: 'Application token and user key',
+    level: 'Full',
+    tools: ['Send a notification'],
+    events: [],
+    tested: 'recorded',
+    wave: 3,
+  },
+  {
+    slug: 'gotify',
+    name: 'Gotify',
+    category: 'Notifications',
+    summary: 'Send and read notifications on your own Gotify server.',
+    signIn:
+      'Application token, plus a client token to read, and server address',
+    level: 'Full',
+    tools: ['Send a message', 'List messages (with a client token)'],
+    events: [],
+    selfHosted: true,
+    tested: 'live',
+    wave: 3,
+  },
+  {
+    slug: 'sql',
+    name: 'SQL database',
+    category: 'Data',
+    summary: 'Query and change PostgreSQL, MySQL and MariaDB databases.',
+    signIn: 'Database user and password, host and TLS mode',
+    level: 'Read',
+    tools: [
+      'List tables',
+      'Describe a table',
+      'Run a read-only query',
+      'Execute a statement (Read and write)',
+    ],
+    events: [],
+    selfHosted: true,
+    tested: 'live',
+    wave: 3,
+  },
+  {
+    slug: 's3',
+    name: 'S3-compatible storage',
+    category: 'Data',
+    summary: 'Objects in AWS S3, Cloudflare R2, Backblaze B2 or MinIO.',
+    signIn: 'Access key and secret, endpoint and region',
+    level: 'Read',
+    tools: [
+      'List buckets',
+      'List objects',
+      'Inspect an object',
+      'Download an object',
+      'Upload an object',
+      'Copy an object',
+      'Delete an object',
+    ],
+    events: [],
+    selfHosted: true,
+    uploads: true,
+    tested: 'live',
+    wave: 3,
+  },
+  {
+    slug: 'sftp',
+    name: 'SFTP',
+    category: 'Data',
+    summary: 'Files on an SSH server, with its host key pinned.',
+    signIn: 'Password or private key, and the host key fingerprint',
+    level: 'Read',
+    tools: [
+      'List a folder',
+      'Inspect a path',
+      'Download a file',
+      'Upload a file',
+      'Create a folder',
+      'Move or rename',
+      'Delete',
+    ],
+    events: [],
+    selfHosted: true,
+    uploads: true,
+    tested: 'live',
+    wave: 3,
+  },
 ]
 
 export const providers = [
@@ -540,6 +646,10 @@ export const providers = [
   { name: 'Google Gemini', note: 'Context windows read from the API' },
   { name: 'xAI Grok', note: 'Chat completions' },
   { name: 'OpenRouter', note: 'Many vendors behind one key' },
+  {
+    name: 'MiniMax',
+    note: 'Anthropic-compatible API, global or mainland China',
+  },
 ] as const
 
 export const plans = [
@@ -550,5 +660,9 @@ export const plans = [
   {
     name: 'SuperGrok and X Premium',
     note: 'Opt-in device sign-in; it identifies as the Grok CLI, so it carries an account-risk warning',
+  },
+  {
+    name: 'MiniMax M Plan',
+    note: 'The plan’s own key, kept personal as MiniMax asks; pay-as-you-go is for shared use',
   },
 ] as const

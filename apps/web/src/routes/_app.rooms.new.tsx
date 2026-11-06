@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, failure, ok } from '../api/client'
-import { keys, useAgents } from '../app/queries'
+import { keys, notRetired, useAgents } from '../app/queries'
 import { Alert, Field } from '../components/primitives'
 import { AgentChoices } from '../features/rooms/Members'
 
@@ -57,7 +57,7 @@ function NewRoom() {
             />
           </Field>
           <AgentChoices
-            agents={agents.data ?? []}
+            agents={notRetired(agents.data)}
             chosen={members}
             onChange={setMembers}
           />

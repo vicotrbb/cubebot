@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, LogIn, LogOut, RefreshCw } from 'lucide-react'
+import { ExternalLink, KeyRound, LogIn, LogOut, RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
@@ -12,14 +12,28 @@ import {
 import { planProblem, signInProblem } from './subscription'
 
 type Subscription = components['schemas']['SubscriptionSummary']
-export type PlanKind = 'chatgpt' | 'supergrok'
+export type PlanKind =
+  'chatgpt' | 'supergrok' | 'minimax_plan' | 'minimax_plan_cn'
 
 export const PLANS: Record<
   PlanKind,
-  { name: string; tiers: string; vendor: string }
+  { name: string; tiers: string; vendor: string; keyed?: boolean }
 > = {
   chatgpt: { name: 'ChatGPT', tiers: 'ChatGPT Plus or Pro', vendor: 'OpenAI' },
   supergrok: { name: 'Grok', tiers: 'SuperGrok or X Premium', vendor: 'xAI' },
+  // An M Plan has no sign-in: its owner pastes the plan's own key.
+  minimax_plan: {
+    name: 'MiniMax',
+    tiers: 'An M Plan',
+    vendor: 'MiniMax',
+    keyed: true,
+  },
+  minimax_plan_cn: {
+    name: 'MiniMax',
+    tiers: 'An M Plan from the mainland China platform',
+    vendor: 'MiniMax',
+    keyed: true,
+  },
 }
 
 /** The sign-in, or the signed-in plan, at the top of its provider's card. */
@@ -37,15 +51,25 @@ export function PlanBlock({
   children: React.ReactNode
   onChanged: (message: string) => Promise<unknown>
 }) {
-  const { name, tiers } = PLANS[plan]
+  const { name, tiers, keyed } = PLANS[plan]
   return (
     <section className="plan" aria-label={`${name} plan`}>
       <div className="plan__intro">
         <h3>Use your {name} plan</h3>
-        <p className="small faint">
-          {tiers} pays for agents instead of a key. A plan is personal: only
-          agents created by the person who signed in use it.
-        </p>
+        {keyed ? (
+          <p className="small faint">
+            {tiers} pays for agents instead of pay-as-you-go. MiniMax sells it
+            for one person’s own interactive use and says not to share its key,
+            so only agents created by the person who saves it use it. For
+            production or agents other people use, use a pay-as-you-go key
+            below.
+          </p>
+        ) : (
+          <p className="small faint">
+            {tiers} pays for agents instead of a key. A plan is personal: only
+            agents created by the person who signed in use it.
+          </p>
+        )}
       </div>
       {subscription ? (
         <SignedIn
@@ -56,6 +80,8 @@ export function PlanBlock({
         >
           {children}
         </SignedIn>
+      ) : keyed ? (
+        <PlanKeyForm plan={plan} onChanged={onChanged} />
       ) : plan === 'chatgpt' ? (
         <ChatgptSignIn onChanged={onChanged} />
       ) : (
@@ -78,7 +104,7 @@ function SignedIn({
   children: React.ReactNode
   onChanged: (message: string) => Promise<unknown>
 }) {
-  const { name } = PLANS[plan]
+  const { name, keyed } = PLANS[plan]
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const problem = planProblem(plan, subscription)
@@ -86,24 +112,16 @@ function SignedIn({
     const yes =
       !inUse ||
       (await confirmAction({
-        title: `Sign out of ${name}?`,
+        title: keyed ? 'Remove the M Plan key?' : `Sign out of ${name}?`,
         body: `Agents use this plan now. They stop thinking until another provider is in use.`,
-        action: 'Sign out',
+        action: keyed ? 'Remove' : 'Sign out',
       }))
     if (!yes) return
     setBusy(true)
     setError('')
     try {
-      const { revoked } = await ok(
-        plan === 'chatgpt'
-          ? api.DELETE('/api/provider/subscriptions/chatgpt')
-          : api.DELETE('/api/provider/subscriptions/supergrok'),
-      )
-      await onChanged(
-        revoked
-          ? `Signed out of ${name}.`
-          : `Signed out of ${name} here. ${PLANS[plan].vendor} did not confirm it, so also disconnect Cubebot in your ${name} settings.`,
-      )
+      const { revoked } = await ok(signedOut(plan))
+      await onChanged(signOutNotice(plan, revoked))
     } catch (caught) {
       setError(failure(caught))
       setBusy(false)
@@ -126,7 +144,7 @@ function SignedIn({
           onClick={() => void signOut()}
         >
           <LogOut />
-          {busy ? 'Signing out…' : 'Sign out'}
+          {busy ? 'Signing out…' : keyed ? 'Remove key' : 'Sign out'}
         </button>
       </div>
       {problem && (
@@ -146,6 +164,84 @@ function SignedIn({
         </p>
       )}
     </div>
+  )
+}
+
+function signedOut(plan: PlanKind) {
+  if (plan === 'chatgpt')
+    return api.DELETE('/api/provider/subscriptions/chatgpt')
+  if (plan === 'supergrok')
+    return api.DELETE('/api/provider/subscriptions/supergrok')
+  return api.DELETE('/api/provider/subscriptions/minimax/{provider}', {
+    params: { path: { provider: plan } },
+  })
+}
+
+function signOutNotice(plan: PlanKind, revoked: boolean) {
+  const { name, vendor, keyed } = PLANS[plan]
+  if (keyed)
+    return 'The M Plan key is gone from Cubebot. It works elsewhere until you delete it in the MiniMax console.'
+  return revoked
+    ? `Signed out of ${name}.`
+    : `Signed out of ${name} here. ${vendor} did not confirm it, so also disconnect Cubebot in your ${name} settings.`
+}
+
+/** An M Plan key, pasted by the person whose plan it is. */
+function PlanKeyForm({
+  plan,
+  onChanged,
+}: {
+  plan: PlanKind
+  onChanged: (message: string) => Promise<unknown>
+}) {
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const save = async () => {
+    setBusy(true)
+    setError('')
+    const { data, error, response } = await api
+      .POST('/api/provider/subscriptions/minimax', {
+        body: { provider: plan, api_key: key },
+      })
+      .catch(() => ({ data: undefined, error: undefined, response: null }))
+    setBusy(false)
+    if (data)
+      return onChanged('Your M Plan key is saved. Choose the model agents use.')
+    const code = (error as { error?: string } | undefined)?.error
+    setError(signInProblem(plan, response?.status, code))
+  }
+  return (
+    <form
+      className="form provider-form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        void save()
+      }}
+    >
+      <Field
+        label="M Plan API key"
+        hint="From Plan Details in the MiniMax console. Never shown again"
+      >
+        <input
+          required
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={4096}
+          placeholder="Your M Plan API key, not a pay-as-you-go one"
+          value={key}
+          onChange={(event) => setKey(event.target.value.trim())}
+        />
+      </Field>
+      <Alert>{error}</Alert>
+      <div className="actions">
+        <button className="btn btn--primary" disabled={busy || !key}>
+          <KeyRound />
+          {busy ? 'Saving…' : 'Save my plan key'}
+        </button>
+      </div>
+    </form>
   )
 }
 

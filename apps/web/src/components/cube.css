@@ -58,6 +58,44 @@
   --face-base: var(--plum-base);
 }
 
+.cube--coral {
+  --face: var(--coral);
+  --face-top: var(--coral-top);
+  --face-side: var(--coral-deep);
+  --face-base: var(--coral-base);
+}
+.cube--mint {
+  --face: var(--mint);
+  --face-top: var(--mint-top);
+  --face-side: var(--mint-deep);
+  --face-base: var(--mint-base);
+}
+.cube--ocean {
+  --face: var(--ocean);
+  --face-top: var(--ocean-top);
+  --face-side: var(--ocean-deep);
+  --face-base: var(--ocean-base);
+}
+.cube--charcoal {
+  --face: var(--charcoal);
+  --face-top: var(--charcoal-top);
+  --face-side: var(--charcoal-deep);
+  --face-base: var(--charcoal-base);
+}
+/* A picked color: the lit, side and under faces are mixed from it like the painted triads. */
+.cube--custom {
+  --face: var(--custom);
+  --face-top: color-mix(in oklab, var(--custom), white 20%);
+  --face-side: color-mix(in oklab, var(--custom), black 26%);
+  --face-base: color-mix(in oklab, var(--custom), black 42%);
+}
+/* Ink eyes and wear vanish on a dark paint, so they turn to paper there. */
+.cube--dark {
+  --eye: #fffdf9;
+  --glint: #2b2420;
+  --wear: #fffdf9;
+}
+
 .cube__body {
   position: absolute;
   inset: 0;
@@ -164,7 +202,7 @@
   position: relative;
   flex: 1;
   height: 100%;
-  color: var(--ink);
+  color: var(--eye, var(--ink));
   transform-origin: 50% 55%;
   animation: cube-blink 5.4s ease-in-out var(--delay, 0s) infinite;
 }
@@ -182,6 +220,9 @@
 }
 .cube--stopped .cube__face {
   filter: saturate(0.35) brightness(0.94);
+}
+.cube__glint {
+  fill: var(--glint, #fffdf9);
 }
 .cube__eye svg {
   display: block;
@@ -324,4 +365,20 @@
   .cube__zz i:first-child {
     opacity: 1;
   }
+}
+
+/* A flat front face for the avatar builder's choices: no depth, no motion. */
+.cube-face {
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  flex: none;
+}
+.cube-face > .cube__face {
+  border-radius: calc(var(--size) * 0.14);
+  box-shadow: inset 0 calc(var(--size) * -0.08) 0 var(--face-side);
+}
+.cube-face .cube__eyes,
+.cube-face .cube__eye {
+  animation: none;
 }

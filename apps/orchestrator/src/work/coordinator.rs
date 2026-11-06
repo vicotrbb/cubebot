@@ -193,46 +193,52 @@ async fn through(
 ) -> Result<(String, Option<Usage>), cubebot_providers::Error> {
     match provider {
         ProviderKind::Openai => {
-            complete(
-                configured(OpenAi::new, OpenAi::for_loopback_tests)?,
-                request,
-            )
-            .await
+            complete(configured(OpenAi::new, OpenAi::for_loopback_tests), request).await
         }
         ProviderKind::Anthropic => {
             complete(
-                configured(Anthropic::new, Anthropic::for_loopback_tests)?,
+                configured(Anthropic::new, Anthropic::for_loopback_tests),
                 request,
             )
             .await
         }
         ProviderKind::Openrouter => {
             complete(
-                configured(OpenRouter::new, OpenRouter::for_loopback_tests)?,
+                configured(OpenRouter::new, OpenRouter::for_loopback_tests),
                 request,
             )
             .await
         }
         ProviderKind::Gemini => {
-            complete(
-                configured(Gemini::new, Gemini::for_loopback_tests)?,
-                request,
-            )
-            .await
+            complete(configured(Gemini::new, Gemini::for_loopback_tests), request).await
         }
         ProviderKind::Grok => {
-            complete(configured(Grok::new, Grok::for_loopback_tests)?, request).await
+            complete(configured(Grok::new, Grok::for_loopback_tests), request).await
         }
         ProviderKind::Chatgpt => {
             complete(
-                configured(OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests)?,
+                configured(OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests),
                 request,
             )
             .await
         }
         ProviderKind::Supergrok => {
             complete(
-                configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests)?,
+                configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests),
+                request,
+            )
+            .await
+        }
+        ProviderKind::Minimax | ProviderKind::MinimaxPlan => {
+            complete(
+                configured(Anthropic::minimax, Anthropic::minimax_for_loopback_tests),
+                request,
+            )
+            .await
+        }
+        ProviderKind::MinimaxCn | ProviderKind::MinimaxPlanCn => {
+            complete(
+                configured(Anthropic::minimax_cn, Anthropic::minimax_for_loopback_tests),
                 request,
             )
             .await
@@ -241,9 +247,10 @@ async fn through(
 }
 
 async fn complete<P: Provider>(
-    provider: P,
+    provider: Result<P, cubebot_providers::Error>,
     request: &Request<'_>,
 ) -> Result<(String, Option<Usage>), cubebot_providers::Error> {
+    let provider = provider?;
     let stream = provider.stream(request);
     let mut stream = std::pin::pin!(stream);
     let deadline = tokio::time::sleep(Duration::from_secs(60));

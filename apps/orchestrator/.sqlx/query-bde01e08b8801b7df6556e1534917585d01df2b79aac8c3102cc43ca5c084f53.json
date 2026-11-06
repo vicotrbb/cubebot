@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_accounts SET profile = $2 WHERE id = $1 AND active",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bde01e08b8801b7df6556e1534917585d01df2b79aac8c3102cc43ca5c084f53"
+}

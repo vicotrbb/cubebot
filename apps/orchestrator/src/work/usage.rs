@@ -47,6 +47,7 @@ pub struct AgentUsage {
     pub week: Spend,
     pub month: Spend,
     pub monthly_budget_usd: Option<f64>,
+    pub daily_budget_usd: Option<f64>,
     pub days: Vec<DaySpend>,
     pub models: Vec<ModelSpend>,
     /// Turns paused because this agent's budget ran out.
@@ -61,6 +62,13 @@ pub struct AgentUsage {
 pub struct SetBudget {
     /// US dollars per calendar month in UTC; `null` removes the limit.
     pub monthly_budget_usd: Option<f64>,
+    /// US dollars per UTC day; `null` removes the limit.
+    pub daily_budget_usd: Option<f64>,
+}
+
+/// A limit is a finite amount above zero and at most a million dollars.
+fn valid(budget: Option<f64>) -> bool {
+    budget.is_none_or(|budget| budget.is_finite() && budget > 0.0 && budget <= 1_000_000.0)
 }
 
 pub(super) struct Window {
@@ -94,10 +102,7 @@ impl Work {
         agent: AgentId,
         input: &SetBudget,
     ) -> Result<AgentUsage, IdentityError> {
-        if input
-            .monthly_budget_usd
-            .is_some_and(|budget| !budget.is_finite() || budget <= 0.0 || budget > 1_000_000.0)
-        {
+        if !valid(input.monthly_budget_usd) || !valid(input.daily_budget_usd) {
             return Err(IdentityError::InvalidInput);
         }
         let mut tx = self.pool.begin().await?;
@@ -106,17 +111,21 @@ impl Work {
         sqlx::query!(
             "
             UPDATE agents
-            SET monthly_budget_usd=$2
+            SET monthly_budget_usd=$2, daily_budget_usd=$3
             WHERE id=$1
             ",
             agent.0,
             input.monthly_budget_usd,
+            input.daily_budget_usd,
         )
         .execute(&mut *tx)
         .await?;
         let event = Event::by(actor.id, "agent.budget_set")
             .on(agent.0)
-            .detail(serde_json::json!({ "monthly_budget_usd": input.monthly_budget_usd }));
+            .detail(serde_json::json!({
+                "monthly_budget_usd": input.monthly_budget_usd,
+                "daily_budget_usd": input.daily_budget_usd,
+            }));
         record(&mut *tx, &event).await?;
         if !exhausted(&mut tx, agent).await? {
             requeue_paused(&mut tx, agent).await?;
@@ -160,7 +169,7 @@ async fn read(
     let models = models(tx, &scope, false).await?;
     let row = sqlx::query!(
         r#"
-        SELECT g.monthly_budget_usd,
+        SELECT g.monthly_budget_usd, g.daily_budget_usd,
             (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status='waiting' AND t.error='budget_exhausted') AS "paused!",
             (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days') AS "turns!",
             (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days' AND (t.status='failed' OR (t.status='waiting' AND t.error<>'budget_exhausted'))) AS "failed!"
@@ -176,6 +185,7 @@ async fn read(
         week: window.week,
         month: window.month,
         monthly_budget_usd: row.monthly_budget_usd,
+        daily_budget_usd: row.daily_budget_usd,
         days,
         models,
         paused_turns: row.paused,
@@ -326,12 +336,15 @@ pub(crate) async fn exhausted(
 ) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(
         r#"
-        SELECT COALESCE(g.monthly_budget_usd <= (
-            SELECT COALESCE(sum(u.cost_usd), 0)
+        SELECT COALESCE(g.monthly_budget_usd <= spent.month, false)
+            OR COALESCE(g.daily_budget_usd <= spent.day, false) AS "exhausted!"
+        FROM agents g
+        CROSS JOIN LATERAL (
+            SELECT COALESCE(sum(u.cost_usd), 0) AS month,
+                COALESCE(sum(u.cost_usd) FILTER (WHERE u.created_at >= date_trunc('day', clock_timestamp(), 'UTC')), 0) AS day
             FROM usage_events u
             WHERE u.agent_id=g.id AND u.created_at >= date_trunc('month', clock_timestamp(), 'UTC')
-        ), false) AS "exhausted!"
-        FROM agents g
+        ) spent
         WHERE g.id=$1
         "#,
         agent.0,
@@ -444,10 +457,17 @@ async fn listed(provider: &str) -> Result<Vec<Price>, Error> {
         Some(ProviderKind::Anthropic) => Anthropic::new()?.prices().await,
         Some(ProviderKind::Openrouter) => OpenRouter::new()?.prices().await,
         Some(ProviderKind::Gemini) => Gemini::new()?.prices().await,
-        // A plan has no per-token price.
-        Some(ProviderKind::Grok | ProviderKind::Chatgpt | ProviderKind::Supergrok) => {
-            Ok(Vec::new())
-        }
+        Some(ProviderKind::Minimax) => Anthropic::minimax()?.prices().await,
+        // A plan has no per-token price, and Grok reports its own cost.
+        // shortcut: mainland MiniMax bills in yuan, so its turns stay unpriced; convert if anyone needs those estimates.
+        Some(
+            ProviderKind::Grok
+            | ProviderKind::Chatgpt
+            | ProviderKind::Supergrok
+            | ProviderKind::MinimaxCn
+            | ProviderKind::MinimaxPlan
+            | ProviderKind::MinimaxPlanCn,
+        ) => Ok(Vec::new()),
         None => Err(Error::Unavailable),
     }
 }

@@ -398,4 +398,124 @@ async fn the_console_routes_reach_sign_in_and_sign_out_for_each_plan() {
     assert_eq!((status, out), (200, json!({"revoked": false})));
     let (_, listed) = call(&router, "GET", "/api/provider/subscriptions", &token).await;
     assert_eq!(listed, json!([]));
+    // A MiniMax plan's sign-out takes only a MiniMax plan.
+    for (plan, status) in [("minimax_plan_cn", 404), ("chatgpt", 404), ("bogus", 400)] {
+        let path = format!("/api/provider/subscriptions/minimax/{plan}");
+        assert_eq!(
+            call(&router, "DELETE", &path, &token).await.0,
+            status,
+            "{plan}"
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_m_plan_key_serves_only_its_owner_and_is_never_shared() {
+    use cubebot_orchestrator::connections::PlanKey;
+    let f = fixture().await;
+    let identity = Identity::new(f.pool.clone());
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    identity
+        .create_account(
+            &admin,
+            "other",
+            "other administrator password",
+            true,
+            Uuid::new_v4(),
+        )
+        .await
+        .unwrap();
+    let session = identity
+        .login("other", "other administrator password")
+        .await
+        .unwrap();
+    let other = identity.authenticate(&session.token).await.unwrap();
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let key = |provider| PlanKey {
+        provider,
+        api_key: "mplan-secret".into(),
+    };
+
+    // Only a MiniMax plan takes a pasted key, and it is saved for the person who pasted it.
+    assert!(matches!(
+        connections
+            .save_plan_key(&admin, &key(ProviderKind::Minimax))
+            .await,
+        Err(IdentityError::InvalidInput)
+    ));
+    let saved = connections
+        .save_plan_key(&admin, &key(ProviderKind::MinimaxPlan))
+        .await
+        .unwrap();
+    assert!(saved.mine && saved.provider == ProviderKind::MinimaxPlan);
+    assert!(matches!(
+        connections
+            .save_plan_key(&other, &key(ProviderKind::MinimaxPlan))
+            .await,
+        Err(IdentityError::Conflict)
+    ));
+    let stored: Vec<u8> = sqlx::query_scalar!("SELECT credential FROM provider_subscriptions")
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    assert!(!stored.windows(12).any(|window| window == b"mplan-secret"));
+
+    // Only its owner makes it the provider in use, and never with an access setting.
+    let plan = |request_id| ConfigureProvider {
+        request_id,
+        expected_revision: 0,
+        provider: ProviderKind::MinimaxPlan,
+        model: "MiniMax-M3.1-Flash".into(),
+        context_window: Some(1_000_000),
+        api_key: None,
+        access: None,
+    };
+    assert!(matches!(
+        connections.configure(&other, &plan(Uuid::new_v4())).await,
+        Err(IdentityError::Forbidden)
+    ));
+    let mut shared = plan(Uuid::new_v4());
+    shared.access = Some(Default::default());
+    assert!(matches!(
+        connections.configure(&admin, &shared).await,
+        Err(IdentityError::InvalidInput)
+    ));
+    connections
+        .configure(&admin, &plan(Uuid::new_v4()))
+        .await
+        .unwrap();
+
+    // The owner's agent gets the key; another person's agent gets nothing.
+    let auth = f.auth.clone().with_credentials(Credentials::new([7; 32]));
+    let issued = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let runtime = cubebot_orchestrator::api::runtime_router(auth);
+    let (status, material) = runtime_key(&runtime, &issued.token).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        (material["provider"].as_str(), material["api_key"].as_str()),
+        (Some("minimax_plan"), Some("mplan-secret"))
+    );
+    sqlx::query!("UPDATE agents SET created_by = $1", other.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(runtime_key(&runtime, &issued.token).await.0, 503);
+
+    // Signing out forgets it; MiniMax has nothing to revoke.
+    assert!(
+        !connections
+            .sign_out(&admin, ProviderKind::MinimaxPlan)
+            .await
+            .unwrap()
+    );
+    assert!(connections.subscriptions(&admin).await.unwrap().is_empty());
+    assert!(connections.inspect(&admin).await.unwrap().is_none());
 }

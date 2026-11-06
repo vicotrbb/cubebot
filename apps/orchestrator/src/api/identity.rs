@@ -20,6 +20,8 @@ use crate::identity::{Actor, Identity, IdentityError, audit::Event};
     logout,
     preferences,
     set_preferences,
+    profile,
+    set_profile,
     avatars,
     avatar,
     set_avatar,
@@ -44,6 +46,7 @@ pub fn router(identity: Identity) -> Router {
             "/api/identity/me/preferences",
             get(preferences).put(set_preferences),
         )
+        .route("/api/identity/me/profile", get(profile).put(set_profile))
         .route("/api/identity/avatars", get(avatars))
         .route("/api/identity/accounts/{id}/avatar", get(avatar))
         .route(
@@ -206,6 +209,33 @@ async fn set_preferences(
     let actor = actor(&identity, &headers).await?;
     identity.set_preferences(&actor, &input).await?;
     Ok(([("cache-control", "no-store")], Json(input)))
+}
+
+/// What the caller tells agents about themselves.
+#[utoipa::path(get, path = "/api/identity/me/profile", responses((status = 200, body = crate::identity::profiles::Profile)))]
+async fn profile(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(identity.profile(&actor).await?),
+    ))
+}
+
+/// Replaces the caller's whole profile; agents that person reaches read it.
+#[utoipa::path(put, path = "/api/identity/me/profile", request_body = crate::identity::profiles::Profile, responses((status = 200, body = crate::identity::profiles::Profile), (status = 400)))]
+async fn set_profile(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Json(input): Json<crate::identity::profiles::Profile>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = actor(&identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(identity.set_profile(&actor, &input).await?),
+    ))
 }
 
 /// Everyone's picture revision, for people who have one.

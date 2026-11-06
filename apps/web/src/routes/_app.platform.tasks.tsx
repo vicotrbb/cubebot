@@ -4,6 +4,7 @@ import { Minus, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../api/client'
 import type { components } from '../api/schema'
+import { CardSelect } from '../components/CardSelect'
 import { Cube } from '../components/Cube'
 import { Alert, Field, Skeleton, Status } from '../components/primitives'
 import { ModelField, useModels } from '../features/platform/Providers'
@@ -26,10 +27,20 @@ const NAMES: Record<Provider, string> = {
   grok: 'xAI Grok',
   chatgpt: 'ChatGPT plan',
   supergrok: 'Grok plan',
+  minimax: 'MiniMax',
+  minimax_cn: 'MiniMax (mainland China)',
+  minimax_plan: 'MiniMax M Plan',
+  minimax_plan_cn: 'MiniMax M Plan (mainland China)',
 }
+const SAME = 'same'
+const PLANS: Provider[] = [
+  'chatgpt',
+  'supergrok',
+  'minimax_plan',
+  'minimax_plan_cn',
+]
 /** A plan is personal, so it never becomes the installation's task orchestrator by choice. */
-const keyed = (provider: Provider) =>
-  provider !== 'chatgpt' && provider !== 'supergrok'
+const keyed = (provider: Provider) => !PLANS.includes(provider)
 
 function TaskSettingsPage() {
   const settings = useQuery({
@@ -104,38 +115,36 @@ function Form({ saved }: { saved: Settings }) {
       </header>
       <fieldset className="task-settings__model">
         <legend>What it thinks with</legend>
-        <label className="trigger">
-          <input
-            type="radio"
-            name="source"
-            checked={!own}
-            onChange={() => setDraft({ ...draft, provider: null, model: null })}
-          />
-          <span>
-            The same model as the agents
-            <span className="small faint">
-              {active
+        <CardSelect
+          label="What it thinks with"
+          value={draft.provider ?? SAME}
+          onChange={(choice) =>
+            setDraft({
+              ...draft,
+              provider: choice === SAME ? null : choice,
+              model: null,
+            })
+          }
+          options={[
+            {
+              value: SAME,
+              title: 'The same model as the agents',
+              detail: active
                 ? `${NAMES[active]}, whichever model is in use there`
-                : 'Set one up under AI providers first'}
-            </span>
-          </span>
-        </label>
-        {keyed.map((provider) => (
-          <label className="trigger" key={provider}>
-            <input
-              type="radio"
-              name="source"
-              checked={draft.provider === provider}
-              onChange={() => setDraft({ ...draft, provider, model: null })}
-            />
-            <span>
-              A model from {NAMES[provider]}
-              <span className="small faint">
-                A small, quick model is usually enough for this job
-              </span>
-            </span>
-          </label>
-        ))}
+                : 'Set one up under AI providers first',
+              mark: <Cube size={20} />,
+            },
+            ...keyed.map((provider) => ({
+              value: provider,
+              title: `A model from ${NAMES[provider]}`,
+              detail:
+                draft.provider === provider && draft.model
+                  ? draft.model
+                  : 'A small, quick model is usually enough for this job',
+              mark: NAMES[provider].charAt(0),
+            })),
+          ]}
+        />
         {draft.provider && (
           <ProviderModel
             key={draft.provider}

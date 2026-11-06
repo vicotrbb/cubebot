@@ -10,7 +10,7 @@ import {
 import { useState } from 'react'
 import { api, failure, ok, type VaultItem } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
-import { useAgents } from '../../app/queries'
+import { notRetired, useAgents } from '../../app/queries'
 import {
   Alert,
   confirmAction,
@@ -255,9 +255,7 @@ function InstallationItemForm({
       </Field>
       <AccessChoice
         access={access}
-        agents={(agents.data ?? []).filter(
-          (agent) => agent.desired_state !== 'retired',
-        )}
+        agents={notRetired(agents.data)}
         onChange={setAccess}
       />
       <Alert>{error}</Alert>

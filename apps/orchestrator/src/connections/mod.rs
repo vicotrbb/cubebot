@@ -17,7 +17,7 @@ pub use native::{
     callback as callback_address,
 };
 pub(crate) use subscriptions::For;
-pub use subscriptions::{SignInError, SubscriptionSummary, keep_fresh};
+pub use subscriptions::{PlanKey, SignInError, SubscriptionSummary, keep_fresh};
 pub use supergrok::SupergrokSignIn;
 pub(crate) use vault::same_site;
 pub use vault::{SaveVaultItem, VaultSummary};
@@ -482,7 +482,8 @@ impl Connections {
                 context_window AS "context_window?"
             FROM provider_connection
             WHERE $1::uuid IS NULL
-                OR provider IN ('chatgpt', 'supergrok')
+                -- A subscription holds no key here; its owner check comes with the token.
+                OR credential IS NULL
                 OR access->>'mode' = 'all_agents'
                 OR (access->>'mode' = 'explicit_grants' AND access->'agents' @> jsonb_build_array($1::uuid))
             "#,

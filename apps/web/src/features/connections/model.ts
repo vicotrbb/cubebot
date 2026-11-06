@@ -17,6 +17,8 @@ export const CATEGORIES: Record<Category, string> = {
   chat: 'Chat',
   home: 'Home',
   finance: 'Finance',
+  notifications: 'Notifications',
+  data: 'Data',
 }
 
 export const LEVELS: { id: Level; label: string; meaning: string }[] = [

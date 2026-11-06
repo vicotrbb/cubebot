@@ -1,0 +1,14 @@
+{
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9,
+    "username": "cubebot",
+    "fingerprint": "SHA256:3kNbrn75w5kid2i4QP8zaes+8vwOMEmSZrnTzjwFnKI"
+  },
+  "credential": {
+    "kind": "fields",
+    "fields": { "password": "choose-a-password" }
+  },
+  "account": "cubebot@127.0.0.1:~",
+  "unrecorded": "SSH's key exchange is random, so sftp::tests::live_sftp runs the check against a real server"
+}

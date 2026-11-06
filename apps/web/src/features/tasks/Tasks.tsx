@@ -3,7 +3,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { api, ok } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
-import { keys, useAgents, useSession, useTasks } from '../../app/queries'
+import {
+  keys,
+  notRetired,
+  useAgents,
+  useSession,
+  useTasks,
+} from '../../app/queries'
 import { taskHover } from '../../components/agentHover'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Skeleton } from '../../components/primitives'
@@ -34,7 +40,7 @@ export function Tasks() {
   const tasks = useTasks()
   const client = useQueryClient()
   const navigate = useNavigate()
-  const crew = agents.data ?? []
+  const crew = notRetired(agents.data)
   const noAgents = agents.isSuccess && crew.length === 0
   return (
     <div className="tasks">
