@@ -1,0 +1,52 @@
+{
+  "from": "2026-10-01",
+  "to": "2026-10-31",
+  "next_page_token": "",
+  "page_count": 1,
+  "page_size": 30,
+  "total_records": 1,
+  "meetings": [
+    {
+      "account_id": "Cx3wERazSgup7ZWRHQM8-w",
+      "duration": 20,
+      "host_id": "_0ctZtY0REqWalTmwvrdIw",
+      "id": 85746065432,
+      "recording_count": 2,
+      "start_time": "2026-10-28T20:00:00Z",
+      "topic": "My Personal Meeting",
+      "total_size": 22,
+      "type": "2",
+      "uuid": "4444AAAiAAAAAiAiAiiAii==",
+      "recording_play_passcode": "yNYIS408EJygs7rE5vVsJwXIz4-VW7MH",
+      "recording_files": [
+        {
+          "deleted_time": "2021-03-18T05:41:36Z",
+          "download_url": "https://us02web.zoom.us/rec/download/video",
+          "file_path": "/9090876528/path01/demo.mp4",
+          "file_size": 7220,
+          "file_type": "MP4",
+          "file_extension": "MP4",
+          "id": "ed6c2f27-2ae7-42f4-b3d0-835b493e4fa8",
+          "meeting_id": "L0AGOEPVR9m5WSOOs/d+FQ==",
+          "play_url": "https://example.com/rec/play/Qg75t7xZBtEbAkjdlgbfdngBBBB",
+          "recording_end": "2026-10-28T20:20:00Z",
+          "recording_start": "2026-10-28T20:00:00Z",
+          "recording_type": "shared_screen_with_speaker_view",
+          "status": "completed"
+        },
+        {
+          "download_url": "https://us02web.zoom.us/rec/download/transcript",
+          "file_size": 2048,
+          "file_type": "TRANSCRIPT",
+          "file_extension": "VTT",
+          "id": "a2f19f96-9294-4f51-8134-6f0eea108eb2",
+          "meeting_id": "L0AGOEPVR9m5WSOOs/d+FQ==",
+          "recording_end": "2026-10-28T20:20:00Z",
+          "recording_start": "2026-10-28T20:00:00Z",
+          "recording_type": "audio_transcript",
+          "status": "completed"
+        }
+      ]
+    }
+  ]
+}

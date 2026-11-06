@@ -1,0 +1,31 @@
+{
+  "config": {},
+  "credential": { "kind": "fields", "fields": { "token": "rk_live_secret" } },
+  "account": "Rocket Rides",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.stripe.com/v1/account",
+      "body": {
+        "id": "acct_1Nv0FGQ9RKHgCVdK",
+        "object": "account",
+        "business_profile": {
+          "name": "Rocket Rides Inc.",
+          "url": "https://rocketrides.io"
+        },
+        "charges_enabled": true,
+        "country": "US",
+        "default_currency": "usd",
+        "email": "jenny.rosen@example.com",
+        "payouts_enabled": true,
+        "settings": {
+          "dashboard": {
+            "display_name": "Rocket Rides",
+            "timezone": "America/Los_Angeles"
+          }
+        },
+        "type": "standard"
+      }
+    }
+  ]
+}

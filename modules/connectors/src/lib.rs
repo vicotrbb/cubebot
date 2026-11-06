@@ -15,8 +15,10 @@ pub mod asana;
 pub mod atlassian;
 pub mod airtable;
 pub mod calendly;
+pub mod cal_com;
 pub mod dav;
 pub mod discord;
+pub mod dropbox;
 pub mod email;
 pub mod github;
 pub mod google;
@@ -31,9 +33,11 @@ pub mod readwise;
 pub mod rss;
 pub mod paperless;
 pub mod slack;
+pub mod stripe;
 pub mod telegram;
 pub mod todoist;
 pub mod trello;
+pub mod zoom;
 
 pub use context::{ATTACH, Attachment, Context, Credential, FILE, LARGEST, file, input};
 pub use manifest::{
