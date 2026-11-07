@@ -156,6 +156,7 @@
   background: var(--danger);
 }
 
+/* Brand marks are drawn for white and may not be recolored, so the tile stays white in both themes. */
 .mark {
   flex: none;
   display: grid;
@@ -163,14 +164,13 @@
   width: 34px;
   height: 34px;
   border-radius: var(--r-md);
-  background: var(--inset);
-  color: var(--ink-soft);
+  background: #fff;
+  color: #2b2420;
   box-shadow: inset 0 0 0 1px var(--line);
 }
 .mark svg {
-  width: 17px;
-  height: 17px;
-  stroke-width: 1.75;
+  width: 20px;
+  height: 20px;
 }
 .mark--lg {
   width: 42px;
@@ -178,8 +178,8 @@
   border-radius: var(--r-lg);
 }
 .mark--lg svg {
-  width: 21px;
-  height: 21px;
+  width: 25px;
+  height: 25px;
 }
 
 /* The sheet: a page edge sliding over the catalog; the whole screen on a phone. */

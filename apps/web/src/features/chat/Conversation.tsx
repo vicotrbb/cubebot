@@ -158,18 +158,27 @@ function stateLabel(turn: Turn, activity: string) {
     return `Failed: ${(turn.error ?? 'unknown').replaceAll('_', ' ')}.`
   if (turn.status === 'cancelled')
     return 'Cancelled, with any work delegated under it. Workspace changes may already have occurred.'
-  if (
-    turn.status === 'waiting' &&
-    turn.terminal.some((t) => t.status === 'uncertain')
-  )
-    return 'Terminal effects are uncertain. Stop this turn, then ask the agent to inspect the workspace in a new message.'
-  if (turn.status === 'waiting' && turn.error === 'budget_exhausted')
-    return 'Paused: this agent spent its budget. It continues the next day or month the budget allows, or when someone raises it under Usage.'
-  if (turn.status === 'waiting' && turn.error === 'provider_usage_limit')
-    return 'Waiting: the signed-in plan reached its usage limit. Retry once the plan’s usage resets, or switch agents to another provider.'
-  if (turn.status === 'waiting')
-    return `Waiting: ${(turn.error ?? 'execution interrupted').replaceAll('_', ' ')}. Retry when ready.`
+  if (turn.status === 'waiting') return waitingLabel(turn)
   return ''
+}
+
+const WAITING: Record<string, string> = {
+  budget_exhausted:
+    'Paused: this agent spent its budget. It continues the next day or month the budget allows, or when someone raises it under Usage.',
+  provider_usage_limit:
+    'Waiting: the signed-in plan reached its usage limit. Retry once the plan’s usage resets, or switch agents to another provider.',
+  provider_invalid_response:
+    'Waiting: the provider’s reply could not be read. Retry the response; if it keeps happening, choose another model.',
+}
+
+function waitingLabel(turn: Turn) {
+  if (turn.terminal.some((t) => t.status === 'uncertain'))
+    return 'Terminal effects are uncertain. Stop this turn, then ask the agent to inspect the workspace in a new message.'
+  const error = turn.error ?? 'execution interrupted'
+  return (
+    WAITING[error] ??
+    `Waiting: ${error.replaceAll('_', ' ')}. Retry when ready.`
+  )
 }
 
 function queuedLabel(activity: string) {

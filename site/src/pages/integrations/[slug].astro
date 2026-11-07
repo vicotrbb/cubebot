@@ -39,7 +39,7 @@ if (c.selfHosted) {
         <div class="detail__cube" aria-hidden="true">
           <Cube size={120} tone={c.tested === 'live' ? 'orange' : 'wood'} paint={c.tested !== 'live'} contact>
             <span slot="face" class="sticker">
-              <BrandMark slug={c.slug} />
+              <BrandMark slug={c.logo ?? c.slug} />
             </span>
           </Cube>
         </div>

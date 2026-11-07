@@ -21,6 +21,13 @@
 .shell-empty {
   margin: auto;
 }
+/* The cube's lit base draws past its box. */
+.shell-empty > .cube {
+  margin-bottom: 18px;
+}
+.shell-empty > .btn {
+  margin-top: 10px;
+}
 
 .sidebar {
   display: flex;
@@ -86,6 +93,15 @@
   color: var(--ink-faint);
   cursor: pointer;
   border-radius: var(--r-sm);
+}
+.section__bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.section__add {
+  flex: none;
+  color: var(--ink-faint);
 }
 .section__head:hover {
   color: var(--ink);

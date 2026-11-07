@@ -273,21 +273,36 @@ fn declared(tool: &crate::Tool, dialect: Dialect) -> Value {
     }
 }
 
+/// Finished items by `output_index`, for a terminal event whose `output` arrives empty or null.
 #[derive(Default)]
-struct Responses;
+struct Responses(std::collections::BTreeMap<u64, Value>);
 impl Decoder for Responses {
-    fn decode(&mut self, data: Value, events: &mut VecDeque<Event>) -> Result<bool, Error> {
+    fn decode(&mut self, mut data: Value, events: &mut VecDeque<Event>) -> Result<bool, Error> {
         match data["type"].as_str() {
+            Some("response.output_item.done") => {
+                let index = data["output_index"]
+                    .as_u64()
+                    .ok_or(Error::InvalidResponse(None))?;
+                self.0.insert(index, data["item"].take());
+                Ok(false)
+            }
             Some("response.output_text.delta") => {
                 let delta = data["delta"].as_str().ok_or(Error::InvalidResponse(None))?;
                 events.push_back(Event::Text(delta.into()));
                 Ok(false)
             }
             Some("response.completed") => {
-                events.push_back(completed(&data["response"])?);
+                let response = &mut data["response"];
+                if response["output"].as_array().is_none_or(Vec::is_empty) {
+                    response["output"] = std::mem::take(&mut self.0).into_values().collect();
+                }
+                events.push_back(completed(response)?);
                 Ok(true)
             }
-            Some("response.incomplete") => Err(Error::InvalidResponse(None)),
+            Some("response.incomplete") => Err(unexpected(
+                "incomplete",
+                &data["response"]["incomplete_details"]["reason"],
+            )),
             Some("response.failed") => Err(failure(&data["response"]["error"]["code"])),
             // Plan usage reports its code under `error`; the API puts it at the top.
             Some("error") => Err(failure(
@@ -322,7 +337,7 @@ pub(crate) fn usage_limit(code: &Value) -> bool {
 /// The final response is authoritative; deltas were only progress.
 fn completed(response: &Value) -> Result<Event, Error> {
     if response["status"] != "completed" {
-        return Err(Error::InvalidResponse(None));
+        return Err(unexpected("status", &response["status"]));
     }
     let output = response["output"]
         .as_array()
@@ -335,7 +350,7 @@ fn completed(response: &Value) -> Result<Event, Error> {
             Some("message") => append_content(&mut text, &item["content"])?,
             Some("function_call") => calls.push(function_call(item)?),
             Some("computer_call") => calls.push(computer_call(item)?),
-            _ => return Err(Error::InvalidResponse(None)),
+            _ => return Err(unexpected("output item", &item["type"])),
         }
     }
     let usage = &response["usage"];
@@ -356,12 +371,20 @@ fn completed(response: &Value) -> Result<Event, Error> {
     })
 }
 
+/// Logs only the protocol label, never content, so a new response shape can be named.
+fn unexpected(what: &str, label: &Value) -> Error {
+    eprintln!("Provider response not understood: {what} {label}");
+    Error::InvalidResponse(None)
+}
+
 fn append_content(text: &mut String, value: &Value) -> Result<(), Error> {
     for part in value.as_array().ok_or(Error::InvalidResponse(None))? {
-        if part["type"] != "output_text" {
-            return Err(Error::InvalidResponse(None));
-        }
-        text.push_str(part["text"].as_str().ok_or(Error::InvalidResponse(None))?);
+        let field = match part["type"].as_str() {
+            Some("output_text") => "text",
+            Some("refusal") => "refusal",
+            _ => return Err(unexpected("content part", &part["type"])),
+        };
+        text.push_str(part[field].as_str().ok_or(Error::InvalidResponse(None))?);
     }
     Ok(())
 }

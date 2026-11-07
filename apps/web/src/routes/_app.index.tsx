@@ -1,5 +1,10 @@
-import { createFileRoute, Navigate } from '@tanstack/react-router'
-import { notRetired, useAgents, usePreferences } from '../app/queries'
+import { createFileRoute, Link, Navigate } from '@tanstack/react-router'
+import {
+  notRetired,
+  useAgents,
+  usePreferences,
+  useSession,
+} from '../app/queries'
 import { Cube } from '../components/Cube'
 import { Sidebar } from '../features/shell/Sidebar'
 import { useIsPhone } from '../features/shell/viewport'
@@ -10,6 +15,7 @@ function Home() {
   const phone = useIsPhone()
   const agents = useAgents()
   const preferences = usePreferences()
+  const session = useSession()
   if (phone) return <Sidebar page />
   if (agents.isPending) return null
   const favorite = preferences.data?.favorites.find(
@@ -26,10 +32,16 @@ function Home() {
     <div className="empty shell-empty">
       <Cube size={96} follow mood="idle" />
       <h2>No agents yet.</h2>
-      <p>
-        An administrator creates the first agent from the sidebar. Members see
-        agents once they are given access.
-      </p>
+      {session.data?.administrator ? (
+        <>
+          <p>Create one to start a conversation.</p>
+          <Link to="/agents/new" className="btn btn--primary">
+            Create agent
+          </Link>
+        </>
+      ) : (
+        <p>You see agents here once an administrator gives you access.</p>
+      )}
     </div>
   )
 }

@@ -1,83 +1,20 @@
-import {
-  Bell,
-  BellRing,
-  Archive,
-  BookText,
-  Building2,
-  CalendarCheck,
-  CalendarClock,
-  CalendarPlus,
-  CircleDot,
-  Cloud,
-  Columns3,
-  Contact,
-  CreditCard,
-  Database,
-  FolderGit2,
-  FolderOpen,
-  HardDrive,
-  Highlighter,
-  House,
-  Inbox,
-  ListChecks,
-  ListTodo,
-  Mail,
-  Megaphone,
-  MessageCircle,
-  MessagesSquare,
-  Plug,
-  Rss,
-  ScanText,
-  Send,
-  SquareKanban,
-  Table2,
-  Video,
-  Webhook,
-  type LucideIcon,
-} from 'lucide-react'
+import { Plug } from 'lucide-react'
+import { logos } from '../../../../../modules/brand/logos'
 
-/** No vendor logos: each connector gets a glyph for what it is. */
-const GLYPHS: Record<string, LucideIcon> = {
-  email: Mail,
-  google: Inbox,
-  microsoft: Building2,
-  dav: CalendarClock,
-  github: FolderGit2,
-  notion: BookText,
-  slack: MessageCircle,
-  telegram: Send,
-  'http-api': Webhook,
-  linear: CircleDot,
-  atlassian: SquareKanban,
-  todoist: ListChecks,
-  trello: Columns3,
-  asana: ListTodo,
-  airtable: Table2,
-  'home-assistant': House,
-  nextcloud: Cloud,
-  paperless: ScanText,
-  discord: MessagesSquare,
-  dropbox: FolderOpen,
-  'cal-com': CalendarCheck,
-  calendly: CalendarPlus,
-  zoom: Video,
-  hubspot: Contact,
-  stripe: CreditCard,
-  readwise: Highlighter,
-  sql: Database,
-  s3: Archive,
-  sftp: HardDrive,
-  rss: Rss,
-  ntfy: Bell,
-  pushover: BellRing,
-  gotify: Megaphone,
-}
-
+/** The connector's own brand mark, unmodified; a plug only for a connector without one. */
 export function Mark({ id, size = 'md' }: { id: string; size?: 'md' | 'lg' }) {
-  const Glyph = GLYPHS[id] ?? Plug
+  const logo = logos[id]
   return (
     <span className={`mark mark--${size}`} aria-hidden="true">
-      <Glyph />
+      {logo ? (
+        // Static marks from our own source, never user content.
+        <svg
+          viewBox={logo.viewBox}
+          dangerouslySetInnerHTML={{ __html: logo.svg }}
+        />
+      ) : (
+        <Plug />
+      )}
     </span>
   )
 }
