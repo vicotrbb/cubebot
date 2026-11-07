@@ -586,3 +586,26 @@ async fn supergrok_passes_the_grok_cli_version_gate_and_keeps_the_api_body() {
     );
     task.abort();
 }
+
+#[tokio::test]
+async fn an_empty_terminal_output_is_rebuilt_from_the_streamed_items() {
+    // Plan streams may close with `output` empty or null after streaming every item.
+    async fn plan(Json(_): Json<Value>) -> Response {
+        sse(&[
+            json!({"type":"response.output_item.done","output_index":1,"item":{"type":"function_call","call_id":"call_1","name":"bash","arguments":"{}"}}),
+            json!({"type":"response.output_item.done","output_index":0,"item":{"type":"message","content":[{"type":"output_text","text":"Running"}]}}),
+            json!({"type":"response.completed","response":{"status":"completed","output":null}}),
+        ])
+    }
+    let (origin, task) = serve(Router::new().route("/responses", post(plan))).await;
+    let provider = OpenAi::chatgpt_for_loopback_tests(&origin).unwrap();
+    let messages = [Message::User("Hello".into())];
+    let events = collect(&provider, &request(&messages, &[])).await;
+    let [Event::Done { reply, .. }] = &events[..] else {
+        panic!("expected one reply, got {} events", events.len())
+    };
+    assert_eq!(reply.text, "Running");
+    assert_eq!(reply.calls[0].call_id, "call_1");
+    assert_eq!(reply.native[1]["call_id"], "call_1");
+    task.abort();
+}

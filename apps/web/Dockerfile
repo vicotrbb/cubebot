@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
 RUN bun install --frozen-lockfile
+COPY modules/brand ./modules/brand
 COPY apps/web ./apps/web
 RUN bun run build
 

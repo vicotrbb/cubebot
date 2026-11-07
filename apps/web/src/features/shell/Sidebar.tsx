@@ -130,7 +130,7 @@ export function Sidebar({
         </Link>
         <Favorites />
         <AgentsSection administrator={administrator} />
-        <RoomsSection />
+        <RoomsSection administrator={administrator} />
         <Section id="library" title="Library">
           <Link
             to="/files"
@@ -282,7 +282,14 @@ function Favorites() {
 function AgentsSection({ administrator }: { administrator: boolean }) {
   const agents = useAgents()
   return (
-    <Section id="agents" title="Agents" label="Agents">
+    <Section
+      id="agents"
+      title="Agents"
+      label="Agents"
+      add={
+        administrator ? { to: '/agents/new', label: 'Add agent' } : undefined
+      }
+    >
       {agents.isPending && <RowSkeleton />}
       {agents.isSuccess && notRetired(agents.data).length === 0 && (
         <p className="row row--note faint">
@@ -296,10 +303,15 @@ function AgentsSection({ administrator }: { administrator: boolean }) {
   )
 }
 
-function RoomsSection() {
+function RoomsSection({ administrator }: { administrator: boolean }) {
   const rooms = useRooms()
   return (
-    <Section id="rooms" title="Rooms" label="Rooms">
+    <Section
+      id="rooms"
+      title="Rooms"
+      label="Rooms"
+      add={administrator ? { to: '/rooms/new', label: 'Add room' } : undefined}
+    >
       {rooms.data?.length === 0 && (
         <p className="row row--note faint">No rooms yet.</p>
       )}
@@ -314,11 +326,13 @@ function Section({
   id,
   title,
   label,
+  add,
   children,
 }: {
   id: string
   title: string
   label?: string
+  add?: { to: '/agents/new' | '/rooms/new'; label: string } | undefined
   children: ReactNode
 }) {
   const preferences = usePreferences()
@@ -326,26 +340,38 @@ function Section({
   const collapsed = preferences.data?.collapsed.includes(id) ?? false
   return (
     <section className="section">
-      <button
-        type="button"
-        className="section__head"
-        aria-expanded={!collapsed}
-        onClick={() => {
-          const current = preferences.data
-          if (!current) return
-          save.mutate({
-            ...current,
-            collapsed: collapsed
-              ? current.collapsed.filter((item) => item !== id)
-              : [...current.collapsed, id],
-          })
-        }}
-      >
-        <ChevronDown
-          className={collapsed ? 'section__chev collapsed' : 'section__chev'}
-        />
-        {title}
-      </button>
+      <div className="section__bar">
+        <button
+          type="button"
+          className="section__head"
+          aria-expanded={!collapsed}
+          onClick={() => {
+            const current = preferences.data
+            if (!current) return
+            save.mutate({
+              ...current,
+              collapsed: collapsed
+                ? current.collapsed.filter((item) => item !== id)
+                : [...current.collapsed, id],
+            })
+          }}
+        >
+          <ChevronDown
+            className={collapsed ? 'section__chev collapsed' : 'section__chev'}
+          />
+          {title}
+        </button>
+        {add && (
+          <Link
+            to={add.to}
+            className="btn btn--ghost btn--icon btn--sm section__add"
+            aria-label={add.label}
+            title={add.label}
+          >
+            <Plus />
+          </Link>
+        )}
+      </div>
       {!collapsed && (
         <div
           className="section__body"

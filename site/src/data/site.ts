@@ -324,7 +324,7 @@ export const releases = [
   },
 ] as const
 
-// Brand marks for the wall's "What it can reach" tiles (keys of data/logos.ts).
+// Brand marks for the wall's "What it can reach" tiles (keys of modules/brand/logos.ts).
 export const wallLogos: Record<string, string> = {
   Gmail: 'gmail',
   GitHub: 'github',
@@ -335,7 +335,7 @@ export const wallLogos: Record<string, string> = {
   Jira: 'atlassian',
   'Home Assistant': 'home-assistant',
   Stripe: 'stripe',
-  Outlook: 'microsoft-365',
+  Outlook: 'microsoft',
   Discord: 'discord',
   Nextcloud: 'nextcloud',
   Zoom: 'zoom',

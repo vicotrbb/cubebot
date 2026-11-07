@@ -19,6 +19,8 @@ export type Category = (typeof categories)[number]
 
 export interface Connector {
   slug: string
+  /** The brand mark's key when it differs from the slug. */
+  logo?: string
   name: string
   category: Category
   summary: string
@@ -91,6 +93,7 @@ export const connectors: Connector[] = [
   },
   {
     slug: 'microsoft-365',
+    logo: 'microsoft',
     name: 'Microsoft 365',
     category: 'Docs and files',
     summary:

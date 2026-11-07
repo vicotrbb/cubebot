@@ -214,15 +214,18 @@ async fn events(
         conversation,
         after,
         full: false,
+        flowing: false,
         sent: HashMap::new(),
     };
     // The first poll runs before responding so a refusal is an HTTP status, not a closed stream.
     let first = follow.poll().await?;
     let live = stream::unfold(follow, |mut follow| async move {
         if !follow.full {
-            // shortcut: polls the ledger twice a second per open stream; use LISTEN/NOTIFY if
-            // measured database load requires it.
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            // A reply arriving token by token reads as stuck at two frames a second.
+            // shortcut: polls the ledger per open stream; use LISTEN/NOTIFY if measured
+            // database load requires it.
+            let wait = if follow.flowing { 150 } else { 500 };
+            tokio::time::sleep(Duration::from_millis(wait)).await;
         }
         let frames = follow.poll().await.ok()?;
         Some((frames, follow))
@@ -243,6 +246,7 @@ struct Follow {
     conversation: Uuid,
     after: i64,
     full: bool,
+    flowing: bool,
     sent: HashMap<Uuid, String>,
 }
 
@@ -257,6 +261,7 @@ impl Follow {
             .events(&actor, self.conversation, self.after, &touched)
             .await?;
         self.full = page.events.len() == 100;
+        self.flowing = !page.events.is_empty();
         let mut frames = Vec::new();
         for event in page.events {
             self.after = event.id;
