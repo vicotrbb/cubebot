@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.3'
-export const released = '2026-11-06'
+export const version = 'v0.2.4'
+export const released = '2026-11-07'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -134,6 +134,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.4',
+    date: '2026-11-07',
+    title: 'ChatGPT plan fixes and real brand marks',
+    items: [
+      'ChatGPT plan replies that ended without their output no longer fail',
+      'Streaming replies arrive smoothly instead of in half-second bursts',
+      'A + beside Agents and Rooms in the sidebar to add one',
+      'Connections show each service’s real logo',
+    ],
+  },
   {
     tag: 'v0.2.3',
     date: '2026-11-06',
