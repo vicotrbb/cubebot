@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT t.id, t.room_id, t.title, t.request, t.status,\n            EXISTS(SELECT 1 FROM chat_turns c JOIN room_messages m ON m.id=c.room_message_id WHERE m.room_id=t.room_id AND c.status='waiting') AS \"blocked!\",\n            EXISTS(SELECT 1 FROM room_messages m WHERE m.room_id=t.room_id AND m.routing='routing') AS \"reading!\",\n            o.login AS owner,\n            to_jsonb(t.created_at) #>> '{}' AS \"created_at!\",\n            to_jsonb(t.updated_at) #>> '{}' AS \"updated_at!\"\n        FROM tasks t\n        JOIN human_accounts o ON o.id=t.created_by\n        JOIN human_accounts a ON a.id=$1 AND a.active\n        WHERE (a.role='administrator' OR t.created_by=a.id) AND ($2::uuid IS NULL OR t.id=$2)\n        ORDER BY t.updated_at DESC\n        LIMIT 100\n        ",
+  "query": "\n        SELECT t.id, t.room_id, t.title, t.request, t.status,\n            EXISTS(SELECT 1 FROM chat_turns c JOIN room_messages m ON m.id=c.room_message_id WHERE m.room_id=t.room_id AND c.status='waiting') AS \"blocked!\",\n            EXISTS(SELECT 1 FROM room_messages m WHERE m.room_id=t.room_id AND m.routing='routing') AS \"reading!\",\n            o.login AS owner,\n            to_jsonb(t.created_at) #>> '{}' AS \"created_at!\",\n            to_jsonb(t.updated_at) #>> '{}' AS \"updated_at!\",\n            t.team_id, g.name AS \"team_name?\"\n        FROM tasks t\n        JOIN human_accounts o ON o.id=t.created_by\n        LEFT JOIN teams g ON g.id=t.team_id\n        JOIN human_accounts a ON a.id=$1 AND a.active\n        WHERE (a.role='administrator' OR t.created_by=a.id) AND ($2::uuid IS NULL OR t.id=$2)\n        ORDER BY t.updated_at DESC\n        LIMIT 100\n        ",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,16 @@
         "ordinal": 9,
         "name": "updated_at!",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "team_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "team_name?",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -70,8 +80,10 @@
       null,
       false,
       null,
-      null
+      null,
+      true,
+      false
     ]
   },
-  "hash": "5953960748a32c486605c5b36be8ae944b20ef4dcedb55342f0fc5a9d355dd95"
+  "hash": "025d228d6014b8c60f76b454ff59013fe5ed613bb99a5f5a5868c060f93b6f5c"
 }

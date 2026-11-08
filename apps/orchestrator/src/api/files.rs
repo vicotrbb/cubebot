@@ -214,7 +214,7 @@ async fn create_folder(
     Ok((StatusCode::CREATED, Json(folder)))
 }
 
-/// Files and folders shared with you or your teams.
+/// Files and folders shared with you or your groups.
 #[utoipa::path(get, path = "/api/files/shared", operation_id = "shared_files", responses((status = 200, body = Vec<FileEntry>)))]
 async fn shared(
     State(identity): State<Identity>,

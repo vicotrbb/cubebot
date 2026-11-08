@@ -14,6 +14,7 @@ pub mod routines;
 mod runtime;
 mod situation;
 pub mod tasks;
+mod teams;
 pub(crate) mod terminal;
 pub(crate) mod usage;
 use crate::{
@@ -34,6 +35,7 @@ pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage, Ro
 use serde::{Deserialize, Serialize};
 pub use situation::{OpenWork, RecentEvent, Situation, SituationAgent};
 use sqlx::PgPool;
+pub use teams::{CreateTeam, SaveMember, SaveTeam, Team, TeamMember, UpdateTeam};
 pub use usage::{
     AgentUsage, DaySpend, ModelSpend, SetBudget, Spend, keep_prices, prices_due, store_prices,
 };

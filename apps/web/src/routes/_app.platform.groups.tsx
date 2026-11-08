@@ -27,29 +27,29 @@ import { applyLevel } from '../features/platform/applyLevel'
 import { useAdminAction } from '../features/platform/useAdminAction'
 import '../features/platform/platform.css'
 
-export const Route = createFileRoute('/_app/platform/teams')({
-  component: TeamsAndAccess,
+export const Route = createFileRoute('/_app/platform/groups')({
+  component: GroupsAndAccess,
 })
 
-type Team = Awaited<ReturnType<typeof admin.teams>>[number]
+type Group = Awaited<ReturnType<typeof admin.groups>>[number]
 type Account = Awaited<ReturnType<typeof admin.accounts>>[number]
-type Chosen = { kind: 'team' | 'user'; id: string }
+type Chosen = { kind: 'group' | 'user'; id: string }
 
 const active = <T extends { active: boolean }>(list: T[] | undefined) =>
   list?.filter((item) => item.active) ?? []
 
-function TeamsAndAccess() {
-  const teams = useQuery({ queryKey: ['teams'], queryFn: admin.teams })
+function GroupsAndAccess() {
+  const groups = useQuery({ queryKey: ['groups'], queryFn: admin.groups })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: admin.accounts })
   const grants = useQuery({ queryKey: ['grants'], queryFn: admin.grants })
-  const action = useAdminAction(['teams', 'grants', 'access-events'])
+  const action = useAdminAction(['groups', 'grants', 'access-events'])
   const [chosen, setChosen] = useState<Chosen | null>(null)
-  const activeTeams = active(teams.data)
+  const activeGroups = active(groups.data)
   const people = active(accounts.data)
-  const selected = chosen ?? firstChoice(activeTeams, people)
-  const team =
-    selected?.kind === 'team'
-      ? activeTeams.find((item) => item.id === selected.id)
+  const selected = chosen ?? firstChoice(activeGroups, people)
+  const group =
+    selected?.kind === 'group'
+      ? activeGroups.find((item) => item.id === selected.id)
       : undefined
   const person =
     selected?.kind === 'user'
@@ -58,7 +58,7 @@ function TeamsAndAccess() {
   return (
     <div className="access">
       <Recipients
-        teams={activeTeams}
+        groups={activeGroups}
         people={people}
         selected={selected}
         action={action}
@@ -67,10 +67,10 @@ function TeamsAndAccess() {
       <div className="access__detail">
         <Alert>{action.error}</Alert>
         <Status>{action.notice}</Status>
-        {(teams.isPending || accounts.isPending) && <Skeleton lines={4} />}
-        {team && (
-          <TeamDetail
-            team={team}
+        {(groups.isPending || accounts.isPending) && <Skeleton lines={4} />}
+        {group && (
+          <GroupDetail
+            group={group}
             people={people}
             grants={grants.data ?? []}
             action={action}
@@ -79,7 +79,7 @@ function TeamsAndAccess() {
         {person && (
           <PersonDetail
             person={person}
-            teams={activeTeams}
+            groups={activeGroups}
             grants={grants.data ?? []}
             action={action}
           />
@@ -90,33 +90,33 @@ function TeamsAndAccess() {
 }
 
 function Recipients({
-  teams,
+  groups,
   people,
   selected,
   action,
   onChoose,
 }: {
-  teams: Team[]
+  groups: Group[]
   people: Account[]
   selected: Chosen | null
   action: Action
   onChoose: (chosen: Chosen) => void
 }) {
   return (
-    <nav className="access__list" aria-label="People and teams">
+    <nav className="access__list" aria-label="People and groups">
       <div className="access__group">
-        <h2>Teams</h2>
-        {teams.map((item) => (
+        <h2>Groups</h2>
+        {groups.map((item) => (
           <button
             key={item.id}
             type="button"
             className="access__pick"
             aria-current={
-              selected?.kind === 'team' && item.id === selected.id
+              selected?.kind === 'group' && item.id === selected.id
                 ? 'true'
                 : undefined
             }
-            onClick={() => onChoose({ kind: 'team', id: item.id })}
+            onClick={() => onChoose({ kind: 'group', id: item.id })}
           >
             <span className="access__mark">
               <Users aria-hidden="true" />
@@ -125,10 +125,10 @@ function Recipients({
             <span className="faint small tabular">{item.members.length}</span>
           </button>
         ))}
-        <NewTeam
+        <NewGroup
           busy={action.busy}
           onCreate={(name) =>
-            action.run(() => admin.createTeam(name), `${name} is ready.`)
+            action.run(() => admin.createGroup(name), `${name} is ready.`)
           }
         />
       </div>
@@ -158,12 +158,12 @@ function Recipients({
   )
 }
 
-function firstChoice(teams: Team[], people: Account[]): Chosen | null {
-  if (teams[0]) return { kind: 'team', id: teams[0].id }
+function firstChoice(groups: Group[], people: Account[]): Chosen | null {
+  if (groups[0]) return { kind: 'group', id: groups[0].id }
   return people[0] ? { kind: 'user', id: people[0].id } : null
 }
 
-function NewTeam({
+function NewGroup({
   busy,
   onCreate,
 }: {
@@ -182,8 +182,8 @@ function NewTeam({
     >
       <Plus aria-hidden="true" />
       <input
-        aria-label="New team name"
-        placeholder="New team"
+        aria-label="New group name"
+        placeholder="New group"
         maxLength={128}
         value={name}
         onChange={(event) => setName(event.target.value)}
@@ -199,62 +199,66 @@ function NewTeam({
 
 type Action = ReturnType<typeof useAdminAction>
 
-function TeamDetail({
-  team,
+function GroupDetail({
+  group,
   people,
   grants,
   action,
 }: {
-  team: Team
+  group: Group
   people: Account[]
   grants: Grant[]
   action: Action
 }) {
-  const inTeam = people.filter((person) => team.members.includes(person.id))
-  const others = people.filter((person) => !team.members.includes(person.id))
+  const inGroup = people.filter((person) => group.members.includes(person.id))
+  const others = people.filter((person) => !group.members.includes(person.id))
   const change = (account: string, present: boolean, done: string) =>
     void action.run(
-      () => admin.membership(team.id, account, team.revision, present),
+      () => admin.membership(group.id, account, group.revision, present),
       done,
     )
   return (
     <>
       <header className="access__head">
-        <h2>{team.name}</h2>
+        <h2>{group.name}</h2>
         <button
           type="button"
           className="btn btn--ghost btn--sm"
           disabled={action.busy}
           onClick={async () => {
             const yes = await confirmAction({
-              title: `Delete ${team.name}?`,
-              body: 'Its members lose what the team gave them.',
+              title: `Delete ${group.name}?`,
+              body: 'Its members lose what the group gave them.',
               action: 'Delete',
             })
             if (yes)
               void action.run(
-                () => admin.deleteTeam(team.id, team.revision),
-                `${team.name} is gone.`,
+                () => admin.deleteGroup(group.id, group.revision),
+                `${group.name} is gone.`,
               )
           }}
         >
-          Delete team
+          Delete group
         </button>
       </header>
       <section className="access__section">
         <h3>Members</h3>
         <ul className="access__members">
-          {inTeam.map((person) => (
+          {inGroup.map((person) => (
             <li key={person.id}>
               <PersonAvatar account={person.id} name={person.login} />
               {person.login}
               <button
                 type="button"
                 className="access__remove"
-                aria-label={`Remove ${person.login} from ${team.name}`}
+                aria-label={`Remove ${person.login} from ${group.name}`}
                 disabled={action.busy}
                 onClick={() =>
-                  change(person.id, false, `${person.login} left ${team.name}.`)
+                  change(
+                    person.id,
+                    false,
+                    `${person.login} left ${group.name}.`,
+                  )
                 }
               >
                 <X />
@@ -265,7 +269,7 @@ function TeamDetail({
             <li className="access__add">
               <select
                 className="input"
-                aria-label={`Add someone to ${team.name}`}
+                aria-label={`Add someone to ${group.name}`}
                 value=""
                 disabled={action.busy}
                 onChange={(event) => {
@@ -276,7 +280,7 @@ function TeamDetail({
                     change(
                       person.id,
                       true,
-                      `${person.login} joined ${team.name}.`,
+                      `${person.login} joined ${group.name}.`,
                     )
                 }}
               >
@@ -292,15 +296,15 @@ function TeamDetail({
             </li>
           )}
         </ul>
-        {inTeam.length === 0 && (
+        {inGroup.length === 0 && (
           <p className="small faint">
             Nobody yet. What you allow below reaches everyone you add.
           </p>
         )}
       </section>
       <AccessTable
-        recipient={{ kind: 'team', id: team.id }}
-        own={grants.filter((grant) => grant.team_id === team.id)}
+        recipient={{ kind: 'group', id: group.id }}
+        own={grants.filter((grant) => grant.group_id === group.id)}
         inherited={() => null}
         action={action}
       />
@@ -310,23 +314,25 @@ function TeamDetail({
 
 function PersonDetail({
   person,
-  teams,
+  groups,
   grants,
   action,
 }: {
   person: Account
-  teams: Team[]
+  groups: Group[]
   grants: Grant[]
   action: Action
 }) {
-  const theirTeams = teams.filter((team) => team.members.includes(person.id))
+  const theirGroups = groups.filter((group) =>
+    group.members.includes(person.id),
+  )
   return (
     <>
       <header className="access__head">
         <h2>{person.login}</h2>
-        {theirTeams.length > 0 && (
+        {theirGroups.length > 0 && (
           <span className="small faint">
-            In {theirTeams.map((team) => team.name).join(', ')}
+            In {theirGroups.map((group) => group.name).join(', ')}
           </span>
         )}
       </header>
@@ -340,7 +346,7 @@ function PersonDetail({
         <AccessTable
           recipient={{ kind: 'user', id: person.id }}
           own={grants.filter((grant) => grant.account_id === person.id)}
-          inherited={(target) => throughTeams(theirTeams, grants, target)}
+          inherited={(target) => throughGroups(theirGroups, grants, target)}
           action={action}
         />
       )}
@@ -348,15 +354,15 @@ function PersonDetail({
   )
 }
 
-function throughTeams(teams: Team[], grants: Grant[], target: Target) {
+function throughGroups(groups: Group[], grants: Grant[], target: Target) {
   for (const level of ['manage', 'chat', 'view', 'custom'] as const)
-    for (const team of teams) {
+    for (const group of groups) {
       const given = grantsOn(
-        grants.filter((grant) => grant.team_id === team.id),
+        grants.filter((grant) => grant.group_id === group.id),
         target,
       )
       if (levelOf(given, target) === level)
-        return `${LABEL[level]} through ${team.name}`
+        return `${LABEL[level]} through ${group.name}`
     }
   return null
 }
@@ -367,7 +373,7 @@ function AccessTable({
   inherited,
   action,
 }: {
-  recipient: { kind: 'user' | 'team'; id: string }
+  recipient: { kind: 'user' | 'group'; id: string }
   own: Grant[]
   inherited: (target: Target) => string | null
   action: Action

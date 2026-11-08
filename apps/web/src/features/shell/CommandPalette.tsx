@@ -1,7 +1,13 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Hash } from 'lucide-react'
+import { Hash, UsersRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { notRetired, useAgents, useRooms, useSession } from '../../app/queries'
+import {
+  notRetired,
+  useAgents,
+  useRooms,
+  useSession,
+  useTeams,
+} from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { PLATFORM } from './Sidebar'
 
@@ -23,6 +29,7 @@ export function CommandPalette({
   const navigate = useNavigate()
   const agents = useAgents()
   const rooms = useRooms()
+  const teams = useTeams()
   const session = useSession()
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -52,13 +59,22 @@ export function CommandPalette({
         icon: <Cube avatar={agent.avatar} mood={moodOf(agent)} size={20} />,
         go: go(`/agents/${agent.id}`),
       })),
-      ...(rooms.data ?? []).map((room) => ({
-        key: `r:${room.id}`,
-        label: room.name,
-        hint: 'Room',
-        icon: <Hash size={16} />,
-        go: go(`/rooms/${room.id}`),
+      ...(teams.data ?? []).map((team) => ({
+        key: `t:${team.id}`,
+        label: team.name,
+        hint: 'Team',
+        icon: <UsersRound size={16} />,
+        go: go(`/teams/${team.id}`),
       })),
+      ...(rooms.data ?? [])
+        .filter((room) => !room.archived)
+        .map((room) => ({
+          key: `r:${room.id}`,
+          label: room.name,
+          hint: room.team ? 'Team room' : 'Room',
+          icon: room.team ? <UsersRound size={16} /> : <Hash size={16} />,
+          go: go(`/rooms/${room.id}`),
+        })),
       {
         key: 'p:activity',
         label: 'Activity',
@@ -71,12 +87,7 @@ export function CommandPalette({
         hint: 'Page',
         go: go('/tasks'),
       },
-      {
-        key: 'p:situation',
-        label: 'Situation room',
-        hint: 'Page',
-        go: go('/situation'),
-      },
+      { key: 'p:home', label: 'Home', hint: 'Page', go: go('/') },
       { key: 'p:files', label: 'Files', hint: 'Page', go: go('/files') },
       { key: 'p:skills', label: 'Skills', hint: 'Page', go: go('/skills') },
       { key: 'p:kb', label: 'Knowledge base', hint: 'Page', go: go('/kb') },
@@ -96,7 +107,15 @@ export function CommandPalette({
         ? all.filter((hit) => hit.label.toLowerCase().includes(needle))
         : all
     ).slice(0, 12)
-  }, [agents.data, rooms.data, session.data, query, navigate, onClose])
+  }, [
+    agents.data,
+    rooms.data,
+    teams.data,
+    session.data,
+    query,
+    navigate,
+    onClose,
+  ])
   const active = hits[Math.min(cursor, hits.length - 1)]
   return (
     <dialog

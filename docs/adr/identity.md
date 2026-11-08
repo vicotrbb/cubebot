@@ -123,6 +123,8 @@ Ownership: the authorization module owns role definitions, grants and effective-
 
 Accepted 2026-10-23.
 
+Amended 2026-11-08: the console and API call these **groups** (Platform › Groups and access, `/api/identity/groups`, a grant or file share `kind` of `group`), because [Agent teams](agents.md#agent-teams) took the word team. The tables and stored audit kinds keep their names.
+
 **Decision.** Manage human teams and their membership entirely in Cubebot. The user selected this model on 2026-10-23. Authorized humans add and remove members locally. Identity-provider groups do not create, synchronize or change Cubebot team membership. OpenID Connect remains responsible for sign-in and optional admission under [Platform-wide built-in accounts and optional OpenID Connect](#platform-wide-built-in-accounts-and-optional-openid-connect) and [Invitations and optional OpenID Connect admission](#invitations-and-optional-openid-connect-admission).
 
 Usage: an administrator creates an Engineering team, adds admitted installation members, and grants the team access to selected agents and rooms. A member's external group changes do not alter that local membership. A user admitted automatically through OpenID Connect receives the configured baseline authority and joins teams through Cubebot's local management process.

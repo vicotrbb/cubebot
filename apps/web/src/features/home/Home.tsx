@@ -4,7 +4,10 @@ import {
   BookOpen,
   CircleCheck,
   CircleX,
+  List,
   Moon,
+  Network,
+  PanelLeft,
   type LucideIcon,
 } from 'lucide-react'
 import { useState } from 'react'
@@ -16,47 +19,85 @@ import {
   useAgents,
   useInstallation,
   useSituation,
+  useTeams,
 } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Empty, Skeleton, when } from '../../components/primitives'
 import { doingOf } from '../agent/doing'
 import { fileSize } from '../files/viewer'
 import { sandboxLabel } from '../platform/sandbox'
+import { useIsPhone } from '../shell/viewport'
+import { OrgChart } from '../teams/OrgChart'
 import { DayBars } from './DayBars'
 import { count, headline, money, pace } from './format'
-import './situation.css'
+import './home.css'
 
 type Data = components['schemas']['Situation']
 type Row = components['schemas']['SituationAgent']
 type Recent = components['schemas']['RecentEvent']
 type Open = components['schemas']['OpenWork']
 
-export function Situation() {
+type View = 'list' | 'org'
+
+/** The console's landing page: every agent at a glance, with spend and work kept to the side. */
+export function Home({
+  view,
+  onView,
+}: {
+  view: View
+  onView: (view: View) => void
+}) {
   const situation = useSituation()
   const agents = useAgents()
+  const phone = useIsPhone()
   return (
-    <div className="page situation">
+    <div className="page home">
       <header className="page__head">
-        <h1>Situation room</h1>
-        <span className="situation__live small faint">
+        <h1>Home</h1>
+        <span className="home__live small faint">
           <span className="dot dot--working" aria-hidden="true" /> Live
         </span>
+        {phone && (
+          <Link
+            to="/menu"
+            className="btn btn--sm home__menu"
+            aria-label="Agents, teams and rooms"
+          >
+            <PanelLeft />
+            <span>Browse</span>
+          </Link>
+        )}
       </header>
-      <div className="page__body situation__body">
+      <div className="page__body home__body">
         {situation.isError && (
-          <Alert>The situation could not be loaded. Retrying shortly.</Alert>
+          <Alert>Home could not be loaded. Retrying shortly.</Alert>
         )}
         {situation.isPending && <Skeleton lines={6} width="60%" />}
         {situation.data && (
-          <Board data={situation.data} agents={notRetired(agents.data)} />
+          <Board
+            data={situation.data}
+            agents={notRetired(agents.data)}
+            view={view}
+            onView={onView}
+          />
         )}
       </div>
     </div>
   )
 }
 
-function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
-  const [view, setView] = useState<(typeof VIEWS)[number][0]>('now')
+function Board({
+  data,
+  agents,
+  view,
+  onView,
+}: {
+  data: Data
+  agents: AgentSummary[]
+  view: View
+  onView: (view: View) => void
+}) {
+  const [pane, setPane] = useState<(typeof PANES)[number][0]>('agents')
   const named = new Map(agents.map((agent) => [agent.id, agent]))
   const rows = data.agents.filter((row) => named.has(row.id))
   const line = headline({
@@ -74,28 +115,26 @@ function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
       </Empty>
     )
   return (
-    <div className="situation__grid" data-view={view}>
+    <div className="home__grid" data-pane={pane}>
       <section className="brief" aria-label="Summary" data-calm={line.calm}>
         <h2>{line.text}</h2>
         <p>{line.state}</p>
       </section>
-      <div className="tabs situation__views" role="group" aria-label="View">
-        {VIEWS.map(([id, label]) => (
+      <div className="tabs home__panes" role="group" aria-label="Show">
+        {PANES.map(([id, label]) => (
           <button
             key={id}
             type="button"
-            aria-pressed={view === id}
-            onClick={() => setView(id)}
+            aria-pressed={pane === id}
+            onClick={() => setPane(id)}
           >
             {label}
           </button>
         ))}
       </div>
-      <div className="situation__main">
+      <AgentsBoard rows={rows} named={named} view={view} onView={onView} />
+      <aside className="home__rail" aria-label="Spend and work">
         <Spend data={data} />
-        <AgentsLedger rows={rows} named={named} />
-      </div>
-      <aside className="situation__rail" aria-label="What is happening">
         <NowList work={data.work} named={named} />
         <RecentList recent={data.recent} named={named} />
       </aside>
@@ -104,11 +143,66 @@ function Board({ data, agents }: { data: Data; agents: AgentSummary[] }) {
   )
 }
 
-const VIEWS = [
-  ['now', 'Now'],
+const PANES = [
   ['agents', 'Agents'],
+  ['now', 'Work'],
   ['spend', 'Spend'],
 ] as const
+
+const VIEWS: [View, string, LucideIcon][] = [
+  ['list', 'List', List],
+  ['org', 'Org chart', Network],
+]
+
+function AgentsBoard({
+  rows,
+  named,
+  view,
+  onView,
+}: {
+  rows: Row[]
+  named: Map<string, AgentSummary>
+  view: View
+  onView: (view: View) => void
+}) {
+  const teams = useTeams()
+  return (
+    <section
+      className="board-section board-section--agents"
+      aria-labelledby="agents"
+    >
+      <div className="board-section__head">
+        <h3 id="agents">Agents</h3>
+        <div className="tabs" role="group" aria-label="Show agents as">
+          {VIEWS.map(([id, label, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={view === id}
+              onClick={() => onView(id)}
+            >
+              <Icon aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {view === 'list' ? (
+        <AgentsLedger rows={rows} named={named} />
+      ) : teams.isPending ? (
+        <Skeleton lines={4} width="50%" />
+      ) : (
+        <div
+          className="board-section__scroll"
+          tabIndex={0}
+          aria-label="Org chart"
+        >
+          <OrgChart teams={teams.data ?? []} agents={[...named.values()]} />
+        </div>
+      )}
+    </section>
+  )
+}
 
 function Spend({ data }: { data: Data }) {
   const [measure, setMeasure] = useState<'cost_usd' | 'tokens'>('cost_usd')
@@ -137,49 +231,46 @@ function Spend({ data }: { data: Data }) {
           </button>
         </div>
       </div>
-      <div className="spend">
-        <div className="spend__chart">
-          <dl className="figures">
-            <Figure name="Today" spend={data.today} />
-            <Figure name="7 days" spend={data.week} />
-            <Figure name="This month" spend={data.month} />
-          </dl>
-          <DayBars
-            days={data.days}
-            measure={measure}
-            format={measure === 'cost_usd' ? money : count}
-            label={measure === 'cost_usd' ? 'Estimated cost' : 'Tokens'}
-          />
-        </div>
-        <div className="spend__models" tabIndex={0} aria-label="Models">
-          {data.models.length > 0 && (
-            <table className="table models">
-              <thead>
-                <tr>
-                  <th scope="col">Model, last 30 days</th>
-                  <th scope="col" className="num">
-                    Tokens
-                  </th>
-                  <th scope="col" className="num">
-                    Cost
-                  </th>
+      <dl className="figures">
+        <Figure name="Today" spend={data.today} />
+        <Figure name="7 days" spend={data.week} />
+        <Figure name="This month" spend={data.month} />
+      </dl>
+      <DayBars
+        days={data.days}
+        measure={measure}
+        format={measure === 'cost_usd' ? money : count}
+        label={measure === 'cost_usd' ? 'Estimated cost' : 'Tokens'}
+      />
+      {data.models.length > 0 && (
+        <details className="spend__models">
+          <summary>Models, last 30 days</summary>
+          <table className="table models">
+            <thead>
+              <tr>
+                <th scope="col">Model</th>
+                <th scope="col" className="num">
+                  Tokens
+                </th>
+                <th scope="col" className="num">
+                  Cost
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.models.map((model) => (
+                <tr key={`${model.provider}/${model.model}`}>
+                  <td className="models__name">{model.model}</td>
+                  <td className="num">{count(model.tokens)}</td>
+                  <td className="num">{modelCost(model)}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {data.models.map((model) => (
-                  <tr key={`${model.provider}/${model.model}`}>
-                    <td className="models__name">{model.model}</td>
-                    <td className="num">{count(model.tokens)}</td>
-                    <td className="num">{modelCost(model)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
       <p className="board-section__note">
-        Costs are estimates from each model&rsquo;s listed price, in UTC
+        Estimates from each model&rsquo;s listed price, in UTC
         {data.prices_at ? '' : '; no price list has loaded yet'}.
         {unpriced > 0 &&
           ` ${count(unpriced)} ${unpriced === 1 ? 'response' : 'responses'} this month had no price and count only as tokens.`}
@@ -221,40 +312,32 @@ function AgentsLedger({
   named: Map<string, AgentSummary>
 }) {
   return (
-    <section
-      className="board-section board-section--agents"
-      aria-labelledby="agents"
-    >
-      <div className="board-section__head">
-        <h3 id="agents">Agents</h3>
-      </div>
-      <div className="board-section__scroll" tabIndex={0} aria-label="Agents">
-        <table className="table ledger">
-          <thead>
-            <tr>
-              <th scope="col">Agent</th>
-              <th scope="col" className="num ledger__wide">
-                Open
-              </th>
-              <th scope="col" className="num ledger__wide">
-                7 days
-              </th>
-              <th scope="col" className="ledger__money">
-                This month
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const agent = named.get(row.id)
-              return agent ? (
-                <AgentRow key={row.id} row={row} agent={agent} />
-              ) : null
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div className="board-section__scroll" tabIndex={0} aria-label="Agents">
+      <table className="table ledger">
+        <thead>
+          <tr>
+            <th scope="col">Agent</th>
+            <th scope="col" className="num ledger__wide">
+              Open
+            </th>
+            <th scope="col" className="num ledger__wide">
+              7 days
+            </th>
+            <th scope="col" className="ledger__money">
+              This month
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const agent = named.get(row.id)
+            return agent ? (
+              <AgentRow key={row.id} row={row} agent={agent} />
+            ) : null
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }
 

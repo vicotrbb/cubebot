@@ -812,7 +812,7 @@ function ShareDialog({
     } catch (error) {
       setError(
         error instanceof ApiError && error.status === 400
-          ? 'Each share names one active person by login, a team, or an agent by its exact name.'
+          ? 'Each share names one active person by login, a group, or an agent by its exact name.'
           : failure(error),
       )
     } finally {
@@ -847,7 +847,7 @@ function ShareDialog({
               }
             >
               <option value="user">Person</option>
-              <option value="team">Team</option>
+              <option value="group">Group</option>
               <option value="agent">Agent</option>
             </select>
             <input
@@ -898,7 +898,7 @@ function ShareDialog({
               ])
             }
           >
-            Add person, team or agent
+            Add person, group or agent
           </button>
           <button
             className="btn btn--primary btn--sm"

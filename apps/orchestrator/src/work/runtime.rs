@@ -93,6 +93,8 @@ impl Work {
         let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
         let instructions =
             super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
+        let (instructions, team_manager) =
+            super::teams::briefed(tx, actor.agent, instructions).await?;
         let instructions = super::calls::spoken(instructions, on_call);
         let instructions = crate::identity::profiles::introduced(tx, turn, instructions).await?;
         let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
@@ -121,6 +123,7 @@ impl Work {
             broadcast,
             knowledge_base,
             in_task,
+            team_manager,
         }))
     }
 

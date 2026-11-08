@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT task OR archived OR EXISTS(SELECT 1 FROM teams t WHERE t.room_id=r.id) AS \"fixed!\" FROM rooms r WHERE r.id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fixed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "25cddc25861695ed880f8be24ab9caca7ca0be0f3c3c97cf5006e84ddd458f49"
+}

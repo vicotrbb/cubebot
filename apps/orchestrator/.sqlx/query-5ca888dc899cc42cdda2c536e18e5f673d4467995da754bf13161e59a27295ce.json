@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.id, r.name, r.archived,\n            (SELECT t.id FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS team,\n            COALESCE((SELECT max(m.sequence) FROM room_messages m WHERE m.room_id=r.id),0) AS \"last_sequence!\",\n            COALESCE((SELECT c.sequence FROM read_cursors c WHERE c.account_id=$2 AND c.scope_kind='room' AND c.scope_id=r.id),0) AS \"read_sequence!\"\n        FROM rooms r\n        WHERE r.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "archived",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "team",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_sequence!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "read_sequence!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5ca888dc899cc42cdda2c536e18e5f673d4467995da754bf13161e59a27295ce"
+}

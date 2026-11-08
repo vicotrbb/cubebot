@@ -7,9 +7,9 @@ import {
   type Target,
 } from './access'
 
-export type Recipient = { kind: 'user' | 'team'; id: string }
+export type Recipient = { kind: 'user' | 'group'; id: string }
 
-/** Moves one person's or team's grants on a target to a level, revoking what it no longer needs. */
+/** Moves one person's or group's grants on a target to a level, revoking what it no longer needs. */
 export async function applyLevel(
   recipient: Recipient,
   own: Grant[],

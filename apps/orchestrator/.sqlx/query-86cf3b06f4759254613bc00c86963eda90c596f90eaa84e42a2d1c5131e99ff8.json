@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id AS \"id!: TeamId\", name AS \"name!\", revision AS \"revision!\", active AS \"active!\",\n                COALESCE((SELECT array_agg(m.account_id) FROM human_team_members m WHERE m.team_id=human_teams.id),'{}') AS \"members!\"\n            FROM human_teams\n            WHERE $1::uuid IS NULL OR id > $1\n            ORDER BY id\n            LIMIT 100\n            ",
+  "query": "\n            SELECT id AS \"id!: GroupId\", name AS \"name!\", revision AS \"revision!\", active AS \"active!\",\n                COALESCE((SELECT array_agg(m.account_id) FROM human_team_members m WHERE m.team_id=human_teams.id),'{}') AS \"members!\"\n            FROM human_teams\n            WHERE $1::uuid IS NULL OR id > $1\n            ORDER BY id\n            LIMIT 100\n            ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id!: TeamId",
+        "name": "id!: GroupId",
         "type_info": "Uuid"
       },
       {
@@ -42,5 +42,5 @@
       null
     ]
   },
-  "hash": "dbf8679b008e482feead6c449c06b375cb937368ae600e66ed800481ec3d7bea"
+  "hash": "86cf3b06f4759254613bc00c86963eda90c596f90eaa84e42a2d1c5131e99ff8"
 }

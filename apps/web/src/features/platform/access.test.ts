@@ -8,7 +8,7 @@ const grant = (scope_kind: string, capability: string): Grant => ({
   id: `${scope_kind}${capability}`,
   revision: 1,
   account_id: 'p',
-  team_id: null,
+  group_id: null,
   scope_kind,
   scope_id: 'a',
   capability,

@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, UsersRound } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { Session } from '../../api/types'
@@ -99,6 +99,17 @@ function TaskHead({ task }: { task: Task }) {
         <TaskMark task={task} />
         <h1>{titleOf(task)}</h1>
         <span className="task__state">{sentenceOf(task)}</span>
+        {task.team && (
+          <Link
+            to="/teams/$teamId"
+            params={{ teamId: task.team.id }}
+            className="task__team"
+            title="The team this task was given to; its manager leads it"
+          >
+            <UsersRound aria-hidden="true" />
+            {task.team.name}
+          </Link>
+        )}
         {running && (
           <button
             type="button"

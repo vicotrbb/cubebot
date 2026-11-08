@@ -1,4 +1,4 @@
-// Chat, attachments, the file viewer, rooms, webhooks, usage, the Situation room and the badge, on
+// Chat, attachments, the file viewer, rooms, webhooks, usage, Home and the badge, on
 // desktop and on a phone. A database-only stack with CUBEBOT_STORAGE_DIRECTORY and Vite on :3100:
 //   python3 tests/system/platform_browser_seed.py $S/seed.json
 //   PLAYWRIGHT=/path/to/playwright/index.mjs S=<dir> node tests/system/platform_browser.mjs
@@ -69,8 +69,8 @@ const longList = (view) =>
     : '.board-section--agents .board-section__scroll'
 
 /** Nothing but a list scrolls, every section ends on screen, and a long list scrolls by itself. */
-async function situationFits(p, viewport, tag) {
-  await p.goto(`${B}/situation`)
+async function homeFits(p, viewport, tag) {
+  await p.goto(`${B}/`)
   await p.locator('.brief h2').waitFor({ timeout: 10000 })
   await p.waitForTimeout(600)
   const phone = viewport.width < 900
@@ -81,7 +81,7 @@ async function situationFits(p, viewport, tag) {
     await p.setViewportSize(size)
     await p.waitForTimeout(250)
     const label = `${tag} ${size.width}x${size.height}`
-    const views = phone ? ['Now', 'Agents', 'Spend'] : [null]
+    const views = phone ? ['Agents', 'Work', 'Spend'] : [null]
     for (const view of views) {
       if (view) {
         const tab = p.getByRole('button', { name: view, exact: true })
@@ -94,7 +94,7 @@ async function situationFits(p, viewport, tag) {
       }
       const name = `${label} ${view ?? 'all'}`
       const facts = await p.evaluate(() => {
-        const body = globalThis.document.querySelector('.situation__body')
+        const body = globalThis.document.querySelector('.home__body')
         const bottom = body.getBoundingClientRect().bottom + 1
         const shown = (el) => el.getBoundingClientRect().height > 0
         const sections = [
@@ -334,25 +334,25 @@ async function run(viewport, scheme, tag) {
   await p.waitForTimeout(300)
   await shot('usage')
   await overflow('usage')
-  await situationFits(p, viewport, tag)
-  await p.goto(`${B}/situation`)
+  await homeFits(p, viewport, tag)
+  await p.goto(`${B}/`)
   await p.locator('.brief h2').waitFor({ timeout: 10000 })
   await p.waitForTimeout(800)
-  await shot('situation')
-  await overflow('situation')
+  await shot('home')
+  await overflow('home')
   if (viewport.width > 500) {
     await p.locator('.bars svg rect[fill=transparent]').nth(24).hover()
     await p.waitForTimeout(120)
-    await p.locator('.situation__body').screenshot({
-      path: `${S}/shots/${process.env.BROWSER || 'chromium'}-${tag}-situation-full.png`,
+    await p.locator('.home__body').screenshot({
+      path: `${S}/shots/${process.env.BROWSER || 'chromium'}-${tag}-home-full.png`,
     })
   } else {
     await p.evaluate(() => {
-      const b = globalThis.document.querySelector('.situation__body')
+      const b = globalThis.document.querySelector('.home__body')
       b.scrollTop = b.scrollHeight
     })
     await p.waitForTimeout(200)
-    await shot('situation-end')
+    await shot('home-end')
   }
   await p.goto(`${B}/`)
   await p.waitForTimeout(600)

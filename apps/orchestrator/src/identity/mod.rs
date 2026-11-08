@@ -6,7 +6,7 @@ pub use avatars::{AVATAR_BYTES, AvatarRevision};
 pub mod oidc;
 pub use accounts::AccountSummary;
 mod commands;
-pub mod teams;
+pub mod groups;
 pub use commands::{IdentityEvent, Receipt};
 mod invitations;
 pub use invitations::{Invitation, InvitationSummary};

@@ -505,7 +505,7 @@ pub(super) async fn with_peers(
         FROM room_members m
         JOIN room_members n ON n.room_id=m.room_id AND n.agent_id<>m.agent_id
         JOIN agents a ON a.id=n.agent_id AND a.desired_state<>'retired'
-        JOIN rooms r ON r.id=m.room_id AND NOT r.task
+        JOIN rooms r ON r.id=m.room_id AND NOT r.task AND NOT r.archived
         WHERE m.agent_id=$1
         GROUP BY a.name
         ORDER BY a.name

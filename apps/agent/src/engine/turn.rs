@@ -329,6 +329,9 @@ async fn start<P: Provider>(
         turn.broadcast,
         turn.in_task,
     ));
+    if turn.team_manager {
+        tools.extend(crate::collaboration::team_definitions());
+    }
     // A task lane never drives the shared desktop; the main lane owns it.
     tools.extend(
         registry

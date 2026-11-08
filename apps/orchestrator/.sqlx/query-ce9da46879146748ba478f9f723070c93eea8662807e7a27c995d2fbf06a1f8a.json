@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, revision, account_id, team_id, scope_kind, scope_id,\n                replace(capability,'.','_') AS \"capability!\"\n            FROM access_grants\n            WHERE revoked_at IS NULL\n            ",
+  "query": "\n            SELECT id, revision, account_id, team_id AS group_id, scope_kind, scope_id,\n                replace(capability,'.','_') AS \"capability!\"\n            FROM access_grants\n            WHERE revoked_at IS NULL\n            ",
   "describe": {
     "columns": [
       {
@@ -20,7 +20,7 @@
       },
       {
         "ordinal": 3,
-        "name": "team_id",
+        "name": "group_id",
         "type_info": "Uuid"
       },
       {
@@ -52,5 +52,5 @@
       null
     ]
   },
-  "hash": "eeefcec467a25d0e2bf4e2f5be400101f7c8d5606c1a1d346070c323f430736d"
+  "hash": "ce9da46879146748ba478f9f723070c93eea8662807e7a27c995d2fbf06a1f8a"
 }

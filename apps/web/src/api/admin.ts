@@ -65,30 +65,30 @@ export const admin = {
         body: { request_id: id(), id: invitation, expected_revision },
       }),
     ),
-  teams: () => ok(api.GET('/api/identity/teams')),
-  createTeam: (name: string) =>
-    ok(api.POST('/api/identity/teams', { body: { request_id: id(), name } })),
+  groups: () => ok(api.GET('/api/identity/groups')),
+  createGroup: (name: string) =>
+    ok(api.POST('/api/identity/groups', { body: { request_id: id(), name } })),
   membership: (
-    team: string,
+    group: string,
     account_id: string,
     expected_revision: number,
     present: boolean,
   ) =>
     ok(
-      api.POST('/api/identity/teams/membership', {
+      api.POST('/api/identity/groups/membership', {
         body: {
           request_id: id(),
-          team,
+          group,
           account_id,
           expected_revision,
           present,
         },
       }),
     ),
-  deleteTeam: (team: string, expected_revision: number) =>
+  deleteGroup: (group: string, expected_revision: number) =>
     ok(
-      api.POST('/api/identity/teams/delete', {
-        body: { request_id: id(), team, expected_revision },
+      api.POST('/api/identity/groups/delete', {
+        body: { request_id: id(), group, expected_revision },
       }),
     ),
   grants: () => ok(api.GET('/api/identity/access/grants')),

@@ -20,27 +20,27 @@ import { applyLevel, type Recipient } from '../platform/applyLevel'
 import { useAdminAction } from '../platform/useAdminAction'
 import '../platform/platform.css'
 
-type Team = Awaited<ReturnType<typeof admin.teams>>[number]
+type Group = Awaited<ReturnType<typeof admin.groups>>[number]
 type Account = Awaited<ReturnType<typeof admin.accounts>>[number]
 type Holder = {
   recipient: Recipient
   name: string
   own: Grant[]
   level: Level
-  team?: Team
+  group?: Group
 }
 
 const active = <T extends { active: boolean }>(list: T[] | undefined) =>
   list?.filter((item) => item.active) ?? []
 
-/** Who can reach this agent and how far, set in the same levels as Platform › Teams and access. */
+/** Who can reach this agent and how far, set in the same levels as Platform › Groups and access. */
 export function Access({ agent }: { agent: AgentSummary }) {
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: admin.accounts })
-  const teams = useQuery({ queryKey: ['teams'], queryFn: admin.teams })
+  const groups = useQuery({ queryKey: ['groups'], queryFn: admin.groups })
   const grants = useQuery({ queryKey: ['grants'], queryFn: admin.grants })
   const action = useAdminAction(['grants', 'access-events'])
   const target: Target = { kind: 'agent', id: agent.id }
-  if (accounts.isPending || teams.isPending || grants.isPending)
+  if (accounts.isPending || groups.isPending || grants.isPending)
     return (
       <section className="panel__section">
         <Skeleton lines={5} />
@@ -48,14 +48,14 @@ export function Access({ agent }: { agent: AgentSummary }) {
     )
   const people = active(accounts.data)
   const holders = holdersOf(
-    active(teams.data),
+    active(groups.data),
     people.filter((person) => !person.administrator),
     grantsOn(grants.data ?? [], target),
     target,
   )
   const reaching = holders.filter(
     (holder) =>
-      holder.level !== 'none' || throughTeams(holder, holders) !== null,
+      holder.level !== 'none' || throughGroups(holder, holders) !== null,
   )
   const admins = people.filter((person) => person.administrator)
   const set = (holder: Holder, level: Level) => {
@@ -85,7 +85,7 @@ export function Access({ agent }: { agent: AgentSummary }) {
           <HolderRow
             key={`${holder.recipient.kind}:${holder.recipient.id}`}
             holder={holder}
-            through={throughTeams(holder, holders)}
+            through={throughGroups(holder, holders)}
             busy={action.busy}
             onLevel={(level) => set(holder, level)}
           />
@@ -119,7 +119,7 @@ export function Access({ agent }: { agent: AgentSummary }) {
       />
       <p className="small faint">
         Every agent and room at once:{' '}
-        <Link to="/platform/teams">Teams and access</Link>. Each change is in
+        <Link to="/platform/groups">Groups and access</Link>. Each change is in
         the <Link to="/platform/audit">audit log</Link>.
       </p>
     </section>
@@ -127,7 +127,7 @@ export function Access({ agent }: { agent: AgentSummary }) {
 }
 
 function holdersOf(
-  teams: Team[],
+  groups: Group[],
   people: Account[],
   onAgent: Grant[],
   target: Target,
@@ -139,13 +139,13 @@ function holdersOf(
     level: levelOf(own, target),
   })
   return [
-    ...teams.map((team) => ({
+    ...groups.map((group) => ({
       ...holder(
-        { kind: 'team', id: team.id },
-        team.name,
-        onAgent.filter((grant) => grant.team_id === team.id),
+        { kind: 'group', id: group.id },
+        group.name,
+        onAgent.filter((grant) => grant.group_id === group.id),
       ),
-      team,
+      group,
     })),
     ...people.map((person) =>
       holder(
@@ -157,13 +157,13 @@ function holdersOf(
   ]
 }
 
-/** The best level a person also holds through a team they are in. */
-function throughTeams(holder: Holder, holders: Holder[]) {
+/** The best level a person also holds through a group they are in. */
+function throughGroups(holder: Holder, holders: Holder[]) {
   if (holder.recipient.kind !== 'user') return null
   const id = holder.recipient.id
   const order: Level[] = ['manage', 'chat', 'view', 'custom']
   const via = holders
-    .filter((other) => other.team?.members.includes(id))
+    .filter((other) => other.group?.members.includes(id))
     .filter((other) => other.level !== 'none')
     .sort((a, b) => order.indexOf(a.level) - order.indexOf(b.level))[0]
   return via ? `${LABEL[via.level]} through ${via.name}` : null
@@ -180,18 +180,18 @@ function HolderRow({
   busy: boolean
   onLevel: (level: Level) => void
 }) {
-  const team = holder.team
+  const group = holder.group
   const detail =
     holder.level === 'custom'
       ? holder.own
           .map((grant) => grant.capability.replaceAll('_', ' '))
           .join(', ')
-      : team
-        ? `Team of ${team.members.length}`
+      : group
+        ? `Group of ${group.members.length}`
         : through
   return (
     <li className="access__row">
-      {team ? (
+      {group ? (
         <span className="access__mark">
           <Users aria-hidden="true" />
         </span>
@@ -258,16 +258,16 @@ function AddHolder({
       <div className="agent-access__add-row">
         <select
           className="input"
-          aria-label="Person or team"
+          aria-label="Person or group"
           value={chosen}
           onChange={(event) => setChosen(event.target.value)}
         >
           <option value="" disabled>
-            Person or team…
+            Person or group…
           </option>
           {holders.map((holder) => (
             <option key={key(holder)} value={key(holder)}>
-              {holder.team ? `${holder.name} (team)` : holder.name}
+              {holder.group ? `${holder.name} (group)` : holder.name}
             </option>
           ))}
         </select>

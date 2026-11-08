@@ -120,7 +120,7 @@ impl Identity {
 }
 
 /// The active people who can reach an agent: administrators and anyone granted on it or its
-/// conversation, directly or through a team.
+/// conversation, directly or through a group.
 #[tracing::instrument(skip_all, fields(agent = %agent))]
 pub async fn people(pool: &sqlx::PgPool, agent: Uuid) -> Result<Vec<Person>, sqlx::Error> {
     let rows = sqlx::query!(

@@ -779,7 +779,7 @@ impl Storage {
             .filter_map(|row| {
                 let (kind, name) = match (row.login, row.team, row.agent) {
                     (Some(login), _, _) => (ShareKind::User, login),
-                    (_, Some(team), _) => (ShareKind::Team, team),
+                    (_, Some(team), _) => (ShareKind::Group, team),
                     (_, _, agent) => (ShareKind::Agent, agent?),
                 };
                 let permission = match row.permission.as_str() {
@@ -864,7 +864,7 @@ async fn recipient(
             .fetch_all(&mut **tx)
             .await?
         }
-        ShareKind::Team => {
+        ShareKind::Group => {
             sqlx::query_scalar!(
                 "
                 SELECT id
@@ -891,12 +891,12 @@ async fn recipient(
     };
     let [id] = ids[..] else {
         return Err(StorageError::Invalid(
-            "a share names one active person by login (not their name), one team or one agent",
+            "a share names one active person by login (not their name), one group or one agent",
         ));
     };
     Ok(match share.kind {
         ShareKind::User => (Some(id), None, None),
-        ShareKind::Team => (None, Some(id), None),
+        ShareKind::Group => (None, Some(id), None),
         ShareKind::Agent => (None, None, Some(id)),
     })
 }

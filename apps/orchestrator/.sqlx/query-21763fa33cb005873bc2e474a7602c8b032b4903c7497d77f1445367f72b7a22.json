@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.id\n            FROM rooms r\n            JOIN human_accounts a ON a.id=$1 AND a.active\n            WHERE NOT r.task AND (NOT r.archived OR a.role='administrator') AND (a.role='administrator'\n                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read'))\n            ORDER BY r.name, r.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "21763fa33cb005873bc2e474a7602c8b032b4903c7497d77f1445367f72b7a22"
+}

@@ -4,8 +4,8 @@ The [manifesto](../../MANIFESTO.md) defines the project intent. These documents 
 
 | Document | Covers |
 | --- | --- |
-| [Identity, access and credentials](identity.md) | installation and tenancy, ownership, human accounts, roles, grants and teams, provider and integration connections, the vault and credential encryption |
-| [Agents and runtime](agents.md) | the native agent engine, its one conversation, lanes, idle lifecycle and definitions, the orchestrator's role and availability, models and providers, tools and MCP, routines and triggers, budgets |
+| [Identity, access and credentials](identity.md) | installation and tenancy, ownership, human accounts, roles, grants and groups of people, provider and integration connections, the vault and credential encryption |
+| [Agents and runtime](agents.md) | the native agent engine, its one conversation, lanes, idle lifecycle and definitions, the orchestrator's role and availability, models and providers, tools and MCP, routines and triggers, budgets, agent teams |
 | [Sandbox and isolation](sandbox.md) | the sandbox boundary, the in-house VMM and the declared `kvm` and `container` runtimes, the desktop, software installation, network access and the browser |
 | [Rooms and delegation](rooms.md) | room routing and mentions, agent messaging and delegation, steering, cancellation, failure containment and completion |
 | [Memory, skills and files](memory.md) | agent memory, retrieval, compaction, dreaming and human correction, skills, durable and shared-file storage, retention |

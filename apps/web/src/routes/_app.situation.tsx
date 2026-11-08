@@ -1,6 +1,8 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Situation } from '../features/situation/Situation'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 
+/** The Situation room became Home; old links and installed shortcuts land there. */
 export const Route = createFileRoute('/_app/situation')({
-  component: Situation,
+  beforeLoad: () => {
+    throw redirect({ to: '/', replace: true })
+  },
 })

@@ -51,6 +51,11 @@ impl Work {
         let Some(human) = human else {
             return Ok(Err("this turn is no longer running".into()));
         };
+        if call.tool.starts_with("team_") {
+            let answer = crate::work::teams::tool(&mut tx, actor, human, call).await?;
+            tx.commit().await?;
+            return Ok(answer);
+        }
         if call.tool.starts_with("task_") {
             let answer = crate::work::tasks::tool(&mut tx, actor, turn, call).await?;
             tx.commit().await?;

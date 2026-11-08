@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                a.role = 'administrator' AS \"administrator!\",\n                g.id AS \"id?: GrantId\",\n                g.team_id AS \"group_id?: GroupId\"\n            FROM human_accounts a\n            LEFT JOIN effective_human_grants g\n                ON g.actor_id = a.id\n                AND g.scope_kind = $2\n                AND g.scope_id = $3\n                AND g.capability = $4\n            WHERE a.id = $1 AND a.active\n            ORDER BY g.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "administrator!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "id?: GrantId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "group_id?: GroupId",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "052ae43a32ea9e620d6812d884c6fdfb10cb9af803493cd0c1d3e5566ede58f2"
+}

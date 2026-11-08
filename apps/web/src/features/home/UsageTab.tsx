@@ -5,8 +5,8 @@ import { can, type AgentSummary, type Session } from '../../api/types'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
 import { DayBars } from './DayBars'
 import { count, money } from './format'
-import { BudgetMeter, modelCost } from './Situation'
-import './situation.css'
+import { BudgetMeter, modelCost } from './Home'
+import './home.css'
 
 export function UsageTab({
   agent,
