@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.room_id\n            FROM teams t\n            JOIN human_accounts a ON a.id=$1 AND a.active\n            WHERE t.deleted_at IS NULL AND (a.role='administrator'\n                OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=t.room_id AND g.capability='conversation.read'))\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "room_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bebfca0b3a08694958f67e1e8550a6352f500aa4e44b0c8b6ffb12b88ee02a59"
+}

@@ -208,6 +208,8 @@ In a task turn `delegate` and `send_message` are replaced by `task_message`, whi
 
 A task belongs to the person who asked and is visible to administrators. The orchestrator may only choose agents that person can send to, and the work carries their authority. Writing in a finished or stopped task starts it again with fresh rounds. Stopping cancels its open turns; it does not undo what they did.
 
+Amended 2026-11-08: the orchestrator also sees the teams whose manager the task's owner may use ([Agent teams](agents.md#agent-teams)) and may give the task to a team instead of to agents. The team's manager alone receives the brief and items, is told it leads the task for its team, and splits the work with `task_message`; the task records the team. The orchestrator is told not to also assign that team's members itself.
+
 **Rationale.** People should not have to know which agent to ask or how to split work. Building on rooms gives tasks the durable messages, deliveries, retries, cancellation and streaming that rooms already have, instead of a parallel system.
 
 **Open details.** Human acceptance of a task's result ([Agent completion with optional human acceptance](#agent-completion-with-optional-human-acceptance)) is not offered; the orchestrator's judgment closes a task. Sharing a task with other people; a forked workspace or desktop, which agents share with their other work.

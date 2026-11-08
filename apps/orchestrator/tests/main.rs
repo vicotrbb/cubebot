@@ -51,6 +51,7 @@ mod runtime_token_review;
 mod skills;
 mod subscriptions;
 mod tasks;
+mod teams;
 mod vault;
 mod wallpaper;
 

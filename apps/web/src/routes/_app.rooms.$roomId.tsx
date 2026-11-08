@@ -5,7 +5,7 @@ import {
   Outlet,
   useChildMatches,
 } from '@tanstack/react-router'
-import { ChevronLeft, Hash, Users, X } from 'lucide-react'
+import { ChevronLeft, Hash, Users, UsersRound, X } from 'lucide-react'
 import { type RoomSummary } from '../api/types'
 import { keys, useAgents, useRooms, useSession } from '../app/queries'
 import { Empty, Skeleton } from '../components/primitives'
@@ -52,14 +52,7 @@ function RoomScreen() {
             <ChevronLeft />
           </Link>
         )}
-        <Hash className="row__icon" />
-        <div className="agent-head__title">
-          <h1>{room.name}</h1>
-          <p className="faint small">
-            {room.members.map((member) => member.name).join(', ') ||
-              'No members'}
-          </p>
-        </div>
+        <RoomTitle room={room} />
         <div className="agent-head__actions">
           <FavoriteButton kind="room" id={room.id} />
           {!panelOpen && (
@@ -67,11 +60,11 @@ function RoomScreen() {
               to="/rooms/$roomId/members"
               params={{ roomId: room.id }}
               className="btn btn--sm"
-              aria-label={room.manage ? 'Edit members' : 'Members'}
+              aria-label={editable(room) ? 'Edit members' : 'Members'}
             >
               <Users />
               <span className="agent-head__word">
-                {room.manage ? 'Edit members' : 'Members'}
+                {editable(room) ? 'Edit members' : 'Members'}
               </span>
             </Link>
           )}
@@ -135,7 +128,16 @@ function RoomMembersPanel({
   return (
     <section className="panel__section">
       <h2>Members</h2>
-      {room.manage ? (
+      {room.team && (
+        <p className="small faint">
+          Agents follow the{' '}
+          <Link to="/teams/$teamId" params={{ teamId: room.team }}>
+            team
+          </Link>
+          : its members and the managers of the teams under it.
+        </p>
+      )}
+      {editable(room) ? (
         <Members
           key={room.members.map((m) => m.id).join()}
           room={room}
@@ -154,5 +156,39 @@ function RoomMembersPanel({
         </ul>
       )}
     </section>
+  )
+}
+
+/** A team room's agents follow its team, and an archived room keeps its last members. */
+function editable(room: RoomSummary) {
+  return room.manage && !room.team && !room.archived
+}
+
+function RoomTitle({ room }: { room: RoomSummary }) {
+  return (
+    <>
+      {room.team || room.archived ? (
+        <UsersRound className="row__icon" />
+      ) : (
+        <Hash className="row__icon" />
+      )}
+      <div className="agent-head__title">
+        <h1>{room.name}</h1>
+        <p className="faint small">
+          {room.team && (
+            <>
+              <Link to="/teams/$teamId" params={{ teamId: room.team }}>
+                Team room
+              </Link>
+              {' · '}
+            </>
+          )}
+          {room.archived
+            ? 'Archived: its team was deleted'
+            : room.members.map((member) => member.name).join(', ') ||
+              'No members'}
+        </p>
+      </div>
+    </>
   )
 }

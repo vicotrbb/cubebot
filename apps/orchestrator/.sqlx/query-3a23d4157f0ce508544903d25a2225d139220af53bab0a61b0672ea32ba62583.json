@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT l.sequence, (to_jsonb(l.at) #>> '{}') AS \"at!\", l.kind,\n                l.actor_id AS actor, h.login AS \"actor_name?\", l.agent_id AS agent,\n                a.name AS \"agent_name?\", l.resource_id AS resource,\n                COALESCE(ra.name, rh.login, rt.name, rr.name, rv.name, rm.name) AS resource_name,\n                l.detail\n            FROM audit_log l\n            LEFT JOIN human_accounts h ON h.id = l.actor_id\n            LEFT JOIN agents a ON a.id = l.agent_id\n            LEFT JOIN agents ra ON ra.id = l.resource_id\n            LEFT JOIN human_accounts rh ON rh.id = l.resource_id\n            LEFT JOIN human_teams rt ON rt.id = l.resource_id\n            LEFT JOIN rooms rr ON rr.id = l.resource_id\n            LEFT JOIN vault_items rv ON rv.id = l.resource_id\n            LEFT JOIN mcp_servers rm ON rm.id = l.resource_id\n            WHERE l.sequence < COALESCE($1, 9223372036854775807)\n                AND (cardinality($2::text[]) = 0 OR split_part(l.kind, '.', 1) = ANY($2))\n            ORDER BY l.sequence DESC\n            LIMIT $3\n            ",
+  "query": "\n            SELECT l.sequence, (to_jsonb(l.at) #>> '{}') AS \"at!\", l.kind,\n                l.actor_id AS actor, h.login AS \"actor_name?\", l.agent_id AS agent,\n                a.name AS \"agent_name?\", l.resource_id AS resource,\n                COALESCE(ra.name, rh.login, rt.name, rg.name, rr.name, rv.name, rm.name) AS resource_name,\n                l.detail\n            FROM audit_log l\n            LEFT JOIN human_accounts h ON h.id = l.actor_id\n            LEFT JOIN agents a ON a.id = l.agent_id\n            LEFT JOIN agents ra ON ra.id = l.resource_id\n            LEFT JOIN human_accounts rh ON rh.id = l.resource_id\n            LEFT JOIN human_teams rt ON rt.id = l.resource_id\n            LEFT JOIN teams rg ON rg.id = l.resource_id\n            LEFT JOIN rooms rr ON rr.id = l.resource_id\n            LEFT JOIN vault_items rv ON rv.id = l.resource_id\n            LEFT JOIN mcp_servers rm ON rm.id = l.resource_id\n            WHERE l.sequence < COALESCE($1, 9223372036854775807)\n                AND (cardinality($2::text[]) = 0 OR split_part(l.kind, '.', 1) = ANY($2))\n            ORDER BY l.sequence DESC\n            LIMIT $3\n            ",
   "describe": {
     "columns": [
       {
@@ -74,5 +74,5 @@
       false
     ]
   },
-  "hash": "049cca5de4cd10623cca7d96316c1539de77906e9863a412b0bb2c1c53cf0dbc"
+  "hash": "3a23d4157f0ce508544903d25a2225d139220af53bab0a61b0672ea32ba62583"
 }

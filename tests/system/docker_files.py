@@ -276,15 +276,15 @@ def agents_scoped(world):
 def team_share(world):
     people, writer, report = world["people"], world["writer"], world["report"]["id"]
     admin, teammate = people["admin"], people["teammate"]
-    team = admin.api("/api/identity/teams", command(name=f"Reviewers {MARKER}"), 201)
+    team = admin.api("/api/identity/groups", command(name=f"Reviewers {MARKER}"), 201)
     change = command(
-        team=team["id"], account_id=teammate.id, expected_revision=1, present=True
+        group=team["id"], account_id=teammate.id, expected_revision=1, present=True
     )
-    admin.api("/api/identity/teams/membership", change)
+    admin.api("/api/identity/groups/membership", change)
     row = chat(
         admin.api,
         writer,
-        f"Call files_share with file {report}, kind team, name Reviewers {MARKER} and "
+        f"Call files_share with file {report}, kind group, name Reviewers {MARKER} and "
         "permission read.",
     )
     assert calls(row, "files_share")[0]["outcome"]["code"] == 0, row["terminal"]
@@ -297,7 +297,7 @@ def team_share(world):
         "expected_revision": 2,
         "present": False,
     }
-    admin.api("/api/identity/teams/membership", change)
+    admin.api("/api/identity/groups/membership", change)
     assert teammate.api("/api/files/shared") == []
     status, _, _ = Raw(world, teammate).content(report)
     assert status == 403, status

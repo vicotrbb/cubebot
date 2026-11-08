@@ -9,23 +9,23 @@ def check_access(base, admin, member):
     status, account = request(base, "/api/identity/me", member)
     assert status == 200
     command = {"request_id": str(uuid.uuid4()), "name": "Engineering"}
-    status, team = request(base, "/api/identity/teams", admin, command)
+    status, team = request(base, "/api/identity/groups", admin, command)
     assert status == 201
     check_team_listing(base, admin, command, team)
     change = {
         "request_id": str(uuid.uuid4()),
-        "team": team["id"],
+        "group": team["id"],
         "account_id": account["id"],
         "expected_revision": 1,
         "present": True,
     }
-    assert request(base, "/api/identity/teams/membership", admin, change)[0] == 200
+    assert request(base, "/api/identity/groups/membership", admin, change)[0] == 200
     scope = {"kind": "agent", "id": str(uuid.uuid4())}
     grant = {
         "request_id": str(uuid.uuid4()),
         "scope": scope,
         "capability": "memory_read",
-        "recipient": {"kind": "team", "id": team["id"]},
+        "recipient": {"kind": "group", "id": team["id"]},
     }
     assert request(base, "/api/identity/access/grants", admin, grant)[0] == 201
     check_effective_access(base, member, scope, team["id"])
@@ -34,7 +34,7 @@ def check_access(base, admin, member):
         "expected_revision": 2,
         "present": False,
     }
-    assert request(base, "/api/identity/teams/membership", admin, change)[0] == 200
+    assert request(base, "/api/identity/groups/membership", admin, change)[0] == 200
     status, explanation = request(
         base,
         "/api/identity/access/explain",
@@ -53,7 +53,7 @@ def check_effective_access(base, member, scope, team):
     query = {"scope": scope, "capability": "memory_read"}
     status, explanation = request(base, "/api/identity/access/explain", member, query)
     assert status == 200 and explanation["allowed"] is True
-    assert explanation["grants"][0]["team_id"] == team
+    assert explanation["grants"][0]["group_id"] == team
     query["capability"] = "memory_edit"
     assert (
         request(base, "/api/identity/access/explain", member, query)[1]["allowed"]
@@ -68,7 +68,7 @@ def check_effective_access(base, member, scope, team):
     assert (
         request(
             base,
-            "/api/identity/teams",
+            "/api/identity/groups",
             member,
             {"request_id": str(uuid.uuid4()), "name": "Escalated"},
         )[0]
@@ -81,15 +81,15 @@ def check_access_restart(base, admin, checkpoint):
     path = f"/api/identity/commands/team.create/{command['request_id']}"
     status, receipt = request(base, path, admin)
     assert status == 200 and receipt == team
-    assert request(base, "/api/identity/teams", admin, command)[1] == team
+    assert request(base, "/api/identity/groups", admin, command)[1] == team
     changed = command | {"name": "Changed"}
-    assert request(base, "/api/identity/teams", admin, changed)[0] == 409
+    assert request(base, "/api/identity/groups", admin, changed)[0] == 409
 
 
 def check_team_listing(base, admin, command, team):
-    assert request(base, "/api/identity/teams", admin, command)[1] == team
-    status, listed = request(base, "/api/identity/teams", admin)
+    assert request(base, "/api/identity/groups", admin, command)[1] == team
+    status, listed = request(base, "/api/identity/groups", admin)
     assert status == 200 and any(item["id"] == team["id"] for item in listed)
     assert (
-        request(base, f"/api/identity/teams?after={listed[-1]['id']}", admin)[1] == []
+        request(base, f"/api/identity/groups?after={listed[-1]['id']}", admin)[1] == []
     )

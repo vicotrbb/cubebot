@@ -11,7 +11,8 @@ import {
   Megaphone,
   Moon,
   Plus,
-  Radar,
+  House,
+  UsersRound,
   Search,
   Settings,
   Star,
@@ -33,6 +34,7 @@ import {
   useSavePreferences,
   useSession,
   useTasks,
+  useTeams,
   useUnreadActivity,
 } from '../../app/queries'
 import { applyTheme, type Theme } from '../../app/theme'
@@ -59,7 +61,7 @@ export const ACTIVITY: Record<string, string> = {
 export const PLATFORM = [
   ['/platform/general', 'General'],
   ['/platform/people', 'People'],
-  ['/platform/teams', 'Teams and access'],
+  ['/platform/groups', 'Groups and access'],
   ['/platform/sign-in', 'Sign-in'],
   ['/platform/providers', 'AI providers'],
   ['/platform/speech', 'Speech'],
@@ -111,6 +113,16 @@ export function Sidebar({
       </header>
       <nav className="sidebar__scroll" aria-label="Workspace">
         <Link
+          to="/"
+          className="row row--page"
+          activeOptions={{ exact: true, includeSearch: false }}
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <House className="row__icon" />
+          <span className="row__label">Home</span>
+        </Link>
+        <hr className="sidebar__rule" />
+        <Link
           to="/activity"
           className="row row--page"
           activeProps={{ 'aria-current': 'page' }}
@@ -121,16 +133,9 @@ export function Sidebar({
         </Link>
         <TasksRow />
         {administrator && <BroadcastRow />}
-        <Link
-          to="/situation"
-          className="row row--page"
-          activeProps={{ 'aria-current': 'page' }}
-        >
-          <Radar className="row__icon" />
-          <span className="row__label">Situation room</span>
-        </Link>
         <Favorites />
         <AgentsSection administrator={administrator} />
+        <TeamsSection administrator={administrator} />
         <RoomsSection administrator={administrator} />
         <Section id="library" title="Library">
           <Link
@@ -265,7 +270,7 @@ function Favorites() {
     .filter((agent): agent is AgentSummary => Boolean(agent))
   const favoriteRooms = favorites
     .filter((item) => item.kind === 'room')
-    .map((item) => rooms.data?.find((room) => room.id === item.id))
+    .map((item) => live(rooms.data).find((room) => room.id === item.id))
     .filter((room): room is RoomSummary => Boolean(room))
   if (favoriteAgents.length === 0 && favoriteRooms.length === 0) return null
   return (
@@ -304,6 +309,36 @@ function AgentsSection({ administrator }: { administrator: boolean }) {
   )
 }
 
+function TeamsSection({ administrator }: { administrator: boolean }) {
+  const teams = useTeams()
+  if (teams.data?.length === 0 && !administrator) return null
+  return (
+    <Section
+      id="teams"
+      title="Teams"
+      label="Teams"
+      add={administrator ? { to: '/teams/new', label: 'Add team' } : undefined}
+    >
+      {teams.data?.length === 0 && (
+        <p className="row row--note faint">No teams yet.</p>
+      )}
+      {teams.data?.map((team) => (
+        <Link
+          key={team.id}
+          to="/teams/$teamId"
+          params={{ teamId: team.id }}
+          className="row row--room"
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <UsersRound className="row__icon" />
+          <span className="row__label">{team.name}</span>
+          <span className="faint small tabular">{team.members.length}</span>
+        </Link>
+      ))}
+    </Section>
+  )
+}
+
 function RoomsSection({ administrator }: { administrator: boolean }) {
   const rooms = useRooms()
   return (
@@ -313,10 +348,10 @@ function RoomsSection({ administrator }: { administrator: boolean }) {
       label="Rooms"
       add={administrator ? { to: '/rooms/new', label: 'Add room' } : undefined}
     >
-      {rooms.data?.length === 0 && (
+      {live(rooms.data).length === 0 && rooms.isSuccess && (
         <p className="row row--note faint">No rooms yet.</p>
       )}
-      {rooms.data?.map((room) => (
+      {live(rooms.data).map((room) => (
         <RoomRow key={room.id} room={room} />
       ))}
     </Section>
@@ -333,7 +368,9 @@ function Section({
   id: string
   title: string
   label?: string
-  add?: { to: '/agents/new' | '/rooms/new'; label: string } | undefined
+  add?:
+    | { to: '/agents/new' | '/rooms/new' | '/teams/new'; label: string }
+    | undefined
   children: ReactNode
 }) {
   const preferences = usePreferences()
@@ -420,11 +457,21 @@ function RoomRow({ room }: { room: RoomSummary }) {
       className={fresh ? 'row row--room unread' : 'row row--room'}
       activeProps={{ 'aria-current': 'page' }}
     >
-      <Hash className="row__icon" />
+      {room.team ? (
+        <UsersRound className="row__icon" aria-label="Team room" />
+      ) : (
+        <Hash className="row__icon" />
+      )}
       <span className="row__label">{room.name}</span>
+      {room.team && <span className="row__hint">team</span>}
       <span className="faint small tabular">{room.members.length}</span>
     </Link>
   )
+}
+
+/** Archived team rooms are listed for administrators only to open their history. */
+function live(rooms: RoomSummary[] = []) {
+  return rooms.filter((room) => !room.archived)
 }
 
 function RowSkeleton() {
@@ -445,6 +492,9 @@ function NewMenu() {
     >
       <Link to="/agents/new" className="menu__item">
         New agent
+      </Link>
+      <Link to="/teams/new" className="menu__item">
+        New team
       </Link>
       <Link to="/rooms/new" className="menu__item">
         New room

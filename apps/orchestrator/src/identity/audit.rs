@@ -123,7 +123,7 @@ impl Identity {
             SELECT l.sequence, (to_jsonb(l.at) #>> '{}') AS "at!", l.kind,
                 l.actor_id AS actor, h.login AS "actor_name?", l.agent_id AS agent,
                 a.name AS "agent_name?", l.resource_id AS resource,
-                COALESCE(ra.name, rh.login, rt.name, rr.name, rv.name, rm.name) AS resource_name,
+                COALESCE(ra.name, rh.login, rt.name, rg.name, rr.name, rv.name, rm.name) AS resource_name,
                 l.detail
             FROM audit_log l
             LEFT JOIN human_accounts h ON h.id = l.actor_id
@@ -131,6 +131,7 @@ impl Identity {
             LEFT JOIN agents ra ON ra.id = l.resource_id
             LEFT JOIN human_accounts rh ON rh.id = l.resource_id
             LEFT JOIN human_teams rt ON rt.id = l.resource_id
+            LEFT JOIN teams rg ON rg.id = l.resource_id
             LEFT JOIN rooms rr ON rr.id = l.resource_id
             LEFT JOIN vault_items rv ON rv.id = l.resource_id
             LEFT JOIN mcp_servers rm ON rm.id = l.resource_id

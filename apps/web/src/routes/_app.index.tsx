@@ -1,47 +1,48 @@
-import { createFileRoute, Link, Navigate } from '@tanstack/react-router'
-import {
-  notRetired,
-  useAgents,
-  usePreferences,
-  useSession,
-} from '../app/queries'
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { notRetired, useAgents, useSession } from '../app/queries'
 import { Cube } from '../components/Cube'
-import { Sidebar } from '../features/shell/Sidebar'
-import { useIsPhone } from '../features/shell/viewport'
+import { Home } from '../features/home/Home'
 
-export const Route = createFileRoute('/_app/')({ component: Home })
+type View = 'list' | 'org'
 
-function Home() {
-  const phone = useIsPhone()
+export const Route = createFileRoute('/_app/')({
+  validateSearch: (search: Record<string, unknown>): { view?: 'org' } =>
+    search.view === 'org' ? { view: 'org' } : {},
+  component: Landing,
+})
+
+function Landing() {
   const agents = useAgents()
-  const preferences = usePreferences()
   const session = useSession()
-  if (phone) return <Sidebar page />
+  const { view } = Route.useSearch()
+  const navigate = Route.useNavigate()
   if (agents.isPending) return null
-  const favorite = preferences.data?.favorites.find(
-    (item) =>
-      item.kind === 'agent' &&
-      notRetired(agents.data).some((a) => a.id === item.id),
-  )
-  const first = favorite?.id ?? notRetired(agents.data)[0]?.id
-  if (first)
+  if (agents.isSuccess && notRetired(agents.data).length === 0)
     return (
-      <Navigate to="/agents/$agentId" params={{ agentId: first }} replace />
+      <div className="empty shell-empty">
+        <Cube size={96} follow mood="idle" />
+        <h2>No agents yet.</h2>
+        {session.data?.administrator ? (
+          <>
+            <p>Create one to start a conversation.</p>
+            <Link to="/agents/new" className="btn btn--primary">
+              Create agent
+            </Link>
+          </>
+        ) : (
+          <p>You see agents here once an administrator gives you access.</p>
+        )}
+      </div>
     )
   return (
-    <div className="empty shell-empty">
-      <Cube size={96} follow mood="idle" />
-      <h2>No agents yet.</h2>
-      {session.data?.administrator ? (
-        <>
-          <p>Create one to start a conversation.</p>
-          <Link to="/agents/new" className="btn btn--primary">
-            Create agent
-          </Link>
-        </>
-      ) : (
-        <p>You see agents here once an administrator gives you access.</p>
-      )}
-    </div>
+    <Home
+      view={view ?? 'list'}
+      onView={(next: View) =>
+        navigate({
+          search: next === 'org' ? { view: 'org' } : {},
+          replace: true,
+        })
+      }
+    />
   )
 }

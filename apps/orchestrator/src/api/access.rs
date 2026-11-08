@@ -11,15 +11,15 @@ use uuid::Uuid;
 use crate::identity::{
     Identity, IdentityError, Receipt,
     access::{AccessExplanation, Capability, GrantRequest, GrantSummary, RevokeGrant, Scope},
-    teams::{CreateTeam, DeleteTeam, MembershipChange, TeamId},
+    groups::{CreateGroup, DeleteGroup, GroupId, MembershipChange},
 };
 
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(
-    teams,
-    create_team,
+    groups,
+    create_group,
     membership,
-    delete_team,
+    delete_group,
     grants,
     grant,
     revoke,
@@ -32,9 +32,9 @@ pub(super) struct Doc;
 
 pub fn router(identity: Identity) -> Router {
     Router::new()
-        .route("/api/identity/teams", get(teams).post(create_team))
-        .route("/api/identity/teams/membership", post(membership))
-        .route("/api/identity/teams/delete", post(delete_team))
+        .route("/api/identity/groups", get(groups).post(create_group))
+        .route("/api/identity/groups/membership", post(membership))
+        .route("/api/identity/groups/delete", post(delete_group))
         .route("/api/identity/access/grants", get(grants).post(grant))
         .route("/api/identity/access/revoke", post(revoke))
         .route("/api/identity/access/explain", post(explain))
@@ -46,34 +46,34 @@ pub fn router(identity: Identity) -> Router {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct TeamCursor {
-    after: Option<TeamId>,
+struct GroupCursor {
+    after: Option<GroupId>,
 }
 
-#[utoipa::path(get, path = "/api/identity/teams", params(("after" = Option<Uuid>, Query)), responses((status = 200, body = Vec<crate::identity::teams::Team>)))]
-async fn teams(
+#[utoipa::path(get, path = "/api/identity/groups", params(("after" = Option<Uuid>, Query)), responses((status = 200, body = Vec<crate::identity::groups::Group>)))]
+async fn groups(
     State(identity): State<Identity>,
     headers: HeaderMap,
-    Query(cursor): Query<TeamCursor>,
+    Query(cursor): Query<GroupCursor>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
-    Ok(no_store(identity.teams(&actor, cursor.after).await?))
+    Ok(no_store(identity.groups(&actor, cursor.after).await?))
 }
 
-#[utoipa::path(post, path = "/api/identity/teams", request_body = CreateTeam, responses((status = 201, body = Receipt)))]
-async fn create_team(
+#[utoipa::path(post, path = "/api/identity/groups", request_body = CreateGroup, responses((status = 201, body = Receipt)))]
+async fn create_group(
     State(identity): State<Identity>,
     headers: HeaderMap,
-    Json(input): Json<CreateTeam>,
+    Json(input): Json<CreateGroup>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
     Ok((
         StatusCode::CREATED,
-        no_store(identity.create_team(&actor, &input).await?),
+        no_store(identity.create_group(&actor, &input).await?),
     ))
 }
 
-#[utoipa::path(post, path = "/api/identity/teams/membership", request_body = MembershipChange, responses((status = 200, body = Receipt)))]
+#[utoipa::path(post, path = "/api/identity/groups/membership", request_body = MembershipChange, responses((status = 200, body = Receipt)))]
 async fn membership(
     State(identity): State<Identity>,
     headers: HeaderMap,
@@ -83,14 +83,14 @@ async fn membership(
     Ok(no_store(identity.change_membership(&actor, &input).await?))
 }
 
-#[utoipa::path(post, path = "/api/identity/teams/delete", request_body = DeleteTeam, responses((status = 200, body = Receipt)))]
-async fn delete_team(
+#[utoipa::path(post, path = "/api/identity/groups/delete", request_body = DeleteGroup, responses((status = 200, body = Receipt)))]
+async fn delete_group(
     State(identity): State<Identity>,
     headers: HeaderMap,
-    Json(input): Json<DeleteTeam>,
+    Json(input): Json<DeleteGroup>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
-    Ok(no_store(identity.delete_team(&actor, &input).await?))
+    Ok(no_store(identity.delete_group(&actor, &input).await?))
 }
 
 /// Every grant in force; administrators only.

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE teams SET revision=1 WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e5951e0ef2876c4d7c5cba0cb95ca40ce365dc0dfe57bff8f3c015a4b9a9b363"
+}

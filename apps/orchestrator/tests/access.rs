@@ -3,7 +3,7 @@ use crate::support;
 use cubebot_orchestrator::identity::{
     Identity, IdentityError,
     access::{Capability, GrantRequest, Recipient, Scope},
-    teams::{CreateTeam, MembershipChange, TeamId},
+    groups::{CreateGroup, GroupId, MembershipChange},
 };
 use uuid::Uuid;
 
@@ -40,14 +40,14 @@ async fn people(
 }
 
 fn membership(
-    team: TeamId,
+    group: GroupId,
     account_id: Uuid,
     expected_revision: i64,
     present: bool,
 ) -> MembershipChange {
     MembershipChange {
         request_id: Uuid::new_v4(),
-        team,
+        group,
         account_id,
         expected_revision,
         present,
@@ -61,16 +61,16 @@ async fn team_access_is_scoped_explainable_and_revoked_without_relogin() {
     let identity = Identity::new(pool.clone());
     let (admin, member) = people(&identity).await;
     let team = identity
-        .create_team(
+        .create_group(
             &admin,
-            &CreateTeam {
+            &CreateGroup {
                 request_id: Uuid::new_v4(),
                 name: "Engineering".into(),
             },
         )
         .await
         .unwrap();
-    let team_id = TeamId(team.id);
+    let team_id = GroupId(team.id);
     identity
         .change_membership(&admin, &membership(team_id, member.id, team.revision, true))
         .await
@@ -81,7 +81,7 @@ async fn team_access_is_scoped_explainable_and_revoked_without_relogin() {
             &admin,
             &GrantRequest {
                 request_id: Uuid::new_v4(),
-                recipient: Recipient::Team { id: team_id },
+                recipient: Recipient::Group { id: team_id },
                 scope,
                 capability: Capability::MemoryRead,
             },
@@ -93,7 +93,7 @@ async fn team_access_is_scoped_explainable_and_revoked_without_relogin() {
         .await
         .unwrap();
     assert!(explanation.allowed);
-    assert_eq!(explanation.grants[0].team_id, Some(team_id));
+    assert_eq!(explanation.grants[0].group_id, Some(team_id));
     assert!(
         !identity
             .explain_access(&member, scope, Capability::MemoryEdit)
@@ -150,13 +150,13 @@ async fn team_commands_replay_after_reconnect_and_reject_changed_input_or_stale_
     let pool = support::database().await;
     let identity = Identity::new(pool.clone());
     let (admin, member) = people(&identity).await;
-    let command = CreateTeam {
+    let command = CreateGroup {
         request_id: Uuid::new_v4(),
         name: "Research".into(),
     };
     let (first, second) = tokio::join!(
-        identity.create_team(&admin, &command),
-        identity.create_team(&admin, &command)
+        identity.create_group(&admin, &command),
+        identity.create_group(&admin, &command)
     );
     let team = first.unwrap();
     assert_eq!(team, second.unwrap());
@@ -165,16 +165,16 @@ async fn team_commands_replay_after_reconnect_and_reject_changed_input_or_stale_
             .await
             .unwrap(),
     );
-    assert_eq!(team, identity.create_team(&admin, &command).await.unwrap());
-    let changed = CreateTeam {
+    assert_eq!(team, identity.create_group(&admin, &command).await.unwrap());
+    let changed = CreateGroup {
         name: "Changed".into(),
         ..command
     };
     assert!(matches!(
-        identity.create_team(&admin, &changed).await,
+        identity.create_group(&admin, &changed).await,
         Err(IdentityError::Conflict)
     ));
-    let add = membership(TeamId(team.id), member.id, 1, true);
+    let add = membership(GroupId(team.id), member.id, 1, true);
     let added = identity.change_membership(&admin, &add).await.unwrap();
     assert_eq!(
         added,
@@ -182,7 +182,7 @@ async fn team_commands_replay_after_reconnect_and_reject_changed_input_or_stale_
     );
     assert!(matches!(
         identity
-            .change_membership(&admin, &membership(TeamId(team.id), member.id, 1, false))
+            .change_membership(&admin, &membership(GroupId(team.id), member.id, 1, false))
             .await,
         Err(IdentityError::Conflict)
     ));
@@ -247,15 +247,15 @@ async fn manager_permissions_never_confer_administration_or_content_and_suspensi
 async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
     use cubebot_orchestrator::identity::{
         access::{GrantId, RevokeGrant},
-        teams::DeleteTeam,
+        groups::DeleteGroup,
     };
     let pool = support::database().await;
     let identity = Identity::new(pool.clone());
     let (admin, member) = people(&identity).await;
     let team = identity
-        .create_team(
+        .create_group(
             &admin,
-            &CreateTeam {
+            &CreateGroup {
                 request_id: Uuid::new_v4(),
                 name: "Shared".into(),
             },
@@ -263,7 +263,7 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
         .await
         .unwrap();
     identity
-        .change_membership(&admin, &membership(TeamId(team.id), member.id, 1, true))
+        .change_membership(&admin, &membership(GroupId(team.id), member.id, 1, true))
         .await
         .unwrap();
     let scope = Scope::Agent { id: Uuid::new_v4() };
@@ -284,8 +284,8 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
             &admin,
             &GrantRequest {
                 request_id: Uuid::new_v4(),
-                recipient: Recipient::Team {
-                    id: TeamId(team.id),
+                recipient: Recipient::Group {
+                    id: GroupId(team.id),
                 },
                 scope,
                 capability: Capability::BrowserView,
@@ -326,11 +326,11 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
     assert!(explanation.allowed);
     assert_eq!(explanation.grants.len(), 1);
     identity
-        .delete_team(
+        .delete_group(
             &admin,
-            &DeleteTeam {
+            &DeleteGroup {
                 request_id: Uuid::new_v4(),
-                team: TeamId(team.id),
+                group: GroupId(team.id),
                 expected_revision: 2,
             },
         )
@@ -360,11 +360,11 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
 async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
     let identity = Identity::new(support::database().await);
     let (admin, _) = people(&identity).await;
-    let command = CreateTeam {
+    let command = CreateGroup {
         request_id: Uuid::new_v4(),
         name: "Private".into(),
     };
-    identity.create_team(&admin, &command).await.unwrap();
+    identity.create_group(&admin, &command).await.unwrap();
     identity
         .create_account(
             &admin,
@@ -385,7 +385,7 @@ async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
         .await
         .unwrap();
     assert!(matches!(
-        identity.create_team(&admin, &command).await,
+        identity.create_group(&admin, &command).await,
         Err(IdentityError::Forbidden)
     ));
     assert!(matches!(
@@ -418,12 +418,12 @@ async fn team_listing_pages_and_denies_non_administrators() {
     .execute(&pool)
     .await
     .unwrap();
-    let page = identity.teams(&admin, None).await.unwrap();
+    let page = identity.groups(&admin, None).await.unwrap();
     assert_eq!(page.len(), 100);
-    let tail = identity.teams(&admin, Some(page[99].id)).await.unwrap();
+    let tail = identity.groups(&admin, Some(page[99].id)).await.unwrap();
     assert_eq!(tail.len(), 5);
     assert!(matches!(
-        identity.teams(&member, None).await,
+        identity.groups(&member, None).await,
         Err(IdentityError::Forbidden)
     ));
 }
@@ -472,12 +472,12 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
     let actor_id = admin.id;
     let mut first = tokio::spawn(async move {
         other
-            .create_team(
+            .create_group(
                 &cubebot_orchestrator::identity::Actor {
                     id: actor_id,
                     administrator: true,
                 },
-                &CreateTeam {
+                &CreateGroup {
                     request_id: Uuid::new_v4(),
                     name: "First".into(),
                 },
@@ -487,9 +487,9 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
     let other = identity.clone();
     let later = tokio::spawn(async move {
         other
-            .create_team(
+            .create_group(
                 &second,
-                &CreateTeam {
+                &CreateGroup {
                     request_id: Uuid::new_v4(),
                     name: "Second".into(),
                 },
@@ -527,16 +527,16 @@ async fn membership_cleanup_accepts_suspended_accounts() {
     let identity = Identity::new(support::database().await);
     let (admin, member) = people(&identity).await;
     let team = identity
-        .create_team(
+        .create_group(
             &admin,
-            &CreateTeam {
+            &CreateGroup {
                 request_id: Uuid::new_v4(),
                 name: "Cleanup".into(),
             },
         )
         .await
         .unwrap();
-    let id = TeamId(team.id);
+    let id = GroupId(team.id);
     identity
         .change_membership(&admin, &membership(id, member.id, 1, true))
         .await

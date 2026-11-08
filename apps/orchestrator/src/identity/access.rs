@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{Actor, Identity, IdentityError, Receipt, commands::Command, teams::TeamId};
+use super::{Actor, Identity, IdentityError, Receipt, commands::Command, groups::GroupId};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -73,7 +73,7 @@ impl Capability {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Recipient {
     User { id: Uuid },
-    Team { id: TeamId },
+    Group { id: GroupId },
 }
 
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
@@ -106,7 +106,7 @@ pub struct GrantSummary {
     pub id: Uuid,
     pub revision: i64,
     pub account_id: Option<Uuid>,
-    pub team_id: Option<Uuid>,
+    pub group_id: Option<Uuid>,
     /// `agent`, `room` or `conversation`; an agent's conversation has the agent's id.
     pub scope_kind: String,
     pub scope_id: Uuid,
@@ -117,7 +117,7 @@ pub struct GrantSummary {
 #[derive(Debug, Serialize, utoipa::ToSchema)]
 pub struct AccessSource {
     pub id: GrantId,
-    pub team_id: Option<TeamId>,
+    pub group_id: Option<GroupId>,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -134,7 +134,7 @@ impl Identity {
         Ok(sqlx::query_as!(
             GrantSummary,
             r#"
-            SELECT id, revision, account_id, team_id, scope_kind, scope_id,
+            SELECT id, revision, account_id, team_id AS group_id, scope_kind, scope_id,
                 replace(capability,'.','_') AS "capability!"
             FROM access_grants
             WHERE revoked_at IS NULL
@@ -226,7 +226,7 @@ impl Identity {
             SELECT
                 a.role = 'administrator' AS "administrator!",
                 g.id AS "id?: GrantId",
-                g.team_id AS "team_id?: TeamId"
+                g.team_id AS "group_id?: GroupId"
             FROM human_accounts a
             LEFT JOIN effective_human_grants g
                 ON g.actor_id = a.id
@@ -252,7 +252,7 @@ impl Identity {
             .filter_map(|row| {
                 row.id.map(|id| AccessSource {
                     id,
-                    team_id: row.team_id,
+                    group_id: row.group_id,
                 })
             })
             .collect::<Vec<_>>();
@@ -279,7 +279,7 @@ impl Identity {
 async fn validate_recipient(
     transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     recipient: Recipient,
-) -> Result<(Option<Uuid>, Option<TeamId>), IdentityError> {
+) -> Result<(Option<Uuid>, Option<GroupId>), IdentityError> {
     let (exists, account, team) = match recipient {
         Recipient::User { id } => {
             let exists = sqlx::query_scalar!(
@@ -295,7 +295,7 @@ async fn validate_recipient(
             .await?;
             (exists.is_some(), Some(id), None)
         }
-        Recipient::Team { id } => {
+        Recipient::Group { id } => {
             let exists = sqlx::query_scalar!(
                 r#"
                 SELECT id AS "id!"

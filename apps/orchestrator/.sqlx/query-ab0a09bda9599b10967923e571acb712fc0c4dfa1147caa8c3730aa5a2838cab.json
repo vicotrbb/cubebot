@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1\n            FROM rooms r\n            JOIN human_accounts a ON a.id=$1 AND a.active\n            WHERE r.id=$2\n                AND (a.role='administrator' OR NOT r.archived)\n                AND (a.role='administrator'\n                    OR EXISTS(SELECT 1 FROM tasks t WHERE t.room_id=r.id AND t.created_by=a.id AND $3<>'room.manage')\n                    OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability=$3))\n        ) AS \"allowed!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "allowed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ab0a09bda9599b10967923e571acb712fc0c4dfa1147caa8c3730aa5a2838cab"
+}

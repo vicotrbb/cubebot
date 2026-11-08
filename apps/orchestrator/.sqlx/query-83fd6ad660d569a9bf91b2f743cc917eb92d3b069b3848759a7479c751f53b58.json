@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, name, description, instructions, parent_id, reports_to, room_id, revision\n        FROM teams\n        WHERE deleted_at IS NULL\n        ORDER BY lower(name), id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "parent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "reports_to",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "room_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "83fd6ad660d569a9bf91b2f743cc917eb92d3b069b3848759a7479c751f53b58"
+}

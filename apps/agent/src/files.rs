@@ -66,11 +66,11 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
         ),
         tool(
             "files_share",
-            "Share one of your files or folders, and everything under a folder, with a person by login, a team or an agent by name, so it appears under Files, Shared with me in their console. Sharing again changes the permission.",
+            "Share one of your files or folders, and everything under a folder, with a person by login, a group of people or an agent by name, so it appears under Files, Shared with me in their console. Sharing again changes the permission.",
             json!({
                 "file":text("The id from files_list or files_put."),
-                "kind":{"type":"string","enum":["user","team","agent"]},
-                "name":text("The person's login, never their display name: your instructions list logins. For a team or agent, its exact name."),
+                "kind":{"type":"string","enum":["user","group","agent"]},
+                "name":text("The person's login, never their display name: your instructions list logins. For a group or agent, its exact name."),
                 "permission":{"type":"string","enum":["read","write"],"description":"write also allows uploading into, renaming, moving and deleting."},
             }),
         ),

@@ -143,6 +143,7 @@ mod tests {
             mcp_servers: Vec::new(),
             broadcast: false,
             knowledge_base: false,
+            team_manager: false,
             connections: Vec::new(),
             in_task: false,
         }

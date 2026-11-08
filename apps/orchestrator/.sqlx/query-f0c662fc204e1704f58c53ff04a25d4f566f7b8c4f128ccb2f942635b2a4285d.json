@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"count!\"\n        FROM agents g\n        WHERE g.id=ANY($1) AND (g.desired_state<>'retired'\n            OR EXISTS(SELECT 1 FROM team_members m WHERE m.team_id=$2 AND m.agent_id=g.id))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f0c662fc204e1704f58c53ff04a25d4f566f7b8c4f128ccb2f942635b2a4285d"
+}

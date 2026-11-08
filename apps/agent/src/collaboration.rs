@@ -1,6 +1,8 @@
 mod routines;
 mod tasks;
+mod teams;
 mod vault;
+pub use teams::definitions as team_definitions;
 pub use vault::redacted;
 
 use crate::{control::MemoryClient, tools::Running};
@@ -117,7 +119,8 @@ impl Collaboration {
                 return self
                     .vault(name, input)
                     .or_else(|| self.routine(name, id, input))
-                    .or_else(|| self.task(name, id, input));
+                    .or_else(|| self.task(name, id, input))
+                    .or_else(|| self.team(name, id, input));
             }
         };
         let parsed = Send::deserialize(input)

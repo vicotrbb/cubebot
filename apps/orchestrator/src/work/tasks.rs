@@ -40,6 +40,8 @@ pub struct Task {
     pub updated_at: String,
     pub agents: Vec<rooms::Member>,
     pub items: Vec<TaskItem>,
+    /// The team the orchestrator gave the task to, whose manager leads it.
+    pub team: Option<rooms::Member>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -115,6 +117,8 @@ struct Row {
     owner: String,
     created_at: String,
     updated_at: String,
+    team_id: Option<Uuid>,
+    team_name: Option<String>,
 }
 
 impl Work {
@@ -319,9 +323,11 @@ async fn read(
             EXISTS(SELECT 1 FROM room_messages m WHERE m.room_id=t.room_id AND m.routing='routing') AS "reading!",
             o.login AS owner,
             to_jsonb(t.created_at) #>> '{}' AS "created_at!",
-            to_jsonb(t.updated_at) #>> '{}' AS "updated_at!"
+            to_jsonb(t.updated_at) #>> '{}' AS "updated_at!",
+            t.team_id, g.name AS "team_name?"
         FROM tasks t
         JOIN human_accounts o ON o.id=t.created_by
+        LEFT JOIN teams g ON g.id=t.team_id
         JOIN human_accounts a ON a.id=$1 AND a.active
         WHERE (a.role='administrator' OR t.created_by=a.id) AND ($2::uuid IS NULL OR t.id=$2)
         ORDER BY t.updated_at DESC
@@ -357,6 +363,10 @@ async fn read(
             owner: row.owner,
             created_at: row.created_at,
             updated_at: row.updated_at,
+            team: row
+                .team_id
+                .zip(row.team_name)
+                .map(|(id, name)| rooms::Member { id, name }),
         });
     }
     Ok(tasks)

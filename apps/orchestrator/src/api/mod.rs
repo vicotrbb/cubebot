@@ -20,6 +20,7 @@ mod routines;
 mod runtime;
 mod skills;
 mod tasks;
+mod teams;
 mod usage;
 mod vault;
 mod work;
@@ -78,6 +79,7 @@ pub fn openapi() -> String {
     doc.merge(desktop::Doc::openapi());
     doc.merge(calls::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
+    doc.merge(teams::Doc::openapi());
     doc.merge(memories::Doc::openapi());
     doc.merge(skills::Doc::openapi());
     doc.merge(vault::Doc::openapi());
@@ -120,6 +122,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(desktop::router(pool.clone(), identity.clone()))
         .merge(work::router(pool.clone(), identity.clone()))
         .merge(rooms::router(pool.clone(), identity.clone()))
+        .merge(teams::router(pool.clone(), identity.clone()))
         .merge(routines::router(pool.clone(), identity.clone()))
         .merge(tasks::router(pool.clone(), identity.clone()))
         .merge(usage::router(pool.clone(), identity.clone()))

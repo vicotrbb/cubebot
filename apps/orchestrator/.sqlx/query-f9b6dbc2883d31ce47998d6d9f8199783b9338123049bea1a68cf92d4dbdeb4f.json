@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE teams SET reports_to=$2, revision=revision+1 WHERE parent_id=$1 AND deleted_at IS NULL AND reports_to<>ALL($3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9b6dbc2883d31ce47998d6d9f8199783b9338123049bea1a68cf92d4dbdeb4f"
+}

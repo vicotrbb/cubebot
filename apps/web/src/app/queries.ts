@@ -31,6 +31,7 @@ export const keys = {
   avatars: ['avatars'] as const,
   broadcasts: ['broadcasts'] as const,
   tasks: ['tasks'] as const,
+  teams: ['teams'] as const,
 }
 
 export function useSession() {
@@ -101,6 +102,13 @@ export function useRooms() {
   return useQuery({
     queryKey: keys.rooms,
     queryFn: async (): Promise<RoomSummary[]> => ok(api.GET('/api/rooms')),
+  })
+}
+
+export function useTeams() {
+  return useQuery({
+    queryKey: keys.teams,
+    queryFn: () => ok(api.GET('/api/teams')),
   })
 }
 

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO room_members (room_id, agent_id)\n        SELECT room_id AS \"room_id!\", agent_id AS \"agent_id!\" FROM team_room_agents\n        ON CONFLICT DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "39e1e970312ec069160fab3e175106b0d0210bcfc4ba3d1c160acf9ba05a14a6"
+}

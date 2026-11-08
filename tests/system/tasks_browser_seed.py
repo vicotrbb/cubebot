@@ -305,8 +305,8 @@ sql(
 
 teams = call(
     "POST",
-    "/api/identity/teams",
-    {"request_id": str(uuid.uuid4()), "name": "Test Team"},
+    "/api/identity/groups",
+    {"request_id": str(uuid.uuid4()), "name": "Test Group"},
 )
 call(
     "POST",

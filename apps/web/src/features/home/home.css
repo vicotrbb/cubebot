@@ -1,36 +1,39 @@
-.situation .page__head {
+.home .page__head {
   flex-wrap: nowrap;
 }
-.situation .page__head h1 {
+.home__menu {
+  margin-left: auto;
+}
+.home .page__head h1 {
   flex-basis: auto;
 }
-.situation__live {
+.home__live {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-.situation__body {
+.home__body {
   container-type: inline-size;
   display: flex;
   flex-direction: column;
   padding-block: 12px;
 }
-.situation__grid {
+.home__grid {
   flex: 1;
   width: 100%;
   min-height: 520px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     'brief brief'
     'main rail'
     'platform platform';
-  gap: 14px 40px;
-  max-width: 1240px;
+  gap: 14px 36px;
+  max-width: 1440px;
   margin-inline: auto;
 }
-.situation__views {
+.home__panes {
   display: none;
 }
 .brief {
@@ -52,19 +55,20 @@
 .brief p {
   color: var(--ink-soft);
 }
-.situation__main {
+
+.board-section--agents {
   grid-area: main;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 16px;
-  min-width: 0;
-  min-height: 0;
 }
-.situation__rail {
+.board-section__head .tabs svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 5px;
+}
+.home__rail {
   grid-area: rail;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   min-width: 0;
   min-height: 0;
 }
@@ -75,16 +79,18 @@
   min-width: 0;
   min-height: 0;
 }
+.board-section--spend {
+  flex: none;
+}
 .board-section--now {
   flex: 0 1 auto;
-  max-height: 40%;
+  max-height: 34%;
 }
 .board-section--latest {
   flex: 1 1 0;
 }
 .board-section__scroll,
-.situation .feed,
-.spend__models {
+.home .feed {
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -92,31 +98,35 @@
   outline-offset: -2px;
 }
 .board-section__scroll,
-.situation .feed {
+.home .feed {
   flex: 1;
   min-height: 0;
 }
-.situation .feed {
+.home .feed {
   align-content: start;
 }
-.spend {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: 24px;
+.spend__models > summary {
+  cursor: pointer;
+  font-size: var(--t-xs);
+  font-weight: var(--w-label);
+  color: var(--ink-soft);
 }
-.spend__chart {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
+.spend__models[open] > summary {
+  margin-bottom: 4px;
 }
-.spend__models {
-  height: 0;
-  min-height: 100%;
+.spend__models .table {
+  font-size: var(--t-xs);
 }
-.situation .bars svg {
-  height: clamp(56px, 11vh, 120px);
+.home .bars svg {
+  height: 44px;
 }
-.situation thead th {
+.home .figures strong {
+  font-size: var(--t-lg);
+}
+.home .figures > div {
+  padding-left: 10px;
+}
+.home thead th {
   position: sticky;
   top: 0;
   z-index: 1;
@@ -430,73 +440,52 @@
 }
 
 @container (max-width: 860px) {
-  .situation__grid {
+  .home__grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       'brief'
-      'views'
+      'panes'
       'content'
       'platform';
     gap: 10px;
     min-height: 420px;
   }
-  .situation__views {
-    grid-area: views;
+  .home__panes {
+    grid-area: panes;
     display: flex;
     justify-self: start;
   }
-  .situation__views button {
-    appearance: none;
-    border: 0;
-    background: none;
-    color: var(--ink-soft);
-    font: inherit;
-    font-size: var(--t-sm);
-    font-weight: var(--w-label);
+  .home__panes button {
     min-height: 36px;
     padding: 4px 14px;
-    border-radius: var(--r-sm);
-    cursor: pointer;
   }
-  .situation__views button[aria-pressed='true'] {
+  .home__panes button[aria-pressed='true'] {
     background: var(--orange-wash);
-    color: var(--ink);
     font-weight: var(--w-strong);
   }
-  .board-section--agents .board-section__head {
-    display: none;
-  }
-  .situation__main,
-  .situation__rail {
+  .board-section--agents,
+  .home__rail {
     grid-area: content;
   }
-  .situation__main {
-    grid-template-rows: minmax(0, 1fr);
-  }
-  .situation__grid[data-view='now'] .situation__main,
-  .situation__grid:not([data-view='now']) .situation__rail,
-  .situation__grid[data-view='agents'] .board-section--spend,
-  .situation__grid[data-view='spend'] .board-section--agents {
+  .home__grid[data-pane='agents'] .home__rail,
+  .home__grid:not([data-pane='agents']) .board-section--agents,
+  .home__grid[data-pane='now'] .board-section--spend,
+  .home__grid[data-pane='spend'] .board-section--now,
+  .home__grid[data-pane='spend'] .board-section--latest {
     display: none;
   }
   .board-section--spend {
     overflow: auto;
     overscroll-behavior: contain;
   }
-  .spend {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-  .spend__models {
-    height: auto;
-    min-height: 0;
-    overflow: visible;
+  .home .bars svg {
+    height: 72px;
   }
   .platform-strip {
     display: none;
   }
-  .situation__grid[data-view='spend'] .platform-strip {
+  .home__grid[data-pane='spend'] .platform-strip {
     display: block;
   }
 }

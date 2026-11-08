@@ -893,7 +893,7 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** Files and folders shared with you or your teams. */
+    /** Files and folders shared with you or your groups. */
     get: operations['shared_files']
     put?: never
     post?: never
@@ -1119,6 +1119,54 @@ export interface paths {
     get: operations['receipt']
     put?: never
     post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/groups': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['groups']
+    put?: never
+    post: operations['create_group']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/groups/delete': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['delete_group']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/groups/membership': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['membership']
     delete?: never
     options?: never
     head?: never
@@ -1408,54 +1456,6 @@ export interface paths {
     get?: never
     put?: never
     post: operations['suspend']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/api/identity/teams': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get: operations['teams']
-    put?: never
-    post: operations['create_team']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/api/identity/teams/delete': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    post: operations['delete_team']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/api/identity/teams/membership': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    post: operations['membership']
     delete?: never
     options?: never
     head?: never
@@ -2243,6 +2243,42 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/teams': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Administrators see every team; others the teams whose room they can read. */
+    get: operations['list_teams']
+    put?: never
+    /** Administrators only; also creates the team's room. `request_id` makes a retry return the same team. */
+    post: operations['create_team']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/teams/{team}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Replaces the team's text, place and roster; administrators only. */
+    put: operations['update_team']
+    post?: never
+    /** Deletes a team with no team under it and archives its room; administrators only. */
+    delete: operations['delete_team']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/vault': {
     parameters: {
       query?: never
@@ -2292,8 +2328,8 @@ export interface components {
       grants: components['schemas']['AccessSource'][]
     }
     AccessSource: {
+      group_id?: null | components['schemas']['GroupId']
       id: components['schemas']['GrantId']
-      team_id?: null | components['schemas']['TeamId']
     }
     /** @enum {string} */
     Accessory:
@@ -2841,6 +2877,11 @@ export interface components {
       request_id: string
       voice?: null | components['schemas']['Voice']
     }
+    CreateGroup: {
+      name: string
+      /** Format: uuid */
+      request_id: string
+    }
     CreateMemory: {
       content: string
     }
@@ -2863,9 +2904,9 @@ export interface components {
       request_id: string
     }
     CreateTeam: {
-      name: string
       /** Format: uuid */
       request_id: string
+      team: components['schemas']['SaveTeam']
     }
     CreatedRoutine: {
       routine: components['schemas']['Routine']
@@ -2911,12 +2952,12 @@ export interface components {
       /** Format: int32 */
       task_lanes: number
     }
-    DeleteTeam: {
+    DeleteGroup: {
       /** Format: int64 */
       expected_revision: number
+      group: components['schemas']['GroupId']
       /** Format: uuid */
       request_id: string
-      team: components['schemas']['TeamId']
     }
     Delivery: {
       agent: string
@@ -3149,6 +3190,8 @@ export interface components {
       /** @description As in `Capability`, such as `conversation_send`. */
       capability: string
       /** Format: uuid */
+      group_id?: string | null
+      /** Format: uuid */
       id: string
       /** Format: int64 */
       revision: number
@@ -3156,9 +3199,18 @@ export interface components {
       scope_id: string
       /** @description `agent`, `room` or `conversation`; an agent's conversation has the agent's id. */
       scope_kind: string
-      /** Format: uuid */
-      team_id?: string | null
     }
+    Group: {
+      active: boolean
+      id: components['schemas']['GroupId']
+      /** @description The accounts in the group. */
+      members: string[]
+      name: string
+      /** Format: int64 */
+      revision: number
+    }
+    /** Format: uuid */
+    GroupId: string
     /**
      * @description One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:
      *     it never reached the routine.
@@ -3353,10 +3405,10 @@ export interface components {
       account_id: string
       /** Format: int64 */
       expected_revision: number
+      group: components['schemas']['GroupId']
       present: boolean
       /** Format: uuid */
       request_id: string
-      team: components['schemas']['TeamId']
     }
     Memory: {
       content: string
@@ -3723,9 +3775,9 @@ export interface components {
           kind: 'user'
         }
       | {
-          id: components['schemas']['TeamId']
+          id: components['schemas']['GroupId']
           /** @enum {string} */
-          kind: 'team'
+          kind: 'group'
         }
     /** @description Replaces one exact passage, which must occur once, so it needs no revision to be safe. */
     Replace: {
@@ -3805,6 +3857,8 @@ export interface components {
      */
     Risk: 'read' | 'write' | 'send'
     Room: {
+      /** @description A deleted team's room: history only, no new messages. */
+      archived: boolean
       /** Format: uuid */
       id: string
       /**
@@ -3821,6 +3875,11 @@ export interface components {
        * @description The viewer's read cursor, 0 until set.
        */
       read_sequence: number
+      /**
+       * Format: uuid
+       * @description The agent team whose room this is; its agents follow the team.
+       */
+      team?: string | null
     }
     /** @description The room's whole new member set; putting the same set again changes nothing. */
     RoomMembers: {
@@ -3925,6 +3984,14 @@ export interface components {
       /** @description HTTP only: an `https://` or `http://` endpoint. */
       url?: string | null
     }
+    SaveMember: {
+      /** Format: uuid */
+      agent: string
+      /** Format: uuid */
+      reports_to?: string | null
+      role: string
+      title: string
+    }
     /** @description What a routine does and when. At least one of `prompt` and `command`. */
     SaveRoutine: {
       /** @description At most one pending turn while one is queued or running. */
@@ -3954,6 +4021,16 @@ export interface components {
       stt_provider: components['schemas']['Provider']
       tts_provider: components['schemas']['Provider']
       voice: components['schemas']['Voice']
+    }
+    SaveTeam: {
+      description: string
+      instructions: string
+      members: components['schemas']['SaveMember'][]
+      name: string
+      /** Format: uuid */
+      parent?: string | null
+      /** Format: uuid */
+      reports_to?: string | null
     }
     SaveVaultItem: {
       access?: null | components['schemas']['ProviderAccess']
@@ -4044,7 +4121,7 @@ export interface components {
       open: boolean
     }
     /** @enum {string} */
-    ShareKind: 'user' | 'team' | 'agent'
+    ShareKind: 'user' | 'group' | 'agent'
     /** @enum {string} */
     SharePermission: 'read' | 'write'
     SignInStarted:
@@ -4312,6 +4389,7 @@ export interface components {
       room_id: string
       /** @description `working`, `needs_you`, `done` or `stopped`. */
       status: string
+      team?: null | components['schemas']['Member']
       /** @description The orchestrator's name for the task; `None` until its first answer. */
       title?: string | null
       updated_at: string
@@ -4350,16 +4428,41 @@ export interface components {
       revision: number
     }
     Team: {
-      active: boolean
-      id: components['schemas']['TeamId']
-      /** @description The accounts in the team. */
-      members: string[]
+      description: string
+      /** Format: uuid */
+      id: string
+      instructions: string
+      /** @description The manager first, then by name. */
+      members: components['schemas']['TeamMember'][]
       name: string
+      /**
+       * Format: uuid
+       * @description The team this one sits under.
+       */
+      parent?: string | null
+      /**
+       * Format: uuid
+       * @description The parent team's member this team's manager reports to.
+       */
+      reports_to?: string | null
       /** Format: int64 */
       revision: number
+      /** Format: uuid */
+      room: string
     }
-    /** Format: uuid */
-    TeamId: string
+    TeamMember: {
+      /** Format: uuid */
+      agent: string
+      name: string
+      /**
+       * Format: uuid
+       * @description The member this one reports to; null for the manager.
+       */
+      reports_to?: string | null
+      retired: boolean
+      role: string
+      title: string
+    }
     /** @enum {string} */
     Theme: 'system' | 'light' | 'dark'
     Token: {
@@ -4491,6 +4594,11 @@ export interface components {
       /** Format: int64 */
       expected_revision: number
       routine: components['schemas']['SaveRoutine']
+    }
+    UpdateTeam: {
+      /** Format: int64 */
+      expected_revision: number
+      team: components['schemas']['SaveTeam']
     }
     /** @enum {string} */
     VaultField: 'username' | 'secret'
@@ -6515,6 +6623,96 @@ export interface operations {
       }
     }
   }
+  groups: {
+    parameters: {
+      query?: {
+        after?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Group'][]
+        }
+      }
+    }
+  }
+  create_group: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateGroup']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  delete_group: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DeleteGroup']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  membership: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MembershipChange']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
   list_invitations: {
     parameters: {
       query?: {
@@ -7040,96 +7238,6 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['Subject']
-      }
-    }
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Receipt']
-        }
-      }
-    }
-  }
-  teams: {
-    parameters: {
-      query?: {
-        after?: string
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Team'][]
-        }
-      }
-    }
-  }
-  create_team: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CreateTeam']
-      }
-    }
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Receipt']
-        }
-      }
-    }
-  }
-  delete_team: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DeleteTeam']
-      }
-    }
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Receipt']
-        }
-      }
-    }
-  }
-  membership: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['MembershipChange']
       }
     }
     responses: {
@@ -8620,6 +8728,96 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Task']
+        }
+      }
+    }
+  }
+  list_teams: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team'][]
+        }
+      }
+    }
+  }
+  create_team: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateTeam']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team']
+        }
+      }
+    }
+  }
+  update_team: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        team: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateTeam']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team']
+        }
+      }
+    }
+  }
+  delete_team: {
+    parameters: {
+      query: {
+        expected_revision: number
+      }
+      header?: never
+      path: {
+        team: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Team']
         }
       }
     }

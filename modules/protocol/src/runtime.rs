@@ -161,6 +161,9 @@ pub struct Turn {
     /// Native connections the agent may use; their credentials are fetched when a tool needs one.
     #[serde(default)]
     pub connections: Vec<Connection>,
+    /// The agent manages a team, so it gets the team tools.
+    #[serde(default)]
+    pub team_manager: bool,
 }
 
 /// A native connection (docs/adr/identity.md#native-connectors) as one turn sees it: no secret.
@@ -392,7 +395,9 @@ pub struct FileShare {
 #[serde(rename_all = "snake_case")]
 pub enum ShareKind {
     User,
-    Team,
+    /// A group of people; agents built before 2026-11-08 say `team`.
+    #[serde(alias = "team")]
+    Group,
     Agent,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -626,6 +631,7 @@ mod tests {
             }],
             broadcast: false,
             knowledge_base: false,
+            team_manager: false,
             connections: Vec::new(),
             in_task: false,
         }));

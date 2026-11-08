@@ -83,6 +83,7 @@ export function Room({
       note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
       empty="Mention members with @name to ask each of them, or write without a mention and the coordinator picks one owner."
       mentionable={room.members}
+      closed={room.archived}
     />
   )
 }
@@ -97,6 +98,7 @@ export function RoomView({
   empty,
   mentionable,
   task = false,
+  closed = false,
 }: {
   roomId: string
   session: Session
@@ -107,6 +109,8 @@ export function RoomView({
   empty: string
   mentionable?: { id: string; name: string }[]
   task?: boolean
+  /** History only: the room takes no new messages. */
+  closed?: boolean
 }) {
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -297,30 +301,37 @@ export function RoomView({
           ))}
       </div>
       <Alert>{readError}</Alert>
-      <Composer
-        draftKey={draftKey}
-        label="Message the room"
-        placeholder={placeholder}
-        note={note}
-        mentionables={(mentionable ?? agents.data ?? []).map((member) => ({
-          id: member.id,
-          name: member.name,
-          avatar: agentOf(member.id)?.avatar ?? null,
-        }))}
-        send={async (request_id, message) => {
-          const posted = await ok(
-            api.POST('/api/rooms/{room}/messages', {
-              params: { path: { room: roomId } },
-              body: { request_id, message },
-            }),
-          )
-          setMessages((current) =>
-            current.some((known) => known.id === posted.id)
-              ? current
-              : merge(current, [posted]),
-          )
-        }}
-      />
+      {closed ? (
+        <p className="room__closed small faint">
+          This room was archived with its team. Its history stays for
+          administrators; nobody can write here.
+        </p>
+      ) : (
+        <Composer
+          draftKey={draftKey}
+          label="Message the room"
+          placeholder={placeholder}
+          note={note}
+          mentionables={(mentionable ?? agents.data ?? []).map((member) => ({
+            id: member.id,
+            name: member.name,
+            avatar: agentOf(member.id)?.avatar ?? null,
+          }))}
+          send={async (request_id, message) => {
+            const posted = await ok(
+              api.POST('/api/rooms/{room}/messages', {
+                params: { path: { room: roomId } },
+                body: { request_id, message },
+              }),
+            )
+            setMessages((current) =>
+              current.some((known) => known.id === posted.id)
+                ? current
+                : merge(current, [posted]),
+            )
+          }}
+        />
+      )}
     </section>
   )
 }

@@ -2339,7 +2339,7 @@
     "/api/files/shared": {
       "get": {
         "tags": [],
-        "summary": "Files and folders shared with you or your teams.",
+        "summary": "Files and folders shared with you or your groups.",
         "operationId": "shared_files",
         "responses": {
           "200": {
@@ -2840,6 +2840,120 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/groups": {
+      "get": {
+        "tags": [],
+        "operationId": "groups",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Group"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/groups/delete": {
+      "post": {
+        "tags": [],
+        "operationId": "delete_group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteGroup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/groups/membership": {
+      "post": {
+        "tags": [],
+        "operationId": "membership",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MembershipChange"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "",
@@ -3423,120 +3537,6 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/Subject"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Receipt"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/identity/teams": {
-      "get": {
-        "tags": [],
-        "operationId": "teams",
-        "parameters": [
-          {
-            "name": "after",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Team"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [],
-        "operationId": "create_team",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateTeam"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Receipt"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/identity/teams/delete": {
-      "post": {
-        "tags": [],
-        "operationId": "delete_team",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DeleteTeam"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Receipt"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/identity/teams/membership": {
-      "post": {
-        "tags": [],
-        "operationId": "membership",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MembershipChange"
               }
             }
           },
@@ -5330,6 +5330,132 @@
         }
       }
     },
+    "/api/teams": {
+      "get": {
+        "tags": [],
+        "summary": "Administrators see every team; others the teams whose room they can read.",
+        "operationId": "list_teams",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Team"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "Administrators only; also creates the team's room. `request_id` makes a retry return the same team.",
+        "operationId": "create_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTeam"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/teams/{team}": {
+      "put": {
+        "tags": [],
+        "summary": "Replaces the team's text, place and roster; administrators only.",
+        "operationId": "update_team",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTeam"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "summary": "Deletes a team with no team under it and archives its room; administrators only.",
+        "operationId": "delete_team",
+        "parameters": [
+          {
+            "name": "team",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "expected_revision",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Team"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/vault": {
       "get": {
         "tags": [],
@@ -5479,18 +5605,18 @@
         "type": "object",
         "required": ["id"],
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/GrantId"
-          },
-          "team_id": {
+          "group_id": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/TeamId"
+                "$ref": "#/components/schemas/GroupId"
               }
             ]
+          },
+          "id": {
+            "$ref": "#/components/schemas/GrantId"
           }
         }
       },
@@ -6897,6 +7023,20 @@
         },
         "additionalProperties": false
       },
+      "CreateGroup": {
+        "type": "object",
+        "required": ["request_id", "name"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateMemory": {
         "type": "object",
         "required": ["content"],
@@ -6962,14 +7102,14 @@
       },
       "CreateTeam": {
         "type": "object",
-        "required": ["request_id", "name"],
+        "required": ["request_id", "team"],
         "properties": {
-          "name": {
-            "type": "string"
-          },
           "request_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "team": {
+            "$ref": "#/components/schemas/SaveTeam"
           }
         },
         "additionalProperties": false
@@ -7101,20 +7241,20 @@
           }
         }
       },
-      "DeleteTeam": {
+      "DeleteGroup": {
         "type": "object",
-        "required": ["request_id", "team", "expected_revision"],
+        "required": ["request_id", "group", "expected_revision"],
         "properties": {
           "expected_revision": {
             "type": "integer",
             "format": "int64"
           },
+          "group": {
+            "$ref": "#/components/schemas/GroupId"
+          },
           "request_id": {
             "type": "string",
             "format": "uuid"
-          },
-          "team": {
-            "$ref": "#/components/schemas/TeamId"
           }
         },
         "additionalProperties": false
@@ -7646,6 +7786,10 @@
             "type": "string",
             "description": "As in `Capability`, such as `conversation_send`."
           },
+          "group_id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -7661,12 +7805,39 @@
           "scope_kind": {
             "type": "string",
             "description": "`agent`, `room` or `conversation`; an agent's conversation has the agent's id."
-          },
-          "team_id": {
-            "type": ["string", "null"],
-            "format": "uuid"
           }
         }
+      },
+      "Group": {
+        "type": "object",
+        "required": ["id", "name", "revision", "active", "members"],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/GroupId"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The accounts in the group."
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "GroupId": {
+        "type": "string",
+        "format": "uuid"
       },
       "HookDelivery": {
         "type": "object",
@@ -8145,7 +8316,7 @@
         "type": "object",
         "required": [
           "request_id",
-          "team",
+          "group",
           "account_id",
           "expected_revision",
           "present"
@@ -8159,15 +8330,15 @@
             "type": "integer",
             "format": "int64"
           },
+          "group": {
+            "$ref": "#/components/schemas/GroupId"
+          },
           "present": {
             "type": "boolean"
           },
           "request_id": {
             "type": "string",
             "format": "uuid"
-          },
-          "team": {
-            "$ref": "#/components/schemas/TeamId"
           }
         },
         "additionalProperties": false
@@ -9016,11 +9187,11 @@
             "required": ["id", "kind"],
             "properties": {
               "id": {
-                "$ref": "#/components/schemas/TeamId"
+                "$ref": "#/components/schemas/GroupId"
               },
               "kind": {
                 "type": "string",
-                "enum": ["team"]
+                "enum": ["group"]
               }
             }
           }
@@ -9208,9 +9379,14 @@
           "members",
           "manage",
           "last_sequence",
-          "read_sequence"
+          "read_sequence",
+          "archived"
         ],
         "properties": {
+          "archived": {
+            "type": "boolean",
+            "description": "A deleted team's room: history only, no new messages."
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -9237,6 +9413,11 @@
             "type": "integer",
             "format": "int64",
             "description": "The viewer's read cursor, 0 until set."
+          },
+          "team": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The agent team whose room this is; its agents follow the team."
           }
         }
       },
@@ -9517,6 +9698,27 @@
         },
         "additionalProperties": false
       },
+      "SaveMember": {
+        "type": "object",
+        "required": ["agent", "title", "role"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reports_to": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "role": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "SaveRoutine": {
         "type": "object",
         "description": "What a routine does and when. At least one of `prompt` and `command`.",
@@ -9606,6 +9808,36 @@
           },
           "voice": {
             "$ref": "#/components/schemas/Voice"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveTeam": {
+        "type": "object",
+        "required": ["name", "description", "instructions", "members"],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SaveMember"
+            }
+          },
+          "name": {
+            "type": "string"
+          },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "reports_to": {
+            "type": ["string", "null"],
+            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -9828,7 +10060,7 @@
       },
       "ShareKind": {
         "type": "string",
-        "enum": ["user", "team", "agent"]
+        "enum": ["user", "group", "agent"]
       },
       "SharePermission": {
         "type": "string",
@@ -10530,6 +10762,17 @@
             "type": "string",
             "description": "`working`, `needs_you`, `done` or `stopped`."
           },
+          "team": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Member",
+                "description": "The team the orchestrator gave the task to, whose manager leads it."
+              }
+            ]
+          },
           "title": {
             "type": ["string", "null"],
             "description": "The orchestrator's name for the task; `None` until its first answer."
@@ -10608,34 +10851,82 @@
       },
       "Team": {
         "type": "object",
-        "required": ["id", "name", "revision", "active", "members"],
+        "required": [
+          "id",
+          "name",
+          "description",
+          "instructions",
+          "room",
+          "revision",
+          "members"
+        ],
         "properties": {
-          "active": {
-            "type": "boolean"
+          "description": {
+            "type": "string"
           },
           "id": {
-            "$ref": "#/components/schemas/TeamId"
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": "string"
           },
           "members": {
             "type": "array",
             "items": {
-              "type": "string",
-              "format": "uuid"
+              "$ref": "#/components/schemas/TeamMember"
             },
-            "description": "The accounts in the team."
+            "description": "The manager first, then by name."
           },
           "name": {
             "type": "string"
           },
+          "parent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The team this one sits under."
+          },
+          "reports_to": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The parent team's member this team's manager reports to."
+          },
           "revision": {
             "type": "integer",
             "format": "int64"
+          },
+          "room": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
-      "TeamId": {
-        "type": "string",
-        "format": "uuid"
+      "TeamMember": {
+        "type": "object",
+        "required": ["agent", "name", "title", "role", "retired"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reports_to": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The member this one reports to; null for the manager."
+          },
+          "retired": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
       },
       "Theme": {
         "type": "string",
@@ -11035,6 +11326,20 @@
           },
           "routine": {
             "$ref": "#/components/schemas/SaveRoutine"
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateTeam": {
+        "type": "object",
+        "required": ["expected_revision", "team"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "team": {
+            "$ref": "#/components/schemas/SaveTeam"
           }
         },
         "additionalProperties": false

@@ -538,7 +538,7 @@ const phone = await session(
   { width: 390, height: 844 },
   { hasTouch: true, isMobile: true, deviceScaleFactor: 2 },
 )
-await phone.page.goto(B + '/')
+await phone.page.goto(B + '/menu')
 await phone.page
   .locator('.row__doing')
   .first()

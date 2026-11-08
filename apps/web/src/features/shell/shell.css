@@ -209,6 +209,25 @@
 .row[aria-current='page'] .row__badge {
   background: var(--paper);
 }
+.sidebar__rule {
+  height: 1px;
+  margin: 6px 10px;
+  border: 0;
+  background: var(--line);
+}
+.row__hint {
+  font-size: var(--t-xs);
+  font-weight: var(--w-label);
+  color: var(--ink-faint);
+  padding: 0 5px;
+  line-height: 16px;
+  border-radius: var(--r-xs);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.row[aria-current='page'] .row__hint {
+  color: inherit;
+  box-shadow: inset 0 0 0 1px rgb(43 36 32 / 0.25);
+}
 .row__flag {
   font-size: var(--t-xs);
   font-weight: var(--w-strong);

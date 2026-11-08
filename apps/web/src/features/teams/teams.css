@@ -1,0 +1,360 @@
+/* Org chart: one card per agent, placed by ./layout, with reporting lines drawn in SVG under the
+   cards. A chart wider than its frame scrolls inside it, never the page. */
+.org {
+  display: grid;
+  gap: 28px;
+  padding: 6px 0 12px;
+}
+.org__empty {
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+  max-width: 52ch;
+}
+.org__graph {
+  position: relative;
+  margin-inline: auto;
+}
+.org__graph > svg {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.org__line {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.25;
+  transition:
+    stroke var(--quick),
+    stroke-width var(--quick);
+}
+.org__line[data-lit='true'] {
+  stroke: var(--orange);
+  stroke-width: 2;
+}
+.org__slot {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+  transition: opacity var(--quick);
+}
+.org__slot[data-dim='true'] {
+  opacity: 0.38;
+}
+.org__team {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 11px 5px;
+  border-radius: 999px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  font-weight: var(--w-head);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--quick),
+    box-shadow var(--quick);
+}
+.org__team span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.org__team svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--ink-faint);
+}
+.org__team small {
+  color: var(--ink-faint);
+  font-weight: var(--w-label);
+  font-variant-numeric: tabular-nums;
+}
+.org__team:hover,
+.org__team:focus-visible {
+  background: var(--orange-wash);
+  box-shadow: inset 0 0 0 1px rgb(242 106 27 / 0.45);
+}
+.org__agent {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  height: 100%;
+  padding: 10px 12px 10px 15px;
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 1px 2px rgb(var(--shadow) / 0.08);
+  color: inherit;
+  text-align: left;
+  text-decoration: none;
+  transition:
+    box-shadow var(--quick),
+    transform var(--quick);
+}
+a.org__agent:hover {
+  box-shadow:
+    inset 0 0 0 1px var(--line-strong),
+    var(--lift);
+  transform: translateY(-1px);
+}
+.org__agent[data-muted='true'] {
+  background: transparent;
+}
+.org__agent > :first-child {
+  flex: none;
+  margin-top: 3px;
+}
+.org__who {
+  display: grid;
+  align-content: start;
+  gap: 1px;
+  min-width: 0;
+}
+.org__who strong {
+  font-size: var(--t-sm);
+  font-weight: var(--w-head);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org__title,
+.org__doing {
+  font-size: var(--t-xs);
+  line-height: 17px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.org__title {
+  font-weight: var(--w-strong);
+  color: var(--orange-text);
+}
+.org__title small {
+  font-size: inherit;
+  font-weight: var(--w-label);
+  color: var(--ink-faint);
+}
+.org__doing {
+  color: var(--ink-faint);
+}
+.org__doing .dot {
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+.org__loose {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.org__loose h4 {
+  font-size: var(--t-sm);
+  font-weight: var(--w-head);
+  color: var(--ink-soft);
+}
+.org__loose ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.org__loose li {
+  width: 252px;
+  height: 94px;
+}
+
+/* Team page */
+.team-page .page__body {
+  display: grid;
+  gap: 28px;
+  align-content: start;
+}
+.team-page__lede {
+  max-width: 70ch;
+  color: var(--ink-soft);
+  font-size: var(--t-md);
+}
+.team-page__where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: var(--t-sm);
+  color: var(--ink-faint);
+}
+.team-page__where a {
+  color: var(--ink-soft);
+}
+.team-page section > h2 {
+  font-size: var(--t-md);
+  font-weight: var(--w-head);
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--line-strong);
+}
+.team-page__chart {
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+.team-page__text {
+  white-space: pre-wrap;
+  max-width: 78ch;
+  font-size: var(--t-md);
+  line-height: 1.55;
+}
+.roles {
+  display: grid;
+  max-width: 78ch;
+}
+.roles > li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 4px 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.roles > li:last-child {
+  border-bottom: 0;
+}
+.roles__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+.roles__head strong {
+  font-weight: var(--w-head);
+}
+.roles__head span {
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+}
+.roles p {
+  grid-column: 2;
+  white-space: pre-wrap;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+
+/* Team editor */
+.team-form {
+  display: grid;
+  gap: 22px;
+  max-width: 860px;
+}
+.team-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.team-form legend {
+  font-size: var(--t-md);
+  font-weight: var(--w-head);
+  padding: 0 0 6px;
+  margin-bottom: 4px;
+  width: 100%;
+  border-bottom: 1px solid var(--line-strong);
+}
+.team-form__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.seats {
+  display: grid;
+  gap: 8px;
+}
+.seat {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 68px;
+  grid-template-areas:
+    'cube agent title boss actions'
+    '. role role role role';
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px 12px 14px;
+  border-radius: var(--r-lg);
+  background: var(--inset);
+}
+.seat[data-manager='true'] {
+  box-shadow: inset 0 0 0 1px rgb(242 106 27 / 0.4);
+}
+.seat > :nth-child(1) {
+  grid-area: cube;
+}
+.seat__agent {
+  grid-area: agent;
+  min-width: 0;
+}
+.seat__agent strong {
+  display: block;
+  font-weight: var(--w-head);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seat__title {
+  grid-area: title;
+}
+.seat__boss {
+  grid-area: boss;
+}
+.seat__actions {
+  grid-area: actions;
+  display: flex;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.seat__role {
+  grid-area: role;
+}
+.seat__role textarea {
+  min-height: 2.6em;
+}
+.seat__manager {
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+  color: var(--orange-text);
+}
+.team-form__add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.team-form__problems {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--danger);
+  font-size: var(--t-sm);
+}
+.team-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 720px) {
+  .team-form__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .seat {
+    grid-template-columns: 34px minmax(0, 1fr) 68px;
+    grid-template-areas:
+      'cube agent actions'
+      'title title title'
+      'boss boss boss'
+      'role role role';
+  }
+}

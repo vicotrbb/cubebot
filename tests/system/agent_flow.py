@@ -36,22 +36,22 @@ def grant_manager(base, admin, member, agent):
     account = request(base, "/api/identity/me", member)[1]
     status, team = request(
         base,
-        "/api/identity/teams",
+        "/api/identity/groups",
         admin,
         {"name": "Agent managers", "request_id": str(uuid.uuid4())},
     )
     assert status == 201
     membership = {
         "request_id": str(uuid.uuid4()),
-        "team": team["id"],
+        "group": team["id"],
         "account_id": account["id"],
         "present": True,
         "expected_revision": 1,
     }
-    assert request(base, "/api/identity/teams/membership", admin, membership)[0] == 200
+    assert request(base, "/api/identity/groups/membership", admin, membership)[0] == 200
     grant = {
         "request_id": str(uuid.uuid4()),
-        "recipient": {"kind": "team", "id": team["id"]},
+        "recipient": {"kind": "group", "id": team["id"]},
         "scope": {"kind": "agent", "id": agent},
         "capability": "agent_manage",
     }
@@ -65,7 +65,7 @@ def revoke_membership(base, admin, member, path, membership):
         "expected_revision": 2,
         "present": False,
     }
-    assert request(base, "/api/identity/teams/membership", admin, change)[0] == 200
+    assert request(base, "/api/identity/groups/membership", admin, change)[0] == 200
     assert request(base, path, member)[0] == 404
     assert request(base, "/api/agents", member)[1] == []
 

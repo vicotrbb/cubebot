@@ -31,6 +31,10 @@ pub struct Room {
     pub last_sequence: i64,
     /// The viewer's read cursor, 0 until set.
     pub read_sequence: i64,
+    /// The agent team whose room this is; its agents follow the team.
+    pub team: Option<Uuid>,
+    /// A deleted team's room: history only, no new messages.
+    pub archived: bool,
 }
 
 /// A room's newest message, for the installation stream.
@@ -165,7 +169,7 @@ impl Work {
             SELECT r.id
             FROM rooms r
             JOIN human_accounts a ON a.id=$1 AND a.active
-            WHERE NOT r.task AND (a.role='administrator'
+            WHERE NOT r.task AND (NOT r.archived OR a.role='administrator') AND (a.role='administrator'
                 OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read'))
             ORDER BY r.name, r.id
             ",
@@ -190,7 +194,7 @@ impl Work {
             FROM rooms r
             JOIN human_accounts a ON a.id=$1 AND a.active
             LEFT JOIN room_messages m ON m.room_id=r.id
-            WHERE NOT r.task AND (a.role='administrator'
+            WHERE NOT r.task AND (NOT r.archived OR a.role='administrator') AND (a.role='administrator'
                 OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability='conversation.read'))
             GROUP BY r.id
             ORDER BY r.id
@@ -218,10 +222,13 @@ impl Work {
             return Err(IdentityError::Forbidden);
         }
         lock(&mut tx, room).await?;
-        let task = sqlx::query_scalar!("SELECT task FROM rooms WHERE id=$1", room)
-            .fetch_one(&mut *tx)
-            .await?;
-        if task {
+        let fixed = sqlx::query_scalar!(
+            r#"SELECT task OR archived OR EXISTS(SELECT 1 FROM teams t WHERE t.room_id=r.id) AS "fixed!" FROM rooms r WHERE r.id=$1"#,
+            room
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        if fixed {
             return Err(IdentityError::Forbidden);
         }
         sqlx::query!(
@@ -307,6 +314,12 @@ impl Work {
         authorize(&mut tx, actor, room, "conversation.send").await?;
         // Serializes retries of one request, so both see a single message.
         lock(&mut tx, room).await?;
+        if sqlx::query_scalar!("SELECT archived FROM rooms WHERE id=$1", room)
+            .fetch_one(&mut *tx)
+            .await?
+        {
+            return Err(IdentityError::Forbidden);
+        }
         let id = match previous(&mut tx, actor, room, input).await? {
             Some(id) => id,
             None => post(&mut tx, actor, room, input).await?,
@@ -440,7 +453,8 @@ async fn room(
 ) -> Result<Room, IdentityError> {
     let row = sqlx::query!(
         r#"
-        SELECT r.id, r.name,
+        SELECT r.id, r.name, r.archived,
+            (SELECT t.id FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS team,
             COALESCE((SELECT max(m.sequence) FROM room_messages m WHERE m.room_id=r.id),0) AS "last_sequence!",
             COALESCE((SELECT c.sequence FROM read_cursors c WHERE c.account_id=$2 AND c.scope_kind='room' AND c.scope_id=r.id),0) AS "read_sequence!"
         FROM rooms r
@@ -458,6 +472,8 @@ async fn room(
         manage: allowed(tx, actor, id, "room.manage").await?,
         last_sequence: row.last_sequence,
         read_sequence: row.read_sequence,
+        team: row.team,
+        archived: row.archived,
     })
 }
 
@@ -624,6 +640,7 @@ async fn allowed(
             FROM rooms r
             JOIN human_accounts a ON a.id=$1 AND a.active
             WHERE r.id=$2
+                AND (a.role='administrator' OR NOT r.archived)
                 AND (a.role='administrator'
                     OR EXISTS(SELECT 1 FROM tasks t WHERE t.room_id=r.id AND t.created_by=a.id AND $3<>'room.manage')
                     OR EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id AND g.scope_kind='room' AND g.scope_id=r.id AND g.capability=$3))

@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useAgentScreen } from '../features/agent/context'
-import { UsageTab } from '../features/situation/UsageTab'
+import { UsageTab } from '../features/home/UsageTab'
 
 export const Route = createFileRoute('/_app/agents/$agentId/usage')({
   component: Usage,
