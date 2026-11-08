@@ -43,6 +43,17 @@ pub enum Delivery {
         dream_after_seconds: u64,
     },
     WallpaperChanged,
+    /// Send the workspace for this backup, at low priority, to `/api/runtime/backups/{backup}/workspace`.
+    Backup {
+        backup: String,
+    },
+}
+
+/// How an agent's extraction of its restored workspace went; `error` is absent when it succeeded.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspaceRestored {
+    pub error: Option<String>,
 }
 
 /// Largest encoded turn event the ledger accepts. Responses are not otherwise bounded.

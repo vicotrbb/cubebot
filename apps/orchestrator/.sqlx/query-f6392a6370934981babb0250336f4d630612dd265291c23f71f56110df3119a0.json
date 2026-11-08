@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO workspace_restores (agent_id, backup_id, bytes, sha256)\n            SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM agents WHERE id=$1)\n            ON CONFLICT (agent_id) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f6392a6370934981babb0250336f4d630612dd265291c23f71f56110df3119a0"
+}

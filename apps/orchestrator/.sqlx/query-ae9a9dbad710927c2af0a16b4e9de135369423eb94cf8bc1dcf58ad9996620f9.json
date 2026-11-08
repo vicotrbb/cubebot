@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE backup_settings\n        SET endpoint=$1, region=$2, bucket=$3, access_key_id=$4, schedule=$5, keep_daily=$6,\n            keep_weekly=$7, bandwidth_bytes=$8, concurrency=$9,\n            secret_access_key=CASE WHEN $10 THEN $11 ELSE secret_access_key END,\n            revision=revision+1\n        WHERE revision=$12\n        RETURNING revision\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "Int4",
+        "Int8",
+        "Int4",
+        "Bool",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ae9a9dbad710927c2af0a16b4e9de135369423eb94cf8bc1dcf58ad9996620f9"
+}

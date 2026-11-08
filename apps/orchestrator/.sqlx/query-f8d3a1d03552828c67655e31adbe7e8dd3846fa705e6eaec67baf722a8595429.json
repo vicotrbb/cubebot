@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM orchestrator_owner",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f8d3a1d03552828c67655e31adbe7e8dd3846fa705e6eaec67baf722a8595429"
+}

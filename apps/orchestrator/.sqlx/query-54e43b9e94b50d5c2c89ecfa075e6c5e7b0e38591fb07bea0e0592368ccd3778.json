@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE backups SET status=$2, bytes=$3, missing=$4, error=$5, finished_at=clock_timestamp() WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "54e43b9e94b50d5c2c89ecfa075e6c5e7b0e38591fb07bea0e0592368ccd3778"
+}

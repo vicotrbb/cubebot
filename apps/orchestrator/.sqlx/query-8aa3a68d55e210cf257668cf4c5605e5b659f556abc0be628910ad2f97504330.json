@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT endpoint, region, bucket, access_key_id, secret_access_key, schedule, keep_daily,\n                keep_weekly, bandwidth_bytes, concurrency, revision\n            FROM backup_settings\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "endpoint",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "region",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "bucket",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "access_key_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "secret_access_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "schedule",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "keep_daily",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "keep_weekly",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "bandwidth_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "concurrency",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "8aa3a68d55e210cf257668cf4c5605e5b659f556abc0be628910ad2f97504330"
+}

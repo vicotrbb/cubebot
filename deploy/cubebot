@@ -2,7 +2,7 @@
 # Runs one installation with Docker Compose: ~/.cubebot, or with CUBEBOT_HOME a checkout built from source.
 set -euo pipefail
 
-usage="usage: cubebot up | down | update [version] | logs [compose logs options] | admin [login] | uninstall [--yes]"
+usage="usage: cubebot up | down | update [version] | logs [compose logs options] | admin [login] | key | uninstall [--yes]"
 home="${CUBEBOT_HOME:-$HOME/.cubebot}"
 
 die() {
@@ -198,6 +198,12 @@ admin() {
     echo "Sign in at $origin as $login."
 }
 
+# Backups never contain the credential key; a restore needs this, as CUBEBOT_RESTORE_KEY.
+key() {
+    docker compose "${files[@]}" run --rm --no-deps -T --entrypoint base64 orchestrator -w0 /state/credential.key
+    echo
+}
+
 installation_agents() {
     docker compose "${files[@]}" up -d --wait postgres >/dev/null 2>&1 || return 1
     docker compose "${files[@]}" exec -T postgres psql -U cubebot -d cubebot -Atc 'SELECT id FROM agents' 2>/dev/null
@@ -258,6 +264,7 @@ case "$command" in
     update) update "$@" ;;
     logs) docker compose "${files[@]}" logs "$@" ;;
     admin) admin "$@" ;;
+    key) key ;;
     uninstall) uninstall "$@" ;;
     *) die "$usage" ;;
 esac

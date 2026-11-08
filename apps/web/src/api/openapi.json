@@ -3574,6 +3574,104 @@
         }
       }
     },
+    "/api/installation/backup": {
+      "get": {
+        "tags": [],
+        "summary": "Administrators only.",
+        "operationId": "backup",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Administrators only. Values the deployment sets are kept whatever is sent. 409 when\n`revision` is not the current one.",
+        "operationId": "save_backup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveBackup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/installation/backup/key": {
+      "post": {
+        "tags": [],
+        "summary": "Administrators only, once per installation: the credential key, base64 encoded, as\n`cubebot key` prints it. 409 once it was downloaded; 404 without a key.",
+        "operationId": "download_key",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/installation/backup/run": {
+      "post": {
+        "tags": [],
+        "summary": "Administrators only. Starts a backup; 409 while one runs, 400 without a bucket.",
+        "operationId": "back_up_now",
+        "responses": {
+          "202": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/installation/settings": {
       "get": {
         "tags": [],
@@ -4615,6 +4713,25 @@
           },
           "502": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/restore": {
+      "get": {
+        "tags": [],
+        "summary": "Whether a restore is running. The console asks before anything else; while a restore runs\nthis is the only route that answers.",
+        "operationId": "restore_progress",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreProgress"
+                }
+              }
+            }
           }
         }
       }
@@ -6175,6 +6292,112 @@
           "type": "string"
         }
       },
+      "BackupSummary": {
+        "type": "object",
+        "description": "The newest backups first, as the console lists them.",
+        "required": ["id", "started_at_unix", "status", "bytes", "missing"],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "finished_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "id": {
+            "type": "string"
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Missing"
+            }
+          },
+          "requested_by": {
+            "type": ["string", "null"],
+            "description": "Who started it; absent for a scheduled one."
+          },
+          "started_at_unix": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string",
+            "description": "`running`, `complete`, `incomplete` (verified, with parts missing), `failed` or `deleted`\n(removed by retention)."
+          }
+        }
+      },
+      "BackupView": {
+        "type": "object",
+        "required": [
+          "settings",
+          "secret_access_key_saved",
+          "revision",
+          "deployment",
+          "deployment_secret_access_key",
+          "deployment_source",
+          "defaults",
+          "can_save_secret",
+          "running",
+          "backups",
+          "restores",
+          "key"
+        ],
+        "properties": {
+          "backups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BackupSummary"
+            }
+          },
+          "can_save_secret": {
+            "type": "boolean",
+            "description": "A secret can be saved only with a credential key to encrypt it."
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/Defaults"
+          },
+          "deployment": {
+            "$ref": "#/components/schemas/Fields",
+            "description": "Set by the deployment and read-only here."
+          },
+          "deployment_secret_access_key": {
+            "type": "boolean"
+          },
+          "deployment_source": {
+            "type": "string",
+            "description": "Where the deployment's values come from: `Helm values` or `.env`."
+          },
+          "key": {
+            "$ref": "#/components/schemas/KeyView"
+          },
+          "restores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkspaceRestore"
+            },
+            "description": "Workspaces the last restore put back, or could not."
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "secret_access_key_saved": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Fields",
+            "description": "Saved here; a value in `deployment` wins over it."
+          }
+        }
+      },
       "Binding": {
         "type": "object",
         "required": [
@@ -6793,6 +7016,44 @@
         },
         "additionalProperties": false
       },
+      "Defaults": {
+        "type": "object",
+        "required": [
+          "region",
+          "schedule",
+          "keep_daily",
+          "keep_weekly",
+          "bandwidth_bytes",
+          "concurrency"
+        ],
+        "properties": {
+          "bandwidth_bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "concurrency": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "keep_daily": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "keep_weekly": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "region": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": "string"
+          }
+        }
+      },
       "DefinitionRevision": {
         "type": "object",
         "required": [
@@ -7211,6 +7472,50 @@
           }
         ]
       },
+      "Fields": {
+        "type": "object",
+        "description": "Each setting, absent where it is not set at that level.",
+        "properties": {
+          "access_key_id": {
+            "type": ["string", "null"]
+          },
+          "bandwidth_bytes": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "Bytes a second, shared by every transfer of a backup."
+          },
+          "bucket": {
+            "type": ["string", "null"]
+          },
+          "concurrency": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "Transfers that run at once."
+          },
+          "endpoint": {
+            "type": ["string", "null"],
+            "description": "An S3-compatible API address; AWS S3 in `region` when empty."
+          },
+          "keep_daily": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "How many of the newest days keep their newest backup."
+          },
+          "keep_weekly": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "How many of the newest weeks keep their newest backup."
+          },
+          "region": {
+            "type": ["string", "null"],
+            "description": "us-east-1 when empty; auto for Cloudflare R2."
+          },
+          "schedule": {
+            "type": ["string", "null"],
+            "description": "`daily` or `off`."
+          }
+        }
+      },
       "FileAccess": {
         "type": "string",
         "description": "`write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.",
@@ -7569,6 +7874,23 @@
           }
         },
         "additionalProperties": false
+      },
+      "KeyView": {
+        "type": "object",
+        "required": ["present"],
+        "properties": {
+          "downloaded_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "downloaded_by": {
+            "type": ["string", "null"]
+          },
+          "present": {
+            "type": "boolean",
+            "description": "Whether this installation has a credential key at all."
+          }
+        }
       },
       "Landed": {
         "type": "object",
@@ -7936,6 +8258,18 @@
           }
         ],
         "description": "A memory write staged by the agent. A revision or removal names the revision it read; a\nnewer one, such as a human edit, wins and the change is dropped."
+      },
+      "Missing": {
+        "type": "object",
+        "required": ["part", "reason"],
+        "properties": {
+          "part": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
       },
       "ModelChoice": {
         "type": "object",
@@ -8727,6 +9061,45 @@
           }
         }
       },
+      "RestoreProgress": {
+        "type": "object",
+        "description": "What the console shows while a restore runs.",
+        "required": ["state", "step", "done", "total", "missing"],
+        "properties": {
+          "backup": {
+            "type": ["string", "null"],
+            "description": "The backup's id, once chosen."
+          },
+          "done": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shared files fetched so far, of `total`.",
+            "minimum": 0
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Missing"
+            },
+            "description": "What the backup itself lacked."
+          },
+          "state": {
+            "type": "string",
+            "description": "`restoring`, or `failed` with `error`."
+          },
+          "step": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "RetryMessage": {
         "type": "object",
         "required": ["request_id"],
@@ -9012,6 +9385,28 @@
           }
         },
         "additionalProperties": false
+      },
+      "SaveBackup": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Fields"
+          },
+          {
+            "type": "object",
+            "required": ["revision"],
+            "properties": {
+              "revision": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "secret_access_key": {
+                "type": ["string", "null"],
+                "description": "Replaces the saved secret access key; empty removes it; absent keeps it."
+              }
+            }
+          }
+        ],
+        "description": "Settings an administrator saves; values the deployment sets are ignored here."
       },
       "SaveConnection": {
         "type": "object",
@@ -10695,6 +11090,30 @@
         "properties": {
           "secret": {
             "type": "string"
+          }
+        }
+      },
+      "WorkspaceRestore": {
+        "type": "object",
+        "description": "An agent workspace a restore put back, or could not.",
+        "required": ["agent", "agent_name", "backup"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent_name": {
+            "type": "string"
+          },
+          "backup": {
+            "type": "string"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "restored_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
           }
         }
       }

@@ -1478,6 +1478,64 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/installation/backup': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Administrators only. */
+    get: operations['backup']
+    /**
+     * Administrators only. Values the deployment sets are kept whatever is sent. 409 when
+     *     `revision` is not the current one.
+     */
+    put: operations['save_backup']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/installation/backup/key': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Administrators only, once per installation: the credential key, base64 encoded, as
+     *     `cubebot key` prints it. 409 once it was downloaded; 404 without a key.
+     */
+    post: operations['download_key']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/installation/backup/run': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Administrators only. Starts a backup; 409 while one runs, 400 without a bucket. */
+    post: operations['back_up_now']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/installation/settings': {
     parameters: {
       query?: never
@@ -1909,6 +1967,26 @@ export interface paths {
     put?: never
     /** 202 until the person approves on xAI's page; then the signed-in plan. */
     post: operations['poll_supergrok']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/restore': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Whether a restore is running. The console asks before anything else; while a restore runs
+     *     this is the only route that answers.
+     */
+    get: operations['restore_progress']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -2520,6 +2598,45 @@ export interface components {
     BTreeMap: {
       [key: string]: string
     }
+    /** @description The newest backups first, as the console lists them. */
+    BackupSummary: {
+      /** Format: int64 */
+      bytes: number
+      error?: string | null
+      /** Format: int64 */
+      finished_at_unix?: number | null
+      id: string
+      missing: components['schemas']['Missing'][]
+      /** @description Who started it; absent for a scheduled one. */
+      requested_by?: string | null
+      /** Format: int64 */
+      started_at_unix: number
+      /**
+       * @description `running`, `complete`, `incomplete` (verified, with parts missing), `failed` or `deleted`
+       *     (removed by retention).
+       */
+      status: string
+    }
+    BackupView: {
+      backups: components['schemas']['BackupSummary'][]
+      /** @description A secret can be saved only with a credential key to encrypt it. */
+      can_save_secret: boolean
+      defaults: components['schemas']['Defaults']
+      /** @description Set by the deployment and read-only here. */
+      deployment: components['schemas']['Fields']
+      deployment_secret_access_key: boolean
+      /** @description Where the deployment's values come from: `Helm values` or `.env`. */
+      deployment_source: string
+      key: components['schemas']['KeyView']
+      /** @description Workspaces the last restore put back, or could not. */
+      restores: components['schemas']['WorkspaceRestore'][]
+      /** Format: int64 */
+      revision: number
+      running: boolean
+      secret_access_key_saved: boolean
+      /** @description Saved here; a value in `deployment` wins over it. */
+      settings: components['schemas']['Fields']
+    }
     Binding: {
       /** Format: uuid */
       account_id: string
@@ -2767,6 +2884,17 @@ export interface components {
       /** @description Returned to the agent; empty when the person gave none. */
       reason: string
     }
+    Defaults: {
+      /** Format: int64 */
+      bandwidth_bytes: number
+      concurrency: number
+      /** Format: int32 */
+      keep_daily: number
+      /** Format: int32 */
+      keep_weekly: number
+      region: string
+      schedule: string
+    }
     DefinitionRevision: {
       /** Format: uuid */
       actor_id: string
@@ -2918,6 +3046,37 @@ export interface components {
           /** @enum {string} */
           type: 'choice'
         }
+    /** @description Each setting, absent where it is not set at that level. */
+    Fields: {
+      access_key_id?: string | null
+      /**
+       * Format: int64
+       * @description Bytes a second, shared by every transfer of a backup.
+       */
+      bandwidth_bytes?: number | null
+      bucket?: string | null
+      /**
+       * Format: int32
+       * @description Transfers that run at once.
+       */
+      concurrency?: number | null
+      /** @description An S3-compatible API address; AWS S3 in `region` when empty. */
+      endpoint?: string | null
+      /**
+       * Format: int32
+       * @description How many of the newest days keep their newest backup.
+       */
+      keep_daily?: number | null
+      /**
+       * Format: int32
+       * @description How many of the newest weeks keep their newest backup.
+       */
+      keep_weekly?: number | null
+      /** @description us-east-1 when empty; auto for Cloudflare R2. */
+      region?: string | null
+      /** @description `daily` or `off`. */
+      schedule?: string | null
+    }
     /**
      * @description `write` adds uploading, moving, renaming and deleting to `read`; `manage` adds sharing.
      * @enum {string}
@@ -3093,6 +3252,13 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    KeyView: {
+      /** Format: int64 */
+      downloaded_at_unix?: number | null
+      downloaded_by?: string | null
+      /** @description Whether this installation has a credential key at all. */
+      present: boolean
+    }
     Landed: {
       /** @description The `http://127.0.0.1:1456/auth/callback?...` address the browser landed on. */
       url: string
@@ -3237,6 +3403,10 @@ export interface components {
           /** @enum {string} */
           op: 'forget'
         }
+    Missing: {
+      part: string
+      reason: string
+    }
     ModelChoice: {
       /**
        * Format: int64
@@ -3574,6 +3744,24 @@ export interface components {
       /** Format: int64 */
       size: number
     }
+    /** @description What the console shows while a restore runs. */
+    RestoreProgress: {
+      /** @description The backup's id, once chosen. */
+      backup?: string | null
+      /**
+       * Format: int64
+       * @description Shared files fetched so far, of `total`.
+       */
+      done: number
+      error?: string | null
+      /** @description What the backup itself lacked. */
+      missing: components['schemas']['Missing'][]
+      /** @description `restoring`, or `failed` with `error`. */
+      state: string
+      step: string
+      /** Format: int64 */
+      total: number
+    }
     RetryMessage: {
       /** Format: uuid */
       request_id: string
@@ -3686,6 +3874,13 @@ export interface components {
     RunRoutine: {
       /** Format: uuid */
       request_id: string
+    }
+    /** @description Settings an administrator saves; values the deployment sets are ignored here. */
+    SaveBackup: components['schemas']['Fields'] & {
+      /** Format: int64 */
+      revision: number
+      /** @description Replaces the saved secret access key; empty removes it; absent keeps it. */
+      secret_access_key?: string | null
     }
     /**
      * @description A connection signed in with pasted secrets, an app's own client credentials, another
@@ -4320,6 +4515,16 @@ export interface components {
     Voice: 'male' | 'female'
     WebhookSecret: {
       secret: string
+    }
+    /** @description An agent workspace a restore put back, or could not. */
+    WorkspaceRestore: {
+      /** Format: uuid */
+      agent: string
+      agent_name: string
+      backup: string
+      error?: string | null
+      /** Format: int64 */
+      restored_at_unix?: number | null
     }
   }
   responses: never
@@ -6957,6 +7162,126 @@ export interface operations {
       }
     }
   }
+  backup: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BackupView']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  save_backup: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveBackup']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['BackupView']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  download_key: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'text/plain': string
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  back_up_now: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   installation_settings: {
     parameters: {
       query?: never
@@ -7838,6 +8163,25 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  restore_progress: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RestoreProgress']
+        }
       }
     }
   }

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT EXISTS (\n                SELECT 1 FROM backups\n                WHERE started_at > clock_timestamp() - CASE WHEN status='failed'\n                    THEN interval '1 hour' ELSE interval '23 hours 55 minutes' END\n            ) AS \"recent!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "recent!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "05f0312844f980b8686dde6a8f13e92ae38b7922c94b93bfc1b57e39e71a2474"
+}

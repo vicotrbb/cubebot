@@ -108,6 +108,39 @@ sandbox:
 credentials:
   existingSecret: ''
 
+# Backups to an S3-compatible bucket (deploy/README.md). Each value set here shows read-only under
+# Platform › Backup; one left empty an administrator may set there.
+backup:
+  # The S3 API address, such as http://minio.storage:9000; AWS S3 in region when empty.
+  endpoint: ''
+  # us-east-1 when empty; auto for Cloudflare R2.
+  region: ''
+  bucket: ''
+  # A Secret in this namespace with access-key-id and secret-access-key keys.
+  existingSecret: ''
+  # daily (the default) or off; Platform › Backup can always start one.
+  schedule: ''
+  # Newest backup of each of the newest days and weeks kept; 7 and 4 when empty.
+  keepDaily: ''
+  keepWeekly: ''
+  # Bytes a second shared by every transfer of a backup; 20 MiB when empty.
+  bandwidthBytes: ''
+  # Transfers at once; 2 when empty.
+  concurrency: ''
+
+# Restores a fresh installation from a backup when the orchestrator first starts on an empty
+# database. Once the installation holds data it is ignored, so it may stay set, as under Argo CD.
+# credentials.existingSecret must hold the backed-up installation's credential key.
+restore:
+  enabled: false
+  endpoint: ''
+  region: ''
+  bucket: ''
+  # A Secret in this namespace with access-key-id and secret-access-key keys.
+  existingSecret: ''
+  # A backup's id, such as 20261107T030000Z; the newest verified one when empty.
+  backup: ''
+
 # Bundled PostgreSQL, used unless externalDatabase.existingSecret is set.
 postgres:
   # A Secret in this namespace with password and database_url keys; generated when empty. Set it

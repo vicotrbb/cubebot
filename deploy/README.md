@@ -4,9 +4,9 @@ Installation packaging and Kubernetes configuration belong here as they are impl
 
 ## Docker Compose
 
-`install.sh` (bash 3.2 or later; `curl -fsSL https://cubebot.io/install.sh | bash`) installs one machine's installation into `~/.cubebot` from a release: it checks for curl, Docker and Compose 2.23 or later, finds the latest release, asks the questions declared in its `questions` table (where agents run, how the console is reached, the directory, the administrator; keys are read from `/dev/tty`, and a question whose `CUBEBOT_*` variable is set, every one under `CUBEBOT_YES=1` or without a terminal, takes its value or default), shows a summary, then downloads the release's `cubebot`, writes `.env` and hands off to `cubebot update`, which downloads the compose files, pulls, starts and waits for `/api/health/live`. A spinner follows each phase from the `Pulling release`, `Starting Cubebot` and `Waiting for` lines `cubebot` prints; the output is shown only when a phase fails. With the administrator created now it runs `cubebot admin`; otherwise the first account created at the console becomes the administrator. It never replaces an existing `.env`, and run again it updates the installation in `~/.cubebot` (or `CUBEBOT_HOME`). Colors, the cube and the spinners are off with `NO_COLOR`, `TERM=dumb`, output that is not a terminal or a terminal under 60 columns. `CUBEBOT_REGISTRY` and `CUBEBOT_SOURCE` point it at other images and files; `just install-check` uses them to install this checkout from a local registry. `tests/system/install_widgets.py` (in `just check`) drives its picker and confirmation through a pty. The site build copies it to `site/public/install.sh`.
+`install.sh` (bash 3.2 or later; `curl -fsSL https://cubebot.io/install.sh | bash`) installs one machine's installation into `~/.cubebot` from a release: it checks for curl, Docker and Compose 2.23 or later, finds the latest release, asks the questions declared in its `questions` table (where agents run, how the console is reached, the directory, whether to restore from a backup, the administrator; keys are read from `/dev/tty`, and a question whose `CUBEBOT_*` variable is set, every one under `CUBEBOT_YES=1` or without a terminal, takes its value or default), shows a summary, then downloads the release's `cubebot`, writes `.env` and hands off to `cubebot update`, which downloads the compose files, pulls, starts and waits for `/api/health/live`. A spinner follows each phase from the `Pulling release`, `Starting Cubebot` and `Waiting for` lines `cubebot` prints; the output is shown only when a phase fails. With the administrator created now it runs `cubebot admin`; otherwise the first account created at the console becomes the administrator. It never replaces an existing `.env`, and run again it updates the installation in `~/.cubebot` (or `CUBEBOT_HOME`). Colors, the cube and the spinners are off with `NO_COLOR`, `TERM=dumb`, output that is not a terminal or a terminal under 60 columns. `CUBEBOT_REGISTRY` and `CUBEBOT_SOURCE` point it at other images and files; `just install-check` uses them to install this checkout from a local registry. `tests/system/install_widgets.py` (in `just check`) drives its picker and confirmation through a pty. The site build copies it to `site/public/install.sh`.
 
-`cubebot` runs the installation: `compose.yaml` always; `compose.domain.yaml` with `CUBEBOT_DOMAIN`; `compose.agents.yaml` unless `CUBEBOT_RUNTIME=off`, plus, without a domain, `compose.control.yaml`, the HTTPS listener on the Docker bridge (on macOS on loopback, reached as `host.docker.internal`) with a development control CA in `~/.cubebot/dev-ca`. Its sandboxes run with the terminal and the desktop (computer use, [Desktop as a VMM device](../docs/adr/sandbox.md#desktop-as-a-vmm-device)) on. In a checkout `just up` runs the same script with `compose.dev.yaml` added, which builds the orchestrator and web images instead of pulling them. `cubebot uninstall` (confirmed by typing `uninstall`, or `--yes`/`CUBEBOT_YES=1`) removes the containers and workspace volumes of every agent the installation's database lists (or, when it cannot be read, of agents running this release's images), runs `docker compose down -v` with the files `up` uses, then removes the Cubebot images of every release in the registry it pulled from and the installation directory; in a checkout it refuses and points at `just down`.
+`cubebot` runs the installation: `compose.yaml` always; `compose.domain.yaml` with `CUBEBOT_DOMAIN`; `compose.agents.yaml` unless `CUBEBOT_RUNTIME=off`, plus, without a domain, `compose.control.yaml`, the HTTPS listener on the Docker bridge (on macOS on loopback, reached as `host.docker.internal`) with a development control CA in `~/.cubebot/dev-ca`. Its sandboxes run with the terminal and the desktop (computer use, [Desktop as a VMM device](../docs/adr/sandbox.md#desktop-as-a-vmm-device)) on. In a checkout `just up` runs the same script with `compose.dev.yaml` added, which builds the orchestrator and web images instead of pulling them. `cubebot key` prints the credential key a restore needs ([Backup and restore](#backup-and-restore)). `cubebot uninstall` (confirmed by typing `uninstall`, or `--yes`/`CUBEBOT_YES=1`) removes the containers and workspace volumes of every agent the installation's database lists (or, when it cannot be read, of agents running this release's images), runs `docker compose down -v` with the files `up` uses, then removes the Cubebot images of every release in the registry it pulled from and the installation directory; in a checkout it refuses and points at `just down`.
 
 Agents in Docker cannot reach each other or Cubebot's other containers directly, but this machine's private networks and cloud metadata stay reachable from them; only the Helm chart blocks those, where the cluster enforces NetworkPolicy ([reference](../docs/reference.md#docker-sandboxes-without-a-cluster)). `CUBEBOT_HOME` installs a separate installation with its own Compose project and data; give it its own `CUBEBOT_PORT`, and without a domain only one installation at a time can hold the agents' control port 8443.
 
@@ -79,10 +79,55 @@ The chart no longer takes `controlOrigin` or `controlCA`; drop them from your va
 ### Operations
 
 - **A node that dies with the orchestrator.** A new orchestrator starts only after Kubernetes proves the old one stopped, so a pod on an unreachable node stays `Terminating` and the new one waits. Once you are sure the node is gone (powered off or deleted), `kubectl -n cubebot delete pod <old orchestrator pod> --force --grace-period=0`; a force delete while the old one still runs breaks the one-orchestrator guarantee.
-- **Backups.** Back up PostgreSQL (`kubectl -n cubebot exec postgres-0 -- pg_dump -U cubebot cubebot`), the `shared-files` volume and the `credentials` Secret together; files without their rows, or rows without the key, do not restore.
-- **Uninstalling.** `helm uninstall` leaves agent pods and workspaces, which the orchestrator made, and the kept Secrets and volumes; `kubectl delete namespace cubebot` removes them all.
+- **Backups.** See [Backup and restore](#backup-and-restore); keep the `credentials` Secret apart from the bucket.
+- **Uninstalling.** `helm uninstall` leaves agent pods and workspaces, which the orchestrator made, and the kept Secrets and volumes. Their `cubebot.dev/*` finalizers keep them until the orchestrator releases them, so after uninstalling, `kubectl delete namespace cubebot` waits until you remove those finalizers (`kubectl -n cubebot patch <object> --type=merge -p '{"metadata":{"finalizers":null}}'` on the agent pods, workspace claims and the anchor ConfigMap).
 - **Rotating the control certificate.** Keep its certificate authority: agents trust only the one they started with. After replacing the CA itself, delete the agent pods (`kubectl -n cubebot delete pod -l cubebot.dev/agent`) so they start again with the new one.
 - **Logins.** Built-in passwords are limited per account (ten tries a minute); limit requests per client address at your ingress controller or Gateway.
+
+## Backup and restore
+
+Cubebot backs itself up to any S3-compatible bucket (AWS S3, Cloudflare R2, Backblaze B2, MinIO) without pausing anything ([Backups without pauses](../docs/adr/packaging.md#backups-without-pauses)): `pg_dump` reads one consistent snapshot of the database, shared files go up once each, and every running agent streams its workspace through the orchestrator at low priority. The parts of one backup can differ by minutes; a stopped agent's workspace is listed as missing. A backup is verified before it counts: its manifest is read back, every part is found at its size and a sample is re-read to compare checksums. Give each installation a bucket of its own.
+
+Backups are **not encrypted**: whoever can read the bucket can read the conversations, files and workspaces in it, so protect it with its own access policy. The credential key that encrypts stored credentials is never in a backup, and a restore cannot start without it: Platform › Backup offers administrators one audited download, `cubebot key` prints it on a Compose machine, and on Kubernetes it is the `credentials` Secret (or your `credentials.existingSecret`).
+
+Settings: bucket (`endpoint`, `region`, `bucket`, access key), `schedule` (`daily` by default, or `off`; Back up now always works), retention (`keepDaily` 7 and `keepWeekly` 4: each of the newest days and weeks keeps its newest backup), `bandwidthBytes` (20 MiB a second) and `concurrency` (2 transfers). Each can be set in Helm values under `backup:`, in `.env` as `CUBEBOT_BACKUP_*`, or on Platform › Backup; a value set by the deployment shows there read-only, with its source. The orchestrator image carries the PostgreSQL 18 client, so an external database must be PostgreSQL 18 or older.
+
+```yaml
+backup:
+  endpoint: http://minio.storage:9000
+  bucket: cubebot-backups
+  existingSecret: cubebot-backup-bucket # keys access-key-id and secret-access-key
+```
+
+```sh
+# .env on a Compose machine; `cubebot up` applies it.
+CUBEBOT_BACKUP_ENDPOINT=http://minio.lan:9000
+CUBEBOT_BACKUP_BUCKET=cubebot-backups
+CUBEBOT_BACKUP_ACCESS_KEY_ID=...
+CUBEBOT_BACKUP_SECRET_ACCESS_KEY=...
+```
+
+Restore happens only into a **fresh** installation: when the orchestrator first starts on an empty database with a restore source set, it restores the newest verified backup (or the one named) before anything else runs. It checks the credential key first and stops at once if it is wrong, then loads the database and the shared files; meanwhile the console shows only the restore's progress, and a failure stops it with the reason. Each agent then fetches its own workspace before it takes work, and Platform › Backup lists each one. Connections and sign-ins come back as they were, but their external tokens may have expired. Once the installation holds data the restore source is ignored, so it can stay in place.
+
+- **Compose:** `install.sh` asks "Restore from a backup?", then for the bucket, its key, which backup and the line `cubebot key` printed on the old machine, and writes them to `.env` as `CUBEBOT_RESTORE_*` and `CUBEBOT_RESTORE_KEY`.
+- **Helm** (Argo CD included): give the old key as `credentials.existingSecret` and set `restore:`. The chart refuses `restore.enabled` without `credentials.existingSecret`.
+
+```sh
+kubectl -n cubebot create secret generic cubebot-credentials --from-file=key=<(base64 -d < cubebot-credential-key.txt)
+kubectl -n cubebot create secret generic cubebot-restore-bucket --from-literal=access-key-id=... --from-literal=secret-access-key=...
+```
+
+```yaml
+credentials: { existingSecret: cubebot-credentials }
+restore:
+  enabled: true
+  endpoint: http://minio.storage:9000
+  bucket: cubebot-backups
+  existingSecret: cubebot-restore-bucket
+  backup: '' # newest verified when empty, or an id such as 20261107T030000Z
+```
+
+`tests/system/backup_check.py` (`just backup-check`) backs up Compose and kind installations to MinIO while an agent works, then restores each into a fresh installation and checks the data and workspace files came back.
 
 `tests/system/cluster_chat_setup.py` installs the chart into kind behind Traefik.
 

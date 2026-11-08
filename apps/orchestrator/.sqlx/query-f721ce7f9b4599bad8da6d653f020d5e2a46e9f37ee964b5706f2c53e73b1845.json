@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE agent_resources\n        SET phase = 'stopped', termination_proof = '{\"kind\":\"restored\"}'::jsonb,\n            blocked_reason = NULL, updated_at = clock_timestamp()\n        WHERE kind = 'pod' AND phase <> 'stopped' AND namespace <> 'docker'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "f721ce7f9b4599bad8da6d653f020d5e2a46e9f37ee964b5706f2c53e73b1845"
+}

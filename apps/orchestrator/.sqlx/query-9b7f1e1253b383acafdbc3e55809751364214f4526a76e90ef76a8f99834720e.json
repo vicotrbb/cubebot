@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT wallpaper_revision,\n            (SELECT backup_id FROM backup_workspaces\n             WHERE agent_id = agents.id AND status = 'requested' LIMIT 1) AS backup\n        FROM agents WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "wallpaper_revision",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "backup",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "9b7f1e1253b383acafdbc3e55809751364214f4526a76e90ef76a8f99834720e"
+}

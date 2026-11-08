@@ -174,7 +174,7 @@ A person can also call an agent ([Voice calls over the chat pipeline](docs/adr/c
 
 Use PostgreSQL-backed scheduling and inbox/outbox records instead of adding Redis, Kafka, or a workflow server. Keep application history in relational state instead of reconstructing everything from an event log. The workload does not yet justify a service mesh, separate vector database, S3 compatibility layer, custom agent CRDs, or multiple orchestration services.
 
-Backups and upgrades use coordinated maintenance, verified writer quiescence, and a recoverable cross-store manifest. Capture the database, shared files, workspace volumes, installation metadata, and separately protected key versions. Restoration remains inactive until identity, ownership, references, and unresolved effects are reconciled.
+Backups never pause work ([Backups without pauses](docs/adr/packaging.md#backups-without-pauses)): one worker sends a `pg_dump` snapshot, new shared-file blobs and each agent's workspace, streamed by the agent through the orchestrator, to an S3-compatible bucket, then writes and verifies a manifest. The credential key stays out of every backup. Restore runs only into a fresh installation, at the orchestrator's first start. Upgrades use coordinated maintenance with verified writer quiescence.
 
 Emit structured logs, metrics, and trace correlation through existing Rust instrumentation. Propose optional OpenTelemetry export and a Prometheus-compatible metrics endpoint; neither requires a bundled observability stack. Keep user-facing progress and audit records durable in PostgreSQL. Do not expose hidden model reasoning or raw credential material in diagnostic views.
 

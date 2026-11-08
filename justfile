@@ -38,7 +38,7 @@ lint: complexity
     shellcheck deploy/install.sh deploy/cubebot
 
 test:
-    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/limits.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/platform/subscription.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts apps/web/src/features/chat/Markdown.test.tsx apps/web/src/app/stream.test.ts apps/web/src/features/knowledge/useSave.test.ts apps/web/src/app/title.test.ts apps/web/src/features/connections/model.test.ts apps/web/src/components/paint.test.ts
+    bun test apps/web/src/api/client.test.ts apps/web/src/features/desktop/desktop.test.ts apps/web/src/features/platform/sandbox.test.ts apps/web/src/features/platform/limits.test.ts apps/web/src/features/platform/models.test.ts apps/web/src/features/platform/subscription.test.ts apps/web/src/features/chat/mentions.test.ts apps/web/src/features/platform/audit.test.ts apps/web/src/features/agent/doing.test.ts apps/web/src/features/knowledge/tree.test.ts apps/web/src/features/chat/tokens.test.ts apps/web/src/features/files/viewer.test.ts apps/web/src/features/situation/format.test.ts apps/web/src/features/chat/work.test.ts apps/web/src/features/tasks/status.test.ts apps/web/src/features/platform/access.test.ts apps/web/src/components/framePage.test.ts apps/web/src/features/call/call.test.ts apps/web/src/features/chat/Markdown.test.tsx apps/web/src/app/stream.test.ts apps/web/src/features/knowledge/useSave.test.ts apps/web/src/app/title.test.ts apps/web/src/features/connections/model.test.ts apps/web/src/components/paint.test.ts apps/web/src/features/platform/backups.test.ts
     cargo test --workspace --locked
     uv run --project tooling/quality --locked python -m unittest discover -s tooling/quality -p 'test_*.py'
     uv run --project tooling/quality --locked python tests/system/install_widgets.py
@@ -67,6 +67,7 @@ chart:
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.networkPolicy.ingressController.podSelector=null,uploads.maxBytes=null > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set externalDatabase.existingSecret=database > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set credentials.existingSecret=key,postgres.existingSecret=database > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set backup.bucket=backups,backup.existingSecret=bucket,backup.bandwidthBytes=20971520,restore.enabled=true,restore.bucket=backups,restore.existingSecret=bucket,credentials.existingSecret=key > /dev/null
 
 # Building first generates the route tree on a fresh checkout.
 check: format-check lint test build chart
@@ -103,6 +104,10 @@ release-chart file="digests.json" push="":
 # Installs this checkout from a local registry, twice (defaults, then pty answers); Docker only.
 install-check:
     uv run --project tooling/quality --locked python tests/system/install_check.py
+
+# Backs up a Compose and a kind installation to MinIO while an agent works, then restores each fresh; Docker, kind, kubectl, helm.
+backup-check:
+    uv run --project tooling/quality --locked python tests/system/backup_check.py
 
 # Starts temporary local processes, checks HTTP behavior, and stops them.
 smoke:

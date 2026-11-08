@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, size, sha256 FROM blobs ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "size",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "sha256",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c17fd038c008230ce446786dbe538c74528a5456e2f05272c9d04f48a4f2ebe4"
+}

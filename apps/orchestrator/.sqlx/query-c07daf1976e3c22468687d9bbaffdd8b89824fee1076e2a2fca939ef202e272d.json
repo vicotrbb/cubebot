@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM installation_kubernetes",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c07daf1976e3c22468687d9bbaffdd8b89824fee1076e2a2fca939ef202e272d"
+}

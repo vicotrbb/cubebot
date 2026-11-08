@@ -49,6 +49,14 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/vault", get(vault).post(vault_put))
         .route("/api/runtime/vault/fills", post(vault_fill))
         .route("/api/runtime/files", get(files).post(upload_file))
+        .route(
+            "/api/runtime/backups/{backup}/workspace",
+            axum::routing::put(backup_workspace),
+        )
+        .route(
+            "/api/runtime/workspace/restore",
+            get(workspace_restore).post(workspace_restored),
+        )
         .route("/api/runtime/files/{file}/content", get(file_content))
         .route("/api/runtime/files/{file}/shares", post(share_file))
         .route(
@@ -500,6 +508,70 @@ async fn finish_dream(
     } else {
         StatusCode::CONFLICT
     })
+}
+type Backups = Option<axum::Extension<crate::backup::Backups>>;
+/// This agent's workspace, as a tar stream, for the backup in progress that asked for it.
+async fn backup_workspace(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    backups: Backups,
+    Path(backup): Path<String>,
+    body: axum::body::Body,
+) -> Result<Response, Failure> {
+    use crate::backup::WorkspaceRefusal;
+    let actor = active(&identity, &headers).await?;
+    let axum::Extension(backups) = backups.ok_or(Failure(StatusCode::CONFLICT))?;
+    let received = backups
+        .receive_workspace(&backup, actor.agent.0, body.into_data_stream())
+        .await;
+    match received {
+        Ok(()) => Ok(StatusCode::NO_CONTENT.into_response()),
+        Err(WorkspaceRefusal::NotAsked) => Err(Failure(StatusCode::CONFLICT)),
+        Err(WorkspaceRefusal::Database(error)) => Err(unavailable(error)),
+        Err(WorkspaceRefusal::Upload(error)) => {
+            tracing::warn!(?error, "workspace backup failed");
+            Err(Failure(StatusCode::BAD_GATEWAY))
+        }
+    }
+}
+/// The backed-up workspace a restore left for this agent; 204 when there is none. No length is
+/// sent, so a stream that ends in a checksum error never looks complete.
+async fn workspace_restore(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    backups: Backups,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let Some(axum::Extension(backups)) = backups else {
+        return Ok(StatusCode::NO_CONTENT.into_response());
+    };
+    match backups.workspace_restore(actor.agent.0).await {
+        Ok(None) => Ok(StatusCode::NO_CONTENT.into_response()),
+        Ok(Some((_, body))) => Ok((
+            [(header::CONTENT_TYPE, "application/x-tar")],
+            axum::body::Body::from_stream(body),
+        )
+            .into_response()),
+        Err(error) => {
+            tracing::warn!(?error, "restored workspace unavailable");
+            Err(Failure(StatusCode::BAD_GATEWAY))
+        }
+    }
+}
+async fn workspace_restored(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    backups: Backups,
+    Json(report): Json<cubebot_protocol::runtime::WorkspaceRestored>,
+) -> Result<Response, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let axum::Extension(backups) = backups.ok_or(Failure(StatusCode::CONFLICT))?;
+    let error = report.error.map(|error| error.chars().take(500).collect());
+    if let Err(error) = backups.restored(actor.agent.0, error).await {
+        tracing::warn!(?error, "workspace restore not recorded");
+        return Err(Failure(StatusCode::SERVICE_UNAVAILABLE));
+    }
+    Ok(StatusCode::NO_CONTENT.into_response())
 }
 async fn active(
     identity: &RuntimeIdentity,
