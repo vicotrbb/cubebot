@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.4'
-export const released = '2026-11-07'
+export const version = 'v0.2.5'
+export const released = '2026-11-08'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -66,9 +66,11 @@ export const status = {
     'Knowledge base, shared files and a vault',
     'Routines on schedules, webhooks and account events',
     'Voice calls, with speech that runs offline',
-    'Teams, scoped grants, OpenID Connect, audit log',
+    'Agent teams with managers, shared instructions and an org chart',
+    'Groups, scoped grants, OpenID Connect, audit log',
     'Usage tracking, daily and monthly budgets per agent',
     'Profiles agents read: who you are and how you work',
+    'Backups to S3-compatible storage, restore into a new install',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -80,7 +82,6 @@ export const status = {
     'Hybrid memory retrieval',
     'Skill imports from files and Git',
     'Push notifications',
-    'Backup and restore from the console',
     'Vendor webhooks for connectors',
   ],
 }
@@ -122,18 +123,32 @@ export const timeline = [
     title: '27 connectors',
     body: 'Your accounts, at the level you set.',
   },
+  {
+    date: 'Nov 8',
+    datetime: '2026-11-08',
+    title: 'Agent teams',
+    body: 'Managers, roles and an org chart.',
+  },
 ] as const
 
 export const next = [
-  {
-    title: 'Agent teams',
-    body: 'Agents grouped with an owner and shared work.',
-  },
   { title: 'Video calls', body: 'Agents join your meetings.' },
   { title: 'Kanban', body: 'Tasks on a board you share with agents.' },
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.5',
+    date: '2026-11-08',
+    title: 'Agent teams, Home and backups',
+    items: [
+      'Agent teams: a manager, shared instructions, a role for each member and a room of their own',
+      'Managers run their teams, and a task can go to a whole team',
+      'Home shows every agent at a glance, as a list or an org chart',
+      'Backups to S3-compatible storage without pausing agents, restored into a new install',
+      'Access teams for people are now called groups',
+    ],
+  },
   {
     tag: 'v0.2.4',
     date: '2026-11-07',
@@ -406,7 +421,7 @@ export const wall = [
       'The desktop, live',
       'Rooms',
       'Tasks and plans',
-      'The Situation room',
+      'Home and an org chart',
       'Memories you can edit',
       'Dream reports',
       'Spend per agent',
