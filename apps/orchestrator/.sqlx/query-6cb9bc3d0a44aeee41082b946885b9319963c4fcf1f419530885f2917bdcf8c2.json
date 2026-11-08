@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT w.agent_id, a.name, w.status, w.bytes, w.sha256, w.error\n        FROM backup_workspaces w JOIN agents a ON a.id=w.agent_id\n        WHERE w.backup_id=$1 ORDER BY a.name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "sha256",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "6cb9bc3d0a44aeee41082b946885b9319963c4fcf1f419530885f2917bdcf8c2"
+}

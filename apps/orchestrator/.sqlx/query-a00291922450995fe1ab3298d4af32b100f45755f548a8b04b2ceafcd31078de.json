@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE backups SET status='deleted' WHERE id = ANY($1) AND status <> 'failed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a00291922450995fe1ab3298d4af32b100f45755f548a8b04b2ceafcd31078de"
+}

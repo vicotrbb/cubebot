@@ -29,11 +29,29 @@ services:
   credential-key:
     image: postgres:18-bookworm
     user: '0:0'
-    # The orchestrator's key for stored provider credentials, made once and kept in its volume.
+    # The orchestrator's key for stored provider credentials, made once and kept in its volume, or
+    # for a restore the backed-up installation's key from CUBEBOT_RESTORE_KEY. Bucket secrets from
+    # .env become files, so the orchestrator never reads a secret from its environment.
+    environment:
+      CUBEBOT_RESTORE_KEY: ${CUBEBOT_RESTORE_KEY:-}
+      CUBEBOT_BACKUP_SECRET_ACCESS_KEY: ${CUBEBOT_BACKUP_SECRET_ACCESS_KEY:-}
+      CUBEBOT_RESTORE_SECRET_ACCESS_KEY: ${CUBEBOT_RESTORE_SECRET_ACCESS_KEY:-}
     command:
       - sh
       - -euc
-      - umask 077; [ -s /state/credential.key ] || head -c 32 /dev/urandom > /state/credential.key; chown 65532:65532 /state/credential.key
+      - |
+        umask 077
+        if [ ! -s /state/credential.key ]; then
+          if [ -n "$$CUBEBOT_RESTORE_KEY" ]; then
+            printf %s "$$CUBEBOT_RESTORE_KEY" | base64 -d > /state/credential.key || true
+            [ "$$(wc -c < /state/credential.key)" -eq 32 ] || { rm /state/credential.key; echo "CUBEBOT_RESTORE_KEY is not the base64 key cubebot key prints" >&2; exit 1; }
+          else
+            head -c 32 /dev/urandom > /state/credential.key
+          fi
+        fi
+        printf %s "$$CUBEBOT_BACKUP_SECRET_ACCESS_KEY" > /state/backup-secret
+        printf %s "$$CUBEBOT_RESTORE_SECRET_ACCESS_KEY" > /state/restore-secret
+        chown 65532:65532 /state/credential.key /state/backup-secret /state/restore-secret
     volumes:
       - orchestrator-state:/state
     network_mode: none
@@ -49,6 +67,24 @@ services:
       CUBEBOT_STORAGE_DIRECTORY: /var/lib/cubebot/files
       CUBEBOT_INSTALLATION_NAME: ${CUBEBOT_INSTALLATION_NAME:-Cubebot}
       RUST_LOG: ${RUST_LOG:-info}
+      # Backups (Platform › Backup shows each value set here as read-only); empty is unset.
+      CUBEBOT_BACKUP_ENDPOINT: ${CUBEBOT_BACKUP_ENDPOINT:-}
+      CUBEBOT_BACKUP_REGION: ${CUBEBOT_BACKUP_REGION:-}
+      CUBEBOT_BACKUP_BUCKET: ${CUBEBOT_BACKUP_BUCKET:-}
+      CUBEBOT_BACKUP_ACCESS_KEY_ID: ${CUBEBOT_BACKUP_ACCESS_KEY_ID:-}
+      CUBEBOT_BACKUP_SECRET_ACCESS_KEY_FILE: /state/backup-secret
+      CUBEBOT_BACKUP_SCHEDULE: ${CUBEBOT_BACKUP_SCHEDULE:-}
+      CUBEBOT_BACKUP_KEEP_DAILY: ${CUBEBOT_BACKUP_KEEP_DAILY:-}
+      CUBEBOT_BACKUP_KEEP_WEEKLY: ${CUBEBOT_BACKUP_KEEP_WEEKLY:-}
+      CUBEBOT_BACKUP_BANDWIDTH_BYTES: ${CUBEBOT_BACKUP_BANDWIDTH_BYTES:-}
+      CUBEBOT_BACKUP_CONCURRENCY: ${CUBEBOT_BACKUP_CONCURRENCY:-}
+      # A fresh installation restores from here at its first start; ignored once it has data.
+      CUBEBOT_RESTORE_ENDPOINT: ${CUBEBOT_RESTORE_ENDPOINT:-}
+      CUBEBOT_RESTORE_REGION: ${CUBEBOT_RESTORE_REGION:-}
+      CUBEBOT_RESTORE_BUCKET: ${CUBEBOT_RESTORE_BUCKET:-}
+      CUBEBOT_RESTORE_ACCESS_KEY_ID: ${CUBEBOT_RESTORE_ACCESS_KEY_ID:-}
+      CUBEBOT_RESTORE_SECRET_ACCESS_KEY_FILE: /state/restore-secret
+      CUBEBOT_RESTORE_BACKUP: ${CUBEBOT_RESTORE_BACKUP:-}
     volumes:
       - orchestrator-state:/state:ro
       # Shared files: only this one orchestrator mounts it.

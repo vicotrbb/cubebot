@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO backup_workspaces (backup_id, agent_id, status, error)\n        SELECT $1, id,\n            CASE WHEN desired_state='stopped' THEN 'missing' ELSE 'requested' END,\n            CASE WHEN desired_state='stopped' THEN 'The agent is stopped, so it could not send its workspace.' END\n        FROM agents WHERE desired_state <> 'retired'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1f5627fa33b13f1402bf562cd31364cc261f6806b7160c965542702c19035090"
+}

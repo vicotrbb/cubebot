@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod api;
+pub mod backup;
 pub mod connections;
 pub mod identity;
 pub mod knowledge;

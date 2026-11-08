@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE backup_workspaces SET status='uploading'\n            WHERE backup_id=$1 AND agent_id=$2 AND status='requested'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f6d59451e3ef6d1154c06705040c9fb49bfe02103937144b5baeec272695e89a"
+}

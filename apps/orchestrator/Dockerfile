@@ -8,7 +8,14 @@ COPY modules ./modules
 RUN cargo build --locked --release -p cubebot-orchestrator
 
 FROM debian:bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+# Backups run pg_dump and pg_restore, which must be at least as new as the server: PostgreSQL 18's
+# client from the PostgreSQL project's repository, which Debian bookworm does not carry.
+ADD https://www.postgresql.org/media/keys/ACCC4CF8.asc /usr/share/keyrings/postgresql.asc
+RUN chmod 644 /usr/share/keyrings/postgresql.asc \
+    && apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 \
     && rm -rf /var/lib/apt/lists/*
 # Compose installations with agents start sandboxes through the host's Docker CLI; Kubernetes never runs it.
 COPY --from=docker:28.5.1-cli /usr/local/bin/docker /usr/local/bin/docker

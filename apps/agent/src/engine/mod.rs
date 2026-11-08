@@ -84,6 +84,9 @@ struct Agent {
     dream_at: Option<Instant>,
     dreaming: Option<(watch::Sender<bool>, tokio::task::JoinHandle<()>)>,
     wallpaper: Option<tokio::task::JoinHandle<()>>,
+    /// Any workspace a restore left for this agent is back.
+    restored: bool,
+    backup: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Agent {
@@ -116,15 +119,29 @@ impl Agent {
             dream_at: None,
             dreaming: None,
             wallpaper: None,
+            restored: false,
+            backup: None,
         })
     }
 
-    async fn session(&mut self, client: &mut RuntimeClient) -> Result<Next, Error> {
+    /// Once per process: the runtime session, then any workspace a restore left, before any work.
+    async fn prepare(&mut self, client: &mut RuntimeClient) -> Result<(), Error> {
         if !self.bootstrapped {
             client.bootstrap().await?;
             self.bootstrapped = true;
             self.memory = client.memory();
         }
+        if !self.restored
+            && let Some(memory) = &self.memory
+        {
+            crate::workspace::restore(memory).await?;
+            self.restored = true;
+        }
+        Ok(())
+    }
+
+    async fn session(&mut self, client: &mut RuntimeClient) -> Result<Next, Error> {
+        self.prepare(client).await?;
         let mut channel = client.connect().await?;
         // Changes while disconnected are not delivered, so each connection starts with a fetch.
         self.redraw();
@@ -157,9 +174,12 @@ impl Agent {
         }
     }
 
-    /// A wallpaper change is not work, so it neither disarms the idle timer nor makes a dream yield.
+    /// A wallpaper change or a backup is not work, so it neither disarms the idle timer nor makes a dream yield.
     fn wake(&mut self, delivery: &Delivery) {
-        if matches!(delivery, Delivery::WallpaperChanged) {
+        if matches!(
+            delivery,
+            Delivery::WallpaperChanged | Delivery::Backup { .. }
+        ) {
             return;
         }
         self.dream_at = None;
@@ -242,10 +262,9 @@ impl Agent {
                 self.drain = Some(request_id);
                 self.idle(channel).await?;
             }
-            Delivery::Idle {
-                dream_after_seconds,
-            } => self.rest(dream_after_seconds),
-            Delivery::WallpaperChanged => self.redraw(),
+            Delivery::Idle { .. } | Delivery::WallpaperChanged | Delivery::Backup { .. } => {
+                self.signal(delivery);
+            }
             Delivery::Revoked => {
                 // Unreported effects stay uncertain in the ledger; stopping the sandbox ends them.
                 for active in self.active.values() {
@@ -257,10 +276,30 @@ impl Agent {
         Ok(None)
     }
 
+    /// Deliveries that are not work.
+    fn signal(&mut self, delivery: Delivery) {
+        match delivery {
+            Delivery::Idle {
+                dream_after_seconds,
+            } => self.rest(dream_after_seconds),
+            Delivery::WallpaperChanged => self.redraw(),
+            Delivery::Backup { backup } => self.back_up(backup),
+            _ => {}
+        }
+    }
+
     fn rest(&mut self, dream_after_seconds: u64) {
         if self.active.is_empty() {
             let delay = Duration::from_secs(dream_after_seconds);
             self.dream_at = Some(Instant::now() + delay);
+        }
+    }
+
+    /// One backup at a time; it runs beside any work, never in its way.
+    fn back_up(&mut self, backup: String) {
+        let running = self.backup.as_ref().is_some_and(|task| !task.is_finished());
+        if let (false, Some(client)) = (running, self.memory.clone()) {
+            self.backup = Some(tokio::spawn(crate::workspace::back_up(client, backup)));
         }
     }
 

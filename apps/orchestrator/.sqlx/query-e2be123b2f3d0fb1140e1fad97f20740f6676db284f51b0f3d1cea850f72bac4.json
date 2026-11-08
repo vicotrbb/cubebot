@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE backup_settings SET key_downloaded_at=clock_timestamp(), key_downloaded_by=$1\n        WHERE key_downloaded_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e2be123b2f3d0fb1140e1fad97f20740f6676db284f51b0f3d1cea850f72bac4"
+}

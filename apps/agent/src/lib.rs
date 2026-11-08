@@ -16,6 +16,7 @@ pub mod memory;
 pub mod people;
 pub mod skills;
 pub mod tools;
+pub mod workspace;
 
 pub mod journal;
 

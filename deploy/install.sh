@@ -20,7 +20,15 @@ CUBEBOT_RUNTIME|fresh|${kvm_mark}kvm=KVM guests;container=Containers;off=No agen
 CUBEBOT_ACCESS|fresh|local=This machine at http://localhost:${CUBEBOT_PORT:-3000};domain=A public domain with automatic certificates|local|How will people reach the console?|This machine keeps the console on loopback (CUBEBOT_PORT picks another port). A public domain serves it on ports 80 and 443 with a certificate Caddy obtains, and agents reach Cubebot through it.
 CUBEBOT_DOMAIN|fresh && [ "\${CUBEBOT_ACCESS:-}" = domain ]|text||Domain name|The name must already resolve to this machine, with ports 80 and 443 open to it. Whoever opens the console first becomes the administrator, unless you create the administrator now.
 CUBEBOT_HOME|true|text|$HOME/.cubebot|Install directory|It holds the compose files, the cubebot command and .env with the database password.
-CUBEBOT_ADMIN|fresh|now=Create it now in this terminal;console=At the console, the first account created|$(admin_default)|Administrator|The administrator manages people, agents and providers. Created now, nobody else can claim the console; at the console, the first person to open it becomes the administrator.
+CUBEBOT_RESTORE|fresh|no=Start a new installation;yes=Restore from a backup|no|Restore from a backup?|A restore loads a Cubebot backup from an S3-compatible bucket into this new installation at its first start; the console shows only its progress until it finishes. It needs the bucket's access key and the credential key of the installation that made the backup, which its cubebot key command prints. Connections and sign-ins restored with it may have expired.
+CUBEBOT_RESTORE_ENDPOINT|[ "\${CUBEBOT_RESTORE:-}" = yes ]|text||Bucket endpoint|The bucket's S3 API address, such as https://s3.eu-west-1.amazonaws.com, https://<account>.r2.cloudflarestorage.com or http://minio.lan:9000.
+CUBEBOT_RESTORE_REGION|[ "\${CUBEBOT_RESTORE:-}" = yes ]|text|us-east-1|Bucket region|auto for Cloudflare R2; MinIO accepts us-east-1.
+CUBEBOT_RESTORE_BUCKET|[ "\${CUBEBOT_RESTORE:-}" = yes ]|text||Bucket name|The bucket the backups were written to.
+CUBEBOT_RESTORE_ACCESS_KEY_ID|[ "\${CUBEBOT_RESTORE:-}" = yes ]|text||Access key ID|A key that can read the bucket.
+CUBEBOT_RESTORE_SECRET_ACCESS_KEY|[ "\${CUBEBOT_RESTORE:-}" = yes ]|secret||Secret access key|Typed twice and never shown; kept in .env.
+CUBEBOT_RESTORE_BACKUP|[ "\${CUBEBOT_RESTORE:-}" = yes ]|text|newest|Which backup?|newest takes the newest verified backup; or give a backup's id, such as 20261107T030000Z, from Platform › Backup.
+CUBEBOT_RESTORE_KEY|[ "\${CUBEBOT_RESTORE:-}" = yes ]|secret||Credential key|The line cubebot key printed on the backed-up installation. Backups never contain it, and the restore stops at once if it does not match.
+CUBEBOT_ADMIN|fresh && [ "\${CUBEBOT_RESTORE:-}" != yes ]|now=Create it now in this terminal;console=At the console, the first account created|$(admin_default)|Administrator|The administrator manages people, agents and providers. Created now, nobody else can claim the console; at the console, the first person to open it becomes the administrator.
 CUBEBOT_BOOTSTRAP_LOGIN|[ "\${CUBEBOT_ADMIN:-}" = now ]|text|admin|Administrator login|You sign in to the console with this login.
 CUBEBOT_BOOTSTRAP_PASSWORD|[ "\${CUBEBOT_ADMIN:-}" = now ]|secret||Administrator password|Typed twice and never shown.
 EOF
@@ -413,6 +421,7 @@ console_url() {
 summary() {
     local admin="the first account created at the console" kept=""
     [ "${CUBEBOT_ADMIN:-}" != now ] || admin="created now as ${CUBEBOT_BOOTSTRAP_LOGIN:-admin}"
+    [ "${CUBEBOT_RESTORE:-}" != yes ] || admin="the backup's accounts, restored from bucket $CUBEBOT_RESTORE_BUCKET"
     fresh || kept=" (keeps its .env and data)" admin="unchanged"
     local network=""
     [ "$(setting CUBEBOT_RUNTIME)" = off ] || network="Agent network  no firewall: agents can reach this machine's private networks and cloud metadata; only the Helm chart blocks them"
@@ -443,6 +452,12 @@ start() {
                 for name in CUBEBOT_DOMAIN CUBEBOT_PORT CUBEBOT_REGISTRY CUBEBOT_SOURCE; do
                     [ -z "${!name:-}" ] || echo "$name=${!name}"
                 done
+                if [ "${CUBEBOT_RESTORE:-}" = yes ]; then
+                    for name in CUBEBOT_RESTORE_ENDPOINT CUBEBOT_RESTORE_REGION CUBEBOT_RESTORE_BUCKET CUBEBOT_RESTORE_ACCESS_KEY_ID \
+                        CUBEBOT_RESTORE_SECRET_ACCESS_KEY CUBEBOT_RESTORE_BACKUP CUBEBOT_RESTORE_KEY; do
+                        echo "$name=${!name}"
+                    done
+                fi
             } >"$home/.env"
         fi
         CUBEBOT_HOME="$home" "$home/cubebot" update "$release"
@@ -469,22 +484,26 @@ finish() {
     local url runtime command=${home/#$HOME/\~}/cubebot
     url=$(console_url) runtime=$(setting CUBEBOT_RUNTIME)
     if [ -z "$fancy" ]; then
-        if [ -n "$fresh_install" ] && [ "${CUBEBOT_ADMIN:-}" = now ]; then
+        if [ "${CUBEBOT_RESTORE:-}" = yes ]; then
+            echo "Open $url to follow the restore, then sign in with an account from the backup."
+        elif [ -n "$fresh_install" ] && [ "${CUBEBOT_ADMIN:-}" = now ]; then
             echo "Open $url and sign in as $CUBEBOT_BOOTSTRAP_LOGIN."
         elif [ -n "$fresh_install" ]; then
             echo "Open $url: the first account created there becomes the administrator. To claim it from this terminal instead, which matters when CUBEBOT_DOMAIN is public, run $command admin."
         fi
         [ "$runtime" = off ] || echo "Then add a provider key: the gear beside your name, then AI providers."
-        echo "Manage this installation with $command up | down | update | logs | admin | uninstall."
+        echo "Manage this installation with $command up | down | update | logs | admin | key | uninstall."
         return
     fi
     local admin="" next=""
-    if [ -n "$fresh_install" ] && [ "${CUBEBOT_ADMIN:-}" = now ]; then
+    if [ "${CUBEBOT_RESTORE:-}" = yes ]; then
+        admin="The console shows the restore until it finishes; then sign in with an account from the backup."
+    elif [ -n "$fresh_install" ] && [ "${CUBEBOT_ADMIN:-}" = now ]; then
         admin="Sign in as $CUBEBOT_BOOTSTRAP_LOGIN."
     elif [ -n "$fresh_install" ]; then
         admin="The first account created there becomes the administrator; $command admin claims it here."
     fi
-    [ "$runtime" = off ] || next="${bold}Next$reset           add a provider key: the gear beside your name, then AI providers"
+    [ "$runtime" = off ] || [ "${CUBEBOT_RESTORE:-}" = yes ] || next="${bold}Next$reset           add a provider key: the gear beside your name, then AI providers"
     card "${bold}Cubebot is running$reset" \
         "Console        $orange$url$reset" \
         "Agents         $runtime" \
@@ -496,6 +515,7 @@ finish() {
         "$command update      move to the latest release" \
         "$command logs        show the services' logs" \
         "$command admin       create the administrator" \
+        "$command key         print the credential key a restore needs" \
         "$command uninstall   remove it, its agents and all data"
 }
 

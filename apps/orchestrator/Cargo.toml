@@ -35,7 +35,7 @@ sha2 = "0.10"
 # A viewer matches its answer by the exact `t` it sent, so floats must round-trip.
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio-rustls", "postgres", "migrate", "macros", "uuid", "json"] }
-tokio = { workspace = true, features = ["process"] }
+tokio = { workspace = true, features = ["process", "io-util", "fs"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

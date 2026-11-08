@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE backup_workspaces\n            SET status=CASE WHEN $3::text IS NULL THEN 'done' ELSE 'missing' END,\n                bytes=$4, sha256=$5, error=$3\n            WHERE backup_id=$1 AND agent_id=$2 AND status='uploading'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16f8841a688d4319fc0c4c673a59467e650d79b3fda81387f9d49aa3e506a451"
+}

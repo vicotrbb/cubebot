@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT backup_id, bytes, sha256 FROM workspace_restores WHERE agent_id=$1 AND restored_at IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "backup_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "sha256",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1d2f087421e8a88edb3b89ffbf9abd25706f41884fc21b1e37d3eac5a8d2bcd6"
+}

@@ -67,6 +67,7 @@ export const PLATFORM = [
   ['/platform/connections', 'Connections'],
   ['/platform/mcp', 'MCP servers'],
   ['/platform/vault', 'Vault'],
+  ['/platform/backup', 'Backup'],
   ['/platform/audit', 'Audit log'],
   ['/platform/health', 'Health'],
 ] as const

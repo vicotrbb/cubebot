@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM agent_resources WHERE kind = 'workspace' AND namespace <> 'docker'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "a364ff08f80d476ee00cc57f4a4795a24362efd72c36cc78211fb5036bf9e8d5"
+}

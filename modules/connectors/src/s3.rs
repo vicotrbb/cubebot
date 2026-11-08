@@ -388,18 +388,26 @@ fn amz_date() -> String {
 }
 
 fn region(cx: &Context) -> Result<&str, Error> {
-    let region = cx.setting("region").unwrap_or("us-east-1").trim();
-    let valid = region
-        .bytes()
-        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+    checked_region(cx.setting("region").unwrap_or("us-east-1").trim())
+}
+
+pub fn checked_region(region: &str) -> Result<&str, Error> {
+    let valid = !region.is_empty()
+        && region
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
     valid
         .then_some(region)
         .ok_or_else(|| Error::Invalid("the region is letters, digits and hyphens".into()))
 }
 
 /// The endpoint and whether buckets go in its path.
-fn endpoint(cx: &Context, region: &str) -> Result<(Url, bool), Error> {
-    let (address, custom) = match cx.setting("endpoint") {
+fn endpoint(
+    custom: Option<&str>,
+    addressing: Option<&str>,
+    region: &str,
+) -> Result<(Url, bool), Error> {
+    let (address, custom) = match custom {
         Some(endpoint) => (endpoint.trim().to_owned(), true),
         None => (format!("https://s3.{region}.amazonaws.com"), false),
     };
@@ -407,7 +415,7 @@ fn endpoint(cx: &Context, region: &str) -> Result<(Url, bool), Error> {
         .ok()
         .filter(|url| url.host_str().is_some())
         .ok_or_else(|| Error::Invalid("the endpoint is not a valid address".into()))?;
-    let path_style = match cx.setting("addressing") {
+    let path_style = match addressing {
         Some("path") => true,
         Some("virtual") => false,
         _ => custom,
@@ -448,65 +456,108 @@ fn checked_key(key: &str) -> Result<&str, Error> {
     Ok(key)
 }
 
+/// Signs requests for one endpoint, for callers that send them on their own client, such as
+/// Cubebot's backups.
+pub struct Signer<'a> {
+    /// AWS S3 in `region` when absent.
+    pub endpoint: Option<&'a str>,
+    /// `path` or `virtual`; when absent, virtual-hosted for AWS and path style for any other.
+    pub addressing: Option<&'a str>,
+    pub region: &'a str,
+    pub key_id: &'a str,
+    pub secret: &'a str,
+}
+
+/// A signed request: its URL and every header to send, except `host`, which the client sets.
+pub struct Signed {
+    pub url: String,
+    pub headers: Vec<(&'static str, String)>,
+}
+
+/// The payload hash of a body sent without hashing it first, which S3 accepts over HTTPS and HTTP.
+pub const UNSIGNED: &str = "UNSIGNED-PAYLOAD";
+
+impl Signer<'_> {
+    /// `payload` is the body's SHA-256 in lowercase hex, or [`UNSIGNED`]. An empty key with a
+    /// bucket addresses the bucket itself.
+    pub fn sign(
+        &self,
+        method: &Method,
+        bucket: Option<&str>,
+        key: &str,
+        query: &[(&'static str, String)],
+        headers: Vec<(&'static str, String)>,
+        payload: &str,
+    ) -> Result<Signed, Error> {
+        let region = checked_region(self.region)?;
+        let (endpoint, path_style) = endpoint(self.endpoint, self.addressing, region)?;
+        let host = endpoint.host_str().unwrap_or_default();
+        let port = endpoint.port().map(|port| format!(":{port}"));
+        let key = encode(key, true);
+        let (host, path) = match (bucket, path_style) {
+            (None, _) => (host.to_owned(), "/".to_owned()),
+            (Some(bucket), true) if key.is_empty() => (host.to_owned(), format!("/{bucket}")),
+            (Some(bucket), true) => (host.to_owned(), format!("/{bucket}/{key}")),
+            (Some(bucket), false) => (format!("{bucket}.{host}"), format!("/{key}")),
+        };
+        let host = format!("{host}{}", port.unwrap_or_default());
+        let query = self::query(query);
+        let mut url = format!("{}://{host}{path}", endpoint.scheme());
+        if !query.is_empty() {
+            url = format!("{url}?{query}");
+        }
+        let date = amz_date();
+        let mut headers = headers;
+        headers.extend([
+            ("x-amz-content-sha256", payload.to_owned()),
+            ("x-amz-date", date.clone()),
+        ]);
+        let mut signed: Vec<(&str, &str)> = vec![("host", &host)];
+        signed.extend(headers.iter().map(|(name, value)| (*name, value.as_str())));
+        let signing = Signing {
+            key_id: self.key_id.trim(),
+            secret: self.secret,
+            region,
+            service: "s3",
+            date: &date,
+        };
+        let canonical = Canonical {
+            method: method.as_str(),
+            path: &path,
+            query: &query,
+            headers: signed,
+            payload,
+        };
+        let authorization = authorization(&signing, &canonical);
+        headers.push(("authorization", authorization));
+        Ok(Signed { url, headers })
+    }
+}
+
 /// The signed request, its URL built for the endpoint's addressing style.
 fn signed(cx: &Context, request: Request) -> Result<RequestBuilder, Error> {
-    let region = region(cx)?;
-    let (endpoint, path_style) = endpoint(cx, region)?;
-    let host = endpoint.host_str().unwrap_or_default();
-    let port = endpoint.port().map(|port| format!(":{port}"));
-    let key = encode(request.key, true);
-    let (host, path) = match (request.bucket, path_style) {
-        (None, _) => (host.to_owned(), "/".to_owned()),
-        (Some(bucket), true) if key.is_empty() => (host.to_owned(), format!("/{bucket}")),
-        (Some(bucket), true) => (host.to_owned(), format!("/{bucket}/{key}")),
-        (Some(bucket), false) => (format!("{bucket}.{host}"), format!("/{key}")),
+    let signer = Signer {
+        endpoint: cx.setting("endpoint"),
+        addressing: cx.setting("addressing"),
+        region: region(cx)?,
+        key_id: cx.setting("access_key_id").ok_or(Error::Unauthorized)?,
+        secret: cx.secret("secret_access_key")?,
     };
-    let host = format!("{host}{}", port.unwrap_or_default());
-    let query = query(&request.query);
-    let mut url = format!("{}://{host}{path}", endpoint.scheme());
-    if !query.is_empty() {
-        url = format!("{url}?{query}");
-    }
     let payload = match request.body.is_empty() {
         true => EMPTY.to_owned(),
         false => hex(&Sha256::digest(&request.body)),
     };
-    let date = amz_date();
-    let mut headers: Vec<(&str, &str)> = vec![
-        ("host", &host),
-        ("x-amz-content-sha256", &payload),
-        ("x-amz-date", &date),
-    ];
-    headers.extend(
-        request
-            .headers
-            .iter()
-            .map(|(name, value)| (*name, value.as_str())),
-    );
-    let signing = Signing {
-        key_id: cx
-            .setting("access_key_id")
-            .ok_or(Error::Unauthorized)?
-            .trim(),
-        secret: cx.secret("secret_access_key")?,
-        region,
-        service: "s3",
-        date: &date,
-    };
-    let canonical = Canonical {
-        method: request.method.as_str(),
-        path: &path,
-        query: &query,
-        headers,
-        payload: &payload,
-    };
-    let authorization = authorization(&signing, &canonical);
-    let mut builder = cx
-        .request(request.method.clone(), &url)?
-        .header("authorization", authorization);
-    // The client sets the host header itself, from the same URL.
-    for (name, value) in canonical.headers.iter().filter(|(name, _)| *name != "host") {
-        builder = builder.header(*name, *value);
+    let signed = signer.sign(
+        &request.method,
+        request.bucket,
+        request.key,
+        &request.query,
+        request.headers,
+        &payload,
+    )?;
+    let mut builder = cx.request(request.method, &signed.url)?;
+    for (name, value) in signed.headers {
+        builder = builder.header(name, value);
     }
     Ok(builder.body(request.body))
 }
@@ -611,6 +662,42 @@ async fn objects(cx: &Context, input: Value) -> Result<Value, Error> {
     let truncated = text(root, "IsTruncated") == Some("true");
     let next = text(root, "NextContinuationToken").filter(|_| truncated);
     Ok(json!({"bucket": bucket, "objects": objects, "folders": folders, "continuation": next}))
+}
+
+/// One page of a ListObjectsV2 answer: each key with its size, and the next page's token.
+pub struct Listed {
+    pub objects: Vec<(String, u64)>,
+    pub next: Option<String>,
+}
+
+pub fn listed(body: &[u8]) -> Result<Listed, Error> {
+    let document = xml(body)?;
+    let root = document.root_element();
+    let objects = every(root, "Contents")
+        .filter_map(|object| {
+            let size = text(object, "Size")?.parse().ok()?;
+            Some((text(object, "Key")?.to_owned(), size))
+        })
+        .collect();
+    let truncated = text(root, "IsTruncated") == Some("true");
+    let next = text(root, "NextContinuationToken").filter(|_| truncated);
+    Ok(Listed {
+        objects,
+        next: next.map(str::to_owned),
+    })
+}
+
+/// A field of an XML answer, such as a new multipart upload's `UploadId`. S3 may answer a
+/// completed multipart upload with 200 and an `Error` document, which is refused here.
+pub fn answered(body: &[u8], name: &str) -> Result<Option<String>, Error> {
+    let document = xml(body)?;
+    let root = document.root_element();
+    if root.tag_name().name() == "Error" {
+        let code = text(root, "Code").unwrap_or("Error");
+        let message = text(root, "Message").unwrap_or_default();
+        return Err(Error::Rejected(format!("{code}: {message}")));
+    }
+    Ok(text(root, name).map(str::to_owned))
 }
 
 async fn head(cx: &Context, input: Value) -> Result<Value, Error> {

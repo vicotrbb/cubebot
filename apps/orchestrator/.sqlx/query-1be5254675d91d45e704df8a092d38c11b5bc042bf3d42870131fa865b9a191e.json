@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE backups SET status='failed', finished_at=clock_timestamp(),\n                error='The orchestrator stopped during this backup.'\n            WHERE status='running'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "1be5254675d91d45e704df8a092d38c11b5bc042bf3d42870131fa865b9a191e"
+}

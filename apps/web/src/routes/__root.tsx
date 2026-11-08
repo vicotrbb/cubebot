@@ -6,6 +6,7 @@ import {
   Scripts,
 } from '@tanstack/react-router'
 import { queryClient } from '../app/queries'
+import { RestoreGate } from '../features/restore/Restore'
 import { THEME_BOOT } from '../app/theme'
 import tokens from '../styles/tokens.css?url'
 import base from '../styles/base.css?url'
@@ -51,7 +52,9 @@ function Root() {
       </head>
       <body>
         <QueryClientProvider client={queryClient}>
-          <Outlet />
+          <RestoreGate>
+            <Outlet />
+          </RestoreGate>
         </QueryClientProvider>
         <Scripts />
       </body>

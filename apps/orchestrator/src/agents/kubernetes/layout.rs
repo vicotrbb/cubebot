@@ -206,6 +206,10 @@ impl Layout {
                 json!({"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}),
             );
         }
+        // The system tests' scripted model, as Docker sandboxes forward it.
+        if let Ok(origin) = std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
+            env.push(json!({"name":"CUBEBOT_TEST_PROVIDER_ORIGIN","value":origin}));
+        }
         env.extend(extra_env);
         let mut mounts = vec![
             json!({"name":"workspace","mountPath":"/var/lib/cubebot"}),

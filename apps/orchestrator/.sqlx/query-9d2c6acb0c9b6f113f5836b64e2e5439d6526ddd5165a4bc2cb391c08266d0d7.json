@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.agent_id, a.name, r.backup_id, EXTRACT(EPOCH FROM r.restored_at)::bigint AS restored,\n                r.error\n            FROM workspace_restores r JOIN agents a ON a.id=r.agent_id\n            ORDER BY a.name\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "backup_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "restored",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "9d2c6acb0c9b6f113f5836b64e2e5439d6526ddd5165a4bc2cb391c08266d0d7"
+}

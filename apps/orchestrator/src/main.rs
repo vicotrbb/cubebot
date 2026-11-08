@@ -106,6 +106,7 @@ async fn run(
     control: Option<Tls>,
     address: SocketAddr,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let listening = restored(listening).await?;
     let (router, controller) = application().await?;
     let router = cubebot_orchestrator::api::traced(router);
     let scheme = match listening {
@@ -123,6 +124,102 @@ async fn run(
     };
     served.map_err(failure("orchestrator ownership or service failed"))?;
     Ok(())
+}
+
+/// A fresh installation with a restore source restores before anything else starts, serving
+/// only its progress meanwhile. A failed restore keeps serving its reason until stopped.
+async fn restored(listening: Listening) -> Result<Listening, Box<dyn Error + Send + Sync>> {
+    let Ok(url) = std::env::var("CUBEBOT_DATABASE_URL") else {
+        return Ok(listening);
+    };
+    let plan = cubebot_orchestrator::backup::restore::plan(&url)
+        .await
+        .map_err(failure("the restore could not start"))?;
+    let Some(plan) = plan else {
+        return Ok(listening);
+    };
+    Ok(match listening {
+        Listening::Plain(listener) => Listening::Plain(restore_on(listener, plan).await?),
+        Listening::Tls(listener) => Listening::Tls(restore_on(listener, plan).await?),
+    })
+}
+
+async fn restore_on<L>(
+    listener: L,
+    plan: cubebot_orchestrator::backup::restore::Plan,
+) -> Result<L, Box<dyn Error + Send + Sync>>
+where
+    L: axum::serve::Listener<Addr = SocketAddr>,
+{
+    use cubebot_orchestrator::backup::restore;
+    let (progress, watching) = tokio::sync::watch::channel(restore::RestoreProgress::default());
+    let mut restoring = tokio::spawn(plan.run(progress));
+    let restored = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let ended = {
+        let restored = restored.clone();
+        async move {
+            tokio::select! {
+                outcome = &mut restoring => {
+                    if !matches!(outcome, Ok(Ok(()))) {
+                        shutdown_signal().await;
+                        return;
+                    }
+                    restored.store(true, std::sync::atomic::Ordering::SeqCst);
+                }
+                () = shutdown_signal() => {}
+            }
+        }
+    };
+    let lent = Lent::new(listener)?;
+    axum::serve(lent.clone(), restore::router(watching))
+        .with_graceful_shutdown(ended)
+        .await?;
+    if !restored.load(std::sync::atomic::Ordering::SeqCst) {
+        return Err("stopped before the restore finished".into());
+    }
+    lent.into_inner()
+}
+
+/// Lends a listener to the restore's server, and gives it back once that server stops.
+struct Lent<L> {
+    listener: std::sync::Arc<tokio::sync::Mutex<L>>,
+    address: SocketAddr,
+}
+
+impl<L> Clone for Lent<L> {
+    fn clone(&self) -> Self {
+        Self {
+            listener: self.listener.clone(),
+            address: self.address,
+        }
+    }
+}
+
+impl<L: axum::serve::Listener<Addr = SocketAddr>> Lent<L> {
+    fn new(listener: L) -> std::io::Result<Self> {
+        let address = listener.local_addr()?;
+        Ok(Self {
+            listener: std::sync::Arc::new(tokio::sync::Mutex::new(listener)),
+            address,
+        })
+    }
+
+    fn into_inner(self) -> Result<L, Box<dyn Error + Send + Sync>> {
+        std::sync::Arc::try_unwrap(self.listener)
+            .map(tokio::sync::Mutex::into_inner)
+            .map_err(|_| "the listener is still lent after the restore".into())
+    }
+}
+
+impl<L: axum::serve::Listener<Addr = SocketAddr>> axum::serve::Listener for Lent<L> {
+    type Io = L::Io;
+    type Addr = SocketAddr;
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        self.listener.lock().await.accept().await
+    }
+    fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        Ok(self.address)
+    }
 }
 
 async fn shutdown_signal() {
@@ -166,6 +263,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             };
             let storage = shared_files(&pool).await?;
             let controller = configured_controller(&pool).await?;
+            let backups = backups(&pool, &url, storage.clone())?;
             let Ok(router) =
                 cubebot_orchestrator::api::configured_router(pool, origin, config).await
             else {
@@ -175,7 +273,8 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                     .map_err(failure("startup cleanup could not release ownership"))?;
                 return Err("identity configuration failed".into());
             };
-            let router = with_storage(controller.routes(router), storage);
+            let router =
+                with_storage(controller.routes(router), storage).layer(axum::Extension(backups));
             Ok((router, Some(controller)))
         }
         Err(std::env::VarError::NotPresent) => {
@@ -276,6 +375,30 @@ async fn shared_files(
         storage.limit(quota, upload);
     }
     Ok(storage)
+}
+
+/// Starts the backup worker, once this orchestrator owns the installation.
+fn backups(
+    pool: &sqlx::PgPool,
+    url: &str,
+    storage: Option<cubebot_orchestrator::storage::Storage>,
+) -> Result<cubebot_orchestrator::backup::Backups, Box<dyn Error + Send + Sync>> {
+    let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
+        .map(|path| {
+            cubebot_orchestrator::connections::Credentials::from_file(std::path::Path::new(&path))
+        })
+        .transpose()
+        .map_err(failure(
+            "CUBEBOT_CREDENTIAL_KEY_FILE is not a private 32-byte key",
+        ))?;
+    let backups = cubebot_orchestrator::backup::Backups::new(
+        pool.clone(),
+        url.to_owned(),
+        credentials,
+        storage,
+    );
+    backups.start();
+    Ok(backups)
 }
 
 fn with_storage(

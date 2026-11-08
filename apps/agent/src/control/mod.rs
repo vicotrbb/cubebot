@@ -521,6 +521,52 @@ impl MemoryClient {
         Ok(request.timeout(Duration::from_secs(30 * 60)))
     }
 
+    /// The workspace as a tar stream, for the backup that asked; it may take hours at the pace
+    /// the orchestrator reads it.
+    #[tracing::instrument(skip_all, fields(backup))]
+    pub async fn put_workspace(&self, backup: &str, body: reqwest::Body) -> Result<(), Error> {
+        let url = self.url.join(&format!("backups/{backup}/workspace"));
+        let request = self.http.put(url.map_err(Error::configuration)?);
+        let request = request.bearer_auth(&self.token).body(body);
+        let response = request
+            .timeout(Duration::from_secs(24 * 60 * 60))
+            .send()
+            .await;
+        match response.map_err(request_failed)?.status() {
+            status if status.is_success() => Ok(()),
+            reqwest::StatusCode::CONFLICT => Err(Error::unavailable(
+                "the orchestrator no longer wants this workspace for that backup",
+            )),
+            _ => Err(Error::Unavailable(None)),
+        }
+    }
+
+    /// The workspace a restore left for this agent, when one is waiting.
+    pub async fn workspace_restore(&self) -> Result<Option<reqwest::Response>, Error> {
+        let request = self.files_request(reqwest::Method::GET, "workspace/restore")?;
+        let response = request
+            .timeout(Duration::from_secs(24 * 60 * 60))
+            .send()
+            .await;
+        let response = response.map_err(request_failed)?;
+        match response.status() {
+            // An orchestrator from before backups has nothing to restore.
+            reqwest::StatusCode::NO_CONTENT | reqwest::StatusCode::NOT_FOUND => Ok(None),
+            status if status.is_success() => Ok(Some(response)),
+            _ => Err(Error::Unavailable(None)),
+        }
+    }
+
+    pub async fn workspace_restored(&self, error: Option<String>) -> Result<(), Error> {
+        let request = self.files_request(reqwest::Method::POST, "workspace/restore")?;
+        let report = runtime::WorkspaceRestored { error };
+        let response = request.json(&report).send().await.map_err(request_failed)?;
+        match response.status().is_success() {
+            true => Ok(()),
+            false => Err(Error::Unavailable(None)),
+        }
+    }
+
     pub async fn kb_get(
         &self,
         path: &str,

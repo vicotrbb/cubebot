@@ -22,6 +22,8 @@ struct Channel {
     /// Steering sent on this connection; a reconnect resends what is still unincorporated.
     steered: std::collections::HashSet<Uuid>,
     wallpaper: Option<i64>,
+    /// The backup this connection last asked for the workspace.
+    backup: Option<String>,
 }
 
 impl Channel {
@@ -116,7 +118,11 @@ impl RuntimeIdentity {
                 request_id: drain.request_id,
             });
         }
-        let wallpaper = wallpaper_revision(&self.pool, &control.actor).await?;
+        let (wallpaper, backup) = signals(&self.pool, &control.actor).await?;
+        if let Some(backup) = backup.filter(|backup| channel.backup.as_ref() != Some(backup)) {
+            channel.backup = Some(backup.clone());
+            deliveries.push(Delivery::Backup { backup });
+        }
         if channel
             .wallpaper
             .replace(wallpaper)
@@ -198,16 +204,23 @@ async fn dream_after(
     Ok(seconds.unsigned_abs().into())
 }
 
-async fn wallpaper_revision(
+/// The agent's wallpaper revision, and a backup waiting for its workspace.
+async fn signals(
     pool: &sqlx::PgPool,
     actor: &super::RuntimeActor,
-) -> Result<i64, Error> {
-    Ok(sqlx::query_scalar!(
-        "SELECT wallpaper_revision FROM agents WHERE id = $1",
+) -> Result<(i64, Option<String>), Error> {
+    let row = sqlx::query!(
+        "
+        SELECT wallpaper_revision,
+            (SELECT backup_id FROM backup_workspaces
+             WHERE agent_id = agents.id AND status = 'requested' LIMIT 1) AS backup
+        FROM agents WHERE id = $1
+        ",
         actor.agent.0,
     )
     .fetch_one(pool)
-    .await?)
+    .await?;
+    Ok((row.wallpaper_revision, row.backup))
 }
 
 async fn keepalive(socket: &mut WebSocket, heard: Instant) -> bool {

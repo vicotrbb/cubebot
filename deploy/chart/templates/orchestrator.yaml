@@ -101,6 +101,47 @@ spec:
             - name: CUBEBOT_BOOTSTRAP_PASSWORD_FILE
               value: /etc/cubebot/admin/password
             {{- end }}
+            {{- range $name, $value := dict "ENDPOINT" .Values.backup.endpoint "REGION" .Values.backup.region "BUCKET" .Values.backup.bucket "SCHEDULE" .Values.backup.schedule }}
+            {{- if $value }}
+            - name: CUBEBOT_BACKUP_{{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- range $name, $value := dict "KEEP_DAILY" .Values.backup.keepDaily "KEEP_WEEKLY" .Values.backup.keepWeekly "BANDWIDTH_BYTES" .Values.backup.bandwidthBytes "CONCURRENCY" .Values.backup.concurrency }}
+            {{- if or $value (eq (toString $value) "0") }}
+            - name: CUBEBOT_BACKUP_{{ $name }}
+              value: {{ $value | int64 | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.backup.existingSecret }}
+            - name: CUBEBOT_BACKUP_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: access-key-id
+            - name: CUBEBOT_BACKUP_SECRET_ACCESS_KEY_FILE
+              value: /etc/cubebot/backup/secret-access-key
+            {{- end }}
+            {{- if .Values.restore.enabled }}
+            {{- if not .Values.credentials.existingSecret }}
+            {{- fail "restore.enabled needs credentials.existingSecret: a Secret holding the backed-up installation's credential key" }}
+            {{- end }}
+            - name: CUBEBOT_RESTORE_BUCKET
+              value: {{ required "restore.bucket is required" .Values.restore.bucket | quote }}
+            {{- range $name, $value := dict "ENDPOINT" .Values.restore.endpoint "REGION" .Values.restore.region "BACKUP" .Values.restore.backup }}
+            {{- if $value }}
+            - name: CUBEBOT_RESTORE_{{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            - name: CUBEBOT_RESTORE_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "restore.existingSecret is required" .Values.restore.existingSecret }}
+                  key: access-key-id
+            - name: CUBEBOT_RESTORE_SECRET_ACCESS_KEY_FILE
+              value: /etc/cubebot/restore/secret-access-key
+            {{- end }}
             # The read-only root keeps no home; libraries that cache write here.
             - name: HOME
               value: /tmp
@@ -162,6 +203,16 @@ spec:
             {{- end }}
             - name: shared-files
               mountPath: /var/lib/cubebot/files
+            {{- if .Values.backup.existingSecret }}
+            - name: backup-bucket
+              mountPath: /etc/cubebot/backup
+              readOnly: true
+            {{- end }}
+            {{- if .Values.restore.enabled }}
+            - name: restore-bucket
+              mountPath: /etc/cubebot/restore
+              readOnly: true
+            {{- end }}
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -196,6 +247,24 @@ spec:
         - name: shared-files
           persistentVolumeClaim:
             claimName: shared-files
+        {{- with .Values.backup.existingSecret }}
+        - name: backup-bucket
+          secret:
+            secretName: {{ . }}
+            defaultMode: 0440
+            items:
+              - key: secret-access-key
+                path: secret-access-key
+        {{- end }}
+        {{- if .Values.restore.enabled }}
+        - name: restore-bucket
+          secret:
+            secretName: {{ .Values.restore.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: secret-access-key
+                path: secret-access-key
+        {{- end }}
         - name: tmp
           emptyDir:
             sizeLimit: 1Gi

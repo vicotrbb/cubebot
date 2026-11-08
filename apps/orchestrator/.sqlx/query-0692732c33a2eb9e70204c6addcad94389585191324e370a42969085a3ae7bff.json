@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE workspace_restores\n            SET restored_at=CASE WHEN $2::text IS NULL THEN clock_timestamp() END, error=$2\n            WHERE agent_id=$1 AND restored_at IS NULL\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0692732c33a2eb9e70204c6addcad94389585191324e370a42969085a3ae7bff"
+}

@@ -901,6 +901,36 @@ async fn recipient(
     })
 }
 
+/// Whether a restore already put this blob on the volume at `directory`.
+pub fn restored_blob(directory: &std::path::Path, id: Uuid, size: u64) -> bool {
+    let path = directory.join("blobs").join(id.to_string());
+    std::fs::metadata(path).is_ok_and(|metadata| metadata.len() == size)
+}
+
+/// Puts a backed-up blob on the volume before the orchestrator starts. Bytes that do not match
+/// `sha256` are removed and refused.
+pub async fn restore_blob<S, E>(
+    directory: &std::path::Path,
+    id: Uuid,
+    sha256: &[u8],
+    body: S,
+) -> Result<(), StorageError>
+where
+    S: futures_util::Stream<Item = Result<Bytes, E>> + Unpin,
+    E: Into<crate::identity::Source>,
+{
+    let volume = volume::Volume::new(directory.to_owned())?;
+    let published = volume.receive(id, body, |_| true).await?;
+    if published.sha256 != sha256 {
+        volume.remove(id).await;
+        return Err(StorageError::Integrity(
+            id,
+            "its bytes differ from the backup's checksum".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn named(name: &str) -> Result<(), StorageError> {
     let valid = (1..=255).contains(&name.len())
         && !matches!(name, "." | "..")
