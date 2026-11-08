@@ -541,7 +541,7 @@ async fn workspace_restore(
     headers: HeaderMap,
     backups: Backups,
 ) -> Result<Response, Failure> {
-    let actor = active(&identity, &headers).await?;
+    let actor = recovering(&identity, &headers).await?;
     let Some(axum::Extension(backups)) = backups else {
         return Ok(StatusCode::NO_CONTENT.into_response());
     };
@@ -564,7 +564,7 @@ async fn workspace_restored(
     backups: Backups,
     Json(report): Json<cubebot_protocol::runtime::WorkspaceRestored>,
 ) -> Result<Response, Failure> {
-    let actor = active(&identity, &headers).await?;
+    let actor = recovering(&identity, &headers).await?;
     let axum::Extension(backups) = backups.ok_or(Failure(StatusCode::CONFLICT))?;
     let error = report.error.map(|error| error.chars().take(500).collect());
     if let Err(error) = backups.restored(actor.agent.0, error).await {
@@ -572,6 +572,16 @@ async fn workspace_restored(
         return Err(Failure(StatusCode::SERVICE_UNAVAILABLE));
     }
     Ok(StatusCode::NO_CONTENT.into_response())
+}
+/// A draining agent still restores its workspace before it can acknowledge the drain.
+async fn recovering(
+    identity: &RuntimeIdentity,
+    headers: &HeaderMap,
+) -> Result<crate::agents::runtime::RuntimeActor, Failure> {
+    identity
+        .authenticate(bearer(headers)?, RuntimeAccess::Recovery)
+        .await
+        .map_err(Failure::from)
 }
 async fn active(
     identity: &RuntimeIdentity,
