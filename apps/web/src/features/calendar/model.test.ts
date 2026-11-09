@@ -3,6 +3,14 @@ import { describe, expect, test } from 'bun:test'
 import type { Schemas } from '../../api/types'
 import {
   cadence,
+  changes,
+  cronOf,
+  draftOf,
+  instantOf,
+  newDraft,
+  timesOf,
+  withTimes,
+  digestDay,
   cronPhrase,
   busyOn,
   isDay,
@@ -390,5 +398,160 @@ describe('navigation', () => {
     expect(isDay('2026-13-01')).toBe(false)
     expect(isDay('2026-1-9')).toBe(false)
     expect(isDay(20261109)).toBe(false)
+  })
+})
+
+describe('writing', () => {
+  test('a slot becomes a weekly cron on its weekday and time', () => {
+    expect(cronOf({ day: '2026-11-10', minute: 870 })).toBe('30 14 * * 2')
+    expect(cronOf({ day: '2026-11-15', minute: 0 })).toBe('0 0 * * 0')
+    // An all-day slot has no time; the routine starts the working morning.
+    expect(cronOf({ day: '2026-11-13', minute: null })).toBe('0 9 * * 5')
+  })
+
+  test('a wall-clock minute of a day is an instant in the zone', () => {
+    expect(instantOf('2026-11-10', 870, SP)).toBe('2026-11-10T17:30:00.000Z')
+    expect(instantOf('2026-03-08', 180, 'America/New_York')).toBe(
+      '2026-03-08T07:00:00.000Z',
+    )
+  })
+
+  test('a new event lasts an hour from its slot, or the whole day', () => {
+    expect(newDraft({ day: '2026-11-10', minute: 870 }, SP)).toMatchObject({
+      all_day: false,
+      start: '2026-11-10T17:30:00.000Z',
+      end: '2026-11-10T18:30:00.000Z',
+    })
+    expect(newDraft({ day: '2026-11-10', minute: null }, SP)).toMatchObject({
+      all_day: true,
+      start: '2026-11-10',
+      end: '2026-11-11',
+    })
+  })
+
+  const event: Item = {
+    ...item('2026-11-10T13:00:00Z', '2026-11-10T14:00:00Z'),
+    title: 'Design review',
+    event: {
+      calendar: '/victor/work/',
+      connection: 'c',
+      event: 'e.ics',
+      description: 'Agenda cut sh',
+      location: 'Room 2',
+    },
+  }
+
+  test('an unchanged event sends nothing, whatever form the times take', () => {
+    const same = {
+      ...draftOf(event),
+      start: '2026-11-10T13:00:00.000Z',
+      end: '2026-11-10T14:00:00.000Z',
+    }
+    expect(changes(draftOf(event), same)).toEqual({})
+  })
+
+  test('only the fields that changed are sent, and times go together', () => {
+    const before = draftOf(event)
+    expect(changes(before, { ...before, title: 'Review' })).toEqual({
+      title: 'Review',
+    })
+    expect(
+      changes(before, { ...before, end: '2026-11-10T15:00:00.000Z' }),
+    ).toEqual({
+      start: '2026-11-10T13:00:00Z',
+      end: '2026-11-10T15:00:00.000Z',
+    })
+    expect(changes(before, { ...before, location: '' })).toEqual({
+      location: '',
+    })
+  })
+
+  test('a description arriving cut short is never echoed back', () => {
+    const before = draftOf(event)
+    expect(changes(before, { ...before, title: 'x' })).not.toHaveProperty(
+      'description',
+    )
+    expect(changes(before, { ...before, description: 'New agenda' })).toEqual({
+      description: 'New agenda',
+    })
+  })
+
+  test('turning an event all-day sends the flag with its dates', () => {
+    const before = draftOf(event)
+    expect(
+      changes(before, {
+        ...before,
+        all_day: true,
+        start: '2026-11-10',
+        end: '2026-11-11',
+      }),
+    ).toEqual({ all_day: true, start: '2026-11-10', end: '2026-11-11' })
+  })
+
+  test('a merged digest answers for the day clicked, not its first', () => {
+    const day = (start: string, runs: number): Item => ({
+      ...item(start, null, true),
+      kind: 'digest',
+      routine: {
+        agent: 'a',
+        routine: 'r',
+        runs,
+        schedule: '*/5 * * * *',
+        time_zone: 'UTC',
+      },
+    })
+    const merged = {
+      ...day('2026-11-09', 180),
+      days: [day('2026-11-09', 180), day('2026-11-10', 288)],
+    }
+    expect(digestDay(merged, '2026-11-10').routine?.runs).toBe(288)
+    expect(digestDay(merged, '2026-12-01').routine?.runs).toBe(180)
+  })
+})
+
+describe('the event form', () => {
+  const blank = { title: '', location: '', description: '' }
+
+  test('times read in the zone, and an all-day end shows as its last day', () => {
+    expect(
+      timesOf(
+        {
+          ...blank,
+          all_day: false,
+          start: '2026-11-10T17:30:00Z',
+          end: '2026-11-11T02:00:00Z',
+        },
+        SP,
+      ),
+    ).toEqual({
+      startDay: '2026-11-10',
+      startTime: '14:30',
+      endDay: '2026-11-10',
+      endTime: '23:00',
+    })
+    expect(
+      timesOf(
+        { ...blank, all_day: true, start: '2026-11-12', end: '2026-11-15' },
+        SP,
+      ),
+    ).toMatchObject({ startDay: '2026-11-12', endDay: '2026-11-14' })
+  })
+
+  test("the form's times become instants, or days with an exclusive end", () => {
+    const times = {
+      startDay: '2026-11-10',
+      startTime: '14:30',
+      endDay: '2026-11-11',
+      endTime: '09:00',
+    }
+    const timed = { ...blank, all_day: false, start: '', end: '' }
+    expect(withTimes(timed, times, SP)).toMatchObject({
+      start: '2026-11-10T17:30:00.000Z',
+      end: '2026-11-11T12:00:00.000Z',
+    })
+    expect(withTimes({ ...timed, all_day: true }, times, SP)).toMatchObject({
+      start: '2026-11-10',
+      end: '2026-11-12',
+    })
   })
 })

@@ -13,6 +13,7 @@ import {
   weekLanes,
   type Bar,
   type Merged,
+  type Slot,
 } from './model'
 import {
   FULL_DAY,
@@ -22,7 +23,6 @@ import {
   titleOf,
   type Item,
   type Look,
-  type Slot,
 } from './parts'
 
 // Must match calendar.css: the day number's row with the cell's foot, and one lane with its gap.

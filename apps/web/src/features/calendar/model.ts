@@ -84,12 +84,22 @@ export function addDays(day: string, days: number) {
   return date.toISOString().slice(0, 10)
 }
 
+/** The instant a wall-clock minute of a local day falls on, as milliseconds. */
+function wallInstant(day: string, minute: number, zone: string) {
+  const wanted = Date.parse(`${day}T00:00:00Z`) + minute * MINUTE
+  let guess = wanted
+  // Two passes settle the offset even when it differs at the guess and at the wanted time.
+  for (let i = 0; i < 2; i++) guess -= wallClock(guess, zone) - wanted
+  return guess
+}
+
+export function instantOf(day: string, minute: number, zone: string) {
+  return new Date(wallInstant(day, minute, zone)).toISOString()
+}
+
 /** The instant a local day starts, as milliseconds. */
 function midnight(day: string, zone: string) {
-  const wanted = Date.parse(`${day}T00:00:00Z`)
-  let guess = wanted
-  // Two passes settle the offset even when it differs at the guess and at midnight.
-  for (let i = 0; i < 2; i++) guess -= wallClock(guess, zone) - wanted
+  let guess = wallInstant(day, 0, zone)
   // A clock that jumps over 00:00 has no midnight; the day starts at the first instant after the jump.
   while (dayOf(guess, zone) < day) guess += 15 * MINUTE
   return guess
@@ -396,4 +406,125 @@ export function isDay(value: unknown): value is string {
     !Number.isNaN(Date.parse(value)) &&
     new Date(value).toISOString().startsWith(value)
   )
+}
+
+/** A wall-clock minute of a day, or `null` for an all-day slot. */
+export type Slot = { day: string; minute: number | null }
+
+// A routine made from an all-day slot starts the working morning.
+const MORNING = 9 * 60
+
+/** A weekly schedule on the slot's weekday and time: Tuesday 14:30 is `30 14 * * 2`. */
+export function cronOf({ day, minute }: Slot) {
+  const at = minute ?? MORNING
+  const weekday = new Date(`${day}T12:00:00Z`).getUTCDay()
+  return `${at % 60} ${Math.floor(at / 60)} * * ${weekday}`
+}
+
+/** An event's editable fields; times as an item has them, all-day ends exclusive. */
+export type Draft = {
+  title: string
+  all_day: boolean
+  start: string
+  end: string
+  location: string
+  description: string
+}
+
+/** A new event over the slot: an hour from its minute, or its whole day. */
+export function newDraft(slot: Slot, zone: string): Draft {
+  const blank = { title: '', location: '', description: '' }
+  if (slot.minute === null)
+    return {
+      ...blank,
+      all_day: true,
+      start: slot.day,
+      end: addDays(slot.day, 1),
+    }
+  return {
+    ...blank,
+    all_day: false,
+    start: instantOf(slot.day, slot.minute, zone),
+    end: instantOf(slot.day, slot.minute + 60, zone),
+  }
+}
+
+export function draftOf(item: Item): Draft {
+  return {
+    title: item.title,
+    all_day: item.all_day,
+    start: item.start,
+    end: item.end ?? item.start,
+    location: item.event?.location ?? '',
+    description: item.event?.description ?? '',
+  }
+}
+
+/**
+ * Only what the form changed. A description arrives cut short or absent, so it goes only when
+ * edited; times go together, with the all-day flag when that changed.
+ */
+export function changes(before: Draft, after: Draft) {
+  const changed: Partial<Draft> = {}
+  for (const key of ['title', 'location', 'description'] as const)
+    if (after[key] !== before[key]) changed[key] = after[key]
+  if (after.all_day !== before.all_day) changed.all_day = after.all_day
+  const moved = (key: 'start' | 'end') =>
+    Date.parse(after[key]) !== Date.parse(before[key])
+  if (changed.all_day !== undefined || moved('start') || moved('end')) {
+    changed.start = after.start
+    changed.end = after.end
+  }
+  return changed
+}
+
+/** One day of a merged digest; a day it does not cover answers with its first. */
+export function digestDay(item: Merged, day: string): Item {
+  return item.days?.find((each) => each.start === day) ?? item
+}
+
+/** The form's start and end: days, and `HH:MM` wall-clock times in the zone. */
+export type Times = {
+  startDay: string
+  startTime: string
+  endDay: string
+  endTime: string
+}
+
+const minutesOf = (time: string) => {
+  const [hour = 0, minute = 0] = time.split(':').map(Number)
+  return hour * 60 + minute
+}
+
+export function timesOf(draft: Draft, zone: string): Times {
+  if (draft.all_day)
+    return {
+      startDay: draft.start,
+      startTime: '09:00',
+      endDay: addDays(draft.end, -1),
+      endTime: '10:00',
+    }
+  const at = (instant: string) => ({
+    day: dayOf(Date.parse(instant), zone),
+    time: formatTime(instant, zone),
+  })
+  const start = at(draft.start)
+  const end = at(draft.end)
+  return {
+    startDay: start.day,
+    startTime: start.time,
+    endDay: end.day,
+    endTime: end.time,
+  }
+}
+
+/** The draft with the form's times; an all-day end is the day after the last. */
+export function withTimes(draft: Draft, times: Times, zone: string): Draft {
+  if (draft.all_day)
+    return { ...draft, start: times.startDay, end: addDays(times.endDay, 1) }
+  return {
+    ...draft,
+    start: instantOf(times.startDay, minutesOf(times.startTime), zone),
+    end: instantOf(times.endDay, minutesOf(times.endTime), zone),
+  }
 }

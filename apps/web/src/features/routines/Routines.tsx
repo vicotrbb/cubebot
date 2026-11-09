@@ -462,13 +462,16 @@ function History({ agent, routine }: { agent: string; routine: string }) {
   )
 }
 
-function RoutineForm({
+export function RoutineForm({
   agent,
   existing,
+  schedule,
   onDone,
 }: {
   agent: AgentSummary
   existing: Routine | undefined
+  /** A new routine's schedule, such as the calendar slot it was made from. */
+  schedule?: string
   onDone: (secret?: Secret) => void
 }) {
   const [error, setError] = useState('')
@@ -521,7 +524,7 @@ function RoutineForm({
           defaultValue={existing?.command ?? ''}
         />
       </Field>
-      <Triggers agent={agent.id} existing={existing} />
+      <Triggers agent={agent.id} existing={existing} schedule={schedule} />
       <label className="check">
         <input
           type="checkbox"
@@ -561,13 +564,17 @@ function RoutineForm({
 function Triggers({
   agent,
   existing,
+  schedule,
 }: {
   agent: string
   existing: Routine | undefined
+  schedule: string | undefined
 }) {
-  const [scheduled, setScheduled] = useState(Boolean(existing?.schedule))
+  const [scheduled, setScheduled] = useState(
+    Boolean(existing?.schedule ?? schedule),
+  )
   const [cron, setCron] = useState<string>(
-    existing?.schedule ?? SCHEDULES[0][1],
+    existing?.schedule ?? schedule ?? SCHEDULES[0][1],
   )
   return (
     <fieldset className="triggers">

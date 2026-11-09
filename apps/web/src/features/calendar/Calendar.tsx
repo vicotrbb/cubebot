@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Layers } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Layers, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   useAgents,
@@ -6,10 +6,12 @@ import {
   useSavePreferences,
   useSession,
 } from '../../app/queries'
+import type { AgentSummary } from '../../api/types'
 import { Skeleton } from '../../components/primitives'
 import { useProfile } from '../shell/AboutYou'
 import { useIsPhone } from '../shell/viewport'
 import { useCalendar } from './api'
+import { Editor, type Editing } from './EventForm'
 import {
   addDays,
   mergeDigests,
@@ -18,10 +20,18 @@ import {
   shift,
   stretch,
   userZone,
+  type Slot,
   type View,
 } from './model'
 import { Agenda, MonthView } from './MonthView'
-import { formatDay, type Item, type Look, type Source } from './parts'
+import {
+  formatDay,
+  type Item,
+  type Look,
+  type Point,
+  type Source,
+} from './parts'
+import { Popover, type Selection } from './Popover'
 import { NoCalendars, Sources } from './Sources'
 import { TimeGrid } from './TimeGrid'
 import './calendar.css'
@@ -88,7 +98,7 @@ function CalendarPage({
   const calendar = useCalendar(span.from, span.to, zone)
   // The app shell renders pages only once the session is known, so the key is final here.
   const [hidden, toggle] = useHidden(session.data?.id ?? '')
-  const [selected, setSelected] = useState<string | null>(null)
+  const overlays = useOverlays(date)
   const [announced, setAnnounced] = useState('')
   const pane = useSourcesPane(phone)
   const sources = useMemo(() => calendar.data?.sources ?? [], [calendar.data])
@@ -110,9 +120,10 @@ function CalendarPage({
     zone,
     paint: (item: Item) => paints.get(item.source) ?? 'var(--ink-faint)',
     sourceName: (item: Item) => names.get(item.source) ?? '',
-    selected,
-    onSelect: (item) => setSelected(item.id),
+    selected: overlays.selected,
+    onSelect: overlays.select,
   }
+  const create = overlays.create
   const heading = headingOf(view, date, span.days, phone)
   // Announce a new period once, when a step button changes it.
   const travel = (to: string) => {
@@ -132,6 +143,7 @@ function CalendarPage({
         pane={pane}
         onView={(id) => go({ view: id })}
         onStep={(by) => travel(by ? step(view, date, by, phone) : now.day)}
+        onNew={() => create(newSlot(date, now))}
       />
       <div className="calendar__body" data-sources={pane.shown || undefined}>
         {pane.shown && (
@@ -177,6 +189,7 @@ function CalendarPage({
                 date={date}
                 onPick={(day) => go({ date: day })}
                 onOpen={open}
+                onCreate={create}
               />
               {phone && <Agenda day={date} items={items} look={look} />}
             </>
@@ -190,12 +203,113 @@ function CalendarPage({
               date={date}
               now={now.minute}
               onOpen={open}
+              onCreate={create}
             />
           )}
         </main>
       </div>
+      <Overlays
+        overlays={overlays}
+        look={look}
+        phone={phone}
+        sources={sources}
+        agents={agents.data}
+      />
     </div>
   )
+}
+
+/** The open popover or editor, and how an item or a slot opens one. */
+function useOverlays(date: string) {
+  const [selection, setSelection] = useState<Selection | null>(null)
+  const [editing, setEditing] = useState<Editing | null>(null)
+  return {
+    selection,
+    editing,
+    selected: selection?.item.id ?? null,
+    select: (item: Item, at: Point) =>
+      setSelection({
+        item,
+        at,
+        day: dayAt(at) ?? date,
+        opener: document.activeElement as HTMLElement | null,
+      }),
+    create: (slot: Slot) => {
+      setSelection(null)
+      setEditing({ slot })
+    },
+    edit: (item: Item) => {
+      setSelection(null)
+      setEditing({ item })
+    },
+    close: () => {
+      setSelection(null)
+      setEditing(null)
+    },
+  }
+}
+
+function Overlays({
+  overlays,
+  look,
+  phone,
+  sources,
+  agents = [],
+}: {
+  overlays: ReturnType<typeof useOverlays>
+  look: Look
+  phone: boolean
+  sources: Source[]
+  agents: AgentSummary[] | undefined
+}) {
+  const { selection, editing } = overlays
+  return (
+    <>
+      {selection && (
+        <Popover
+          key={`${selection.item.id}:${selection.at.x}:${selection.at.y}`}
+          selection={selection}
+          sheet={phone}
+          look={look}
+          onClose={overlays.close}
+          onEdit={overlays.edit}
+        />
+      )}
+      {editing && (
+        <Editor
+          editing={editing}
+          sources={sources}
+          agents={agents}
+          zone={look.zone}
+          onClose={overlays.close}
+        />
+      )}
+    </>
+  )
+}
+
+/** The day under a point: a month's cell, or the time grid's column at that x. */
+function dayAt({ x, y }: Point) {
+  for (const cell of document.querySelectorAll<HTMLElement>('[data-day]')) {
+    const box = cell.getBoundingClientRect()
+    const column = cell.classList.contains('timegrid__col')
+    if (
+      x >= box.left &&
+      x < box.right &&
+      (column || (y >= box.top && y < box.bottom))
+    )
+      return cell.dataset.day
+  }
+  return undefined
+}
+
+/** "New" starts at the next hour today, or the working morning on another day. */
+function newSlot(date: string, now: { day: string; minute: number }): Slot {
+  if (date !== now.day) return { day: date, minute: 9 * 60 }
+  return {
+    day: date,
+    minute: Math.min(23 * 60, Math.ceil(now.minute / 60) * 60),
+  }
 }
 
 /** The loading sweep, a failed read with Retry, and the missing-calendars note while the pane is hidden. */
@@ -242,6 +356,7 @@ function Head({
   pane,
   onView,
   onStep,
+  onNew,
 }: {
   view: View
   heading: [string, string]
@@ -250,6 +365,7 @@ function Head({
   onView: (view: View) => void
   /** -1 and 1 step a period; 0 is today. */
   onStep: (by: -1 | 0 | 1) => void
+  onNew: () => void
 }) {
   return (
     <header className="page__head calendar__head">
@@ -311,6 +427,15 @@ function Head({
           <ChevronRight />
         </button>
       </div>
+      <button
+        type="button"
+        className="btn btn--ghost btn--icon btn--sm calendar__new"
+        aria-label="New event or routine"
+        title="New event or routine"
+        onClick={onNew}
+      >
+        <Plus />
+      </button>
     </header>
   )
 }

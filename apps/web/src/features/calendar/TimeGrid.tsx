@@ -5,6 +5,7 @@ import {
   weekLanes,
   type Bar,
   type Placed,
+  type Slot,
 } from './model'
 import {
   FULL_DAY,
@@ -14,7 +15,6 @@ import {
   titleOf,
   type Item,
   type Look,
-  type Slot,
 } from './parts'
 
 const DAY = 1440
@@ -173,6 +173,7 @@ function Column({
       role="group"
       aria-label={formatDay(day, FULL_DAY)}
       className="timegrid__col"
+      data-day={day}
       data-weekend={
         [0, 6].includes(new Date(`${day}T12:00:00Z`).getUTCDay()) || undefined
       }

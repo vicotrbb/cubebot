@@ -131,6 +131,8 @@ pub struct NewEvent {
 /// `one` changes only the occurrence written, `all` the whole series it belongs to.
 #[derive(Clone, Copy, PartialEq, Eq, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
+// Grants have their own `Scope` schema; two of one name in the spec would collide.
+#[schema(as = EventScope)]
 pub enum Scope {
     One,
     All,

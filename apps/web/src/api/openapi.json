@@ -6916,7 +6916,7 @@
             "type": ["string", "null"]
           },
           "scope": {
-            "$ref": "#/components/schemas/Scope"
+            "$ref": "#/components/schemas/EventScope"
           },
           "series": {
             "type": ["string", "null"]
@@ -7717,6 +7717,11 @@
             "type": "string"
           }
         }
+      },
+      "EventScope": {
+        "type": "string",
+        "description": "`one` changes only the occurrence written, `all` the whole series it belongs to.",
+        "enum": ["one", "all"]
       },
       "EventSpec": {
         "type": "object",
@@ -9588,7 +9593,7 @@
             "type": ["string", "null"]
           },
           "scope": {
-            "$ref": "#/components/schemas/Scope"
+            "$ref": "#/components/schemas/EventScope"
           },
           "series": {
             "type": ["string", "null"]

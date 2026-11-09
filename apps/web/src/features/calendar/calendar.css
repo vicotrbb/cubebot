@@ -931,7 +931,8 @@
     justify-content: center;
     padding: 2px 8px 3px;
   }
-  .calendar__toggle {
+  .calendar__toggle,
+  .calendar__new {
     order: 3;
   }
   .calendar__today,
@@ -970,4 +971,203 @@
 }
 .cal-problem::first-letter {
   text-transform: uppercase;
+}
+
+/* Details: a card beside the click, like a macOS Calendar popover; a bottom sheet on phones. */
+dialog.cal-pop {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 50;
+  margin: 0;
+  width: 304px;
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  border: 0;
+  border-radius: var(--r-xl);
+  background: var(--raised);
+  color: var(--ink);
+  box-shadow: var(--float);
+  outline: 1px solid var(--line);
+  transform-origin: top left;
+  transition:
+    opacity var(--quick) ease-out,
+    scale 180ms var(--settle);
+}
+@starting-style {
+  dialog.cal-pop[open] {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+dialog.cal-pop:focus-visible {
+  outline: 2px solid var(--orange);
+}
+dialog.cal-pop[data-sheet] {
+  inset: auto 0 0 0;
+  width: 100%;
+  max-width: none;
+  max-height: 85dvh;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom));
+  border-radius: 14px 14px 0 0;
+  outline: 0;
+  transition:
+    opacity var(--quick) ease-out,
+    translate 260ms var(--settle);
+}
+/* The grabber says the sheet is a sheet. */
+dialog.cal-pop[data-sheet]::before {
+  content: '';
+  justify-self: center;
+  width: 36px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line-strong);
+}
+@starting-style {
+  dialog.cal-pop[data-sheet][open] {
+    opacity: 1;
+    translate: 0 40%;
+  }
+}
+dialog.cal-pop::backdrop {
+  background: rgb(18 14 11 / 0.35);
+}
+.cal-pop__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+.cal-pop__swatch {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--c);
+}
+.cal-pop__head h2 {
+  font-size: var(--t-xl);
+  font-weight: var(--w-head);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.cal-pop__head .btn {
+  margin: -4px -6px 0 0;
+}
+.cal-pop__body {
+  display: grid;
+  gap: 10px;
+}
+.cal-pop__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  font-size: var(--t-md);
+}
+.cal-pop__row > svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--ink-faint);
+}
+.cal-pop__row > div {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.cal-pop__faint {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.cal-pop__wrap {
+  overflow-wrap: anywhere;
+}
+.cal-pop__lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cal-pop__lock svg {
+  width: 12px;
+  height: 12px;
+}
+.cal-pop__notes {
+  max-height: 9.5em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.cal-pop__link {
+  justify-self: start;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.cal-pop__outcome .cal-glyph {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+.cal-pop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.cal-pop__lead {
+  margin-right: auto;
+}
+.cal-pop__delete {
+  color: var(--danger);
+}
+.cal-pop__ask {
+  display: grid;
+  gap: 8px;
+  font-size: var(--t-sm);
+  color: var(--ink-soft);
+}
+.cal-pop .notice {
+  font-size: var(--t-sm);
+}
+@media (pointer: coarse) {
+  .cal-pop__actions .btn {
+    min-height: 40px;
+  }
+}
+
+/* New and edit: the kind switch, and start and end side by side. */
+.cal-new__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cal-form__times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+/* The date takes the room; a time beside it takes what "23:45" needs. */
+.cal-form__when {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 7.5em;
+  gap: 6px;
+}
+@media (max-width: 520px) {
+  .cal-form__times {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cal-form__when {
+    grid-auto-columns: 9em;
+  }
 }

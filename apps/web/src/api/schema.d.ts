@@ -2827,7 +2827,7 @@ export interface components {
       event: string
       location?: string | null
       occurrence?: string | null
-      scope: components['schemas']['Scope']
+      scope: components['schemas']['EventScope']
       series?: string | null
       /** @description Given together with `end`. */
       start?: string | null
@@ -3124,6 +3124,11 @@ export interface components {
       id: string
       name: string
     }
+    /**
+     * @description `one` changes only the occurrence written, `all` the whole series it belongs to.
+     * @enum {string}
+     */
+    EventScope: 'one' | 'all'
     EventSpec: {
       description: string
       /** @description Such as `mail.received`. */
@@ -3912,7 +3917,7 @@ export interface components {
       etag?: string | null
       event: string
       occurrence?: string | null
-      scope: components['schemas']['Scope']
+      scope: components['schemas']['EventScope']
       series?: string | null
       /** @description The event's own `time_zone` when its detail has one. */
       time_zone?: string | null

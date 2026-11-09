@@ -12,8 +12,6 @@ import { cadence, formatRange, type Merged } from './model'
 export type Item = Schemas['Item']
 export type Source = Schemas['Source']
 export type Point = { x: number; y: number }
-/** A wall-clock minute of a day, or `null` for an all-day slot. */
-export type Slot = { day: string; minute: number | null }
 export type Select = (item: Item, at: Point) => void
 
 /** What every view needs to draw an item. */
