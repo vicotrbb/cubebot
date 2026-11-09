@@ -30,6 +30,8 @@ export const Route = createRootRoute({
       { name: 'theme-color', content: '#f26a1b' },
       { name: 'apple-mobile-web-app-capable', content: 'yes' },
       { name: 'mobile-web-app-capable', content: 'yes' },
+      // iOS names the home-screen app after the page title ("Home · Cubebot") without this.
+      { name: 'apple-mobile-web-app-title', content: 'Cubebot' },
     ],
     links: [
       { rel: 'stylesheet', href: tokens },
@@ -37,7 +39,7 @@ export const Route = createRootRoute({
       { rel: 'stylesheet', href: controls },
       { rel: 'manifest', href: '/manifest.webmanifest' },
       { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
-      { rel: 'apple-touch-icon', href: '/icons/icon-192.png' },
+      { rel: 'apple-touch-icon', href: '/apple-touch-icon.png' },
     ],
     scripts: [{ children: THEME_BOOT }],
   }),
