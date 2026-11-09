@@ -28,10 +28,29 @@ export function userZone(profileZone: string) {
   return profileZone || Intl.DateTimeFormat().resolvedOptions().timeZone
 }
 
+// Building a formatter costs far more than using one, and a month view asks thousands of times.
+const formatters = new Map<string, Intl.DateTimeFormat>()
+
+function formatter(
+  zone: string,
+  kind: string,
+  options: Intl.DateTimeFormatOptions,
+) {
+  const key = `${kind}|${zone}`
+  let found = formatters.get(key)
+  if (!found) {
+    found = new Intl.DateTimeFormat(kind === 'clock' ? 'en-US' : undefined, {
+      ...options,
+      timeZone: zone,
+    })
+    formatters.set(key, found)
+  }
+  return found
+}
+
 /** The zone's wall clock at an instant, read as if it were UTC. */
 function wallClock(ms: number, zone: string) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone,
+  const parts = formatter(zone, 'clock', {
     hourCycle: 'h23',
     year: 'numeric',
     month: 'numeric',
@@ -67,6 +86,8 @@ function midnight(day: string, zone: string) {
   let guess = wanted
   // Two passes settle the offset even when it differs at the guess and at midnight.
   for (let i = 0; i < 2; i++) guess -= wallClock(guess, zone) - wanted
+  // A clock that jumps over 00:00 has no midnight; the day starts at the first instant after the jump.
+  while (dayOf(guess, zone) < day) guess += 15 * MINUTE
   return guess
 }
 
@@ -124,21 +145,25 @@ export function localDay(item: Item, zone: string) {
   return span(dayOf(start, zone), dayOf(last, zone))
 }
 
+// Minutes on the grid are wall-clock, so a clock change shifts items the way the hour labels do.
 function place(
   item: Item,
-  midnightMs: number,
+  day: string,
+  zone: string,
 ): Omit<Placed, 'column' | 'columns'> {
-  const top = Math.max(0, (Date.parse(item.start) - midnightMs) / MINUTE)
-  const bottom = Math.min(DAY_MINUTES, (endOf(item) - midnightMs) / MINUTE)
-  return { item, top, height: Math.max(bottom - top, POINT_MINUTES) }
+  const base = Date.parse(`${day}T00:00:00Z`)
+  const minutes = (ms: number) => (wallClock(ms, zone) - base) / MINUTE
+  const top = Math.max(0, minutes(Date.parse(item.start)))
+  const bottom = Math.min(DAY_MINUTES, minutes(endOf(item)))
+  const height = Math.max(bottom - top, POINT_MINUTES)
+  return { item, top: Math.min(top, DAY_MINUTES - height), height }
 }
 
 /** Overlapping items form a cluster; each takes the first free column in it. */
 export function layoutDay(items: Item[], day: string, zone: string): Placed[] {
-  const midnightMs = midnight(day, zone)
   const timed = items
     .filter((item) => !item.all_day && localDay(item, zone).includes(day))
-    .map((item) => place(item, midnightMs))
+    .map((item) => place(item, day, zone))
     .sort((a, b) => a.top - b.top || b.height - a.height)
   const placed: Placed[] = []
   let cluster: Placed[] = []
@@ -168,8 +193,7 @@ export function layoutDay(items: Item[], day: string, zone: string): Placed[] {
 }
 
 export function formatTime(instant: string, zone: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    timeZone: zone,
+  return formatter(zone, 'time', {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
@@ -203,6 +227,7 @@ export function cronPhrase(schedule: string) {
     return null
   if (hour === '*')
     return minute === '0' && weekday === '*' ? 'Every hour' : null
+  if (Number(hour) > 23 || Number(minute) > 59) return null
   const day = NUMBER.test(hour) ? dayPhrase(weekday) : null
   return day ? `${day} at ${clock(hour, minute)}` : null
 }

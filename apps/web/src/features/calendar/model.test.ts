@@ -49,6 +49,16 @@ describe('range', () => {
     expect(day.to).toBe('2026-11-10T03:00:00.000Z')
   })
 
+  test('a day whose midnight does not exist starts at its first instant', () => {
+    const zone = 'America/Santiago'
+    expect(range('day', '2026-09-06', zone, 1).from).toBe(
+      '2026-09-06T04:00:00.000Z',
+    )
+    expect(range('day', '2026-09-05', zone, 1).to).toBe(
+      '2026-09-06T04:00:00.000Z',
+    )
+  })
+
   test('the week a clock change falls in is 169 hours', () => {
     const week = range('week', '2026-11-01', 'America/New_York', 1)
     expect(week.days).toHaveLength(7)
@@ -118,6 +128,38 @@ describe('layoutDay', () => {
     expect(laid[0]?.height).toBe(30)
   })
 
+  test('tops follow the wall clock on a fall-back day', () => {
+    const NY = 'America/New_York'
+    const laid = layoutDay(
+      [
+        item('2026-11-01T14:00:00Z', '2026-11-01T15:00:00Z'),
+        item('2026-11-02T04:30:00Z', '2026-11-02T04:45:00Z'),
+      ],
+      '2026-11-01',
+      NY,
+    )
+    expect(laid[0]).toMatchObject({ top: 540, height: 60 })
+    expect(laid[1]).toMatchObject({ top: 1410, height: 30 })
+  })
+
+  test('tops follow the wall clock on a spring-forward day', () => {
+    const laid = layoutDay(
+      [item('2026-03-08T19:00:00Z', '2026-03-08T20:00:00Z')],
+      '2026-03-08',
+      'America/New_York',
+    )
+    expect(laid[0]).toMatchObject({ top: 900, height: 60 })
+  })
+
+  test('a point item late in the day stays inside the grid', () => {
+    const laid = layoutDay(
+      [item('2026-11-10T02:50:00Z', null)],
+      '2026-11-09',
+      SP,
+    )
+    expect(laid[0]).toMatchObject({ top: 1410, height: 30 })
+  })
+
   test('an item from the day before is cut at midnight', () => {
     const laid = layoutDay(
       [item('2026-11-10T02:30:00Z', '2026-11-10T04:30:00Z')],
@@ -135,6 +177,8 @@ describe('text', () => {
     expect(cronPhrase('0 * * * *')).toBe('Every hour')
     expect(cronPhrase('0 9 * * 1')).toBe('Every Monday at 09:00')
     expect(cronPhrase('*/7 3 1 * *')).toBeNull()
+    expect(cronPhrase('60 25 * * *')).toBeNull()
+    expect(cronPhrase('0 9 * * 9')).toBeNull()
   })
 
   test('the viewer zone falls back to the browser zone', () => {
@@ -148,6 +192,6 @@ describe('text', () => {
     )
     expect(
       formatRange(item('2026-11-09T12:00:00Z', '2026-11-09T13:30:00Z'), SP),
-    ).toContain('09:00')
+    ).toBe('09:00 – 10:30')
   })
 })
