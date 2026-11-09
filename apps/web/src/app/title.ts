@@ -14,6 +14,7 @@ const PAGES: [string, string][] = [
   ['/platform/audit', 'Audit log'],
   ['/platform/health', 'Health'],
   ['/broadcast', 'Broadcast'],
+  ['/calendar', 'Calendar'],
   ['/files', 'Files'],
   ['/kb', 'Knowledge base'],
   ['/platform', 'Platform'],

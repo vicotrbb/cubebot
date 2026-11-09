@@ -1,3 +1,6 @@
+use chrono::{DateTime, NaiveDateTime, TimeZone};
+use chrono_tz::Tz;
+
 pub(crate) struct Cron {
     minutes: u64,
     hours: u64,
@@ -46,6 +49,26 @@ impl Cron {
             })
     }
 
+    /// The next run strictly after `seconds`, reading the schedule on `zone`'s wall clock: a
+    /// skipped local time runs when the clock jumps past it, a repeated one runs only the first time.
+    pub(crate) fn after_in(&self, seconds: i64, zone: Tz) -> Option<i64> {
+        let mut local = DateTime::from_timestamp(seconds, 0)?
+            .with_timezone(&zone)
+            .naive_local()
+            .and_utc()
+            .timestamp();
+        loop {
+            local = self.after(local)?;
+            let instant = (local..local + 86_400).step_by(60).find_map(|wall| {
+                let earliest = zone.from_local_datetime(&naive(wall)?).earliest();
+                earliest.map(|instant| instant.timestamp())
+            })?;
+            if instant > seconds {
+                return Some(instant);
+            }
+        }
+    }
+
     fn on(&self, day: i64) -> bool {
         let (month, date) = civil(day);
         let weekday = (day + 4).rem_euclid(7);
@@ -56,6 +79,14 @@ impl Cron {
         };
         bit(self.months, month) && by_day
     }
+}
+
+pub(crate) fn zone(name: &str) -> Option<Tz> {
+    name.parse().ok()
+}
+
+fn naive(seconds: i64) -> Option<NaiveDateTime> {
+    DateTime::from_timestamp(seconds, 0).map(|time| time.naive_utc())
 }
 
 fn bit(set: u64, value: i64) -> bool {
@@ -148,5 +179,36 @@ mod tests {
         ] {
             assert!(Cron::parse(schedule).is_none(), "{schedule}");
         }
+    }
+
+    #[test]
+    fn zoned_schedules_keep_local_time_across_daylight_saving() {
+        let ny: chrono_tz::Tz = "America/New_York".parse().unwrap();
+        let cron = Cron::parse("0 9 * * *").unwrap();
+        // 2026-03-07 15:00 UTC -> 2026-03-08 09:00 EDT = 13:00 UTC
+        assert_eq!(cron.after_in(1_772_895_600, ny), Some(1_772_974_800));
+        // 2026-10-31 15:00 UTC -> 2026-11-01 09:00 EST = 14:00 UTC
+        assert_eq!(cron.after_in(1_793_458_800, ny), Some(1_793_541_600));
+    }
+
+    #[test]
+    fn a_skipped_local_time_runs_once_at_the_transition_and_a_repeated_one_runs_once() {
+        let ny: chrono_tz::Tz = "America/New_York".parse().unwrap();
+        let gap = Cron::parse("30 2 8 3 *").unwrap();
+        // 2026-03-08 02:30 does not exist: runs at 03:00 EDT = 07:00 UTC
+        assert_eq!(gap.after_in(1_772_895_600, ny), Some(1_772_953_200));
+        let overlap = Cron::parse("30 1 1 11 *").unwrap();
+        let first = overlap.after_in(1_793_458_800, ny).unwrap();
+        assert_eq!(first, 1_793_511_000); // 01:30 EDT = 05:30 UTC
+        assert!(overlap.after_in(first, ny).unwrap() > first + 86_400);
+    }
+
+    #[test]
+    fn utc_zone_matches_the_unzoned_schedule() {
+        let cron = Cron::parse("*/15 * * * *").unwrap();
+        assert_eq!(
+            cron.after_in(1_793_527_650, chrono_tz::UTC),
+            cron.after(1_793_527_650)
+        );
     }
 }

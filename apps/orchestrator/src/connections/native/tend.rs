@@ -57,9 +57,13 @@ impl Connections {
         Ok(())
     }
 
-    /// Renews an access token about to expire.
+    /// Renews an access token about to expire. It runs as its own task, so a caller that gives up
+    /// (a timed-out read, a dropped request) never loses a rotated refresh token before it is saved.
     pub(super) async fn renew(&self, id: Uuid) -> Result<(), IdentityError> {
-        self.renew_within(id, SPARE).await
+        let connections = self.clone();
+        tokio::spawn(async move { connections.renew_within(id, SPARE).await })
+            .await
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?
     }
 
     /// Renews the token if it expires within `ahead` seconds. The row lock serializes callers: one

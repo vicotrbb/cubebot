@@ -590,6 +590,50 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/calendar': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * The range's events and routine runs, in order of start; 400 for a range over 62 days. A
+     *     connection that fails shows its problem on its source.
+     */
+    get: operations['calendar_range']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/calendar/events': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Changes the event, or with scope `all` the series its occurrence belongs to; read the range
+     *     again for the result.
+     */
+    put: operations['update_calendar_event']
+    /**
+     * 404 for a connection that is not yours, 403 when its level does not allow writing, 422 with
+     *     the vendor's reason when it refuses.
+     */
+    post: operations['create_calendar_event']
+    delete: operations['delete_calendar_event']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/connections': {
     parameters: {
       query?: never
@@ -2713,6 +2757,11 @@ export interface components {
       /** Format: int64 */
       sequence: number
     }
+    CalendarRange: {
+      /** @description In order of start. */
+      items: components['schemas']['Item'][]
+      sources: components['schemas']['Source'][]
+    }
     /** @description What a voice call's message shows. */
     CallRecord: {
       /**
@@ -2762,6 +2811,30 @@ export interface components {
       | 'finance'
       | 'notifications'
       | 'data'
+    /**
+     * @description A change to an event, named as its [`EventDetail`] names it. Send only the fields that changed:
+     *     one left out stays as it is, and an event's `description` arrives cut short from Google and
+     *     absent from Microsoft, so sending it back unchanged would lose text.
+     */
+    ChangeEvent: {
+      all_day?: boolean | null
+      calendar: string
+      /** Format: uuid */
+      connection: string
+      description?: string | null
+      end?: string | null
+      etag?: string | null
+      event: string
+      location?: string | null
+      occurrence?: string | null
+      scope: components['schemas']['EventScope']
+      series?: string | null
+      /** @description Given together with `end`. */
+      start?: string | null
+      /** @description The event's own `time_zone` when its detail has one, else the viewer's zone. */
+      time_zone?: string | null
+      title?: string | null
+    }
     ChatgptSignIn: {
       /** Format: uuid */
       sign_in: string
@@ -3022,6 +3095,30 @@ export interface components {
       /** Format: uuid */
       turn_id: string
     }
+    /**
+     * @description What a write names the event by. Google and Microsoft name an occurrence by its own `event`
+     *     id and give its `series`; CalDAV names it by the event's href and its `occurrence`.
+     */
+    EventDetail: {
+      calendar: string
+      /** Format: uuid */
+      connection: string
+      description?: string | null
+      etag?: string | null
+      event: string
+      /** @description The event in the vendor's own app. */
+      link?: string | null
+      location?: string | null
+      occurrence?: string | null
+      /**
+       * @description The text fields shown cut short or not at all (`title`, `location`, `description`): a write
+       *     would replace the whole text, so they are changed in the vendor's own app.
+       */
+      partial: string[]
+      series?: string | null
+      /** @description The event's own zone, which a write of a CalDAV occurrence sends back as `time_zone`. */
+      time_zone?: string | null
+    }
     EventRoutine: {
       /** Format: uuid */
       agent: string
@@ -3032,6 +3129,11 @@ export interface components {
       id: string
       name: string
     }
+    /**
+     * @description `one` changes only the occurrence written, `all` the whole series it belongs to.
+     * @enum {string}
+     */
+    EventScope: 'one' | 'all'
     EventSpec: {
       description: string
       /** @description Such as `mail.received`. */
@@ -3304,6 +3406,26 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    Item: {
+      all_day: boolean
+      editable: boolean
+      /** @description Exclusive: the day after for an all-day item. */
+      end?: string | null
+      event?: null | components['schemas']['EventDetail']
+      /** @description Stable across reads. */
+      id: string
+      /**
+       * @description `event`, `routine` (an upcoming run), `run` (a run that happened) or `digest` (a day of a
+       *     routine that runs more than hourly).
+       */
+      kind: string
+      routine?: null | components['schemas']['RoutineDetail']
+      source: string
+      /** @description RFC 3339 in UTC, or `YYYY-MM-DD` when `all_day`. */
+      start: string
+      /** @description Untrusted vendor text for an event. */
+      title: string
+    }
     KeyView: {
       /** Format: int64 */
       downloaded_at_unix?: number | null
@@ -3488,6 +3610,20 @@ export interface components {
        * @description The new parent; null is the top level.
        */
       parent?: string | null
+    }
+    /** @description A new event: RFC 3339 times, or `YYYY-MM-DD` dates (end exclusive) with `all_day`. */
+    NewEvent: {
+      all_day: boolean
+      calendar: string
+      /** Format: uuid */
+      connection: string
+      description?: string | null
+      end: string
+      location?: string | null
+      start: string
+      /** @description The viewer's IANA zone; the profile's, else UTC, when absent. */
+      time_zone?: string | null
+      title: string
     }
     NewPage: {
       body?: string
@@ -3779,6 +3915,18 @@ export interface components {
           /** @enum {string} */
           kind: 'group'
         }
+    RemoveEvent: {
+      calendar: string
+      /** Format: uuid */
+      connection: string
+      etag?: string | null
+      event: string
+      occurrence?: string | null
+      scope: components['schemas']['EventScope']
+      series?: string | null
+      /** @description The event's own `time_zone` when its detail has one. */
+      time_zone?: string | null
+    }
     /** @description Replaces one exact passage, which must occur once, so it needs no revision to be safe. */
     Replace: {
       new_text: string
@@ -3926,9 +4074,28 @@ export interface components {
       /** Format: int64 */
       revision: number
       schedule?: string | null
+      /** @description The IANA zone the schedule is read in. */
+      time_zone: string
       trigger?: null | components['schemas']['Trigger']
       /** @description A webhook secret is set; it is shown only when made. */
       webhook: boolean
+    }
+    RoutineDetail: {
+      /** Format: uuid */
+      agent: string
+      /** @description A run's turn status, or `failed`. */
+      outcome?: string | null
+      /** Format: uuid */
+      routine: string
+      /**
+       * Format: int32
+       * @description A digest's runs that day.
+       */
+      runs?: number | null
+      schedule: string
+      time_zone: string
+      /** Format: uuid */
+      turn?: string | null
     }
     RunRoutine: {
       /** Format: uuid */
@@ -4001,8 +4168,10 @@ export interface components {
       enabled: boolean
       name: string
       prompt?: string | null
-      /** @description Five-field cron in UTC; `null` runs only by hand or webhook. */
+      /** @description Five-field cron in `time_zone`; `null` runs only by hand or webhook. */
       schedule?: string | null
+      /** @description The IANA zone the schedule is read in, such as `America/Sao_Paulo`; omitted or `null` is UTC. */
+      time_zone?: string | null
       trigger?: null | components['schemas']['Trigger']
     }
     SaveSingleSignOn: {
@@ -4245,6 +4414,28 @@ export interface components {
       revision: number
       /** Format: uuid */
       skill: string
+    }
+    /** @description One calendar of a connection, or one agent. */
+    Source: {
+      /** @description The connection's account a calendar belongs to. */
+      account?: string | null
+      /** @description A hex color the vendor gives the calendar. */
+      color?: string | null
+      /** Format: uuid */
+      connection?: string | null
+      connector?: string | null
+      /**
+       * @description `calendar:<connection>:<calendar>`, `calendar:<connection>` for a connection whose
+       *     calendars could not be listed, or `agent:<agent>`.
+       */
+      id: string
+      /** @description `calendar` or `agent`. */
+      kind: string
+      name: string
+      /** @description Why its events are missing, worded for the person. */
+      problem?: string | null
+      /** @description Its events can be created, changed and deleted from the calendar. */
+      writable: boolean
     }
     /** @description The installation's speech settings; the key itself is never returned. */
     SpeechSettings: {
@@ -5683,6 +5874,171 @@ export interface operations {
         content: {
           'application/json': components['schemas']['ReadCursor']
         }
+      }
+    }
+  }
+  calendar_range: {
+    parameters: {
+      query: {
+        /** @description RFC 3339; at most 62 days before `to`. */
+        from: string
+        to: string
+        /**
+         * @description The IANA zone days are counted in and a floating CalDAV time is read in; the profile's,
+         *     else UTC, when absent.
+         */
+        time_zone?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CalendarRange']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  update_calendar_event: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeEvent']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  create_calendar_event: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewEvent']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Item']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  delete_calendar_event: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RemoveEvent']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

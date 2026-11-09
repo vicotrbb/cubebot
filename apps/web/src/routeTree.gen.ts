@@ -14,6 +14,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
 import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
+import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
 import { Route as AppKbRouteImport } from './routes/_app.kb'
 import { Route as AppMenuRouteImport } from './routes/_app.menu'
@@ -82,6 +83,11 @@ const AppActivityRoute = AppActivityRouteImport.update({
 const AppBroadcastRoute = AppBroadcastRouteImport.update({
   id: '/broadcast',
   path: '/broadcast',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCalendarRoute = AppCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFilesRoute = AppFilesRouteImport.update({
@@ -319,6 +325,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
+  '/calendar': typeof AppCalendarRoute
   '/files': typeof AppFilesRoute
   '/kb': typeof AppKbRouteWithChildren
   '/menu': typeof AppMenuRoute
@@ -369,6 +376,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
+  '/calendar': typeof AppCalendarRoute
   '/files': typeof AppFilesRoute
   '/menu': typeof AppMenuRoute
   '/platform': typeof AppPlatformRouteWithChildren
@@ -421,6 +429,7 @@ export interface FileRoutesById {
   '/sign-in': typeof SignInRoute
   '/_app/activity': typeof AppActivityRoute
   '/_app/broadcast': typeof AppBroadcastRoute
+  '/_app/calendar': typeof AppCalendarRoute
   '/_app/files': typeof AppFilesRoute
   '/_app/kb': typeof AppKbRouteWithChildren
   '/_app/menu': typeof AppMenuRoute
@@ -475,6 +484,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/activity'
     | '/broadcast'
+    | '/calendar'
     | '/files'
     | '/kb'
     | '/menu'
@@ -525,6 +535,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/activity'
     | '/broadcast'
+    | '/calendar'
     | '/files'
     | '/menu'
     | '/platform'
@@ -576,6 +587,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/_app/activity'
     | '/_app/broadcast'
+    | '/_app/calendar'
     | '/_app/files'
     | '/_app/kb'
     | '/_app/menu'
@@ -664,6 +676,13 @@ declare module '@tanstack/react-router' {
       path: '/broadcast'
       fullPath: '/broadcast'
       preLoaderRoute: typeof AppBroadcastRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/calendar': {
+      id: '/_app/calendar'
+      path: '/calendar'
+      fullPath: '/calendar'
+      preLoaderRoute: typeof AppCalendarRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/files': {
@@ -1080,6 +1099,7 @@ const AppRoomsRoomIdRouteWithChildren = AppRoomsRoomIdRoute._addFileChildren(
 interface AppRouteChildren {
   AppActivityRoute: typeof AppActivityRoute
   AppBroadcastRoute: typeof AppBroadcastRoute
+  AppCalendarRoute: typeof AppCalendarRoute
   AppFilesRoute: typeof AppFilesRoute
   AppKbRoute: typeof AppKbRouteWithChildren
   AppMenuRoute: typeof AppMenuRoute
@@ -1103,6 +1123,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppActivityRoute: AppActivityRoute,
   AppBroadcastRoute: AppBroadcastRoute,
+  AppCalendarRoute: AppCalendarRoute,
   AppFilesRoute: AppFilesRoute,
   AppKbRoute: AppKbRouteWithChildren,
   AppMenuRoute: AppMenuRoute,

@@ -1,10 +1,12 @@
 //! Google Calendar (https://developers.google.com/calendar/api/v3/reference). Only invitations
-//! and responses notify anyone; creating and deleting are silent.
+//! and responses notify anyone; creating, changing and deleting are silent.
 use super::{at, clip, now, rfc3339};
 use crate::{Context, Error, Event};
+use chrono::{NaiveDateTime, TimeDelta, TimeZone};
+use chrono_tz::Tz;
 use reqwest::Method;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 const CALENDAR: &str = "https://www.googleapis.com/calendar/v3";
 /// How far ahead `event.starting` looks, in seconds.
@@ -17,7 +19,8 @@ struct Events {
     from: Option<String>,
     to: Option<String>,
     query: Option<String>,
-    limit: Option<u8>,
+    limit: Option<u16>,
+    page: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +39,20 @@ struct Create {
     summary: String,
     start: String,
     end: String,
+    time_zone: Option<String>,
+    description: Option<String>,
+    location: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Change {
+    calendar: Option<String>,
+    event: String,
+    all: Option<bool>,
+    summary: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
     time_zone: Option<String>,
     description: Option<String>,
     location: Option<String>,
@@ -70,6 +87,7 @@ pub(super) async fn call(cx: &Context, name: &str, input: Value) -> Result<Value
         "events" => events(cx, input).await,
         "freebusy" => freebusy(cx, input).await,
         "create_event" => create(cx, input).await,
+        "update_event" => change(cx, input).await,
         "invite" => invite(cx, input).await,
         "respond" => respond(cx, input).await,
         "delete_event" => {
@@ -117,7 +135,7 @@ async fn list(cx: &Context) -> Result<Value, Error> {
 
 async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     let wanted: Events = crate::input(input)?;
-    let limit = wanted.limit.unwrap_or(25).clamp(1, 100).to_string();
+    let limit = wanted.limit.unwrap_or(25).clamp(1, 250).to_string();
     let from = wanted.from.unwrap_or_else(|| rfc3339(now()));
     let mut query = vec![
         ("singleEvents", "true"),
@@ -131,10 +149,22 @@ async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     if let Some(text) = &wanted.query {
         query.push(("q", text));
     }
+    if let Some(page) = &wanted.page {
+        query.push(("pageToken", page));
+    }
     let request = cx.get(&events_path(wanted.calendar.as_deref()))?;
     let found = cx.json(request.query(&query)).await?;
+    let calendar = wanted.calendar.as_deref().unwrap_or("primary");
     let items = found["items"].as_array().into_iter().flatten();
-    Ok(json!({"events": items.map(event).collect::<Vec<_>>()}))
+    let events: Vec<Value> = items.map(|item| in_calendar(item, calendar)).collect();
+    Ok(json!({"events": events, "next_page": found["nextPageToken"]}))
+}
+
+/// [`event`] with the calendar it was read from.
+fn in_calendar(item: &Value, calendar: &str) -> Value {
+    let mut made = event(item);
+    made["calendar"] = json!(calendar);
+    made
 }
 
 /// An event as the model needs it, its description cut short.
@@ -147,6 +177,8 @@ fn event(event: &Value) -> Value {
         .collect();
     json!({
         "id": event["id"],
+        "series": event["recurringEventId"],
+        "all_day": event["start"]["date"].is_string(),
         "summary": event["summary"],
         "start": when(&event["start"]),
         "end": when(&event["end"]),
@@ -202,8 +234,125 @@ async fn create(cx: &Context, input: Value) -> Result<Value, Error> {
 fn time(text: &str, zone: Option<&str>) -> Value {
     match text.len() {
         10 => json!({"date": text}),
-        _ => json!({"dateTime": text, "timeZone": zone}),
+        _ => match zone {
+            Some(zone) => json!({"dateTime": text, "timeZone": zone}),
+            None => json!({"dateTime": text}),
+        },
     }
+}
+
+/// Google merges a patched start into the old one, so the key of the other kind is cleared.
+fn exclusive(mut time: Value) -> Value {
+    let other = if time["date"].is_null() {
+        "date"
+    } else {
+        "dateTime"
+    };
+    time[other] = Value::Null;
+    time
+}
+
+/// Patches the event, or with `all` the series its occurrence belongs to; nobody is notified.
+async fn change(cx: &Context, input: Value) -> Result<Value, Error> {
+    let change: Change = crate::input(input)?;
+    let (mut body, times) = fields(&change)?;
+    let calendar = change.calendar.as_deref();
+    let mut path = event_path(calendar, &change.event);
+    let mut series = None;
+    if change.all == Some(true) {
+        let instance = cx.json(cx.get(&path)?).await?;
+        if let Some(master) = instance["recurringEventId"].as_str() {
+            path = event_path(calendar, master);
+            series = Some(instance);
+        }
+    }
+    if let Some(times) = times {
+        let master = match &series {
+            Some(_) => cx.json(cx.get(&path)?).await?,
+            None => Value::Null,
+        };
+        let pair = series.as_ref().map(|instance| (instance, &master));
+        let (start, end) = moved(pair, times, change.time_zone.as_deref())?;
+        body.insert("start".into(), exclusive(start));
+        body.insert("end".into(), exclusive(end));
+    }
+    let request = cx
+        .request(Method::PATCH, &path)?
+        .query(&[("sendUpdates", "none")]);
+    let changed = cx.json(request.json(&body)).await?;
+    Ok(in_calendar(&changed, calendar.unwrap_or("primary")))
+}
+
+/// A start and an end, as the caller wrote them.
+type Times<'a> = (&'a str, &'a str);
+
+/// The fields to patch apart from the times, and the times when both are given.
+fn fields(change: &Change) -> Result<(Map<String, Value>, Option<Times<'_>>), Error> {
+    let mut body = Map::new();
+    for (key, text) in [
+        ("summary", &change.summary),
+        ("description", &change.description),
+        ("location", &change.location),
+    ] {
+        if let Some(text) = text {
+            body.insert(key.into(), json!(text));
+        }
+    }
+    let times = match (&change.start, &change.end) {
+        (Some(start), Some(end)) => Some((start.as_str(), end.as_str())),
+        (None, None) => None,
+        _ => return Err(Error::Invalid("start and end are given together".into())),
+    };
+    if body.is_empty() && times.is_none() {
+        return Err(Error::Invalid("nothing to change".into()));
+    }
+    Ok((body, times))
+}
+
+/// The new start and end: as given, or for a series the first occurrence moved as far as the
+/// edited occurrence on the wall clock of the series' own zone (`zone` only when it has none, as
+/// an all-day series), keeping the new length.
+fn moved(
+    series: Option<(&Value, &Value)>,
+    (start, end): Times,
+    zone: Option<&str>,
+) -> Result<(Value, Value), Error> {
+    let Some((instance, master)) = series else {
+        return Ok((time(start, zone), time(end, zone)));
+    };
+    let name = master["start"]["timeZone"]
+        .as_str()
+        .or(zone)
+        .ok_or_else(|| Error::Invalid("the series has no time zone; pass time_zone".into()))?;
+    let tz: Tz = name
+        .parse()
+        .map_err(|_| Error::Invalid(format!("{name} is not a time zone")))?;
+    let local = |text: &str| -> Result<NaiveDateTime, Error> {
+        let at = seconds(text)?;
+        let moment = tz.timestamp_opt(at, 0).single();
+        moment
+            .map(|m| m.naive_local())
+            .ok_or_else(|| Error::Invalid(format!("{text} is not a time")))
+    };
+    let known = |time: &Value| local(when(time).as_str().unwrap_or_default());
+    let first = known(&master["start"])? + (local(start)? - known(&instance["originalStartTime"])?);
+    let length = TimeDelta::seconds(seconds(end)? - seconds(start)?);
+    let render = |at: NaiveDateTime, like: &str| match like.len() {
+        10 => json!({"date": at.format("%Y-%m-%d").to_string()}),
+        _ => time(&at.format("%Y-%m-%dT%H:%M:%S").to_string(), Some(name)),
+    };
+    Ok((render(first, start), render(first + length, end)))
+}
+
+/// A date or an RFC 3339 time as seconds since the epoch.
+fn seconds(time: &str) -> Result<i64, Error> {
+    let full = match time.len() {
+        10 => format!("{time}T00:00:00Z"),
+        _ => time.to_owned(),
+    };
+    mail_parser::DateTime::parse_rfc3339(&full)
+        .map(|parsed| parsed.to_timestamp())
+        .ok_or_else(|| Error::Invalid(format!("{time} is not a date or an RFC 3339 time")))
 }
 
 /// Adds guests and emails them; the guests already invited are kept.

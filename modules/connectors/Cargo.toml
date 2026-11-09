@@ -11,12 +11,15 @@ workspace = true
 [dependencies]
 async-imap = { version = "0.12.0", default-features = false, features = ["runtime-tokio"] }
 base64 = "0.22.1"
+chrono = { version = "0.4", default-features = false }
+chrono-tz = { workspace = true }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 hmac = "0.12.1"
 lettre = { version = "0.11.23", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls", "ring", "webpki-roots"] }
 mail-parser = "0.11"
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 roxmltree = "0.21.2"
+rrule = "0.14"
 russh = { version = "0.65.1", default-features = false, features = ["ring", "rsa"] }
 russh-sftp = "3.0.1"
 rsa = { version = "0.9.10", features = ["sha2"] }

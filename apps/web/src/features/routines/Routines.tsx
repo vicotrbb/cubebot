@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarClock, Play, Webhook, Zap } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   api,
   failure,
@@ -20,6 +20,8 @@ import {
   Status,
   when,
 } from '../../components/primitives'
+import { scheduleWords } from '../calendar/model'
+import { useProfile } from '../shell/AboutYou'
 import './routines.css'
 
 const SCHEDULES = [
@@ -48,6 +50,7 @@ export function Routines({
 }) {
   const [routines, setRoutines] = useState<Routine[]>([])
   const [editing, setEditing] = useState<Routine | 'new' | null>(null)
+  const zone = useViewerZone()
   const [secret, setSecret] = useState<Secret | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -187,7 +190,7 @@ export function Routines({
                   <code>{routine.command}</code>
                 </p>
               )}
-              <p className="small faint">{describe(routine)}</p>
+              <p className="small faint">{describe(routine, zone)}</p>
               {routine.webhook && (
                 <WebhookDetails
                   agent={agent.id}
@@ -241,13 +244,21 @@ export function Routines({
   )
 }
 
-function describe(routine: Routine) {
+/** The zone the person reads times in: their profile's, else this device's. */
+function useViewerZone() {
+  const profile = useProfile()
+  return (
+    profile.data?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  )
+}
+
+function describe(routine: Routine, zone: string) {
   const managed =
     routine.managed_by === 'agent'
       ? 'Managed by the agent'
       : 'Managed by a person'
   const schedule = routine.schedule
-    ? `next ${routine.next_at ? when(routine.next_at) : 'never'}`
+    ? scheduleWords(routine.schedule, routine.time_zone, routine.next_at, zone)
     : routine.trigger
       ? `Runs on ${routine.trigger.connection}'s ${routine.trigger.event}`
       : routine.webhook
@@ -439,13 +450,16 @@ function History({ agent, routine }: { agent: string; routine: string }) {
   )
 }
 
-function RoutineForm({
+export function RoutineForm({
   agent,
   existing,
+  schedule,
   onDone,
 }: {
   agent: AgentSummary
   existing: Routine | undefined
+  /** A new routine's schedule, such as the calendar slot it was made from. */
+  schedule?: string
   onDone: (secret?: Secret) => void
 }) {
   const [error, setError] = useState('')
@@ -498,7 +512,7 @@ function RoutineForm({
           defaultValue={existing?.command ?? ''}
         />
       </Field>
-      <Triggers agent={agent.id} existing={existing} />
+      <Triggers agent={agent.id} existing={existing} schedule={schedule} />
       <label className="check">
         <input
           type="checkbox"
@@ -538,13 +552,17 @@ function RoutineForm({
 function Triggers({
   agent,
   existing,
+  schedule,
 }: {
   agent: string
   existing: Routine | undefined
+  schedule: string | undefined
 }) {
-  const [scheduled, setScheduled] = useState(Boolean(existing?.schedule))
+  const [scheduled, setScheduled] = useState(
+    Boolean(existing?.schedule ?? schedule),
+  )
   const [cron, setCron] = useState<string>(
-    existing?.schedule ?? SCHEDULES[0][1],
+    existing?.schedule ?? schedule ?? SCHEDULES[0][1],
   )
   return (
     <fieldset className="triggers">
@@ -567,7 +585,7 @@ function Triggers({
       </label>
       {scheduled && (
         <div className="trigger__more">
-          <Field label="Cron" hint="Five fields, in UTC">
+          <Field label="Cron" hint="Five fields, in the time zone below">
             <input
               name="schedule"
               required
@@ -594,6 +612,7 @@ function Triggers({
               </button>
             ))}
           </div>
+          <ZoneField existing={existing} />
         </div>
       )}
       {existing?.webhook ? (
@@ -622,6 +641,33 @@ function Triggers({
       )}
       <EventTrigger agent={agent} existing={existing} />
     </fieldset>
+  )
+}
+
+/** Defaults to the zone the person reads times in. */
+function ZoneField({ existing }: { existing: Routine | undefined }) {
+  const viewer = useViewerZone()
+  const zones = useMemo(() => Intl.supportedValuesOf('timeZone'), [])
+  // An unscheduled routine holds the column default, UTC, which nobody chose.
+  const [chosen, setChosen] = useState(
+    existing?.schedule ? existing.time_zone : undefined,
+  )
+  const zone = chosen ?? viewer
+  return (
+    <Field label="Time zone">
+      <select
+        name="time_zone"
+        value={zone}
+        onChange={(event) => setChosen(event.target.value)}
+      >
+        {!zones.includes(zone) && <option value={zone}>{zone}</option>}
+        {zones.map((option) => (
+          <option key={option} value={option}>
+            {option.replaceAll('_', ' ')}
+          </option>
+        ))}
+      </select>
+    </Field>
   )
 }
 
@@ -732,6 +778,7 @@ function routineBody(data: FormData) {
     prompt: text('prompt'),
     command: text('command'),
     schedule: text('schedule'),
+    time_zone: text('time_zone'),
     coalesce: data.has('coalesce'),
     enabled: data.has('enabled'),
     trigger: trigger(text('trigger')),

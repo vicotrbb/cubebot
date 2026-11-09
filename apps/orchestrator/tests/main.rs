@@ -12,6 +12,7 @@ mod agent_lifecycle;
 mod agents;
 mod audit;
 mod authentication_limits;
+mod calendar;
 mod calls;
 mod chat;
 mod collaboration;

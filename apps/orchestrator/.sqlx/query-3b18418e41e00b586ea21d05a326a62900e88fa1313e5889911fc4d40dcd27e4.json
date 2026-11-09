@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE connections SET status = 'sign_in_again', problem = $2 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b18418e41e00b586ea21d05a326a62900e88fa1313e5889911fc4d40dcd27e4"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE routines\n        SET name=$2, prompt=$3, command=$4, coalesce=$5, enabled=$6, managed_by=$7,\n            trigger_connection=$8, trigger_event=$9, revision=revision+1\n        WHERE id=$1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Bool",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d94dc553f57170ce12a8ac2802226071da574183f8d7b935d9fc4fd8cb5a1436"
+}

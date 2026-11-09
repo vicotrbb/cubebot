@@ -48,6 +48,8 @@ pub enum ConnectError {
     Refused(String),
     /// The vendor refused the credential itself: a person must sign in again.
     SignInAgain,
+    /// The vendor could not be reached or failed before acting, so nothing was done.
+    Unavailable(String),
 }
 impl From<IdentityError> for ConnectError {
     fn from(error: IdentityError) -> Self {
@@ -192,6 +194,9 @@ pub struct EventRoutine {
     pub event: String,
     pub enabled: bool,
 }
+
+/// A connection's connector and settings.
+type Usable = (&'static dyn Connector, Value);
 
 /// A connection as the orchestrator uses it.
 struct Stored {
@@ -539,9 +544,11 @@ impl Connections {
                 None,
                 Some("The account refused the credential; sign in again."),
             ),
-            Err(ConnectError::Refused(problem) | ConnectError::Invalid(problem)) => {
-                ("error", None, Some(problem.as_str()))
-            }
+            Err(
+                ConnectError::Refused(problem)
+                | ConnectError::Invalid(problem)
+                | ConnectError::Unavailable(problem),
+            ) => ("error", None, Some(problem.as_str())),
             Err(ConnectError::Identity(_)) => {
                 ("error", None, Some("The credential could not be opened."))
             }
@@ -595,10 +602,17 @@ impl Connections {
 
     /// A current credential for the connection and when it expires, renewing it first when due.
     async fn fresh_credential(&self, id: Uuid) -> Result<(Credential, Option<i64>), ConnectError> {
+        let (_, credential) = self.usable(id).await?;
+        Ok(credential)
+    }
+
+    /// The connection's connector and settings with [`Self::fresh_credential`], read once.
+    async fn usable(&self, id: Uuid) -> Result<(Usable, (Credential, Option<i64>)), ConnectError> {
         let mut tx = self.pool.begin().await?;
         let stored = self.stored(&mut tx, id, false).await?;
         tx.commit().await?;
-        match stored.auth.as_str() {
+        let usable = (stored.connector, stored.config.clone());
+        let credential = match stored.auth.as_str() {
             "api_key" | "password" | "public" => Ok((
                 Credential::Fields {
                     fields: stored.sealed.fields,
@@ -607,7 +621,8 @@ impl Connections {
             )),
             "linked" => self.linked(&stored.config).await,
             _ => self.token(stored).await,
-        }
+        }?;
+        Ok((usable, credential))
     }
 
     /// The access token of an OAuth or GitHub App connection, renewed when it is close to expiry.
@@ -662,6 +677,37 @@ impl Connections {
             ));
         }
         self.token(stored).await
+    }
+
+    /// Runs one of the connection's tools for the orchestrator itself, with a current credential.
+    /// A refused credential leaves the connection needing a new sign-in, as a poll does.
+    #[tracing::instrument(skip_all, fields(connection = %id, tool))]
+    pub(crate) async fn call_tool(
+        &self,
+        id: Uuid,
+        tool: &str,
+        input: Value,
+    ) -> Result<Value, ConnectError> {
+        let ((connector, config), (credential, _)) = self.usable(id).await?;
+        let cx = self.context(config, credential);
+        match connector.call(&cx, tool, input).await {
+            Ok(answer) => Ok(answer),
+            Err(cubebot_connectors::Error::Unauthorized) => {
+                sqlx::query!(
+                    "UPDATE connections SET status = 'sign_in_again', problem = $2 WHERE id = $1",
+                    id,
+                    "The account refused the credential; sign in again.",
+                )
+                .execute(&self.pool)
+                .await?;
+                Err(ConnectError::SignInAgain)
+            }
+            Err(cubebot_connectors::Error::Invalid(problem)) => Err(ConnectError::Invalid(problem)),
+            Err(cubebot_connectors::Error::Unavailable(problem)) => {
+                Err(ConnectError::Unavailable(problem))
+            }
+            Err(error) => Err(ConnectError::Refused(refusal(&error))),
+        }
     }
 
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]

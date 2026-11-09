@@ -84,6 +84,11 @@ impl IntoResponse for ConnectError {
             Self::Identity(error) => return error.into_response(),
             Self::Invalid(message) => (StatusCode::BAD_REQUEST, "invalid_input", message),
             Self::Refused(message) => (StatusCode::UNPROCESSABLE_ENTITY, "refused", message),
+            Self::Unavailable(message) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "refused",
+                format!("unavailable, nothing was done: {message}"),
+            ),
             Self::SignInAgain => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "refused",

@@ -1,5 +1,5 @@
 mod agent;
-mod cron;
+pub(crate) mod cron;
 
 use super::{Work, access, wake};
 use crate::{
@@ -25,6 +25,8 @@ pub struct Routine {
     pub prompt: Option<String>,
     pub command: Option<String>,
     pub schedule: Option<String>,
+    /// The IANA zone the schedule is read in.
+    pub time_zone: String,
     pub coalesce: bool,
     pub enabled: bool,
     /// A webhook secret is set; it is shown only when made.
@@ -58,8 +60,11 @@ pub struct SaveRoutine {
     pub name: String,
     pub prompt: Option<String>,
     pub command: Option<String>,
-    /// Five-field cron in UTC; `null` runs only by hand or webhook.
+    /// Five-field cron in `time_zone`; `null` runs only by hand or webhook.
     pub schedule: Option<String>,
+    /// The IANA zone the schedule is read in, such as `America/Sao_Paulo`; omitted or `null` is UTC.
+    #[serde(default)]
+    pub time_zone: Option<String>,
     /// At most one pending turn while one is queued or running.
     pub coalesce: bool,
     /// A disabled routine runs only by hand.
@@ -436,7 +441,7 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     // Another orchestrator's tick takes the rows this one holds.
     let due = sqlx::query!(
         r#"
-        SELECT id, schedule AS "schedule!"
+        SELECT id, schedule AS "schedule!", time_zone
         FROM routines
         WHERE enabled AND next_at <= clock_timestamp() AND schedule IS NOT NULL
         ORDER BY next_at
@@ -447,7 +452,13 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     .fetch_all(&mut *tx)
     .await?;
     for routine in &due {
-        let next = Cron::parse(&routine.schedule).and_then(|cron| cron.after(now));
+        let zone = cron::zone(&routine.time_zone);
+        if zone.is_none() {
+            tracing::warn!(routine = %routine.id, zone = %routine.time_zone, "routine time zone is unknown; it stops");
+        }
+        let next = Cron::parse(&routine.schedule)
+            .zip(zone)
+            .and_then(|(cron, zone)| cron.after_in(now, zone));
         sqlx::query!(
             "
             UPDATE routines
@@ -685,14 +696,19 @@ async fn next_at(
             .is_none_or(|command| text(command, 4096))
         && (input.prompt.is_some() || input.command.is_some());
     let cron = input.schedule.as_deref().map(Cron::parse);
-    if !valid || matches!(cron, Some(None)) {
+    let zone = cron::zone(time_zone(input)).filter(|_| valid && !matches!(cron, Some(None)));
+    let Some(zone) = zone else {
         return Err(IdentityError::InvalidInput);
-    }
+    };
     let now = now(tx).await?;
     Ok(cron
         .flatten()
-        .and_then(|cron| cron.after(now))
+        .and_then(|cron| cron.after_in(now, zone))
         .map(|next| next as f64))
+}
+
+fn time_zone(input: &SaveRoutine) -> &str {
+    input.time_zone.as_deref().unwrap_or("UTC")
 }
 
 /// The connection and event kind a trigger names, when that connection's connector reports it.
@@ -743,7 +759,8 @@ async fn insert(
         Err(reason) => return Ok(Err(reason)),
     }
     let made = (human, managed_by, request_id);
-    let id = inserted(tx, agent, made, input, (next, trigger)).await?;
+    let id = inserted(tx, agent, made, input, trigger).await?;
+    reschedule(tx, id, input, next).await?;
     Ok(Ok((id, true)))
 }
 
@@ -752,23 +769,21 @@ async fn inserted(
     agent: AgentId,
     (human, managed_by, request_id): (Uuid, &str, Uuid),
     input: &SaveRoutine,
-    (next, (connection, event)): (Option<f64>, (Option<Uuid>, Option<&str>)),
+    (connection, event): (Option<Uuid>, Option<&str>),
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar!(
         "
-        INSERT INTO routines (agent_id, name, prompt, command, schedule, coalesce, enabled, next_at, created_by, managed_by, request_id,
+        INSERT INTO routines (agent_id, name, prompt, command, coalesce, enabled, created_by, managed_by, request_id,
             trigger_connection, trigger_event)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8), $9, $10, $11, $12, $13)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING id
         ",
         agent.0,
         input.name,
         input.prompt,
         input.command,
-        input.schedule,
         input.coalesce,
         input.enabled,
-        next,
         human,
         managed_by,
         request_id,
@@ -777,6 +792,25 @@ async fn inserted(
     )
     .fetch_one(&mut **tx)
     .await
+}
+
+/// When a saved routine runs: its schedule, the zone it is read in and its next time.
+async fn reschedule(
+    tx: &mut Transaction<'_, Postgres>,
+    routine: Uuid,
+    input: &SaveRoutine,
+    next: Option<f64>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE routines SET schedule=$2, time_zone=$3, next_at=to_timestamp($4) WHERE id=$1",
+        routine,
+        input.schedule,
+        time_zone(input),
+        next,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 async fn admit(
@@ -822,24 +856,23 @@ async fn update(
     sqlx::query!(
         "
         UPDATE routines
-        SET name=$2, prompt=$3, command=$4, schedule=$5, coalesce=$6, enabled=$7, next_at=to_timestamp($8), managed_by=$9,
-            trigger_connection=$10, trigger_event=$11, revision=revision+1
+        SET name=$2, prompt=$3, command=$4, coalesce=$5, enabled=$6, managed_by=$7,
+            trigger_connection=$8, trigger_event=$9, revision=revision+1
         WHERE id=$1
         ",
         routine.id,
         input.name,
         input.prompt,
         input.command,
-        input.schedule,
         input.coalesce,
         input.enabled,
-        next,
         managed_by,
         connection,
         event,
     )
     .execute(&mut **tx)
     .await?;
+    reschedule(tx, routine.id, input, next).await?;
     Ok(())
 }
 
@@ -964,7 +997,7 @@ async fn list(
     sqlx::query_as!(
         Routine,
         r#"
-        SELECT id, name, prompt, command, schedule, coalesce, enabled,
+        SELECT id, name, prompt, command, schedule, time_zone, coalesce, enabled,
             webhook_secret_hash IS NOT NULL AS "webhook!", managed_by,
             (to_jsonb(next_at) #>> '{}') AS next_at, (to_jsonb(last_run_at) #>> '{}') AS last_run_at,
             (SELECT to_jsonb(max(h.received_at)) #>> '{}' FROM routine_hooks h WHERE h.routine_id=routines.id) AS last_delivery_at,

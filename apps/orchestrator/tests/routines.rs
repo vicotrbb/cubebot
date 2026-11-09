@@ -53,6 +53,7 @@ fn routine(schedule: Option<&str>, coalesce: bool) -> CreateRoutine {
             coalesce,
             enabled: true,
             trigger: None,
+            time_zone: None,
         },
     }
 }
@@ -358,4 +359,60 @@ async fn a_person_who_edits_or_rekeys_a_routine_becomes_who_it_runs_as() {
         .await
         .unwrap();
     assert_eq!(runs_as(rekeyed.id).await, member.id);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_routine_in_a_zone_reports_its_next_run_in_that_zone() {
+    let (pool, admin, agent) = setup().await;
+    let mut input = routine(Some("0 9 * * *"), true);
+    input.routine.time_zone = Some("America/Sao_Paulo".into());
+    let made = Work::new(pool.clone())
+        .create_routine(&admin, agent, &input)
+        .await
+        .unwrap()
+        .routine;
+    assert_eq!(made.time_zone, "America/Sao_Paulo");
+    let hour = sqlx::query_scalar!(
+        r#"SELECT to_char(next_at AT TIME ZONE 'UTC', 'HH24:MI') AS "hour!" FROM routines WHERE id=$1"#,
+        made.id,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(hour, "12:00");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_unknown_zone_is_refused() {
+    let (pool, admin, agent) = setup().await;
+    let mut input = routine(Some("0 9 * * *"), true);
+    input.routine.time_zone = Some("Mars/Olympus".into());
+    let refused = Work::new(pool).create_routine(&admin, agent, &input).await;
+    assert!(matches!(
+        refused,
+        Err(cubebot_orchestrator::identity::IdentityError::InvalidInput)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_routine_without_a_zone_is_utc() {
+    let (pool, admin, agent) = setup().await;
+    let input = CreateRoutine {
+        request_id: Uuid::new_v4(),
+        webhook: false,
+        routine: serde_json::from_value(serde_json::json!({
+            "name": "disk", "prompt": "Check the disk", "command": null,
+            "schedule": "0 9 * * *", "coalesce": true, "enabled": true,
+        }))
+        .unwrap(),
+    };
+    let made = Work::new(pool)
+        .create_routine(&admin, agent, &input)
+        .await
+        .unwrap()
+        .routine;
+    assert_eq!(made.time_zone, "UTC");
 }

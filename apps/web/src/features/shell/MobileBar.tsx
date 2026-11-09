@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Folder, House, Inbox, ListChecks, UserRound } from 'lucide-react'
+import { CalendarDays, House, Inbox, ListChecks, UserRound } from 'lucide-react'
 import { useUnreadActivity } from '../../app/queries'
 
 export function MobileBar() {
@@ -33,12 +33,12 @@ export function MobileBar() {
         {attention > 0 && <span className="row__badge">{attention}</span>}
       </Link>
       <Link
-        to="/files"
+        to="/calendar"
         className="bottombar__item"
         activeProps={{ 'aria-current': 'page' }}
       >
-        <Folder />
-        <span>Files</span>
+        <CalendarDays />
+        <span>Calendar</span>
       </Link>
       <Link
         to="/you"

@@ -28,18 +28,18 @@ const TOKEN: &str = "crm-secret-token";
 
 /// A vendor on loopback: each request takes the first queued answer for its path, and is recorded.
 #[derive(Clone, Default)]
-struct Vendor {
+pub(crate) struct Vendor {
     answers: Arc<Mutex<Vec<(String, u16, Value)>>>,
     seen: Arc<Mutex<Vec<(String, String, String)>>>,
 }
 
 impl Vendor {
-    fn answer(&self, path: &str, status: u16, body: Value) {
+    pub(crate) fn answer(&self, path: &str, status: u16, body: Value) {
         let answer = (path.to_owned(), status, body);
         self.answers.lock().unwrap().push(answer);
     }
 
-    fn seen(&self, path: &str) -> Vec<String> {
+    pub(crate) fn seen(&self, path: &str) -> Vec<String> {
         let seen = self.seen.lock().unwrap();
         let bodies = seen
             .iter()
@@ -47,7 +47,7 @@ impl Vendor {
         bodies.map(|(_, _, body)| body.clone()).collect()
     }
 
-    async fn serve(&self) -> String {
+    pub(crate) async fn serve(&self) -> String {
         async fn answer(
             State(vendor): State<Vendor>,
             method: Method,
@@ -88,10 +88,10 @@ impl Vendor {
     }
 }
 
-struct Console {
-    http: openidconnect::reqwest::Client,
-    origin: String,
-    token: String,
+pub(crate) struct Console {
+    pub(crate) http: openidconnect::reqwest::Client,
+    pub(crate) origin: String,
+    pub(crate) token: String,
 }
 
 impl Console {
@@ -118,7 +118,7 @@ impl Console {
         .unwrap()
     }
 
-    async fn json(&self, verb: &str, path: &str, body: Option<Value>) -> (u16, Value) {
+    pub(crate) async fn json(&self, verb: &str, path: &str, body: Option<Value>) -> (u16, Value) {
         let response = self.send(verb, path, body).await;
         let status = response.status().as_u16();
         (status, response.json().await.unwrap_or(Value::Null))

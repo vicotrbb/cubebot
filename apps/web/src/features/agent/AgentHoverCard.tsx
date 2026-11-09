@@ -15,7 +15,8 @@ import './hover.css'
 const OFFSET = 14
 const OPEN_DELAY = 280
 
-function place(card: HTMLElement, x: number, y: number) {
+/** Puts a floating card beside a point, flipped to whichever side keeps it on screen. */
+export function place(card: HTMLElement, x: number, y: number) {
   const { width, height } = card.getBoundingClientRect()
   const left =
     x + OFFSET + width > window.innerWidth ? x - OFFSET - width : x + OFFSET

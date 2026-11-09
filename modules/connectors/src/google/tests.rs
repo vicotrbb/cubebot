@@ -202,6 +202,148 @@ async fn calendar_create_event_notifies_no_one() {
 }
 
 #[tokio::test]
+async fn calendar_events_reports_series_and_pages() {
+    let mut found = recorded("events");
+    found["items"][0]["recurringEventId"] = json!("weekly");
+    found["nextPageToken"] = json!("page-2");
+    let fixture = Fixture::start(vec![get(PRIMARY, found)]).await;
+    let input = json!({"from": "2026-11-06T00:00:00Z", "limit": 250, "page": "page-1"});
+    let found = call(&fixture, "calendar_events", input).await;
+    let (review, holiday) = (&found["events"][0], &found["events"][1]);
+    assert_eq!(review["series"], "weekly");
+    assert_eq!(review["all_day"], false);
+    assert_eq!(holiday["all_day"], true);
+    assert_eq!(
+        (&review["calendar"], &holiday["series"]),
+        (&json!("primary"), &Value::Null)
+    );
+    assert_eq!(found["next_page"], "page-2");
+    let seen = fixture.finish().await;
+    assert!(
+        seen[0].target.contains("maxResults=250&"),
+        "{}",
+        seen[0].target
+    );
+    assert!(seen[0].target.contains("pageToken=page-1"));
+}
+
+#[tokio::test]
+async fn calendar_update_event_patches_without_notifying() {
+    let path = "/www.googleapis.com/calendar/v3/calendars/team@example.com/events/abc";
+    let made = recorded("events")["items"][1].clone();
+    let fixture = Fixture::start(vec![Exchange::new("PATCH", path, 200, made)]).await;
+    let input = json!({"calendar": "team@example.com", "event": "abc", "summary": "Moved", "start": "2026-11-16T09:00:00-03:00", "end": "2026-11-16T10:00:00-03:00", "time_zone": "America/Sao_Paulo"});
+    call(&fixture, "calendar_update_event", input).await;
+    let seen = &fixture.finish().await[0];
+    assert!(seen.target.ends_with("?sendUpdates=none"));
+    let sent = seen.json();
+    assert_eq!(sent["summary"], "Moved");
+    assert_eq!(sent["start"]["timeZone"], "America/Sao_Paulo");
+    assert!(
+        sent.get("location").is_none(),
+        "unset fields stay as they are"
+    );
+    let none = Fixture::start(vec![]).await;
+    let nothing = Google
+        .call(
+            &cx(&none, json!({})),
+            "calendar_update_event",
+            json!({"event": "abc"}),
+        )
+        .await;
+    assert_eq!(nothing, Err(Error::Invalid("nothing to change".into())));
+}
+
+#[tokio::test]
+async fn calendar_update_event_with_all_shifts_the_series_by_the_instance_delta() {
+    let events = "/www.googleapis.com/calendar/v3/calendars/primary/events";
+    let instance = json!({"id": "weekly_20261110T120000Z", "recurringEventId": "weekly", "originalStartTime": {"dateTime": "2026-11-10T09:00:00-03:00"}, "start": {"dateTime": "2026-11-10T09:00:00-03:00"}});
+    let master = json!({"id": "weekly", "start": {"dateTime": "2026-11-03T09:00:00-03:00", "timeZone": "America/Sao_Paulo"}, "end": {"dateTime": "2026-11-03T10:00:00-03:00"}});
+    let fixture = Fixture::start(vec![
+        get(&format!("{events}/weekly_20261110T120000Z"), instance),
+        get(&format!("{events}/weekly"), master.clone()),
+        Exchange::new("PATCH", &format!("{events}/weekly"), 200, master),
+    ])
+    .await;
+    // One hour later and half an hour longer.
+    let input = json!({"event": "weekly_20261110T120000Z", "all": true, "start": "2026-11-10T10:00:00-03:00", "end": "2026-11-10T11:30:00-03:00"});
+    call(&fixture, "calendar_update_event", input).await;
+    let seen = fixture.finish().await;
+    let sent = seen[2].json();
+    assert_eq!(
+        sent["start"],
+        json!({"dateTime": "2026-11-03T10:00:00", "date": null, "timeZone": "America/Sao_Paulo"})
+    );
+    assert_eq!(sent["end"]["dateTime"], "2026-11-03T11:30:00");
+    assert!(seen[2].target.ends_with("?sendUpdates=none"));
+}
+
+#[tokio::test]
+async fn calendar_update_event_with_all_keeps_wall_clock_across_dst() {
+    let events = "/www.googleapis.com/calendar/v3/calendars/primary/events";
+    let instance = json!({"id": "ny_20261031T130000Z", "recurringEventId": "ny", "originalStartTime": {"dateTime": "2026-10-31T09:00:00-04:00", "timeZone": "America/New_York"}});
+    let master = json!({"id": "ny", "start": {"dateTime": "2026-10-25T09:00:00-04:00", "timeZone": "America/New_York"}, "end": {"dateTime": "2026-10-25T10:00:00-04:00", "timeZone": "America/New_York"}});
+    let fixture = Fixture::start(vec![
+        get(&format!("{events}/ny_20261031T130000Z"), instance),
+        get(&format!("{events}/ny"), master.clone()),
+        Exchange::new("PATCH", &format!("{events}/ny"), 200, master),
+    ])
+    .await;
+    // Oct 31 moves to Nov 2 at 09:00 EST: two days on the wall clock, 49 hours in absolute time.
+    let input = json!({"event": "ny_20261031T130000Z", "all": true, "start": "2026-11-02T09:00:00-05:00", "end": "2026-11-02T10:00:00-05:00"});
+    call(&fixture, "calendar_update_event", input).await;
+    let sent = fixture.finish().await[2].json();
+    let zone = "America/New_York";
+    assert_eq!(
+        sent["start"],
+        json!({"dateTime": "2026-10-27T09:00:00", "date": null, "timeZone": zone})
+    );
+    assert_eq!(
+        sent["end"],
+        json!({"dateTime": "2026-10-27T10:00:00", "date": null, "timeZone": zone})
+    );
+}
+
+#[tokio::test]
+async fn calendar_update_event_with_all_keeps_the_series_in_its_own_zone() {
+    let events = "/www.googleapis.com/calendar/v3/calendars/primary/events";
+    let instance = json!({"id": "ny_20261110T140000Z", "recurringEventId": "ny", "originalStartTime": {"dateTime": "2026-11-10T09:00:00-05:00", "timeZone": "America/New_York"}});
+    let master = json!({"id": "ny", "start": {"dateTime": "2026-11-03T09:00:00-05:00", "timeZone": "America/New_York"}, "end": {"dateTime": "2026-11-03T10:00:00-05:00", "timeZone": "America/New_York"}});
+    let fixture = Fixture::start(vec![
+        get(&format!("{events}/ny_20261110T140000Z"), instance),
+        get(&format!("{events}/ny"), master.clone()),
+        Exchange::new("PATCH", &format!("{events}/ny"), 200, master),
+    ])
+    .await;
+    // A Berlin viewer moves the 09:00 New York occurrence an hour later: 16:00 in Berlin.
+    let input = json!({"event": "ny_20261110T140000Z", "all": true, "start": "2026-11-10T16:00:00+01:00", "end": "2026-11-10T17:00:00+01:00", "time_zone": "Europe/Berlin"});
+    call(&fixture, "calendar_update_event", input).await;
+    let sent = fixture.finish().await[2].json();
+    let zone = "America/New_York";
+    assert_eq!(
+        sent["start"],
+        json!({"dateTime": "2026-11-03T10:00:00", "date": null, "timeZone": zone})
+    );
+    assert_eq!(sent["end"]["timeZone"], zone);
+}
+
+#[tokio::test]
+async fn calendar_update_event_switches_to_all_day() {
+    let path = "/www.googleapis.com/calendar/v3/calendars/primary/events/abc";
+    let made = recorded("events")["items"][1].clone();
+    let fixture = Fixture::start(vec![Exchange::new("PATCH", path, 200, made)]).await;
+    let input = json!({"event": "abc", "start": "2026-11-16", "end": "2026-11-17"});
+    let changed = call(&fixture, "calendar_update_event", input).await;
+    assert_eq!(changed["calendar"], "primary");
+    let sent = fixture.finish().await[0].json();
+    assert_eq!(
+        sent["start"],
+        json!({"date": "2026-11-16", "dateTime": null})
+    );
+    assert_eq!(sent["end"], json!({"date": "2026-11-17", "dateTime": null}));
+}
+
+#[tokio::test]
 async fn drive_read_exports_a_google_doc_as_text() {
     let file = "/www.googleapis.com/drive/v3/files/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
     let fixture = Fixture::start(vec![

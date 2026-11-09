@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT to_char(next_at AT TIME ZONE 'UTC', 'HH24:MI') AS \"hour!\" FROM routines WHERE id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hour!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ef8f7d44d2d7fa0fada7650e3eda62fba97df97ef83ffcb4953c1675b8465a88"
+}

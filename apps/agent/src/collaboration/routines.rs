@@ -19,7 +19,8 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
         "name":{"type":"string","description":"A short name."},
         "prompt":nullable("What to do each run, as a message to yourself; null to only run the command."),
         "command":nullable("A bash command run before the prompt, whose result you then read; null for none. Without a prompt the result is the whole answer."),
-        "schedule":nullable("Five-field cron in UTC, such as \"0 9 * * 1-5\"; null to run only on demand."),
+        "schedule":nullable("Five-field cron in time_zone, such as \"0 9 * * 1-5\"; null to run only on demand."),
+        "time_zone":nullable("IANA zone the schedule is read in, such as \"America/Sao_Paulo\"; null is UTC."),
         "coalesce":{"type":"boolean","description":"True to skip a run while another is still waiting to start."},
         "enabled":{"type":"boolean","description":"False pauses the schedule."},
         "trigger":{"anyOf":[{"type":"object","properties":{
@@ -27,7 +28,7 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
             "event":{"type":"string","description":"One of the events listed with that connection, such as mail.received."},
         },"required":["connection","event"],"additionalProperties":false},{"type":"null"}],
         "description":"Also run each time one of your connected accounts reports this event, with the event in the run's message; null for none."},
-    },"required":["name","prompt","command","schedule","coalesce","enabled","trigger"],"additionalProperties":false});
+    },"required":["name","prompt","command","schedule","time_zone","coalesce","enabled","trigger"],"additionalProperties":false});
     let id = json!({"type":"string","description":"The routine's id from routine_list."});
     vec![
         tool(

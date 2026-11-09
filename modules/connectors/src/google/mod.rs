@@ -189,7 +189,7 @@ static MANIFEST: Manifest = Manifest {
             description: "Events in order of start, from now unless `from` says otherwise, with recurring events expanded.",
             risk: Risk::Read,
             product: Some("calendar"),
-            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar id; primary when absent."},"from":{"type":"string","description":"RFC 3339, such as 2026-11-05T09:00:00-03:00."},"to":{"type":"string"},"query":{"type":"string","description":"Free text matched against the events."},"limit":{"type":"integer","minimum":1,"maximum":100}},"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar id; primary when absent."},"from":{"type":"string","description":"RFC 3339, such as 2026-11-05T09:00:00-03:00."},"to":{"type":"string"},"query":{"type":"string","description":"Free text matched against the events."},"limit":{"type":"integer","minimum":1,"maximum":250},"page":{"type":"string","description":"The next_page of the previous answer."}},"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "calendar_freebusy",
@@ -204,6 +204,13 @@ static MANIFEST: Manifest = Manifest {
             risk: Risk::Write,
             product: Some("calendar"),
             input: r#"{"type":"object","properties":{"calendar":{"type":"string"},"summary":{"type":"string"},"start":{"type":"string","description":"RFC 3339, or YYYY-MM-DD for an all-day event."},"end":{"type":"string","description":"Exclusive: the day after for an all-day event."},"time_zone":{"type":"string","description":"An IANA zone such as America/Sao_Paulo."},"description":{"type":"string"},"location":{"type":"string"}},"required":["summary","start","end"],"additionalProperties":false}"#,
+        },
+        ToolSpec {
+            name: "calendar_update_event",
+            description: "Change an event without notifying its guests. An occurrence's id changes only that occurrence, and with all the whole series, new times moving every occurrence as much as that one moves; all is ignored for an event that does not repeat.",
+            risk: Risk::Write,
+            product: Some("calendar"),
+            input: r#"{"type":"object","properties":{"calendar":{"type":"string"},"event":{"type":"string"},"all":{"type":"boolean","description":"Change the whole series the occurrence belongs to."},"summary":{"type":"string"},"start":{"type":"string","description":"RFC 3339, or YYYY-MM-DD for an all-day event; given together with end."},"end":{"type":"string","description":"Exclusive: the day after for an all-day event."},"time_zone":{"type":"string","description":"An IANA zone such as America/Sao_Paulo."},"description":{"type":"string"},"location":{"type":"string"}},"required":["event"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "calendar_invite",

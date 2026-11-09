@@ -23,7 +23,7 @@ struct Change {
     routine: SaveRoutine,
 }
 
-const INVALID: &str = "name is 1 to 128 bytes; prompt up to 8 KiB and command up to 4 KiB, at least one of them; schedule is five-field cron in UTC or null";
+const INVALID: &str = "name is 1 to 128 bytes; prompt up to 8 KiB and command up to 4 KiB, at least one of them; schedule is five-field cron or null; time_zone is an IANA zone name or null for UTC";
 
 type Answer = Result<String, String>;
 

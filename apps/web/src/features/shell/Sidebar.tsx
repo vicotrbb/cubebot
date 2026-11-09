@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from '@tanstack/react-router'
 import {
   BookOpen,
+  CalendarDays,
   ChevronDown,
   Folder,
   Hash,
@@ -132,6 +133,14 @@ export function Sidebar({
           {attention > 0 && <span className="row__badge">{attention}</span>}
         </Link>
         <TasksRow />
+        <Link
+          to="/calendar"
+          className="row row--page"
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <CalendarDays className="row__icon" />
+          <span className="row__label">Calendar</span>
+        </Link>
         {administrator && <BroadcastRow />}
         <Favorites />
         <AgentsSection administrator={administrator} />
