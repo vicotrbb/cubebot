@@ -422,6 +422,52 @@ async fn past_scheduled_runs_appear_with_their_outcome() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_paused_or_unscheduled_routine_keeps_its_past_runs() {
+    let s = setup().await;
+    let keeper = agent(&s, "Keeper").await;
+    let paused = routine(&s, keeper, "Daily report", Some("0 9 * * *")).await;
+    let unscheduled = routine(&s, keeper, "Inbox sweep", Some("0 10 * * *")).await;
+    sqlx::query(
+        "UPDATE routines SET next_at = clock_timestamp() - interval '1 minute' WHERE id = ANY($1)",
+    )
+    .bind(vec![paused, unscheduled])
+    .execute(&s.pool)
+    .await
+    .unwrap();
+    assert_eq!(routines::tick(&s.pool).await.unwrap(), 2);
+    sqlx::query("UPDATE routines SET enabled = false WHERE id = $1")
+        .bind(paused)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE routines SET schedule = NULL, next_at = NULL WHERE id = $1")
+        .bind(unscheduled)
+        .execute(&s.pool)
+        .await
+        .unwrap();
+
+    let now = chrono::Utc::now();
+    let from = (now - chrono::TimeDelta::hours(1)).to_rfc3339();
+    let to = (now + chrono::TimeDelta::days(2)).to_rfc3339();
+    let found = range(&s, &s.admin, &from, &to).await;
+    let mut ran: Vec<Uuid> = found
+        .items
+        .iter()
+        .filter(|item| item.kind == "run")
+        .map(|item| item.routine.as_ref().unwrap().routine)
+        .collect();
+    ran.sort();
+    let mut both = vec![paused, unscheduled];
+    both.sort();
+    assert_eq!(ran, both, "their history stays");
+    assert!(
+        found.items.iter().all(|item| item.kind == "run"),
+        "neither is scheduled to run again"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn a_failing_connection_reports_its_problem_and_the_rest_still_shows() {
     let s = setup().await;
     let lapsed = google(&s, &s.admin, "lapsed").await;
