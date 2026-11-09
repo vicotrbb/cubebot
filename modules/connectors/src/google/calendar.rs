@@ -2,6 +2,8 @@
 //! and responses notify anyone; creating, changing and deleting are silent.
 use super::{at, clip, now, rfc3339};
 use crate::{Context, Error, Event};
+use chrono::{NaiveDateTime, TimeDelta, TimeZone};
+use chrono_tz::Tz;
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
@@ -154,14 +156,15 @@ async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     let found = cx.json(request.query(&query)).await?;
     let calendar = wanted.calendar.as_deref().unwrap_or("primary");
     let items = found["items"].as_array().into_iter().flatten();
-    let events: Vec<Value> = items
-        .map(|item| {
-            let mut made = event(item);
-            made["calendar"] = json!(calendar);
-            made
-        })
-        .collect();
+    let events: Vec<Value> = items.map(|item| in_calendar(item, calendar)).collect();
     Ok(json!({"events": events, "next_page": found["nextPageToken"]}))
+}
+
+/// [`event`] with the calendar it was read from.
+fn in_calendar(item: &Value, calendar: &str) -> Value {
+    let mut made = event(item);
+    made["calendar"] = json!(calendar);
+    made
 }
 
 /// An event as the model needs it, its description cut short.
@@ -231,8 +234,22 @@ async fn create(cx: &Context, input: Value) -> Result<Value, Error> {
 fn time(text: &str, zone: Option<&str>) -> Value {
     match text.len() {
         10 => json!({"date": text}),
-        _ => json!({"dateTime": text, "timeZone": zone}),
+        _ => match zone {
+            Some(zone) => json!({"dateTime": text, "timeZone": zone}),
+            None => json!({"dateTime": text}),
+        },
     }
+}
+
+/// Google merges a patched start into the old one, so the key of the other kind is cleared.
+fn exclusive(mut time: Value) -> Value {
+    let other = if time["date"].is_null() {
+        "date"
+    } else {
+        "dateTime"
+    };
+    time[other] = Value::Null;
+    time
 }
 
 /// Patches the event, or with `all` the series its occurrence belongs to; nobody is notified.
@@ -256,13 +273,14 @@ async fn change(cx: &Context, input: Value) -> Result<Value, Error> {
         };
         let pair = series.as_ref().map(|instance| (instance, &master));
         let (start, end) = moved(pair, times, change.time_zone.as_deref())?;
-        body.insert("start".into(), start);
-        body.insert("end".into(), end);
+        body.insert("start".into(), exclusive(start));
+        body.insert("end".into(), exclusive(end));
     }
     let request = cx
         .request(Method::PATCH, &path)?
         .query(&[("sendUpdates", "none")]);
-    Ok(event(&cx.json(request.json(&body)).await?))
+    let changed = cx.json(request.json(&body)).await?;
+    Ok(in_calendar(&changed, calendar.unwrap_or("primary")))
 }
 
 /// A start and an end, as the caller wrote them.
@@ -292,7 +310,7 @@ fn fields(change: &Change) -> Result<(Map<String, Value>, Option<Times<'_>>), Er
 }
 
 /// The new start and end: as given, or for a series the first occurrence moved as far as the
-/// edited occurrence, keeping the new length.
+/// edited occurrence on the wall clock of its zone, keeping the new length.
 fn moved(
     series: Option<(&Value, &Value)>,
     (start, end): Times,
@@ -301,15 +319,27 @@ fn moved(
     let Some((instance, master)) = series else {
         return Ok((time(start, zone), time(end, zone)));
     };
-    let (start_at, end_at) = (seconds(start)?, seconds(end)?);
-    let at = |time: &Value| seconds(when(time).as_str().unwrap_or_default());
-    let first = at(&master["start"])? + start_at - at(&instance["originalStartTime"])?;
-    let zone = zone.or(master["start"]["timeZone"].as_str());
-    let render = |at: i64, like: &str| match like.len() {
-        10 => json!({"date": &rfc3339(at)[..10]}),
-        _ => json!({"dateTime": rfc3339(at), "timeZone": zone}),
+    let name = zone
+        .or(master["start"]["timeZone"].as_str())
+        .ok_or_else(|| Error::Invalid("the series has no time zone; pass time_zone".into()))?;
+    let tz: Tz = name
+        .parse()
+        .map_err(|_| Error::Invalid(format!("{name} is not a time zone")))?;
+    let local = |text: &str| -> Result<NaiveDateTime, Error> {
+        let at = seconds(text)?;
+        let moment = tz.timestamp_opt(at, 0).single();
+        moment
+            .map(|m| m.naive_local())
+            .ok_or_else(|| Error::Invalid(format!("{text} is not a time")))
     };
-    Ok((render(first, start), render(first + end_at - start_at, end)))
+    let known = |time: &Value| local(when(time).as_str().unwrap_or_default());
+    let first = known(&master["start"])? + (local(start)? - known(&instance["originalStartTime"])?);
+    let length = TimeDelta::seconds(seconds(end)? - seconds(start)?);
+    let render = |at: NaiveDateTime, like: &str| match like.len() {
+        10 => json!({"date": at.format("%Y-%m-%d").to_string()}),
+        _ => time(&at.format("%Y-%m-%dT%H:%M:%S").to_string(), Some(name)),
+    };
+    Ok((render(first, start), render(first + length, end)))
 }
 
 /// A date or an RFC 3339 time as seconds since the epoch.

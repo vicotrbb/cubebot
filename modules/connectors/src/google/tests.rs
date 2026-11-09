@@ -272,10 +272,52 @@ async fn calendar_update_event_with_all_shifts_the_series_by_the_instance_delta(
     let sent = seen[2].json();
     assert_eq!(
         sent["start"],
-        json!({"dateTime": "2026-11-03T13:00:00Z", "timeZone": "America/Sao_Paulo"})
+        json!({"dateTime": "2026-11-03T10:00:00", "date": null, "timeZone": "America/Sao_Paulo"})
     );
-    assert_eq!(sent["end"]["dateTime"], "2026-11-03T14:30:00Z");
+    assert_eq!(sent["end"]["dateTime"], "2026-11-03T11:30:00");
     assert!(seen[2].target.ends_with("?sendUpdates=none"));
+}
+
+#[tokio::test]
+async fn calendar_update_event_with_all_keeps_wall_clock_across_dst() {
+    let events = "/www.googleapis.com/calendar/v3/calendars/primary/events";
+    let instance = json!({"id": "ny_20261031T130000Z", "recurringEventId": "ny", "originalStartTime": {"dateTime": "2026-10-31T09:00:00-04:00", "timeZone": "America/New_York"}});
+    let master = json!({"id": "ny", "start": {"dateTime": "2026-10-25T09:00:00-04:00", "timeZone": "America/New_York"}, "end": {"dateTime": "2026-10-25T10:00:00-04:00", "timeZone": "America/New_York"}});
+    let fixture = Fixture::start(vec![
+        get(&format!("{events}/ny_20261031T130000Z"), instance),
+        get(&format!("{events}/ny"), master.clone()),
+        Exchange::new("PATCH", &format!("{events}/ny"), 200, master),
+    ])
+    .await;
+    // Oct 31 moves to Nov 2 at 09:00 EST: two days on the wall clock, 49 hours in absolute time.
+    let input = json!({"event": "ny_20261031T130000Z", "all": true, "start": "2026-11-02T09:00:00-05:00", "end": "2026-11-02T10:00:00-05:00"});
+    call(&fixture, "calendar_update_event", input).await;
+    let sent = fixture.finish().await[2].json();
+    let zone = "America/New_York";
+    assert_eq!(
+        sent["start"],
+        json!({"dateTime": "2026-10-27T09:00:00", "date": null, "timeZone": zone})
+    );
+    assert_eq!(
+        sent["end"],
+        json!({"dateTime": "2026-10-27T10:00:00", "date": null, "timeZone": zone})
+    );
+}
+
+#[tokio::test]
+async fn calendar_update_event_switches_to_all_day() {
+    let path = "/www.googleapis.com/calendar/v3/calendars/primary/events/abc";
+    let made = recorded("events")["items"][1].clone();
+    let fixture = Fixture::start(vec![Exchange::new("PATCH", path, 200, made)]).await;
+    let input = json!({"event": "abc", "start": "2026-11-16", "end": "2026-11-17"});
+    let changed = call(&fixture, "calendar_update_event", input).await;
+    assert_eq!(changed["calendar"], "primary");
+    let sent = fixture.finish().await[0].json();
+    assert_eq!(
+        sent["start"],
+        json!({"date": "2026-11-16", "dateTime": null})
+    );
+    assert_eq!(sent["end"], json!({"date": "2026-11-17", "dateTime": null}));
 }
 
 #[tokio::test]
