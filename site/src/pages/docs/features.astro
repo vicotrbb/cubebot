@@ -54,7 +54,7 @@ import { status } from '../../data/site'
 
   <h2 id="routines">Routines</h2>
   <ul>
-    <li><strong>On a schedule</strong> with cron (UTC), <strong>on demand</strong>, <strong>from a webhook</strong> with its own secret, or <strong>on an account event</strong> like new mail or an assigned issue.</li>
+    <li><strong>On a schedule</strong> with cron in the routine's own time zone, <strong>on demand</strong>, <strong>from a webhook</strong> with its own secret, or <strong>on an account event</strong> like new mail or an assigned issue.</li>
     <li>A routine is a prompt, a shell command, or both. A command alone runs without calling the model at all.</li>
     <li>Agents can create and manage their own routines, up to 32 each.</li>
   </ul>
@@ -79,6 +79,7 @@ import { status } from '../../data/site'
     <li><strong>Live replies and every step.</strong> Each tool call appears as it happens: commands with their output, edits as diffs.</li>
     <li><strong>Rich answers.</strong> HTML, SVG, Mermaid, tables and math render live in the chat, sandboxed from the network.</li>
     <li><strong>Home.</strong> Every agent at a glance, as a list or an org chart, beside what needs you, who is working and what it costs.</li>
+    <li><strong>Calendar.</strong> Your calendars and every routine run in one month, week or day view. Create, move and delete events and routines from it.</li>
     <li><strong>Shared files.</strong> Upload, organize and share with people, groups or agents, with a viewer for images, PDF, audio, video, tables and code.</li>
     <li><strong>Activity inbox, command palette, light and dark themes</strong>, and an installable app that works on phones.</li>
   </ul>
