@@ -4,6 +4,7 @@ import type { Schemas } from '../../api/types'
 import {
   cadence,
   cronPhrase,
+  busyOn,
   isDay,
   mergeDigests,
   shift,
@@ -328,6 +329,35 @@ describe('digests', () => {
       ['2026-11-09T12:00:00Z-null', '2026-11-09T12:00:00Z', null, undefined],
       ['digest:r:2026-11-12', '2026-11-12', '2026-11-13', 1],
     ])
+  })
+
+  test('days out of order start a new bar rather than a wrong one', () => {
+    const merged = mergeDigests([
+      digest('r', '2026-11-10', '2026-11-11'),
+      digest('r', '2026-11-09', '2026-11-10'),
+    ])
+    expect(merged.map((m) => [m.start, m.end])).toEqual([
+      ['2026-11-10', '2026-11-11'],
+      ['2026-11-09', '2026-11-10'],
+    ])
+  })
+
+  test('a day with only a digest is not busy', () => {
+    const week = range('week', '2026-11-09', SP, 1).days
+    const { bars } = weekLanes(
+      [
+        ...mergeDigests([
+          digest('r', '2026-11-09', '2026-11-10'),
+          digest('r', '2026-11-10', '2026-11-11'),
+        ]),
+        { ...item('2026-11-10T12:00:00Z', null), id: 't' },
+      ],
+      week,
+      SP,
+      Infinity,
+    )
+    expect(busyOn(bars, 0)).toEqual([])
+    expect(busyOn(bars, 1).map((bar) => bar.item.id)).toEqual(['t'])
   })
 
   test('merging leaves the items it was given unchanged', () => {

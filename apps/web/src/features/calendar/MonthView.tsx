@@ -6,7 +6,14 @@ import {
   useState,
   type Ref,
 } from 'react'
-import { formatTime, localDay, weekLanes, type Bar, type Merged } from './model'
+import {
+  busyOn,
+  formatTime,
+  localDay,
+  weekLanes,
+  type Bar,
+  type Merged,
+} from './model'
 import {
   FULL_DAY,
   formatDay,
@@ -315,7 +322,7 @@ function Dots({
   column: number
   look: Look
 }) {
-  const here = bars.filter((bar) => bar.first <= column && column <= bar.last)
+  const here = busyOn(bars, column)
   const paints = [...new Set(here.map((bar) => look.paint(bar.item)))].slice(
     0,
     3,

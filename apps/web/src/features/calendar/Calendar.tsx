@@ -151,7 +151,7 @@ function CalendarPage({
                 paint={(id) => paints.get(id) ?? 'var(--ink-faint)'}
               />
             ) : (
-              <Skeleton lines={4} width="80%" />
+              !calendar.isError && <Skeleton lines={4} width="80%" />
             )}
           </aside>
         )}
@@ -162,7 +162,7 @@ function CalendarPage({
         >
           <Notices
             calendar={calendar}
-            noCalendars={phone && noCalendars && !pane.shown}
+            noCalendars={noCalendars && !pane.shown}
             administrator={Boolean(session.data?.administrator)}
           />
           {view === 'month' ? (
@@ -198,7 +198,7 @@ function CalendarPage({
   )
 }
 
-/** The loading sweep, a failed read with Retry, and on a phone the missing-calendars note. */
+/** The loading sweep, a failed read with Retry, and the missing-calendars note while the pane is hidden. */
 function Notices({
   calendar,
   noCalendars,

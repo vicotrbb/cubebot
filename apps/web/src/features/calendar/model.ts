@@ -325,6 +325,14 @@ export function weekLanes(
   return { bars: bars.filter((bar) => bar.lane < shown), more }
 }
 
+/** What makes a day busy: its bars, except digests, which mark every day a routine runs all day. */
+export function busyOn(bars: Bar[], column: number) {
+  return bars.filter(
+    (bar) =>
+      bar.item.kind !== 'digest' && bar.first <= column && column <= bar.last,
+  )
+}
+
 /** How often a digest's routine runs, in words. */
 export function cadence(schedule: string) {
   const [minute = '', hour] = schedule.trim().split(/\s+/)
@@ -338,6 +346,7 @@ export function cadence(schedule: string) {
 export type Merged = Item & { days?: Item[] }
 
 export function mergeDigests(items: Item[]): Merged[] {
+  // The server sends items in order of start; a day out of order would only start a new bar.
   const merged: Merged[] = []
   const open = new Map<string, Merged>()
   for (const item of items) {

@@ -350,12 +350,25 @@ fn problem(error: &ConnectError) -> String {
         ConnectError::Refused(text) | ConnectError::Invalid(text) => text.clone(),
         ConnectError::Identity(_) => "The connection could not be opened.".into(),
         // A read changes nothing, so only the reason is worth saying: "Could not reach the server."
-        ConnectError::Unavailable(reason) => {
-            let mut chars = reason.chars();
-            let first = chars.next().map(|c| c.to_uppercase().collect::<String>());
-            format!("{}{}.", first.unwrap_or_default(), chars.as_str())
-        }
+        ConnectError::Unavailable(reason) => sentence(reason),
     }
+}
+
+/// A capital first letter and a full stop, unless the reason already ends one.
+fn sentence(reason: &str) -> String {
+    let mut chars = reason.chars();
+    let first: String = chars
+        .next()
+        .map(char::to_uppercase)
+        .into_iter()
+        .flatten()
+        .collect();
+    let stop = if reason.ends_with(['.', '!', '?']) {
+        ""
+    } else {
+        "."
+    };
+    format!("{first}{}{stop}", chars.as_str())
 }
 
 /// An instance of a recurring event has its own id and names its series; cancelled ones are gone.
@@ -473,6 +486,16 @@ fn local(time: &str, zone: &str) -> Result<String, ConnectError> {
 mod tests {
     use super::*;
     use crate::calendar::Owned;
+
+    #[test]
+    fn a_read_problem_is_one_sentence() {
+        let said = |reason: &str| problem(&ConnectError::Unavailable(reason.into()));
+        assert_eq!(
+            said("could not reach the server"),
+            "Could not reach the server."
+        );
+        assert_eq!(said("rate limited: throttled."), "Rate limited: throttled.");
+    }
 
     fn place(source: &str) -> Place<'_> {
         Place {
