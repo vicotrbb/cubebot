@@ -2,12 +2,15 @@
 import { describe, expect, test } from 'bun:test'
 import type { Schemas } from '../../api/types'
 import {
+  cadence,
   cronPhrase,
   formatRange,
   layoutDay,
   localDay,
+  nowIn,
   range,
   userZone,
+  weekLanes,
 } from './model'
 
 type Item = Schemas['Item']
@@ -193,5 +196,70 @@ describe('text', () => {
     expect(
       formatRange(item('2026-11-09T12:00:00Z', '2026-11-09T13:30:00Z'), SP),
     ).toBe('09:00 – 10:30')
+  })
+})
+
+describe('weekLanes', () => {
+  const week = range('week', '2026-11-09', SP, 1).days
+  const lanesOf = (laid: ReturnType<typeof weekLanes>) =>
+    laid.bars.map((bar) => [bar.item.id, bar.first, bar.last, bar.lane])
+
+  test('a spanning event takes the first lane and timed items stack under it', () => {
+    const offsite = { ...item('2026-11-11', '2026-11-14', true), id: 'off' }
+    const meeting = {
+      ...item('2026-11-12T13:00:00Z', '2026-11-12T14:00:00Z'),
+      id: 'm',
+    }
+    const early = { ...item('2026-11-09T12:00:00Z', null), id: 'e' }
+    expect(lanesOf(weekLanes([early, meeting, offsite], week, SP, 4))).toEqual([
+      ['off', 2, 4, 0],
+      ['e', 0, 0, 0],
+      ['m', 3, 3, 1],
+    ])
+  })
+
+  test('an event from the week before starts at the first column', () => {
+    const long = item('2026-11-05', '2026-11-11', true)
+    expect(lanesOf(weekLanes([long], week, SP, 3))[0]?.slice(1)).toEqual([
+      0, 1, 0,
+    ])
+  })
+
+  test('overflow keeps the last lane for the count of hidden items', () => {
+    const many = [1, 2, 3, 4].map((at) => ({
+      ...item(`2026-11-10T1${at}:00:00Z`, null),
+      id: `t${at}`,
+    }))
+    const laid = weekLanes(many, week, SP, 3)
+    expect(laid.bars.map((bar) => bar.item.id)).toEqual(['t1', 't2'])
+    expect(laid.more).toEqual([0, 2, 0, 0, 0, 0, 0])
+  })
+
+  test('digests come after spanning events and timed items', () => {
+    const digest = {
+      ...item('2026-11-09', '2026-11-10', true),
+      id: 'd',
+      kind: 'digest',
+    }
+    const timed = { ...item('2026-11-09T12:00:00Z', null), id: 't' }
+    const allDay = { ...item('2026-11-09', '2026-11-10', true), id: 'a' }
+    expect(
+      lanesOf(weekLanes([timed, digest, allDay], week, SP, 5)).map((l) => l[0]),
+    ).toEqual(['a', 't', 'd'])
+  })
+})
+
+describe('now and cadence', () => {
+  test('now is the zone day and its wall-clock minute', () => {
+    expect(nowIn(SP, Date.parse('2026-11-10T02:30:00Z'))).toEqual({
+      day: '2026-11-09',
+      minute: 23 * 60 + 30,
+    })
+  })
+
+  test('a digest says how often its routine runs', () => {
+    expect(cadence('*/5 * * * *')).toBe('every 5 min')
+    expect(cadence('* * * * *')).toBe('every minute')
+    expect(cadence('*/10 9-17 * * *')).toBe('many times a day')
   })
 })

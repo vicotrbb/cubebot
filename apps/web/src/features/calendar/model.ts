@@ -70,11 +70,11 @@ function wallClock(ms: number, zone: string) {
   )
 }
 
-function dayOf(ms: number, zone: string) {
+export function dayOf(ms: number, zone: string) {
   return new Date(wallClock(ms, zone)).toISOString().slice(0, 10)
 }
 
-function addDays(day: string, days: number) {
+export function addDays(day: string, days: number) {
   const date = new Date(`${day}T00:00:00Z`)
   date.setUTCDate(date.getUTCDate() + days)
   return date.toISOString().slice(0, 10)
@@ -230,4 +230,72 @@ export function cronPhrase(schedule: string) {
   if (Number(hour) > 23 || Number(minute) > 59) return null
   const day = NUMBER.test(hour) ? dayPhrase(weekday) : null
   return day ? `${day} at ${clock(hour, minute)}` : null
+}
+
+/** Today in the zone, and how many wall-clock minutes of it have passed. */
+export function nowIn(zone: string, ms = Date.now()) {
+  const day = dayOf(ms, zone)
+  return {
+    day,
+    minute: (wallClock(ms, zone) - Date.parse(`${day}T00:00:00Z`)) / MINUTE,
+  }
+}
+
+export type Bar = { item: Item; first: number; last: number; lane: number }
+
+// Spanning events claim lanes first, then the day's timed items; digests go last, so they are the first hidden.
+function rank(item: Item, first: number, last: number) {
+  if (item.kind === 'digest') return 2
+  return item.all_day || last > first ? 0 : 1
+}
+
+/**
+ * A week row of the month: each item a bar over its days in the first lane free across them.
+ * When `lanes` cannot hold every bar, the last lane is kept for each day's "more" count.
+ */
+export function weekLanes(
+  items: Item[],
+  days: string[],
+  zone: string,
+  lanes: number,
+) {
+  const spans = items.flatMap((item) => {
+    const covered = localDay(item, zone)
+      .map((day) => days.indexOf(day))
+      .filter((at) => at >= 0)
+    if (!covered.length) return []
+    const first = Math.min(...covered)
+    const last = Math.max(...covered)
+    return [{ item, first, last, order: rank(item, first, last) }]
+  })
+  spans.sort(
+    (a, b) => a.order - b.order || a.first - b.first || b.last - a.last,
+  )
+  const taken: boolean[][] = []
+  const bars: Bar[] = spans.map(({ item, first, last }) => {
+    let lane = 0
+    const free = (row: boolean[] = []) =>
+      row.slice(first, last + 1).every((cell) => !cell)
+    while (!free(taken[lane])) lane++
+    const row = (taken[lane] ??= [])
+    for (let at = first; at <= last; at++) row[at] = true
+    return { item, first, last, lane }
+  })
+  const shown = bars.some((bar) => bar.lane >= lanes) ? lanes - 1 : lanes
+  const more = days.map(
+    (_, at) =>
+      bars.filter(
+        (bar) => bar.lane >= shown && bar.first <= at && at <= bar.last,
+      ).length,
+  )
+  return { bars: bars.filter((bar) => bar.lane < shown), more }
+}
+
+/** How often a digest's routine runs, in words. */
+export function cadence(schedule: string) {
+  const [minute = '', hour] = schedule.trim().split(/\s+/)
+  const every = /^\*\/(\d+)$/.exec(minute)?.[1]
+  if (hour === '*' && every) return `every ${every} min`
+  if (hour === '*' && minute === '*') return 'every minute'
+  return 'many times a day'
 }
