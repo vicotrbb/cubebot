@@ -876,23 +876,37 @@ const WEEKDAYS: [&str; 7] = [
     "sunday",
 ];
 
+/// The weekday `by` days after the one named.
+fn weekday(name: &Value, by: i64) -> Option<&'static str> {
+    let at = WEEKDAYS
+        .iter()
+        .position(|day| Some(*day) == name.as_str())?;
+    Some(WEEKDAYS[(at as i64 + by).rem_euclid(7) as usize])
+}
+
 fn on(date: NaiveDate, by: i64) -> NaiveDate {
     date + TimeDelta::days(by)
 }
 
 /// The recurrence with its days moved `by` days, so the occurrences keep following the series start
 /// that moved to `first`.
-fn moved_recurrence(recurrence: &Value, by: i64, first: NaiveDate) -> Result<Value, Error> {
+fn moved_recurrence(
+    recurrence: &Value,
+    by: i64,
+    first: NaiveDate,
+    zone: &str,
+) -> Result<Value, Error> {
     let mut moved = recurrence.clone();
     let pattern = &mut moved["pattern"];
     match pattern["type"].as_str() {
         Some("weekly") => {
             let days = pattern["daysOfWeek"].as_array().into_iter().flatten();
-            let shifted: Vec<&str> = days
-                .filter_map(|day| WEEKDAYS.iter().position(|name| Some(*name) == day.as_str()))
-                .map(|at| WEEKDAYS[(at as i64 + by).rem_euclid(7) as usize])
-                .collect();
+            let shifted: Vec<&str> = days.filter_map(|day| weekday(day, by)).collect();
             pattern["daysOfWeek"] = json!(shifted);
+            // The week start moves with the days, or an interval above 1 regroups them into other weeks.
+            if let Some(start) = weekday(&pattern["firstDayOfWeek"], by) {
+                pattern["firstDayOfWeek"] = json!(start);
+            }
         }
         Some("absoluteMonthly") => pattern["dayOfMonth"] = json!(first.day()),
         Some("absoluteYearly") => {
@@ -907,6 +921,8 @@ fn moved_recurrence(recurrence: &Value, by: i64, first: NaiveDate) -> Result<Val
         _ => (),
     }
     let range = &mut moved["range"];
+    // The times are sent in this zone, so the series repeats on its wall clock.
+    range["recurrenceTimeZone"] = json!(zone);
     let ends = range["type"] == "endDate";
     for key in ["startDate", "endDate"] {
         let date = range[key].as_str();
@@ -948,7 +964,7 @@ async fn shifted(
     moved.insert("end".into(), render(from + (end - start)));
     let by = (from.date() - began.date()).num_days();
     if by != 0 && first["recurrence"].is_object() {
-        let recurrence = moved_recurrence(&first["recurrence"], by, from.date())?;
+        let recurrence = moved_recurrence(&first["recurrence"], by, from.date(), name)?;
         moved.insert("recurrence".into(), recurrence);
     }
     Ok(moved)
@@ -1597,6 +1613,33 @@ mod tests {
         assert_eq!(sent["recurrence"]["pattern"]["interval"], 1);
         assert_eq!(sent["recurrence"]["range"]["startDate"], "2026-10-28");
         assert_eq!(sent["recurrence"]["range"]["endDate"], "2026-12-30");
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_with_all_moves_the_week_start_with_the_days() {
+        let recurrence = json!({
+            "pattern": {"type": "weekly", "interval": 2, "daysOfWeek": ["friday", "sunday"], "firstDayOfWeek": "monday"},
+            "range": {"type": "noEnd", "startDate": "2026-10-23", "recurrenceTimeZone": "Eastern Standard Time"},
+        });
+        let master = json!({"id": "AAMkMaster", "start": {"dateTime": "2026-10-23T13:00:00.0000000", "timeZone": "UTC"}, "end": {"dateTime": "2026-10-23T14:00:00.0000000", "timeZone": "UTC"}, "recurrence": recurrence});
+        // Friday Nov 6 moves two days later, across the week boundary, then two days earlier.
+        for (to, days, week) in [
+            ("2026-11-08", ["sunday", "tuesday"], "wednesday"),
+            ("2026-11-04", ["wednesday", "friday"], "saturday"),
+        ] {
+            let exchanges = series_fixture(master.clone(), "2026-11-06T14:00:00Z");
+            let fixture = Fixture::start(exchanges).await;
+            let input = json!({"event": "AAMkOcc", "all": true, "start": format!("{to}T09:00:00"), "end": format!("{to}T10:00:00"), "time_zone": "America/New_York"});
+            Microsoft
+                .call(&cx(&fixture), "calendar_update_event", input)
+                .await
+                .unwrap();
+            let sent = fixture.finish().await[2].json();
+            assert_eq!(sent["recurrence"]["pattern"]["daysOfWeek"], json!(days));
+            assert_eq!(sent["recurrence"]["pattern"]["firstDayOfWeek"], week);
+            let range = &sent["recurrence"]["range"];
+            assert_eq!(range["recurrenceTimeZone"], "America/New_York");
+        }
     }
 
     #[tokio::test]
