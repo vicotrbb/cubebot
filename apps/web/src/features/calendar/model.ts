@@ -491,9 +491,13 @@ export type Times = {
   endTime: string
 }
 
-const minutesOf = (time: string) => {
-  const [hour = 0, minute = 0] = time.split(':').map(Number)
-  return hour * 60 + minute
+const HH_MM = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/** A time input's `HH:MM` as minutes; anything else is refused rather than misread. */
+export function minutesOf(time: string) {
+  const [, hour, minute] = HH_MM.exec(time) ?? []
+  if (!hour || !minute) throw new RangeError('Write times as HH:MM.')
+  return Number(hour) * 60 + Number(minute)
 }
 
 export function timesOf(draft: Draft, zone: string): Times {
@@ -504,10 +508,11 @@ export function timesOf(draft: Draft, zone: string): Times {
       endDay: addDays(draft.end, -1),
       endTime: '10:00',
     }
-  const at = (instant: string) => ({
-    day: dayOf(Date.parse(instant), zone),
-    time: formatTime(instant, zone),
-  })
+  // A time input takes ASCII HH:MM only, never the locale's way of writing a time.
+  const at = (instant: string) => {
+    const wall = new Date(wallClock(Date.parse(instant), zone)).toISOString()
+    return { day: wall.slice(0, 10), time: wall.slice(11, 16) }
+  }
   const start = at(draft.start)
   const end = at(draft.end)
   return {
@@ -520,6 +525,8 @@ export function timesOf(draft: Draft, zone: string): Times {
 
 /** The draft with the form's times; an all-day end is the day after the last. */
 export function withTimes(draft: Draft, times: Times, zone: string): Draft {
+  if (!isDay(times.startDay) || !isDay(times.endDay))
+    throw new RangeError('Pick the days it starts and ends.')
   if (draft.all_day)
     return { ...draft, start: times.startDay, end: addDays(times.endDay, 1) }
   return {

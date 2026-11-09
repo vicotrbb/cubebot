@@ -9,6 +9,7 @@ import {
   instantOf,
   newDraft,
   timesOf,
+  minutesOf,
   withTimes,
   digestDay,
   cronPhrase,
@@ -553,5 +554,57 @@ describe('the event form', () => {
       start: '2026-11-10',
       end: '2026-11-12',
     })
+  })
+})
+
+describe('form times in any locale', () => {
+  test('times fill the input as ASCII HH:MM whatever the locale writes', () => {
+    const Real = Intl.DateTimeFormat
+    // fi-FI writes 09.30 and ar-EG Arabic digits; a time input takes neither.
+    for (const locale of ['fi-FI', 'ar-EG']) {
+      Intl.DateTimeFormat = function (wanted?: string, options?: object) {
+        return new Real(wanted ?? locale, options)
+      } as unknown as typeof Intl.DateTimeFormat
+      try {
+        const times = timesOf(
+          {
+            title: '',
+            location: '',
+            description: '',
+            all_day: false,
+            start: '2026-11-10T07:30:00Z',
+            end: '2026-11-10T08:45:00Z',
+          },
+          locale === 'fi-FI' ? 'Europe/Helsinki' : 'Africa/Cairo',
+        )
+        expect(times.startTime).toMatch(/^\d{2}:\d{2}$/)
+        expect(times.endTime).toMatch(/^\d{2}:\d{2}$/)
+        expect(times.startTime).toBe('09:30')
+      } finally {
+        Intl.DateTimeFormat = Real
+      }
+    }
+  })
+
+  test('a time that is not HH:MM is refused, not misread', () => {
+    expect(minutesOf('14:30')).toBe(870)
+    expect(() => minutesOf('09.30')).toThrow()
+    expect(() => minutesOf('٠٩:٣٠')).toThrow()
+    expect(() => minutesOf('')).toThrow()
+    const blank = {
+      title: '',
+      location: '',
+      description: '',
+      all_day: true,
+      start: '',
+      end: '',
+    }
+    const times = {
+      startDay: '',
+      startTime: '09:00',
+      endDay: '2026-11-10',
+      endTime: '10:00',
+    }
+    expect(() => withTimes(blank, times, SP)).toThrow('Pick the days')
   })
 })

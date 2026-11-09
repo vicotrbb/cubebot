@@ -78,13 +78,22 @@ export function Popover({
   const ref = useRef<HTMLDialogElement>(null)
   const title = useId()
   const { item, at, opener } = selection
-  const close = (back: boolean) => {
-    // The item may have been read again since, so the selected one stands in for the opener.
-    const target = opener?.isConnected
+  // The item may have been read again since, so the selected one stands in for the opener.
+  const focusItem = () =>
+    (opener?.isConnected
       ? opener
       : document.querySelector<HTMLElement>('.calendar [data-selected]')
-    if (back) target?.focus()
+    )?.focus()
+  const close = (back: boolean) => {
+    if (back) focusItem()
     onClose()
+  }
+  // The editor returns focus to whatever had it when it opened, so that is the item; the sheet
+  // is modal and keeps the item inert until it closes.
+  const edit = (item: Item) => {
+    ref.current?.close()
+    focusItem()
+    onEdit(item)
   }
   useLayoutEffect(() => {
     const dialog = ref.current
@@ -128,10 +137,10 @@ export function Popover({
         </button>
       </header>
       {item.kind === 'event' && (
-        <EventBody item={item} look={look} close={close} onEdit={onEdit} />
+        <EventBody item={item} look={look} close={close} onEdit={edit} />
       )}
       {item.kind === 'routine' && (
-        <RoutineBody item={item} look={look} close={close} onEdit={onEdit} />
+        <RoutineBody item={item} look={look} close={close} onEdit={edit} />
       )}
       {item.kind === 'run' && <RunBody item={item} look={look} />}
       {item.kind === 'digest' && <DigestBody item={day} look={look} />}

@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Layers, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   useAgents,
   usePreferences,
@@ -223,6 +223,13 @@ function CalendarPage({
 function useOverlays(date: string) {
   const [selection, setSelection] = useState<Selection | null>(null)
   const [editing, setEditing] = useState<Editing | null>(null)
+  // The editor unmounts rather than closes, so it returns focus itself: to the item or the button.
+  const returnTo = useRef<Element | null>(null)
+  const open = (next: Editing) => {
+    returnTo.current = document.activeElement
+    setSelection(null)
+    setEditing(next)
+  }
   return {
     selection,
     editing,
@@ -234,17 +241,16 @@ function useOverlays(date: string) {
         day: dayAt(at) ?? date,
         opener: document.activeElement as HTMLElement | null,
       }),
-    create: (slot: Slot) => {
-      setSelection(null)
-      setEditing({ slot })
-    },
-    edit: (item: Item) => {
-      setSelection(null)
-      setEditing({ item })
-    },
-    close: () => {
-      setSelection(null)
+    create: (slot: Slot) => open({ slot }),
+    edit: (item: Item) => open({ item }),
+    close: () => setSelection(null),
+    closeEditor: () => {
       setEditing(null)
+      const back = returnTo.current
+      // While the modal editor is still up everything else is inert, so focus waits a frame.
+      requestAnimationFrame(() => {
+        if (back instanceof HTMLElement && back.isConnected) back.focus()
+      })
     },
   }
 }
@@ -281,7 +287,7 @@ function Overlays({
           sources={sources}
           agents={agents}
           zone={look.zone}
-          onClose={overlays.close}
+          onClose={overlays.closeEditor}
         />
       )}
     </>

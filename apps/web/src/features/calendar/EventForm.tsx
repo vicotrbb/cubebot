@@ -91,7 +91,8 @@ function slotWords(slot: Slot) {
   const day = formatDay(slot.day, FULL_DAY)
   if (slot.minute === null) return day
   const hour = String(Math.floor(slot.minute / 60)).padStart(2, '0')
-  return `${day} at ${hour}:${String(slot.minute % 60).padStart(2, '0')}`
+  // A comma, not "at": the day is written in the reader's own language.
+  return `${day}, ${hour}:${String(slot.minute % 60).padStart(2, '0')}`
 }
 
 /** Event or Routine, like the new-item sheet of iOS Calendar. */
@@ -142,6 +143,24 @@ function NewItem({ slot, ...context }: Context & { slot: Slot }) {
   )
 }
 
+function newEvent(
+  chosen: ReturnType<typeof writable>[number] | undefined,
+  draft: Draft,
+  zone: string,
+) {
+  return {
+    connection: chosen?.connection ?? '',
+    calendar: chosen?.calendar ?? '',
+    title: draft.title,
+    all_day: draft.all_day,
+    start: draft.start,
+    end: draft.end,
+    time_zone: zone,
+    location: draft.location.trim() || null,
+    description: draft.description.trim() || null,
+  }
+}
+
 function validate(draft: Draft) {
   if (!draft.title.trim()) return 'Give the event a title.'
   if (
@@ -177,29 +196,20 @@ function EventForm({
   const repeats = Boolean(detail?.series || detail?.occurrence)
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch })
   const time = (patch: Partial<Times>) => setTimes({ ...times, ...patch })
+  // Everything that can throw, the times included, stays inside the try so it shows.
   const save = async (scope: 'one' | 'all') => {
-    const after = withTimes(draft, times, zone)
-    const problem = validate(after)
-    setError(problem)
-    if (problem) return
-    const change = changes(before, after)
-    if (detail && !Object.keys(change).length) return onClose()
-    const chosen = calendars[calendar]
     try {
+      const title = draft.title.trim()
+      const after = withTimes({ ...draft, title }, times, zone)
+      const problem = validate(after)
+      setError(problem)
+      if (problem) return
+      const change = changes(before, after)
+      if (detail && !Object.keys(change).length) return onClose()
       await write.mutateAsync(() =>
         detail
           ? changeEvent({ ...eventRef(detail, zone, scope), ...change })
-          : createEvent({
-              connection: chosen?.connection ?? '',
-              calendar: chosen?.calendar ?? '',
-              title: after.title.trim(),
-              all_day: after.all_day,
-              start: after.start,
-              end: after.end,
-              time_zone: zone,
-              location: after.location.trim() || null,
-              description: after.description.trim() || null,
-            }),
+          : createEvent(newEvent(calendars[calendar], after, zone)),
       )
       onClose()
     } catch (error) {
