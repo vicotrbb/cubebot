@@ -6884,7 +6884,7 @@
       },
       "ChangeEvent": {
         "type": "object",
-        "description": "A change to an event, named as its [`EventDetail`] names it; fields absent stay as they are.",
+        "description": "A change to an event, named as its [`EventDetail`] names it. Send only the fields that changed:\none left out stays as it is, and an event's `description` arrives cut short from Google and\nabsent from Microsoft, so sending it back unchanged would lose text.",
         "required": ["connection", "calendar", "event", "scope"],
         "properties": {
           "all_day": {

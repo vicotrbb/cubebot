@@ -482,6 +482,16 @@ async fn a_failing_connection_reports_its_problem_and_the_rest_still_shows() {
         .await
         .unwrap();
     assert_eq!(status, "sign_in_again");
+    // Writes are refused up front, without asking the vendor.
+    let new = serde_json::from_value(
+        json!({"connection": lapsed, "calendar": "work", "title": "Lunch",
+        "start": "2030-01-08T15:00:00Z", "end": "2030-01-08T16:00:00Z", "all_day": false}),
+    )
+    .unwrap();
+    let asked = s.vendor.seen("/oauth2.googleapis.com/token").len();
+    let refused = s.calendar.create_event(&s.admin, &new).await;
+    assert!(matches!(refused, Err(ConnectError::SignInAgain)));
+    assert_eq!(s.vendor.seen("/oauth2.googleapis.com/token").len(), asked);
 }
 
 #[tokio::test]
@@ -652,4 +662,39 @@ async fn editing_one_occurrence_routes_to_the_occurrence_and_all_to_the_series()
         2,
         "the series' patch and its deletion"
     );
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_read_that_stops_at_its_cap_says_so() {
+    let s = setup().await;
+    let connection = google(&s, &s.admin, "busy").await;
+    calendars(&s);
+    // The vendor never stops paging.
+    for page in 0..25 {
+        let start = format!("2030-01-08T{:02}:00:00-03:00", page % 10 + 9);
+        let event = standup(&format!("standup_{page}"), &start, &start);
+        let answer = json!({"items": [event], "nextPageToken": format!("page{}", page + 1)});
+        s.vendor
+            .answer(&format!("{EVENTS}/work/events"), 200, answer);
+    }
+    s.vendor.answer(
+        &format!("{EVENTS}/holidays/events"),
+        200,
+        json!({"items": []}),
+    );
+
+    let found = range(&s, &s.admin, "2030-01-07T03:00:00Z", "2030-01-14T03:00:00Z").await;
+    let work = found
+        .sources
+        .iter()
+        .find(|source| source.id == format!("calendar:{connection}:work"))
+        .unwrap();
+    assert_eq!(
+        work.problem.as_deref(),
+        Some("Showing the first 20 events of this range.")
+    );
+    assert_eq!(ids(&found, "event").len(), 20);
+    let holidays = &found.sources[1];
+    assert_eq!(holidays.problem, None);
 }

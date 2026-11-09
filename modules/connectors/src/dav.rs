@@ -19,6 +19,8 @@ const REDIRECTS: usize = 3;
 /// The most a PROPFIND or REPORT answer may hold.
 const LARGEST: usize = 5 * 1024 * 1024;
 pub(crate) const EVENTS: usize = 100;
+/// The most occurrences one `list_events` may ask for.
+const MOST_EVENTS: usize = 2000;
 const CONTACTS: usize = 50;
 /// The longest text field passed on, such as a description.
 const LONGEST: usize = 500;
@@ -156,7 +158,7 @@ static MANIFEST: Manifest = Manifest {
             description: "Events of a calendar between two times; repeating events come as their occurrences.",
             risk: Risk::Read,
             product: Some("calendar"),
-            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T00:00:00Z."},"end":{"type":"string","description":"RFC 3339."}},"required":["calendar","start","end"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T00:00:00Z."},"end":{"type":"string","description":"RFC 3339."},"limit":{"type":"integer","minimum":1,"maximum":2000,"description":"The most occurrences to answer, 100 when absent; more says whether others were left out."}},"required":["calendar","start","end"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "create_event",
@@ -227,6 +229,7 @@ struct Between {
     calendar: String,
     start: String,
     end: String,
+    limit: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -558,10 +561,17 @@ async fn listed(cx: &Context, input: Value, kind: &Kind) -> Result<Value, Error>
 
 async fn list_events(cx: &Context, input: Value) -> Result<Value, Error> {
     let between: Between = crate::input(input)?;
+    let limit = between.limit.unwrap_or(EVENTS);
+    if !(1..=MOST_EVENTS).contains(&limit) {
+        return Err(Error::Invalid(format!("limit is 1 to {MOST_EVENTS}")));
+    }
     let (start, end) = (seconds(&between.start)?, seconds(&between.end)?);
     let base = base(cx, &CALENDARS)?;
-    let events = events_between(cx, &base, address(&between.calendar)?, start, end).await?;
-    Ok(json!({"events": events}))
+    let calendar = address(&between.calendar)?;
+    let mut events = events_between(cx, &base, calendar, (start, end), limit + 1).await?;
+    let more = events.len() > limit;
+    events.truncate(limit);
+    Ok(json!({"events": events, "more": more}))
 }
 
 /// Events overlapping `start..end`, asking the server to expand repeating ones (RFC 4791 §9.6.5)
@@ -570,8 +580,8 @@ async fn events_between(
     cx: &Context,
     base: &Url,
     calendar: Url,
-    start: i64,
-    end: i64,
+    (start, end): (i64, i64),
+    limit: usize,
 ) -> Result<Vec<Value>, Error> {
     let (from, until) = (ical(start), ical(end));
     let query = format!(
@@ -581,15 +591,19 @@ async fn events_between(
     let events = found.iter().flat_map(|entry| {
         let href = at.join(&entry.href).map(String::from).unwrap_or_default();
         let etag = entry.text("getetag").map(str::to_owned);
-        occurrences(entry.text("calendar-data").unwrap_or_default(), start, end)
-            .into_iter()
-            .map(move |mut event| {
-                event["href"] = json!(href);
-                event["etag"] = json!(etag);
-                event
-            })
+        occurrences(
+            entry.text("calendar-data").unwrap_or_default(),
+            (start, end),
+            limit,
+        )
+        .into_iter()
+        .map(move |mut event| {
+            event["href"] = json!(href);
+            event["etag"] = json!(etag);
+            event
+        })
     });
-    Ok(events.take(EVENTS).collect())
+    Ok(events.take(limit).collect())
 }
 
 async fn create(cx: &Context, input: Value) -> Result<Value, Error> {
@@ -755,7 +769,7 @@ async fn poll(cx: &Context, cursor: Option<&str>) -> Result<Poll, Error> {
         .into_iter()
         .take(POLLED)
     {
-        for event in events_between(cx, &base, calendar, now, now + SOON).await? {
+        for event in events_between(cx, &base, calendar, (now, now + SOON), EVENTS).await? {
             let start = event["start"].as_str().unwrap_or_default();
             let id = format!("{}@{}", event["uid"].as_str().unwrap_or_default(), start);
             if !starting(start, now) || reported.contains(&id) {
@@ -1661,6 +1675,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_events_stops_at_its_limit_and_says_there_is_more() {
+        let answer = || multistatus("REPORT", "/dav/victor/personal/", "events");
+        let fixture = Fixture::start(vec![answer(), answer()]).await;
+        let calendar = format!("{}dav/victor/personal/", fixture.origin());
+        let window = json!({"calendar": calendar, "start": "2026-11-06T00:00:00Z", "end": "2026-11-08T00:00:00Z"});
+        let mut limited = window.clone();
+        limited["limit"] = json!(1);
+        let cut = Dav
+            .call(&local(&fixture), "list_events", limited)
+            .await
+            .unwrap();
+        assert_eq!(
+            (cut["events"].as_array().unwrap().len(), &cut["more"]),
+            (1, &json!(true))
+        );
+        let all = Dav
+            .call(&local(&fixture), "list_events", window)
+            .await
+            .unwrap();
+        assert_eq!(
+            (all["events"].as_array().unwrap().len(), &all["more"]),
+            (2, &json!(false))
+        );
+        let refused = json!({"calendar": calendar, "start": "2026-11-06T00:00:00Z", "end": "2026-11-08T00:00:00Z", "limit": 2001});
+        assert!(matches!(
+            Dav.call(&local(&fixture), "list_events", refused).await,
+            Err(Error::Invalid(_))
+        ));
+        fixture.finish().await;
+    }
+
+    #[tokio::test]
     async fn list_events_unfolds_lines_keeps_zones_and_skips_alarms() {
         let fixture = Fixture::start(vec![multistatus(
             "REPORT",
@@ -1867,7 +1913,7 @@ mod tests {
             seconds("2026-10-01T00:00:00Z"),
             seconds("2026-11-03T00:00:00Z"),
         );
-        let shown = occurrences(sent, start.unwrap(), end.unwrap());
+        let shown = occurrences(sent, (start.unwrap(), end.unwrap()), EVENTS);
         let text = |event: &Value, key: &str| event[key].as_str().unwrap().to_owned();
         let mut shown: Vec<_> = shown
             .iter()
@@ -2080,7 +2126,7 @@ mod tests {
         let sent = fixture.finish().await[0].text();
         let days = "DTSTART;VALUE=DATE:20261107\r\nDTEND;VALUE=DATE:20261108\r\n";
         assert!(sent.contains(days), "{sent}");
-        let shown = occurrences(&sent, 1_790_000_000, 1_800_000_000);
+        let shown = occurrences(&sent, (1_790_000_000, 1_800_000_000), EVENTS);
         assert_eq!(shown[0]["start"], "2026-11-07");
         assert_eq!(shown[0]["end"], "2026-11-08");
         assert_eq!(shown[0]["all_day"], true);

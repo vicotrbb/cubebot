@@ -2,7 +2,7 @@
 //! that answer a calendar query without expanding them.
 mod windows_zones;
 
-use crate::dav::{EVENTS, Line, field, lines, stamp, vevents};
+use crate::dav::{Line, field, lines, stamp, vevents};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Offset, TimeDelta, TimeZone};
 use rrule::{RRule, RRuleError, RRuleSet, Tz, Unvalidated};
 use serde_json::{Value, json};
@@ -87,7 +87,8 @@ impl Moment {
 /// RECURRENCE-ID or EXDATE value carries it (`20261110T090000` in `time_zone`, `20261110T090000Z`,
 /// or `20261110` all day), and `null` for an event that does not repeat. A rule that cannot be
 /// read yields the master once rather than losing the event.
-pub(crate) fn occurrences(ics: &str, start: i64, end: i64) -> Vec<Value> {
+/// At most `limit` occurrences of each event.
+pub(crate) fn occurrences(ics: &str, (start, end): (i64, i64), limit: usize) -> Vec<Value> {
     let zones = zones(ics);
     let components = vevents(ics);
     let moved: Vec<(String, DateTime<Tz>)> = components
@@ -101,7 +102,7 @@ pub(crate) fn occurrences(ics: &str, start: i64, end: i64) -> Vec<Value> {
         .collect();
     components
         .iter()
-        .flat_map(|lines| expand(lines, &zones, &moved, start, end))
+        .flat_map(|lines| expand(lines, &zones, &moved, (start, end), limit))
         .collect()
 }
 
@@ -109,8 +110,8 @@ fn expand(
     lines: &[Line],
     zones: &Zones,
     moved: &[(String, DateTime<Tz>)],
-    start: i64,
-    end: i64,
+    (start, end): (i64, i64),
+    limit: usize,
 ) -> Vec<Value> {
     let Some(first) = moment(lines, "DTSTART", zones) else {
         return Vec::new();
@@ -160,7 +161,7 @@ fn expand(
     let dates = set
         .after(since.with_timezone(&zone))
         .before(before.with_timezone(&zone))
-        .all(EVENTS as u16)
+        .all(u16::try_from(limit).unwrap_or(u16::MAX))
         .dates;
     dates
         .into_iter()
@@ -373,7 +374,7 @@ mod tests {
     /// The occurrences of a calendar holding `vevents` between two RFC 3339 times.
     fn expanded(vevents: &str, start: &str, end: &str) -> Vec<Value> {
         let ics = format!("BEGIN:VCALENDAR\nVERSION:2.0\n{vevents}END:VCALENDAR\n");
-        occurrences(&ics, at(start), at(end))
+        occurrences(&ics, (at(start), at(end)), crate::dav::EVENTS)
     }
 
     fn starts(events: &[Value]) -> Vec<&str> {

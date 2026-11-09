@@ -193,6 +193,9 @@ pub struct EventRoutine {
     pub enabled: bool,
 }
 
+/// A connection's connector and settings.
+type Usable = (&'static dyn Connector, Value);
+
 /// A connection as the orchestrator uses it.
 struct Stored {
     id: Uuid,
@@ -595,10 +598,17 @@ impl Connections {
 
     /// A current credential for the connection and when it expires, renewing it first when due.
     async fn fresh_credential(&self, id: Uuid) -> Result<(Credential, Option<i64>), ConnectError> {
+        let (_, credential) = self.usable(id).await?;
+        Ok(credential)
+    }
+
+    /// The connection's connector and settings with [`Self::fresh_credential`], read once.
+    async fn usable(&self, id: Uuid) -> Result<(Usable, (Credential, Option<i64>)), ConnectError> {
         let mut tx = self.pool.begin().await?;
         let stored = self.stored(&mut tx, id, false).await?;
         tx.commit().await?;
-        match stored.auth.as_str() {
+        let usable = (stored.connector, stored.config.clone());
+        let credential = match stored.auth.as_str() {
             "api_key" | "password" | "public" => Ok((
                 Credential::Fields {
                     fields: stored.sealed.fields,
@@ -607,7 +617,8 @@ impl Connections {
             )),
             "linked" => self.linked(&stored.config).await,
             _ => self.token(stored).await,
-        }
+        }?;
+        Ok((usable, credential))
     }
 
     /// The access token of an OAuth or GitHub App connection, renewed when it is close to expiry.
@@ -673,12 +684,9 @@ impl Connections {
         tool: &str,
         input: Value,
     ) -> Result<Value, ConnectError> {
-        let (credential, _) = self.fresh_credential(id).await?;
-        let mut tx = self.pool.begin().await?;
-        let stored = self.stored(&mut tx, id, false).await?;
-        tx.commit().await?;
-        let cx = self.context(stored.config, credential);
-        match stored.connector.call(&cx, tool, input).await {
+        let ((connector, config), (credential, _)) = self.usable(id).await?;
+        let cx = self.context(config, credential);
+        match connector.call(&cx, tool, input).await {
             Ok(answer) => Ok(answer),
             Err(cubebot_connectors::Error::Unauthorized) => {
                 sqlx::query!(

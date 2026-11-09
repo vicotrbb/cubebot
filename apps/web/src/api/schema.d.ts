@@ -2811,7 +2811,11 @@ export interface components {
       | 'finance'
       | 'notifications'
       | 'data'
-    /** @description A change to an event, named as its [`EventDetail`] names it; fields absent stay as they are. */
+    /**
+     * @description A change to an event, named as its [`EventDetail`] names it. Send only the fields that changed:
+     *     one left out stays as it is, and an event's `description` arrives cut short from Google and
+     *     absent from Microsoft, so sending it back unchanged would lose text.
+     */
     ChangeEvent: {
       all_day?: boolean | null
       calendar: string

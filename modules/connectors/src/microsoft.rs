@@ -167,7 +167,7 @@ static MANIFEST: Manifest = Manifest {
             description: "Events between two times, including each occurrence of recurring ones, in UTC.",
             risk: Risk::Read,
             product: CALENDAR,
-            input: r#"{"type":"object","properties":{"start":{"type":"string","description":"ISO 8601, such as 2026-11-05T00:00:00Z."},"end":{"type":"string"},"calendar":{"type":"string","description":"A calendar id from calendar_list; your default calendar when absent."},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["start","end"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"start":{"type":"string","description":"ISO 8601, such as 2026-11-05T00:00:00Z."},"end":{"type":"string"},"calendar":{"type":"string","description":"A calendar id from calendar_list; your default calendar when absent."},"limit":{"type":"integer","minimum":1,"maximum":500,"description":"50 when absent; more says whether others were left out."}},"required":["start","end"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "calendar_create_event",
@@ -780,7 +780,7 @@ async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     };
     let mut url = format!("{base}{}", query(&pairs));
     let mut found = Vec::new();
-    loop {
+    let more = loop {
         let request = cx.get(&url)?.header("prefer", UTC);
         let page = cx.json(request).await?;
         let events = page["value"].as_array().into_iter().flatten();
@@ -788,11 +788,11 @@ async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
         // The token goes wherever the next link points, so only Graph's own addresses are followed.
         match page["@odata.nextLink"].as_str() {
             Some(next) if found.len() < wanted && next.starts_with(API) => url = next.into(),
-            _ => break,
+            next => break found.len() > wanted || next.is_some() && found.len() >= wanted,
         }
-    }
+    };
     found.truncate(wanted);
-    Ok(json!({"events": found}))
+    Ok(json!({"events": found, "more": more}))
 }
 
 /// [`event`] as read in UTC from the calendar asked for.
@@ -1549,11 +1549,31 @@ mod tests {
         assert_eq!(events[1]["series"], Value::Null);
         assert_eq!(events[0]["calendar"], "cal 1");
         assert_eq!(events[0]["time_zone"], "UTC");
+        assert_eq!(found["more"], false);
         let seen = fixture.finish().await;
         assert!(seen[1].target.contains("$skiptoken=page2"));
         for each in &seen {
             assert_eq!(each.header("prefer"), Some("outlook.timezone=\"UTC\""));
         }
+    }
+
+    #[tokio::test]
+    async fn calendar_events_says_there_is_more_when_it_stops_at_its_limit() {
+        let mut page = recorded("calendar_view");
+        page["@odata.nextLink"] =
+            json!("https://graph.microsoft.com/v1.0/me/calendarView?$skiptoken=page2");
+        let fixture = Fixture::start(vec![graph("GET", "/me/calendarView", page)]).await;
+        let input =
+            json!({"start": "2026-11-05T00:00:00Z", "end": "2026-11-06T00:00:00Z", "limit": 1});
+        let found = Microsoft
+            .call(&cx(&fixture), "calendar_events", input)
+            .await
+            .unwrap();
+        assert_eq!(
+            (found["events"].as_array().unwrap().len(), &found["more"]),
+            (1, &json!(true))
+        );
+        fixture.finish().await;
     }
 
     #[tokio::test]

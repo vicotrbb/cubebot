@@ -168,4 +168,4 @@ Accepted 2026-11-09, at the user's direction (docs/superpowers/specs/2026-11-09-
 
 **Rationale.** Asking the vendors on each read keeps PostgreSQL free of anyone's calendar and needs no sync. Reusing the connector tools gives agents and people the same reads and writes, so a fix reaches both.
 
-**Consequences.** A read is as slow as the slowest calendar and makes one vendor request per calendar (Google pages through 250 events at a time). Microsoft reads at most 500 events and CalDAV 100 occurrences per calendar and range.
+**Consequences.** A read makes one vendor request per calendar, six calendars of a connection at a time, and gives each connection 12 seconds before its source says it did not answer. Each calendar reads at most 5,000 events from Google, 500 from Microsoft and 2,000 occurrences from CalDAV per range; a calendar cut short says so on its source instead of dropping events silently.

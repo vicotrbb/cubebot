@@ -6,8 +6,9 @@ use super::{
 use crate::connections::{ConnectError, Connections};
 use chrono::DateTime;
 use chrono_tz::Tz;
-use futures_util::future::join_all;
+use futures_util::{StreamExt, stream};
 use serde_json::{Value, json};
+use std::time::Duration;
 use uuid::Uuid;
 
 /// Pages of one calendar's events read at most, in case a vendor never stops paging.
@@ -133,7 +134,7 @@ impl Vendor {
             Self::Microsoft => {
                 json!({"calendar": calendar, "start": from, "end": to, "limit": 500})
             }
-            Self::Dav => json!({"calendar": calendar, "start": from, "end": to}),
+            Self::Dav => json!({"calendar": calendar, "start": from, "end": to, "limit": 2000}),
         }
     }
 
@@ -221,9 +222,36 @@ impl Vendor {
     }
 }
 
+/// How long one connection's read may take before its source says it did not answer.
+const BUDGET: Duration = Duration::from_secs(12);
+/// Calendars of one connection read at the same time.
+const AT_ONCE: usize = 6;
+
 /// One connection's calendars as sources and their events in the range. A failure shows as the
 /// problem of the connection's source, or of the calendar's when only that calendar failed.
 pub(super) async fn read(
+    connections: &Connections,
+    owned: &Owned,
+    bounds: (i64, i64),
+) -> (Vec<Source>, Vec<Item>) {
+    within(BUDGET, owned, calendars_of(connections, owned, bounds)).await
+}
+
+/// The read, or the connection's source with a problem when it takes longer than `budget`.
+async fn within(
+    budget: Duration,
+    owned: &Owned,
+    read: impl Future<Output = (Vec<Source>, Vec<Item>)>,
+) -> (Vec<Source>, Vec<Item>) {
+    tokio::time::timeout(budget, read)
+        .await
+        .unwrap_or_else(|_| {
+            let source = troubled(owned, "Didn't answer in time.".into());
+            (vec![source], Vec::new())
+        })
+}
+
+async fn calendars_of(
     connections: &Connections,
     owned: &Owned,
     bounds: (i64, i64),
@@ -235,18 +263,17 @@ pub(super) async fn read(
     };
     let calendars = match listed {
         Ok(answer) => owned.vendor.calendars(&answer),
-        Err(error) => {
-            let mut source = source(owned, format!("calendar:{}", owned.id), &owned.name);
-            source.problem = Some(problem(&error));
-            return (vec![source], Vec::new());
-        }
+        Err(error) => return (vec![troubled(owned, problem(&error))], Vec::new()),
     };
     let writable = owned.offered.contains(&tools.create);
-    let read = calendars
+    // Collected first: a lazy map would make the future not `Send` for every lifetime.
+    let read: Vec<_> = calendars
         .iter()
-        .map(|calendar| events_of(connections, owned, &calendar.id, bounds));
+        .map(|calendar| events_of(connections, owned, &calendar.id, bounds))
+        .collect();
+    let found: Vec<_> = stream::iter(read).buffered(AT_ONCE).collect().await;
     let (mut sources, mut items) = (Vec::new(), Vec::new());
-    for (calendar, found) in calendars.iter().zip(join_all(read).await) {
+    for (calendar, found) in calendars.iter().zip(found) {
         let id = format!("calendar:{}:{}", owned.id, calendar.id);
         let place = Place {
             connection: owned.id,
@@ -258,16 +285,27 @@ pub(super) async fn read(
         source.color.clone_from(&calendar.color);
         source.writable = place.editable;
         match found {
-            Ok(events) => items.extend(
-                events
+            Ok((events, more)) => {
+                let read = events
                     .iter()
-                    .filter_map(|event| owned.vendor.item(event, &place)),
-            ),
+                    .filter_map(|event| owned.vendor.item(event, &place));
+                items.extend(read);
+                // Never drop events silently: say the range was cut short.
+                source.problem = more
+                    .then(|| format!("Showing the first {} events of this range.", events.len()));
+            }
             Err(error) => source.problem = Some(problem(&error)),
         }
         sources.push(source);
     }
     (sources, items)
+}
+
+/// The connection's own source, when none of its calendars could be read.
+fn troubled(owned: &Owned, problem: String) -> Source {
+    let mut source = source(owned, format!("calendar:{}", owned.id), &owned.name);
+    source.problem = Some(problem);
+    source
 }
 
 fn source(owned: &Owned, id: String, name: &str) -> Source {
@@ -290,7 +328,7 @@ async fn events_of(
     owned: &Owned,
     calendar: &str,
     bounds: (i64, i64),
-) -> Result<Vec<Value>, ConnectError> {
+) -> Result<(Vec<Value>, bool), ConnectError> {
     let mut found = Vec::new();
     let mut page = None;
     for _ in 0..PAGES {
@@ -300,10 +338,10 @@ async fn events_of(
         found.extend(answer["events"].as_array().into_iter().flatten().cloned());
         page = text(&answer["next_page"]);
         if page.is_none() {
-            break;
+            return Ok((found, answer["more"] == true));
         }
     }
-    Ok(found)
+    Ok((found, true))
 }
 
 fn problem(error: &ConnectError) -> String {
@@ -428,6 +466,7 @@ fn local(time: &str, zone: &str) -> Result<String, ConnectError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::calendar::Owned;
 
     fn place(source: &str) -> Place<'_> {
         Place {
@@ -454,6 +493,30 @@ mod tests {
             .unwrap()
             .extend(fields.as_object().unwrap().clone());
         serde_json::from_value(body).unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_connection_that_does_not_answer_in_time_says_so() {
+        let owned = Owned {
+            id: Uuid::nil(),
+            vendor: Vendor::Google,
+            name: "work@example.com".into(),
+            offered: Vec::new(),
+            status: "connected".into(),
+        };
+        let budget = Duration::from_millis(10);
+        let (sources, items) = within(budget, &owned, std::future::pending()).await;
+        let source = &sources[0];
+        assert_eq!(
+            (source.id.as_str(), source.problem.as_deref(), items.len()),
+            (
+                "calendar:00000000-0000-0000-0000-000000000000",
+                Some("Didn't answer in time."),
+                0
+            )
+        );
+        let quick = within(budget, &owned, async { (Vec::new(), Vec::new()) }).await;
+        assert!(quick.0.is_empty());
     }
 
     #[test]

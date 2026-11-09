@@ -136,7 +136,9 @@ pub enum Scope {
     All,
 }
 
-/// A change to an event, named as its [`EventDetail`] names it; fields absent stay as they are.
+/// A change to an event, named as its [`EventDetail`] names it. Send only the fields that changed:
+/// one left out stays as it is, and an event's `description` arrives cut short from Google and
+/// absent from Microsoft, so sending it back unchanged would lose text.
 #[derive(Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ChangeEvent {
@@ -204,8 +206,11 @@ impl Calendar {
     ) -> Result<CalendarRange, IdentityError> {
         let bounds = bounds(&window.from, &window.to)?;
         let zone = self.zone(actor, window.time_zone.as_deref()).await?;
-        let (mut sources, mut items) = self.events(actor.id, bounds).await?;
-        let (agents, routines) = routines::items(&self.pool, actor.id, bounds, zone).await?;
+        let (events, routines) = tokio::join!(
+            self.events(actor.id, bounds),
+            routines::items(&self.pool, actor.id, bounds, zone)
+        );
+        let ((mut sources, mut items), (agents, routines)) = (events?, routines?);
         sources.extend(agents);
         items.extend(routines);
         items.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id)));
@@ -305,6 +310,9 @@ impl Calendar {
         let name = tool(owned.vendor.tools());
         if !owned.offered.contains(&name) {
             return Err(IdentityError::Forbidden.into());
+        }
+        if owned.status == "sign_in_again" {
+            return Err(ConnectError::SignInAgain);
         }
         Ok((connections, owned.vendor, name))
     }
