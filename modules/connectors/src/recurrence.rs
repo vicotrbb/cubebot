@@ -1,10 +1,16 @@
 //! Repeating events expanded from their master VEVENT (RFC 5545 §3.8.5), for CalDAV servers
 //! that answer a calendar query without expanding them.
-use crate::dav::{EVENTS, Line, field, stamp, vevents};
-use chrono::{DateTime, NaiveDate, NaiveDateTime, TimeDelta, TimeZone};
+mod windows_zones;
+
+use crate::dav::{EVENTS, Line, field, lines, stamp, vevents};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, Offset, TimeDelta, TimeZone};
 use rrule::{RRule, RRuleError, RRuleSet, Tz, Unvalidated};
 use serde_json::{Value, json};
 use std::str::FromStr;
+use windows_zones::WINDOWS_ZONES;
+
+/// Each VTIMEZONE's TZID with the zone it was resolved to.
+type Zones = Vec<(String, chrono_tz::Tz)>;
 
 /// A DTSTART, DTEND, RDATE, EXDATE or RECURRENCE-ID value.
 #[derive(Clone)]
@@ -17,8 +23,8 @@ struct Moment {
 }
 
 impl Moment {
-    /// Floating times, and zones chrono-tz does not know, are taken as UTC.
-    fn parse(params: &str, value: &str) -> Option<Self> {
+    /// Floating times, and zones neither known nor described by a VTIMEZONE, are taken as UTC.
+    fn parse(params: &str, value: &str, zones: &Zones) -> Option<Self> {
         let zone = params
             .split(';')
             .find_map(|param| param.strip_prefix("TZID="))
@@ -35,9 +41,7 @@ impl Moment {
         let utc = value.ends_with('Z');
         let local =
             NaiveDateTime::parse_from_str(value.trim_end_matches('Z'), "%Y%m%dT%H%M%S").ok()?;
-        let named = zone
-            .as_deref()
-            .and_then(|zone| chrono_tz::Tz::from_str(zone).ok());
+        let named = zone.as_deref().and_then(|zone| resolve(zone, zones));
         let tz = named.filter(|_| !utc).map_or(Tz::UTC, Tz::Tz);
         // A time skipped by a daylight-saving change is read as UTC rather than dropped.
         let at = tz
@@ -52,10 +56,10 @@ impl Moment {
         })
     }
 
-    fn each(line: &Line) -> impl Iterator<Item = Self> {
+    fn each<'a>(line: &'a Line, zones: &'a Zones) -> impl Iterator<Item = Self> + 'a {
         line.value
             .split(',')
-            .filter_map(|value| Self::parse(&line.params, value))
+            .filter_map(|value| Self::parse(&line.params, value, zones))
     }
 
     /// As a RECURRENCE-ID or EXDATE value: `20261110`, `20261110T090000` or `20261110T090000Z`.
@@ -84,29 +88,37 @@ impl Moment {
 /// or `20261110` all day), and `null` for an event that does not repeat. A rule that cannot be
 /// read yields the master once rather than losing the event.
 pub(crate) fn occurrences(ics: &str, start: i64, end: i64) -> Vec<Value> {
+    let zones = zones(ics);
     let components = vevents(ics);
     let moved: Vec<(String, DateTime<Tz>)> = components
         .iter()
         .filter_map(|lines| {
             Some((
                 text(lines, "UID")?.to_owned(),
-                moment(lines, "RECURRENCE-ID")?.at,
+                moment(lines, "RECURRENCE-ID", &zones)?.at,
             ))
         })
         .collect();
     components
         .iter()
-        .flat_map(|lines| expand(lines, &moved, start, end))
+        .flat_map(|lines| expand(lines, &zones, &moved, start, end))
         .collect()
 }
 
-fn expand(lines: &[Line], moved: &[(String, DateTime<Tz>)], start: i64, end: i64) -> Vec<Value> {
-    let Some(first) = moment(lines, "DTSTART") else {
+fn expand(
+    lines: &[Line],
+    zones: &Zones,
+    moved: &[(String, DateTime<Tz>)],
+    start: i64,
+    end: i64,
+) -> Vec<Value> {
+    let Some(first) = moment(lines, "DTSTART", zones) else {
         return Vec::new();
     };
-    let length = moment(lines, "DTEND").map_or(TimeDelta::days(i64::from(first.date)), |last| {
-        last.at - first.at
-    });
+    let length = moment(lines, "DTEND", zones)
+        .map(|last| last.at - first.at)
+        .or_else(|| text(lines, "DURATION").and_then(duration))
+        .unwrap_or(TimeDelta::days(i64::from(first.date)));
     let mut fields = json!({});
     lines.iter().for_each(|line| field(&mut fields, line));
     let event = |at, id: Option<&Moment>| {
@@ -122,7 +134,7 @@ fn expand(lines: &[Line], moved: &[(String, DateTime<Tz>)], start: i64, end: i64
         let (from, until) = (at.timestamp(), (*at + length).timestamp());
         from < end && (until > start || from == until && from >= start)
     };
-    if let Some(id) = moment(lines, "RECURRENCE-ID") {
+    if let Some(id) = moment(lines, "RECURRENCE-ID", zones) {
         let cancelled = text(lines, "STATUS") == Some("CANCELLED");
         let shown = !cancelled && overlaps(&first.at);
         return shown
@@ -141,7 +153,8 @@ fn expand(lines: &[Line], moved: &[(String, DateTime<Tz>)], start: i64, end: i64
     }
     let uid = text(lines, "UID").unwrap_or_default();
     let overridden = moved.iter().filter(|(of, _)| of == uid).map(|(_, at)| *at);
-    let Ok(set) = rule_set(lines, &first).map(|set| overridden.fold(set, RRuleSet::exdate)) else {
+    let Ok(set) = rule_set(lines, &first, zones).map(|set| overridden.fold(set, RRuleSet::exdate))
+    else {
         return vec![event(first.at, None)];
     };
     let zone = first.at.timezone();
@@ -167,17 +180,21 @@ fn expand(lines: &[Line], moved: &[(String, DateTime<Tz>)], start: i64, end: i64
         .collect()
 }
 
-fn rule_set(lines: &[Line], first: &Moment) -> Result<RRuleSet, RRuleError> {
+fn rule_set(lines: &[Line], first: &Moment, zones: &Zones) -> Result<RRuleSet, RRuleError> {
     let mut set = RRuleSet::new(first.at);
+    // DTSTART is always an instance (RFC 5545 §3.8.5.2); `rrule` only counts it through a rule.
+    if text(lines, "RRULE").is_none() {
+        set = set.rdate(first.at);
+    }
     for line in lines {
         set = match line.name.as_str() {
             "RRULE" => set.rrule(
                 RRule::<Unvalidated>::from_str(&utc_until(&line.value))?.validate(first.at)?,
             ),
-            "RDATE" => Moment::each(line)
+            "RDATE" => Moment::each(line, zones)
                 .map(|moment| moment.at)
                 .fold(set, RRuleSet::rdate),
-            "EXDATE" => Moment::each(line)
+            "EXDATE" => Moment::each(line, zones)
                 .map(|moment| moment.at)
                 .fold(set, RRuleSet::exdate),
             _ => set,
@@ -205,9 +222,110 @@ fn text<'a>(lines: &'a [Line], name: &str) -> Option<&'a str> {
         .map(|line| line.value.as_str())
 }
 
-fn moment(lines: &[Line], name: &str) -> Option<Moment> {
+fn moment(lines: &[Line], name: &str, zones: &Zones) -> Option<Moment> {
     let line = lines.iter().find(|line| line.name == name)?;
-    Moment::parse(&line.params, &line.value)
+    Moment::parse(&line.params, &line.value, zones)
+}
+
+/// A DURATION value (RFC 5545 §3.3.6), such as `PT1H30M`, `P1D` or `P1W`.
+fn duration(value: &str) -> Option<TimeDelta> {
+    let (sign, value) = match value.strip_prefix('-') {
+        Some(value) => (-1, value),
+        None => (1, value.trim_start_matches('+')),
+    };
+    let (mut seconds, mut digits) = (0, String::new());
+    for c in value.strip_prefix('P')?.chars() {
+        let unit = match c {
+            '0'..='9' => {
+                digits.push(c);
+                continue;
+            }
+            'T' => continue,
+            'W' => 604_800,
+            'D' => 86_400,
+            'H' => 3600,
+            'M' => 60,
+            'S' => 1,
+            _ => return None,
+        };
+        seconds += digits.parse::<i64>().ok()? * unit;
+        digits.clear();
+    }
+    Some(TimeDelta::seconds(sign * seconds))
+}
+
+/// Each VTIMEZONE's TZID resolved by name, then its `X-LIC-LOCATION`, then as a Windows name,
+/// then by its standard offset.
+fn zones(ics: &str) -> Zones {
+    let mut zones = Vec::new();
+    let (mut tzid, mut location, mut offset) = (None, None, None);
+    let mut standard = false;
+    for line in lines(ics) {
+        match (line.name.as_str(), line.value.as_str()) {
+            ("BEGIN", "STANDARD") => standard = true,
+            ("END", "STANDARD") => standard = false,
+            ("TZID", _) => tzid = Some(line.value),
+            ("X-LIC-LOCATION", _) => location = Some(line.value),
+            ("TZOFFSETTO", _) if standard && offset.is_none() => offset = Some(line.value),
+            ("END", "VTIMEZONE") => {
+                let (id, location, offset) = (tzid.take(), location.take(), offset.take());
+                let Some(id) = id else { continue };
+                let zone = named(&id)
+                    .or_else(|| location.as_deref().and_then(named))
+                    .or_else(|| windows(&id))
+                    .or_else(|| offset.as_deref().and_then(fixed));
+                zones.extend(zone.map(|zone| (id, zone)));
+            }
+            _ => (),
+        }
+    }
+    zones
+}
+
+/// The zone a TZID names, through its VTIMEZONE when the calendar has one.
+fn resolve(tzid: &str, zones: &Zones) -> Option<chrono_tz::Tz> {
+    let described = zones.iter().find(|(id, _)| id == tzid);
+    described
+        .map(|(_, zone)| *zone)
+        .or_else(|| named(tzid))
+        .or_else(|| windows(tzid))
+}
+
+/// An IANA name, or one with a prefix such as `/mozilla.org/20070129_1/Europe/Berlin`.
+fn named(name: &str) -> Option<chrono_tz::Tz> {
+    let tails = name.match_indices('/').map(|(at, _)| &name[at + 1..]);
+    std::iter::once(name)
+        .chain(tails)
+        .find_map(|name| chrono_tz::Tz::from_str(name).ok())
+}
+
+fn windows(name: &str) -> Option<chrono_tz::Tz> {
+    let (_, iana) = WINDOWS_ZONES.iter().find(|(windows, _)| *windows == name)?;
+    chrono_tz::Tz::from_str(iana).ok()
+}
+
+/// A zone keeping a VTIMEZONE's offset, such as `+0530`, all year. shortcut: the VTIMEZONE's
+/// daylight-saving rules are ignored; interpret them if unnamed zones with DST show up.
+fn fixed(offset: &str) -> Option<chrono_tz::Tz> {
+    let sign = if offset.starts_with('-') { -1 } else { 1 };
+    let digits = offset.trim_start_matches(['+', '-']);
+    let part = |range| {
+        digits
+            .get(range)
+            .and_then(|part: &str| part.parse::<i32>().ok())
+    };
+    let seconds = sign * (part(0..2)? * 3600 + part(2..4)? * 60);
+    let month = |month| NaiveDate::from_ymd_opt(2026, month, 1)?.and_hms_opt(0, 0, 0);
+    let (january, july) = (month(1)?, month(7)?);
+    let keeps = |zone: &&chrono_tz::Tz| {
+        [january, july]
+            .iter()
+            .all(|at| zone.offset_from_utc_datetime(at).fix().local_minus_utc() == seconds)
+    };
+    let zones = chrono_tz::TZ_VARIANTS.iter().filter(keeps);
+    zones
+        .min_by_key(|zone| !zone.name().starts_with("Etc/"))
+        .copied()
 }
 
 #[cfg(test)]
@@ -230,6 +348,13 @@ mod tests {
             .iter()
             .map(|event| event["start"].as_str().unwrap())
             .collect()
+    }
+
+    #[test]
+    fn every_windows_zone_names_a_known_iana_zone() {
+        for (windows, iana) in WINDOWS_ZONES {
+            assert!(chrono_tz::Tz::from_str(iana).is_ok(), "{windows} → {iana}");
+        }
     }
 
     const NOVEMBER: (&str, &str) = ("2026-11-01T00:00:00Z", "2026-12-01T00:00:00Z");
@@ -331,6 +456,98 @@ mod tests {
         assert_eq!(events[1]["end"], "2026-10-25T09:00:00Z");
         assert_eq!(events[1]["occurrence"], "20261025T090000");
         assert_eq!(events[1]["time_zone"], "Europe/Berlin");
+    }
+
+    #[test]
+    fn a_windows_tzid_resolves_to_its_iana_zone() {
+        let events = expanded(
+            "BEGIN:VEVENT\nUID:outlook\nDTSTART;TZID=W. Europe Standard Time:20261018T090000\nDTEND;TZID=W. Europe Standard Time:20261018T100000\nRRULE:FREQ=WEEKLY\nEND:VEVENT\n",
+            "2026-10-15T00:00:00Z",
+            "2026-10-29T00:00:00Z",
+        );
+        assert_eq!(
+            starts(&events),
+            ["2026-10-18T07:00:00Z", "2026-10-25T08:00:00Z"]
+        );
+        assert_eq!(events[1]["end"], "2026-10-25T09:00:00Z");
+        assert_eq!(events[1]["occurrence"], "20261025T090000");
+        assert_eq!(events[1]["time_zone"], "W. Europe Standard Time");
+    }
+
+    #[test]
+    fn a_mozilla_prefixed_tzid_resolves() {
+        let events = expanded(
+            "BEGIN:VEVENT\nUID:thunderbird\nDTSTART;TZID=/mozilla.org/20070129_1/Europe/Berlin:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=2\nEND:VEVENT\n",
+            "2026-10-15T00:00:00Z",
+            "2026-10-29T00:00:00Z",
+        );
+        assert_eq!(
+            starts(&events),
+            ["2026-10-18T07:00:00Z", "2026-10-25T08:00:00Z"]
+        );
+    }
+
+    #[test]
+    fn a_vtimezone_location_resolves_its_tzid() {
+        let events = expanded(
+            "BEGIN:VTIMEZONE\nTZID:Berlin time\nX-LIC-LOCATION:Europe/Berlin\nBEGIN:STANDARD\nTZOFFSETTO:+0100\nEND:STANDARD\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:lic\nDTSTART;TZID=Berlin time:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=2\nEND:VEVENT\n",
+            "2026-10-15T00:00:00Z",
+            "2026-10-29T00:00:00Z",
+        );
+        assert_eq!(
+            starts(&events),
+            ["2026-10-18T07:00:00Z", "2026-10-25T08:00:00Z"]
+        );
+    }
+
+    #[test]
+    fn an_unknown_tzid_uses_its_vtimezone_offset() {
+        let events = expanded(
+            "BEGIN:VTIMEZONE\nTZID:Office time\nBEGIN:DAYLIGHT\nTZOFFSETTO:+0630\nEND:DAYLIGHT\nBEGIN:STANDARD\nTZOFFSETTO:+0530\nEND:STANDARD\nEND:VTIMEZONE\nBEGIN:VEVENT\nUID:custom\nDTSTART;TZID=Office time:20261102T090000\nDTEND;TZID=Office time:20261102T100000\nRRULE:FREQ=DAILY;COUNT=2\nEND:VEVENT\n",
+            NOVEMBER.0,
+            NOVEMBER.1,
+        );
+        assert_eq!(
+            starts(&events),
+            ["2026-11-02T03:30:00Z", "2026-11-03T03:30:00Z"]
+        );
+        assert_eq!(events[1]["occurrence"], "20261103T090000");
+        assert_eq!(events[1]["time_zone"], "Office time");
+    }
+
+    #[test]
+    fn rdates_without_a_rule_keep_the_first_instance() {
+        let events = expanded(
+            "BEGIN:VEVENT\nUID:dates\nDTSTART:20261102T090000Z\nRDATE:20261105T090000Z,20261109T090000Z\nEXDATE:20261105T090000Z\nEND:VEVENT\n",
+            NOVEMBER.0,
+            NOVEMBER.1,
+        );
+        assert_eq!(
+            starts(&events),
+            ["2026-11-02T09:00:00Z", "2026-11-09T09:00:00Z"]
+        );
+    }
+
+    #[test]
+    fn duration_sets_the_end_when_dtend_is_absent() {
+        let events = expanded(
+            "BEGIN:VEVENT\nUID:timed\nDTSTART:20261102T090000Z\nDURATION:PT1H30M\nRRULE:FREQ=DAILY;COUNT=2\nEND:VEVENT\nBEGIN:VEVENT\nUID:week\nDTSTART;VALUE=DATE:20261103\nDURATION:P1W\nEND:VEVENT\nBEGIN:VEVENT\nUID:day\nDTSTART;VALUE=DATE:20261104\nEND:VEVENT\n",
+            NOVEMBER.0,
+            NOVEMBER.1,
+        );
+        let ends: Vec<&str> = events
+            .iter()
+            .map(|event| event["end"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            ends,
+            [
+                "2026-11-02T10:30:00Z",
+                "2026-11-03T10:30:00Z",
+                "2026-11-10",
+                "2026-11-05"
+            ]
+        );
     }
 
     #[test]

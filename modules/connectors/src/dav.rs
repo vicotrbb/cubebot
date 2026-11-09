@@ -727,7 +727,7 @@ pub(crate) struct Line {
 }
 
 /// The unfolded content lines of an iCalendar or vCard text.
-fn lines(text: &str) -> Vec<Line> {
+pub(crate) fn lines(text: &str) -> Vec<Line> {
     let unfolded = text
         .replace("\r\n", "\n")
         .replace("\n ", "")
