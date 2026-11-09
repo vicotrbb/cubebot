@@ -244,7 +244,7 @@ pub fn file(name: &str, content_type: Option<&str>, bytes: &[u8]) -> Value {
 
 /// A request that failed without an answer. One that was never sent did nothing; a read did
 /// nothing either way; anything else may have taken effect.
-fn failed(error: &reqwest::Error, reading: bool) -> Error {
+pub(crate) fn failed(error: &reqwest::Error, reading: bool) -> Error {
     if error.is_connect() || error.is_builder() || reading {
         let what = if error.is_timeout() {
             "timed out"
@@ -273,7 +273,7 @@ fn wait(response: &Response) -> Option<Duration> {
     Some(Duration::from_secs(seconds)).filter(|delay| *delay <= LONGEST_WAIT)
 }
 
-async fn refused(response: Response, reading: bool) -> Result<Response, Error> {
+pub(crate) async fn refused(response: Response, reading: bool) -> Result<Response, Error> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);

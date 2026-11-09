@@ -115,10 +115,7 @@ fn expand(
     let Some(first) = moment(lines, "DTSTART", zones) else {
         return Vec::new();
     };
-    let length = moment(lines, "DTEND", zones)
-        .map(|last| last.at - first.at)
-        .or_else(|| text(lines, "DURATION").and_then(duration))
-        .unwrap_or(TimeDelta::days(i64::from(first.date)));
+    let length = span(lines, &first, zones);
     let mut fields = json!({});
     lines.iter().for_each(|line| field(&mut fields, line));
     let event = |at, id: Option<&Moment>| {
@@ -178,6 +175,37 @@ fn expand(
             )
         })
         .collect()
+}
+
+/// How long an event lasts: to its DTEND, for its DURATION, or a day for a date without either.
+fn span(lines: &[Line], first: &Moment, zones: &Zones) -> TimeDelta {
+    moment(lines, "DTEND", zones)
+        .map(|last| last.at - first.at)
+        .or_else(|| text(lines, "DURATION").and_then(duration))
+        .unwrap_or(TimeDelta::days(i64::from(first.date)))
+}
+
+/// How long the occurrences of the series in `ics` last, as a DURATION value such as `PT1800S`
+/// or `P1D`.
+pub(crate) fn length(ics: &str) -> Option<String> {
+    let zones = zones(ics);
+    let events = vevents(ics);
+    let master = events
+        .iter()
+        .find(|lines| text(lines, "RECURRENCE-ID").is_none())?;
+    let first = moment(master, "DTSTART", &zones)?;
+    let length = span(master, &first, &zones);
+    Some(match first.date {
+        true => format!("P{}D", length.num_days()),
+        false => format!("PT{}S", length.num_seconds()),
+    })
+}
+
+/// `seconds` as a local time, such as `20261110T090000`, in the zone a TZID of `ics` names.
+pub(crate) fn local(ics: &str, tzid: &str, seconds: i64) -> Option<String> {
+    let zone = resolve(tzid, &zones(ics))?;
+    let at = DateTime::from_timestamp(seconds, 0)?.with_timezone(&zone);
+    Some(at.format("%Y%m%dT%H%M%S").to_string())
 }
 
 fn rule_set(lines: &[Line], first: &Moment, zones: &Zones) -> Result<RRuleSet, RRuleError> {
