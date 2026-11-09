@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { CalendarClock, Play, Webhook, Zap } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   api,
   failure,
@@ -20,6 +20,7 @@ import {
   Status,
   when,
 } from '../../components/primitives'
+import { useProfile } from '../shell/AboutYou'
 import './routines.css'
 
 const SCHEDULES = [
@@ -247,7 +248,7 @@ function describe(routine: Routine) {
       ? 'Managed by the agent'
       : 'Managed by a person'
   const schedule = routine.schedule
-    ? `next ${routine.next_at ? when(routine.next_at) : 'never'}`
+    ? `next ${routine.next_at ? when(routine.next_at) : 'never'}, on ${routine.time_zone.replaceAll('_', ' ')} time`
     : routine.trigger
       ? `Runs on ${routine.trigger.connection}'s ${routine.trigger.event}`
       : routine.webhook
@@ -567,7 +568,7 @@ function Triggers({
       </label>
       {scheduled && (
         <div className="trigger__more">
-          <Field label="Cron" hint="Five fields, in UTC">
+          <Field label="Cron" hint="Five fields, in the time zone below">
             <input
               name="schedule"
               required
@@ -594,6 +595,7 @@ function Triggers({
               </button>
             ))}
           </div>
+          <ZoneField existing={existing} />
         </div>
       )}
       {existing?.webhook ? (
@@ -622,6 +624,33 @@ function Triggers({
       )}
       <EventTrigger agent={agent} existing={existing} />
     </fieldset>
+  )
+}
+
+/** Defaults to the zone in the person's profile, else this device's. */
+function ZoneField({ existing }: { existing: Routine | undefined }) {
+  const profile = useProfile()
+  const zones = useMemo(() => Intl.supportedValuesOf('timeZone'), [])
+  const [chosen, setChosen] = useState(existing?.time_zone)
+  const zone =
+    chosen ??
+    (profile.data?.time_zone ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone)
+  return (
+    <Field label="Time zone">
+      <select
+        name="time_zone"
+        value={zone}
+        onChange={(event) => setChosen(event.target.value)}
+      >
+        {!zones.includes(zone) && <option value={zone}>{zone}</option>}
+        {zones.map((option) => (
+          <option key={option} value={option}>
+            {option.replaceAll('_', ' ')}
+          </option>
+        ))}
+      </select>
+    </Field>
   )
 }
 
@@ -732,6 +761,7 @@ function routineBody(data: FormData) {
     prompt: text('prompt'),
     command: text('command'),
     schedule: text('schedule'),
+    time_zone: text('time_zone'),
     coalesce: data.has('coalesce'),
     enabled: data.has('enabled'),
     trigger: trigger(text('trigger')),

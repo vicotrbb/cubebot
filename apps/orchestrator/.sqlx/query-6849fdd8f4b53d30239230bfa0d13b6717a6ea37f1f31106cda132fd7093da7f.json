@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE routines SET schedule=$2, time_zone=$3, next_at=to_timestamp($4) WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6849fdd8f4b53d30239230bfa0d13b6717a6ea37f1f31106cda132fd7093da7f"
+}

@@ -3926,6 +3926,8 @@ export interface components {
       /** Format: int64 */
       revision: number
       schedule?: string | null
+      /** @description The IANA zone the schedule is read in. */
+      time_zone: string
       trigger?: null | components['schemas']['Trigger']
       /** @description A webhook secret is set; it is shown only when made. */
       webhook: boolean
@@ -4001,8 +4003,10 @@ export interface components {
       enabled: boolean
       name: string
       prompt?: string | null
-      /** @description Five-field cron in UTC; `null` runs only by hand or webhook. */
+      /** @description Five-field cron in `time_zone`; `null` runs only by hand or webhook. */
       schedule?: string | null
+      /** @description The IANA zone the schedule is read in, such as `America/Sao_Paulo`; omitted or `null` is UTC. */
+      time_zone?: string | null
       trigger?: null | components['schemas']['Trigger']
     }
     SaveSingleSignOn: {

@@ -9492,6 +9492,7 @@
         "required": [
           "id",
           "name",
+          "time_zone",
           "coalesce",
           "enabled",
           "webhook",
@@ -9538,6 +9539,10 @@
           },
           "schedule": {
             "type": ["string", "null"]
+          },
+          "time_zone": {
+            "type": "string",
+            "description": "The IANA zone the schedule is read in."
           },
           "trigger": {
             "oneOf": [
@@ -9743,7 +9748,11 @@
           },
           "schedule": {
             "type": ["string", "null"],
-            "description": "Five-field cron in UTC; `null` runs only by hand or webhook."
+            "description": "Five-field cron in `time_zone`; `null` runs only by hand or webhook."
+          },
+          "time_zone": {
+            "type": ["string", "null"],
+            "description": "The IANA zone the schedule is read in, such as `America/Sao_Paulo`; omitted or `null` is UTC."
           },
           "trigger": {
             "oneOf": [

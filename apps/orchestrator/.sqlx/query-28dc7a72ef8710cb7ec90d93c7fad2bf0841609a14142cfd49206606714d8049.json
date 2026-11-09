@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, schedule AS \"schedule!\", time_zone\n        FROM routines\n        WHERE enabled AND next_at <= clock_timestamp() AND schedule IS NOT NULL\n        ORDER BY next_at\n        LIMIT 64\n        FOR UPDATE SKIP LOCKED\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "schedule!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "time_zone",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "28dc7a72ef8710cb7ec90d93c7fad2bf0841609a14142cfd49206606714d8049"
+}
