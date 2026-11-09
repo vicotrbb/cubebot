@@ -84,6 +84,9 @@ pub struct EventDetail {
     pub time_zone: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
+    /// The text fields shown cut short or not at all (`title`, `location`, `description`): a write
+    /// would replace the whole text, so they are changed in the vendor's own app.
+    pub partial: Vec<&'static str>,
     /// The event in the vendor's own app.
     pub link: Option<String>,
 }
@@ -108,7 +111,8 @@ pub struct Window {
     /// RFC 3339; at most 62 days before `to`.
     pub from: String,
     pub to: String,
-    /// The IANA zone days are counted in; the profile's, else UTC, when absent.
+    /// The IANA zone days are counted in and a floating CalDAV time is read in; the profile's,
+    /// else UTC, when absent.
     pub time_zone: Option<String>,
 }
 
@@ -209,7 +213,7 @@ impl Calendar {
         let bounds = bounds(&window.from, &window.to)?;
         let zone = self.zone(actor, window.time_zone.as_deref()).await?;
         let (events, routines) = tokio::join!(
-            self.events(actor.id, bounds),
+            self.events(actor.id, bounds, zone),
             routines::items(&self.pool, actor.id, bounds, zone)
         );
         let ((mut sources, mut items), (agents, routines)) = (events?, routines?);
@@ -240,6 +244,7 @@ impl Calendar {
         &self,
         viewer: Uuid,
         bounds: (i64, i64),
+        zone: Tz,
     ) -> Result<(Vec<Source>, Vec<Item>), IdentityError> {
         let Some(connections) = &self.connections else {
             return Ok(Default::default());
@@ -253,7 +258,7 @@ impl Calendar {
                     .iter()
                     .all(|tool| owned.offered.contains(tool))
             })
-            .map(|owned| events::read(connections, owned, bounds));
+            .map(|owned| events::read(connections, owned, bounds, zone));
         let (mut sources, mut items) = (Vec::new(), Vec::new());
         for (found, events) in join_all(read).await {
             sources.extend(found);

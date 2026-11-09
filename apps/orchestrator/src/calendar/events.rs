@@ -13,6 +13,10 @@ use uuid::Uuid;
 
 /// Pages of one calendar's events read at most, in case a vendor never stops paging.
 const PAGES: usize = 20;
+/// Google's connector cuts a description to this many characters and adds "…".
+const GOOGLE_TEXT: usize = 1000;
+/// CalDAV's connector cuts a text to this many characters, without a mark.
+const DAV_TEXT: usize = 500;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Vendor {
@@ -124,7 +128,14 @@ impl Vendor {
             .collect()
     }
 
-    fn events_input(self, calendar: &str, (from, to): (i64, i64), page: Option<&str>) -> Value {
+    /// A floating CalDAV time is read in the viewer's `zone`; Google and Microsoft have none.
+    fn events_input(
+        self,
+        calendar: &str,
+        (from, to): (i64, i64),
+        page: Option<&str>,
+        zone: Tz,
+    ) -> Value {
         let (from, to) = (utc(from), utc(to));
         match self {
             Self::Google => {
@@ -134,7 +145,10 @@ impl Vendor {
             Self::Microsoft => {
                 json!({"calendar": calendar, "start": from, "end": to, "limit": 500})
             }
-            Self::Dav => json!({"calendar": calendar, "start": from, "end": to, "limit": 2000}),
+            Self::Dav => json!({
+                "calendar": calendar, "start": from, "end": to, "limit": 2000,
+                "time_zone": zone.name(),
+            }),
         }
     }
 
@@ -233,8 +247,14 @@ pub(super) async fn read(
     connections: &Connections,
     owned: &Owned,
     bounds: (i64, i64),
+    zone: Tz,
 ) -> (Vec<Source>, Vec<Item>) {
-    within(BUDGET, owned, calendars_of(connections, owned, bounds)).await
+    within(
+        BUDGET,
+        owned,
+        calendars_of(connections, owned, bounds, zone),
+    )
+    .await
 }
 
 /// The read, or the connection's source with a problem when it takes longer than `budget`.
@@ -255,6 +275,7 @@ async fn calendars_of(
     connections: &Connections,
     owned: &Owned,
     bounds: (i64, i64),
+    zone: Tz,
 ) -> (Vec<Source>, Vec<Item>) {
     let tools = owned.vendor.tools();
     let listed = match owned.status.as_str() {
@@ -269,7 +290,7 @@ async fn calendars_of(
     // Collected first: a lazy map would make the future not `Send` for every lifetime.
     let read: Vec<_> = calendars
         .iter()
-        .map(|calendar| events_of(connections, owned, &calendar.id, bounds))
+        .map(|calendar| events_of(connections, owned, &calendar.id, (bounds, zone)))
         .collect();
     let found: Vec<_> = stream::iter(read).buffered(AT_ONCE).collect().await;
     let (mut sources, mut items) = (Vec::new(), Vec::new());
@@ -327,12 +348,14 @@ async fn events_of(
     connections: &Connections,
     owned: &Owned,
     calendar: &str,
-    bounds: (i64, i64),
+    (bounds, zone): ((i64, i64), Tz),
 ) -> Result<(Vec<Value>, bool), ConnectError> {
     let mut found = Vec::new();
     let mut page = None;
     for _ in 0..PAGES {
-        let input = owned.vendor.events_input(calendar, bounds, page.as_deref());
+        let input = owned
+            .vendor
+            .events_input(calendar, bounds, page.as_deref(), zone);
         let tool = owned.vendor.tools().events;
         let answer = connections.call_tool(owned.id, tool, input).await?;
         found.extend(answer["events"].as_array().into_iter().flatten().cloned());
@@ -381,17 +404,20 @@ fn normalize_google(event: &Value, place: &Place) -> Option<Item> {
         series: text(&event["series"]),
         ..Ids::default()
     };
-    item(event, "summary", ids, place)
+    let description = event["description"].as_str().unwrap_or_default();
+    let clipped = description.ends_with('…') && description.chars().count() > GOOGLE_TEXT;
+    let partial = clipped.then_some("description").into_iter().collect();
+    item(event, "summary", ids, partial, place)
 }
 
-/// Times come in UTC; an occurrence has its own id and names its series.
+/// Times come in UTC; an occurrence has its own id and names its series. Its body is never read.
 fn normalize_microsoft(event: &Value, place: &Place) -> Option<Item> {
     let ids = Ids {
         event: text(&event["id"])?,
         series: text(&event["series"]),
         ..Ids::default()
     };
-    item(event, "subject", ids, place)
+    item(event, "subject", ids, vec!["description"], place)
 }
 
 /// An occurrence is its event's href with the occurrence it is, in the event's own zone.
@@ -403,10 +429,28 @@ fn normalize_dav(event: &Value, place: &Place) -> Option<Item> {
         time_zone: text(&event["time_zone"]),
         ..Ids::default()
     };
-    item(event, "summary", ids, place)
+    // A text as long as the cut may have been longer.
+    let fields = [
+        ("summary", "title"),
+        ("location", "location"),
+        ("description", "description"),
+    ];
+    let partial = fields.into_iter().filter(|(key, _)| {
+        event[key]
+            .as_str()
+            .is_some_and(|text| text.chars().count() >= DAV_TEXT)
+    });
+    let partial = partial.map(|(_, field)| field).collect();
+    item(event, "summary", ids, partial, place)
 }
 
-fn item(event: &Value, title: &str, ids: Ids, place: &Place) -> Option<Item> {
+fn item(
+    event: &Value,
+    title: &str,
+    ids: Ids,
+    partial: Vec<&'static str>,
+    place: &Place,
+) -> Option<Item> {
     let start = shown(event["start"].as_str()?)?;
     let id = match &ids.occurrence {
         Some(occurrence) => format!("{}:{}:{occurrence}", place.source, ids.event),
@@ -431,6 +475,7 @@ fn item(event: &Value, title: &str, ids: Ids, place: &Place) -> Option<Item> {
             time_zone: ids.time_zone,
             location: text(&event["location"]),
             description: text(&event["description"]),
+            partial,
             link: text(&event["link"]),
         }),
         routine: None,
@@ -461,6 +506,7 @@ pub(super) fn created(new: &NewEvent, made: &Value) -> Item {
             time_zone: None,
             location: new.location.clone(),
             description: new.description.clone(),
+            partial: Vec::new(),
             link: text(&made["link"]),
         }),
         routine: None,
@@ -546,6 +592,48 @@ mod tests {
         );
         let quick = within(budget, &owned, async { (Vec::new(), Vec::new()) }).await;
         assert!(quick.0.is_empty());
+    }
+
+    #[test]
+    fn a_dav_read_takes_floating_times_in_the_viewers_zone() {
+        let zone: Tz = "America/Sao_Paulo".parse().unwrap();
+        let input = Vendor::Dav.events_input("/work/", (0, 86_400), None, zone);
+        assert_eq!(input["time_zone"], "America/Sao_Paulo");
+    }
+
+    /// The fields of `event` as `vendor` reads it that are shown cut short.
+    fn partial(vendor: Vendor, event: Value) -> Vec<&'static str> {
+        let item = vendor.item(&event, &place("calendar:x:work")).unwrap();
+        item.event.unwrap().partial
+    }
+
+    #[test]
+    fn text_a_vendor_cut_short_or_left_out_is_partial() {
+        let at = |more: Value| {
+            let mut event = json!({"id": "e1", "href": "/e1.ics", "summary": "Plan", "start": "2026-11-10T09:00:00Z"});
+            event
+                .as_object_mut()
+                .unwrap()
+                .extend(more.as_object().unwrap().clone());
+            event
+        };
+        let clipped = format!("{}…", "a".repeat(1000));
+        let google = |text: &str| partial(Vendor::Google, at(json!({"description": text})));
+        assert_eq!(google(&clipped), ["description"]);
+        assert!(google(&"a".repeat(1000)).is_empty());
+        assert!(google("Bring the slides…").is_empty());
+        // Microsoft never reads an event's body.
+        assert_eq!(partial(Vendor::Microsoft, at(json!({}))), ["description"]);
+        let dav = |more: Value| partial(Vendor::Dav, at(more));
+        let full = "b".repeat(500);
+        assert_eq!(
+            dav(json!({"summary": full, "location": "Room 1", "description": "c".repeat(499)})),
+            ["title"]
+        );
+        assert_eq!(
+            dav(json!({"location": full, "description": full})),
+            ["location", "description"]
+        );
     }
 
     #[test]

@@ -3110,6 +3110,11 @@ export interface components {
       link?: string | null
       location?: string | null
       occurrence?: string | null
+      /**
+       * @description The text fields shown cut short or not at all (`title`, `location`, `description`): a write
+       *     would replace the whole text, so they are changed in the vendor's own app.
+       */
+      partial: string[]
       series?: string | null
       /** @description The event's own zone, which a write of a CalDAV occurrence sends back as `time_zone`. */
       time_zone?: string | null
@@ -5878,7 +5883,10 @@ export interface operations {
         /** @description RFC 3339; at most 62 days before `to`. */
         from: string
         to: string
-        /** @description The IANA zone days are counted in; the profile's, else UTC, when absent. */
+        /**
+         * @description The IANA zone days are counted in and a floating CalDAV time is read in; the profile's,
+         *     else UTC, when absent.
+         */
         time_zone?: string
       }
       header?: never

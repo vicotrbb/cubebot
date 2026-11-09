@@ -1151,17 +1151,39 @@ dialog.cal-pop::backdrop {
   justify-content: space-between;
   gap: 8px;
 }
+/*
+ * Starts and Ends share one grid, so their dates line up: the date takes the room and the time
+ * column what the widest locale value needs ("10:00 PM" too).
+ */
 .cal-form__times {
   display: grid;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 12px 6px;
 }
-/* The date takes the room; a time takes what its locale's value needs ("10:00 PM" too). */
+.cal-form__times > .field,
 .cal-form__when {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  grid-auto-columns: max-content;
-  gap: 6px;
+  grid-template-columns: subgrid;
+}
+.cal-form__times > .field > span:first-child,
+.cal-form__when > :only-child {
+  grid-column: 1 / -1;
+}
+/* Text the vendor sent cut short or not at all: shown on the page's ground, never edited here. */
+.cal-form__kept {
+  margin: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--ground);
+  max-height: 7.5em;
+  overflow: auto;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-weight: 400;
+  color: var(--ink);
 }
 
 /* On phones New and Edit rise as a sheet, like the details sheet and iOS's New Event. */

@@ -20,6 +20,7 @@ import {
   Status,
   when,
 } from '../../components/primitives'
+import { scheduleWords } from '../calendar/model'
 import { useProfile } from '../shell/AboutYou'
 import './routines.css'
 
@@ -251,26 +252,13 @@ function useViewerZone() {
   )
 }
 
-function nextRun(at: string | null | undefined, zone: string) {
-  if (!at) return 'never'
-  return new Intl.DateTimeFormat(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: zone,
-    timeZoneName: 'short',
-  }).format(new Date(at))
-}
-
 function describe(routine: Routine, zone: string) {
   const managed =
     routine.managed_by === 'agent'
       ? 'Managed by the agent'
       : 'Managed by a person'
   const schedule = routine.schedule
-    ? `On ${routine.time_zone.replaceAll('_', ' ')} time, next ${nextRun(routine.next_at, zone)}`
+    ? scheduleWords(routine.schedule, routine.time_zone, routine.next_at, zone)
     : routine.trigger
       ? `Runs on ${routine.trigger.connection}'s ${routine.trigger.event}`
       : routine.webhook

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import {
@@ -11,17 +11,12 @@ import {
   Skeleton,
 } from '../../components/primitives'
 import { RoutineForm } from '../routines/Routines'
-import {
-  CALENDAR_KEY,
-  changeEvent,
-  createEvent,
-  eventRef,
-  useWrite,
-} from './api'
+import { CALENDAR_KEY, changeEvent, createEvent, useWrite } from './api'
 import {
   changes,
   cronOf,
   draftOf,
+  eventRef,
   newDraft,
   timesOf,
   withTimes,
@@ -175,6 +170,70 @@ function validate(draft: Draft) {
   return ''
 }
 
+const VENDORS: Record<string, string> = {
+  google: 'Google Calendar',
+  microsoft: 'Outlook',
+}
+const WEB = /^https?:\/\//i
+
+/** Where an event's own text is edited: its page in the vendor's app, else that app. */
+function original(item: Item, sources: Source[]) {
+  const connector = sources.find((each) => each.id === item.source)?.connector
+  const link = item.event?.link
+  return {
+    app: VENDORS[connector ?? ''] ?? 'your calendar app',
+    link: link && WEB.test(link) ? link : null,
+  }
+}
+
+type Text = 'title' | 'location' | 'description'
+
+/** A text the vendor sent cut short or not at all: saving it would replace the whole, so it is only shown. */
+function Kept({
+  label,
+  text,
+  where,
+}: {
+  label: string
+  text: string
+  where: ReturnType<typeof original>
+}) {
+  const noun = label === 'Notes' ? 'notes' : label.toLowerCase()
+  const edit = `Edit the full ${noun} in ${where.app}`
+  return (
+    <div className="field">
+      <span>{label}</span>
+      {text && <p className="cal-form__kept">{text}</p>}
+      <span className="hint">
+        {text ? 'Shown cut short here. ' : 'Not shown here. '}
+        {where.link ? (
+          <a href={where.link} target="_blank" rel="noopener noreferrer">
+            {edit}
+          </a>
+        ) : (
+          `${edit}.`
+        )}
+      </span>
+    </div>
+  )
+}
+
+/** A text field, or the vendor's text shown read-only when it arrived cut short. */
+function TextField({
+  label,
+  text,
+  where,
+  children,
+}: {
+  label: string
+  text: string
+  where: ReturnType<typeof original> | null
+  children: ReactNode
+}) {
+  if (where) return <Kept label={label} text={text} where={where} />
+  return <Field label={label}>{children}</Field>
+}
+
 /** A new event over a slot, or an existing one; a repeating one saves for one or all. */
 function EventForm({
   item,
@@ -193,6 +252,10 @@ function EventForm({
   const [error, setError] = useState('')
   const write = useWrite()
   const detail = item?.event
+  const partial = detail?.partial ?? []
+  const where = item ? original(item, sources) : null
+  // Where to edit a text instead, when it arrived cut short.
+  const kept = (field: Text) => (partial.includes(field) ? where : null)
   const repeats = Boolean(detail?.series || detail?.occurrence)
   const set = (patch: Partial<Draft>) => setDraft({ ...draft, ...patch })
   const time = (patch: Partial<Times>) => setTimes({ ...times, ...patch })
@@ -204,7 +267,7 @@ function EventForm({
       const problem = validate(after)
       setError(problem)
       if (problem) return
-      const change = changes(before, after)
+      const change = changes(before, after, partial)
       if (detail && !Object.keys(change).length) return onClose()
       await write.mutateAsync(() =>
         detail
@@ -240,7 +303,7 @@ function EventForm({
           </select>
         </Field>
       )}
-      <Field label="Title">
+      <TextField label="Title" text={draft.title} where={kept('title')}>
         <input
           value={draft.title}
           required
@@ -248,7 +311,7 @@ function EventForm({
           autoFocus
           onChange={(event) => set({ title: event.target.value })}
         />
-      </Field>
+      </TextField>
       <label className="check">
         <input
           type="checkbox"
@@ -258,21 +321,29 @@ function EventForm({
         All day
       </label>
       <TimesFields allDay={draft.all_day} times={times} onChange={time} />
-      <Field label="Location">
+      <TextField
+        label="Location"
+        text={draft.location}
+        where={kept('location')}
+      >
         <input
           value={draft.location}
           maxLength={1024}
           onChange={(event) => set({ location: event.target.value })}
         />
-      </Field>
-      <Field label="Notes">
+      </TextField>
+      <TextField
+        label="Notes"
+        text={draft.description}
+        where={kept('description')}
+      >
         <textarea
           rows={3}
           maxLength={8192}
           value={draft.description}
           onChange={(event) => set({ description: event.target.value })}
         />
-      </Field>
+      </TextField>
       <Alert>{error}</Alert>
       <div className="actions dialog__actions">
         <button

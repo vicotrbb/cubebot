@@ -23,14 +23,16 @@ import { useAgent } from '../../app/queries'
 import { Cube } from '../../components/Cube'
 import { Alert, confirmAction, Status } from '../../components/primitives'
 import { place } from '../agent/AgentHoverCard'
-import { eventRef, removeEvent, useWrite } from './api'
+import { removeEvent, useWrite } from './api'
 import {
   cadence,
   cronPhrase,
   digestDay,
+  eventRef,
   formatRange,
   formatTime,
   localDay,
+  placeOf,
   type Merged,
 } from './model'
 import {
@@ -375,7 +377,7 @@ function EventActions({ item, look, close, onEdit }: Actions & { item: Item }) {
 }
 
 function zoneNote(zone: string, viewer: string) {
-  return zone === viewer ? null : `On ${zone.replaceAll('_', ' ')} time`
+  return zone === viewer ? null : `${placeOf(zone)} time`
 }
 
 function RoutineBody({ item, look, close, onEdit }: Actions & { item: Item }) {

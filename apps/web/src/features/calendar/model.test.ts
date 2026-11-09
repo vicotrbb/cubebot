@@ -6,7 +6,9 @@ import {
   changes,
   cronOf,
   draftOf,
+  eventRef,
   instantOf,
+  scheduleWords,
   newDraft,
   timesOf,
   minutesOf,
@@ -213,6 +215,31 @@ describe('text', () => {
     expect(cronPhrase('*/7 3 1 * *')).toBeNull()
     expect(cronPhrase('60 25 * * *')).toBeNull()
     expect(cronPhrase('0 9 * * 9')).toBeNull()
+  })
+
+  test('a schedule names its own zone once and the next run in the reader’s', () => {
+    const next = '2026-11-10T14:00:00Z'
+    const there = scheduleWords(
+      '0 9 * * 1-5',
+      'America/New_York',
+      next,
+      'America/Sao_Paulo',
+    )
+    expect(there).toStartWith('Every weekday at 09:00, New York time · next ')
+    expect(there).toContain('11:00')
+    expect(there).toEndWith(' (your time)')
+    const here = scheduleWords(
+      '0 9 * * 1-5',
+      'America/New_York',
+      next,
+      'America/New_York',
+    )
+    expect(here).toStartWith('Every weekday at 09:00 · next ')
+    expect(here).toContain('09:00')
+    expect(here).not.toContain('your time')
+    expect(scheduleWords('*/7 3 1 * *', 'UTC', null, 'UTC')).toBe(
+      'On its schedule',
+    )
   })
 
   test('the viewer zone falls back to the browser zone', () => {
@@ -439,6 +466,7 @@ describe('writing', () => {
       event: 'e.ics',
       description: 'Agenda cut sh',
       location: 'Room 2',
+      partial: [],
     },
   }
 
@@ -475,6 +503,24 @@ describe('writing', () => {
     expect(changes(before, { ...before, description: 'New agenda' })).toEqual({
       description: 'New agenda',
     })
+  })
+
+  test('a field shown cut short is never sent, even when the form holds other text', () => {
+    const before = draftOf(event)
+    const after = { ...before, title: 'Review', description: 'Agenda' }
+    expect(changes(before, after, ['description'])).toEqual({ title: 'Review' })
+  })
+
+  test('a floating CalDAV occurrence is written floating, other events in the viewer zone', () => {
+    const detail = event.event
+    if (!detail) throw new Error('the fixture is an event')
+    const zone = (each: Partial<typeof detail>) =>
+      eventRef({ ...detail, ...each }, 'America/Sao_Paulo', 'one').time_zone
+    expect(zone({ occurrence: '20261110T090000', time_zone: null })).toBeNull()
+    expect(
+      zone({ occurrence: '20261110T090000', time_zone: 'Europe/Berlin' }),
+    ).toBe('Europe/Berlin')
+    expect(zone({})).toBe('America/Sao_Paulo')
   })
 
   test('turning an event all-day sends the flag with its dates', () => {

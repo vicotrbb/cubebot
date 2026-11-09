@@ -66,21 +66,3 @@ export const changeEvent = (body: Schemas['ChangeEvent']) =>
 
 export const removeEvent = (body: Schemas['RemoveEvent']) =>
   written(api.DELETE('/api/calendar/events', { body }))
-
-/** Names an event or its occurrence as its detail does; a CalDAV occurrence is read in its own zone. */
-export function eventRef(
-  detail: Schemas['EventDetail'],
-  zone: string,
-  scope: Schemas['EventScope'],
-) {
-  return {
-    connection: detail.connection,
-    calendar: detail.calendar,
-    event: detail.event,
-    etag: detail.etag ?? null,
-    occurrence: detail.occurrence ?? null,
-    series: detail.series ?? null,
-    time_zone: detail.time_zone ?? zone,
-    scope,
-  }
-}

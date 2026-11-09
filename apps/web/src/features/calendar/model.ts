@@ -253,6 +253,36 @@ function dayPhrase(weekday: string) {
   return name && `Every ${name}`
 }
 
+/**
+ * A routine's schedule read one way: its own zone named once when it is not the reader's, and
+ * the next run in the reader's zone.
+ */
+export function scheduleWords(
+  schedule: string,
+  zone: string,
+  next: string | null | undefined,
+  viewer: string,
+) {
+  const phrase = cronPhrase(schedule) ?? 'On its schedule'
+  const away = zone !== viewer
+  const own = away ? `${phrase}, ${placeOf(zone)} time` : phrase
+  if (!next) return own
+  const at = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: viewer,
+  }).format(new Date(next))
+  return `${own} · next ${at}${away ? ' (your time)' : ''}`
+}
+
+/** The place an IANA zone is named for: `America/New_York` is New York. */
+export const placeOf = (zone: string) =>
+  (zone.split('/').at(-1) ?? zone).replaceAll('_', ' ')
+
 /** A sentence for the common schedules; `null` means show the cron itself. */
 export function cronPhrase(schedule: string) {
   const [minute = '', hour = '', date, month, weekday = '', ...rest] = schedule
@@ -461,13 +491,18 @@ export function draftOf(item: Item): Draft {
 }
 
 /**
- * Only what the form changed. A description arrives cut short or absent, so it goes only when
- * edited; times go together, with the all-day flag when that changed.
+ * Only what the form changed. A text shown cut short or not at all (`partial`) never goes: it
+ * would replace the whole text. Times go together, with the all-day flag when that changed.
  */
-export function changes(before: Draft, after: Draft) {
+export function changes(
+  before: Draft,
+  after: Draft,
+  partial: readonly string[] = [],
+) {
   const changed: Partial<Draft> = {}
   for (const key of ['title', 'location', 'description'] as const)
-    if (after[key] !== before[key]) changed[key] = after[key]
+    if (after[key] !== before[key] && !partial.includes(key))
+      changed[key] = after[key]
   if (after.all_day !== before.all_day) changed.all_day = after.all_day
   const moved = (key: 'start' | 'end') =>
     Date.parse(after[key]) !== Date.parse(before[key])
@@ -476,6 +511,29 @@ export function changes(before: Draft, after: Draft) {
     changed.end = after.end
   }
   return changed
+}
+
+/**
+ * Names an event or its occurrence as its detail does. A CalDAV occurrence keeps its own zone,
+ * none for a floating time; other events are written in the viewer's.
+ */
+export function eventRef(
+  detail: Schemas['EventDetail'],
+  zone: string,
+  scope: Schemas['EventScope'],
+) {
+  return {
+    connection: detail.connection,
+    calendar: detail.calendar,
+    event: detail.event,
+    etag: detail.etag ?? null,
+    occurrence: detail.occurrence ?? null,
+    series: detail.series ?? null,
+    time_zone: detail.occurrence
+      ? (detail.time_zone ?? null)
+      : (detail.time_zone ?? zone),
+    scope,
+  }
 }
 
 /** One day of a merged digest; a day it does not cover answers with its first. */

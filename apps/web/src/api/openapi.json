@@ -1625,7 +1625,7 @@
           {
             "name": "time_zone",
             "in": "query",
-            "description": "The IANA zone days are counted in; the profile's, else UTC, when absent.",
+            "description": "The IANA zone days are counted in and a floating CalDAV time is read in; the profile's,\nelse UTC, when absent.",
             "required": false,
             "schema": {
               "type": "string"
@@ -7655,7 +7655,7 @@
       "EventDetail": {
         "type": "object",
         "description": "What a write names the event by. Google and Microsoft name an occurrence by its own `event`\nid and give its `series`; CalDAV names it by the event's href and its `occurrence`.",
-        "required": ["connection", "calendar", "event"],
+        "required": ["connection", "calendar", "event", "partial"],
         "properties": {
           "calendar": {
             "type": "string"
@@ -7682,6 +7682,13 @@
           },
           "occurrence": {
             "type": ["string", "null"]
+          },
+          "partial": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The text fields shown cut short or not at all (`title`, `location`, `description`): a write\nwould replace the whole text, so they are changed in the vendor's own app."
           },
           "series": {
             "type": ["string", "null"]
