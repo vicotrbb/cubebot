@@ -6,6 +6,7 @@ mod context;
 #[cfg(test)]
 mod contract;
 mod manifest;
+mod recurrence;
 mod registry;
 mod settings;
 #[cfg(test)]

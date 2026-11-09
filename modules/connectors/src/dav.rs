@@ -1,6 +1,7 @@
 //! CalDAV and CardDAV (RFC 4791, RFC 6352) with an app-specific password: iCloud, Fastmail,
 //! Nextcloud, Radicale and other servers. Collections are found from the server's address
 //! through the principal (RFC 5397), and the credential is only ever sent within that site.
+use crate::recurrence::occurrences;
 use crate::{
     Account, Answer, Auth, Category, Choice, Connector, Context, Error, Event, EventSpec, Field,
     FieldKind, Level, Manifest, Poll, Product, Risk, Step, ToolSpec,
@@ -16,7 +17,7 @@ const DAV: &str = "DAV:";
 const REDIRECTS: usize = 3;
 /// The most a PROPFIND or REPORT answer may hold.
 const LARGEST: usize = 5 * 1024 * 1024;
-const EVENTS: usize = 100;
+pub(crate) const EVENTS: usize = 100;
 const CONTACTS: usize = 50;
 /// The longest text field passed on, such as a description.
 const LONGEST: usize = 500;
@@ -151,7 +152,7 @@ static MANIFEST: Manifest = Manifest {
         },
         ToolSpec {
             name: "list_events",
-            description: "Events of a calendar between two times; repeating events come as their occurrences when the server expands them.",
+            description: "Events of a calendar between two times; repeating events come as their occurrences.",
             risk: Risk::Read,
             product: Some("calendar"),
             input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T00:00:00Z."},"end":{"type":"string","description":"RFC 3339."}},"required":["calendar","start","end"],"additionalProperties":false}"#,
@@ -536,7 +537,8 @@ async fn list_events(cx: &Context, input: Value) -> Result<Value, Error> {
     Ok(json!({"events": events}))
 }
 
-/// Events overlapping `start..end`, asking the server to expand repeating ones (RFC 4791 §9.6.5).
+/// Events overlapping `start..end`, asking the server to expand repeating ones (RFC 4791 §9.6.5)
+/// and expanding those it answers unexpanded.
 async fn events_between(
     cx: &Context,
     base: &Url,
@@ -544,15 +546,15 @@ async fn events_between(
     start: i64,
     end: i64,
 ) -> Result<Vec<Value>, Error> {
-    let (start, end) = (ical(start), ical(end));
+    let (from, until) = (ical(start), ical(end));
     let query = format!(
-        r#"<?xml version="1.0" encoding="utf-8"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data><c:expand start="{start}" end="{end}"/></c:calendar-data></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="{start}" end="{end}"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>"#
+        r#"<?xml version="1.0" encoding="utf-8"?><c:calendar-query xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:getetag/><c:calendar-data><c:expand start="{from}" end="{until}"/></c:calendar-data></d:prop><c:filter><c:comp-filter name="VCALENDAR"><c:comp-filter name="VEVENT"><c:time-range start="{from}" end="{until}"/></c:comp-filter></c:comp-filter></c:filter></c:calendar-query>"#
     );
     let (at, found) = read(cx, base, "REPORT", calendar, "1", &query).await?;
     let events = found.iter().flat_map(|entry| {
         let href = at.join(&entry.href).map(String::from).unwrap_or_default();
         let etag = entry.text("getetag").map(str::to_owned);
-        vevents(entry.text("calendar-data").unwrap_or_default())
+        occurrences(entry.text("calendar-data").unwrap_or_default(), start, end)
             .into_iter()
             .map(move |mut event| {
                 event["href"] = json!(href);
@@ -677,8 +679,7 @@ async fn poll(cx: &Context, cursor: Option<&str>) -> Result<Poll, Error> {
 }
 
 /// Whether a shown start such as `2026-11-05T09:30:00Z` is within [`SOON`] from `now`; all-day
-/// events have no start time and never are. shortcut: a TZID or floating start is compared as
-/// if it were UTC; servers that expand answer in UTC, which is the common case.
+/// events have no start time and never are.
 fn starting(start: &str, now: i64) -> bool {
     let Some(start) = start.get(..19) else {
         return false;
@@ -718,11 +719,11 @@ pub(crate) fn escape_xml(text: &str) -> String {
 }
 
 /// One content line (RFC 5545 §3.1, RFC 6350 §3.3).
-struct Line {
+pub(crate) struct Line {
     /// Upper-cased, without a group prefix such as Apple's `item1.`.
-    name: String,
-    params: String,
-    value: String,
+    pub(crate) name: String,
+    pub(crate) params: String,
+    pub(crate) value: String,
 }
 
 /// The unfolded content lines of an iCalendar or vCard text.
@@ -764,63 +765,41 @@ fn unescape(value: &str) -> String {
     clip(&text)
 }
 
-/// The VEVENTs of an iCalendar text, leaving out nested components such as alarms.
-fn vevents(ics: &str) -> Vec<Value> {
+/// The top-level content lines of each VEVENT of an iCalendar text, leaving out nested
+/// components such as alarms.
+pub(crate) fn vevents(ics: &str) -> Vec<Vec<Line>> {
     let mut events = Vec::new();
-    let mut current: Option<Value> = None;
+    let mut current: Option<Vec<Line>> = None;
     let mut nested = 0usize;
     for line in lines(ics) {
         let inside = current.is_some();
         match (line.name.as_str(), line.value.as_str()) {
-            ("BEGIN", "VEVENT") if !inside => current = Some(json!({})),
+            ("BEGIN", "VEVENT") if !inside => current = Some(Vec::new()),
             ("END", "VEVENT") if nested == 0 => events.extend(current.take()),
             ("BEGIN", _) if inside => nested += 1,
             ("END", _) if inside => nested = nested.saturating_sub(1),
-            _ if nested == 0 => current.iter_mut().for_each(|event| field(event, &line)),
+            _ if nested == 0 => {
+                if let Some(event) = current.as_mut() {
+                    event.push(line);
+                }
+            }
             _ => (),
         }
     }
     events
 }
 
-fn field(event: &mut Value, line: &Line) {
+/// The descriptive fields of an event; [`crate::recurrence`] adds its times.
+pub(crate) fn field(event: &mut Value, line: &Line) {
     let (key, value) = match line.name.as_str() {
         "UID" => ("uid", json!(clip(&line.value))),
         "SUMMARY" => ("summary", json!(unescape(&line.value))),
         "LOCATION" => ("location", json!(unescape(&line.value))),
         "DESCRIPTION" => ("description", json!(unescape(&line.value))),
-        "DTSTART" => ("start", json!(when(&line.params, &line.value))),
-        "DTEND" => ("end", json!(when(&line.params, &line.value))),
         "RRULE" => ("repeats", json!(clip(&line.value))),
         _ => return,
     };
     event[key] = value;
-}
-
-/// A DATE or DATE-TIME as `2026-11-05`, `2026-11-05T09:30:00Z` or, with its zone,
-/// `2026-11-05T09:30:00 Europe/Berlin`; anything else as given.
-fn when(params: &str, value: &str) -> String {
-    let zone = params
-        .split(';')
-        .find_map(|param| param.strip_prefix("TZID="))
-        .map(|zone| format!(" {}", zone.trim_matches('"')))
-        .unwrap_or_default();
-    let part = |range: std::ops::Range<usize>| value.get(range).unwrap_or_default();
-    let shown = match value.len() {
-        8 => format!("{}-{}-{}", part(0..4), part(4..6), part(6..8)),
-        15 | 16 => format!(
-            "{}-{}-{}T{}:{}:{}{}{zone}",
-            part(0..4),
-            part(4..6),
-            part(6..8),
-            part(9..11),
-            part(11..13),
-            part(13..15),
-            value.get(15..).unwrap_or_default(),
-        ),
-        _ => return clip(value),
-    };
-    if value.is_ascii() { shown } else { clip(value) }
 }
 
 fn contact(vcard: &str) -> Value {
@@ -1137,7 +1116,9 @@ mod tests {
             .unwrap();
         let planning = &listed["events"][0];
         assert_eq!(planning["summary"], "Planning, Q1");
-        assert_eq!(planning["start"], "2026-11-06T09:30:00 Europe/Berlin");
+        assert_eq!(planning["start"], "2026-11-06T08:30:00Z");
+        assert_eq!(planning["time_zone"], "Europe/Berlin");
+        assert_eq!(planning["occurrence"], Value::Null);
         assert_eq!(
             planning["description"],
             "Agenda: budget, hiring and the roadmap for the first quarter of next year.\nBring numbers."
@@ -1151,10 +1132,46 @@ mod tests {
         assert_eq!(holiday["start"], "2026-11-07");
         assert_eq!(holiday["end"], "2026-11-08");
         assert_eq!(holiday["repeats"], "FREQ=YEARLY");
+        assert_eq!(holiday["occurrence"], "20261107");
         let seen = fixture.finish().await;
         assert_eq!(seen[0].header("depth"), Some("1"));
         let range = r#"<c:time-range start="20261106T000000Z" end="20261108T000000Z"/>"#;
         assert!(seen[0].text().contains(range));
+    }
+
+    #[tokio::test]
+    async fn list_events_expands_a_master_the_server_did_not() {
+        let path = "/1234567890/calendars/home/";
+        let fixture = Fixture::start(vec![multistatus("REPORT", path, "master")]).await;
+        let calendar = format!("{}{}", fixture.origin(), &path[1..]);
+        let input = json!({"calendar": calendar, "start": "2026-10-12T00:00:00Z", "end": "2026-11-03T00:00:00Z"});
+        let listed = Dav
+            .call(&local(&fixture), "list_events", input)
+            .await
+            .unwrap();
+        let events = listed["events"].as_array().unwrap();
+        let shown: Vec<(&str, &str)> = events
+            .iter()
+            .map(|event| {
+                (
+                    event["start"].as_str().unwrap(),
+                    event["occurrence"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        let expected = [
+            ("2026-10-12T08:00:00Z", "20261012T100000"),
+            ("2026-11-02T09:00:00Z", "20261102T100000"),
+            ("2026-10-20T12:00:00Z", "20261019T100000"),
+        ];
+        assert_eq!(shown, expected);
+        assert_eq!(events[2]["summary"], "Team sync (Tuesday)");
+        assert_eq!(events[1]["time_zone"], "Europe/Berlin");
+        assert_eq!(events[1]["etag"], "\"lu4q2k7m\"");
+        assert_eq!(
+            events[1]["href"],
+            format!("{calendar}0C3E7A52-9B1F-4D6A-8E2C-5F4B3A291D07.ics")
+        );
     }
 
     #[tokio::test]

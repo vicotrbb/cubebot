@@ -849,12 +849,15 @@ version = "0.2.5"
 dependencies = [
  "async-imap",
  "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
  "futures-util",
  "hmac 0.12.1",
  "lettre",
  "mail-parser",
  "reqwest",
  "roxmltree",
+ "rrule",
  "rsa 0.9.10",
  "russh",
  "russh-sftp",
@@ -3676,6 +3679,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9da7f59328b09405b181fee1018925fad50f157afb43c0c0f5c522c256dd5907"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "rrule"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "720acfb4980b9d8a6a430f6d7a11933e701ebbeba5eee39cc9d8c5f932aaff74"
+dependencies = [
+ "chrono",
+ "chrono-tz",
+ "log",
+ "regex",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
