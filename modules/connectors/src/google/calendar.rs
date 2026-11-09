@@ -310,7 +310,8 @@ fn fields(change: &Change) -> Result<(Map<String, Value>, Option<Times<'_>>), Er
 }
 
 /// The new start and end: as given, or for a series the first occurrence moved as far as the
-/// edited occurrence on the wall clock of its zone, keeping the new length.
+/// edited occurrence on the wall clock of the series' own zone (`zone` only when it has none, as
+/// an all-day series), keeping the new length.
 fn moved(
     series: Option<(&Value, &Value)>,
     (start, end): Times,
@@ -319,8 +320,9 @@ fn moved(
     let Some((instance, master)) = series else {
         return Ok((time(start, zone), time(end, zone)));
     };
-    let name = zone
-        .or(master["start"]["timeZone"].as_str())
+    let name = master["start"]["timeZone"]
+        .as_str()
+        .or(zone)
         .ok_or_else(|| Error::Invalid("the series has no time zone; pass time_zone".into()))?;
     let tz: Tz = name
         .parse()

@@ -305,6 +305,29 @@ async fn calendar_update_event_with_all_keeps_wall_clock_across_dst() {
 }
 
 #[tokio::test]
+async fn calendar_update_event_with_all_keeps_the_series_in_its_own_zone() {
+    let events = "/www.googleapis.com/calendar/v3/calendars/primary/events";
+    let instance = json!({"id": "ny_20261110T140000Z", "recurringEventId": "ny", "originalStartTime": {"dateTime": "2026-11-10T09:00:00-05:00", "timeZone": "America/New_York"}});
+    let master = json!({"id": "ny", "start": {"dateTime": "2026-11-03T09:00:00-05:00", "timeZone": "America/New_York"}, "end": {"dateTime": "2026-11-03T10:00:00-05:00", "timeZone": "America/New_York"}});
+    let fixture = Fixture::start(vec![
+        get(&format!("{events}/ny_20261110T140000Z"), instance),
+        get(&format!("{events}/ny"), master.clone()),
+        Exchange::new("PATCH", &format!("{events}/ny"), 200, master),
+    ])
+    .await;
+    // A Berlin viewer moves the 09:00 New York occurrence an hour later: 16:00 in Berlin.
+    let input = json!({"event": "ny_20261110T140000Z", "all": true, "start": "2026-11-10T16:00:00+01:00", "end": "2026-11-10T17:00:00+01:00", "time_zone": "Europe/Berlin"});
+    call(&fixture, "calendar_update_event", input).await;
+    let sent = fixture.finish().await[2].json();
+    let zone = "America/New_York";
+    assert_eq!(
+        sent["start"],
+        json!({"dateTime": "2026-11-03T10:00:00", "date": null, "timeZone": zone})
+    );
+    assert_eq!(sent["end"]["timeZone"], zone);
+}
+
+#[tokio::test]
 async fn calendar_update_event_switches_to_all_day() {
     let path = "/www.googleapis.com/calendar/v3/calendars/primary/events/abc";
     let made = recorded("events")["items"][1].clone();

@@ -9,8 +9,11 @@ use serde_json::{Value, json};
 use std::str::FromStr;
 use windows_zones::WINDOWS_ZONES;
 
-/// Each VTIMEZONE's TZID with the zone it was resolved to.
-type Zones = Vec<(String, chrono_tz::Tz)>;
+/// Each VTIMEZONE's TZID with the zone it was resolved to, and the zone floating times are in.
+struct Zones {
+    described: Vec<(String, chrono_tz::Tz)>,
+    floating: chrono_tz::Tz,
+}
 
 /// A DTSTART, DTEND, RDATE, EXDATE or RECURRENCE-ID value.
 #[derive(Clone)]
@@ -23,7 +26,8 @@ struct Moment {
 }
 
 impl Moment {
-    /// Floating times, and zones neither known nor described by a VTIMEZONE, are taken as UTC.
+    /// A floating time is in the reader's zone; a zone neither known nor described by a
+    /// VTIMEZONE is taken as UTC.
     fn parse(params: &str, value: &str, zones: &Zones) -> Option<Self> {
         let zone = params
             .split(';')
@@ -41,8 +45,11 @@ impl Moment {
         let utc = value.ends_with('Z');
         let local =
             NaiveDateTime::parse_from_str(value.trim_end_matches('Z'), "%Y%m%dT%H%M%S").ok()?;
-        let named = zone.as_deref().and_then(|zone| resolve(zone, zones));
-        let tz = named.filter(|_| !utc).map_or(Tz::UTC, Tz::Tz);
+        let tz = match (utc, zone.as_deref()) {
+            (true, _) => Tz::UTC,
+            (false, None) => Tz::Tz(zones.floating),
+            (false, Some(zone)) => resolve(zone, zones).map_or(Tz::UTC, Tz::Tz),
+        };
         // A time skipped by a daylight-saving change is read as UTC rather than dropped.
         let at = tz
             .from_local_datetime(&local)
@@ -87,9 +94,14 @@ impl Moment {
 /// RECURRENCE-ID or EXDATE value carries it (`20261110T090000` in `time_zone`, `20261110T090000Z`,
 /// or `20261110` all day), and `null` for an event that does not repeat. A rule that cannot be
 /// read yields the master once rather than losing the event.
-/// At most `limit` occurrences of each event.
-pub(crate) fn occurrences(ics: &str, (start, end): (i64, i64), limit: usize) -> Vec<Value> {
-    let zones = zones(ics);
+/// At most `limit` occurrences of each event; floating times are in the zone `floating`.
+pub(crate) fn occurrences(
+    ics: &str,
+    (start, end): (i64, i64),
+    limit: usize,
+    floating: chrono_tz::Tz,
+) -> Vec<Value> {
+    let zones = zones(ics, floating);
     let components = vevents(ics);
     let moved: Vec<(String, DateTime<Tz>)> = components
         .iter()
@@ -189,7 +201,7 @@ fn span(lines: &[Line], first: &Moment, zones: &Zones) -> TimeDelta {
 /// How long the occurrences of the series in `ics` last, as a DURATION value such as `PT1800S`
 /// or `P1D`.
 pub(crate) fn length(ics: &str) -> Option<String> {
-    let zones = zones(ics);
+    let zones = zones(ics, chrono_tz::UTC);
     let events = vevents(ics);
     let master = events
         .iter()
@@ -204,9 +216,16 @@ pub(crate) fn length(ics: &str) -> Option<String> {
 
 /// `seconds` as a local time, such as `20261110T090000`, in the zone a TZID of `ics` names.
 pub(crate) fn local(ics: &str, tzid: &str, seconds: i64) -> Option<String> {
-    let zone = resolve(tzid, &zones(ics))?;
+    let zone = resolve(tzid, &zones(ics, chrono_tz::UTC))?;
     let at = DateTime::from_timestamp(seconds, 0)?.with_timezone(&zone);
     Some(at.format("%Y%m%dT%H%M%S").to_string())
+}
+
+/// When a RECURRENCE-ID or EXDATE value with its parameters happens in the zones of `ics`, so
+/// `20261019T080000Z` and `TZID=Europe/Berlin:20261019T100000` name one occurrence.
+pub(crate) fn instant(ics: &str, params: &str, value: &str) -> Option<i64> {
+    let zones = zones(ics, chrono_tz::UTC);
+    Moment::parse(params, value, &zones).map(|moment| moment.at.timestamp())
 }
 
 fn rule_set(lines: &[Line], first: &Moment, zones: &Zones) -> Result<RRuleSet, RRuleError> {
@@ -285,7 +304,7 @@ fn duration(value: &str) -> Option<TimeDelta> {
 
 /// Each VTIMEZONE's TZID resolved by name, then its `X-LIC-LOCATION`, then as a Windows name,
 /// then by its standard offset.
-fn zones(ics: &str) -> Zones {
+fn zones(ics: &str, floating: chrono_tz::Tz) -> Zones {
     let mut zones = Vec::new();
     let (mut tzid, mut location, mut offset) = (None, None, None);
     let mut standard = false;
@@ -308,12 +327,15 @@ fn zones(ics: &str) -> Zones {
             _ => (),
         }
     }
-    zones
+    Zones {
+        described: zones,
+        floating,
+    }
 }
 
 /// The zone a TZID names, through its VTIMEZONE when the calendar has one.
 fn resolve(tzid: &str, zones: &Zones) -> Option<chrono_tz::Tz> {
-    let described = zones.iter().find(|(id, _)| id == tzid);
+    let described = zones.described.iter().find(|(id, _)| id == tzid);
     described
         .map(|(_, zone)| *zone)
         .or_else(|| named(tzid))
@@ -374,7 +396,12 @@ mod tests {
     /// The occurrences of a calendar holding `vevents` between two RFC 3339 times.
     fn expanded(vevents: &str, start: &str, end: &str) -> Vec<Value> {
         let ics = format!("BEGIN:VCALENDAR\nVERSION:2.0\n{vevents}END:VCALENDAR\n");
-        occurrences(&ics, (at(start), at(end)), crate::dav::EVENTS)
+        occurrences(
+            &ics,
+            (at(start), at(end)),
+            crate::dav::EVENTS,
+            chrono_tz::UTC,
+        )
     }
 
     fn starts(events: &[Value]) -> Vec<&str> {
@@ -410,6 +437,21 @@ mod tests {
         assert_eq!(events[1]["occurrence"], "20261104T090000Z");
         assert_eq!(events[1]["summary"], "Sync");
         assert_eq!(events[1]["all_day"], false);
+        assert_eq!(events[1]["time_zone"], Value::Null);
+    }
+
+    #[test]
+    fn floating_times_are_on_the_readers_wall_clock() {
+        let ics = "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:run\nDTSTART:20261102T090000\nDTEND:20261102T100000\nRRULE:FREQ=DAILY;COUNT=2\nEND:VEVENT\nEND:VCALENDAR\n";
+        let sao_paulo = "America/Sao_Paulo".parse().unwrap();
+        let bounds = (at(NOVEMBER.0), at(NOVEMBER.1));
+        let events = occurrences(ics, bounds, crate::dav::EVENTS, sao_paulo);
+        assert_eq!(
+            starts(&events),
+            ["2026-11-02T12:00:00Z", "2026-11-03T12:00:00Z"]
+        );
+        // Still floating, so a write names it as it was written.
+        assert_eq!(events[1]["occurrence"], "20261103T090000");
         assert_eq!(events[1]["time_zone"], Value::Null);
     }
 

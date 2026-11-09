@@ -158,7 +158,7 @@ static MANIFEST: Manifest = Manifest {
             description: "Events of a calendar between two times; repeating events come as their occurrences.",
             risk: Risk::Read,
             product: Some("calendar"),
-            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T00:00:00Z."},"end":{"type":"string","description":"RFC 3339."},"limit":{"type":"integer","minimum":1,"maximum":2000,"description":"The most occurrences to answer, 100 when absent; more says whether others were left out."}},"required":["calendar","start","end"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T00:00:00Z."},"end":{"type":"string","description":"RFC 3339."},"limit":{"type":"integer","minimum":1,"maximum":2000,"description":"The most occurrences to answer, 100 when absent; more says whether others were left out."},"time_zone":{"type":"string","description":"The IANA zone an event without one (a floating time) is read in; UTC when absent."}},"required":["calendar","start","end"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "create_event",
@@ -230,6 +230,7 @@ struct Between {
     start: String,
     end: String,
     limit: Option<usize>,
+    time_zone: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -566,22 +567,29 @@ async fn list_events(cx: &Context, input: Value) -> Result<Value, Error> {
         return Err(Error::Invalid(format!("limit is 1 to {MOST_EVENTS}")));
     }
     let (start, end) = (seconds(&between.start)?, seconds(&between.end)?);
+    let floating = match between.time_zone.as_deref() {
+        Some(name) => crate::recurrence::zone(name)
+            .ok_or_else(|| Error::Invalid(format!("{name} is not a time zone")))?,
+        None => chrono_tz::UTC,
+    };
     let base = base(cx, &CALENDARS)?;
     let calendar = address(&between.calendar)?;
-    let mut events = events_between(cx, &base, calendar, (start, end), limit + 1).await?;
+    let window = (start, end);
+    let mut events = events_between(cx, &base, calendar, window, limit + 1, floating).await?;
     let more = events.len() > limit;
     events.truncate(limit);
     Ok(json!({"events": events, "more": more}))
 }
 
 /// Events overlapping `start..end`, asking the server to expand repeating ones (RFC 4791 §9.6.5)
-/// and expanding those it answers unexpanded.
+/// and expanding those it answers unexpanded; floating times are in the zone `floating`.
 async fn events_between(
     cx: &Context,
     base: &Url,
     calendar: Url,
     (start, end): (i64, i64),
     limit: usize,
+    floating: chrono_tz::Tz,
 ) -> Result<Vec<Value>, Error> {
     let (from, until) = (ical(start), ical(end));
     let query = format!(
@@ -595,6 +603,7 @@ async fn events_between(
             entry.text("calendar-data").unwrap_or_default(),
             (start, end),
             limit,
+            floating,
         )
         .into_iter()
         .map(move |mut event| {
@@ -684,7 +693,7 @@ async fn skip(cx: &Context, delete: &Delete, occurrence: &Occurrence) -> Result<
     );
     parts[master].insert(1, exdate);
     bump(&mut parts[master]);
-    if let Some(moved) = overridden(&parts, occurrence) {
+    if let Some(moved) = overridden(&parts, occurrence, &ics) {
         parts.remove(moved);
     }
     store(cx, &base, &url, delete.etag.clone().or(read), &parts).await?;
@@ -769,7 +778,8 @@ async fn poll(cx: &Context, cursor: Option<&str>) -> Result<Poll, Error> {
         .into_iter()
         .take(POLLED)
     {
-        for event in events_between(cx, &base, calendar, (now, now + SOON), EVENTS).await? {
+        let soon = (now, now + SOON);
+        for event in events_between(cx, &base, calendar, soon, EVENTS, chrono_tz::UTC).await? {
             let start = event["start"].as_str().unwrap_or_default();
             let id = format!("{}@{}", event["uid"].as_str().unwrap_or_default(), start);
             if !starting(start, now) || reported.contains(&id) {
@@ -1167,11 +1177,15 @@ fn master(parts: &[Vec<Line>]) -> Result<usize, Error> {
     found.ok_or_else(|| Error::NotFound("the resource holds no event to change".into()))
 }
 
-/// The override already written for `occurrence`.
-fn overridden(parts: &[Vec<Line>], occurrence: &Occurrence) -> Option<usize> {
+/// The override already written for `occurrence`, whichever form its RECURRENCE-ID takes.
+fn overridden(parts: &[Vec<Line>], occurrence: &Occurrence, ics: &str) -> Option<usize> {
+    let master = &parts[master(parts).ok()?];
+    let named = |params: &str, value: &str| crate::recurrence::instant(ics, params, value);
+    let wanted = named(&occurrence.params(master), &occurrence.value)?;
     parts.iter().position(|part| {
         is_event(part)
-            && property(part, "RECURRENCE-ID").is_some_and(|at| part[at].value == occurrence.value)
+            && property(part, "RECURRENCE-ID")
+                .is_some_and(|at| named(&part[at].params, &part[at].value) == Some(wanted))
     })
 }
 
@@ -1263,14 +1277,14 @@ impl Edit<'_> {
         }
         bump(event);
         if let (Some(from), Some(to)) = (from, start(&parts[master])) {
-            shift(parts, &from, &to);
+            shift(parts, &from, &to)?;
         }
         Ok(())
     }
 
     /// Changes one occurrence through its override, made from the master if there is none yet.
     fn one(&self, parts: &mut Vec<Vec<Line>>, occurrence: &Occurrence) -> Result<(), Error> {
-        let at = match overridden(parts, occurrence) {
+        let at = match overridden(parts, occurrence, self.ics) {
             Some(at) => at,
             None => {
                 let made = self.override_of(&parts[master(parts)?], occurrence);
@@ -1363,9 +1377,9 @@ fn delta(from: &str, to: &str) -> Option<TimeDelta> {
 
 /// Moves the series' rule and exceptions along with its start, so they keep naming the same
 /// occurrences.
-fn shift(parts: &mut [Vec<Line>], from: &str, to: &str) {
+fn shift(parts: &mut [Vec<Line>], from: &str, to: &str) -> Result<(), Error> {
     let (Some(delta), Some(from), Some(to)) = (delta(from, to), instant(from), instant(to)) else {
-        return;
+        return Ok(());
     };
     let days = (to.date() - from.date()).num_days();
     for event in parts.iter_mut().filter(|part| is_event(part)) {
@@ -1380,7 +1394,7 @@ fn shift(parts: &mut [Vec<Line>], from: &str, to: &str) {
         for at in dated {
             let line = &mut event[at];
             line.value = match line.name.as_str() {
-                "RRULE" => rule(&line.value, delta, days),
+                "RRULE" => rule(&line.value, delta, days)?,
                 _ => {
                     let values = line.value.split(',').map(|value| moved(value, delta));
                     values.collect::<Vec<_>>().join(",")
@@ -1388,13 +1402,24 @@ fn shift(parts: &mut [Vec<Line>], from: &str, to: &str) {
             };
         }
     }
+    Ok(())
 }
 
 const WEEKDAYS: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 
-/// A rule moved `days` days along with its series: its weekdays and its UNTIL. shortcut:
-/// BYMONTHDAY, BYYEARDAY and BYMONTH stay; move them too if series move across those.
-fn rule(rule: &str, delta: TimeDelta, days: i64) -> String {
+/// A rule moved `days` days along with its series: its weekdays and its UNTIL. One on set days of
+/// the month or year, such as the second Tuesday, is refused: shifting those would pick other days.
+fn rule(rule: &str, delta: TimeDelta, days: i64) -> Result<String, Error> {
+    let set = |part: &str| match part.split_once('=') {
+        Some(("BYMONTHDAY" | "BYMONTH" | "BYYEARDAY" | "BYWEEKNO" | "BYSETPOS", _)) => true,
+        Some(("BYDAY", list)) => list.split(',').any(|day| day.len() > 2),
+        _ => false,
+    };
+    if days != 0 && rule.split(';').any(set) {
+        return Err(Error::Invalid(
+            "this series repeats on set days of the month or year; move it to another day in its calendar app".into(),
+        ));
+    }
     let weekday = |day: &str| {
         let (ordinal, code) = day.split_at(day.len().saturating_sub(2));
         let at = WEEKDAYS.iter().position(|weekday| *weekday == code);
@@ -1416,7 +1441,7 @@ fn rule(rule: &str, delta: TimeDelta, days: i64) -> String {
         Some(("UNTIL", until)) => format!("UNTIL={}", moved(until, delta)),
         _ => part.to_owned(),
     };
-    rule.split(';').map(part).collect::<Vec<_>>().join(";")
+    Ok(rule.split(';').map(part).collect::<Vec<_>>().join(";"))
 }
 
 /// A value moved by `delta` in its own form; one that is not a time, such as a period, stays.
@@ -1913,7 +1938,7 @@ mod tests {
             seconds("2026-10-01T00:00:00Z"),
             seconds("2026-11-03T00:00:00Z"),
         );
-        let shown = occurrences(sent, (start.unwrap(), end.unwrap()), EVENTS);
+        let shown = occurrences(sent, (start.unwrap(), end.unwrap()), EVENTS, chrono_tz::UTC);
         let text = |event: &Value, key: &str| event[key].as_str().unwrap().to_owned();
         let mut shown: Vec<_> = shown
             .iter()
@@ -2073,6 +2098,54 @@ mod tests {
         assert_eq!(october(&sent), kept);
     }
 
+    /// Servers expand a series with RECURRENCE-IDs in UTC (RFC 4791 §9.6.5), while the override
+    /// a client wrote names the same occurrence in its own zone.
+    #[tokio::test]
+    async fn an_expanded_utc_occurrence_is_the_override_written_in_its_zone() {
+        let input = json!({"occurrence": "20261019T080000Z", "summary": "Team sync (moved)"});
+        let (answer, seen) = written(input, "update_event", 204).await;
+        answer.unwrap();
+        let sent = seen[1].text();
+        assert_eq!(sent.matches("RECURRENCE-ID").count(), 1, "{sent}");
+        let moved = (
+            "2026-10-20T12:00:00Z",
+            "2026-10-20T12:30:00Z",
+            "Team sync (moved)",
+        );
+        let kept = weekly(&[("-", "2026-10-20T12:00:00Z", ""), moved]);
+        assert_eq!(october(&sent), kept);
+
+        let input = json!({"occurrence": "20261019T080000Z"});
+        let (answer, seen) = written(input, "delete_event", 204).await;
+        answer.unwrap();
+        let sent = seen[1].text();
+        assert!(!sent.contains("RECURRENCE-ID"), "{sent}");
+        assert_eq!(october(&sent), weekly(&[("-", "2026-10-20T12:00:00Z", "")]));
+    }
+
+    #[test]
+    fn a_rule_on_set_days_of_the_month_or_year_is_not_moved_to_another_day() {
+        let hour = TimeDelta::hours(1);
+        let weekly = rule("FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261130T090000Z", hour, 1);
+        assert_eq!(
+            weekly.unwrap(),
+            "FREQ=WEEKLY;BYDAY=TU,TH;UNTIL=20261130T100000Z"
+        );
+        for set in [
+            "FREQ=MONTHLY;BYDAY=2TU",
+            "FREQ=MONTHLY;BYMONTHDAY=10",
+            "FREQ=YEARLY;BYMONTH=11",
+            "FREQ=YEARLY;BYYEARDAY=100",
+            "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1",
+        ] {
+            assert!(
+                matches!(rule(set, hour, 1), Err(Error::Invalid(_))),
+                "{set}"
+            );
+            assert_eq!(rule(set, hour, 0).unwrap(), set, "the same day keeps it");
+        }
+    }
+
     /// The 2026-10-26 instance is an EXDATE in the recording, so the 10-12 one is moved.
     #[tokio::test]
     async fn moving_one_occurrence_with_all_shifts_the_series_by_its_delta() {
@@ -2126,7 +2199,12 @@ mod tests {
         let sent = fixture.finish().await[0].text();
         let days = "DTSTART;VALUE=DATE:20261107\r\nDTEND;VALUE=DATE:20261108\r\n";
         assert!(sent.contains(days), "{sent}");
-        let shown = occurrences(&sent, (1_790_000_000, 1_800_000_000), EVENTS);
+        let shown = occurrences(
+            &sent,
+            (1_790_000_000, 1_800_000_000),
+            EVENTS,
+            chrono_tz::UTC,
+        );
         assert_eq!(shown[0]["start"], "2026-11-07");
         assert_eq!(shown[0]["end"], "2026-11-08");
         assert_eq!(shown[0]["all_day"], true);

@@ -938,7 +938,9 @@ fn moved_recurrence(
 }
 
 /// The series' new start, end and recurrence: its first occurrence moved as far as the edited
-/// occurrence on the wall clock of the zone, keeping the new length.
+/// occurrence on the wall clock of the series' own zone, keeping the new length. `start` and `end`
+/// are wall-clock times in `zone_name`, else in the series' zone, which is `zone_name` only for a
+/// series without a known one.
 async fn shifted(
     cx: &Context,
     (master, occurrence): (&str, &Value),
@@ -948,17 +950,25 @@ async fn shifted(
     let select = query(&[("$select", "start,recurrence")]);
     let request = cx.get(&format!("{}{select}", event_path(master)))?;
     let first = cx.json(request.header("prefer", UTC)).await?;
-    let name = zone_name
-        .or(occurrence["originalStartTimeZone"].as_str())
+    let own = occurrence["originalStartTimeZone"].as_str();
+    let name = own
+        .filter(|own| crate::recurrence::zone(own).is_some())
+        .or(zone_name)
         .ok_or_else(|| Error::Invalid("the series has no time zone; pass time_zone".into()))?;
     let tz = zone(name)?;
+    let given = zone_name.map(zone).transpose()?.unwrap_or(tz);
+    let in_own = |wall: NaiveDateTime| {
+        let at = given.from_local_datetime(&wall).earliest();
+        at.map(|at| at.with_timezone(&tz).naive_local())
+            .ok_or_else(|| Error::Invalid(format!("{wall} is not a time in {}", given.name())))
+    };
     let originally = occurrence["originalStart"].as_str().unwrap_or_default();
     let originally = DateTime::parse_from_rfc3339(originally)
         .map_err(|_| Error::Invalid(format!("{originally} is not a time")))?;
     let was = tz.from_utc_datetime(&originally.naive_utc()).naive_local();
     let began = wall_clock(first["start"]["dateTime"].as_str().unwrap_or_default())?;
     let began = tz.from_utc_datetime(&began).naive_local();
-    let (start, end) = (wall_clock(start)?, wall_clock(end)?);
+    let (start, end) = (in_own(wall_clock(start)?)?, in_own(wall_clock(end)?)?);
     let from = began + (start - was);
     let render = |at: NaiveDateTime| json!({"dateTime": at.format("%Y-%m-%dT%H:%M:%S").to_string(), "timeZone": name});
     let mut moved = Map::new();
@@ -1658,6 +1668,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn calendar_update_event_with_all_keeps_the_series_in_its_own_zone() {
+        let recurrence = json!({
+            "pattern": {"type": "weekly", "interval": 1, "daysOfWeek": ["tuesday"], "firstDayOfWeek": "sunday"},
+            "range": {"type": "noEnd", "startDate": "2026-11-03", "recurrenceTimeZone": "Eastern Standard Time"},
+        });
+        let master = json!({"id": "AAMkMaster", "start": {"dateTime": "2026-11-03T14:00:00.0000000", "timeZone": "UTC"}, "end": {"dateTime": "2026-11-03T15:00:00.0000000", "timeZone": "UTC"}, "recurrence": recurrence});
+        let fixture = Fixture::start(series_fixture(master, "2026-11-10T14:00:00Z")).await;
+        // A Berlin viewer moves the 09:00 New York occurrence to 23:00 in Berlin, the same evening there.
+        let input = json!({"event": "AAMkOcc", "all": true, "start": "2026-11-10T23:00:00", "end": "2026-11-11T00:00:00", "time_zone": "Europe/Berlin"});
+        Microsoft
+            .call(&cx(&fixture), "calendar_update_event", input)
+            .await
+            .unwrap();
+        let sent = fixture.finish().await[2].json();
+        let zone = "Eastern Standard Time";
+        assert_eq!(
+            sent["start"],
+            json!({"dateTime": "2026-11-03T17:00:00", "timeZone": zone})
+        );
+        assert_eq!(sent["end"]["dateTime"], "2026-11-03T18:00:00");
+        assert!(sent["recurrence"].is_null(), "the same day in New York");
+    }
+
+    #[tokio::test]
     async fn calendar_update_event_with_all_moves_a_weekly_pattern() {
         let recurrence = json!({
             "pattern": {"type": "weekly", "interval": 1, "daysOfWeek": ["monday"], "firstDayOfWeek": "sunday"},
@@ -1705,7 +1739,7 @@ mod tests {
             assert_eq!(sent["recurrence"]["pattern"]["daysOfWeek"], json!(days));
             assert_eq!(sent["recurrence"]["pattern"]["firstDayOfWeek"], week);
             let range = &sent["recurrence"]["range"];
-            assert_eq!(range["recurrenceTimeZone"], "America/New_York");
+            assert_eq!(range["recurrenceTimeZone"], "Eastern Standard Time");
         }
     }
 
