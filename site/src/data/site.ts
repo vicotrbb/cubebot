@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.5'
-export const released = '2026-11-08'
+export const version = 'v0.2.6'
+export const released = '2026-11-09'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -71,6 +71,7 @@ export const status = {
     'Usage tracking, daily and monthly budgets per agent',
     'Profiles agents read: who you are and how you work',
     'Backups to S3-compatible storage, restore into a new install',
+    'A calendar with your events and every routine run',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -129,6 +130,12 @@ export const timeline = [
     title: 'Agent teams',
     body: 'Managers, roles and an org chart.',
   },
+  {
+    date: 'Nov 9',
+    datetime: '2026-11-09',
+    title: 'Calendar',
+    body: 'Your events and agent routines together.',
+  },
 ] as const
 
 export const next = [
@@ -137,6 +144,18 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.6',
+    date: '2026-11-09',
+    title: 'Calendar',
+    items: [
+      'A calendar with your Google, Microsoft 365 and CalDAV events beside every routine run, past and planned',
+      'Create, edit and delete events and routines from the calendar, one occurrence or the whole series',
+      'Routines run in their own time zone and keep their time across daylight saving',
+      'Repeating CalDAV events expand with their exceptions and moved occurrences',
+      'An iOS-friendly home-screen icon and name',
+    ],
+  },
   {
     tag: 'v0.2.5',
     date: '2026-11-08',
