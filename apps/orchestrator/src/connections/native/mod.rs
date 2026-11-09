@@ -48,6 +48,8 @@ pub enum ConnectError {
     Refused(String),
     /// The vendor refused the credential itself: a person must sign in again.
     SignInAgain,
+    /// The vendor could not be reached or failed before acting, so nothing was done.
+    Unavailable(String),
 }
 impl From<IdentityError> for ConnectError {
     fn from(error: IdentityError) -> Self {
@@ -542,9 +544,11 @@ impl Connections {
                 None,
                 Some("The account refused the credential; sign in again."),
             ),
-            Err(ConnectError::Refused(problem) | ConnectError::Invalid(problem)) => {
-                ("error", None, Some(problem.as_str()))
-            }
+            Err(
+                ConnectError::Refused(problem)
+                | ConnectError::Invalid(problem)
+                | ConnectError::Unavailable(problem),
+            ) => ("error", None, Some(problem.as_str())),
             Err(ConnectError::Identity(_)) => {
                 ("error", None, Some("The credential could not be opened."))
             }
@@ -699,6 +703,9 @@ impl Connections {
                 Err(ConnectError::SignInAgain)
             }
             Err(cubebot_connectors::Error::Invalid(problem)) => Err(ConnectError::Invalid(problem)),
+            Err(cubebot_connectors::Error::Unavailable(problem)) => {
+                Err(ConnectError::Unavailable(problem))
+            }
             Err(error) => Err(ConnectError::Refused(refusal(&error))),
         }
     }

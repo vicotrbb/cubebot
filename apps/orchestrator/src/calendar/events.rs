@@ -349,6 +349,12 @@ fn problem(error: &ConnectError) -> String {
         ConnectError::SignInAgain => "The account refused the credential; sign in again.".into(),
         ConnectError::Refused(text) | ConnectError::Invalid(text) => text.clone(),
         ConnectError::Identity(_) => "The connection could not be opened.".into(),
+        // A read changes nothing, so only the reason is worth saying: "Could not reach the server."
+        ConnectError::Unavailable(reason) => {
+            let mut chars = reason.chars();
+            let first = chars.next().map(|c| c.to_uppercase().collect::<String>());
+            format!("{}{}.", first.unwrap_or_default(), chars.as_str())
+        }
     }
 }
 

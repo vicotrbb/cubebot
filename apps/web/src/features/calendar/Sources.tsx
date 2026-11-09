@@ -68,7 +68,7 @@ export function Sources({
   )
 }
 
-function NoCalendars({ administrator }: { administrator: boolean }) {
+export function NoCalendars({ administrator }: { administrator: boolean }) {
   if (!administrator)
     return (
       <p className="cal-sources__note">

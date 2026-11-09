@@ -19,15 +19,13 @@
 }
 
 /* Head: the period on the left, the view switch and the step on the right. */
+.calendar__head {
+  gap: 10px;
+}
 .calendar__head h1 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.calendar__controls {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 .calendar__step {
   display: flex;
@@ -55,6 +53,9 @@
   flex: 1;
   min-height: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.calendar__body[data-sources] {
   grid-template-columns: 232px minmax(0, 1fr);
 }
 .calendar__sources {
@@ -65,13 +66,39 @@
   border-right: 1px solid var(--line);
 }
 .calendar__main {
+  position: relative;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
-.calendar__main > [role='alert'] {
-  margin: 12px 16px 0;
+.calendar__notice {
+  margin: 12px 16px;
+}
+/* A quiet sweep along the top while a range loads. */
+.calendar__loading {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 8;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--shadow) / 0.28),
+    transparent
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: calendar-sweep 1.1s var(--settle) infinite;
+  pointer-events: none;
+}
+@keyframes calendar-sweep {
+  from {
+    background-position: -40% 0;
+  }
+  to {
+    background-position: 140% 0;
+  }
 }
 
 /* Sources */
@@ -240,7 +267,7 @@
   display: grid;
   grid-template-columns:
     var(--gutter)
-    repeat(var(--days), minmax(var(--col-min, 0px), 1fr));
+    repeat(var(--days), minmax(0, 1fr));
   grid-template-rows: var(--head-h) auto calc(24 * var(--hour));
 }
 .timegrid__corner,
@@ -333,7 +360,7 @@
   align-content: start;
   row-gap: 2px;
   /* A scroller adds nothing to its grid row's height, so the band sets its own: up to four lanes. */
-  height: calc(var(--lanes) * 24px + 6px);
+  height: calc(min(var(--lanes), var(--band-lanes, 4)) * 24px + 6px);
   overflow-y: auto;
   padding: 4px 0;
   border-bottom: 1px solid var(--line-strong);
@@ -394,6 +421,15 @@
   margin-top: -1px;
   background: var(--orange);
   pointer-events: none;
+}
+.timegrid__now[data-faint] {
+  left: 0;
+  height: 1px;
+  margin-top: 0;
+  background: color-mix(in srgb, var(--orange) 45%, transparent);
+}
+.timegrid__now[data-faint]::before {
+  display: none;
 }
 .timegrid__now::before {
   content: '';
@@ -545,8 +581,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cal-chip[data-kind='digest'],
-.month__item--digest {
+.cal-chip[data-kind='digest'] {
   align-self: center;
   height: 18px;
   border-radius: 999px;
@@ -554,9 +589,6 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent);
   color: var(--ink-soft);
   font-weight: var(--w-label);
-}
-.cal-chip[data-kind='digest'] .cal-glyph {
-  display: none;
 }
 
 /* Month */
@@ -694,15 +726,16 @@
 .month__item--bar[data-before][data-after] {
   width: calc(var(--span) * 100%);
 }
-.month__item--digest {
+.month__item--bar[data-kind='digest'] {
   height: 16px;
   margin-block: 1px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c) 8%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 26%, transparent);
   color: var(--ink-soft);
   font-weight: var(--w-label);
-  background: none;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 22%, transparent);
 }
-.month__item--digest:hover {
+.month__item--bar[data-kind='digest']:hover {
   background: color-mix(in srgb, var(--c) 16%, var(--surface));
 }
 .month__item[data-kind='run'] {
@@ -716,11 +749,21 @@
   border-radius: 50%;
   background: var(--c);
 }
+.month__item--line {
+  container-type: inline-size;
+}
 .month__time {
   flex: none;
-  margin-right: 5px;
-  color: var(--ink-soft);
+  margin-left: auto;
+  padding-left: 6px;
+  color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
+}
+/* A narrow day keeps the title; the order of the list already says when. */
+@container (max-width: 120px) {
+  .month__time {
+    display: none;
+  }
 }
 .month__title {
   min-width: 0;
@@ -854,7 +897,8 @@
   .timegrid__hours > span {
     right: 4px;
   }
-  .calendar__body {
+  .calendar__body,
+  .calendar__body[data-sources] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(0, 1fr);
   }
@@ -866,11 +910,41 @@
   .calendar__main {
     overflow: auto;
   }
-  .timegrid {
-    --col-min: 88px;
+  /* iOS-style head: the period with ‹ Today › on one line, the views and the sources button below. */
+  .calendar__head {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    padding-block: 8px;
   }
-  .timegrid[data-days='1'] {
-    --col-min: 0px;
+  .page__head.calendar__head h1 {
+    flex: 1 1 0;
+  }
+  .calendar__step {
+    order: 1;
+  }
+  .calendar__views {
+    order: 2;
+    flex: 1 0 60%;
+  }
+  .calendar__views > button {
+    flex: 1;
+    justify-content: center;
+    padding: 2px 8px 3px;
+  }
+  .calendar__toggle {
+    order: 3;
+  }
+  .calendar__today,
+  .calendar__today:hover,
+  .calendar__today:active {
+    background: none;
+    box-shadow: none;
+    transform: none;
+    color: var(--orange-text);
+    font-weight: var(--w-strong);
+  }
+  .timegrid {
+    --band-lanes: 2;
   }
   .timegrid__day {
     flex-direction: column;
@@ -887,25 +961,6 @@
   .timegrid[data-days='1'] .timegrid__day {
     flex-direction: row;
     gap: 6px;
-  }
-}
-@media (max-width: 640px) {
-  .page__head.calendar__head h1 {
-    flex: 1;
-    flex-basis: 0;
-  }
-  .calendar__controls {
-    order: 2;
-    width: 100%;
-    justify-content: space-between;
-  }
-  .calendar__views {
-    flex: 1;
-    max-width: 240px;
-  }
-  .calendar__views > button {
-    flex: 1;
-    justify-content: center;
   }
 }
 @media (pointer: coarse) {

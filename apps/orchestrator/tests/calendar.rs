@@ -463,6 +463,8 @@ async fn a_failing_connection_reports_its_problem_and_the_rest_still_shows() {
             (format!("calendar:{working}:holidays"), true),
         ]
     );
+    // A failed read says why in plain words, not a write's "nothing was done".
+    assert_eq!(found.sources[2].problem.as_deref(), Some("Backend error."));
     let lapsed_source = &found.sources[0];
     assert_eq!(lapsed_source.name, "lapsed@example.com");
     assert!(

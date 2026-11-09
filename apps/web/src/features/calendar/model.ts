@@ -8,12 +8,16 @@ export type Placed = {
   height: number
   column: number
   columns: number
+  /** How many earlier items this one is stacked over, when its cluster cascades. */
+  indent: number
 }
 
 const MINUTE = 60_000
 const DAY_MINUTES = 1440
 // A routine run has no end; this keeps it tall enough to read and click.
 export const POINT_MINUTES = 30
+// Items starting this many minutes apart leave the earlier title showing, so they stack instead of splitting.
+const CASCADE = 25
 const WEEKDAYS = [
   'Sunday',
   'Monday',
@@ -150,7 +154,7 @@ function place(
   item: Item,
   day: string,
   zone: string,
-): Omit<Placed, 'column' | 'columns'> {
+): Omit<Placed, 'column' | 'columns' | 'indent'> {
   const base = Date.parse(`${day}T00:00:00Z`)
   const minutes = (ms: number) => (wallClock(ms, zone) - base) / MINUTE
   const top = Math.max(0, minutes(Date.parse(item.start)))
@@ -159,7 +163,22 @@ function place(
   return { item, top: Math.min(top, DAY_MINUTES - height), height }
 }
 
-/** Overlapping items form a cluster; each takes the first free column in it. */
+const overlap = (a: Placed, b: Placed) =>
+  a.top < b.top + b.height && b.top < a.top + a.height
+
+/** Whether every overlapping pair in a cluster starts far enough apart to stack. */
+function cascades(cluster: Placed[]) {
+  return cluster.every((a, at) =>
+    cluster
+      .slice(at + 1)
+      .every((b) => !overlap(a, b) || b.top - a.top >= CASCADE),
+  )
+}
+
+/**
+ * Overlapping items form a cluster. When their starts are far apart each later one is stacked
+ * over the earlier ones, indented; otherwise each takes the first free column.
+ */
 export function layoutDay(items: Item[], day: string, zone: string): Placed[] {
   const timed = items
     .filter((item) => !item.all_day && localDay(item, zone).includes(day))
@@ -170,7 +189,13 @@ export function layoutDay(items: Item[], day: string, zone: string): Placed[] {
   let clusterEnd = 0
   const close = () => {
     const columns = Math.max(...cluster.map((p) => p.column + 1))
-    for (const p of cluster) p.columns = columns
+    const stacked = cascades(cluster)
+    cluster.forEach((p, at) => {
+      p.columns = stacked ? 1 : columns
+      if (!stacked) return
+      p.column = 0
+      p.indent = cluster.slice(0, at).filter((q) => overlap(p, q)).length
+    })
     cluster = []
   }
   for (const base of timed) {
@@ -180,7 +205,7 @@ export function layoutDay(items: Item[], day: string, zone: string): Placed[] {
     )
     let column = 0
     while (taken.has(column)) column++
-    const next = { ...base, column, columns: 1 }
+    const next = { ...base, column, columns: 1, indent: 0 }
     cluster.push(next)
     placed.push(next)
     clusterEnd =
@@ -243,11 +268,11 @@ export function nowIn(zone: string, ms = Date.now()) {
 
 export type Bar = { item: Item; first: number; last: number; lane: number }
 
-// Spanning events claim lanes first, then the day's timed items; digests go last, so they are the first hidden.
-function rank(item: Item, first: number, last: number) {
-  if (item.kind === 'digest') return 2
-  return item.all_day || last > first ? 0 : 1
-}
+// Bars over whole days (events and digests) claim the top lanes, longest first; then the day's timed items.
+const rank = (item: Item, first: number, last: number) =>
+  item.all_day || last > first ? 0 : 2
+const digestLast = (a: Item, b: Item) =>
+  Number(a.kind === 'digest') - Number(b.kind === 'digest')
 
 /**
  * A week row of the month: each item a bar over its days in the first lane free across them.
@@ -269,16 +294,25 @@ export function weekLanes(
     return [{ item, first, last, order: rank(item, first, last) }]
   })
   spans.sort(
-    (a, b) => a.order - b.order || a.first - b.first || b.last - a.last,
+    (a, b) =>
+      a.order - b.order ||
+      a.first - b.first ||
+      b.last - a.last ||
+      digestLast(a.item, b.item),
   )
   const taken: boolean[][] = []
-  const bars: Bar[] = spans.map(({ item, first, last }) => {
-    let lane = 0
+  // Timed items stack under the bars over their day, as the all-day band sits over the hours.
+  const barred = days.map(() => 0)
+  const bars: Bar[] = spans.map(({ item, first, last, order }) => {
+    let lane = order === 2 ? Math.max(...barred.slice(first, last + 1)) : 0
     const free = (row: boolean[] = []) =>
       row.slice(first, last + 1).every((cell) => !cell)
     while (!free(taken[lane])) lane++
     const row = (taken[lane] ??= [])
-    for (let at = first; at <= last; at++) row[at] = true
+    for (let at = first; at <= last; at++) {
+      row[at] = true
+      if (order < 2) barred[at] = Math.max(barred[at] ?? 0, lane + 1)
+    }
     return { item, first, last, lane }
   })
   const shown = bars.some((bar) => bar.lane >= lanes) ? lanes - 1 : lanes
@@ -298,4 +332,59 @@ export function cadence(schedule: string) {
   if (hour === '*' && every) return `every ${every} min`
   if (hour === '*' && minute === '*') return 'every minute'
   return 'many times a day'
+}
+
+/** One routine's digests on consecutive days, as one item over those days; `days` keeps each. */
+export type Merged = Item & { days?: Item[] }
+
+export function mergeDigests(items: Item[]): Merged[] {
+  const merged: Merged[] = []
+  const open = new Map<string, Merged>()
+  for (const item of items) {
+    const routine = item.kind === 'digest' ? item.routine?.routine : undefined
+    const last = routine ? open.get(routine) : undefined
+    if (last && last.end === item.start) {
+      last.end = item.end ?? null
+      last.days?.push(item)
+      continue
+    }
+    const next = routine ? { ...item, days: [item] } : item
+    if (routine) open.set(routine, next)
+    merged.push(next)
+  }
+  return merged
+}
+
+/** The day one view earlier or later; a month keeps the day number where it can. */
+export function shift(view: View, date: string, step: number) {
+  if (view === 'day') return addDays(date, step)
+  if (view === 'week') return addDays(date, 7 * step)
+  const [year = 0, month = 1, day = 1] = date.split('-').map(Number)
+  const target = new Date(Date.UTC(year, month - 1 + step, 1))
+  const length = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate()
+  return `${target.toISOString().slice(0, 8)}${String(Math.min(day, length)).padStart(2, '0')}`
+}
+
+/** Days from `first` on, as `range` gives them: the phone's three-day week. */
+export function stretch(first: string, count: number, zone: string) {
+  const last = addDays(first, count - 1)
+  return {
+    from: range('day', first, zone, 1).from,
+    to: range('day', last, zone, 1).to,
+    days: span(first, last),
+  }
+}
+
+const DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
+/** A real calendar day as `YYYY-MM-DD`; the pattern alone lets through 2026-02-31. */
+export function isDay(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    DAY_PATTERN.test(value) &&
+    !Number.isNaN(Date.parse(value)) &&
+    new Date(value).toISOString().startsWith(value)
+  )
 }

@@ -1,15 +1,28 @@
 import { ChevronLeft, ChevronRight, Layers } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AgentSummary } from '../../api/types'
-import { useAgents, useSession } from '../../app/queries'
-import { Alert } from '../../components/primitives'
+import {
+  useAgents,
+  usePreferences,
+  useSavePreferences,
+  useSession,
+} from '../../app/queries'
+import { Skeleton } from '../../components/primitives'
 import { useProfile } from '../shell/AboutYou'
 import { useIsPhone } from '../shell/viewport'
 import { useCalendar } from './api'
-import { addDays, nowIn, range, userZone, type View } from './model'
+import {
+  addDays,
+  mergeDigests,
+  nowIn,
+  range,
+  shift,
+  stretch,
+  userZone,
+  type View,
+} from './model'
 import { Agenda, MonthView } from './MonthView'
 import { formatDay, type Item, type Look, type Source } from './parts'
-import { Sources } from './Sources'
+import { NoCalendars, Sources } from './Sources'
 import { TimeGrid } from './TimeGrid'
 import './calendar.css'
 
@@ -20,16 +33,20 @@ const VIEWS: [View, string, string][] = [
   ['week', 'Week', 'w'],
   ['month', 'Month', 'm'],
 ]
+// A phone's week is three days at a time, paged like iOS Calendar's multi-day view.
+const PHONE_WEEK = 3
+const SOURCES_PANE = 'calendar-sources'
 // Vendor colors are untrusted text; only a hex color reaches a style.
-const HEX = /^#[0-9a-f]{3,8}$/i
+const HEX = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
+// Never the orange accent: it marks today, now and selection.
 const SPARE = [
   'var(--ocean)',
   'var(--rose-deep)',
-  'var(--mint-deep)',
   'var(--lemon-deep)',
-  'var(--plum)',
-  'var(--coral)',
   'var(--sky-deep)',
+  'var(--mint-deep)',
+  'var(--sage-deep)',
+  'var(--plum)',
 ]
 
 /** Calendar events and agents' routines on one timeline, in the viewer's time zone. */
@@ -39,6 +56,18 @@ export function Calendar(props: Place & { onGo: (place: Place) => void }) {
   return (
     <CalendarPage zone={userZone(profile.data?.time_zone ?? '')} {...props} />
   )
+}
+
+/** The days a view shows and the instants they span. */
+function spanOf(view: View, date: string, zone: string, phone: boolean) {
+  if (phone && view === 'week') return stretch(date, PHONE_WEEK, zone)
+  return range(view, date, zone, firstWeekday())
+}
+
+function step(view: View, date: string, by: 1 | -1, phone: boolean) {
+  return phone && view === 'week'
+    ? addDays(date, PHONE_WEEK * by)
+    : shift(view, date, by)
 }
 
 function CalendarPage({
@@ -53,21 +82,22 @@ function CalendarPage({
   const now = useNow(zone)
   const date = wanted ?? now.day
   const span = useMemo(
-    () => range(view, date, zone, firstWeekday()),
-    [view, date, zone],
+    () => spanOf(view, date, zone, phone),
+    [view, date, zone, phone],
   )
   const calendar = useCalendar(span.from, span.to, zone)
+  // The app shell renders pages only once the session is known, so the key is final here.
   const [hidden, toggle] = useHidden(session.data?.id ?? '')
   const [selected, setSelected] = useState<string | null>(null)
-  const [sourcesOpen, setSourcesOpen] = useState(false)
+  const [announced, setAnnounced] = useState('')
+  const pane = useSourcesPane(phone)
   const sources = useMemo(() => calendar.data?.sources ?? [], [calendar.data])
-  const paints = useMemo(
-    () => paintsOf(sources, agents.data ?? []),
-    [sources, agents.data],
-  )
+  const paints = useMemo(() => paintsOf(sources), [sources])
   const items = useMemo(
     () =>
-      (calendar.data?.items ?? []).filter((item) => !hidden.has(item.source)),
+      mergeDigests(
+        (calendar.data?.items ?? []).filter((item) => !hidden.has(item.source)),
+      ),
     [calendar.data, hidden],
   )
   const go = useCallback(
@@ -83,83 +113,46 @@ function CalendarPage({
     selected,
     onSelect: (item) => setSelected(item.id),
   }
+  const heading = headingOf(view, date, span.days, phone)
+  // Announce a new period once, when a step button changes it.
+  const travel = (to: string) => {
+    const next = headingOf(view, to, spanOf(view, to, zone, phone).days, phone)
+    if (next.join(' ') !== heading.join(' ')) setAnnounced(next.join(' '))
+    go({ date: to })
+  }
   const open = (day: string) => go({ view: 'day', date: day })
+  const noCalendars =
+    calendar.isSuccess && !sources.some((source) => source.kind === 'calendar')
   return (
     <div className="page calendar">
-      <header className="page__head calendar__head">
-        <Heading view={view} date={date} days={span.days} />
-        <div className="calendar__controls">
-          <div className="tabs calendar__views" role="group" aria-label="View">
-            {VIEWS.map(([id, label, key]) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={id === view}
-                aria-keyshortcuts={key}
-                title={`${label} (${key.toUpperCase()})`}
-                onClick={() => go({ view: id })}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="calendar__step">
-            <button
-              type="button"
-              className="btn btn--ghost btn--icon btn--sm"
-              aria-label={`Previous ${view}`}
-              onClick={() => go({ date: shift(view, date, -1) })}
-            >
-              <ChevronLeft />
-            </button>
-            <button
-              type="button"
-              className="btn btn--sm"
-              aria-keyshortcuts="t"
-              title="Today (T)"
-              onClick={() => go({ date: now.day })}
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost btn--icon btn--sm"
-              aria-label={`Next ${view}`}
-              onClick={() => go({ date: shift(view, date, 1) })}
-            >
-              <ChevronRight />
-            </button>
-          </div>
-        </div>
-        {phone && (
-          <button
-            type="button"
-            className="btn btn--icon btn--sm calendar__toggle"
-            aria-label="Calendars"
-            title="Calendars"
-            aria-expanded={sourcesOpen}
-            aria-controls="cal-sources"
-            onClick={() => setSourcesOpen(!sourcesOpen)}
-          >
-            <Layers />
-          </button>
-        )}
-      </header>
-      <div className="calendar__body">
-        {(!phone || sourcesOpen) && (
+      <Head
+        view={view}
+        heading={heading}
+        announced={announced}
+        pane={pane}
+        onView={(id) => go({ view: id })}
+        onStep={(by) => travel(by ? step(view, date, by, phone) : now.day)}
+      />
+      <div className="calendar__body" data-sources={pane.shown || undefined}>
+        {pane.shown && (
           <aside
             id="cal-sources"
             className="calendar__sources"
             aria-label="Calendars and agents"
+            aria-busy={calendar.isPending}
           >
-            <Sources
-              sources={sources}
-              agents={agents.data ?? []}
-              administrator={Boolean(session.data?.administrator)}
-              hidden={hidden}
-              onToggle={toggle}
-              paint={(id) => paints.get(id) ?? 'var(--ink-faint)'}
-            />
+            {calendar.data ? (
+              <Sources
+                sources={sources}
+                agents={agents.data ?? []}
+                administrator={Boolean(session.data?.administrator)}
+                hidden={hidden}
+                onToggle={toggle}
+                paint={(id) => paints.get(id) ?? 'var(--ink-faint)'}
+              />
+            ) : (
+              <Skeleton lines={4} width="80%" />
+            )}
           </aside>
         )}
         <main
@@ -167,9 +160,11 @@ function CalendarPage({
           aria-label="Calendar"
           aria-busy={calendar.isFetching}
         >
-          {calendar.isError && (
-            <Alert>The calendar could not be read. Retry shortly.</Alert>
-          )}
+          <Notices
+            calendar={calendar}
+            noCalendars={phone && noCalendars && !pane.shown}
+            administrator={Boolean(session.data?.administrator)}
+          />
           {view === 'month' ? (
             <>
               <MonthView
@@ -203,28 +198,138 @@ function CalendarPage({
   )
 }
 
-function Heading({
-  view,
-  date,
-  days,
+/** The loading sweep, a failed read with Retry, and on a phone the missing-calendars note. */
+function Notices({
+  calendar,
+  noCalendars,
+  administrator,
 }: {
-  view: View
-  date: string
-  days: string[]
+  calendar: ReturnType<typeof useCalendar>
+  noCalendars: boolean
+  administrator: boolean
 }) {
-  const [main, rest] = headingOf(view, date, days)
   return (
-    <h1 aria-live="polite">
-      {main} <span className="faint">{rest}</span>
-    </h1>
+    <>
+      {calendar.isFetching && (
+        <span className="calendar__loading" aria-hidden="true" />
+      )}
+      {calendar.isError && (
+        <p role="alert" className="notice notice--danger calendar__notice">
+          The calendar could not be read.{' '}
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => void calendar.refetch()}
+          >
+            Retry
+          </button>
+        </p>
+      )}
+      {noCalendars && (
+        <div className="notice calendar__notice">
+          <NoCalendars administrator={administrator} />
+        </div>
+      )}
+    </>
   )
 }
 
-function headingOf(view: View, date: string, days: string[]): [string, string] {
+/** The period, the view switch, ‹ Today ›, and the sources pane's toggle. */
+function Head({
+  view,
+  heading,
+  announced,
+  pane,
+  onView,
+  onStep,
+}: {
+  view: View
+  heading: [string, string]
+  announced: string
+  pane: { shown: boolean; toggle: () => void }
+  onView: (view: View) => void
+  /** -1 and 1 step a period; 0 is today. */
+  onStep: (by: -1 | 0 | 1) => void
+}) {
+  return (
+    <header className="page__head calendar__head">
+      <button
+        type="button"
+        className="btn btn--ghost btn--icon btn--sm calendar__toggle"
+        aria-label={pane.shown ? 'Hide calendars' : 'Show calendars'}
+        title={pane.shown ? 'Hide calendars' : 'Show calendars'}
+        aria-expanded={pane.shown}
+        aria-controls="cal-sources"
+        onClick={pane.toggle}
+      >
+        <Layers />
+      </button>
+      <h1>
+        {heading[0]} <span className="faint">{heading[1]}</span>
+      </h1>
+      <p className="sr-only" role="status">
+        {announced}
+      </p>
+      <div className="tabs calendar__views" role="group" aria-label="View">
+        {VIEWS.map(([id, label, key]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={id === view}
+            aria-keyshortcuts={key}
+            title={`${label} (${key.toUpperCase()})`}
+            onClick={() => onView(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="calendar__step">
+        <button
+          type="button"
+          className="btn btn--ghost btn--icon btn--sm"
+          aria-label={`Previous ${view}`}
+          onClick={() => onStep(-1)}
+        >
+          <ChevronLeft />
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm calendar__today"
+          aria-keyshortcuts="t"
+          title="Today (T)"
+          onClick={() => onStep(0)}
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          className="btn btn--ghost btn--icon btn--sm"
+          aria-label={`Next ${view}`}
+          onClick={() => onStep(1)}
+        >
+          <ChevronRight />
+        </button>
+      </div>
+    </header>
+  )
+}
+
+function headingOf(
+  view: View,
+  date: string,
+  days: string[],
+  phone = false,
+): [string, string] {
+  // A phone's head shares its line with ‹ Today ›, so the day's name goes short there.
   if (view === 'day')
     return [
-      formatDay(date, { day: 'numeric', month: 'long', year: 'numeric' }),
-      formatDay(date, { weekday: 'long' }),
+      formatDay(date, {
+        day: 'numeric',
+        month: phone ? 'short' : 'long',
+        year: 'numeric',
+      }),
+      formatDay(date, { weekday: phone ? 'short' : 'long' }),
     ]
   const first = view === 'month' ? date : (days[0] ?? date)
   const last = view === 'month' ? date : (days.at(-1) ?? date)
@@ -236,18 +341,6 @@ function headingOf(view: View, date: string, days: string[]): [string, string] {
       ? first.slice(0, 4)
       : `${first.slice(0, 4)} – ${last.slice(0, 4)}`
   return [`${month(first)} – ${month(last)}`, years]
-}
-
-/** The day one view earlier or later; a month keeps the day number where it can. */
-export function shift(view: View, date: string, step: 1 | -1) {
-  if (view === 'day') return addDays(date, step)
-  if (view === 'week') return addDays(date, 7 * step)
-  const [year = 0, month = 1, day = 1] = date.split('-').map(Number)
-  const target = new Date(Date.UTC(year, month - 1 + step, 1))
-  const length = new Date(
-    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
-  ).getUTCDate()
-  return `${target.toISOString().slice(0, 8)}${String(Math.min(day, length)).padStart(2, '0')}`
 }
 
 /** The locale's first day of the week, where the calendar can start on it. */
@@ -273,6 +366,26 @@ function useNow(zone: string) {
     return () => window.clearInterval(timer)
   }, [zone])
   return now
+}
+
+/** The sources pane: remembered with the person's other collapsed panes; a sheet on phones. */
+function useSourcesPane(phone: boolean) {
+  const preferences = usePreferences()
+  const save = useSavePreferences()
+  const [sheet, setSheet] = useState(false)
+  const collapsed = preferences.data?.collapsed.includes(SOURCES_PANE) ?? false
+  const toggle = () => {
+    if (phone) return setSheet(!sheet)
+    const current = preferences.data
+    if (!current) return
+    save.mutate({
+      ...current,
+      collapsed: collapsed
+        ? current.collapsed.filter((pane) => pane !== SOURCES_PANE)
+        : [...current.collapsed, SOURCES_PANE],
+    })
+  }
+  return { shown: phone ? sheet : !collapsed, toggle }
 }
 
 /** Hidden sources, remembered on this device for this person. */
@@ -302,29 +415,26 @@ function storedHidden(key: string) {
   }
 }
 
-function paintsOf(sources: Source[], agents: AgentSummary[]) {
+/**
+ * A calendar keeps its vendor color; the rest take spare paints, calendars from the front of the
+ * list and agents from the back, so an agent's color holds when a calendar is added.
+ */
+function paintsOf(sources: Source[]) {
   const paints = new Map<string, string>()
-  let spare = 0
+  let calendars = 0
+  let agents = 0
   for (const source of sources) {
-    if (source.kind === 'agent') {
-      const agent = agents.find((each) => `agent:${each.id}` === source.id)
-      paints.set(source.id, agentPaint(agent))
-    } else {
-      const color = source.color && HEX.test(source.color) ? source.color : null
-      paints.set(source.id, color ?? SPARE[spare++ % SPARE.length] ?? '')
-    }
+    const vendor =
+      source.color && HEX.test(source.color) ? source.color : undefined
+    if (source.kind === 'agent')
+      paints.set(
+        source.id,
+        SPARE[SPARE.length - 1 - (agents++ % SPARE.length)] ?? '',
+      )
+    else
+      paints.set(source.id, vendor ?? SPARE[calendars++ % SPARE.length] ?? '')
   }
   return paints
-}
-
-/** An agent's items carry its cube's paint, one shade deeper so they read on paper. */
-function agentPaint(agent: AgentSummary | undefined) {
-  const avatar = agent?.avatar
-  if (!avatar) return 'var(--orange-deep)'
-  if (avatar.color && HEX.test(avatar.color)) return avatar.color
-  return avatar.paint === 'paper'
-    ? 'var(--paper-base)'
-    : `var(--${avatar.paint}-deep)`
 }
 
 const MOVES: Record<string, number> = {

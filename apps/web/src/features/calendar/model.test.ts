@@ -4,6 +4,10 @@ import type { Schemas } from '../../api/types'
 import {
   cadence,
   cronPhrase,
+  isDay,
+  mergeDigests,
+  shift,
+  stretch,
   formatRange,
   layoutDay,
   localDay,
@@ -98,12 +102,12 @@ describe('localDay', () => {
 })
 
 describe('layoutDay', () => {
-  test('overlapping items share columns and a later one is alone', () => {
+  test('items starting close together share columns and a later one is alone', () => {
     const laid = layoutDay(
       [
         item('2026-11-09T13:00:00Z', '2026-11-09T15:00:00Z'),
-        item('2026-11-09T13:30:00Z', '2026-11-09T14:30:00Z'),
-        item('2026-11-09T14:00:00Z', '2026-11-09T14:45:00Z'),
+        item('2026-11-09T13:10:00Z', '2026-11-09T14:30:00Z'),
+        item('2026-11-09T13:20:00Z', '2026-11-09T14:45:00Z'),
         item('2026-11-09T18:00:00Z', '2026-11-09T19:00:00Z'),
       ],
       '2026-11-09',
@@ -116,6 +120,23 @@ describe('layoutDay', () => {
       [0, 1],
     ])
     expect(laid[0]).toMatchObject({ top: 600, height: 120 })
+  })
+
+  test('items starting far apart stack, each indented over the ones it overlaps', () => {
+    const laid = layoutDay(
+      [
+        item('2026-11-09T13:00:00Z', '2026-11-09T15:00:00Z'),
+        item('2026-11-09T13:30:00Z', '2026-11-09T14:00:00Z'),
+        item('2026-11-09T14:15:00Z', '2026-11-09T14:45:00Z'),
+      ],
+      '2026-11-09',
+      SP,
+    )
+    expect(laid.map((l) => [l.column, l.columns, l.indent])).toEqual([
+      [0, 1, 0],
+      [0, 1, 1],
+      [0, 1, 1],
+    ])
   })
 
   test('a point item gets a minimum height and all-day items are left out', () => {
@@ -235,7 +256,22 @@ describe('weekLanes', () => {
     expect(laid.more).toEqual([0, 2, 0, 0, 0, 0, 0])
   })
 
-  test('digests come after spanning events and timed items', () => {
+  test('a longer digest bar goes over a shorter event, and timed items start under both', () => {
+    const offsite = { ...item('2026-11-11', '2026-11-14', true), id: 'off' }
+    const digest = {
+      ...item('2026-11-08', '2026-11-15', true),
+      id: 'd',
+      kind: 'digest',
+    }
+    const early = { ...item('2026-11-09T12:00:00Z', null), id: 'e' }
+    expect(lanesOf(weekLanes([early, digest, offsite], week, SP, 5))).toEqual([
+      ['d', 0, 5, 0],
+      ['off', 2, 4, 1],
+      ['e', 0, 0, 1],
+    ])
+  })
+
+  test('a digest goes under an event of the same days, and over timed items', () => {
     const digest = {
       ...item('2026-11-09', '2026-11-10', true),
       id: 'd',
@@ -245,7 +281,7 @@ describe('weekLanes', () => {
     const allDay = { ...item('2026-11-09', '2026-11-10', true), id: 'a' }
     expect(
       lanesOf(weekLanes([timed, digest, allDay], week, SP, 5)).map((l) => l[0]),
-    ).toEqual(['a', 't', 'd'])
+    ).toEqual(['a', 'd', 't'])
   })
 })
 
@@ -261,5 +297,68 @@ describe('now and cadence', () => {
     expect(cadence('*/5 * * * *')).toBe('every 5 min')
     expect(cadence('* * * * *')).toBe('every minute')
     expect(cadence('*/10 9-17 * * *')).toBe('many times a day')
+  })
+})
+
+describe('digests', () => {
+  const digest = (routine: string, day: string, next: string): Item => ({
+    ...item(day, next, true),
+    id: `digest:${routine}:${day}`,
+    kind: 'digest',
+    routine: {
+      agent: 'a',
+      routine,
+      schedule: '*/5 * * * *',
+      time_zone: 'UTC',
+      runs: 288,
+    },
+  })
+
+  test("a routine's digests on consecutive days become one item over them", () => {
+    const merged = mergeDigests([
+      digest('r', '2026-11-09', '2026-11-10'),
+      digest('s', '2026-11-09', '2026-11-10'),
+      item('2026-11-09T12:00:00Z', null),
+      digest('r', '2026-11-10', '2026-11-11'),
+      digest('r', '2026-11-12', '2026-11-13'),
+    ])
+    expect(merged.map((m) => [m.id, m.start, m.end, m.days?.length])).toEqual([
+      ['digest:r:2026-11-09', '2026-11-09', '2026-11-11', 2],
+      ['digest:s:2026-11-09', '2026-11-09', '2026-11-10', 1],
+      ['2026-11-09T12:00:00Z-null', '2026-11-09T12:00:00Z', null, undefined],
+      ['digest:r:2026-11-12', '2026-11-12', '2026-11-13', 1],
+    ])
+  })
+
+  test('merging leaves the items it was given unchanged', () => {
+    const first = digest('r', '2026-11-09', '2026-11-10')
+    mergeDigests([first, digest('r', '2026-11-10', '2026-11-11')])
+    expect(first.end).toBe('2026-11-10')
+  })
+})
+
+describe('navigation', () => {
+  test('a month step keeps the day number where the month has it', () => {
+    expect(shift('month', '2026-01-31', 1)).toBe('2026-02-28')
+    expect(shift('month', '2026-03-31', -1)).toBe('2026-02-28')
+    expect(shift('month', '2026-12-15', 1)).toBe('2027-01-15')
+    expect(shift('week', '2026-11-09', -1)).toBe('2026-11-02')
+    expect(shift('day', '2026-12-31', 1)).toBe('2027-01-01')
+  })
+
+  test('the three-day week runs from the chosen day', () => {
+    const three = stretch('2026-11-09', 3, SP)
+    expect(three.days).toEqual(['2026-11-09', '2026-11-10', '2026-11-11'])
+    expect(three.from).toBe('2026-11-09T03:00:00.000Z')
+    expect(three.to).toBe('2026-11-12T03:00:00.000Z')
+  })
+
+  test('only real days are accepted from the address', () => {
+    expect(isDay('2026-11-09')).toBe(true)
+    expect(isDay('2024-02-29')).toBe(true)
+    expect(isDay('2026-02-29')).toBe(false)
+    expect(isDay('2026-13-01')).toBe(false)
+    expect(isDay('2026-1-9')).toBe(false)
+    expect(isDay(20261109)).toBe(false)
   })
 })

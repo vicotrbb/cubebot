@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import type { Schemas } from '../../api/types'
-import { cadence, formatRange } from './model'
+import { cadence, formatRange, type Merged } from './model'
 
 export type Item = Schemas['Item']
 export type Source = Schemas['Source']
@@ -46,24 +46,32 @@ export function Glyph({ item }: { item: Item }) {
   return <Icon className="cal-glyph" data-outcome={status} aria-hidden="true" />
 }
 
-/** A digest reads "Inbox sweep · every 5 min · Keeper": the name first, so a narrow day still shows it. */
-export function titleOf(item: Item, look: Look) {
+/** A digest reads "Inbox sweep · every 5 min"; its color and label say whose. */
+export function titleOf(item: Item) {
   if (item.kind !== 'digest') return item.title
-  return `${item.title} · ${cadence(item.routine?.schedule ?? '')} · ${look.sourceName(item)}`
+  return `${item.title} · ${cadence(item.routine?.schedule ?? '')}`
 }
 
-export function labelOf(item: Item, look: Look) {
+/** "288 runs a day", or a span when the days differ. */
+function runsOf(item: Merged) {
+  const counts = (item.days ?? [item]).map((day) => day.routine?.runs ?? 0)
+  const least = Math.min(...counts)
+  const most = Math.max(...counts)
+  return least === most
+    ? `${most} runs a day`
+    : `${least} to ${most} runs a day`
+}
+
+export function labelOf(item: Merged, look: Look) {
   const when =
-    item.kind === 'digest'
-      ? `${item.routine?.runs ?? 0} runs`
-      : formatRange(item, look.zone)
+    item.kind === 'digest' ? runsOf(item) : formatRange(item, look.zone)
   const what: Record<string, string> = {
     routine: `routine of ${look.sourceName(item)}`,
     run: `${outcomeOf(item).look[0]}, run of ${look.sourceName(item)}`,
-    digest: 'routine',
+    digest: `routine of ${look.sourceName(item)}`,
     event: look.sourceName(item),
   }
-  return `${titleOf(item, look)}, ${when}, ${what[item.kind] ?? ''}`
+  return `${titleOf(item)}, ${when}, ${what[item.kind] ?? ''}`
 }
 
 /** Where a popover should point: the click, or the item's edge for a keyboard press. */

@@ -6,7 +6,7 @@ import {
   useState,
   type Ref,
 } from 'react'
-import { formatTime, localDay, weekLanes, type Bar } from './model'
+import { formatTime, localDay, weekLanes, type Bar, type Merged } from './model'
 import {
   FULL_DAY,
   formatDay,
@@ -109,10 +109,13 @@ function useLanes() {
   const [lanes, setLanes] = useState(3)
   const rowRef = useCallback((row: HTMLDivElement | null) => {
     if (!row) return
-    const observer = new ResizeObserver(() => {
+    const measure = () => {
       if (row.isConnected)
         setLanes(Math.max(1, Math.floor((row.clientHeight - HEAD) / LANE)))
-    })
+    }
+    // Measured as the row attaches, so the first paint already has the right lanes.
+    measure()
+    const observer = new ResizeObserver(measure)
     observer.observe(row)
     return () => observer.disconnect()
   }, [])
@@ -276,12 +279,7 @@ function MonthItem({
   look: Look
 }) {
   const { item, first, last } = bar
-  const shape =
-    item.kind === 'digest'
-      ? 'digest'
-      : item.all_day || last > first
-        ? 'bar'
-        : 'line'
+  const shape = item.all_day || last > first ? 'bar' : 'line'
   const props = itemProps(item, look)
   const covered = shape === 'bar' ? localDay(item, look.zone) : []
   return (
@@ -298,12 +296,12 @@ function MonthItem({
         <span className="month__dot" aria-hidden="true" />
       )}
       <Glyph item={item} />
+      <span className="month__title">{titleOf(item)}</span>
       {shape === 'line' && (
         <time className="month__time" dateTime={item.start}>
           {formatTime(item.start, look.zone)}
         </time>
       )}
-      <span className="month__title">{titleOf(item, look)}</span>
     </button>
   )
 }
@@ -355,7 +353,7 @@ export function Agenda({
         <ul>
           {here.map((item) => (
             <li key={item.id}>
-              <AgendaRow item={item} look={look} />
+              <AgendaRow item={item} day={day} look={look} />
             </li>
           ))}
         </ul>
@@ -364,8 +362,17 @@ export function Agenda({
   )
 }
 
-function AgendaRow({ item, look }: { item: Item; look: Look }) {
+function AgendaRow({
+  item,
+  day,
+  look,
+}: {
+  item: Merged
+  day: string
+  look: Look
+}) {
   const timed = !item.all_day
+  const runs = item.days?.find((each) => each.start === day)?.routine?.runs
   return (
     <button {...itemProps(item, look)} className="agenda__item">
       <span className="agenda__time tabular">
@@ -376,14 +383,16 @@ function AgendaRow({ item, look }: { item: Item; look: Look }) {
       <span className="agenda__text">
         <span className="agenda__title">
           <Glyph item={item} />
-          {titleOf(item, look)}
+          {titleOf(item)}
         </span>
         <span className="agenda__source">
-          {item.kind === 'digest'
-            ? `${item.routine?.runs ?? 0} runs`
-            : [look.sourceName(item), item.event?.location]
-                .filter(Boolean)
-                .join(' · ')}
+          {[
+            look.sourceName(item),
+            item.event?.location,
+            item.kind === 'digest' && `${runs ?? 0} runs`,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
       </span>
     </button>

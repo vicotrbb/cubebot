@@ -21,6 +21,8 @@ const DAY = 1440
 // Below these many minutes an item has room for one line, or for its title and time only.
 const ONE_LINE = 50
 const TWO_LINES = 80
+// How far a stacked item steps right of the one under it.
+const INDENT = 10
 const HOURS = Array.from({ length: 23 }, (_, at) => at + 1)
 
 /** Week and Day: an all-day band over the hours, items placed by wall-clock minute. */
@@ -63,7 +65,7 @@ export function TimeGrid({
       style={
         {
           '--days': days.length,
-          '--lanes': Math.min(lanes, 4),
+          '--lanes': lanes,
         } as React.CSSProperties
       }
       data-days={days.length}
@@ -93,7 +95,10 @@ export function TimeGrid({
         ))}
       </div>
       <div className="timegrid__hours" aria-hidden="true">
-        {HOURS.map((hour) => (
+        {HOURS.filter(
+          // The current time's label stands in for an hour it would cover.
+          (hour) => !showsToday || Math.abs(hour * 60 - now) > 20,
+        ).map((hour) => (
           <span key={hour} style={{ top: `${(hour / 24) * 100}%` }}>
             {String(hour).padStart(2, '0')}:00
           </span>
@@ -110,7 +115,8 @@ export function TimeGrid({
           day={day}
           items={items}
           look={look}
-          now={day === today ? now : null}
+          now={showsToday ? now : null}
+          today={day === today}
           onCreate={onCreate}
         />
       ))}
@@ -142,12 +148,14 @@ function Column({
   items,
   look,
   now,
+  today,
   onCreate,
 }: {
   day: string
   items: Item[]
   look: Look
   now: number | null
+  today: boolean
   onCreate?: ((slot: Slot) => void) | undefined
 }) {
   const placed = useMemo(
@@ -177,6 +185,7 @@ function Column({
       {now !== null && (
         <span
           className="timegrid__now"
+          data-faint={!today || undefined}
           style={{ top: at(now) }}
           aria-hidden="true"
         />
@@ -198,13 +207,13 @@ function AllDay({ bar, look }: { bar: Bar; look: Look }) {
       }}
     >
       <Glyph item={bar.item} />
-      <span className="cal-chip__title">{titleOf(bar.item, look)}</span>
+      <span className="cal-chip__title">{titleOf(bar.item)}</span>
     </button>
   )
 }
 
 function GridItem({ place, look }: { place: Placed; look: Look }) {
-  const { item, top, height, column, columns } = place
+  const { item, top, height, column, columns, indent } = place
   const props = itemProps(item, look)
   const short = height < ONE_LINE
   const roomy = height >= TWO_LINES
@@ -218,13 +227,13 @@ function GridItem({ place, look }: { place: Placed; look: Look }) {
         ...props.style,
         top: at(top),
         height: `calc(${at(height)} - 1px)`,
-        left: `calc(${(column / columns) * 100}% + 1px)`,
-        width: `calc(${100 / columns}% - 3px)`,
+        left: `calc(${(column / columns) * 100}% + ${indent * INDENT + 1}px)`,
+        width: `calc(${100 / columns}% - ${indent * INDENT + 3}px)`,
       }}
     >
       <span className="cal-block__title">
         <Glyph item={item} />
-        {titleOf(item, look)}
+        {titleOf(item)}
       </span>
       <time className="cal-block__time" dateTime={item.start}>
         {formatTime(item.start, look.zone)}
