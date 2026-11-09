@@ -6,7 +6,7 @@ use crate::{
     Account, Answer, Auth, Category, Choice, Connector, Context, Error, Event, EventSpec, Field,
     FieldKind, Level, Manifest, Poll, Product, Risk, Step, ToolSpec,
 };
-use chrono::{NaiveDate, NaiveDateTime, TimeDelta};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta};
 use reqwest::{Method, RequestBuilder, Response, StatusCode, Url, header};
 use roxmltree::Node;
 use serde::Deserialize;
@@ -163,14 +163,14 @@ static MANIFEST: Manifest = Manifest {
             description: "Add an event to a calendar. Nobody is invited.",
             risk: Risk::Write,
             product: Some("calendar"),
-            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"summary":{"type":"string"},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T09:30:00+01:00."},"end":{"type":"string","description":"RFC 3339."},"description":{"type":"string"},"location":{"type":"string"}},"required":["calendar","summary","start","end"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar's href from list_calendars."},"summary":{"type":"string"},"start":{"type":"string","description":"RFC 3339, such as 2026-11-05T09:30:00+01:00, or YYYY-MM-DD all day."},"end":{"type":"string","description":"RFC 3339, or YYYY-MM-DD all day (exclusive)."},"description":{"type":"string"},"location":{"type":"string"}},"required":["calendar","summary","start","end"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "update_event",
-            description: "Change an event, or with its occurrence only that occurrence of a repeating event; with its etag, only if it has not changed since it was read.",
+            description: "Change an event, or with its occurrence only that occurrence of a repeating event; with its etag, only if it has not changed since it was read. With an occurrence and all, the whole series changes, and new times move every occurrence as much as that one moves.",
             risk: Risk::Write,
             product: Some("calendar"),
-            input: r#"{"type":"object","properties":{"event":{"type":"string","description":"The event's href from list_events."},"etag":{"type":"string"},"occurrence":{"type":"string","description":"The occurrence from list_events, to change only that one."},"time_zone":{"type":"string","description":"The occurrence's time_zone from list_events."},"summary":{"type":"string"},"start":{"type":"string","description":"RFC 3339, or YYYY-MM-DD all day; given together with end."},"end":{"type":"string","description":"RFC 3339, or YYYY-MM-DD all day (exclusive)."},"description":{"type":"string"},"location":{"type":"string"}},"required":["event"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"event":{"type":"string","description":"The event's href from list_events."},"etag":{"type":"string"},"occurrence":{"type":"string","description":"The occurrence from list_events, to change only that one."},"time_zone":{"type":"string","description":"The occurrence's time_zone from list_events."},"all":{"type":"boolean","description":"Change the whole series the occurrence belongs to."},"summary":{"type":"string"},"start":{"type":"string","description":"RFC 3339, or YYYY-MM-DD all day; given together with end."},"end":{"type":"string","description":"RFC 3339, or YYYY-MM-DD all day (exclusive)."},"description":{"type":"string"},"location":{"type":"string"}},"required":["event"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "delete_event",
@@ -247,6 +247,8 @@ struct Update {
     etag: Option<String>,
     occurrence: Option<String>,
     time_zone: Option<String>,
+    #[serde(default)]
+    all: bool,
     summary: Option<String>,
     start: Option<String>,
     end: Option<String>,
@@ -592,10 +594,7 @@ async fn events_between(
 
 async fn create(cx: &Context, input: Value) -> Result<Value, Error> {
     let create: Create = crate::input(input)?;
-    let (start, end) = (seconds(&create.start)?, seconds(&create.end)?);
-    if end <= start {
-        return Err(Error::Invalid("the end is not after the start".into()));
-    }
+    let (start, end) = period(&create.start, &create.end)?;
     let base = base(cx, &CALENDARS)?;
     let mut calendar = address(&create.calendar)?;
     if !calendar.path().ends_with('/') {
@@ -609,7 +608,7 @@ async fn create(cx: &Context, input: Value) -> Result<Value, Error> {
         .header(header::CONTENT_TYPE, "text/calendar; charset=utf-8")
         // Never replaces an existing event.
         .header(header::IF_NONE_MATCH, "*")
-        .body(icalendar(&uid, &create, start, end));
+        .body(icalendar(&uid, &create, &start, &end));
     let response = cx.send(request).await?;
     Ok(json!({"href": url.as_str(), "uid": uid, "etag": etag(&response)}))
 }
@@ -617,6 +616,10 @@ async fn create(cx: &Context, input: Value) -> Result<Value, Error> {
 async fn update(cx: &Context, input: Value) -> Result<Value, Error> {
     let update: Update = crate::input(input)?;
     let times = times(update.start.as_deref(), update.end.as_deref())?;
+    let texts = [&update.summary, &update.location, &update.description];
+    if times.is_none() && texts.iter().all(|text| text.is_none()) {
+        return Err(Error::Invalid("nothing to change".into()));
+    }
     let occurrence = update.occurrence.as_deref();
     let occurrence = occurrence
         .map(|value| Occurrence::new(value, update.time_zone.as_deref()))
@@ -630,9 +633,9 @@ async fn update(cx: &Context, input: Value) -> Result<Value, Error> {
         times,
         ics: &ics,
     };
-    match &occurrence {
-        Some(occurrence) => edit.one(&mut parts, occurrence)?,
-        None => edit.all(&mut parts)?,
+    match (&occurrence, update.all) {
+        (Some(occurrence), false) => edit.one(&mut parts, occurrence)?,
+        (occurrence, _) => edit.all(&mut parts, occurrence.as_ref())?,
     }
     let response = store(cx, &base, &url, update.etag.clone().or(read), &parts).await?;
     Ok(json!({"href": url.as_str(), "etag": etag(&response)}))
@@ -660,7 +663,11 @@ async fn skip(cx: &Context, delete: &Delete, occurrence: &Occurrence) -> Result<
     let (ics, read) = fetch(cx, &base, &url).await?;
     let mut parts = parts(&ics);
     let master = master(&parts)?;
-    let exdate = line("EXDATE", &occurrence.params, &occurrence.value);
+    let exdate = line(
+        "EXDATE",
+        &occurrence.params(&parts[master]),
+        &occurrence.value,
+    );
     parts[master].insert(1, exdate);
     bump(&mut parts[master]);
     if let Some(moved) = overridden(&parts, occurrence) {
@@ -672,10 +679,7 @@ async fn skip(cx: &Context, delete: &Delete, occurrence: &Occurrence) -> Result<
 
 /// An event's iCalendar text and the etag it was read at.
 async fn fetch(cx: &Context, base: &Url, url: &Url) -> Result<(String, Option<String>), Error> {
-    let response = authed(cx, Method::GET, base, url)?
-        .send()
-        .await
-        .map_err(|_| Error::Unavailable("could not reach the server".into()))?;
+    let response = cx.send(authed(cx, Method::GET, base, url)?).await?;
     let read = etag(&response).map(str::to_owned);
     Ok((text(response).await?, read))
 }
@@ -694,15 +698,8 @@ async fn store(
     if let Some(matched) = matched {
         request = request.header(header::IF_MATCH, matched);
     }
-    // Sent here rather than through `Context::send` to tell a 412 from other refusals.
-    let response = request
-        .send()
+    cx.send_unchanged(request, "the event changed since it was read")
         .await
-        .map_err(|error| crate::context::failed(&error, false))?;
-    if response.status() == StatusCode::PRECONDITION_FAILED {
-        return Err(Error::Invalid("the event changed since it was read".into()));
-    }
-    crate::context::refused(response, false).await
 }
 
 async fn search(cx: &Context, input: Value) -> Result<Value, Error> {
@@ -931,7 +928,14 @@ fn contact(vcard: &str) -> Value {
     json!({"name": name, "emails": emails, "phones": phones, "org": org})
 }
 
-fn icalendar(uid: &str, create: &Create, start: i64, end: i64) -> String {
+fn icalendar(uid: &str, create: &Create, start: &When, end: &When) -> String {
+    let time = |name, when| {
+        let line = time(name, when, None, "");
+        match line.params.as_str() {
+            "" => format!("{name}:{}", line.value),
+            params => format!("{name};{params}:{}", line.value),
+        }
+    };
     let mut lines = vec![
         "BEGIN:VCALENDAR".to_owned(),
         "VERSION:2.0".into(),
@@ -939,8 +943,8 @@ fn icalendar(uid: &str, create: &Create, start: i64, end: i64) -> String {
         "BEGIN:VEVENT".into(),
         format!("UID:{uid}"),
         format!("DTSTAMP:{}", ical(now_nanos() as i64 / 1_000_000_000)),
-        format!("DTSTART:{}", ical(start)),
-        format!("DTEND:{}", ical(end)),
+        time("DTSTART", start),
+        time("DTEND", end),
         format!("SUMMARY:{}", escape_text(&create.summary)),
     ];
     lines.extend(
@@ -959,11 +963,21 @@ fn icalendar(uid: &str, create: &Create, start: i64, end: i64) -> String {
     lines.iter().map(|line| fold(line)).collect()
 }
 
-/// A new start or end: an all-day date as `20261105`, or seconds since the epoch.
+/// A start or end: an all-day date, or seconds since the epoch.
 #[derive(PartialEq, PartialOrd)]
 enum When {
-    Day(String),
+    Day(NaiveDate),
     At(i64),
+}
+
+impl When {
+    /// Seconds since the epoch, a date's at midnight UTC.
+    fn at(&self) -> i64 {
+        match self {
+            Self::Day(day) => day.and_time(NaiveTime::MIN).and_utc().timestamp(),
+            Self::At(at) => *at,
+        }
+    }
 }
 
 fn when(text: &str) -> Result<When, Error> {
@@ -972,16 +986,21 @@ fn when(text: &str) -> Result<When, Error> {
     }
     let day = NaiveDate::parse_from_str(text, "%Y-%m-%d")
         .map_err(|_| Error::Invalid(format!("{text:?} is not a date such as 2026-11-05")))?;
-    Ok(When::Day(day.format("%Y%m%d").to_string()))
+    Ok(When::Day(day))
 }
 
 /// The new start and end, which change together.
 fn times(start: Option<&str>, end: Option<&str>) -> Result<Option<(When, When)>, Error> {
-    let (start, end) = match (start, end) {
-        (None, None) => return Ok(None),
-        (Some(start), Some(end)) => (when(start)?, when(end)?),
-        _ => return Err(Error::Invalid("start and end are changed together".into())),
-    };
+    match (start, end) {
+        (None, None) => Ok(None),
+        (Some(start), Some(end)) => period(start, end).map(Some),
+        _ => Err(Error::Invalid("start and end are changed together".into())),
+    }
+}
+
+/// A start and an end after it, both dates or both times.
+fn period(start: &str, end: &str) -> Result<(When, When), Error> {
+    let (start, end) = (when(start)?, when(end)?);
     if matches!(
         (&start, &end),
         (When::Day(_), When::At(_)) | (When::At(_), When::Day(_))
@@ -993,13 +1012,23 @@ fn times(start: Option<&str>, end: Option<&str>) -> Result<Option<(When, When)>,
     if end <= start {
         return Err(Error::Invalid("the end is not after the start".into()));
     }
-    Ok(Some((start, end)))
+    Ok((start, end))
+}
+
+/// How long from `start` to `end`, as a DURATION value.
+fn lasting(start: &When, end: &When) -> String {
+    let length = end.at() - start.at();
+    match start {
+        When::Day(_) => format!("P{}D", length / 86_400),
+        When::At(_) => format!("PT{length}S"),
+    }
 }
 
 /// One occurrence of a series, as its RECURRENCE-ID or EXDATE names it.
 struct Occurrence {
-    params: String,
     value: String,
+    /// The `TZID=` parameter of the time zone given with it.
+    zone: Option<String>,
 }
 
 impl Occurrence {
@@ -1010,17 +1039,34 @@ impl Occurrence {
                 "{value:?} is not an occurrence from list_events"
             )));
         }
-        let params = match time_zone {
-            // A TZID only qualifies a local time.
-            Some(zone) if value.len() == 15 => tzid(zone)?,
-            _ if value.len() == 8 => "VALUE=DATE".into(),
-            _ => String::new(),
-        };
         Ok(Self {
-            params,
             value: value.into(),
+            zone: time_zone.map(tzid).transpose()?,
         })
     }
+
+    /// Its parameters: a local time is in the zone given with it, else in the series' own.
+    fn params(&self, master: &[Line]) -> String {
+        match self.value.len() {
+            8 => "VALUE=DATE".into(),
+            15 => self
+                .zone
+                .as_deref()
+                .or_else(|| zone(master))
+                .unwrap_or_default()
+                .to_owned(),
+            _ => String::new(),
+        }
+    }
+}
+
+/// The `TZID=` parameter of an event's DTSTART.
+fn zone(event: &[Line]) -> Option<&str> {
+    let at = property(event, "DTSTART")?;
+    event[at]
+        .params
+        .split(';')
+        .find(|param| param.starts_with("TZID="))
 }
 
 fn tzid(zone: &str) -> Result<String, Error> {
@@ -1169,7 +1215,7 @@ fn bump(event: &mut Vec<Line>) {
 /// A DTSTART or DTEND: a date, a local time in the zone of `zone` (a `TZID=` parameter), or UTC.
 fn time(name: &str, when: &When, zone: Option<&str>, ics: &str) -> Line {
     let at = match when {
-        When::Day(day) => return line(name, "VALUE=DATE", day),
+        When::Day(day) => return line(name, "VALUE=DATE", &day.format("%Y%m%d").to_string()),
         When::At(at) => *at,
     };
     let tzid = |param: &str| Some(param.strip_prefix("TZID=")?.trim_matches('"').to_owned());
@@ -1188,13 +1234,21 @@ struct Edit<'a> {
 }
 
 impl Edit<'_> {
-    /// Changes the whole series through its master; overrides keep their own changes.
-    fn all(&self, parts: &mut [Vec<Line>]) -> Result<(), Error> {
+    /// Changes the whole series through its master; overrides keep their own changes. New times
+    /// are the master's, or with an occurrence that occurrence's, moving the series as much.
+    fn all(&self, parts: &mut [Vec<Line>], occurrence: Option<&Occurrence>) -> Result<(), Error> {
         let master = master(parts)?;
         let start = |event: &[Line]| property(event, "DTSTART").map(|at| event[at].value.clone());
         let from = start(&parts[master]);
-        self.change(&mut parts[master]);
-        if let (Some(from), Some(to), Some(_)) = (from, start(&parts[master]), &self.times) {
+        let event = &mut parts[master];
+        self.texts(event);
+        match (&self.times, occurrence) {
+            (Some((start, end)), Some(occurrence)) => self.slide(event, occurrence, start, end)?,
+            (Some((start, end)), None) => self.retime(event, start, end),
+            (None, _) => (),
+        }
+        bump(event);
+        if let (Some(from), Some(to)) = (from, start(&parts[master])) {
             shift(parts, &from, &to);
         }
         Ok(())
@@ -1211,7 +1265,12 @@ impl Edit<'_> {
                 after
             }
         };
-        self.change(&mut parts[at]);
+        let event = &mut parts[at];
+        self.texts(event);
+        if let Some((start, end)) = &self.times {
+            self.retime(event, start, end);
+        }
+        bump(event);
         Ok(())
     }
 
@@ -1220,16 +1279,16 @@ impl Edit<'_> {
         let mut event = master.to_vec();
         let repetition = ["RRULE", "RDATE", "EXDATE", "EXRULE", "DTEND", "DURATION"];
         remove(&mut event, &repetition);
-        let (params, value) = (&occurrence.params, &occurrence.value);
-        set(&mut event, line("RECURRENCE-ID", params, value));
-        set(&mut event, line("DTSTART", params, value));
+        let (params, value) = (occurrence.params(master), &occurrence.value);
+        set(&mut event, line("RECURRENCE-ID", &params, value));
+        set(&mut event, line("DTSTART", &params, value));
         if let Some(length) = length(self.ics) {
             set(&mut event, line("DURATION", "", &length));
         }
         event
     }
 
-    fn change(&self, event: &mut Vec<Line>) {
+    fn texts(&self, event: &mut Vec<Line>) {
         let update = self.update;
         let texts = [
             ("SUMMARY", &update.summary),
@@ -1241,43 +1300,109 @@ impl Edit<'_> {
                 set(event, line(name, "", &escape_text(text)));
             }
         }
-        if let Some((start, end)) = &self.times {
-            let params = property(event, "DTSTART").map(|at| event[at].params.clone());
-            let zone = params
-                .as_deref()
-                .and_then(|params| params.split(';').find(|param| param.starts_with("TZID=")));
-            let (start, end) = (
-                time("DTSTART", start, zone, self.ics),
-                time("DTEND", end, zone, self.ics),
-            );
-            remove(event, &["DURATION"]);
-            set(event, start);
-            set(event, end);
-        }
-        bump(event);
+    }
+
+    /// New times in the event's own zone.
+    fn retime(&self, event: &mut Vec<Line>, start: &When, end: &When) {
+        let zone = zone(event).map(str::to_owned);
+        let (start, end) = (
+            time("DTSTART", start, zone.as_deref(), self.ics),
+            time("DTEND", end, zone.as_deref(), self.ics),
+        );
+        remove(event, &["DURATION"]);
+        set(event, start);
+        set(event, end);
+    }
+
+    /// Moves the master's start as far as `occurrence` moves to `start`, and makes every
+    /// occurrence last from `start` to `end`.
+    fn slide(
+        &self,
+        master: &mut Vec<Line>,
+        occurrence: &Occurrence,
+        start: &When,
+        end: &When,
+    ) -> Result<(), Error> {
+        let params = occurrence.params(master);
+        let to = time("DTSTART", start, Some(&params), self.ics).value;
+        // A floating occurrence stays floating.
+        let to = match occurrence.value.len() {
+            15 => to.trim_end_matches('Z'),
+            _ => &to,
+        };
+        let unlike =
+            || Error::Invalid("an all-day series moves to dates, a timed one to times".into());
+        let delta = delta(&occurrence.value, to).ok_or_else(unlike)?;
+        let at = property(master, "DTSTART").ok_or_else(unlike)?;
+        master[at].value = moved(&master[at].value, delta);
+        remove(master, &["DTEND", "DURATION"]);
+        set(master, line("DURATION", "", &lasting(start, end)));
+        Ok(())
     }
 }
 
-/// Moves the series' exceptions along with its start, so they keep naming the same occurrences.
+/// How far `to` is from `from`, both RECURRENCE-ID values of one form.
+fn delta(from: &str, to: &str) -> Option<TimeDelta> {
+    let (from_at, to_at) = (instant(from)?, instant(to)?);
+    (from.len() == to.len()).then(|| to_at - from_at)
+}
+
+/// Moves the series' rule and exceptions along with its start, so they keep naming the same
+/// occurrences.
 fn shift(parts: &mut [Vec<Line>], from: &str, to: &str) {
-    let delta = match (instant(from), instant(to)) {
-        (Some(from_at), Some(to_at)) if from.len() == to.len() => to_at - from_at,
-        _ => return,
+    let (Some(delta), Some(from), Some(to)) = (delta(from, to), instant(from), instant(to)) else {
+        return;
     };
+    let days = (to.date() - from.date()).num_days();
     for event in parts.iter_mut().filter(|part| is_event(part)) {
         let dated: Vec<usize> = own(event)
             .filter(|&at| {
                 matches!(
                     event[at].name.as_str(),
-                    "EXDATE" | "RDATE" | "RECURRENCE-ID"
+                    "RRULE" | "EXDATE" | "RDATE" | "RECURRENCE-ID"
                 )
             })
             .collect();
         for at in dated {
-            let values = event[at].value.split(',').map(|value| moved(value, delta));
-            event[at].value = values.collect::<Vec<_>>().join(",");
+            let line = &mut event[at];
+            line.value = match line.name.as_str() {
+                "RRULE" => rule(&line.value, delta, days),
+                _ => {
+                    let values = line.value.split(',').map(|value| moved(value, delta));
+                    values.collect::<Vec<_>>().join(",")
+                }
+            };
         }
     }
+}
+
+const WEEKDAYS: [&str; 7] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+
+/// A rule moved `days` days along with its series: its weekdays and its UNTIL. shortcut:
+/// BYMONTHDAY, BYYEARDAY and BYMONTH stay; move them too if series move across those.
+fn rule(rule: &str, delta: TimeDelta, days: i64) -> String {
+    let weekday = |day: &str| {
+        let (ordinal, code) = day.split_at(day.len().saturating_sub(2));
+        let at = WEEKDAYS.iter().position(|weekday| *weekday == code);
+        at.map_or_else(
+            || day.to_owned(),
+            |at| {
+                format!(
+                    "{ordinal}{}",
+                    WEEKDAYS[(at as i64 + days).rem_euclid(7) as usize]
+                )
+            },
+        )
+    };
+    let part = |part: &str| match part.split_once('=') {
+        Some(("BYDAY", list)) => {
+            let list: Vec<String> = list.split(',').map(weekday).collect();
+            format!("BYDAY={}", list.join(","))
+        }
+        Some(("UNTIL", until)) => format!("UNTIL={}", moved(until, delta)),
+        _ => part.to_owned(),
+    };
+    rule.split(';').map(part).collect::<Vec<_>>().join(";")
 }
 
 /// A value moved by `delta` in its own form; one that is not a time, such as a period, stays.
@@ -1869,9 +1994,96 @@ mod tests {
         let fixture = Fixture::start(vec![]).await;
         let mut input = bad;
         input["event"] = json!(format!("{}{}", fixture.origin(), &SERIES[1..]));
-        let refused = Dav.call(&local(&fixture), "delete_event", input).await;
+        let refused = Dav
+            .call(&local(&fixture), "delete_event", input.clone())
+            .await;
         assert!(matches!(refused, Err(Error::Invalid(_))));
+        input.as_object_mut().unwrap().remove("occurrence");
+        let unchanged = Dav.call(&local(&fixture), "update_event", input).await;
+        assert_eq!(unchanged, Err(Error::Invalid("nothing to change".into())));
         fixture.finish().await;
+    }
+
+    #[tokio::test]
+    async fn an_occurrence_without_its_time_zone_is_in_the_series_zone() {
+        let input = json!({"occurrence": "20261019T100000"});
+        let (answer, seen) = written(input, "delete_event", 204).await;
+        answer.unwrap();
+        let sent = seen[1].text();
+        assert!(sent.contains("EXDATE;TZID=Europe/Berlin:20261019T100000\r\n"));
+        assert_eq!(october(&sent), weekly(&[("-", "2026-10-20T12:00:00Z", "")]));
+
+        let input = json!({"occurrence": "20261012T100000", "summary": "Team sync (with Ada)"});
+        let (answer, seen) = written(input, "update_event", 204).await;
+        answer.unwrap();
+        let sent = seen[1].text();
+        assert!(sent.contains("RECURRENCE-ID;TZID=Europe/Berlin:20261012T100000\r\n"));
+        let with_ada = (
+            "2026-10-12T08:00:00Z",
+            "2026-10-12T08:30:00Z",
+            "Team sync (with Ada)",
+        );
+        let kept = weekly(&[("-", "2026-10-12T08:00:00Z", ""), with_ada]);
+        assert_eq!(october(&sent), kept);
+    }
+
+    /// The 2026-10-26 instance is an EXDATE in the recording, so the 10-12 one is moved.
+    #[tokio::test]
+    async fn moving_one_occurrence_with_all_shifts_the_series_by_its_delta() {
+        let input = json!({
+            "occurrence": "20261012T100000",
+            "time_zone": "Europe/Berlin",
+            "all": true,
+            "start": "2026-10-13T11:00:00+02:00",
+            "end": "2026-10-13T11:45:00+02:00",
+        });
+        let (answer, seen) = written(input, "update_event", 204).await;
+        answer.unwrap();
+        let sent = seen[1].text();
+        assert!(
+            sent.contains("DTSTART;TZID=Europe/Berlin:20261006T110000\r\n"),
+            "{sent}"
+        );
+        assert!(sent.contains("RRULE:FREQ=WEEKLY;BYDAY=TU\r\n"));
+        assert!(sent.contains("EXDATE;TZID=Europe/Berlin:20261027T110000\r\n"));
+        assert!(sent.contains("RECURRENCE-ID;TZID=Europe/Berlin:20261020T110000\r\n"));
+        let tuesdays = [
+            ("2026-10-06T09:00:00Z", "2026-10-06T09:45:00Z", "Team sync"),
+            ("2026-10-13T09:00:00Z", "2026-10-13T09:45:00Z", "Team sync"),
+            (
+                "2026-10-20T12:00:00Z",
+                "2026-10-20T12:30:00Z",
+                "Team sync (Tuesday)",
+            ),
+        ];
+        let tuesdays: Vec<_> = tuesdays
+            .iter()
+            .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()))
+            .collect();
+        assert_eq!(october(&sent), tuesdays);
+    }
+
+    #[tokio::test]
+    async fn create_event_makes_an_all_day_event() {
+        let mut input = json!({"summary": "Holiday", "start": "2026-11-07", "end": "2026-11-08"});
+        input["calendar"] = json!("");
+        let uid = uid(&crate::input(input.clone()).unwrap());
+        let path = format!("/dav/victor/personal/{uid}.ics");
+        let fixture = Fixture::start(vec![Exchange::raw("PUT", &path, 201, "")]).await;
+        input["calendar"] = json!(format!("{}dav/victor/personal/", fixture.origin()));
+        let cx = local(&fixture);
+        let mut mixed = input.clone();
+        mixed["end"] = json!("2026-11-07T10:00:00Z");
+        let refused = Dav.call(&cx, "create_event", mixed).await;
+        assert!(matches!(refused, Err(Error::Invalid(_))));
+        Dav.call(&cx, "create_event", input).await.unwrap();
+        let sent = fixture.finish().await[0].text();
+        let days = "DTSTART;VALUE=DATE:20261107\r\nDTEND;VALUE=DATE:20261108\r\n";
+        assert!(sent.contains(days), "{sent}");
+        let shown = occurrences(&sent, 1_790_000_000, 1_800_000_000);
+        assert_eq!(shown[0]["start"], "2026-11-07");
+        assert_eq!(shown[0]["end"], "2026-11-08");
+        assert_eq!(shown[0]["all_day"], true);
     }
 
     #[test]

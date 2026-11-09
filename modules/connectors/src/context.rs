@@ -179,6 +179,25 @@ impl Context {
 
     /// Sends, waiting out short rate limits, and maps a refusal to an [`Error`].
     pub async fn send(&self, request: RequestBuilder) -> Result<Response, Error> {
+        let (response, reading) = self.answer(request).await?;
+        refused(response, reading).await
+    }
+
+    /// [`Context::send`] for a write made conditional on what was read: a 412 is `changed`.
+    pub(crate) async fn send_unchanged(
+        &self,
+        request: RequestBuilder,
+        changed: &str,
+    ) -> Result<Response, Error> {
+        let (response, reading) = self.answer(request).await?;
+        if response.status() == StatusCode::PRECONDITION_FAILED {
+            return Err(Error::Invalid(changed.into()));
+        }
+        refused(response, reading).await
+    }
+
+    /// The answer after waiting out short rate limits, and whether the request was a read.
+    async fn answer(&self, request: RequestBuilder) -> Result<(Response, bool), Error> {
         let request = request
             .build()
             .map_err(|_| Error::Invalid("the request could not be built".into()))?;
@@ -196,7 +215,7 @@ impl Context {
                     tokio::time::sleep(delay).await;
                     current = next;
                 }
-                _ => return refused(response, reading).await,
+                _ => return Ok((response, reading)),
             }
         }
         unreachable!("the attempts are unbounded until one returns")
@@ -244,7 +263,7 @@ pub fn file(name: &str, content_type: Option<&str>, bytes: &[u8]) -> Value {
 
 /// A request that failed without an answer. One that was never sent did nothing; a read did
 /// nothing either way; anything else may have taken effect.
-pub(crate) fn failed(error: &reqwest::Error, reading: bool) -> Error {
+fn failed(error: &reqwest::Error, reading: bool) -> Error {
     if error.is_connect() || error.is_builder() || reading {
         let what = if error.is_timeout() {
             "timed out"
@@ -273,7 +292,7 @@ fn wait(response: &Response) -> Option<Duration> {
     Some(Duration::from_secs(seconds)).filter(|delay| *delay <= LONGEST_WAIT)
 }
 
-pub(crate) async fn refused(response: Response, reading: bool) -> Result<Response, Error> {
+async fn refused(response: Response, reading: bool) -> Result<Response, Error> {
     let status = response.status();
     if status.is_success() {
         return Ok(response);
