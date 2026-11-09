@@ -1599,6 +1599,157 @@
         }
       }
     },
+    "/api/calendar": {
+      "get": {
+        "tags": [],
+        "summary": "The range's events and routine runs, in order of start; 400 for a range over 62 days. A\nconnection that fails shows its problem on its source.",
+        "operationId": "calendar_range",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "RFC 3339; at most 62 days before `to`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "time_zone",
+            "in": "query",
+            "description": "The IANA zone days are counted in; the profile's, else UTC, when absent.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarRange"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/calendar/events": {
+      "put": {
+        "tags": [],
+        "summary": "Changes the event, or with scope `all` the series its occurrence belongs to; read the range\nagain for the result.",
+        "operationId": "update_calendar_event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "summary": "404 for a connection that is not yours, 403 when its level does not allow writing, 422 with\nthe vendor's reason when it refuses.",
+        "operationId": "create_calendar_event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "delete_calendar_event",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RemoveEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "422": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/connections": {
       "get": {
         "tags": [],
@@ -6623,6 +6774,25 @@
           }
         }
       },
+      "CalendarRange": {
+        "type": "object",
+        "required": ["sources", "items"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "description": "In order of start."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            }
+          }
+        }
+      },
       "CallRecord": {
         "type": "object",
         "description": "What a voice call's message shows.",
@@ -6711,6 +6881,59 @@
           "notifications",
           "data"
         ]
+      },
+      "ChangeEvent": {
+        "type": "object",
+        "description": "A change to an event, named as its [`EventDetail`] names it; fields absent stay as they are.",
+        "required": ["connection", "calendar", "event", "scope"],
+        "properties": {
+          "all_day": {
+            "type": ["boolean", "null"]
+          },
+          "calendar": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "end": {
+            "type": ["string", "null"]
+          },
+          "etag": {
+            "type": ["string", "null"]
+          },
+          "event": {
+            "type": "string"
+          },
+          "location": {
+            "type": ["string", "null"]
+          },
+          "occurrence": {
+            "type": ["string", "null"]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "series": {
+            "type": ["string", "null"]
+          },
+          "start": {
+            "type": ["string", "null"],
+            "description": "Given together with `end`."
+          },
+          "time_zone": {
+            "type": ["string", "null"],
+            "description": "The event's own `time_zone` when its detail has one, else the viewer's zone."
+          },
+          "title": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
       },
       "ChatgptSignIn": {
         "type": "object",
@@ -7429,6 +7652,46 @@
           }
         }
       },
+      "EventDetail": {
+        "type": "object",
+        "description": "What a write names the event by. Google and Microsoft name an occurrence by its own `event`\nid and give its `series`; CalDAV names it by the event's href and its `occurrence`.",
+        "required": ["connection", "calendar", "event"],
+        "properties": {
+          "calendar": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "etag": {
+            "type": ["string", "null"]
+          },
+          "event": {
+            "type": "string"
+          },
+          "link": {
+            "type": ["string", "null"],
+            "description": "The event in the vendor's own app."
+          },
+          "location": {
+            "type": ["string", "null"]
+          },
+          "occurrence": {
+            "type": ["string", "null"]
+          },
+          "series": {
+            "type": ["string", "null"]
+          },
+          "time_zone": {
+            "type": ["string", "null"],
+            "description": "The event's own zone, which a write of a CalDAV occurrence sends back as `time_zone`."
+          }
+        }
+      },
       "EventRoutine": {
         "type": "object",
         "required": ["id", "name", "agent", "agent_name", "event", "enabled"],
@@ -8046,6 +8309,69 @@
         },
         "additionalProperties": false
       },
+      "Item": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "source",
+          "title",
+          "start",
+          "all_day",
+          "editable"
+        ],
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "editable": {
+            "type": "boolean"
+          },
+          "end": {
+            "type": ["string", "null"],
+            "description": "Exclusive: the day after for an all-day item."
+          },
+          "event": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EventDetail"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable across reads."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`event`, `routine` (an upcoming run), `run` (a run that happened) or `digest` (a day of a\nroutine that runs more than hourly)."
+          },
+          "routine": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RoutineDetail"
+              }
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "start": {
+            "type": "string",
+            "description": "RFC 3339 in UTC, or `YYYY-MM-DD` when `all_day`."
+          },
+          "title": {
+            "type": "string",
+            "description": "Untrusted vendor text for an event."
+          }
+        }
+      },
       "KeyView": {
         "type": "object",
         "required": ["present"],
@@ -8493,6 +8819,50 @@
             "type": ["string", "null"],
             "format": "uuid",
             "description": "The new parent; null is the top level."
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewEvent": {
+        "type": "object",
+        "description": "A new event: RFC 3339 times, or `YYYY-MM-DD` dates (end exclusive) with `all_day`.",
+        "required": [
+          "connection",
+          "calendar",
+          "title",
+          "start",
+          "end",
+          "all_day"
+        ],
+        "properties": {
+          "all_day": {
+            "type": "boolean"
+          },
+          "calendar": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "end": {
+            "type": "string"
+          },
+          "location": {
+            "type": ["string", "null"]
+          },
+          "start": {
+            "type": "string"
+          },
+          "time_zone": {
+            "type": ["string", "null"],
+            "description": "The viewer's IANA zone; the profile's, else UTC, when absent."
+          },
+          "title": {
+            "type": "string"
           }
         },
         "additionalProperties": false
@@ -9197,6 +9567,39 @@
           }
         ]
       },
+      "RemoveEvent": {
+        "type": "object",
+        "required": ["connection", "calendar", "event", "scope"],
+        "properties": {
+          "calendar": {
+            "type": "string"
+          },
+          "connection": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etag": {
+            "type": ["string", "null"]
+          },
+          "event": {
+            "type": "string"
+          },
+          "occurrence": {
+            "type": ["string", "null"]
+          },
+          "scope": {
+            "$ref": "#/components/schemas/Scope"
+          },
+          "series": {
+            "type": ["string", "null"]
+          },
+          "time_zone": {
+            "type": ["string", "null"],
+            "description": "The event's own `time_zone` when its detail has one."
+          }
+        },
+        "additionalProperties": false
+      },
       "Replace": {
         "type": "object",
         "description": "Replaces one exact passage, which must occur once, so it needs no revision to be safe.",
@@ -9558,6 +9961,40 @@
           "webhook": {
             "type": "boolean",
             "description": "A webhook secret is set; it is shown only when made."
+          }
+        }
+      },
+      "RoutineDetail": {
+        "type": "object",
+        "required": ["agent", "routine", "schedule", "time_zone"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "outcome": {
+            "type": ["string", "null"],
+            "description": "A run's turn status, or `failed`."
+          },
+          "routine": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "runs": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "A digest's runs that day.",
+            "minimum": 0
+          },
+          "schedule": {
+            "type": "string"
+          },
+          "time_zone": {
+            "type": "string"
+          },
+          "turn": {
+            "type": ["string", "null"],
+            "format": "uuid"
           }
         }
       },
@@ -10420,6 +10857,47 @@
           "skill": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "Source": {
+        "type": "object",
+        "description": "One calendar of a connection, or one agent.",
+        "required": ["id", "kind", "name", "writable"],
+        "properties": {
+          "account": {
+            "type": ["string", "null"],
+            "description": "The connection's account a calendar belongs to."
+          },
+          "color": {
+            "type": ["string", "null"],
+            "description": "A hex color the vendor gives the calendar."
+          },
+          "connection": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "connector": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "description": "`calendar:<connection>:<calendar>`, `calendar:<connection>` for a connection whose\ncalendars could not be listed, or `agent:<agent>`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`calendar` or `agent`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "problem": {
+            "type": ["string", "null"],
+            "description": "Why its events are missing, worded for the person."
+          },
+          "writable": {
+            "type": "boolean",
+            "description": "Its events can be created, changed and deleted from the calendar."
           }
         }
       },

@@ -171,10 +171,10 @@ static MANIFEST: Manifest = Manifest {
         },
         ToolSpec {
             name: "calendar_create_event",
-            description: "Create an event on your own calendar, without inviting anyone.",
+            description: "Create an event on one of your calendars, without inviting anyone.",
             risk: Risk::Write,
             product: CALENDAR,
-            input: r#"{"type":"object","properties":{"subject":{"type":"string"},"start":{"type":"string","description":"Local time without offset, such as 2026-11-05T09:00:00."},"end":{"type":"string"},"time_zone":{"type":"string","description":"Such as Europe/Lisbon; UTC when absent."},"body":{"type":"string"},"location":{"type":"string"}},"required":["subject","start","end"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{"calendar":{"type":"string","description":"A calendar id from calendar_list; your default calendar when absent."},"subject":{"type":"string"},"start":{"type":"string","description":"Local time without offset, such as 2026-11-05T09:00:00, or a date for an all-day event."},"end":{"type":"string","description":"Exclusive: the day after for an all-day event."},"all_day":{"type":"boolean","description":"True when start and end are dates."},"time_zone":{"type":"string","description":"Such as Europe/Lisbon; UTC when absent."},"body":{"type":"string"},"location":{"type":"string"}},"required":["subject","start","end"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "calendar_update_event",
@@ -382,10 +382,12 @@ struct Removal {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct NewEvent {
+    calendar: Option<String>,
     subject: String,
     start: String,
     end: String,
     time_zone: Option<String>,
+    all_day: Option<bool>,
     body: Option<String>,
     location: Option<String>,
     #[serde(default)]
@@ -1044,10 +1046,11 @@ async fn create_event(cx: &Context, input: Value, invite: bool) -> Result<Value,
         return Err(Error::Invalid(wrong.into()));
     }
     let zone = new.time_zone.as_deref().unwrap_or("UTC");
+    let all_day = new.all_day.unwrap_or(false);
     let mut body = json!({
         "subject": new.subject,
-        "start": {"dateTime": new.start, "timeZone": zone},
-        "end": {"dateTime": new.end, "timeZone": zone},
+        "start": {"dateTime": stamp(&new.start, all_day)?, "timeZone": zone},
+        "end": {"dateTime": stamp(&new.end, all_day)?, "timeZone": zone},
         "attendees": new.attendees.iter().map(|address| json!({"emailAddress": {"address": address}, "type": "required"})).collect::<Vec<_>>(),
     });
     if let Some(text) = new.body {
@@ -1056,9 +1059,14 @@ async fn create_event(cx: &Context, input: Value, invite: bool) -> Result<Value,
     if let Some(place) = new.location {
         body["location"] = json!({"displayName": place});
     }
-    let made = cx
-        .json(cx.post(&format!("{API}/me/events"))?.json(&body))
-        .await?;
+    if all_day {
+        body["isAllDay"] = json!(true);
+    }
+    let url = match &new.calendar {
+        Some(id) => format!("{API}/me/calendars/{}/events", part(id)),
+        None => format!("{API}/me/events"),
+    };
+    let made = cx.json(cx.post(&url)?.json(&body)).await?;
     Ok(event(&made))
 }
 
@@ -1455,6 +1463,45 @@ mod tests {
                 .target
                 .contains("startDateTime=2026-11-05T00:00:00Z")
         );
+    }
+
+    #[tokio::test]
+    async fn calendar_create_event_targets_a_calendar_and_makes_all_day_events() {
+        let fixture = Fixture::start(vec![
+            graph(
+                "POST",
+                "/me/calendars/AAMkBirthdays/events",
+                json!({"id": "AAMkNew"}),
+            ),
+            graph("POST", "/me/events", json!({"id": "AAMkTimed"})),
+        ])
+        .await;
+        let cx = cx(&fixture);
+        let all_day = json!({"calendar": "AAMkBirthdays", "subject": "Holiday", "start": "2026-11-05", "end": "2026-11-06", "all_day": true, "time_zone": "Europe/Lisbon"});
+        let made = Microsoft
+            .call(&cx, "calendar_create_event", all_day)
+            .await
+            .unwrap();
+        assert_eq!(made["id"], "AAMkNew");
+        let timed = json!({"subject": "Call", "start": "2026-11-05", "end": "2026-11-05T10:00:00", "all_day": true});
+        let refused = Microsoft.call(&cx, "calendar_create_event", timed).await;
+        assert!(matches!(refused, Err(Error::Invalid(_))));
+        let timed = json!({"subject": "Call", "start": "2026-11-05T09:00:00", "end": "2026-11-05T10:00:00"});
+        Microsoft
+            .call(&cx, "calendar_create_event", timed)
+            .await
+            .unwrap();
+        let seen = fixture.finish().await;
+        let body = seen[0].json();
+        assert_eq!(
+            (&body["start"], &body["end"], &body["isAllDay"]),
+            (
+                &json!({"dateTime": "2026-11-05T00:00:00", "timeZone": "Europe/Lisbon"}),
+                &json!({"dateTime": "2026-11-06T00:00:00", "timeZone": "Europe/Lisbon"}),
+                &json!(true)
+            )
+        );
+        assert_eq!(seen[1].json()["isAllDay"], Value::Null);
     }
 
     #[tokio::test]

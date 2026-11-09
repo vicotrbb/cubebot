@@ -1,5 +1,5 @@
 mod agent;
-mod cron;
+pub(crate) mod cron;
 
 use super::{Work, access, wake};
 use crate::{

@@ -3,6 +3,7 @@ mod activity;
 mod agents;
 mod backup;
 mod browser;
+mod calendar;
 mod calls;
 mod connections;
 mod connectors;
@@ -78,6 +79,7 @@ pub fn openapi() -> String {
     doc.merge(work::Doc::openapi());
     doc.merge(desktop::Doc::openapi());
     doc.merge(calls::Doc::openapi());
+    doc.merge(calendar::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
     doc.merge(teams::Doc::openapi());
     doc.merge(memories::Doc::openapi());
@@ -173,6 +175,8 @@ pub async fn configured_router_with_credentials(
     let connections = credentials
         .map(|credentials| crate::connections::Connections::new(pool.clone(), credentials));
     let speech = crate::speech::Speech::environment(connections.clone());
+    let events = crate::calendar::Calendar::new(pool.clone(), connections.clone());
+    routes = routes.merge(calendar::router(identity.clone(), events));
     routes = routes.merge(calls::router(
         pool,
         identity.clone(),

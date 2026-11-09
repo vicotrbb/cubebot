@@ -152,3 +152,20 @@ Every sentence a person finishes becomes an ordinary `chat_turns` row through th
 **Open details.** Non-English embedded models; a limit on concurrent calls; telling the agent how much of a reply was heard; mute.
 
 **Validation scenarios.** Real speech through the embedded models yields the expected text; a call produces one Call message whose turns reached the agent's context; speaking over the agent stops playback; refusing a person's `conversation.send` refuses their call; each external adapter sends its documented request; a tampered model download is refused.
+
+## A calendar of the person's events and their agents' schedules
+
+Accepted 2026-11-09, at the user's direction (docs/superpowers/specs/2026-11-09-calendar-design.md). The user set the scope, the noise rule, the time zone, recurring edits and editing; the details marked *chosen here* were not specified and are open to overrule.
+
+**Decision.** The console has a Calendar that shows, on one timeline in the person's time zone, the events of the calendar connections they created (`connections.created_by`) and the routines of the agents they created (`agents.created_by`). Nobody sees another person's calendars or agents there, administrators included, which keeps [Installation-managed external account connections](identity.md#installation-managed-external-account-connections): a member who adds no connection sees only routines.
+
+- **Events** come from Google, Microsoft 365 and CalDAV connections with Calendar switched on, through the same connector tools agents use ([Native connectors](identity.md#native-connectors)), called by the orchestrator with the connection's credential. Every calendar a connection lists is a source. Nothing is stored: each read asks the vendors, and repeating events come as their occurrences, exceptions applied. A connection or calendar that fails shows its problem on its source; the rest still shows.
+- **Routines** show by their schedule, read in the routine's own zone: each upcoming run, and the scheduled runs that happened with their outcome. A routine with no schedule (webhook or connection event only) is not shown. A routine with more than 24 runs in one of the person's days shows that day as one digest with the count.
+- **Writes.** Events are created, changed and deleted from the calendar; a change or deletion of a repeating event's occurrence applies to that occurrence or, as the person chooses, to all events of the series. The connection's level governs: a connection whose level does not offer the write is read-only. Routines are written through the routine endpoints; the calendar adds no routine API.
+- **Time zone.** The profile's zone, else the browser's. Google and Microsoft writes are made in that zone; a CalDAV occurrence is named in the event's own zone.
+
+*Chosen here:* a read covers at most 62 days; the orchestrator keeps no cache, and the console caches per range; calendar writes are not audited, as agents' tool calls are not; a change answers no content and the console reads the range again, because a series change moves many occurrences.
+
+**Rationale.** Asking the vendors on each read keeps PostgreSQL free of anyone's calendar and needs no sync. Reusing the connector tools gives agents and people the same reads and writes, so a fix reaches both.
+
+**Consequences.** A read is as slow as the slowest calendar and makes one vendor request per calendar (Google pages through 250 events at a time). Microsoft reads at most 500 events and CalDAV 100 occurrences per calendar and range.

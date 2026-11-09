@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, routine_id AS \"routine!\", extract(epoch FROM created_at)::bigint AS \"started!\",\n            extract(epoch FROM completed_at)::bigint AS ended,\n            CASE WHEN error IS NULL THEN status ELSE 'failed' END AS \"outcome!\"\n        FROM chat_turns\n        WHERE routine_id = ANY($1) AND origin = 'schedule'\n            AND created_at >= to_timestamp($2) AND created_at < to_timestamp($3)\n        ORDER BY created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "routine!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "started!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "ended",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "outcome!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Float8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "68ea563769b77ee32676283e4f4724f6710dcaa294ca29def39078553cbcf995"
+}

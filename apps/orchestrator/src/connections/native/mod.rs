@@ -664,6 +664,37 @@ impl Connections {
         self.token(stored).await
     }
 
+    /// Runs one of the connection's tools for the orchestrator itself, with a current credential.
+    /// A refused credential leaves the connection needing a new sign-in, as a poll does.
+    #[tracing::instrument(skip_all, fields(connection = %id, tool))]
+    pub(crate) async fn call_tool(
+        &self,
+        id: Uuid,
+        tool: &str,
+        input: Value,
+    ) -> Result<Value, ConnectError> {
+        let (credential, _) = self.fresh_credential(id).await?;
+        let mut tx = self.pool.begin().await?;
+        let stored = self.stored(&mut tx, id, false).await?;
+        tx.commit().await?;
+        let cx = self.context(stored.config, credential);
+        match stored.connector.call(&cx, tool, input).await {
+            Ok(answer) => Ok(answer),
+            Err(cubebot_connectors::Error::Unauthorized) => {
+                sqlx::query!(
+                    "UPDATE connections SET status = 'sign_in_again', problem = $2 WHERE id = $1",
+                    id,
+                    "The account refused the credential; sign in again.",
+                )
+                .execute(&self.pool)
+                .await?;
+                Err(ConnectError::SignInAgain)
+            }
+            Err(cubebot_connectors::Error::Invalid(problem)) => Err(ConnectError::Invalid(problem)),
+            Err(error) => Err(ConnectError::Refused(refusal(&error))),
+        }
+    }
+
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn agent_connections(
         &self,

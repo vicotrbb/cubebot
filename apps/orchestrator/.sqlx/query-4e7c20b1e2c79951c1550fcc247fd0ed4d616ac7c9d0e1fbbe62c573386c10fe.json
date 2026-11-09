@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.agent_id AS agent, r.id, r.name, r.schedule AS \"schedule!\", r.time_zone\n        FROM routines r JOIN agents a ON a.id = r.agent_id\n        WHERE a.created_by = $1 AND a.desired_state <> 'retired' AND r.enabled AND r.schedule IS NOT NULL\n        ORDER BY r.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "schedule!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "time_zone",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "4e7c20b1e2c79951c1550fcc247fd0ed4d616ac7c9d0e1fbbe62c573386c10fe"
+}
