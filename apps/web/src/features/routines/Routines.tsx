@@ -49,6 +49,7 @@ export function Routines({
 }) {
   const [routines, setRoutines] = useState<Routine[]>([])
   const [editing, setEditing] = useState<Routine | 'new' | null>(null)
+  const zone = useViewerZone()
   const [secret, setSecret] = useState<Secret | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -188,7 +189,7 @@ export function Routines({
                   <code>{routine.command}</code>
                 </p>
               )}
-              <p className="small faint">{describe(routine)}</p>
+              <p className="small faint">{describe(routine, zone)}</p>
               {routine.webhook && (
                 <WebhookDetails
                   agent={agent.id}
@@ -242,13 +243,34 @@ export function Routines({
   )
 }
 
-function describe(routine: Routine) {
+/** The zone the person reads times in: their profile's, else this device's. */
+function useViewerZone() {
+  const profile = useProfile()
+  return (
+    profile.data?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  )
+}
+
+function nextRun(at: string | null | undefined, zone: string) {
+  if (!at) return 'never'
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: zone,
+    timeZoneName: 'short',
+  }).format(new Date(at))
+}
+
+function describe(routine: Routine, zone: string) {
   const managed =
     routine.managed_by === 'agent'
       ? 'Managed by the agent'
       : 'Managed by a person'
   const schedule = routine.schedule
-    ? `next ${routine.next_at ? when(routine.next_at) : 'never'}, on ${routine.time_zone.replaceAll('_', ' ')} time`
+    ? `On ${routine.time_zone.replaceAll('_', ' ')} time, next ${nextRun(routine.next_at, zone)}`
     : routine.trigger
       ? `Runs on ${routine.trigger.connection}'s ${routine.trigger.event}`
       : routine.webhook
@@ -627,15 +649,15 @@ function Triggers({
   )
 }
 
-/** Defaults to the zone in the person's profile, else this device's. */
+/** Defaults to the zone the person reads times in. */
 function ZoneField({ existing }: { existing: Routine | undefined }) {
-  const profile = useProfile()
+  const viewer = useViewerZone()
   const zones = useMemo(() => Intl.supportedValuesOf('timeZone'), [])
-  const [chosen, setChosen] = useState(existing?.time_zone)
-  const zone =
-    chosen ??
-    (profile.data?.time_zone ||
-      Intl.DateTimeFormat().resolvedOptions().timeZone)
+  // An unscheduled routine holds the column default, UTC, which nobody chose.
+  const [chosen, setChosen] = useState(
+    existing?.schedule ? existing.time_zone : undefined,
+  )
+  const zone = chosen ?? viewer
   return (
     <Field label="Time zone">
       <select

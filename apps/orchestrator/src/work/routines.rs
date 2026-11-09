@@ -452,8 +452,12 @@ pub async fn tick(pool: &PgPool) -> Result<usize, IdentityError> {
     .fetch_all(&mut *tx)
     .await?;
     for routine in &due {
+        let zone = cron::zone(&routine.time_zone);
+        if zone.is_none() {
+            tracing::warn!(routine = %routine.id, zone = %routine.time_zone, "routine time zone is unknown; it stops");
+        }
         let next = Cron::parse(&routine.schedule)
-            .zip(cron::zone(&routine.time_zone))
+            .zip(zone)
             .and_then(|(cron, zone)| cron.after_in(now, zone));
         sqlx::query!(
             "
