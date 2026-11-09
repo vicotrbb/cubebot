@@ -6,13 +6,15 @@ use crate::{
     Field, FieldKind, Level, Manifest, OAuth2, Poll, Product, Risk, Scope, Step, ToolSpec,
 };
 use base64::Engine;
-use chrono::{NaiveDateTime, TimeZone};
+use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, TimeZone};
 use reqwest::Method;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 const API: &str = "https://graph.microsoft.com/v1.0";
 const INBOX: &str = "/me/mailFolders/inbox/messages";
+/// Asks Graph for times in UTC.
+const UTC: &str = "outlook.timezone=\"UTC\"";
 /// The most text a tool hands the model at once.
 const LONGEST_TEXT: usize = 50_000;
 /// Graph's limit for a single-request upload.
@@ -761,7 +763,7 @@ async fn calendars(cx: &Context) -> Result<Value, Error> {
 async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     let window: Window = crate::input(input)?;
     let wanted = usize::from(window.limit.unwrap_or(50).clamp(1, 500));
-    let select = "subject,start,end,isAllDay,location,organizer,attendees,onlineMeeting,webLink,type,seriesMasterId";
+    let select = "subject,start,end,isAllDay,location,organizer,attendees,onlineMeeting,webLink,type,seriesMasterId,originalStartTimeZone";
     let top = wanted.min(100).to_string();
     let pairs = [
         ("startDateTime", window.start.as_str()),
@@ -777,7 +779,7 @@ async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     let mut url = format!("{base}{}", query(&pairs));
     let mut found = Vec::new();
     loop {
-        let request = cx.get(&url)?.header("prefer", "outlook.timezone=\"UTC\"");
+        let request = cx.get(&url)?.header("prefer", UTC);
         let page = cx.json(request).await?;
         let events = page["value"].as_array().into_iter().flatten();
         found.extend(events.map(|item| in_calendar(item, window.calendar.as_deref())));
@@ -796,7 +798,29 @@ fn in_calendar(item: &Value, calendar: Option<&str>) -> Value {
     let mut made = event(item);
     made["time_zone"] = json!("UTC");
     made["calendar"] = json!(calendar);
+    if item["isAllDay"] == true {
+        for key in ["start", "end"] {
+            made[key] = own_day(&item[key]["dateTime"], &item["originalStartTimeZone"]);
+        }
+    }
     made
+}
+
+/// An all-day boundary read in UTC as the date it has in the event's own zone, which is the
+/// same date when UTC says midnight.
+fn own_day(utc: &Value, zone: &Value) -> Value {
+    let Some(at) = utc.as_str().and_then(|text| wall_clock(text).ok()) else {
+        return utc.clone();
+    };
+    let own = zone.as_str().and_then(crate::recurrence::zone);
+    let day = match (at.time() == NaiveTime::MIN, own) {
+        (false, Some(own)) => chrono::Utc
+            .from_utc_datetime(&at)
+            .with_timezone(&own)
+            .date_naive(),
+        _ => at.date(),
+    };
+    json!(day.to_string())
 }
 
 fn event_path(id: &str) -> String {
@@ -808,7 +832,10 @@ async fn series_of(cx: &Context, event: &str, all: bool) -> Result<(String, Opti
     if !all {
         return Ok((event.into(), None));
     }
-    let select = query(&[("$select", "seriesMasterId,originalStart")]);
+    let select = query(&[(
+        "$select",
+        "seriesMasterId,originalStart,originalStartTimeZone",
+    )]);
     let found = cx
         .json(cx.get(&format!("{}{select}", event_path(event)))?)
         .await?;
@@ -839,41 +866,97 @@ fn zone(name: &str) -> Result<chrono_tz::Tz, Error> {
         .ok_or_else(|| Error::Invalid(format!("{name} is not a time zone")))
 }
 
-/// The series' new start and end: its first occurrence moved as far as the edited occurrence on
-/// the wall clock of the zone, keeping the new length.
+const WEEKDAYS: [&str; 7] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+];
+
+fn on(date: NaiveDate, by: i64) -> NaiveDate {
+    date + TimeDelta::days(by)
+}
+
+/// The recurrence with its days moved `by` days, so the occurrences keep following the series start
+/// that moved to `first`.
+fn moved_recurrence(recurrence: &Value, by: i64, first: NaiveDate) -> Result<Value, Error> {
+    let mut moved = recurrence.clone();
+    let pattern = &mut moved["pattern"];
+    match pattern["type"].as_str() {
+        Some("weekly") => {
+            let days = pattern["daysOfWeek"].as_array().into_iter().flatten();
+            let shifted: Vec<&str> = days
+                .filter_map(|day| WEEKDAYS.iter().position(|name| Some(*name) == day.as_str()))
+                .map(|at| WEEKDAYS[(at as i64 + by).rem_euclid(7) as usize])
+                .collect();
+            pattern["daysOfWeek"] = json!(shifted);
+        }
+        Some("absoluteMonthly") => pattern["dayOfMonth"] = json!(first.day()),
+        Some("absoluteYearly") => {
+            pattern["dayOfMonth"] = json!(first.day());
+            pattern["month"] = json!(first.month());
+        }
+        Some("relativeMonthly" | "relativeYearly") => {
+            return Err(Error::Invalid(
+                "this series repeats on a weekday of the month; move it from the series' first event".into(),
+            ));
+        }
+        _ => (),
+    }
+    let range = &mut moved["range"];
+    let ends = range["type"] == "endDate";
+    for key in ["startDate", "endDate"] {
+        let date = range[key].as_str();
+        if let Some(date) = date.filter(|_| key == "startDate" || ends) {
+            let parsed = NaiveDate::parse_from_str(date, "%Y-%m-%d");
+            let parsed = parsed.map_err(|_| Error::Invalid(format!("{date} is not a date")))?;
+            range[key] = json!(on(parsed, by).to_string());
+        }
+    }
+    Ok(moved)
+}
+
+/// The series' new start, end and recurrence: its first occurrence moved as far as the edited
+/// occurrence on the wall clock of the zone, keeping the new length.
 async fn shifted(
     cx: &Context,
     (master, occurrence): (&str, &Value),
     (start, end): (&str, &str),
     zone_name: Option<&str>,
-) -> Result<(Value, Value), Error> {
-    let select = query(&[("$select", "start")]);
-    let first = cx
-        .json(cx.get(&format!("{}{select}", event_path(master)))?)
-        .await?;
-    let own = first["start"]["timeZone"].as_str();
+) -> Result<Map<String, Value>, Error> {
+    let select = query(&[("$select", "start,recurrence")]);
+    let request = cx.get(&format!("{}{select}", event_path(master)))?;
+    let first = cx.json(request.header("prefer", UTC)).await?;
     let name = zone_name
-        .or(own)
+        .or(occurrence["originalStartTimeZone"].as_str())
         .ok_or_else(|| Error::Invalid("the series has no time zone; pass time_zone".into()))?;
-    let (tz, own_tz) = (zone(name)?, zone(own.unwrap_or(name))?);
+    let tz = zone(name)?;
     let originally = occurrence["originalStart"].as_str().unwrap_or_default();
-    let was = tz.from_utc_datetime(&wall_clock(originally)?).naive_local();
+    let originally = DateTime::parse_from_rfc3339(originally)
+        .map_err(|_| Error::Invalid(format!("{originally} is not a time")))?;
+    let was = tz.from_utc_datetime(&originally.naive_utc()).naive_local();
     let began = wall_clock(first["start"]["dateTime"].as_str().unwrap_or_default())?;
-    let began = own_tz
-        .from_local_datetime(&began)
-        .single()
-        .ok_or_else(|| Error::Invalid("the series start is not a time".into()))?
-        .with_timezone(&tz)
-        .naive_local();
+    let began = tz.from_utc_datetime(&began).naive_local();
     let (start, end) = (wall_clock(start)?, wall_clock(end)?);
     let from = began + (start - was);
     let render = |at: NaiveDateTime| json!({"dateTime": at.format("%Y-%m-%dT%H:%M:%S").to_string(), "timeZone": name});
-    Ok((render(from), render(from + (end - start))))
+    let mut moved = Map::new();
+    moved.insert("start".into(), render(from));
+    moved.insert("end".into(), render(from + (end - start)));
+    let by = (from.date() - began.date()).num_days();
+    if by != 0 && first["recurrence"].is_object() {
+        let recurrence = moved_recurrence(&first["recurrence"], by, from.date())?;
+        moved.insert("recurrence".into(), recurrence);
+    }
+    Ok(moved)
 }
 
-/// The fields to patch apart from the times, and the stamped times with whether they are dates.
-fn edits(change: &Change) -> Result<(serde_json::Map<String, Value>, Option<Edited>), Error> {
-    let mut body = serde_json::Map::new();
+/// The fields to patch apart from the times, and the stamped times.
+fn edits(change: &Change) -> Result<(Map<String, Value>, Option<Edited>), Error> {
+    let mut body = Map::new();
     let text = change.subject.as_ref().map(|text| json!(text));
     let notes = change
         .body
@@ -889,7 +972,7 @@ fn edits(change: &Change) -> Result<(serde_json::Map<String, Value>, Option<Edit
     let times = match (&change.start, &change.end) {
         (Some(start), Some(end)) => {
             let all_day = change.all_day.unwrap_or(false);
-            Some((stamp(start, all_day)?, stamp(end, all_day)?, all_day))
+            Some((stamp(start, all_day)?, stamp(end, all_day)?))
         }
         (None, None) => None,
         _ => return Err(Error::Invalid("start and end are given together".into())),
@@ -900,29 +983,27 @@ fn edits(change: &Change) -> Result<(serde_json::Map<String, Value>, Option<Edit
     Ok((body, times))
 }
 
-/// A start, an end and whether they are all-day dates.
-type Edited = (String, String, bool);
+/// A start and an end, stamped.
+type Edited = (String, String);
 
 /// Patches the event, or with `all` the series its occurrence belongs to.
 async fn update_event(cx: &Context, input: Value) -> Result<Value, Error> {
     let change: Change = crate::input(input)?;
     let (mut body, times) = edits(&change)?;
     let (id, occurrence) = series_of(cx, &change.event, change.all).await?;
-    if let Some((start, end, all_day)) = times {
+    if let Some((start, end)) = times {
         let zone = change.time_zone.as_deref();
-        let (start, end) = match &occurrence {
-            Some(found) => shifted(cx, (&id, found), (&start, &end), zone).await?,
+        match &occurrence {
+            Some(found) => body.extend(shifted(cx, (&id, found), (&start, &end), zone).await?),
             None => {
                 let zone = zone.unwrap_or("UTC");
-                (
-                    json!({"dateTime": start, "timeZone": zone}),
-                    json!({"dateTime": end, "timeZone": zone}),
-                )
+                body.insert("start".into(), json!({"dateTime": start, "timeZone": zone}));
+                body.insert("end".into(), json!({"dateTime": end, "timeZone": zone}));
             }
-        };
-        body.insert("isAllDay".into(), json!(all_day));
-        body.insert("start".into(), start);
-        body.insert("end".into(), end);
+        }
+        if let Some(all_day) = change.all_day {
+            body.insert("isAllDay".into(), json!(all_day));
+        }
     }
     let request = cx.request(Method::PATCH, &event_path(&id))?;
     Ok(event(&cx.json(request.json(&body)).await?))
@@ -1436,7 +1517,6 @@ mod tests {
             json!({
                 "subject": "Picnic",
                 "location": {"displayName": "Park"},
-                "isAllDay": false,
                 "start": {"dateTime": "2026-11-05T09:00:00", "timeZone": "Europe/Lisbon"},
                 "end": {"dateTime": "2026-11-05T10:00:00", "timeZone": "Europe/Lisbon"},
             })
@@ -1461,32 +1541,109 @@ mod tests {
         assert_eq!(sent["end"]["dateTime"], "2026-11-17T00:00:00");
     }
 
-    #[tokio::test]
-    async fn calendar_update_event_with_all_keeps_wall_clock_across_dst() {
-        let occurrence = json!({"id": "AAMkOcc", "type": "occurrence", "seriesMasterId": "AAMkMaster", "originalStart": "2026-10-31T13:00:00Z"});
-        let master = json!({"id": "AAMkMaster", "start": {"dateTime": "2026-10-25T09:00:00.0000000", "timeZone": "Eastern Standard Time"}, "end": {"dateTime": "2026-10-25T10:00:00.0000000", "timeZone": "Eastern Standard Time"}});
-        let fixture = Fixture::start(vec![
+    fn series_fixture(master: Value, originally: &str) -> Vec<Exchange> {
+        let occurrence = json!({"id": "AAMkOcc", "type": "occurrence", "seriesMasterId": "AAMkMaster", "originalStart": originally, "originalStartTimeZone": "Eastern Standard Time"});
+        vec![
             graph("GET", "/me/events/AAMkOcc", occurrence),
             graph("GET", "/me/events/AAMkMaster", master.clone()),
             graph("PATCH", "/me/events/AAMkMaster", master),
-        ])
-        .await;
+        ]
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_with_all_keeps_wall_clock_across_dst() {
+        // Graph answers the master in UTC; the series' own zone is the occurrence's originalStartTimeZone.
+        let master = json!({"id": "AAMkMaster", "start": {"dateTime": "2026-10-25T13:00:00.0000000", "timeZone": "UTC"}, "end": {"dateTime": "2026-10-25T14:00:00.0000000", "timeZone": "UTC"}});
+        let fixture = Fixture::start(series_fixture(master, "2026-10-31T13:00:00Z")).await;
         // Oct 31 moves to Nov 2 at 09:00 EST: two days on the wall clock, 49 hours in absolute time.
-        let input = json!({"event": "AAMkOcc", "all": true, "start": "2026-11-02T09:00:00", "end": "2026-11-02T10:00:00", "time_zone": "America/New_York"});
+        let input = json!({"event": "AAMkOcc", "all": true, "start": "2026-11-02T09:00:00", "end": "2026-11-02T10:00:00"});
+        Microsoft
+            .call(&cx(&fixture), "calendar_update_event", input)
+            .await
+            .unwrap();
+        let seen = fixture.finish().await;
+        assert_eq!(seen[1].header("prefer"), Some("outlook.timezone=\"UTC\""));
+        let zone = "Eastern Standard Time";
+        assert_eq!(
+            seen[2].json()["start"],
+            json!({"dateTime": "2026-10-27T09:00:00", "timeZone": zone})
+        );
+        assert_eq!(
+            seen[2].json()["end"],
+            json!({"dateTime": "2026-10-27T10:00:00", "timeZone": zone})
+        );
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_with_all_moves_a_weekly_pattern() {
+        let recurrence = json!({
+            "pattern": {"type": "weekly", "interval": 1, "daysOfWeek": ["monday"], "firstDayOfWeek": "sunday"},
+            "range": {"type": "endDate", "startDate": "2026-10-26", "endDate": "2026-12-28", "recurrenceTimeZone": "Eastern Standard Time"},
+        });
+        let master = json!({"id": "AAMkMaster", "start": {"dateTime": "2026-10-26T13:00:00.0000000", "timeZone": "UTC"}, "end": {"dateTime": "2026-10-26T14:00:00.0000000", "timeZone": "UTC"}, "recurrence": recurrence});
+        // The Monday Nov 2 occurrence, given with an offset, moves to Wednesday Nov 4.
+        let fixture = Fixture::start(series_fixture(master, "2026-11-02T09:00:00-05:00")).await;
+        let input = json!({"event": "AAMkOcc", "all": true, "start": "2026-11-04T09:00:00", "end": "2026-11-04T10:00:00"});
         Microsoft
             .call(&cx(&fixture), "calendar_update_event", input)
             .await
             .unwrap();
         let sent = fixture.finish().await[2].json();
-        let zone = "America/New_York";
+        assert_eq!(sent["start"]["dateTime"], "2026-10-28T09:00:00");
         assert_eq!(
-            sent["start"],
-            json!({"dateTime": "2026-10-27T09:00:00", "timeZone": zone})
+            sent["recurrence"]["pattern"]["daysOfWeek"],
+            json!(["wednesday"])
         );
-        assert_eq!(
-            sent["end"],
-            json!({"dateTime": "2026-10-27T10:00:00", "timeZone": zone})
-        );
+        assert_eq!(sent["recurrence"]["pattern"]["interval"], 1);
+        assert_eq!(sent["recurrence"]["range"]["startDate"], "2026-10-28");
+        assert_eq!(sent["recurrence"]["range"]["endDate"], "2026-12-30");
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_with_all_moves_a_monthly_day_and_refuses_a_relative_one() {
+        let master = |pattern: Value| json!({"id": "AAMkMaster", "start": {"dateTime": "2026-10-26T13:00:00.0000000", "timeZone": "UTC"}, "recurrence": {"pattern": pattern, "range": {"type": "noEnd", "startDate": "2026-10-26"}}});
+        let absolute = json!({"type": "absoluteMonthly", "interval": 1, "dayOfMonth": 26});
+        let relative = json!({"type": "relativeMonthly", "interval": 1, "daysOfWeek": ["monday"], "index": "last"});
+        let mut exchanges = series_fixture(master(absolute), "2026-11-26T14:00:00Z");
+        exchanges.extend(series_fixture(master(relative), "2026-11-30T14:00:00Z")[..2].to_vec());
+        let fixture = Fixture::start(exchanges).await;
+        let cx = cx(&fixture);
+        let input = json!({"event": "AAMkOcc", "all": true, "start": "2026-11-28T09:00:00", "end": "2026-11-28T10:00:00"});
+        Microsoft
+            .call(&cx, "calendar_update_event", input.clone())
+            .await
+            .unwrap();
+        let refused = Microsoft.call(&cx, "calendar_update_event", input).await;
+        assert!(matches!(refused, Err(Error::Invalid(_))), "{refused:?}");
+        let seen = fixture.finish().await;
+        let pattern = &seen[2].json()["recurrence"]["pattern"];
+        assert_eq!(pattern["dayOfMonth"], 28);
+        assert_eq!(seen.len(), 5, "the refused edit patches nothing");
+    }
+
+    #[tokio::test]
+    async fn calendar_events_reports_all_day_events_as_their_own_dates() {
+        let mut page = recorded("calendar_view");
+        let shifted = json!({"isAllDay": true, "originalStartTimeZone": "E. South America Standard Time", "start": {"dateTime": "2026-11-05T03:00:00.0000000", "timeZone": "UTC"}, "end": {"dateTime": "2026-11-06T03:00:00.0000000", "timeZone": "UTC"}});
+        let aligned = json!({"isAllDay": true, "originalStartTimeZone": "UTC", "start": {"dateTime": "2026-11-07T00:00:00.0000000", "timeZone": "UTC"}, "end": {"dateTime": "2026-11-08T00:00:00.0000000", "timeZone": "UTC"}});
+        let base = page["value"][0].clone();
+        page["value"] = json!([]);
+        for all_day in [shifted, aligned] {
+            let mut item = base.clone();
+            item.as_object_mut()
+                .unwrap()
+                .extend(all_day.as_object().unwrap().clone());
+            page["value"].as_array_mut().unwrap().push(item);
+        }
+        let fixture = Fixture::start(vec![graph("GET", "/me/calendarView", page)]).await;
+        let input = json!({"start": "2026-11-05T00:00:00Z", "end": "2026-11-09T00:00:00Z"});
+        let found = Microsoft
+            .call(&cx(&fixture), "calendar_events", input)
+            .await
+            .unwrap();
+        assert_eq!(found["events"][0]["start"], "2026-11-05");
+        assert_eq!(found["events"][0]["end"], "2026-11-06");
+        assert_eq!(found["events"][1]["start"], "2026-11-07");
     }
 
     #[tokio::test]
