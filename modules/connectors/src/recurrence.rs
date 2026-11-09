@@ -319,6 +319,11 @@ fn resolve(tzid: &str, zones: &Zones) -> Option<chrono_tz::Tz> {
         .or_else(|| windows(tzid))
 }
 
+/// A zone by IANA or Windows name, such as `Europe/Berlin` or `W. Europe Standard Time`.
+pub(crate) fn zone(name: &str) -> Option<chrono_tz::Tz> {
+    named(name).or_else(|| windows(name))
+}
+
 /// An IANA name, or one with a prefix such as `/mozilla.org/20070129_1/Europe/Berlin`.
 fn named(name: &str) -> Option<chrono_tz::Tz> {
     let tails = name.match_indices('/').map(|(at, _)| &name[at + 1..]);

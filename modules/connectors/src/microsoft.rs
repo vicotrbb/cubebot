@@ -6,6 +6,7 @@ use crate::{
     Field, FieldKind, Level, Manifest, OAuth2, Poll, Product, Risk, Scope, Step, ToolSpec,
 };
 use base64::Engine;
+use chrono::{NaiveDateTime, TimeZone};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -153,11 +154,18 @@ static MANIFEST: Manifest = Manifest {
             input: r#"{"type":"object","properties":{"message":{"type":"string"},"attachment":{"type":"string","description":"The attachment id from mail_read."}},"required":["message","attachment"],"additionalProperties":false}"#,
         },
         ToolSpec {
-            name: "calendar_events",
-            description: "Events between two times, including each occurrence of recurring ones.",
+            name: "calendar_list",
+            description: "Your calendars, with their ids and whether you can edit them.",
             risk: Risk::Read,
             product: CALENDAR,
-            input: r#"{"type":"object","properties":{"start":{"type":"string","description":"ISO 8601, such as 2026-11-05T00:00:00Z."},"end":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":100}},"required":["start","end"],"additionalProperties":false}"#,
+            input: r#"{"type":"object","properties":{},"additionalProperties":false}"#,
+        },
+        ToolSpec {
+            name: "calendar_events",
+            description: "Events between two times, including each occurrence of recurring ones, in UTC.",
+            risk: Risk::Read,
+            product: CALENDAR,
+            input: r#"{"type":"object","properties":{"start":{"type":"string","description":"ISO 8601, such as 2026-11-05T00:00:00Z."},"end":{"type":"string"},"calendar":{"type":"string","description":"A calendar id from calendar_list; your default calendar when absent."},"limit":{"type":"integer","minimum":1,"maximum":500}},"required":["start","end"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "calendar_create_event",
@@ -165,6 +173,20 @@ static MANIFEST: Manifest = Manifest {
             risk: Risk::Write,
             product: CALENDAR,
             input: r#"{"type":"object","properties":{"subject":{"type":"string"},"start":{"type":"string","description":"Local time without offset, such as 2026-11-05T09:00:00."},"end":{"type":"string"},"time_zone":{"type":"string","description":"Such as Europe/Lisbon; UTC when absent."},"body":{"type":"string"},"location":{"type":"string"}},"required":["subject","start","end"],"additionalProperties":false}"#,
+        },
+        ToolSpec {
+            name: "calendar_update_event",
+            description: "Change an event or one occurrence of a repeating one, or with all the whole series.",
+            risk: Risk::Write,
+            product: CALENDAR,
+            input: r#"{"type":"object","properties":{"event":{"type":"string","description":"An event or occurrence id from calendar_events."},"all":{"type":"boolean","description":"Change the whole series an occurrence belongs to."},"subject":{"type":"string"},"start":{"type":"string","description":"Local time without offset, such as 2026-11-05T09:00:00, or a date for an all-day event; given with end."},"end":{"type":"string"},"all_day":{"type":"boolean","description":"True when start and end are dates; false to make an all-day event timed."},"time_zone":{"type":"string","description":"Such as Europe/Lisbon; UTC when absent."},"body":{"type":"string"},"location":{"type":"string"}},"required":["event"],"additionalProperties":false}"#,
+        },
+        ToolSpec {
+            name: "calendar_delete_event",
+            description: "Delete an event or one occurrence of a repeating one, or with all the whole series.",
+            risk: Risk::Write,
+            product: CALENDAR,
+            input: r#"{"type":"object","properties":{"event":{"type":"string"},"all":{"type":"boolean","description":"Delete the whole series an occurrence belongs to."}},"required":["event"],"additionalProperties":false}"#,
         },
         ToolSpec {
             name: "calendar_invite",
@@ -328,7 +350,31 @@ struct Attachment {
 struct Window {
     start: String,
     end: String,
-    limit: Option<u8>,
+    calendar: Option<String>,
+    limit: Option<u16>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Change {
+    event: String,
+    #[serde(default)]
+    all: bool,
+    subject: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+    all_day: Option<bool>,
+    time_zone: Option<String>,
+    body: Option<String>,
+    location: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Removal {
+    event: String,
+    #[serde(default)]
+    all: bool,
 }
 
 #[derive(Deserialize)]
@@ -456,7 +502,10 @@ async fn mail(cx: &Context, tool: &str, input: Value) -> Result<Value, Error> {
 
 async fn calendar(cx: &Context, tool: &str, input: Value) -> Result<Value, Error> {
     match tool {
+        "calendar_list" => calendars(cx).await,
         "calendar_events" => events(cx, input).await,
+        "calendar_update_event" => update_event(cx, input).await,
+        "calendar_delete_event" => delete_event(cx, input).await,
         "calendar_create_event" => create_event(cx, input, false).await,
         "calendar_invite" => create_event(cx, input, true).await,
         "calendar_respond" => respond(cx, input).await,
@@ -687,6 +736,7 @@ fn event(event: &Value) -> Value {
         "start": event["start"]["dateTime"],
         "end": event["end"]["dateTime"],
         "time_zone": event["start"]["timeZone"],
+        "series": event["seriesMasterId"],
         "all_day": event["isAllDay"],
         "location": event["location"]["displayName"],
         "organizer": event["organizer"]["emailAddress"]["address"],
@@ -696,19 +746,195 @@ fn event(event: &Value) -> Value {
     })
 }
 
+async fn calendars(cx: &Context) -> Result<Value, Error> {
+    let found = cx.json(cx.get(&format!("{API}/me/calendars"))?).await?;
+    let calendars = list(&found, |calendar| {
+        let color = match calendar["hexColor"].as_str() {
+            Some(hex) if !hex.is_empty() => &calendar["hexColor"],
+            _ => &calendar["color"],
+        };
+        json!({"id": calendar["id"], "name": calendar["name"], "color": color, "can_edit": calendar["canEdit"]})
+    });
+    Ok(json!({"calendars": calendars}))
+}
+
 async fn events(cx: &Context, input: Value) -> Result<Value, Error> {
     let window: Window = crate::input(input)?;
-    let select = "subject,start,end,isAllDay,location,organizer,attendees,onlineMeeting,webLink";
+    let wanted = usize::from(window.limit.unwrap_or(50).clamp(1, 500));
+    let select = "subject,start,end,isAllDay,location,organizer,attendees,onlineMeeting,webLink,type,seriesMasterId";
+    let top = wanted.min(100).to_string();
     let pairs = [
         ("startDateTime", window.start.as_str()),
         ("endDateTime", window.end.as_str()),
-        ("$top", &limit(window.limit, 50)),
+        ("$top", &top),
         ("$orderby", "start/dateTime"),
         ("$select", select),
     ];
-    let url = format!("{API}/me/calendarView{}", query(&pairs));
-    let found = cx.json(cx.get(&url)?).await?;
-    Ok(json!({"events": list(&found, event)}))
+    let base = match &window.calendar {
+        Some(id) => format!("{API}/me/calendars/{}/calendarView", part(id)),
+        None => format!("{API}/me/calendarView"),
+    };
+    let mut url = format!("{base}{}", query(&pairs));
+    let mut found = Vec::new();
+    loop {
+        let request = cx.get(&url)?.header("prefer", "outlook.timezone=\"UTC\"");
+        let page = cx.json(request).await?;
+        let events = page["value"].as_array().into_iter().flatten();
+        found.extend(events.map(|item| in_calendar(item, window.calendar.as_deref())));
+        // The token goes wherever the next link points, so only Graph's own addresses are followed.
+        match page["@odata.nextLink"].as_str() {
+            Some(next) if found.len() < wanted && next.starts_with(API) => url = next.into(),
+            _ => break,
+        }
+    }
+    found.truncate(wanted);
+    Ok(json!({"events": found}))
+}
+
+/// [`event`] as read in UTC from the calendar asked for.
+fn in_calendar(item: &Value, calendar: Option<&str>) -> Value {
+    let mut made = event(item);
+    made["time_zone"] = json!("UTC");
+    made["calendar"] = json!(calendar);
+    made
+}
+
+fn event_path(id: &str) -> String {
+    format!("{API}/me/events/{}", part(id))
+}
+
+/// The id to change and, with `all` on an occurrence, the occurrence read to find its series.
+async fn series_of(cx: &Context, event: &str, all: bool) -> Result<(String, Option<Value>), Error> {
+    if !all {
+        return Ok((event.into(), None));
+    }
+    let select = query(&[("$select", "seriesMasterId,originalStart")]);
+    let found = cx
+        .json(cx.get(&format!("{}{select}", event_path(event)))?)
+        .await?;
+    Ok(match found["seriesMasterId"].as_str() {
+        Some(master) => (master.into(), Some(found)),
+        None => (event.into(), None),
+    })
+}
+
+/// Graph takes an all-day event's dates as midnights.
+fn stamp(text: &str, all_day: bool) -> Result<String, Error> {
+    match (all_day, text.len()) {
+        (true, 10) => Ok(format!("{text}T00:00:00")),
+        (true, _) => Err(Error::Invalid(
+            "all-day events take dates, such as 2026-11-05".into(),
+        )),
+        _ => Ok(text.into()),
+    }
+}
+
+fn wall_clock(text: &str) -> Result<NaiveDateTime, Error> {
+    NaiveDateTime::parse_from_str(text.trim_end_matches('Z'), "%Y-%m-%dT%H:%M:%S%.f")
+        .map_err(|_| Error::Invalid(format!("{text} is not a local time")))
+}
+
+fn zone(name: &str) -> Result<chrono_tz::Tz, Error> {
+    crate::recurrence::zone(name)
+        .ok_or_else(|| Error::Invalid(format!("{name} is not a time zone")))
+}
+
+/// The series' new start and end: its first occurrence moved as far as the edited occurrence on
+/// the wall clock of the zone, keeping the new length.
+async fn shifted(
+    cx: &Context,
+    (master, occurrence): (&str, &Value),
+    (start, end): (&str, &str),
+    zone_name: Option<&str>,
+) -> Result<(Value, Value), Error> {
+    let select = query(&[("$select", "start")]);
+    let first = cx
+        .json(cx.get(&format!("{}{select}", event_path(master)))?)
+        .await?;
+    let own = first["start"]["timeZone"].as_str();
+    let name = zone_name
+        .or(own)
+        .ok_or_else(|| Error::Invalid("the series has no time zone; pass time_zone".into()))?;
+    let (tz, own_tz) = (zone(name)?, zone(own.unwrap_or(name))?);
+    let originally = occurrence["originalStart"].as_str().unwrap_or_default();
+    let was = tz.from_utc_datetime(&wall_clock(originally)?).naive_local();
+    let began = wall_clock(first["start"]["dateTime"].as_str().unwrap_or_default())?;
+    let began = own_tz
+        .from_local_datetime(&began)
+        .single()
+        .ok_or_else(|| Error::Invalid("the series start is not a time".into()))?
+        .with_timezone(&tz)
+        .naive_local();
+    let (start, end) = (wall_clock(start)?, wall_clock(end)?);
+    let from = began + (start - was);
+    let render = |at: NaiveDateTime| json!({"dateTime": at.format("%Y-%m-%dT%H:%M:%S").to_string(), "timeZone": name});
+    Ok((render(from), render(from + (end - start))))
+}
+
+/// The fields to patch apart from the times, and the stamped times with whether they are dates.
+fn edits(change: &Change) -> Result<(serde_json::Map<String, Value>, Option<Edited>), Error> {
+    let mut body = serde_json::Map::new();
+    let text = change.subject.as_ref().map(|text| json!(text));
+    let notes = change
+        .body
+        .as_ref()
+        .map(|text| json!({"contentType": "Text", "content": text}));
+    let place = change
+        .location
+        .as_ref()
+        .map(|place| json!({"displayName": place}));
+    for (key, value) in [("subject", text), ("body", notes), ("location", place)] {
+        body.extend(value.map(|value| (key.into(), value)));
+    }
+    let times = match (&change.start, &change.end) {
+        (Some(start), Some(end)) => {
+            let all_day = change.all_day.unwrap_or(false);
+            Some((stamp(start, all_day)?, stamp(end, all_day)?, all_day))
+        }
+        (None, None) => None,
+        _ => return Err(Error::Invalid("start and end are given together".into())),
+    };
+    if body.is_empty() && times.is_none() {
+        return Err(Error::Invalid("nothing to change".into()));
+    }
+    Ok((body, times))
+}
+
+/// A start, an end and whether they are all-day dates.
+type Edited = (String, String, bool);
+
+/// Patches the event, or with `all` the series its occurrence belongs to.
+async fn update_event(cx: &Context, input: Value) -> Result<Value, Error> {
+    let change: Change = crate::input(input)?;
+    let (mut body, times) = edits(&change)?;
+    let (id, occurrence) = series_of(cx, &change.event, change.all).await?;
+    if let Some((start, end, all_day)) = times {
+        let zone = change.time_zone.as_deref();
+        let (start, end) = match &occurrence {
+            Some(found) => shifted(cx, (&id, found), (&start, &end), zone).await?,
+            None => {
+                let zone = zone.unwrap_or("UTC");
+                (
+                    json!({"dateTime": start, "timeZone": zone}),
+                    json!({"dateTime": end, "timeZone": zone}),
+                )
+            }
+        };
+        body.insert("isAllDay".into(), json!(all_day));
+        body.insert("start".into(), start);
+        body.insert("end".into(), end);
+    }
+    let request = cx.request(Method::PATCH, &event_path(&id))?;
+    Ok(event(&cx.json(request.json(&body)).await?))
+}
+
+/// Deletes the event, or with `all` the series its occurrence belongs to.
+async fn delete_event(cx: &Context, input: Value) -> Result<Value, Error> {
+    let removal: Removal = crate::input(input)?;
+    let (id, _) = series_of(cx, &removal.event, removal.all).await?;
+    cx.send(cx.request(Method::DELETE, &event_path(&id))?)
+        .await?;
+    Ok(json!({"deleted": id}))
 }
 
 async fn create_event(cx: &Context, input: Value, invite: bool) -> Result<Value, Error> {
@@ -1132,6 +1358,171 @@ mod tests {
                 .target
                 .contains("startDateTime=2026-11-05T00:00:00Z")
         );
+    }
+
+    #[tokio::test]
+    async fn calendar_list_reads_calendars() {
+        let fixture =
+            Fixture::start(vec![graph("GET", "/me/calendars", recorded("calendars"))]).await;
+        let found = Microsoft
+            .call(&cx(&fixture), "calendar_list", json!({}))
+            .await
+            .unwrap();
+        assert_eq!(
+            found["calendars"],
+            json!([
+                {"id": "AAMkAGI2TGuLAAA=", "name": "Calendar", "color": "auto", "can_edit": true},
+                {"id": "AAMkAGI2THVSAAA=", "name": "Birthdays", "color": "#f4a6c8", "can_edit": false},
+            ])
+        );
+    }
+
+    #[tokio::test]
+    async fn calendar_events_follows_next_links_in_utc() {
+        let mut first = recorded("calendar_view");
+        first["value"][0]["type"] = json!("occurrence");
+        first["value"][0]["seriesMasterId"] = json!("AAMkMaster");
+        first["@odata.nextLink"] = json!(
+            "https://graph.microsoft.com/v1.0/me/calendars/cal%201/calendarView?$skiptoken=page2"
+        );
+        let mut second = recorded("calendar_view");
+        second["value"][0]["id"] = json!("AAMkSecond");
+        let calendar = "/me/calendars/cal%201/calendarView";
+        let fixture = Fixture::start(vec![
+            graph("GET", calendar, first),
+            graph("GET", calendar, second),
+        ])
+        .await;
+        let input = json!({"start": "2026-11-05T00:00:00Z", "end": "2026-11-06T00:00:00Z", "calendar": "cal 1", "limit": 500});
+        let found = Microsoft
+            .call(&cx(&fixture), "calendar_events", input)
+            .await
+            .unwrap();
+        let events = found["events"].as_array().unwrap();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0]["series"], "AAMkMaster");
+        assert_eq!(events[1]["id"], "AAMkSecond");
+        assert_eq!(events[1]["series"], Value::Null);
+        assert_eq!(events[0]["calendar"], "cal 1");
+        assert_eq!(events[0]["time_zone"], "UTC");
+        let seen = fixture.finish().await;
+        assert!(seen[1].target.contains("$skiptoken=page2"));
+        for each in &seen {
+            assert_eq!(each.header("prefer"), Some("outlook.timezone=\"UTC\""));
+        }
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_patches() {
+        let made = recorded("calendar_view")["value"][0].clone();
+        let fixture = Fixture::start(vec![graph("PATCH", "/me/events/AAMkOcc", made)]).await;
+        let cx = cx(&fixture);
+        let input = json!({"event": "AAMkOcc", "subject": "Picnic", "location": "Park", "start": "2026-11-05T09:00:00", "end": "2026-11-05T10:00:00", "time_zone": "Europe/Lisbon"});
+        let changed = Microsoft
+            .call(&cx, "calendar_update_event", input)
+            .await
+            .unwrap();
+        assert_eq!(changed["subject"], "Plan summer company picnic");
+        let nothing = Microsoft
+            .call(&cx, "calendar_update_event", json!({"event": "AAMkOcc"}))
+            .await;
+        assert!(matches!(nothing, Err(Error::Invalid(m)) if m == "nothing to change"));
+        let half = json!({"event": "AAMkOcc", "start": "2026-11-05T09:00:00"});
+        let refused = Microsoft.call(&cx, "calendar_update_event", half).await;
+        assert!(matches!(refused, Err(Error::Invalid(_))));
+        let sent = fixture.finish().await[0].json();
+        assert_eq!(
+            sent,
+            json!({
+                "subject": "Picnic",
+                "location": {"displayName": "Park"},
+                "isAllDay": false,
+                "start": {"dateTime": "2026-11-05T09:00:00", "timeZone": "Europe/Lisbon"},
+                "end": {"dateTime": "2026-11-05T10:00:00", "timeZone": "Europe/Lisbon"},
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_switches_to_all_day() {
+        let made = recorded("calendar_view")["value"][0].clone();
+        let fixture = Fixture::start(vec![graph("PATCH", "/me/events/AAMkOne", made)]).await;
+        let input = json!({"event": "AAMkOne", "start": "2026-11-16", "end": "2026-11-17", "all_day": true});
+        Microsoft
+            .call(&cx(&fixture), "calendar_update_event", input)
+            .await
+            .unwrap();
+        let sent = fixture.finish().await[0].json();
+        assert_eq!(sent["isAllDay"], true);
+        assert_eq!(
+            sent["start"],
+            json!({"dateTime": "2026-11-16T00:00:00", "timeZone": "UTC"})
+        );
+        assert_eq!(sent["end"]["dateTime"], "2026-11-17T00:00:00");
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_with_all_keeps_wall_clock_across_dst() {
+        let occurrence = json!({"id": "AAMkOcc", "type": "occurrence", "seriesMasterId": "AAMkMaster", "originalStart": "2026-10-31T13:00:00Z"});
+        let master = json!({"id": "AAMkMaster", "start": {"dateTime": "2026-10-25T09:00:00.0000000", "timeZone": "Eastern Standard Time"}, "end": {"dateTime": "2026-10-25T10:00:00.0000000", "timeZone": "Eastern Standard Time"}});
+        let fixture = Fixture::start(vec![
+            graph("GET", "/me/events/AAMkOcc", occurrence),
+            graph("GET", "/me/events/AAMkMaster", master.clone()),
+            graph("PATCH", "/me/events/AAMkMaster", master),
+        ])
+        .await;
+        // Oct 31 moves to Nov 2 at 09:00 EST: two days on the wall clock, 49 hours in absolute time.
+        let input = json!({"event": "AAMkOcc", "all": true, "start": "2026-11-02T09:00:00", "end": "2026-11-02T10:00:00", "time_zone": "America/New_York"});
+        Microsoft
+            .call(&cx(&fixture), "calendar_update_event", input)
+            .await
+            .unwrap();
+        let sent = fixture.finish().await[2].json();
+        let zone = "America/New_York";
+        assert_eq!(
+            sent["start"],
+            json!({"dateTime": "2026-10-27T09:00:00", "timeZone": zone})
+        );
+        assert_eq!(
+            sent["end"],
+            json!({"dateTime": "2026-10-27T10:00:00", "timeZone": zone})
+        );
+    }
+
+    #[tokio::test]
+    async fn calendar_update_event_with_all_patches_the_master_for_text() {
+        let occurrence = json!({"id": "AAMkOcc", "seriesMasterId": "AAMkMaster"});
+        let fixture = Fixture::start(vec![
+            graph("GET", "/me/events/AAMkOcc", occurrence),
+            graph("PATCH", "/me/events/AAMkMaster", json!({})),
+        ])
+        .await;
+        let input = json!({"event": "AAMkOcc", "all": true, "subject": "Standup"});
+        Microsoft
+            .call(&cx(&fixture), "calendar_update_event", input)
+            .await
+            .unwrap();
+        let seen = fixture.finish().await;
+        assert_eq!(seen[1].json(), json!({"subject": "Standup"}));
+    }
+
+    #[tokio::test]
+    async fn calendar_delete_event_deletes() {
+        let occurrence = json!({"id": "AAMkOcc", "seriesMasterId": "AAMkMaster"});
+        let fixture = Fixture::start(vec![
+            graph("DELETE", "/me/events/AAMkOcc", Value::Null),
+            graph("GET", "/me/events/AAMkOcc", occurrence),
+            graph("DELETE", "/me/events/AAMkMaster", Value::Null),
+        ])
+        .await;
+        let cx = cx(&fixture);
+        let one = json!({"event": "AAMkOcc"});
+        let gone = Microsoft.call(&cx, "calendar_delete_event", one).await;
+        assert_eq!(gone.unwrap(), json!({"deleted": "AAMkOcc"}));
+        let series = json!({"event": "AAMkOcc", "all": true});
+        let gone = Microsoft.call(&cx, "calendar_delete_event", series).await;
+        assert_eq!(gone.unwrap(), json!({"deleted": "AAMkMaster"}));
+        fixture.finish().await;
     }
 
     #[tokio::test]

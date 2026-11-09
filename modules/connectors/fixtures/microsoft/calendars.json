@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('48d31887-5fad-4d73-a9f5-3c356e68a038')/calendars",
+  "value": [
+    {
+      "id": "AAMkAGI2TGuLAAA=",
+      "name": "Calendar",
+      "color": "auto",
+      "hexColor": "",
+      "isDefaultCalendar": true,
+      "canEdit": true,
+      "canShare": true,
+      "canViewPrivateItems": true
+    },
+    {
+      "id": "AAMkAGI2THVSAAA=",
+      "name": "Birthdays",
+      "color": "lightPink",
+      "hexColor": "#f4a6c8",
+      "isDefaultCalendar": false,
+      "canEdit": false,
+      "canShare": false,
+      "canViewPrivateItems": true
+    }
+  ]
+}
