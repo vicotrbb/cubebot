@@ -50,7 +50,7 @@ Keep facts that will change, such as people's names, current projects and deadli
 
 Call `agent_create` with the name, instructions and cube. Then end your turn with a short note to the person: what you asked for, the one-line job, and that it waits for their approval in the console. At most five new agents can wait for approval at once; plan a larger roster in waves.
 
-Do not ask again while a request is pending. Once a person has settled every request from your turn, one message lists each outcome: approved, declined or failed. If it fails, the message says why: fix exactly that and ask once more. If it is declined, read the reason and change the design rather than resubmitting the same thing.
+Do not ask again while a request is pending. Approved requests are made without telling you. Once a person has settled every request from your turn, one message lists any that were declined or failed. If it fails, the message says why: fix exactly that and ask once more. If it is declined, read the reason and change the design rather than resubmitting the same thing.
 
 A new agent starts asleep and boots on its first message, so the platform never starts a crowd of computers at once.
 

@@ -12,7 +12,7 @@ const NAMES: [&str; 5] = [
     "team_create",
 ];
 
-const ASKED: &str = " Nothing is created until a person approves it in the console; it is created as that person, with their access. After asking, end your turn with a short note: once a person settles every request from that turn, one message tells you each outcome. Requests may name agents that another pending request creates.";
+const ASKED: &str = " Nothing is created until a person approves it in the console; it is created as that person, with their access. After asking, end your turn with a short note: approved requests are made without telling you, and once a person settles every request from that turn, one message tells you any that were declined or could not be made. Requests may name agents that another pending request creates.";
 
 /// Offered while the agent's creation capability is on; the orchestrator checks it again.
 pub fn definitions() -> Vec<cubebot_providers::Tool> {

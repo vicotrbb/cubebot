@@ -51,10 +51,6 @@ async fn an_agent_asks_for_an_agent_and_its_team_and_a_person_approves_them_in_o
         ],
         json!([]),
     );
-    model.turn(
-        vec![Step::Reply(json!([text("Finder exists.")]))],
-        json!([]),
-    );
     let (provider, provider_task) = http_server(
         Router::new()
             .route("/responses", axum::routing::post(respond))
@@ -168,11 +164,11 @@ async fn an_agent_asks_for_an_agent_and_its_team_and_a_person_approves_them_in_o
         .await
         .unwrap();
     assert_eq!(renamed.unwrap(), (scout, "Finder".to_owned()));
-    let turns = settled(&work, &admin, agent, 3).await;
-    assert!(
-        turns[2]
-            .message
-            .ends_with("- the change to the agent Scout: made.")
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        work.history(&admin, agent, 0).await.unwrap().len(),
+        2,
+        "an approval that is made wakes no one"
     );
     let now = sqlx::query!(
         r#"SELECT name, avatar->>'paint' AS "paint!" FROM agents WHERE id=$1"#,
