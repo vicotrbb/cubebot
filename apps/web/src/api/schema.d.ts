@@ -2869,6 +2869,7 @@ export interface components {
       | 'work'
       | 'chat'
       | 'home'
+      | 'health'
       | 'finance'
       | 'notifications'
       | 'data'

@@ -44,6 +44,7 @@ pub mod stripe;
 pub mod telegram;
 pub mod todoist;
 pub mod trello;
+pub mod whoop;
 pub mod zoom;
 
 pub use context::{ATTACH, Attachment, Context, Credential, FILE, LARGEST, file, input};
