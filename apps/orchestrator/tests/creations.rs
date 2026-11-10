@@ -43,9 +43,18 @@ async fn an_agent_asks_for_an_agent_and_its_team_and_a_person_approves_them_in_o
         ],
         json!([]),
     );
-    for reply in ["Noted the failure.", "Scout exists."] {
-        model.turn(vec![Step::Reply(json!([text(reply)]))], json!([]));
-    }
+    let rename = json!({"agent":"Scout","name":"Finder","avatar":{"paint":"sky","eyes":"wink","accessory":"crown","color":null}});
+    model.turn(
+        vec![
+            Step::Reply(json!([call("agent_update", rename)])),
+            Step::Reply(json!([text("Asked to rename Scout.")])),
+        ],
+        json!([]),
+    );
+    model.turn(
+        vec![Step::Reply(json!([text("Finder exists.")]))],
+        json!([]),
+    );
     let (provider, provider_task) = http_server(
         Router::new()
             .route("/responses", axum::routing::post(respond))
@@ -72,11 +81,11 @@ async fn an_agent_asks_for_an_agent_and_its_team_and_a_person_approves_them_in_o
         .await
         .unwrap();
     assert_eq!(failed.unwrap_err(), "no agent is called Scout");
-    let turns = settled(&work, &admin, agent, 2).await;
-    assert!(
-        turns[1].message.contains("no agent is called Scout"),
-        "{}",
-        turns[1].message
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(
+        work.history(&admin, agent, 0).await.unwrap().len(),
+        1,
+        "nothing is told while a request of the turn still waits"
     );
 
     // The console's path: list and approve over HTTP with a person's session.
@@ -121,22 +130,58 @@ async fn an_agent_asks_for_an_agent_and_its_team_and_a_person_approves_them_in_o
     let made: serde_json::Value = approved.json().await.unwrap();
     assert_eq!(made["name"], "Scout");
     let scout: Uuid = made["id"].as_str().unwrap().parse().unwrap();
-    let turns = settled(&work, &admin, agent, 3).await;
+    let turns = settled(&work, &admin, agent, 2).await;
+    let mut lines: Vec<&str> = turns[1].message.lines().collect();
+    lines[1..].sort_unstable();
     assert_eq!(
-        turns[2].message,
-        "A person approved your request: the agent Scout now exists."
+        lines,
+        [
+            "A person settled every request from your earlier turn:",
+            "- the agent Scout: created.",
+            "- the team Research: could not be made: no agent is called Scout. Fix it and ask again.",
+        ]
     );
-    let owner: Uuid = sqlx::query_scalar!("SELECT created_by FROM agents WHERE id=$1", scout)
-        .fetch_one(&f.pool)
-        .await
-        .unwrap();
-    assert_eq!(owner, admin.id, "created as the person who approved it");
+    assert_eq!(turns[1].origin.as_ref().unwrap().kind, "approvals");
+    let made = sqlx::query!(
+        "SELECT created_by, desired_state FROM agents WHERE id=$1",
+        scout
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        made.created_by, admin.id,
+        "created as the person who approved it"
+    );
+    assert_eq!(made.desired_state, "stopped", "boots on its first message");
     assert!(
         work.approve_creation(&admin, AgentId(agent), request("agent"))
             .await
             .is_err(),
         "a settled request cannot be approved again"
     );
+
+    let change = work.pending_creations(AgentId(agent)).await.unwrap();
+    assert_eq!(change[0].kind, "change");
+    let renamed = work
+        .approve_creation(&admin, AgentId(agent), change[0].id)
+        .await
+        .unwrap();
+    assert_eq!(renamed.unwrap(), (scout, "Finder".to_owned()));
+    let turns = settled(&work, &admin, agent, 3).await;
+    assert!(
+        turns[2]
+            .message
+            .ends_with("- the change to the agent Scout: made.")
+    );
+    let now = sqlx::query!(
+        r#"SELECT name, avatar->>'paint' AS "paint!" FROM agents WHERE id=$1"#,
+        scout
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!((now.name.as_str(), now.paint.as_str()), ("Finder", "sky"));
     drop(child);
     console_task.abort();
     server.abort();

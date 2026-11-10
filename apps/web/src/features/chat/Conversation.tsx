@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Megaphone, Repeat } from 'lucide-react'
+import { ChevronRight, ListChecks, Megaphone, Repeat } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok, type Turn } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
@@ -13,6 +13,7 @@ import { Composer } from './Composer'
 import { Markdown } from './Markdown'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
 import { WorkCard, WorkLog } from './WorkCard'
+import { ApprovalBar, AskRow, isAsk, useApprovals } from './Approvals'
 import './chat.css'
 
 const PAGE = 60
@@ -100,6 +101,7 @@ export function Conversation({
                   turn={said}
                   streaming={undefined}
                   you={you}
+                  canSend={canSend}
                   onOpenThread={() => onOpenThread(said)}
                 />
               ))}
@@ -111,6 +113,7 @@ export function Conversation({
               turn={turn}
               streaming={streaming[turn.id]}
               you={you}
+              canSend={canSend}
               onOpenThread={() => onOpenThread(turn)}
             />
           ),
@@ -191,6 +194,7 @@ function queuedLabel(activity: string) {
 function origin(turn: Turn) {
   const from = turn.origin
   if (!from) return null
+  if (from.kind === 'approvals') return `${from.name} settled the requests`
   if (from.kind === 'broadcast') return `broadcast from ${from.name}`
   if (from.kind === 'routine') return `via routine ${from.name}`
   if (from.kind === 'delegation') return `delegated by ${from.name}`
@@ -202,14 +206,20 @@ function Exchange({
   turn,
   streaming,
   you,
+  canSend,
   onOpenThread,
 }: {
   agent: AgentSummary
   turn: Turn
   streaming: string | undefined
   you: string
+  canSend: boolean
   onOpenThread: () => void
 }) {
+  const approvals = useApprovals(agent)
+  const asking = turn.terminal.some(
+    (tool) => isAsk(tool) && approvals.statusOf(tool).status === 'pending',
+  )
   return (
     <article className="exchange" data-status={turn.status}>
       <PersonMessage turn={turn} you={you} />
@@ -228,8 +238,19 @@ function Exchange({
               {stateLabel(turn, agent.activity)}
             </span>
           </div>
+          {canSend && (
+            <ApprovalBar
+              agent={agent}
+              tools={turn.terminal}
+              approvals={approvals}
+            />
+          )}
           {turn.terminal.length > 0 && (
-            <WorkLog tools={turn.terminal} running={turn.status === 'running'}>
+            <WorkLog
+              tools={turn.terminal}
+              running={turn.status === 'running'}
+              open={turn.status === 'running' || asking}
+            >
               {turn.terminal.map((tool) => (
                 <div key={tool.id}>
                   {tool.reobserved && (
@@ -237,7 +258,16 @@ function Exchange({
                       Control returned · agent re-observed the screen
                     </p>
                   )}
-                  <WorkCard tool={tool} />
+                  {isAsk(tool) ? (
+                    <AskRow
+                      agent={agent}
+                      tool={tool}
+                      approvals={approvals}
+                      canSettle={canSend}
+                    />
+                  ) : (
+                    <WorkCard tool={tool} />
+                  )}
                 </div>
               ))}
             </WorkLog>
@@ -264,6 +294,8 @@ function shownRequest(turn: Turn) {
     return turn.message.replace(/^Broadcast [^\n]*:\n\n/, '')
   if (turn.origin?.kind === 'routine')
     return turn.message.replace(/^Routine [^\n]*:\n\n/, '')
+  if (turn.origin?.kind === 'approvals')
+    return turn.message.replace(/^[^\n]*\n/, '')
   return turn.message
 }
 
@@ -276,6 +308,7 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
         <span className="avatar-initial msg__avatar" aria-hidden="true">
           {from.kind === 'routine' && <Repeat size={16} />}
           {from.kind === 'broadcast' && <Megaphone size={16} />}
+          {from.kind === 'approvals' && <ListChecks size={16} />}
           {(from.kind === 'delegation' || from.kind === 'message') &&
             from.name.slice(0, 1).toUpperCase()}
         </span>
@@ -283,12 +316,43 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
         <PersonAvatar login={you} className="msg__avatar" />
       )}
       <div className="msg__body">
-        <div className="msg__head">
-          <span className="msg__author">{via ? capital(via) : you}</span>
-        </div>
-        <Markdown text={shownRequest(turn)} />
+        {from?.kind === 'approvals' ? (
+          <Settled who={capital(via ?? '')} text={shownRequest(turn)} />
+        ) : (
+          <>
+            <div className="msg__head">
+              <span className="msg__author">{via ? capital(via) : you}</span>
+            </div>
+            <Markdown text={shownRequest(turn)} />
+          </>
+        )}
       </div>
     </div>
+  )
+}
+
+function Settled({ who, text }: { who: string; text: string }) {
+  const lines = text.split('\n').filter(Boolean)
+  const count = (ending: RegExp) =>
+    lines.filter((line) => ending.test(line)).length
+  const parts = [
+    [count(/: (created|made)\.$/), 'approved'],
+    [count(/: declined: /), 'declined'],
+    [count(/: could not be made: /), 'failed'],
+  ] as const
+  const outcome = parts
+    .filter(([n]) => n > 0)
+    .map(([n, word]) => `${n} ${word}`)
+    .join(', ')
+  return (
+    <details className="settled">
+      <summary className="settled__summary">
+        <span className="msg__author">{who}</span>
+        <span className="faint small">{outcome}</span>
+        <ChevronRight className="settled__chevron" aria-hidden="true" />
+      </summary>
+      <Markdown text={text} />
+    </details>
   )
 }
 

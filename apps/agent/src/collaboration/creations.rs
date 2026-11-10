@@ -4,20 +4,30 @@ use cubebot_protocol::runtime::RoutineCall;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-const NAMES: [&str; 4] = [
+const NAMES: [&str; 5] = [
     "platform_list",
     "agent_create",
+    "agent_update",
     "room_create",
     "team_create",
 ];
 
-const ASKED: &str = " Nothing is created until a person approves it in the console; it is created as that person, with their access. After asking, end your turn with a short note: a new message tells you when they approve or decline. Requests may name agents that another pending request creates.";
+const ASKED: &str = " Nothing is created until a person approves it in the console; it is created as that person, with their access. After asking, end your turn with a short note: once a person settles every request from that turn, one message tells you each outcome. Requests may name agents that another pending request creates.";
 
 /// Offered while the agent's creation capability is on; the orchestrator checks it again.
 pub fn definitions() -> Vec<cubebot_providers::Tool> {
     let tool = cubebot_providers::Tool::strict;
     let text = |description: &str| json!({"type":"string","description":description});
     let maybe = |description: &str| json!({"type":["string","null"],"description":description});
+    let one_of = |values: &[&str], description: &str| json!({"type":"string","enum":values,"description":description});
+    let avatar = |description: &str| {
+        json!({"type":["object","null"],"description":description,"properties":{
+        "paint":one_of(&["orange","sage","paper","wood","sky","rose","lemon","plum","coral","mint","ocean","charcoal"], "The cube's color."),
+        "eyes":one_of(&["round","wide","sleepy","dot","happy","wink","star","heart"], "The cube's eyes."),
+        "accessory":one_of(&["none","cap","glasses","bow","antenna","crown","headphones","sprout","party_hat","monocle"], "What the cube wears."),
+        "color":maybe("A custom #rrggbb color that replaces paint; null to use paint."),
+    },"required":["paint","eyes","accessory","color"],"additionalProperties":false})
+    };
     let member = json!({"type":"object","properties":{
         "agent":text("The agent's exact name."),
         "title":text("A short title such as Backend engineer."),
@@ -38,6 +48,19 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
             json!({
                 "name":text("A short name people will address it by, unique on the platform."),
                 "instructions":text("Its standing instructions in Markdown, written to it in the second person: its one job, how it works, what it never does, and how it reports."),
+                "avatar":avatar("Its cube, chosen to fit its role and to tell it apart from the other agents; null for the default orange cube."),
+            }),
+        ),
+        tool(
+            "agent_update",
+            &format!(
+                "Ask to rename an agent that exists or change how its cube looks.{}",
+                ASKED.replace("created", "changed")
+            ),
+            json!({
+                "agent":text("The agent's exact current name."),
+                "name":maybe("Its new name, unique on the platform; null to keep the name."),
+                "avatar":avatar("Its new cube; null to keep the cube."),
             }),
         ),
         tool(

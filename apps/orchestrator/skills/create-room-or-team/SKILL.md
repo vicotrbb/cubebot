@@ -44,7 +44,7 @@ If the person asked for a whole setup, show the plan in one short message (each 
 
 A request may name an agent that another pending request creates, but each is approved separately, and a room or team that names an agent fails if it is approved before that agent exists. So ask for agents first, then rooms and teams, and tell the person to approve them in that order.
 
-Then end your turn with a short note: what you asked for, in what order to approve it, and why each piece exists. A new message tells you when each one is approved, declined or fails. When one fails, the message says why: fix that and ask again once. Do not resubmit a declined request unchanged.
+Then end your turn with a short note: what you asked for, in what order to approve it, and why each piece exists. The console offers Approve all, which approves agents before rooms and teams. Once a person has settled every request from your turn, one message lists each outcome; when one failed, it says why: fix that and ask again once. Do not resubmit a declined request unchanged.
 
 ## 6. After it exists
 

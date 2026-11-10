@@ -84,6 +84,7 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
   'task.settings': () => 'changed the task orchestrator’s settings',
   'room.create': () => 'created the room',
   'room.members': () => 'changed the members of',
+  'room.delete': () => 'deleted the room',
   'desktop.take_control': (detail) =>
     detail.login
       ? `took control to log in to ${text(detail.login)} on`

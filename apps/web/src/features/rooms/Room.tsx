@@ -309,8 +309,8 @@ export function RoomView({
       <Alert>{readError}</Alert>
       {closed ? (
         <p className="room__closed small faint">
-          This room was archived with its team. Its history stays for
-          administrators; nobody can write here.
+          This room was deleted. Its history stays for administrators; nobody
+          can write here.
         </p>
       ) : (
         <Composer

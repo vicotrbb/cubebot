@@ -14,6 +14,7 @@ import {
   type Route,
 } from './layout'
 import { teamsBelow, type Team, type TeamMember } from './model'
+import { Canvas } from './Canvas'
 import './teams.css'
 
 const WIDTH = 252
@@ -134,59 +135,61 @@ function Graph({
     graph.edges.filter(lit).flatMap((edge) => [edge.from, edge.to]),
   )
   return (
-    <div
-      className="org__graph"
-      style={{ width, height }}
-      onMouseLeave={() => onFocus(null)}
-    >
-      <svg width={width} height={height} aria-hidden="true">
-        {graph.edges.map((edge) => {
-          const from = box(edge.from)
-          const to = box(edge.to)
-          const through = (routes.get(routeKey(edge)) ?? []).map((bend) =>
-            band(bend, tops, rows),
-          )
-          return (
-            <path
-              key={routeKey(edge)}
-              className="org__line"
-              data-lit={lit(edge)}
-              d={pathOf({ x: from.x, y: from.bottom }, through, {
-                x: to.x,
-                y: to.top,
-              })}
-            />
-          )
-        })}
-      </svg>
-      {placed.map((node) => (
-        <div
-          key={node.id}
-          className="org__slot"
-          data-dim={focus !== null && !touched.has(node.id)}
-          style={{
-            left: node.x,
-            top: tops[node.layer],
-            width: WIDTH,
-            height: heightOf(node, seats),
-          }}
-        >
-          {node.kind === 'team' ? (
-            <TeamLabel
-              team={teams.find((team) => team.id === node.ref)}
-              onFocus={onFocus}
-            />
-          ) : (
-            <AgentCard
-              id={node.ref}
-              name={seats.get(node.ref)?.[0]?.member.name ?? 'An agent'}
-              seats={seats.get(node.ref) ?? []}
-              agent={agents.get(node.ref)}
-            />
-          )}
-        </div>
-      ))}
-    </div>
+    <Canvas width={width} height={height} label="Organization chart">
+      <div
+        className="org__graph"
+        style={{ width, height }}
+        onMouseLeave={() => onFocus(null)}
+      >
+        <svg width={width} height={height} aria-hidden="true">
+          {graph.edges.map((edge) => {
+            const from = box(edge.from)
+            const to = box(edge.to)
+            const through = (routes.get(routeKey(edge)) ?? []).map((bend) =>
+              band(bend, tops, rows),
+            )
+            return (
+              <path
+                key={routeKey(edge)}
+                className="org__line"
+                data-lit={lit(edge)}
+                d={pathOf({ x: from.x, y: from.bottom }, through, {
+                  x: to.x,
+                  y: to.top,
+                })}
+              />
+            )
+          })}
+        </svg>
+        {placed.map((node) => (
+          <div
+            key={node.id}
+            className="org__slot"
+            data-dim={focus !== null && !touched.has(node.id)}
+            style={{
+              left: node.x,
+              top: tops[node.layer],
+              width: WIDTH,
+              height: heightOf(node, seats),
+            }}
+          >
+            {node.kind === 'team' ? (
+              <TeamLabel
+                team={teams.find((team) => team.id === node.ref)}
+                onFocus={onFocus}
+              />
+            ) : (
+              <AgentCard
+                id={node.ref}
+                name={seats.get(node.ref)?.[0]?.member.name ?? 'An agent'}
+                seats={seats.get(node.ref) ?? []}
+                agent={agents.get(node.ref)}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </Canvas>
   )
 }
 

@@ -25,13 +25,16 @@ pub struct Progress {
     pub outcome: Option<Value>,
     /// The agent's first screenshot after a person handed its desktop back.
     pub reobserved: bool,
+    pub request: Option<Uuid>,
+    pub approval: Option<String>,
+    pub approval_note: Option<String>,
 }
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
 pub struct Origin {
     #[serde(skip)]
     pub turn_id: Uuid,
-    /// `broadcast`, `room`, `routine`, `delegation` or `message`.
+    /// `approvals`, `broadcast`, `room`, `routine`, `delegation` or `message`.
     pub kind: String,
     /// The room's or routine's name, the sending agent's, or a broadcast's sender.
     pub name: String,
@@ -111,9 +114,13 @@ pub(super) async fn tool_progress(
             CASE WHEN c.payload->>'name' IN ('bash','terminal') THEN c.payload->'input'->>'command' ELSE (c.payload->>'name')||' '||(c.payload->'input')::text END AS "command!",
             CASE WHEN r.outcome IS NOT NULL THEN r.outcome->>'status' WHEN t.status='running' THEN 'running' ELSE 'uncertain' END AS "status!",
             r.outcome - 'image' AS "outcome?",
-            EXISTS(SELECT 1 FROM desktop_reobservations o WHERE o.agent_id=t.conversation_id AND o.turn_id=c.turn_id AND o.call_id=c.payload->>'id') AS "reobserved!"
+            EXISTS(SELECT 1 FROM desktop_reobservations o WHERE o.agent_id=t.conversation_id AND o.turn_id=c.turn_id AND o.call_id=c.payload->>'id') AS "reobserved!",
+            q.id AS "request?",
+            CASE WHEN q.status='approved' AND q.created_id IS NULL THEN 'approving' ELSE q.status END AS "approval?",
+            q.outcome AS "approval_note?"
         FROM turn_events c
         JOIN chat_turns t ON t.id=c.turn_id
+        LEFT JOIN creation_requests q ON q.call_id=(c.payload->>'id')::uuid AND q.agent_id=t.conversation_id AND q.turn_id=c.turn_id
         LEFT JOIN LATERAL (SELECT e.payload->'outcome' AS outcome FROM turn_events e WHERE e.turn_id=c.turn_id AND e.payload->>'kind'='tool_result' AND e.payload->>'id'=c.payload->>'id' ORDER BY e.sequence LIMIT 1) r ON true
         WHERE c.turn_id=ANY($1) AND c.payload->>'kind'='tool_call'
         ORDER BY c.turn_id, c.sequence
@@ -263,8 +270,8 @@ impl Work {
             Origin,
             r#"
             SELECT t.id AS turn_id,
-                CASE WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
-                COALESCE(ba.name,bh.login,r.name,u.name,CASE WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
+                CASE WHEN s.settles THEN 'approvals' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
+                COALESCE(s.person,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
                 t.parent_turn_id
             FROM chat_turns t
             LEFT JOIN room_messages m ON m.id=t.room_message_id
@@ -275,7 +282,8 @@ impl Work {
             LEFT JOIN broadcasts b ON b.id=t.broadcast_id
             LEFT JOIN agents ba ON ba.id=b.agent_id
             LEFT JOIN human_accounts bh ON bh.id=b.actor_id AND b.agent_id IS NULL
-            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL)
+            LEFT JOIN LATERAL (SELECT true AS settles, h.login AS person FROM creation_requests q JOIN human_accounts h ON h.id=q.settled_by WHERE q.reported_in=t.id ORDER BY q.settled_at DESC LIMIT 1) s ON true
+            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL OR s.settles)
             "#,
             ids,
         )

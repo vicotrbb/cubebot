@@ -216,3 +216,63 @@ async fn team_rooms_follow_rosters_and_nesting_and_a_deleted_team_archives_its_r
         Err(IdentityError::InvalidInput)
     ));
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_administrator_deletes_a_room_but_not_a_live_team_room() {
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let ada = agent(&pool, &admin, "Ada").await;
+    let work = Work::new(pool.clone());
+    let team = work
+        .create_team(
+            &admin,
+            &CreateTeam {
+                request_id: Uuid::new_v4(),
+                team: save("Ops", None, vec![member(ada, "Lead", None)]),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        work.delete_room(&admin, team.room).await,
+        Err(IdentityError::Conflict)
+    ));
+    let room = work
+        .create_room(
+            &admin,
+            &cubebot_orchestrator::work::CreateRoom {
+                request_id: Uuid::new_v4(),
+                name: "Scratch".into(),
+                agents: vec![ada],
+            },
+        )
+        .await
+        .unwrap();
+    assert!(work.delete_room(&admin, room.id).await.unwrap().archived);
+    assert!(work.delete_room(&admin, room.id).await.unwrap().archived);
+    let refused = work
+        .post_room_message(
+            &admin,
+            room.id,
+            &SendMessage {
+                request_id: Uuid::new_v4(),
+                message: "Still here?".into(),
+            },
+        )
+        .await;
+    assert!(refused.is_err(), "nobody writes in a deleted room");
+    assert!(matches!(
+        work.delete_room(&admin, Uuid::new_v4()).await,
+        Err(IdentityError::NotFound)
+    ));
+}

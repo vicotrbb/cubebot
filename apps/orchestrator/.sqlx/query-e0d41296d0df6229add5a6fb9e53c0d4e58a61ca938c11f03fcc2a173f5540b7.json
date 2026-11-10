@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message)\n        VALUES ($1, $2, gen_random_uuid(), $3)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e0d41296d0df6229add5a6fb9e53c0d4e58a61ca938c11f03fcc2a173f5540b7"
+}

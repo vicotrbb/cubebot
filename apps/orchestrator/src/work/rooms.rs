@@ -207,6 +207,35 @@ impl Work {
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
+    pub async fn delete_room(&self, actor: &Actor, room: Uuid) -> Result<Room, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        access::lock_actor(&mut tx, actor).await?;
+        crate::identity::administrator(&mut *tx, actor.id).await?;
+        lock(&mut tx, room).await?;
+        let found = sqlx::query!(
+            r#"
+            SELECT r.task, EXISTS(SELECT 1 FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS "teamed!"
+            FROM rooms r
+            WHERE r.id=$1
+            "#,
+            room,
+        )
+        .fetch_optional(&mut *tx)
+        .await?
+        .filter(|found| !found.task)
+        .ok_or(IdentityError::NotFound)?;
+        if found.teamed {
+            return Err(IdentityError::Conflict);
+        }
+        sqlx::query!("UPDATE rooms SET archived=true WHERE id=$1", room)
+            .execute(&mut *tx)
+            .await?;
+        let room = self::room(&mut tx, actor, room).await?;
+        tx.commit().await?;
+        Ok(room)
+    }
+
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, room = %room))]
     pub async fn set_room_members(
         &self,
         actor: &Actor,

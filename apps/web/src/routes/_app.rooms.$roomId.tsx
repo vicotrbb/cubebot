@@ -9,6 +9,7 @@ import { ChevronLeft, Hash, Users, UsersRound, X } from 'lucide-react'
 import { type AgentSummary, type RoomSummary } from '../api/types'
 import { keys, useAgents, useRooms, useSession } from '../app/queries'
 import { Empty, Skeleton } from '../components/primitives'
+import { DeleteRoom } from '../features/rooms/DeleteRoom'
 import { Members } from '../features/rooms/Members'
 import { Room } from '../features/rooms/Room'
 import { FavoriteButton } from '../features/shell/Sidebar'
@@ -55,6 +56,9 @@ function RoomScreen() {
         <RoomTitle room={room} />
         <div className="agent-head__actions">
           <FavoriteButton kind="room" id={room.id} />
+          {session.data.administrator && !room.team && !room.archived && (
+            <DeleteRoom room={room} />
+          )}
           {!panelOpen && (
             <Link
               to="/rooms/$roomId/members"
@@ -171,7 +175,7 @@ function RoomTitle({ room }: { room: RoomSummary }) {
             </>
           )}
           {room.archived
-            ? 'Archived: its team was deleted'
+            ? 'Deleted; administrators can still read it'
             : room.members.map((member) => member.name).join(', ') ||
               'No agents yet'}
         </p>

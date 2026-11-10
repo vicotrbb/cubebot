@@ -1,5 +1,5 @@
 /* Org chart: one card per agent, placed by ./layout, with reporting lines drawn in SVG under the
-   cards. A chart wider than its frame scrolls inside it, never the page. */
+   cards, inside a canvas that fits the whole chart first and then pans and zooms. */
 .org {
   display: grid;
   gap: 28px;
@@ -12,7 +12,75 @@
 }
 .org__graph {
   position: relative;
-  margin-inline: auto;
+}
+.canvas {
+  position: relative;
+  min-width: 0;
+}
+.canvas__frame {
+  position: relative;
+  min-height: 280px;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 0) 0 0 /
+      20px 20px,
+    var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.canvas__frame:active {
+  cursor: grabbing;
+}
+.canvas__frame:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.canvas__frame a {
+  -webkit-user-drag: none;
+}
+.canvas__world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+.canvas__tools {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 6px 16px -10px rgb(var(--shadow) / 0.45);
+}
+.canvas__scale {
+  min-width: 48px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.canvas__scale:hover {
+  background: var(--inset);
+  color: var(--ink);
+}
+.canvas__scale:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 1px;
 }
 .org__graph > svg {
   position: absolute;

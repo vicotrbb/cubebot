@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.task, EXISTS(SELECT 1 FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS \"teamed!\"\n            FROM rooms r\n            WHERE r.id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "teamed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "d143c450febc60f1e6ffb6c2524529951d31263ab95d3216329fc7d9104d06da"
+}

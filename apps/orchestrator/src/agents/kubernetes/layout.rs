@@ -237,7 +237,7 @@ fn container_security() -> Value {
     json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID","CHOWN"]}})
 }
 fn kvm_resources() -> Value {
-    json!({"requests":{"cpu":"100m","memory":"256Mi","ephemeral-storage":"64Mi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"},"limits":{"cpu":"2","memory":"3Gi","ephemeral-storage":"1Gi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"}})
+    json!({"requests":{"cpu":"100m","memory":"2304Mi","ephemeral-storage":"64Mi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"},"limits":{"cpu":"2","memory":"3Gi","ephemeral-storage":"1Gi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"}})
 }
 fn container_resources() -> Value {
     json!({"requests":{"cpu":"100m","memory":"256Mi","ephemeral-storage":"64Mi"},"limits":{"cpu":"2","memory":"3Gi","ephemeral-storage":"1Gi"}})

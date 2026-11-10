@@ -4,7 +4,7 @@
 //! to ids only then, so one request may name an agent another pending request creates.
 use super::{CreateRoom, CreateTeam, SaveMember, SaveTeam, Team, Work, teams};
 use crate::{
-    agents::{AgentId, Agents, CreateAgent, runtime::RuntimeActor},
+    agents::{AgentId, Agents, Avatar, CreateAgent, UpdateAgent, runtime::RuntimeActor},
     identity::{
         Actor, IdentityError,
         audit::{Event, record},
@@ -21,11 +21,14 @@ type Answer = Result<String, String>;
 
 /// Enough to settle a stream of requests without letting one agent flood the console.
 const PENDING: i64 = 20;
+const PENDING_AGENTS: i64 = 5;
+const REASON: usize = 500;
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct CreationRequest {
     pub id: Uuid,
-    /// `agent`, `room` or `team`.
+    pub turn_id: Uuid,
+    /// `agent`, `room`, `team` or `change`.
     pub kind: String,
     /// The tool input as the agent sent it: untrusted text to show, never markup.
     #[schema(value_type = Object)]
@@ -45,6 +48,27 @@ pub struct DeclineCreation {
 struct NewAgent {
     name: String,
     instructions: String,
+    #[serde(default)]
+    avatar: Option<Avatar>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Change {
+    agent: String,
+    name: Option<String>,
+    avatar: Option<Avatar>,
+}
+
+impl Change {
+    fn valid(self) -> Option<Self> {
+        let named = self.name.as_deref().is_none_or(sized);
+        (named && (self.name.is_some() || self.avatar.is_some())).then_some(self)
+    }
+}
+
+fn sized(name: &str) -> bool {
+    !name.trim().is_empty() && name.len() <= 255
 }
 
 #[derive(Deserialize)]
@@ -92,20 +116,57 @@ pub(super) async fn tool(
     let (kind, name) = match call.tool.as_str() {
         "platform_list" => return Ok(Ok(listed(tx, person).await?.to_string())),
         "agent_create" => ("agent", parsed::<NewAgent>(&call.input).map(|new| new.name)),
+        "agent_update" => (
+            "change",
+            parsed::<Change>(&call.input)
+                .and_then(Change::valid)
+                .map(|change| change.agent),
+        ),
         "room_create" => ("room", parsed::<NewRoom>(&call.input).map(|new| new.name)),
         "team_create" => ("team", parsed::<NewTeam>(&call.input).map(|new| new.name)),
         _ => return Ok(Err("no creation tool has this name".into())),
     };
-    let Some(name) = name.filter(|name| !name.trim().is_empty() && name.len() <= 255) else {
-        return Ok(Err(format!(
-            "the {kind} needs a name of 1 to 255 bytes and every field the tool lists"
-        )));
+    let Some(name) = name.filter(|name| sized(name)) else {
+        return Ok(Err(if kind == "change" {
+            "name the agent exactly and give a new name of 1 to 255 bytes, a new avatar, or both"
+                .into()
+        } else {
+            format!("the {kind} needs a name of 1 to 255 bytes and every field the tool lists")
+        }));
     };
     ask(tx, actor, (turn, call), kind, name.trim()).await
 }
 
 fn parsed<T: for<'de> Deserialize<'de>>(input: &Value) -> Option<T> {
     T::deserialize(input).ok()
+}
+
+async fn crowded(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    kind: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let pending = sqlx::query!(
+        r#"
+        SELECT count(*) AS "all!", count(*) FILTER (WHERE kind='agent') AS "agents!"
+        FROM creation_requests
+        WHERE agent_id=$1 AND status='pending'
+        "#,
+        agent.0,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    Ok(if pending.all >= PENDING {
+        Some(format!(
+            "{PENDING} of your requests already wait for a person; wait until they settle"
+        ))
+    } else if kind == "agent" && pending.agents >= PENDING_AGENTS {
+        Some(format!(
+            "{PENDING_AGENTS} of your requests to create agents already wait for a person; wait until they settle before asking for more agents"
+        ))
+    } else {
+        None
+    })
 }
 
 async fn ask(
@@ -115,8 +176,13 @@ async fn ask(
     kind: &str,
     name: &str,
 ) -> Result<Answer, IdentityError> {
+    let what = if kind == "change" {
+        format!("changing the agent {name}")
+    } else {
+        format!("creating the {kind} {name}")
+    };
     let asked = format!(
-        "A person was asked to approve creating the {kind} {name}. End this turn now with a short note; a new message tells you when they approve or decline."
+        "A person was asked to approve {what}. End this turn now with a short note; once a person settles every request from this turn, one message tells you each outcome."
     );
     let previous = sqlx::query_scalar!(
         "SELECT agent_id FROM creation_requests WHERE call_id=$1",
@@ -129,16 +195,8 @@ async fn ask(
             .then_some(asked)
             .ok_or_else(|| "this call id was already used".into()));
     }
-    let pending = sqlx::query_scalar!(
-        r#"SELECT count(*) AS "count!" FROM creation_requests WHERE agent_id=$1 AND status='pending'"#,
-        actor.agent.0,
-    )
-    .fetch_one(&mut **tx)
-    .await?;
-    if pending >= PENDING {
-        return Ok(Err(format!(
-            "{PENDING} of your requests already wait for a person; wait until they settle"
-        )));
+    if let Some(refused) = crowded(tx, actor.agent, kind).await? {
+        return Ok(Err(refused));
     }
     sqlx::query!(
         "
@@ -206,7 +264,7 @@ impl Work {
         Ok(sqlx::query_as!(
             CreationRequest,
             r#"
-            SELECT id, kind, input, (to_jsonb(created_at) #>> '{}') AS "created_at!"
+            SELECT id, turn_id, kind, input, (to_jsonb(created_at) #>> '{}') AS "created_at!"
             FROM creation_requests
             WHERE agent_id=$1 AND status='pending'
             ORDER BY created_at, id
@@ -236,20 +294,11 @@ impl Work {
                 return Err(error);
             }
         };
-        let message = match &made {
-            Ok((_, name)) => {
-                format!("A person approved your request: the {kind} {name} now exists.")
-            }
-            Err(reason) => format!(
-                "A person approved your request to create a {kind}, but it could not be created: {reason}. Fix it and ask again."
-            ),
-        };
         let (status, outcome, created) = match &made {
             Ok((created, _)) => ("approved", None, Some(*created)),
             Err(reason) => ("failed", Some(reason.as_str()), None),
         };
-        self.settle_creation(id, (status, outcome, created), &message)
-            .await?;
+        self.settle_creation(id, (status, outcome, created)).await?;
         Ok(made)
     }
 
@@ -262,8 +311,7 @@ impl Work {
         reason: &str,
     ) -> Result<String, IdentityError> {
         let (kind, _) = self.claim_creation(agent, id, actor.id).await?;
-        let message = format!("A person declined your request to create a {kind}: {reason}");
-        self.settle_creation(id, ("declined", Some(reason), None), &message)
+        self.settle_creation(id, ("declined", Some(reason), None))
             .await?;
         Ok(kind)
     }
@@ -302,41 +350,34 @@ impl Work {
         Ok(())
     }
 
-    /// Records the outcome and tells the agent, as the person whose turn asked.
     async fn settle_creation(
         &self,
         id: Uuid,
         (status, outcome, created): (&str, Option<&str>, Option<Uuid>),
-        message: &str,
     ) -> Result<(), IdentityError> {
         let mut tx = self.pool.begin().await?;
         let asked = sqlx::query!(
             "
-            UPDATE creation_requests c
-            SET status=$2, outcome=$3, created_id=$4
-            FROM chat_turns t
-            WHERE c.id=$1 AND t.id=c.turn_id
-            RETURNING c.agent_id, t.actor_id
+            SELECT t.id, t.conversation_id, t.actor_id
+            FROM creation_requests c
+            JOIN chat_turns t ON t.id=c.turn_id
+            WHERE c.id=$1
+            FOR UPDATE OF t
             ",
+            id,
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        sqlx::query!(
+            "UPDATE creation_requests SET status=$2, outcome=$3, created_id=$4 WHERE id=$1",
             id,
             status,
             outcome,
             created,
         )
-        .fetch_one(&mut *tx)
-        .await?;
-        super::wake(&mut tx, AgentId(asked.agent_id)).await?;
-        sqlx::query!(
-            "
-            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message)
-            VALUES ($1, $2, gen_random_uuid(), $3)
-            ",
-            asked.agent_id,
-            asked.actor_id,
-            message,
-        )
         .execute(&mut *tx)
         .await?;
+        report(&mut tx, asked.id, (asked.conversation_id, asked.actor_id)).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -359,14 +400,18 @@ impl Work {
                     request_id: id,
                     name: new.name.trim().to_owned(),
                     instructions: new.instructions,
-                    avatar: None,
+                    avatar: new.avatar,
                     voice: None,
                 };
                 let receipt = Agents::new(self.pool.clone())
-                    .create(actor, &create)
+                    .create_stopped(actor, &create)
                     .await?;
                 Ok(Ok((receipt.id, create.name)))
             }
+            "change" => match parsed::<Change>(input).and_then(Change::valid) {
+                Some(change) => self.make_change(actor, id, change).await,
+                None => invalid(),
+            },
             "room" => match parsed::<NewRoom>(input) {
                 Some(new) => self.make_room(actor, id, new).await,
                 None => invalid(),
@@ -376,6 +421,44 @@ impl Work {
                 None => invalid(),
             },
         }
+    }
+
+    async fn make_change(
+        &self,
+        actor: &Actor,
+        id: Uuid,
+        change: Change,
+    ) -> Result<Made, IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        let target = match resolved(&mut tx, std::slice::from_ref(&change.agent)).await? {
+            Ok(agents) => AgentId(agents[&change.agent]),
+            Err(reason) => return Ok(Err(reason)),
+        };
+        tx.commit().await?;
+        let agents = Agents::new(self.pool.clone());
+        let current = agents.get(actor, target).await?;
+        let instructions = current.instructions.ok_or(IdentityError::Forbidden)?;
+        let name = change
+            .name
+            .as_deref()
+            .map(str::trim)
+            .map_or(current.name, str::to_owned);
+        let update = UpdateAgent {
+            request_id: id,
+            expected_revision: current.revision,
+            name: name.clone(),
+            instructions,
+            idle_policy: current.idle_policy,
+            idle_delay_seconds: current.idle_delay_seconds,
+            dreaming_model: current.dreaming_model,
+            task_lanes: None,
+            broadcast: None,
+            knowledge_base: None,
+            creates: None,
+            avatar: change.avatar,
+        };
+        let receipt = agents.update(actor, target, &update).await?;
+        Ok(Ok((receipt.id, name)))
     }
 
     async fn make_room(
@@ -431,6 +514,104 @@ impl Work {
             )
             .await?;
         Ok(Ok((team.id, team.name)))
+    }
+}
+
+async fn report(
+    tx: &mut Transaction<'_, Postgres>,
+    turn: Uuid,
+    (agent, person): (Uuid, Uuid),
+) -> Result<(), IdentityError> {
+    let rows = sqlx::query!(
+        "
+        SELECT kind, input, status, outcome, created_id
+        FROM creation_requests
+        WHERE turn_id=$1 AND reported_in IS NULL
+        ORDER BY created_at, id
+        ",
+        turn,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let open = |status: &str, created: Option<Uuid>| {
+        status == "pending" || (status == "approved" && created.is_none())
+    };
+    if rows.is_empty() || rows.iter().any(|row| open(&row.status, row.created_id)) {
+        return Ok(());
+    }
+    let settled: Vec<Settled> = rows
+        .iter()
+        .map(|row| Settled {
+            kind: &row.kind,
+            name: row.input[if row.kind == "change" {
+                "agent"
+            } else {
+                "name"
+            }]
+            .as_str()
+            .unwrap_or_default(),
+            status: &row.status,
+            outcome: row.outcome.as_deref(),
+        })
+        .collect();
+    super::wake(tx, AgentId(agent)).await?;
+    let reported = sqlx::query_scalar!(
+        "
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message)
+        VALUES ($1, $2, gen_random_uuid(), $3)
+        RETURNING id
+        ",
+        agent,
+        person,
+        summary(&settled),
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    sqlx::query!(
+        "UPDATE creation_requests SET reported_in=$2 WHERE turn_id=$1 AND reported_in IS NULL",
+        turn,
+        reported,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+struct Settled<'a> {
+    kind: &'a str,
+    name: &'a str,
+    status: &'a str,
+    outcome: Option<&'a str>,
+}
+
+fn summary(settled: &[Settled]) -> String {
+    let lines: Vec<String> = settled
+        .iter()
+        .map(|request| {
+            let what = if request.kind == "change" {
+                format!("the change to the agent {}", request.name)
+            } else {
+                format!("the {} {}", request.kind, request.name)
+            };
+            let reason = request.outcome.map(clipped).unwrap_or_default();
+            match request.status {
+                "approved" if request.kind == "change" => format!("- {what}: made."),
+                "approved" => format!("- {what}: created."),
+                "declined" => format!("- {what}: declined: {reason}"),
+                _ => format!("- {what}: could not be made: {reason}. Fix it and ask again."),
+            }
+        })
+        .collect();
+    format!(
+        "A person settled every request from your earlier turn:\n{}",
+        lines.join("\n")
+    )
+}
+
+fn clipped(reason: &str) -> &str {
+    match reason.char_indices().nth(REASON) {
+        Some((at, _)) => &reason[..at],
+        None => reason,
     }
 }
 
@@ -506,6 +687,45 @@ fn drafted(org: &[Team], agents: &HashMap<String, Uuid>, new: NewTeam) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn one_message_reports_every_outcome_of_a_turn() {
+        let long = "x".repeat(REASON + 40);
+        let request = |kind, name, status, outcome| Settled {
+            kind,
+            name,
+            status,
+            outcome,
+        };
+        let text = summary(&[
+            request("agent", "Writer", "approved", None),
+            request("change", "Writer", "approved", None),
+            request("team", "Blog", "declined", Some("too early")),
+            request("room", "Ops", "failed", Some(&long)),
+        ]);
+        assert_eq!(text.lines().count(), 5);
+        assert!(text.contains("- the agent Writer: created."));
+        assert!(text.contains("- the change to the agent Writer: made."));
+        assert!(text.contains("- the team Blog: declined: too early"));
+        assert!(text.contains(&format!("{}. Fix it", "x".repeat(REASON))));
+        assert!(!text.contains(&"x".repeat(REASON + 1)));
+    }
+
+    #[test]
+    fn a_change_needs_a_new_name_or_avatar() {
+        let change = |input: Value| parsed::<Change>(&input).and_then(Change::valid).is_some();
+        assert!(change(
+            json!({"agent":"Dev","name":"Builder","avatar":null})
+        ));
+        assert!(change(
+            json!({"agent":"Dev","name":null,"avatar":{"paint":"sky","eyes":"wink","accessory":"crown","color":null}})
+        ));
+        assert!(!change(json!({"agent":"Dev","name":null,"avatar":null})));
+        assert!(!change(json!({"agent":"Dev","name":"  ","avatar":null})));
+        assert!(!change(
+            json!({"agent":"Dev","name":null,"avatar":{"paint":"neon","eyes":"wink","accessory":"crown","color":null}})
+        ));
+    }
 
     #[test]
     fn a_team_names_its_parent_and_lines_by_name() {

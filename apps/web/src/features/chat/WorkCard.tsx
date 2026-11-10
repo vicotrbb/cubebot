@@ -231,10 +231,12 @@ function OutcomeView({ outcome }: { outcome: Outcome }) {
 export function WorkLog({
   tools,
   running,
+  open = running,
   children,
 }: {
   tools: Progress[]
   running: boolean
+  open?: boolean
   children: React.ReactNode
 }) {
   const count = (statuses: string[]) =>
@@ -247,7 +249,7 @@ export function WorkLog({
   const last = tools.at(-1)
   const now = last && workView(last)
   return (
-    <details className="worklog" open={running}>
+    <details className="worklog" open={open}>
       <summary className="worklog__summary">
         <ChevronRight className="worklog__chevron" aria-hidden="true" />
         {running ? (

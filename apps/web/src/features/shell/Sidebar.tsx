@@ -56,6 +56,7 @@ export const ACTIVITY: Record<string, string> = {
   idle: 'Idle',
   sleeping: 'Sleeping',
   stopped: 'Stopped',
+  unscheduled: 'Waiting for room',
   retired: 'Retired',
 }
 

@@ -11,6 +11,7 @@ const IDLE: Record<string, string> = {
   idle: 'Ready for work',
   sleeping: 'Asleep, wakes when asked',
   stopped: 'Stopped',
+  unscheduled: 'Waiting for room on the cluster',
   retired: 'Retired',
 }
 

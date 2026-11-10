@@ -2156,6 +2156,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/rooms/{room}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['delete_room']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/rooms/{room}/events': {
     parameters: {
       query?: never
@@ -2557,7 +2573,7 @@ export interface components {
      */
     Agent: {
       /**
-       * @description `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
+       * @description `unscheduled` (no node has room), `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
        *     otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
        *     still holds its credential.
        */
@@ -3137,8 +3153,10 @@ export interface components {
       id: string
       /** @description The tool input as the agent sent it: untrusted text to show, never markup. */
       input: Record<string, never>
-      /** @description `agent`, `room` or `team`. */
+      /** @description `agent`, `room`, `team` or `change`. */
       kind: string
+      /** Format: uuid */
+      turn_id: string
     }
     DaySpend: {
       /** Format: double */
@@ -3839,7 +3857,7 @@ export interface components {
       turn: string
     }
     Origin: {
-      /** @description `broadcast`, `room`, `routine`, `delegation` or `message`. */
+      /** @description `approvals`, `broadcast`, `room`, `routine`, `delegation` or `message`. */
       kind: string
       /** @description The room's or routine's name, the sending agent's, or a broadcast's sender. */
       name: string
@@ -3991,6 +4009,8 @@ export interface components {
       time_zone: string
     }
     Progress: {
+      approval?: string | null
+      approval_note?: string | null
       command: string
       /** Format: uuid */
       id: string
@@ -3999,6 +4019,8 @@ export interface components {
       outcome?: null | components['schemas']['Outcome']
       /** @description The agent's first screenshot after a person handed its desktop back. */
       reobserved: boolean
+      /** Format: uuid */
+      request?: string | null
       status: string
       /** Format: uuid */
       turn_id: string
@@ -9045,6 +9067,39 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Room']
         }
+      }
+    }
+  }
+  delete_room: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        room: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Room']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }
