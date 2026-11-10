@@ -164,6 +164,9 @@ pub struct Turn {
     /// The agent manages a team, so it gets the team tools.
     #[serde(default)]
     pub team_manager: bool,
+    /// The agent may ask to create agents, rooms and teams, which a person then approves.
+    #[serde(default)]
+    pub creates: bool,
 }
 
 /// A native connection (docs/adr/identity.md#native-connectors) as one turn sees it: no secret.
@@ -632,6 +635,7 @@ mod tests {
             broadcast: false,
             knowledge_base: false,
             team_manager: false,
+            creates: false,
             connections: Vec::new(),
             in_task: false,
         }));

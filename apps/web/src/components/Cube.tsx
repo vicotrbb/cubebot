@@ -69,9 +69,10 @@ export function moodOf(agent: {
   activity: string
   desktop_active?: boolean
   pending_login?: boolean
+  pending_creations?: number
 }): Mood {
   if (agent.activity === 'retired') return 'retired'
-  if (agent.pending_login) return 'waiting'
+  if (agent.pending_login || agent.pending_creations) return 'waiting'
   if (agent.desktop_active) return 'desktop'
   if (agent.activity === 'working') return 'working'
   if (agent.activity === 'dreaming') return 'dreaming'

@@ -278,6 +278,8 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
     assert_eq!(usage.paused_turns, 1);
 }
 
+const SHIPPED: [&str; 4] = ["coding", "create-agent", "create-room-or-team", "design"];
+
 async fn names(knowledge: &Knowledge, admin: &Actor, agent: Uuid) -> Vec<String> {
     let installed = knowledge.installed_skills(admin, AgentId(agent)).await;
     installed
@@ -294,10 +296,7 @@ async fn shipped_skills_reach_every_agent_once_and_uninstalling_one_sticks() {
     let (_, _, admin, existing) = native_chat_setup(&f, "Hello").await;
     Knowledge::seed_shipped_skills(&f.pool).await.unwrap();
     let knowledge = Knowledge::new(f.pool.clone());
-    assert_eq!(
-        names(&knowledge, &admin, existing).await,
-        ["coding", "design"]
-    );
+    assert_eq!(names(&knowledge, &admin, existing).await, SHIPPED);
     let later = Agents::new(f.pool.clone())
         .create(
             &admin,
@@ -312,7 +311,7 @@ async fn shipped_skills_reach_every_agent_once_and_uninstalling_one_sticks() {
         .await
         .unwrap()
         .id;
-    assert_eq!(names(&knowledge, &admin, later).await, ["coding", "design"]);
+    assert_eq!(names(&knowledge, &admin, later).await, SHIPPED);
 
     let library = knowledge.skills(&admin).await.unwrap();
     let design = library.iter().find(|skill| skill.name == "design").unwrap();
@@ -321,8 +320,11 @@ async fn shipped_skills_reach_every_agent_once_and_uninstalling_one_sticks() {
         .await
         .unwrap();
     Knowledge::seed_shipped_skills(&f.pool).await.unwrap();
-    assert_eq!(names(&knowledge, &admin, existing).await, ["coding"]);
-    assert_eq!(knowledge.skills(&admin).await.unwrap().len(), 2);
+    assert_eq!(
+        names(&knowledge, &admin, existing).await,
+        ["coding", "create-agent", "create-room-or-team"]
+    );
+    assert_eq!(knowledge.skills(&admin).await.unwrap().len(), SHIPPED.len());
 
     let shipped = knowledge
         .skill_revision(&admin, design.id, 1)

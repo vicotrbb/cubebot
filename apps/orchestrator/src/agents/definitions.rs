@@ -119,6 +119,8 @@ pub struct Agent {
     pub broadcast: bool,
     /// The agent may use the knowledge base (migrations/0048_knowledge_base.sql), on by default.
     pub knowledge_base: bool,
+    /// The agent may ask to create agents, rooms and teams (migrations/0071_creation_requests.sql), on by default.
+    pub creates: bool,
     /// `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
     /// otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
     /// still holds its credential.
@@ -136,6 +138,8 @@ pub struct Agent {
     pub desktop_active: bool,
     /// The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover).
     pub pending_login: bool,
+    /// Its requests to create agents, rooms or teams that wait for a person.
+    pub pending_creations: i64,
     /// The tool its running turn is in now; `None` while it thinks, works on nothing, or the
     /// caller cannot read its conversation.
     pub current_tool: Option<String>,
@@ -244,7 +248,7 @@ impl Agents {
                CASE WHEN 'agent_manage' = ANY(c.names) THEN g.instructions END AS instructions,
                g.revision, g.instructions_revision, g.desired_state,
                g.idle_policy AS "idle_policy: IdlePolicy", g.restart_generation,
-               g.idle_delay_seconds, g.dreaming_model, g.task_lanes, g.broadcast, g.knowledge_base,
+               g.idle_delay_seconds, g.dreaming_model, g.task_lanes, g.broadcast, g.knowledge_base, g.creates,
                CASE
                    WHEN g.desired_state <> 'running' THEN g.desired_state
                    WHEN EXISTS(
@@ -295,6 +299,8 @@ impl Agents {
                    WHERE h.agent_id = g.id
                      AND h.status = 'pending'
                ) AS "pending_login!",
+               (SELECT count(*) FROM creation_requests q WHERE q.agent_id = g.id AND q.status = 'pending')
+                   AS "pending_creations!",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.name END AS "current_tool?",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.target END AS "current_target?",
                COALESCE((SELECT max(t.sequence) FROM chat_turns t WHERE t.conversation_id = g.id AND t.room_message_id IS NULL), 0)

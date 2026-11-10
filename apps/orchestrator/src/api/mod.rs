@@ -7,6 +7,7 @@ mod calendar;
 mod calls;
 mod connections;
 mod connectors;
+mod creations;
 mod desktop;
 mod files;
 mod identity;
@@ -78,6 +79,7 @@ pub fn openapi() -> String {
     doc.merge(connections::Doc::openapi());
     doc.merge(work::Doc::openapi());
     doc.merge(desktop::Doc::openapi());
+    doc.merge(creations::Doc::openapi());
     doc.merge(calls::Doc::openapi());
     doc.merge(calendar::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
@@ -122,6 +124,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(backup::router(pool.clone(), identity.clone()))
         .merge(activity::router(pool.clone(), identity.clone()))
         .merge(desktop::router(pool.clone(), identity.clone()))
+        .merge(creations::router(pool.clone(), identity.clone()))
         .merge(work::router(pool.clone(), identity.clone()))
         .merge(rooms::router(pool.clone(), identity.clone()))
         .merge(teams::router(pool.clone(), identity.clone()))

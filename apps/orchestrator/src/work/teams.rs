@@ -455,7 +455,7 @@ pub(super) async fn load(tx: &mut Transaction<'_, Postgres>) -> Result<Vec<Team>
 }
 
 /// Checks a team on its own: sizes, one manager, and reporting lines that form one tree.
-fn checked(team: &SaveTeam) -> Result<(), &'static str> {
+pub(super) fn checked(team: &SaveTeam) -> Result<(), &'static str> {
     let name = team.name.trim();
     let text = [&team.description, &team.instructions];
     if name.is_empty() || name.len() > 128 || name.chars().any(char::is_control) {
@@ -516,7 +516,7 @@ fn lines_checked(members: &[SaveMember]) -> Result<(), &'static str> {
 }
 
 /// Checks a team against the rest: a unique name, and a parent that exists outside its subtree.
-fn placed(org: &[Team], id: Option<Uuid>, team: &SaveTeam) -> Result<(), &'static str> {
+pub(super) fn placed(org: &[Team], id: Option<Uuid>, team: &SaveTeam) -> Result<(), &'static str> {
     let name = team.name.trim().to_lowercase();
     if org
         .iter()

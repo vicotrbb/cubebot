@@ -927,6 +927,129 @@
         }
       }
     },
+    "/api/agents/{id}/creations": {
+      "get": {
+        "tags": [],
+        "summary": "The agent's requests waiting for a person, oldest first.",
+        "operationId": "pending",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CreationRequest"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/creations/{request}/approve": {
+      "post": {
+        "tags": [],
+        "summary": "Creates it as the caller, with the caller's authority; 409 with the reason, told to the agent\ntoo, when it cannot be created as asked; 404 when it is no longer pending.",
+        "operationId": "approve",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "request",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Created"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/creations/{request}/decline": {
+      "post": {
+        "tags": [],
+        "summary": "Declines it and tells the agent why; 404 when it is no longer pending.",
+        "operationId": "decline",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "request",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineCreation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/definition": {
       "post": {
         "tags": [],
@@ -5882,11 +6005,13 @@
           "task_lanes",
           "broadcast",
           "knowledge_base",
+          "creates",
           "activity",
           "capabilities",
           "avatar",
           "desktop_active",
           "pending_login",
+          "pending_creations",
           "last_sequence",
           "read_sequence"
         ],
@@ -5908,6 +6033,10 @@
               "type": "string"
             },
             "description": "The caller's capabilities on this agent and its conversation as grant names, such as\n`conversation_send`."
+          },
+          "creates": {
+            "type": "boolean",
+            "description": "The agent may ask to create agents, rooms and teams (migrations/0071_creation_requests.sql), on by default."
           },
           "current_target": {
             "type": ["string", "null"],
@@ -5958,6 +6087,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "pending_creations": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Its requests to create agents, rooms or teams that wait for a person."
           },
           "pending_login": {
             "type": "boolean",
@@ -7337,6 +7471,19 @@
         },
         "additionalProperties": false
       },
+      "Created": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "CreatedRoutine": {
         "type": "object",
         "required": ["routine"],
@@ -7347,6 +7494,27 @@
           "secret": {
             "type": ["string", "null"],
             "description": "The webhook's bearer secret, only in the response that made it."
+          }
+        }
+      },
+      "CreationRequest": {
+        "type": "object",
+        "required": ["id", "kind", "input", "created_at"],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "input": {
+            "type": "object",
+            "description": "The tool input as the agent sent it: untrusted text to show, never markup."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`agent`, `room` or `team`."
           }
         }
       },
@@ -7367,6 +7535,17 @@
             "format": "int64"
           }
         }
+      },
+      "DeclineCreation": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Returned to the agent; empty when the person gave none."
+          }
+        },
+        "additionalProperties": false
       },
       "DeclineLogin": {
         "type": "object",
@@ -11729,6 +11908,10 @@
           "broadcast": {
             "type": ["boolean", "null"],
             "description": "Whether the agent may broadcast to every agent; `None` keeps the current setting."
+          },
+          "creates": {
+            "type": ["boolean", "null"],
+            "description": "Whether the agent may ask to create agents, rooms and teams; `None` keeps the current setting."
           },
           "dreaming_model": {
             "type": ["string", "null"],

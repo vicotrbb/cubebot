@@ -45,6 +45,9 @@ pub struct UpdateAgent {
     /// Whether the agent may use the knowledge base; `None` keeps the current setting.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub knowledge_base: Option<bool>,
+    /// Whether the agent may ask to create agents, rooms and teams; `None` keeps the current setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub creates: Option<bool>,
     /// `None` keeps the current cube; not part of the revision history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<super::Avatar>,
@@ -107,6 +110,7 @@ impl Agents {
                 avatar = COALESCE($9, avatar),
                 broadcast = COALESCE($10, broadcast),
                 knowledge_base = COALESCE($11, knowledge_base),
+                creates = COALESCE($12, creates),
                 revision = revision + 1
             WHERE id = $1
               AND revision = $5
@@ -124,6 +128,7 @@ impl Agents {
             input.avatar.map(sqlx::types::Json) as Option<sqlx::types::Json<super::Avatar>>,
             input.broadcast,
             input.knowledge_base,
+            input.creates,
         )
         .fetch_optional(&mut *transaction)
         .await?

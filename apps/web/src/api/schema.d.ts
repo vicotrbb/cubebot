@@ -312,6 +312,60 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/creations': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The agent's requests waiting for a person, oldest first. */
+    get: operations['pending']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/creations/{request}/approve': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Creates it as the caller, with the caller's authority; 409 with the reason, told to the agent
+     *     too, when it cannot be created as asked; 404 when it is no longer pending.
+     */
+    post: operations['approve']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/creations/{request}/decline': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Declines it and tells the agent why; 404 when it is no longer pending. */
+    post: operations['decline']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/definition': {
     parameters: {
       query?: never
@@ -2446,6 +2500,8 @@ export interface components {
        *     `conversation_send`.
        */
       capabilities: string[]
+      /** @description The agent may ask to create agents, rooms and teams (migrations/0071_creation_requests.sql), on by default. */
+      creates: boolean
       /** @description What that tool is working on, such as a file or a URL. */
       current_target?: string | null
       /**
@@ -2477,6 +2533,11 @@ export interface components {
        */
       last_sequence: number
       name: string
+      /**
+       * Format: int64
+       * @description Its requests to create agents, rooms or teams that wait for a person.
+       */
+      pending_creations: number
       /** @description The agent is waiting for a person to log in on a site (docs/adr/sandbox.md#live-browser-viewing-and-explicit-human-takeover). */
       pending_login: boolean
       /**
@@ -2981,10 +3042,24 @@ export interface components {
       request_id: string
       team: components['schemas']['SaveTeam']
     }
+    Created: {
+      /** Format: uuid */
+      id: string
+      name: string
+    }
     CreatedRoutine: {
       routine: components['schemas']['Routine']
       /** @description The webhook's bearer secret, only in the response that made it. */
       secret?: string | null
+    }
+    CreationRequest: {
+      created_at: string
+      /** Format: uuid */
+      id: string
+      /** @description The tool input as the agent sent it: untrusted text to show, never markup. */
+      input: Record<string, never>
+      /** @description `agent`, `room` or `team`. */
+      kind: string
     }
     DaySpend: {
       /** Format: double */
@@ -2993,6 +3068,10 @@ export interface components {
       day: string
       /** Format: int64 */
       tokens: number
+    }
+    DeclineCreation: {
+      /** @description Returned to the agent; empty when the person gave none. */
+      reason: string
     }
     DeclineLogin: {
       /** @description Returned to the agent; empty when the person gave none. */
@@ -4751,6 +4830,8 @@ export interface components {
       avatar?: null | components['schemas']['Avatar']
       /** @description Whether the agent may broadcast to every agent; `None` keeps the current setting. */
       broadcast?: boolean | null
+      /** @description Whether the agent may ask to create agents, rooms and teams; `None` keeps the current setting. */
+      creates?: boolean | null
       /** @description `None` dreams with the connection's model. */
       dreaming_model?: string | null
       /** Format: int64 */
@@ -5411,6 +5492,91 @@ export interface operations {
         content?: never
       }
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  pending: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CreationRequest'][]
+        }
+      }
+    }
+  }
+  approve: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        request: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Created']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  decline: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        request: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DeclineCreation']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

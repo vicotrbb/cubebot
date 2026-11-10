@@ -17,6 +17,7 @@ import { useAgent, useSession } from '../app/queries'
 import { Cube, moodOf } from '../components/Cube'
 import { Empty, Skeleton } from '../components/primitives'
 import { AgentProvider } from '../features/agent/context'
+import { CreationRequests } from '../features/agent/CreationRequests'
 import { CallButton } from '../features/call/CallScreen'
 import { Conversation } from '../features/chat/Conversation'
 import { useConversation } from '../features/chat/useConversation'
@@ -112,6 +113,9 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
               })
             }
           />
+        )}
+        {can(agent, 'conversation_send', me) && (
+          <CreationRequests agent={agent} />
         )}
         <div className="agent-split">
           {readable ? (
