@@ -10,6 +10,7 @@ export const categories = [
   'Developer',
   'Projects and CRM',
   'Home and feeds',
+  'Health',
   'Payments',
   'Notifications',
   'Data',
@@ -33,7 +34,7 @@ export interface Connector {
   uploads?: boolean
   tested: Tested
   /** 3: not in a release yet. */
-  wave: 1 | 2 | 3
+  wave: 1 | 2 | 3 | 4
 }
 
 export const connectors: Connector[] = [
@@ -377,6 +378,24 @@ export const connectors: Connector[] = [
     events: [],
     tested: 'recorded',
     wave: 2,
+  },
+  {
+    slug: 'whoop',
+    name: 'WHOOP',
+    category: 'Health',
+    summary: 'Your recovery, sleep, strain and workouts.',
+    signIn: 'Sign in with WHOOP through your own WHOOP app',
+    level: 'Read',
+    tools: [
+      'Read your profile',
+      'List cycles',
+      'List recoveries',
+      'List sleeps',
+      'List workouts',
+    ],
+    events: [],
+    tested: 'recorded',
+    wave: 4,
   },
   {
     slug: 'rss',
