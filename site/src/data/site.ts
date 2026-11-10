@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.9'
+export const version = 'v0.2.10'
 export const released = '2026-11-10'
 
 export const docs = {
@@ -75,6 +75,7 @@ export const status = {
     'Agents that set up agents, rooms and teams, with your approval',
     'A model of its own for each agent',
     'An org chart that fits, pans and zooms',
+    'A title for each agent on its cards',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -153,6 +154,15 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.10',
+    date: '2026-11-10',
+    title: 'Agents with titles',
+    items: [
+      'Give an agent a title, such as Research lead, in its About section',
+      'The title shows under the agent’s name on its hover card and on org chart cards',
+    ],
+  },
   {
     tag: 'v0.2.9',
     date: '2026-11-10',
