@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.11'
+export const version = 'v0.2.12'
 export const released = '2026-11-10'
 
 export const docs = {
@@ -154,6 +154,15 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.12',
+    date: '2026-11-10',
+    title: 'Approvals that stay quiet',
+    items: [
+      'Approving an agent’s requests no longer sends it a message or wakes it',
+      'An agent hears back only when a request is declined or cannot be made',
+    ],
+  },
   {
     tag: 'v0.2.11',
     date: '2026-11-10',
