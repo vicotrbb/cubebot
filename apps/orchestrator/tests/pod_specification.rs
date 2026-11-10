@@ -222,6 +222,45 @@ fn resource_overrides_refuse_unknown_keys_bad_quantities_and_requests_over_limit
     assert!(layout().with_resources(fine.unwrap()).is_ok());
 }
 
+fn guest_memory(resources: serde_json::Value) -> Option<serde_json::Value> {
+    let parsed = serde_json::from_value(resources).unwrap();
+    let spec = serde_json::to_value(
+        layout()
+            .with_resources(parsed)
+            .unwrap()
+            .pod("workspace")
+            .unwrap(),
+    )
+    .unwrap();
+    spec["containers"][0]["env"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|env| env["name"] == "CUBEBOT_GUEST_MEMORY_MIB")
+        .map(|env| env["value"].clone())
+}
+
+#[test]
+fn a_kvm_guest_is_sized_by_the_memory_request_less_the_vmm() {
+    // The default guest leaves the spec as it was, so upgrading replaces no agent.
+    assert_eq!(guest_memory(json!({})), None);
+    assert_eq!(guest_memory(json!({"requests":{"memory":"2304Mi"}})), None);
+    assert_eq!(
+        guest_memory(json!({"requests":{"memory":"1280Mi"},"limits":{"memory":"1536Mi"}})),
+        Some(json!("1024"))
+    );
+    assert_eq!(
+        guest_memory(json!({"requests":{"memory":"3Gi"}})),
+        Some(json!("2816"))
+    );
+    for memory in ["511Mi", "3329Mi"] {
+        let parsed =
+            serde_json::from_value(json!({"requests":{"memory":memory},"limits":{"memory":"4Gi"}}))
+                .unwrap();
+        assert!(layout().with_resources(parsed).is_err(), "{memory}");
+    }
+}
+
 #[test]
 fn retained_workspace_claim_is_exclusive() {
     let claim = serde_json::to_value(layout().workspace()).unwrap();
