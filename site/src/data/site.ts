@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.8'
+export const version = 'v0.2.9'
 export const released = '2026-11-10'
 
 export const docs = {
@@ -74,6 +74,7 @@ export const status = {
     'A calendar with your events and every routine run',
     'Agents that set up agents, rooms and teams, with your approval',
     'A model of its own for each agent',
+    'An org chart that fits, pans and zooms',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -152,6 +153,20 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.9',
+    date: '2026-11-10',
+    title: 'Quieter approvals, safer bursts',
+    items: [
+      'Approve or decline an agent’s requests right on the turn that asked, or approve them all at once',
+      'An agent hears every outcome of a turn in one message, instead of one message per approval',
+      'Agents can ask to rename another agent or change its cube, with your approval, and give new agents a cube of their own',
+      'The org chart fits on first view, then pans and zooms with drag, pinch, scroll or keys',
+      'Administrators can delete rooms; history stays readable for administrators',
+      'KVM agents reserve the memory their virtual machine really uses, so a node is never overcommitted, and agents that do not fit show as waiting for room',
+      'Agents created from requests boot on their first message, and at most five new agents wait for approval at once',
+    ],
+  },
   {
     tag: 'v0.2.8',
     date: '2026-11-10',
