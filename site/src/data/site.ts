@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.7'
+export const version = 'v0.2.8'
 export const released = '2026-11-10'
 
 export const docs = {
@@ -73,6 +73,7 @@ export const status = {
     'Backups to S3-compatible storage, restore into a new install',
     'A calendar with your events and every routine run',
     'Agents that set up agents, rooms and teams, with your approval',
+    'A model of its own for each agent',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -151,6 +152,20 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.8',
+    date: '2026-11-10',
+    title: 'A model for each agent',
+    items: [
+      'Pick each agent’s own model on its Usage tab, from the provider in use or any provider with a saved key; the platform default stays one click away',
+      'Platform settings open with an About section: version, deployment, sandbox, default model, uptime, database and counts',
+      'General, Speech, Tasks and Backup settings use the whole page, with each section explained beside its controls',
+      'Rooms and teams can start empty; add agents and people later from one searchable member picker',
+      'People join rooms and team rooms, and retired agents are never offered as members',
+      'A WHOOP connector reads recovery, sleep, strain and workouts through your own WHOOP app',
+      'The message box shrinks back after you send a long message',
+    ],
+  },
   {
     tag: 'v0.2.7',
     date: '2026-11-10',
