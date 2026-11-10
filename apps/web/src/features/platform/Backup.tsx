@@ -13,6 +13,7 @@ import {
 import { fileSize } from '../files/viewer'
 import { STATUS, backupName, lastVerified, took } from './backups'
 import { bytesFrom, unitsOf } from './limits'
+import { SaveBar, Section } from './Section'
 import './platform.css'
 
 type View = components['schemas']['BackupView']
@@ -33,11 +34,16 @@ export function PlatformBackup() {
   if (backup.isError)
     return <Alert>Backup settings could not be read. Retry shortly.</Alert>
   return (
-    <div className="backup">
-      <Overview view={backup.data} />
+    <div className="settings">
+      <Section
+        title="Backups"
+        description="Copies of the database, shared files and every agent’s workspace, kept in a bucket you own."
+      >
+        <Overview view={backup.data} />
+        <History backups={backup.data.backups} />
+      </Section>
       <Terms view={backup.data} />
       <BackupForm key={backup.data.revision} view={backup.data} />
-      <History backups={backup.data.backups} />
       {backup.data.restores.length > 0 && <Restores view={backup.data} />}
     </div>
   )
@@ -71,16 +77,16 @@ function Overview({ view }: { view: View }) {
     }
   }
   return (
-    <section className="backup__overview" aria-labelledby="backup-now">
+    <div className="backup__overview">
       <DatabaseBackup aria-hidden="true" />
       <div>
-        <h2 id="backup-now">
+        <h3>
           {view.running
             ? 'A backup is running'
             : last
               ? `Last verified backup: ${backupName(last.id)}`
               : 'No verified backup yet'}
-        </h2>
+        </h3>
         <p className="small faint">
           {ready
             ? schedule === 'off'
@@ -98,15 +104,15 @@ function Overview({ view }: { view: View }) {
       >
         {view.running ? 'Backing up…' : 'Back up now'}
       </button>
-    </section>
+    </div>
   )
 }
 
 function Terms({ view }: { view: View }) {
   return (
-    <section className="backup__terms" aria-label="What a backup is">
-      <div>
-        <h3>Nothing pauses, so parts can differ by minutes</h3>
+    <Section
+      title="Nothing pauses"
+      description={
         <p>
           Agents keep working and the console stays open while a backup runs.
           The database is read from one consistent moment, then shared files are
@@ -115,7 +121,8 @@ function Terms({ view }: { view: View }) {
           minutes newer than its conversation. A stopped or offline agent has no
           workspace in that backup; the backup says so.
         </p>
-      </div>
+      }
+    >
       <div className="backup__warning">
         <h3>
           <ShieldAlert aria-hidden="true" /> Backups are not encrypted
@@ -129,7 +136,7 @@ function Terms({ view }: { view: View }) {
         </p>
         <CredentialKey view={view} />
       </div>
-    </section>
+    </Section>
   )
 }
 
@@ -283,13 +290,11 @@ function BackupForm({ view }: { view: View }) {
   }
   const secretFixed = view.deployment_secret_access_key
   return (
-    <form className="form backup__form" onSubmit={submit}>
-      <fieldset>
-        <legend>Bucket</legend>
-        <p className="small faint">
-          Any S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2 or
-          MinIO. Give this installation a bucket of its own.
-        </p>
+    <form className="settings__form backup__form" onSubmit={submit}>
+      <Section
+        title="Bucket"
+        description="Any S3-compatible bucket: AWS S3, Cloudflare R2, Backblaze B2 or MinIO. Give this installation a bucket of its own."
+      >
         <Setting
           view={view}
           name="endpoint"
@@ -303,7 +308,7 @@ function BackupForm({ view }: { view: View }) {
             defaultValue={saved.endpoint ?? ''}
           />
         </Setting>
-        <div className="row">
+        <div className="settings__pair">
           <Setting view={view} name="bucket" label="Bucket">
             <input
               name="bucket"
@@ -321,7 +326,7 @@ function BackupForm({ view }: { view: View }) {
             />
           </Setting>
         </div>
-        <div className="row">
+        <div className="settings__pair">
           <Setting view={view} name="access_key_id" label="Access key ID">
             <input
               name="access_key_id"
@@ -354,10 +359,12 @@ function BackupForm({ view }: { view: View }) {
             </Field>
           )}
         </div>
-      </fieldset>
-      <fieldset>
-        <legend>Schedule and retention</legend>
-        <div className="row">
+      </Section>
+      <Section
+        title="Schedule and retention"
+        description="Each day and each week keeps its newest backup. A shared file leaves the bucket only once no kept backup needs it."
+      >
+        <div className="settings__pair">
           <Setting view={view} name="schedule" label="Schedule">
             <select name="schedule" defaultValue={saved.schedule ?? ''}>
               <option value="">Daily</option>
@@ -397,14 +404,12 @@ function BackupForm({ view }: { view: View }) {
             />
           </Setting>
         </div>
-        <p className="small faint">
-          Each day and each week keeps its newest backup. A shared file leaves
-          the bucket only once no kept backup needs it.
-        </p>
-      </fieldset>
-      <fieldset>
-        <legend>Limits</legend>
-        <div className="row">
+      </Section>
+      <Section
+        title="Limits"
+        description="Shared by the database, shared files and workspaces, so a backup never takes more of the network than this."
+      >
+        <div className="settings__pair">
           <Setting
             view={view}
             name="bandwidth_bytes"
@@ -439,32 +444,30 @@ function BackupForm({ view }: { view: View }) {
             />
           </Setting>
         </div>
-        <p className="small faint">
-          Shared by the database, shared files and workspaces, so a backup never
-          takes more of the network than this.
-        </p>
-      </fieldset>
-      {!view.can_save_secret && !secretFixed && (
-        <p className="small faint">
-          This installation has no credential key, so a secret can only come
-          from {view.deployment_source}.
-        </p>
-      )}
-      <Alert>{error}</Alert>
-      <Status>{notice}</Status>
-      <div className="actions">
-        <button className="btn btn--primary" disabled={busy}>
-          {busy ? 'Saving…' : 'Save settings'}
-        </button>
-      </div>
+      </Section>
+      <SaveBar>
+        {!view.can_save_secret && !secretFixed && (
+          <p className="small faint">
+            This installation has no credential key, so a secret can only come
+            from {view.deployment_source}.
+          </p>
+        )}
+        <Alert>{error}</Alert>
+        <Status>{notice}</Status>
+        <div className="actions">
+          <button className="btn btn--primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Save settings'}
+          </button>
+        </div>
+      </SaveBar>
     </form>
   )
 }
 
 function History({ backups }: { backups: Summary[] }) {
   return (
-    <section className="backup__history" aria-labelledby="backup-history">
-      <h2 id="backup-history">History</h2>
+    <div className="backup__history">
+      <h3>History</h3>
       {backups.length === 0 ? (
         <p className="small faint">No backup has run yet.</p>
       ) : (
@@ -474,7 +477,7 @@ function History({ backups }: { backups: Summary[] }) {
           ))}
         </ol>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -518,13 +521,11 @@ function BackupRow({ backup }: { backup: Summary }) {
 
 function Restores({ view }: { view: View }) {
   return (
-    <section className="backup__history" aria-labelledby="backup-restores">
-      <h2 id="backup-restores">Restored workspaces</h2>
-      <p className="small faint">
-        Each agent fetches its workspace from the backup before it takes work.
-        Connections and sign-ins came back as they were and may have expired.
-      </p>
-      <ul>
+    <Section
+      title="Restored workspaces"
+      description="Each agent fetches its workspace from the backup before it takes work. Connections and sign-ins came back as they were and may have expired."
+    >
+      <ul className="backup__rows">
         {view.restores.map((restore) => (
           <li key={restore.agent} className="backup__row">
             <div className="backup__line">
@@ -544,6 +545,6 @@ function Restores({ view }: { view: View }) {
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   )
 }

@@ -122,6 +122,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/model': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['agent_model']
+    put: operations['set_agent_model']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/models': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['agent_models']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{agent}/routines': {
     parameters: {
       query?: never
@@ -1576,6 +1608,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/installation/about': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['installation_about']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/installation/backup': {
     parameters: {
       query?: never
@@ -2414,6 +2462,28 @@ export interface paths {
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    About: {
+      /** Format: int64 */
+      agents: number
+      /** Format: int64 */
+      database_bytes: number
+      /** Format: uuid */
+      installation_id: string
+      installed_at: string
+      model?: string | null
+      namespace?: string | null
+      /** Format: int64 */
+      people: number
+      postgres_version: string
+      provider?: string | null
+      /** Format: int64 */
+      rooms: number
+      /** Format: int64 */
+      teams: number
+      /** Format: int64 */
+      uptime_seconds: number
+      version: string
+    }
     Accept: {
       password: string
       /** Format: uuid */
@@ -2586,6 +2656,14 @@ export interface components {
       id: string
       name: string
       transport: components['schemas']['McpTransport']
+    }
+    AgentModel: {
+      chosen?: null | components['schemas']['ModelRef']
+      default?: null | components['schemas']['ModelRef']
+      providers: components['schemas']['ProviderKind'][]
+    }
+    AgentModels: {
+      provider: components['schemas']['ProviderKind']
     }
     /** @description An agent's overrides; `None` inherits the installation's setting. */
     AgentSpeech: {
@@ -3671,6 +3749,12 @@ export interface components {
       /** @description Whether it can call tools; a model that cannot only talks. */
       tools: boolean
     }
+    ModelRef: {
+      /** Format: int64 */
+      context_window?: number | null
+      model: string
+      provider: components['schemas']['ProviderKind']
+    }
     ModelSpend: {
       /** Format: double */
       cost_usd: number
@@ -4098,6 +4182,7 @@ export interface components {
       manage: boolean
       members: components['schemas']['Member'][]
       name: string
+      people: components['schemas']['Member'][]
       /**
        * Format: int64
        * @description The viewer's read cursor, 0 until set.
@@ -4335,6 +4420,9 @@ export interface components {
       message: string
       /** Format: uuid */
       request_id: string
+    }
+    SetAgentModel: {
+      chosen?: null | components['schemas']['ModelRef']
     }
     SetBudget: {
       /**
@@ -5131,6 +5219,89 @@ export interface operations {
     requestBody?: never
     responses: {
       204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  agent_model: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentModel']
+        }
+      }
+    }
+  }
+  set_agent_model: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetAgentModel']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AgentModel']
+        }
+      }
+    }
+  }
+  agent_models: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AgentModels']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ModelChoice'][]
+        }
+      }
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      502: {
         headers: {
           [name: string]: unknown
         }
@@ -7789,6 +7960,25 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['InstallationSummary']
+        }
+      }
+    }
+  }
+  installation_about: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['About']
         }
       }
     }

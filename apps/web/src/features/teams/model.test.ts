@@ -63,6 +63,6 @@ describe('team drafts', () => {
   test('a draft names what keeps it from saving', () => {
     const draft = { ...team([['lia', null]]), name: ' ' }
     expect(problems(draft, [])).toEqual(['Name the team.'])
-    expect(problems(team([]), [])).toEqual(['Add at least one agent.'])
+    expect(problems(team([]), [])).toEqual([])
   })
 })

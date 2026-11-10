@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT i.id,\n            to_jsonb(i.created_at) #>> '{}' AS \"installed_at!\",\n            (SELECT namespace FROM installation_kubernetes) AS namespace,\n            current_setting('server_version') AS \"postgres_version!\",\n            pg_database_size(current_database()) AS \"database_bytes!\",\n            (SELECT count(*) FROM human_accounts WHERE active) AS \"people!\",\n            (SELECT count(*) FROM agents WHERE desired_state<>'retired') AS \"agents!\",\n            (SELECT count(*) FROM rooms WHERE NOT task AND NOT archived) AS \"rooms!\",\n            (SELECT count(*) FROM teams WHERE deleted_at IS NULL) AS \"teams!\",\n            (SELECT provider FROM provider_connection) AS provider,\n            (SELECT model FROM provider_connection) AS model\n        FROM installation i\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "installed_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "namespace",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "postgres_version!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "database_bytes!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "people!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "agents!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "rooms!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "teams!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "model",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c9e510b8d58f2fe68edd35e68deda7978c4162bc9484bf711f80ae7b4e1a045c"
+}

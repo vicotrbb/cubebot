@@ -5,6 +5,7 @@ import type { components } from '../../api/schema'
 import type { AgentSummary } from '../../api/types'
 import { keys } from '../../app/queries'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
+import { SaveBar, Section } from '../platform/Section'
 import { PROVIDER_OPTIONS } from './call'
 import { ProviderField, VoiceChoice } from './SpeechFields'
 import './call.css'
@@ -69,68 +70,94 @@ function SpeechForm({ settings }: { settings: Settings }) {
     !key
   return (
     <form
-      className="form speech-form"
+      className="settings"
       onSubmit={(event) => {
         event.preventDefault()
         void save(false)
       }}
     >
-      <p className="platform__lead">
-        How every agent hears and speaks on a call, unless its About tab says
-        otherwise. Embedded runs on this installation and works offline. OpenAI
-        uses the key under AI providers.
-      </p>
-      <ProviderField
-        label="Speech to text"
-        value={stt}
-        onChange={(provider) => provider && setStt(provider)}
-      />
-      <ProviderField
-        label="Text to speech"
-        value={tts}
-        onChange={(provider) => provider && setTts(provider)}
-      />
-      <VoiceChoice
-        value={voice}
-        onChange={(chosen) => chosen && setVoice(chosen)}
-      />
-      <Field
-        label="ElevenLabs API key"
-        hint={
-          settings.elevenlabs_configured
-            ? 'A key is saved. Paste a new one to replace it; it is never shown again.'
-            : 'Encrypted on the server and never shown again.'
+      <Section
+        title="Hearing and speaking"
+        description={
+          <>
+            <p>
+              How every agent hears and speaks on a call, unless its About tab
+              says otherwise.
+            </p>
+            <p>
+              Embedded runs on this installation and works offline. OpenAI uses
+              the key under AI providers.
+            </p>
+          </>
         }
       >
-        <input
-          type="password"
-          autoComplete="off"
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
+        <div className="settings__pair">
+          <ProviderField
+            label="Speech to text"
+            value={stt}
+            onChange={(provider) => provider && setStt(provider)}
+          />
+          <ProviderField
+            label="Text to speech"
+            value={tts}
+            onChange={(provider) => provider && setTts(provider)}
+          />
+        </div>
+      </Section>
+      <Section
+        title="How agents sound"
+        description="The voice agents answer in. Each agent can pick its own."
+      >
+        <VoiceChoice
+          value={voice}
+          onChange={(chosen) => chosen && setVoice(chosen)}
         />
-      </Field>
-      {needsKey && (
-        <p className="small faint">
-          ElevenLabs needs a key before a call can use it.
-        </p>
-      )}
-      <Alert>{error}</Alert>
-      <Status>{notice}</Status>
-      <div className="actions">
-        <button className="btn btn--primary" disabled={busy || needsKey}>
-          {busy ? 'Saving…' : 'Save speech settings'}
-        </button>
-        {settings.elevenlabs_configured && (
-          <button
-            type="button"
-            className="btn btn--ghost"
-            disabled={busy}
-            onClick={() => void save(true)}
-          >
-            Forget ElevenLabs key
-          </button>
+      </Section>
+      <Section
+        title="ElevenLabs"
+        description="Only needed when ElevenLabs hears or speaks for agents. The key is encrypted on the server and never shown again."
+      >
+        <Field
+          label="API key"
+          hint={settings.elevenlabs_configured ? 'A key is saved' : undefined}
+        >
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder={
+              settings.elevenlabs_configured
+                ? 'Paste a new key to replace it'
+                : ''
+            }
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+          />
+        </Field>
+        {needsKey && (
+          <p className="small faint">
+            ElevenLabs needs a key before a call can use it.
+          </p>
         )}
-      </div>
+      </Section>
+      <SaveBar>
+        <Alert>{error}</Alert>
+        <Status>{notice}</Status>
+        <div className="actions">
+          <button className="btn btn--primary" disabled={busy || needsKey}>
+            {busy ? 'Saving…' : 'Save speech settings'}
+          </button>
+          {settings.elevenlabs_configured && (
+            <button
+              type="button"
+              className="btn btn--ghost"
+              disabled={busy}
+              onClick={() => void save(true)}
+            >
+              Forget ElevenLabs key
+            </button>
+          )}
+        </div>
+      </SaveBar>
     </form>
   )
 }

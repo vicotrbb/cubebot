@@ -100,8 +100,10 @@ export function problems(team: SaveTeam, others: Team[]): string[] {
   if (!name) found.push('Name the team.')
   else if (others.some((other) => other.name.trim().toLowerCase() === name))
     found.push('Another team already has this name.')
-  if (team.members.length === 0) found.push('Add at least one agent.')
-  else if (team.members.filter((m) => m.reports_to == null).length !== 1)
+  if (
+    team.members.length > 0 &&
+    team.members.filter((m) => m.reports_to == null).length !== 1
+  )
     found.push('Choose one manager.')
   if (team.members.some((member) => !member.title.trim()))
     found.push('Give every member a title.')

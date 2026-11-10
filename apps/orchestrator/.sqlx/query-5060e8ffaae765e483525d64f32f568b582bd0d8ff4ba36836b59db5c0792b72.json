@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credential, context_window FROM provider_saved WHERE provider = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "context_window",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "5060e8ffaae765e483525d64f32f568b582bd0d8ff4ba36836b59db5c0792b72"
+}

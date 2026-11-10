@@ -5,7 +5,9 @@ import { keys } from '../../app/queries'
 import type { components } from '../../api/schema'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
 import { fileSize } from '../files/viewer'
+import { About } from './About'
 import { bytesFrom, unitsOf } from './limits'
+import { SaveBar, Section } from './Section'
 import './platform.css'
 
 type Settings = components['schemas']['SettingsView']
@@ -19,12 +21,20 @@ export function PlatformGeneral() {
     queryKey: ['installation-settings'],
     queryFn: () => ok(api.GET('/api/installation/settings')),
   })
-  if (settings.isPending) return <Skeleton lines={5} width="62ch" />
-  if (settings.isError)
-    return (
-      <Alert>The installation settings could not be read. Retry shortly.</Alert>
-    )
-  return <GeneralForm settings={settings.data} />
+  return (
+    <div className="settings">
+      <About />
+      {settings.isPending ? (
+        <Skeleton lines={5} width="62ch" />
+      ) : settings.isError ? (
+        <Alert>
+          The installation settings could not be read. Retry shortly.
+        </Alert>
+      ) : (
+        <GeneralForm settings={settings.data} />
+      )}
+    </div>
+  )
 }
 
 function GeneralForm({ settings }: { settings: Settings }) {
@@ -63,38 +73,51 @@ function GeneralForm({ settings }: { settings: Settings }) {
     }
   }
   return (
-    <form className="form general" onSubmit={submit}>
-      <p className="platform__lead">
-        What this installation is called and how much of its shared-file volume
-        people and agents may fill. A field left empty uses the deployment’s
-        value, from the Helm chart or <code>.env</code>.
-      </p>
-      <Field
-        label="Installation name"
-        hint={`Empty uses “${settings.default_name}”`}
+    <form className="settings__form" onSubmit={submit}>
+      <Section
+        title="Name"
+        description="What people see in the sidebar, the browser tab and invitations."
       >
-        <input
-          name="name"
-          maxLength={64}
-          placeholder={settings.default_name}
-          defaultValue={settings.name ?? ''}
-        />
-      </Field>
-      {volume ? (
-        <StorageFields settings={settings} volume={volume} />
-      ) : (
-        <p className="small faint">
-          This installation keeps no shared files, so it has no storage quota or
-          upload limit to set.
-        </p>
-      )}
-      <Alert>{error}</Alert>
-      <Status>{notice}</Status>
-      <div className="actions">
-        <button className="btn btn--primary" disabled={busy}>
-          {busy ? 'Saving…' : 'Save settings'}
-        </button>
-      </div>
+        <Field
+          label="Installation name"
+          hint={`Empty uses “${settings.default_name}”`}
+        >
+          <input
+            name="name"
+            maxLength={64}
+            placeholder={settings.default_name}
+            defaultValue={settings.name ?? ''}
+          />
+        </Field>
+      </Section>
+      <Section
+        title="Shared files"
+        description={
+          <p>
+            How much of the shared-file volume people and agents may fill. A
+            field left empty uses the deployment’s value, from the Helm chart or{' '}
+            <code>.env</code>.
+          </p>
+        }
+      >
+        {volume ? (
+          <StorageFields settings={settings} volume={volume} />
+        ) : (
+          <p className="small faint">
+            This installation keeps no shared files, so it has no storage quota
+            or upload limit to set.
+          </p>
+        )}
+      </Section>
+      <SaveBar>
+        <Alert>{error}</Alert>
+        <Status>{notice}</Status>
+        <div className="actions">
+          <button className="btn btn--primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Save settings'}
+          </button>
+        </div>
+      </SaveBar>
     </form>
   )
 }
@@ -114,34 +137,36 @@ function StorageFields({
   return (
     <>
       <VolumeMeter volume={volume} />
-      <Field
-        label="Storage quota (GiB)"
-        hint={`Empty uses ${fileSize(volume.default_quota_bytes)}${ceiling}`}
-      >
-        <input
-          name="quota"
-          type="number"
-          min={0.0625}
-          step="any"
-          inputMode="decimal"
-          placeholder={unitsOf(volume.default_quota_bytes, GIB)}
-          defaultValue={unitsOf(settings.storage_quota_bytes, GIB)}
-        />
-      </Field>
-      <Field
-        label="Largest upload (MiB)"
-        hint={`Per file; empty uses ${upload == null ? 'no limit' : fileSize(upload)}`}
-      >
-        <input
-          name="upload"
-          type="number"
-          min={1}
-          step="any"
-          inputMode="decimal"
-          placeholder={upload == null ? 'No limit' : unitsOf(upload, MIB)}
-          defaultValue={unitsOf(settings.upload_limit_bytes, MIB)}
-        />
-      </Field>
+      <div className="settings__pair">
+        <Field
+          label="Storage quota (GiB)"
+          hint={`Empty uses ${fileSize(volume.default_quota_bytes)}${ceiling}`}
+        >
+          <input
+            name="quota"
+            type="number"
+            min={0.0625}
+            step="any"
+            inputMode="decimal"
+            placeholder={unitsOf(volume.default_quota_bytes, GIB)}
+            defaultValue={unitsOf(settings.storage_quota_bytes, GIB)}
+          />
+        </Field>
+        <Field
+          label="Largest upload (MiB)"
+          hint={`Per file; empty uses ${upload == null ? 'no limit' : fileSize(upload)}`}
+        >
+          <input
+            name="upload"
+            type="number"
+            min={1}
+            step="any"
+            inputMode="decimal"
+            placeholder={upload == null ? 'No limit' : unitsOf(upload, MIB)}
+            defaultValue={unitsOf(settings.upload_limit_bytes, MIB)}
+          />
+        </Field>
+      </div>
     </>
   )
 }

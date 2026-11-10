@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import { can, type AgentSummary, type Session } from '../../api/types'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
+import { AgentModel } from '../agent/AgentModel'
 import { DayBars } from './DayBars'
 import { count, money } from './format'
 import { BudgetMeter, modelCost } from './Home'
@@ -42,6 +43,7 @@ export function UsageTab({
     data.turns > 0 ? Math.round((data.failed_turns / data.turns) * 100) : 0
   return (
     <>
+      {can(agent, 'agent_manage', session) && <AgentModel agent={agent} />}
       <section className="panel__section usage">
         <h2>Budgets</h2>
         <div className="usage__limits">

@@ -1,3 +1,4 @@
+mod agent_model;
 mod chatgpt;
 mod credentials;
 mod mcp;
@@ -6,6 +7,7 @@ mod native;
 mod subscriptions;
 mod supergrok;
 mod vault;
+pub use agent_model::{AgentModel, ModelRef, SetAgentModel};
 pub use chatgpt::ChatgptSignIn;
 pub use credentials::{CredentialError, Credentials};
 pub use mcp::{AgentMcpServer, McpServerSummary, McpTransport, SaveMcpServer};
@@ -357,7 +359,8 @@ impl Connections {
         tx: &mut Transaction<'_, Postgres>,
         agent: crate::agents::AgentId,
     ) -> Result<Inference, IdentityError> {
-        self.connection(tx, For::Agent(agent)).await
+        let base = self.connection(tx, For::Agent(agent)).await?;
+        self.chosen(tx, agent, base).await
     }
 
     /// The agent's current material, renewing a due subscription first.
@@ -553,25 +556,8 @@ impl Connections {
         transaction: &mut Transaction<'_, Postgres>,
         provider: ProviderKind,
     ) -> Result<String, IdentityError> {
-        let aside = sqlx::query_scalar!(
-            "
-            SELECT credential
-            FROM provider_saved
-            WHERE provider = $1
-            ",
-            provider.as_str(),
-        )
-        .fetch_optional(&mut **transaction)
-        .await?;
-        if let Some(credential) = aside {
-            let context = saved_context(transaction, provider).await?;
-            let secret = self
-                .credentials
-                .decrypt(&credential, &context)
-                .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
-            return String::from_utf8(secret).map_err(|error| {
-                IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
-            });
+        if let Some((key, _)) = self.saved_material(transaction, provider).await? {
+            return Ok(key);
         }
         let saved = self
             .connection(transaction, For::Installation)
@@ -584,6 +570,31 @@ impl Connections {
             return Err(IdentityError::InvalidInput);
         }
         Ok(saved.api_key)
+    }
+
+    async fn saved_material(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        provider: ProviderKind,
+    ) -> Result<Option<(String, Option<i64>)>, IdentityError> {
+        let Some(saved) = sqlx::query!(
+            "SELECT credential, context_window FROM provider_saved WHERE provider = $1",
+            provider.as_str(),
+        )
+        .fetch_optional(&mut **transaction)
+        .await?
+        else {
+            return Ok(None);
+        };
+        let context = saved_context(transaction, provider).await?;
+        let secret = self
+            .credentials
+            .decrypt(&saved.credential, &context)
+            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
+        let key = String::from_utf8(secret).map_err(|error| {
+            IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
+        })?;
+        Ok(Some((key, saved.context_window)))
     }
 
     async fn set_aside(

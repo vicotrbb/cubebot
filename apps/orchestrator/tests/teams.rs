@@ -189,4 +189,30 @@ async fn team_rooms_follow_rosters_and_nesting_and_a_deleted_team_archives_its_r
     let teams = work.teams(&admin).await.unwrap();
     assert_eq!(teams.len(), 1);
     assert_eq!(teams[0].members[0].title, "CTO");
+
+    let research = work
+        .create_team(
+            &admin,
+            &CreateTeam {
+                request_id: Uuid::new_v4(),
+                team: save("Research", Some((top.id, cto)), vec![]),
+            },
+        )
+        .await
+        .unwrap();
+    assert!(research.members.is_empty());
+    let leadership = work.teams(&admin).await.unwrap();
+    let leadership = leadership.iter().find(|team| team.id == top.id).unwrap();
+    assert!(matches!(
+        work.update_team(
+            &admin,
+            top.id,
+            &UpdateTeam {
+                expected_revision: leadership.revision,
+                team: save("Leadership", None, vec![]),
+            },
+        )
+        .await,
+        Err(IdentityError::InvalidInput)
+    ));
 }

@@ -8,9 +8,12 @@ import {
   keys,
   notRetired,
   useAgents,
+  useRooms,
   useSession,
   useTeams,
 } from '../../app/queries'
+import { MemberList } from '../../components/MemberPicker'
+import type { MemberOption } from '../../components/members'
 import { Cube, moodOf } from '../../components/Cube'
 import {
   Alert,
@@ -26,6 +29,7 @@ import './teams.css'
 export function TeamPage({ teamId }: { teamId: string }) {
   const teams = useTeams()
   const agents = useAgents()
+  const rooms = useRooms()
   const session = useSession()
   const [editing, setEditing] = useState(false)
   const team = teams.data?.find((item) => item.id === teamId)
@@ -43,6 +47,13 @@ export function TeamPage({ teamId }: { teamId: string }) {
     )
   const all = teams.data ?? []
   const visible = notRetired(agents.data)
+  const people = (
+    rooms.data?.find((room) => room.id === team.room)?.people ?? []
+  ).map((person): MemberOption => ({
+    kind: 'person',
+    id: person.id,
+    name: person.name,
+  }))
   const administrator = Boolean(session.data?.administrator)
   return (
     <div className="page team-page">
@@ -79,11 +90,17 @@ export function TeamPage({ teamId }: { teamId: string }) {
             draft={toSave(team)}
             teams={all}
             agents={visible}
+            people={people}
             onDone={() => setEditing(false)}
             onCancel={() => setEditing(false)}
           />
         ) : (
-          <TeamDetails team={team} teams={all} agents={visible} />
+          <TeamDetails
+            team={team}
+            teams={all}
+            agents={visible}
+            people={people}
+          />
         )}
       </div>
     </div>
@@ -94,10 +111,12 @@ function TeamDetails({
   team,
   teams,
   agents,
+  people,
 }: {
   team: Team
   teams: Team[]
   agents: AgentSummary[]
+  people: MemberOption[]
 }) {
   const parent = teams.find((other) => other.id === team.parent)
   const boss = parent?.members.find((m) => m.agent === team.reports_to)
@@ -127,7 +146,7 @@ function TeamDetails({
           )}
           <span>
             {team.members.length}{' '}
-            {team.members.length === 1 ? 'member' : 'members'}
+            {team.members.length === 1 ? 'agent' : 'agents'}
           </span>
         </p>
       </div>
@@ -149,6 +168,11 @@ function TeamDetails({
       </section>
       <section aria-labelledby="team-roles">
         <h2 id="team-roles">Roles</h2>
+        {team.members.length === 0 && (
+          <p className="faint small">
+            No agents yet. Edit the team to add its manager and members.
+          </p>
+        )}
         <ul className="roles">
           {team.members.map((member) => {
             const agent = named.get(member.agent)
@@ -179,6 +203,18 @@ function TeamDetails({
           })}
         </ul>
       </section>
+      {people.length > 0 && (
+        <section aria-labelledby="team-people">
+          <h2 id="team-people">People</h2>
+          <MemberList
+            members={people}
+            busy={false}
+            removable={() => false}
+            onRemove={() => undefined}
+            empty=""
+          />
+        </section>
+      )}
     </>
   )
 }

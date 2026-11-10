@@ -189,3 +189,46 @@ async fn switching_providers_keeps_each_key_until_it_is_forgotten() {
         Err(IdentityError::InvalidInput)
     ));
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn about_reports_the_running_installation_and_its_default_model() {
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let about = cubebot_orchestrator::operations::about::about(&pool)
+        .await
+        .unwrap();
+    assert_eq!(about.version, env!("CARGO_PKG_VERSION"));
+    assert_eq!((about.people, about.agents, about.teams), (1, 0, 0));
+    assert!(about.provider.is_none() && about.database_bytes > 0);
+    assert!(!about.postgres_version.is_empty());
+    Connections::new(pool.clone(), Credentials::new([7; 32]))
+        .configure(
+            &admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 0,
+                provider: cubebot_protocol::runtime::ProviderKind::Anthropic,
+                model: "default-model".into(),
+                context_window: Some(200_000),
+                api_key: Some("anthropic-key".into()),
+                access: None,
+            },
+        )
+        .await
+        .unwrap();
+    let about = cubebot_orchestrator::operations::about::about(&pool)
+        .await
+        .unwrap();
+    assert_eq!(about.provider.as_deref(), Some("anthropic"));
+    assert_eq!(about.model.as_deref(), Some("default-model"));
+}

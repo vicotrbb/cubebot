@@ -23,6 +23,16 @@ pub struct ModelChoice {
     pub tools: bool,
 }
 
+impl From<cubebot_providers::Model> for ModelChoice {
+    fn from(model: cubebot_providers::Model) -> Self {
+        Self {
+            id: model.id,
+            context_window: model.context_window,
+            tools: model.tools,
+        }
+    }
+}
+
 pub enum ModelsError {
     Identity(IdentityError),
     Provider(cubebot_providers::Error),
@@ -45,7 +55,7 @@ pub(crate) fn configured<P>(
     }
 }
 
-async fn listed(
+pub(super) async fn listed(
     provider: ProviderKind,
     key: &str,
 ) -> Result<Vec<cubebot_providers::Model>, cubebot_providers::Error> {
@@ -120,14 +130,7 @@ impl Connections {
         let models = listed(input.provider, &key)
             .await
             .map_err(ModelsError::Provider)?;
-        Ok(models
-            .into_iter()
-            .map(|model| ModelChoice {
-                id: model.id,
-                context_window: model.context_window,
-                tools: model.tools,
-            })
-            .collect())
+        Ok(models.into_iter().map(ModelChoice::from).collect())
     }
 
     async fn listing_key(

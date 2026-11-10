@@ -60,17 +60,29 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     let room = work.create_room(&admin, &create).await.unwrap();
     assert_eq!(work.create_room(&admin, &create).await.unwrap().id, room.id);
     assert_eq!(room.members.len(), 2);
-    for agents in [vec![], vec![Uuid::new_v4()]] {
-        let invalid = CreateRoom {
-            request_id: Uuid::new_v4(),
-            name: "Invalid".into(),
-            agents,
-        };
-        assert!(matches!(
-            work.create_room(&admin, &invalid).await,
-            Err(IdentityError::InvalidInput)
-        ));
-    }
+    let invalid = CreateRoom {
+        request_id: Uuid::new_v4(),
+        name: "Invalid".into(),
+        agents: vec![Uuid::new_v4()],
+    };
+    assert!(matches!(
+        work.create_room(&admin, &invalid).await,
+        Err(IdentityError::InvalidInput)
+    ));
+    let empty = CreateRoom {
+        request_id: Uuid::new_v4(),
+        name: "Empty".into(),
+        agents: vec![],
+    };
+    let empty = work.create_room(&admin, &empty).await.unwrap();
+    assert!(empty.members.is_empty());
+    let unread = work
+        .post_room_message(&admin, empty.id, &message("Anyone here?"))
+        .await
+        .unwrap();
+    assert_eq!(unread.routing, "no_action");
+    assert_eq!(unread.note.as_deref(), Some("no_agents"));
+    assert!(unread.deliveries.is_empty());
 
     let mentioned = message("@Ada and @bob, then @ada again; cc @Cy");
     let (first, second) = tokio::join!(
@@ -170,7 +182,16 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
             .await
             .unwrap();
     }
-    assert_eq!(work.rooms(&member).await.unwrap()[0].id, room.id);
+    let visible = work.rooms(&member).await.unwrap();
+    assert_eq!(visible[0].id, room.id);
+    assert_eq!(
+        visible[0]
+            .people
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect::<Vec<_>>(),
+        ["member"]
+    );
     let posted = work
         .post_room_message(&member, room.id, &message("@Bob hi"))
         .await
@@ -216,13 +237,17 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
             .len(),
         1
     );
-    for agents in [vec![], vec![Uuid::new_v4()]] {
-        assert!(matches!(
-            work.set_room_members(&admin, room.id, &RoomMembers { agents })
-                .await,
-            Err(IdentityError::InvalidInput)
-        ));
-    }
+    assert!(matches!(
+        work.set_room_members(
+            &admin,
+            room.id,
+            &RoomMembers {
+                agents: vec![Uuid::new_v4()]
+            }
+        )
+        .await,
+        Err(IdentityError::InvalidInput)
+    ));
     let removed = work
         .post_room_message(&member, room.id, &message("@Bob are you there?"))
         .await

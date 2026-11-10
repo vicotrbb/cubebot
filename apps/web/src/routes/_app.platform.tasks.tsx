@@ -7,6 +7,8 @@ import type { components } from '../api/schema'
 import { CardSelect } from '../components/CardSelect'
 import { Cube } from '../components/Cube'
 import { Alert, Field, Skeleton, Status } from '../components/primitives'
+import { PROVIDER_NAMES } from '../features/platform/models'
+import { SaveBar, Section } from '../features/platform/Section'
 import { ModelField, useModels } from '../features/platform/Providers'
 import { ORCHESTRATOR_AVATAR } from '../features/tasks/orchestrator'
 import '../features/platform/platform.css'
@@ -19,19 +21,6 @@ export const Route = createFileRoute('/_app/platform/tasks')({
 type Settings = components['schemas']['TaskSettings']
 type Provider = components['schemas']['ProviderKind']
 
-const NAMES: Record<Provider, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic',
-  openrouter: 'OpenRouter',
-  gemini: 'Google Gemini',
-  grok: 'xAI Grok',
-  chatgpt: 'ChatGPT plan',
-  supergrok: 'Grok plan',
-  minimax: 'MiniMax',
-  minimax_cn: 'MiniMax (mainland China)',
-  minimax_plan: 'MiniMax M Plan',
-  minimax_plan_cn: 'MiniMax M Plan (mainland China)',
-}
 const SAME = 'same'
 const PLANS: Provider[] = [
   'chatgpt',
@@ -100,21 +89,24 @@ function Form({ saved }: { saved: Settings }) {
   const ready = !own || Boolean(draft.model)
   return (
     <form
-      className="form task-settings"
+      className="settings"
       onSubmit={(event) => {
         event.preventDefault()
         void save()
       }}
     >
-      <header className="task-settings__hello">
-        <Cube avatar={ORCHESTRATOR_AVATAR} size={44} />
-        <p>
-          The orchestrator takes every task people hand over: it names it, picks
-          the agents, gives each their part and reads what comes back.
-        </p>
-      </header>
-      <fieldset className="task-settings__model">
-        <legend>What it thinks with</legend>
+      <Section
+        title="What it thinks with"
+        description={
+          <div className="task-settings__hello">
+            <Cube avatar={ORCHESTRATOR_AVATAR} size={30} />
+            <p>
+              The orchestrator takes every task people hand over: it names it,
+              picks the agents, gives each their part and reads what comes back.
+            </p>
+          </div>
+        }
+      >
         <CardSelect
           label="What it thinks with"
           value={draft.provider ?? SAME}
@@ -130,18 +122,18 @@ function Form({ saved }: { saved: Settings }) {
               value: SAME,
               title: 'The same model as the agents',
               detail: active
-                ? `${NAMES[active]}, whichever model is in use there`
+                ? `${PROVIDER_NAMES[active]}, whichever model is in use there`
                 : 'Set one up under AI providers first',
               mark: <Cube size={20} />,
             },
             ...keyed.map((provider) => ({
               value: provider,
-              title: `A model from ${NAMES[provider]}`,
+              title: `A model from ${PROVIDER_NAMES[provider]}`,
               detail:
                 draft.provider === provider && draft.model
                   ? draft.model
                   : 'A small, quick model is usually enough for this job',
-              mark: NAMES[provider].charAt(0),
+              mark: PROVIDER_NAMES[provider].charAt(0),
             })),
           ]}
         />
@@ -153,40 +145,49 @@ function Form({ saved }: { saved: Settings }) {
             onPick={(model) => setDraft({ ...draft, model })}
           />
         )}
-      </fieldset>
-      <Stepper
-        label="Agents per round"
-        hint="The most it may start at once"
-        value={draft.max_agents}
-        onChange={(max_agents) => setDraft({ ...draft, max_agents })}
-      />
-      <Stepper
-        label="Rounds of work"
-        hint="How many times it may start agents before it asks you"
-        value={draft.max_rounds}
-        onChange={(max_rounds) => setDraft({ ...draft, max_rounds })}
-      />
-      <Field
-        label="House rules"
-        hint="Optional; it follows these on every task"
+      </Section>
+      <Section
+        title="How far it goes"
+        description="It stops and asks you once it reaches either limit."
       >
-        <textarea
-          rows={4}
-          maxLength={8192}
-          placeholder="Ayla handles anything about finance. Ask before spending money."
-          value={draft.instructions}
-          onChange={(event) =>
-            setDraft({ ...draft, instructions: event.target.value })
-          }
+        <Stepper
+          label="Agents per round"
+          hint="The most it may start at once"
+          value={draft.max_agents}
+          onChange={(max_agents) => setDraft({ ...draft, max_agents })}
         />
-      </Field>
-      <Alert>{error}</Alert>
-      <Status>{notice}</Status>
-      <div className="actions">
-        <button className="btn btn--primary" disabled={busy || !ready}>
-          {busy ? 'Saving…' : 'Save'}
-        </button>
-      </div>
+        <Stepper
+          label="Rounds of work"
+          hint="How many times it may start agents before it asks you"
+          value={draft.max_rounds}
+          onChange={(max_rounds) => setDraft({ ...draft, max_rounds })}
+        />
+      </Section>
+      <Section
+        title="House rules"
+        description="Optional. It follows these on every task, before any task's own words."
+      >
+        <Field label="Rules">
+          <textarea
+            rows={6}
+            maxLength={8192}
+            placeholder="Ayla handles anything about finance. Ask before spending money."
+            value={draft.instructions}
+            onChange={(event) =>
+              setDraft({ ...draft, instructions: event.target.value })
+            }
+          />
+        </Field>
+      </Section>
+      <SaveBar>
+        <Alert>{error}</Alert>
+        <Status>{notice}</Status>
+        <div className="actions">
+          <button className="btn btn--primary" disabled={busy || !ready}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </SaveBar>
     </form>
   )
 }
