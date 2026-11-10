@@ -102,6 +102,7 @@ pub enum Accessory {
 pub struct Agent {
     pub id: AgentId,
     pub name: String,
+    pub title: String,
     /// `None` without `agent_manage`.
     pub instructions: Option<String>,
     pub revision: i64,
@@ -263,7 +264,7 @@ impl Agents {
         Ok(sqlx::query_as!(
             Agent,
             r#"
-        SELECT g.id AS "id: AgentId", g.name,
+        SELECT g.id AS "id: AgentId", g.name, g.title,
                CASE WHEN 'agent_manage' = ANY(c.names) THEN g.instructions END AS instructions,
                g.revision, g.instructions_revision, g.desired_state,
                g.idle_policy AS "idle_policy: IdlePolicy", g.restart_generation,

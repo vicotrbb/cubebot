@@ -96,6 +96,9 @@ function Card({ id, ref }: { id: string; ref: React.Ref<HTMLDivElement> }) {
         <Cube avatar={agent.avatar} mood={moodOf(agent)} size={36} />
         <div className="agent-card__who">
           <strong>{agent.name}</strong>
+          {agent.title && (
+            <span className="agent-card__title">{agent.title}</span>
+          )}
           <span className="agent-card__status">
             <span className={`dot dot--${agent.activity}`} />
             {ACTIVITY[agent.activity] ?? agent.activity}

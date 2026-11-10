@@ -49,6 +49,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         knowledge_base: Some(false),
         creates: None,
         avatar: None,
+        title: Some("  Research lead ".into()),
     };
     let receipt = agents.update(&actor, id, &update).await.unwrap();
     assert_eq!(receipt.revision, 2);
@@ -65,6 +66,18 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
     );
     assert!(definition.broadcast);
     assert!(!definition.knowledge_base);
+    assert_eq!(definition.title, "Research lead");
+    let long_title = UpdateAgent {
+        request_id: Uuid::new_v4(),
+        expected_revision: 2,
+        title: Some("x".repeat(65)),
+        ..update
+    };
+    assert!(agents.update(&actor, id, &long_title).await.is_err());
+    let update = UpdateAgent {
+        title: None,
+        ..long_title
+    };
     let invalid = UpdateAgent {
         request_id: Uuid::new_v4(),
         expected_revision: 2,
@@ -261,6 +274,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         knowledge_base: None,
         creates: None,
         avatar: None,
+        title: None,
     };
     let second = UpdateAgent {
         request_id: Uuid::new_v4(),
@@ -275,6 +289,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         knowledge_base: None,
         creates: None,
         avatar: None,
+        title: None,
     };
     let (first, second) = tokio::join!(
         agents.update(&admin, id, &first),

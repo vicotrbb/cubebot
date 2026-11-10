@@ -79,9 +79,11 @@ function Identity({
 }) {
   const { save, error, notice, busy } = useSave(onSaved)
   const [name, setName] = useState(agent.name)
+  const [title, setTitle] = useState(agent.title)
   const [avatar, setAvatar] = useState<Avatar>(agent.avatar)
   const changed =
     name !== agent.name ||
+    title.trim() !== agent.title ||
     JSON.stringify(avatar) !== JSON.stringify(agent.avatar)
   return (
     <section className="panel__section">
@@ -91,7 +93,11 @@ function Identity({
         onSubmit={(event) => {
           event.preventDefault()
           void save(() =>
-            admin.setAvatar(agent.id, { ...definition(agent), name }, avatar),
+            admin.setAvatar(
+              agent.id,
+              { ...definition(agent), name, title },
+              avatar,
+            ),
           )
         }}
       >
@@ -106,6 +112,14 @@ function Identity({
             onChange={(event) => setName(event.target.value)}
             required
             maxLength={255}
+          />
+        </Field>
+        <Field label="Title" hint="Shown on its cards">
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={64}
+            placeholder="Research lead"
           />
         </Field>
         <Wallpaper agent={agent} />

@@ -88,9 +88,16 @@ export function OrgChart({
   )
 }
 
-function heightOf(node: Placed, seats: Map<string, Seat[]>) {
+function heightOf(
+  node: Placed,
+  seats: Map<string, Seat[]>,
+  agents: Map<string, AgentSummary>,
+) {
   if (node.kind === 'team') return TEAM_HEIGHT
-  return 58 + 18 * Math.max(1, seats.get(node.ref)?.length ?? 1)
+  const lines =
+    Math.max(1, seats.get(node.ref)?.length ?? 1) +
+    (agents.get(node.ref)?.title ? 1 : 0)
+  return 58 + 18 * lines
 }
 
 function Graph({
@@ -114,7 +121,7 @@ function Graph({
       0,
       ...placed
         .filter((node) => node.layer === layer)
-        .map((node) => heightOf(node, seats)),
+        .map((node) => heightOf(node, seats, agents)),
     ),
   )
   const tops = rows.map((_, layer) =>
@@ -124,7 +131,7 @@ function Graph({
   const box = (id: string) => {
     const node = at.get(id)
     const top = node ? (tops[node.layer] ?? 0) : 0
-    const bottom = node ? top + heightOf(node, seats) : 0
+    const bottom = node ? top + heightOf(node, seats, agents) : 0
     return { x: (node?.x ?? 0) + WIDTH / 2, top, bottom }
   }
   const bends = [...routes.values()].flat().map((bend) => bend.x)
@@ -170,7 +177,7 @@ function Graph({
               left: node.x,
               top: tops[node.layer],
               width: WIDTH,
-              height: heightOf(node, seats),
+              height: heightOf(node, seats, agents),
             }}
           >
             {node.kind === 'team' ? (
@@ -270,6 +277,11 @@ function AgentCard({
       />
       <span className="org__who">
         <strong>{name}</strong>
+        {agent?.title && (
+          <span className="org__role" title={agent.title}>
+            {agent.title}
+          </span>
+        )}
         {seats.map((seat) => (
           <span
             className="org__title"

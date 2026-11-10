@@ -2641,6 +2641,7 @@ export interface components {
        * @description Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four.
        */
       task_lanes: number
+      title: string
       tts_provider?: null | components['schemas']['Provider']
       voice?: null | components['schemas']['Voice']
     }
@@ -4961,6 +4962,7 @@ export interface components {
        * @description Concurrent delegated tasks, one to four; `None` keeps the current setting.
        */
       task_lanes?: number | null
+      title?: string | null
     }
     /** @description Each field present replaces the current one; changed settings or secrets are checked again. */
     UpdateConnection: {
