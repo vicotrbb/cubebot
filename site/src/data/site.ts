@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.6'
-export const released = '2026-11-09'
+export const version = 'v0.2.7'
+export const released = '2026-11-10'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -72,6 +72,7 @@ export const status = {
     'Profiles agents read: who you are and how you work',
     'Backups to S3-compatible storage, restore into a new install',
     'A calendar with your events and every routine run',
+    'Agents that set up agents, rooms and teams, with your approval',
   ],
   progress: [
     'Real-cluster fencing and isolation',
@@ -136,6 +137,12 @@ export const timeline = [
     title: 'Calendar',
     body: 'Your events and agent routines together.',
   },
+  {
+    date: 'Nov 10',
+    datetime: '2026-11-10',
+    title: 'Agents that build',
+    body: 'Ask an agent to set up your platform.',
+  },
 ] as const
 
 export const next = [
@@ -144,6 +151,18 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.7',
+    date: '2026-11-10',
+    title: 'Agents that build',
+    items: [
+      'Ask an agent to create agents, rooms and teams; each request waits for your approval in its conversation',
+      'Approving creates it as you, with your access, the default skills and your connection defaults',
+      'The agent hears what you decided, including why a request could not be created',
+      'New default skills teach agents to design a focused agent, a room or a team before asking',
+      'A per-agent switch turns the capability off',
+    ],
+  },
   {
     tag: 'v0.2.6',
     date: '2026-11-09',
