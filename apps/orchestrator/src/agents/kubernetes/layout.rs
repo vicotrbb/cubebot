@@ -124,7 +124,20 @@ impl Layout {
     pub fn with_resources(mut self, resources: Resources) -> Result<Self, Error> {
         resources.validate(&self.default_resources())?;
         self.resources = resources;
+        if self.runtime == (Runtime::Kvm {}) && self.guest_memory().is_none() {
+            return Err(Error::InvalidConfiguration);
+        }
         Ok(self)
+    }
+    /// A KVM guest gets the memory request less the VMM's share, so the request stays what the
+    /// pod really uses; the sandbox accepts 256 to 3072 MiB.
+    fn guest_memory(&self) -> Option<u64> {
+        let request = self.resources.apply(self.default_resources())["requests"]["memory"]
+            .as_str()
+            .and_then(quantity)?;
+        let mib = (request / 1048576.0).floor() as u64;
+        mib.checked_sub(VMM_MIB)
+            .filter(|guest| (256..=3072).contains(guest))
     }
     fn default_resources(&self) -> Value {
         match self.runtime {
@@ -205,6 +218,13 @@ impl Layout {
             env.push(
                 json!({"name":"CUBEBOT_GUEST_WORKSPACE","value":"/var/lib/cubebot/workspace.ext4"}),
             );
+            // Left unset at the default so upgrading does not replace every running agent.
+            match self.guest_memory() {
+                Some(GUEST_MIB) | None => {}
+                Some(mib) => {
+                    env.push(json!({"name":"CUBEBOT_GUEST_MEMORY_MIB","value":mib.to_string()}));
+                }
+            }
         }
         // The system tests' scripted model, as Docker sandboxes forward it.
         if let Ok(origin) = std::env::var("CUBEBOT_TEST_PROVIDER_ORIGIN") {
@@ -236,6 +256,9 @@ fn kvm_security() -> Value {
 fn container_security() -> Value {
     json!({"runAsUser":0,"runAsGroup":0,"runAsNonRoot":false,"privileged":false,"allowPrivilegeEscalation":false,"readOnlyRootFilesystem":false,"capabilities":{"drop":["ALL"],"add":["SETUID","SETGID","CHOWN"]}})
 }
+/// The sandbox's default guest size, and what its VMM uses beside the guest.
+const GUEST_MIB: u64 = 2048;
+const VMM_MIB: u64 = 256;
 fn kvm_resources() -> Value {
     json!({"requests":{"cpu":"100m","memory":"2304Mi","ephemeral-storage":"64Mi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"},"limits":{"cpu":"2","memory":"3Gi","ephemeral-storage":"1Gi","devices.kubevirt.io/kvm":"1","devices.kubevirt.io/tun":"1"}})
 }

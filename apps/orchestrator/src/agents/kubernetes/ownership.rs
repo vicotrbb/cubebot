@@ -86,11 +86,12 @@ pub fn termination_proven(pod: &Pod) -> bool {
     }
     let shape = spec.containers.len() == 1 && spec.containers[0].name == "sandbox";
     let containers = status.container_statuses.as_deref().unwrap_or_default();
-    let stopped = containers.len() == 1 && stopped_named(containers, "sandbox");
-    shape && stopped && init_stopped(pod)
+    let failed = status.phase.as_deref() == Some("Failed");
+    let stopped = containers.len() == 1 && stopped_named(containers, "sandbox", failed);
+    shape && stopped && init_stopped(pod, failed)
 }
 
-fn init_stopped(pod: &Pod) -> bool {
+fn init_stopped(pod: &Pod, failed: bool) -> bool {
     let expected = pod
         .spec
         .as_ref()
@@ -104,16 +105,16 @@ fn init_stopped(pod: &Pod) -> bool {
     expected.len() == observed.len()
         && expected
             .iter()
-            .all(|container| stopped_named(observed, &container.name))
+            .all(|container| stopped_named(observed, &container.name, failed))
 }
 
-fn stopped_named(containers: &[ContainerStatus], name: &str) -> bool {
+fn stopped_named(containers: &[ContainerStatus], name: &str, failed: bool) -> bool {
     containers
         .iter()
-        .any(|container| container.name == name && terminated(container))
+        .any(|container| container.name == name && terminated(container, failed))
 }
 
-fn terminated(container: &ContainerStatus) -> bool {
+fn terminated(container: &ContainerStatus, failed: bool) -> bool {
     let Some(state) = &container.state else {
         return false;
     };
@@ -127,14 +128,22 @@ fn terminated(container: &ContainerStatus) -> bool {
         .container_id
         .as_deref()
         .is_some_and(|id| !id.is_empty() && container.container_id.as_deref() == Some(id));
-    identified && known_exit(exit)
+    identified && known_exit(exit, failed)
 }
 
-fn known_exit(exit: &ContainerStateTerminated) -> bool {
-    let known = matches!(
-        exit.reason.as_deref(),
-        Some("Completed" | "Error" | "OOMKilled")
-    );
+fn known_exit(exit: &ContainerStateTerminated, failed: bool) -> bool {
+    // The runtime forgets a container only when its state is wiped, as a host reboot does with
+    // every process; the kubelet then fails the pod, which it would otherwise have restarted.
+    let lost = failed
+        && matches!(
+            exit.reason.as_deref(),
+            Some("Unknown" | "ContainerStatusUnknown")
+        );
+    let known = lost
+        || matches!(
+            exit.reason.as_deref(),
+            Some("Completed" | "Error" | "OOMKilled")
+        );
     let timed = match (&exit.started_at, &exit.finished_at) {
         (Some(start), Some(end)) => end.0 >= start.0,
         _ => false,

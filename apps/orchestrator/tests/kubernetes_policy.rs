@@ -1,6 +1,7 @@
 use crate::fixtures;
 use cubebot_orchestrator::agents::kubernetes::{termination_proven, verify_pod};
 use fixtures::{identity, pod};
+use k8s_openapi::api::core::v1::Pod;
 use serde_json::json;
 
 #[test]
@@ -31,25 +32,44 @@ fn ready_failed_or_missing_objects_do_not_establish_executor_termination() {
     assert!(!termination_proven(&pod));
 }
 
-#[test]
-fn unknown_container_status_and_restartable_pods_do_not_prove_termination() {
-    let identity = identity();
-    let mut pod = pod(&identity);
-    fixtures::terminate(&mut pod);
-    pod.status
-        .as_mut()
-        .unwrap()
-        .container_statuses
-        .as_mut()
-        .unwrap()[0]
+fn forget(pod: &mut Pod, reason: &str) {
+    let status = pod.status.as_mut().unwrap();
+    status.container_statuses.as_mut().unwrap()[0]
         .state
         .as_mut()
         .unwrap()
         .terminated
         .as_mut()
         .unwrap()
-        .reason = Some("ContainerStatusUnknown".into());
+        .reason = Some(reason.into());
+}
+
+#[test]
+fn a_container_the_runtime_forgot_proves_termination_only_on_a_failed_pod() {
+    let identity = identity();
+    for reason in ["Unknown", "ContainerStatusUnknown"] {
+        // What the kubelet reports for each sandbox after its host reboots.
+        let mut pod = pod(&identity);
+        fixtures::terminate(&mut pod);
+        forget(&mut pod, reason);
+        assert!(termination_proven(&pod), "{reason} on a failed pod");
+        pod.status.as_mut().unwrap().phase = Some("Succeeded".into());
+        assert!(!termination_proven(&pod), "{reason} on a succeeded pod");
+        fixtures::terminate(&mut pod);
+        forget(&mut pod, reason);
+        pod.spec.as_mut().unwrap().restart_policy = Some("Always".into());
+        assert!(!termination_proven(&pod), "{reason} on a restartable pod");
+    }
+    let mut pod = pod(&identity);
+    fixtures::terminate(&mut pod);
+    forget(&mut pod, "Unrecognized");
     assert!(!termination_proven(&pod));
+}
+
+#[test]
+fn restartable_pods_do_not_prove_termination() {
+    let identity = identity();
+    let mut pod = pod(&identity);
     fixtures::terminate(&mut pod);
     pod.spec.as_mut().unwrap().restart_policy = Some("Always".into());
     assert!(!termination_proven(&pod));
