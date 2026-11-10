@@ -6227,6 +6227,7 @@
         "required": [
           "id",
           "name",
+          "title",
           "revision",
           "instructions_revision",
           "desired_state",
@@ -6356,6 +6357,9 @@
             "type": "integer",
             "format": "int32",
             "description": "Delegated tasks that may run beside the main lane (docs/adr/agents.md#agent-execution-lanes), one to four."
+          },
+          "title": {
+            "type": "string"
           },
           "tts_provider": {
             "oneOf": [
@@ -12274,6 +12278,9 @@
             "type": ["integer", "null"],
             "format": "int32",
             "description": "Concurrent delegated tasks, one to four; `None` keeps the current setting."
+          },
+          "title": {
+            "type": ["string", "null"]
           }
         },
         "additionalProperties": false

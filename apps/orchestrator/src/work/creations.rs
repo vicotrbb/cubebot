@@ -456,6 +456,7 @@ impl Work {
             knowledge_base: None,
             creates: None,
             avatar: change.avatar,
+            title: None,
         };
         let receipt = agents.update(actor, target, &update).await?;
         Ok(Ok((receipt.id, name)))

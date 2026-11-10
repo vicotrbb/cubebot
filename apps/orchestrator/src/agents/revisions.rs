@@ -51,6 +51,8 @@ pub struct UpdateAgent {
     /// `None` keeps the current cube; not part of the revision history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub avatar: Option<super::Avatar>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -88,6 +90,9 @@ impl Agents {
             || input.dreaming_model.as_deref().is_some_and(|model| {
                 model.trim().is_empty() || model.len() > 200 || model.chars().any(char::is_control)
             })
+            || input.title.as_deref().is_some_and(|title| {
+                title.trim().chars().count() > 64 || title.chars().any(char::is_control)
+            })
         {
             return Err(IdentityError::InvalidInput);
         }
@@ -111,6 +116,7 @@ impl Agents {
                 broadcast = COALESCE($10, broadcast),
                 knowledge_base = COALESCE($11, knowledge_base),
                 creates = COALESCE($12, creates),
+                title = COALESCE(btrim($13), title),
                 revision = revision + 1
             WHERE id = $1
               AND revision = $5
@@ -129,6 +135,7 @@ impl Agents {
             input.broadcast,
             input.knowledge_base,
             input.creates,
+            input.title,
         )
         .fetch_optional(&mut *transaction)
         .await?

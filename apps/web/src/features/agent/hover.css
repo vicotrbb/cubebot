@@ -37,6 +37,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.agent-card__title {
+  font-size: var(--t-xs);
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .agent-card__status {
   display: flex;
   align-items: center;

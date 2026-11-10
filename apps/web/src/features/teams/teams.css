@@ -192,6 +192,7 @@ a.org__agent:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.org__role,
 .org__title,
 .org__doing {
   font-size: var(--t-xs);
@@ -208,6 +209,9 @@ a.org__agent:hover {
   font-size: inherit;
   font-weight: var(--w-label);
   color: var(--ink-faint);
+}
+.org__role {
+  color: var(--ink-soft);
 }
 .org__doing {
   color: var(--ink-faint);
