@@ -182,7 +182,7 @@ async fn ask(
         format!("creating the {kind} {name}")
     };
     let asked = format!(
-        "A person was asked to approve {what}. End this turn now with a short note; once a person settles every request from this turn, one message tells you each outcome."
+        "A person was asked to approve {what}. End this turn now with a short note. Approved requests are made without telling you; once every request from this turn settles, one message tells you any that were declined or could not be made."
     );
     let previous = sqlx::query_scalar!(
         "SELECT agent_id FROM creation_requests WHERE call_id=$1",
@@ -537,7 +537,10 @@ async fn report(
     let open = |status: &str, created: Option<Uuid>| {
         status == "pending" || (status == "approved" && created.is_none())
     };
-    if rows.is_empty() || rows.iter().any(|row| open(&row.status, row.created_id)) {
+    if rows.is_empty()
+        || rows.iter().any(|row| open(&row.status, row.created_id))
+        || rows.iter().all(|row| row.status == "approved")
+    {
         return Ok(());
     }
     let settled: Vec<Settled> = rows
