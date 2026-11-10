@@ -41,6 +41,8 @@ from integration import run_database
 from smoke import running
 
 PORT = 18080
+# The skills apps/orchestrator/skills ships, installed on every agent.
+SHIPPED = ("coding", "create-agent", "create-room-or-team", "design")
 KEY_A = 38
 STAND_IN = r"""
 import http.server, json, re, sys
@@ -211,9 +213,9 @@ def shared_and_written(api, postgres, identity, marker):
     assert page["updated_by"]["agent"] == identity, page
     # A skill the agent wrote is a real library entry it has installed, not a file.
     library = {skill["name"]: skill for skill in api("/api/skills")}
-    assert {"coding", "design", "write-a-poem"} <= set(library), library
+    assert set(SHIPPED) | {"write-a-poem"} <= set(library), library
     installed = [s["name"] for s in api(f"/api/agents/{identity}/skills")]
-    assert sorted(installed) == ["coding", "design", "write-a-poem"], installed
+    assert sorted(installed) == sorted([*SHIPPED, "write-a-poem"]), installed
     reply = finished(api, identity, turn)
     assert [a["name"][:4] for a in reply["attachments"]] == ["poem"], reply
     assert reply["attachments"][0]["size"] == len("verse\n"), reply
