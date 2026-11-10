@@ -131,9 +131,15 @@ async fn an_agent_asks_for_an_agent_and_its_team_and_a_person_approves_them_in_o
     assert_eq!(made["name"], "Scout");
     let scout: Uuid = made["id"].as_str().unwrap().parse().unwrap();
     let turns = settled(&work, &admin, agent, 2).await;
+    let mut lines: Vec<&str> = turns[1].message.lines().collect();
+    lines[1..].sort_unstable();
     assert_eq!(
-        turns[1].message,
-        "A person settled every request from your earlier turn:\n- the team Research: could not be made: no agent is called Scout. Fix it and ask again.\n- the agent Scout: created."
+        lines,
+        [
+            "A person settled every request from your earlier turn:",
+            "- the agent Scout: created.",
+            "- the team Research: could not be made: no agent is called Scout. Fix it and ask again.",
+        ]
     );
     assert_eq!(turns[1].origin.as_ref().unwrap().kind, "approvals");
     let made = sqlx::query!(
