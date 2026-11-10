@@ -121,7 +121,7 @@ pub struct Agent {
     pub knowledge_base: bool,
     /// The agent may ask to create agents, rooms and teams (migrations/0071_creation_requests.sql), on by default.
     pub creates: bool,
-    /// `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
+    /// `unscheduled` (no node has room), `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,
     /// otherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox
     /// still holds its credential.
     pub activity: String,
@@ -174,6 +174,24 @@ impl Agents {
         actor: &Actor,
         input: &CreateAgent,
     ) -> Result<Receipt, IdentityError> {
+        self.create_in(actor, input, "running").await
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn create_stopped(
+        &self,
+        actor: &Actor,
+        input: &CreateAgent,
+    ) -> Result<Receipt, IdentityError> {
+        self.create_in(actor, input, "stopped").await
+    }
+
+    async fn create_in(
+        &self,
+        actor: &Actor,
+        input: &CreateAgent,
+        desired_state: &str,
+    ) -> Result<Receipt, IdentityError> {
         validate(input)?;
         let command = Command::new(actor, None, "agent.create", input.request_id, input)?;
         let (mut transaction, previous) = command.begin(&self.pool).await?;
@@ -182,8 +200,8 @@ impl Agents {
         }
         let id = sqlx::query_scalar!(
             "
-            INSERT INTO agents (name, instructions, created_by, avatar, voice)
-            VALUES ($1, $2, $3, COALESCE($4, '{\"paint\":\"orange\",\"eyes\":\"round\",\"accessory\":\"none\"}'::jsonb), $5)
+            INSERT INTO agents (name, instructions, created_by, avatar, voice, desired_state)
+            VALUES ($1, $2, $3, COALESCE($4, '{\"paint\":\"orange\",\"eyes\":\"round\",\"accessory\":\"none\"}'::jsonb), $5, $6)
             RETURNING id
             ",
             input.name,
@@ -191,6 +209,7 @@ impl Agents {
             actor.id,
             input.avatar.map(sqlx::types::Json) as Option<sqlx::types::Json<Avatar>>,
             input.voice.map(crate::speech::Voice::as_str),
+            desired_state,
         )
         .fetch_one(&mut *transaction)
         .await?;
@@ -251,6 +270,14 @@ impl Agents {
                g.idle_delay_seconds, g.dreaming_model, g.task_lanes, g.broadcast, g.knowledge_base, g.creates,
                CASE
                    WHEN g.desired_state <> 'running' THEN g.desired_state
+                   WHEN EXISTS(
+                       SELECT 1
+                       FROM agent_resources r
+                       WHERE r.agent_id = g.id
+                         AND r.kind = 'pod'
+                         AND r.phase <> 'stopped'
+                         AND r.kubernetes_reason = 'Unschedulable'
+                   ) THEN 'unscheduled'
                    WHEN EXISTS(
                        SELECT 1
                        FROM chat_turns t

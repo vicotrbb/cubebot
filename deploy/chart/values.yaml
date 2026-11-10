@@ -76,8 +76,9 @@ sandbox:
   dns: []
   terminalEnabled: false
   computerUseEnabled: false
-  # Overrides for each agent's cpu, memory and ephemeral-storage. Defaults: requests 100m, 256Mi,
-  # 64Mi; limits 2, 3Gi, 1Gi. A change replaces running agents once their work settles.
+  # Overrides for each agent's cpu, memory and ephemeral-storage. Defaults: requests 100m, 256Mi
+  # (2304Mi for kvm, the guest's 2 GiB plus the VMM, so nodes are never overcommitted), 64Mi;
+  # limits 2, 3Gi, 1Gi. A change replaces running agents once their work settles.
   resources: {}
   #   limits:
   #     memory: 6Gi

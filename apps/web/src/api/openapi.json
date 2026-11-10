@@ -5190,6 +5190,41 @@
         }
       }
     },
+    "/api/rooms/{room}": {
+      "delete": {
+        "tags": [],
+        "operationId": "delete_room",
+        "parameters": [
+          {
+            "name": "room",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Room"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/rooms/{room}/events": {
       "get": {
         "tags": [],
@@ -6214,7 +6249,7 @@
         "properties": {
           "activity": {
             "type": "string",
-            "description": "`working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,\notherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox\nstill holds its credential."
+            "description": "`unscheduled` (no node has room), `working`, `dreaming`, `sleeping` (idle past its delay) or `idle` while running,\notherwise the desired state, `stopped` or `retired`. Dreaming needs a run whose sandbox\nstill holds its credential."
           },
           "avatar": {
             "$ref": "#/components/schemas/Avatar"
@@ -7738,7 +7773,7 @@
       },
       "CreationRequest": {
         "type": "object",
-        "required": ["id", "kind", "input", "created_at"],
+        "required": ["id", "turn_id", "kind", "input", "created_at"],
         "properties": {
           "created_at": {
             "type": "string"
@@ -7753,7 +7788,11 @@
           },
           "kind": {
             "type": "string",
-            "description": "`agent`, `room` or `team`."
+            "description": "`agent`, `room`, `team` or `change`."
+          },
+          "turn_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -9446,7 +9485,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`broadcast`, `room`, `routine`, `delegation` or `message`."
+            "description": "`approvals`, `broadcast`, `room`, `routine`, `delegation` or `message`."
           },
           "name": {
             "type": "string",
@@ -9802,6 +9841,12 @@
           "reobserved"
         ],
         "properties": {
+          "approval": {
+            "type": ["string", "null"]
+          },
+          "approval_note": {
+            "type": ["string", "null"]
+          },
           "command": {
             "type": "string"
           },
@@ -9826,6 +9871,10 @@
           "reobserved": {
             "type": "boolean",
             "description": "The agent's first screenshot after a person handed its desktop back."
+          },
+          "request": {
+            "type": ["string", "null"],
+            "format": "uuid"
           },
           "status": {
             "type": "string"

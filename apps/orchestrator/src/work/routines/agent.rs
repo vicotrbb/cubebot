@@ -76,7 +76,9 @@ async fn family(
     call: &RoutineCall,
 ) -> Result<Option<Answer>, IdentityError> {
     let tool = call.tool.as_str();
-    if tool == "platform_list" || tool.ends_with("_create") && tool != "routine_create" {
+    if matches!(tool, "platform_list" | "agent_update")
+        || tool.ends_with("_create") && tool != "routine_create"
+    {
         return Ok(Some(
             crate::work::creations::tool(tx, actor, (turn, human), call).await?,
         ));

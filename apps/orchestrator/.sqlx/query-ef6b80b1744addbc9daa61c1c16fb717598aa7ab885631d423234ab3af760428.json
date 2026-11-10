@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, kind, input, (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            FROM creation_requests\n            WHERE agent_id=$1 AND status='pending'\n            ORDER BY created_at, id\n            ",
+  "query": "\n            SELECT id, turn_id, kind, input, (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            FROM creation_requests\n            WHERE agent_id=$1 AND status='pending'\n            ORDER BY created_at, id\n            ",
   "describe": {
     "columns": [
       {
@@ -10,16 +10,21 @@
       },
       {
         "ordinal": 1,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
         "name": "kind",
         "type_info": "Text"
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "input",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "created_at!",
         "type_info": "Text"
       }
@@ -33,8 +38,9 @@
       false,
       false,
       false,
+      false,
       null
     ]
   },
-  "hash": "790bf5504496c872736fd5d5b57a191f7d04f4b3d9acc542bb77a965f4269f8d"
+  "hash": "ef6b80b1744addbc9daa61c1c16fb717598aa7ab885631d423234ab3af760428"
 }

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE creation_requests SET reported_in=$2 WHERE turn_id=$1 AND reported_in IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a8987ecfa4447030b2f27828e7cab2f4ee4d21075d748634cbffdc1919289e4a"
+}

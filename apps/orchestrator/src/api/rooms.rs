@@ -10,7 +10,7 @@ use axum::{
         IntoResponse,
         sse::{self, KeepAlive, Sse},
     },
-    routing::{get, put},
+    routing::{delete, get, put},
 };
 use futures_util::{StreamExt, stream};
 use serde::Deserialize;
@@ -27,6 +27,7 @@ struct Api {
 #[openapi(paths(
     list_rooms,
     create_room,
+    delete_room,
     set_members,
     room_messages,
     post_room_message,
@@ -41,6 +42,7 @@ pub(super) struct Doc;
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
     Router::new()
         .route("/api/rooms", get(list_rooms).post(create_room))
+        .route("/api/rooms/{room}", delete(delete_room))
         .route("/api/rooms/{room}/members", put(set_members))
         .route("/api/rooms/{room}/events", get(room_events))
         .route("/api/rooms/{room}/read", put(read))
@@ -91,6 +93,18 @@ async fn audit(api: &Api, actor: &Actor, kind: &'static str, room: &crate::work:
     let detail = serde_json::json!({ "name": room.name, "members": members });
     let event = Event::by(actor.id, kind).on(room.id).detail(detail);
     api.identity.audit(event).await;
+}
+
+#[utoipa::path(delete, path = "/api/rooms/{room}", params(("room" = Uuid, Path)), responses((status = 200, body = crate::work::Room), (status = 404), (status = 409)))]
+async fn delete_room(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(room): Path<Uuid>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let room = api.work.delete_room(&actor, room).await?;
+    audit(&api, &actor, "room.delete", &room).await;
+    Ok(([("cache-control", "no-store")], Json(room)))
 }
 
 /// Replaces the member set; administrators and `room.manage` holders only.

@@ -1,6 +1,6 @@
 ---
 name: create-agent
-description: How to design a new agent for this platform and ask for it with agent_create. Load this before creating an agent, and whenever someone asks for a new agent, specialist, assistant, bot or worker, wants help setting up the platform's agents, or asks for "an agent that does X". Not needed to message, delegate to or change an agent that already exists.
+description: How to design a new agent for this platform and ask for it with agent_create. Load this before creating an agent, and whenever someone asks for a new agent, specialist, assistant, bot or worker, wants help setting up the platform's agents, or asks for "an agent that does X". Also covers renaming an agent or changing its cube with agent_update. Not needed to message or delegate to an agent that already exists.
 ---
 
 # Create an agent
@@ -30,6 +30,8 @@ Ask in one short message, never one question per turn. Do not ask about models, 
 
 Short, specific and easy to address: "Triage", "Inbox Scout", "Release Notes". Never "Assistant", "Helper" or "Agent 2". Check `platform_list` so it does not collide with an existing name.
 
+Give it a cube too: a paint, eyes and an accessory that fit the job and set it apart from the agents already there, so people tell them apart at a glance in the sidebar and the org chart. Agents of one team can share a paint and differ in accessory.
+
 ## 4. Write the instructions
 
 The instructions are the agent's standing orders, read at the start of every turn for as long as it lives. Write them to it, in the second person, in Markdown, in this order:
@@ -46,9 +48,11 @@ Keep facts that will change, such as people's names, current projects and deadli
 
 ## 5. Ask for it
 
-Call `agent_create` with the name and instructions. Then end your turn with a short note to the person: what you asked for, the one-line job, and that it waits for their approval in the console.
+Call `agent_create` with the name, instructions and cube. Then end your turn with a short note to the person: what you asked for, the one-line job, and that it waits for their approval in the console. At most five new agents can wait for approval at once; plan a larger roster in waves.
 
-Do not ask again while a request is pending; a new message tells you when it is approved, declined or fails. If it fails, the message says why: fix exactly that and ask once more. If it is declined, read the reason and change the design rather than resubmitting the same thing.
+Do not ask again while a request is pending. Once a person has settled every request from your turn, one message lists each outcome: approved, declined or failed. If it fails, the message says why: fix exactly that and ask once more. If it is declined, read the reason and change the design rather than resubmitting the same thing.
+
+A new agent starts asleep and boots on its first message, so the platform never starts a crowd of computers at once.
 
 ## 6. After it exists
 
@@ -70,3 +74,7 @@ Do not ask again while a request is pending; a new message tells you when it is 
 | Its access is right    | The person confirmed what it may send or change           |
 
 Report plainly: the agent's name and one-line job, what you chose without asking, what its first answer showed, and what is left for the person, such as granting a connection that is limited to specific agents, or a setting only the console changes.
+
+## Renaming or recolouring an agent
+
+Call `agent_update` with the agent's exact current name and a new name, a new cube, or both; null keeps what it has. It waits for a person's approval like a creation and needs a person who may manage that agent. Rename only when the job changed or the name confuses people, and say why in your note.

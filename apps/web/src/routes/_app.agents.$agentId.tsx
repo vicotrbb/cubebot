@@ -115,7 +115,12 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
           />
         )}
         {can(agent, 'conversation_send', me) && (
-          <CreationRequests agent={agent} />
+          <CreationRequests
+            agent={agent}
+            shownTurns={conversation.turns.flatMap((turn) =>
+              (turn.call?.turns ?? [turn]).map((said) => said.id),
+            )}
+          />
         )}
         <div className="agent-split">
           {readable ? (

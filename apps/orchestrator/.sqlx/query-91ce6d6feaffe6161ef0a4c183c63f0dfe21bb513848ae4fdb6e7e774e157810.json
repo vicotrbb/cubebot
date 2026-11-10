@@ -1,12 +1,17 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT created_by FROM agents WHERE id=$1",
+  "query": "SELECT created_by, desired_state FROM agents WHERE id=$1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "created_by",
         "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "desired_state",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -15,8 +20,9 @@
       ]
     },
     "nullable": [
+      false,
       false
     ]
   },
-  "hash": "4734e171dc73cd3349f5e3f706ff61decb2c7fc970aea130e706faac3ad59172"
+  "hash": "91ce6d6feaffe6161ef0a4c183c63f0dfe21bb513848ae4fdb6e7e774e157810"
 }

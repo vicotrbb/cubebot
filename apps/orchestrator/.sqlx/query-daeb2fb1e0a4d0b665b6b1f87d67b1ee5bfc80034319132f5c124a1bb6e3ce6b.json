@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"all!\", count(*) FILTER (WHERE kind='agent') AS \"agents!\"\n        FROM creation_requests\n        WHERE agent_id=$1 AND status='pending'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "all!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "agents!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "daeb2fb1e0a4d0b665b6b1f87d67b1ee5bfc80034319132f5c124a1bb6e3ce6b"
+}

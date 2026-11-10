@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id, t.conversation_id, t.actor_id\n            FROM creation_requests c\n            JOIN chat_turns t ON t.id=c.turn_id\n            WHERE c.id=$1\n            FOR UPDATE OF t\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "conversation_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f545e8d3967b4d07aa31a8fdbb5f695f988e9f2ff97e27da67a87a12323299e5"
+}

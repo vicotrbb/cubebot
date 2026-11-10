@@ -225,6 +225,11 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.creation-request__change {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .creation-request__roster {
   display: grid;
   gap: 2px;

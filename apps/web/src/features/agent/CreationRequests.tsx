@@ -1,4 +1,4 @@
-import { Bot, Hash, Network } from 'lucide-react'
+import { Bot, Hash, Network, PencilLine } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import {
   api,
@@ -8,25 +8,34 @@ import {
   type CreationRequest,
 } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
+import { Cube, type Avatar } from '../../components/Cube'
 import { Alert } from '../../components/primitives'
 
-const ICONS = { agent: Bot, room: Hash, team: Network }
+const ICONS = { agent: Bot, room: Hash, team: Network, change: PencilLine }
 
 type Member = { agent?: string; title?: string; reports_to?: string | null }
 /** The agent's tool input: untrusted, so every field is read defensively. */
-type Input = {
+export type Input = {
   name?: unknown
   instructions?: unknown
   agents?: unknown
   description?: unknown
   parent?: unknown
   members?: unknown
+  agent?: unknown
+  avatar?: unknown
 }
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
 
 /** An agent's pending requests to create agents, rooms and teams, each approved or declined here. */
-export function CreationRequests({ agent }: { agent: AgentSummary }) {
+export function CreationRequests({
+  agent,
+  shownTurns,
+}: {
+  agent: AgentSummary
+  shownTurns: string[]
+}) {
   const [requests, setRequests] = useState<CreationRequest[]>([])
   const [failed, setFailed] = useState<{ id: string; text: string }[]>([])
   const refresh = useCallback(async () => {
@@ -44,7 +53,9 @@ export function CreationRequests({ agent }: { agent: AgentSummary }) {
     return () => clearInterval(timer)
   }, [refresh, pending])
   // A settled count hides what the last poll saw until the next request arrives.
-  const shown = pending ? requests : []
+  const shown = pending
+    ? requests.filter((request) => !shownTurns.includes(request.turn_id))
+    : []
   if (shown.length === 0 && failed.length === 0) return null
   return (
     <section
@@ -141,7 +152,10 @@ function Request({
       </span>
       <div className="creation-request__body">
         <p className="creation-request__title">
-          {agent.name} asks to create the {kind} <strong>{name}</strong>
+          {kind === 'change'
+            ? `${agent.name} asks to change the agent `
+            : `${agent.name} asks to create the ${kind} `}
+          <strong>{kind === 'change' ? text(input.agent) : name}</strong>
         </p>
         <Details kind={kind} input={input} />
       </div>
@@ -194,7 +208,11 @@ function Request({
             disabled={busy}
             onClick={() => void approve()}
           >
-            {busy ? 'Creating…' : `Create ${kind}`}
+            {busy
+              ? 'Working…'
+              : kind === 'change'
+                ? 'Approve'
+                : `Create ${kind}`}
           </button>
         </div>
       )}
@@ -207,7 +225,8 @@ function Request({
   )
 }
 
-function Details({ kind, input }: { kind: string; input: Input }) {
+export function Details({ kind, input }: { kind: string; input: Input }) {
+  if (kind === 'change') return <ChangeDetails input={input} />
   if (kind === 'room') {
     const agents = Array.isArray(input.agents) ? input.agents.map(text) : []
     return (
@@ -253,5 +272,22 @@ function TeamDetails({ input }: { input: Input }) {
         ))}
       </ul>
     </>
+  )
+}
+
+function ChangeDetails({ input }: { input: Input }) {
+  const name = text(input.name)
+  const avatar =
+    typeof input.avatar === 'object' && input.avatar
+      ? (input.avatar as Avatar)
+      : null
+  return (
+    <div className="creation-request__change">
+      {avatar && <Cube avatar={avatar} size={40} />}
+      <p className="creation-request__summary">
+        {name ? `Renamed to ${name}` : 'Keeps its name'}
+        {avatar ? ', with this cube.' : ', keeps its cube.'}
+      </p>
+    </div>
   )
 }

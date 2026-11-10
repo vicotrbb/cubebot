@@ -38,6 +38,7 @@ impl<'a> Observation<'a> {
                         && reason.len() <= 128
                         && reason.bytes().all(|byte| byte.is_ascii_alphanumeric())
                 })
+                .or_else(|| unschedulable(pod))
         });
         let deleting = pod.metadata.deletion_timestamp.is_some();
         let recovery = deleting
@@ -77,6 +78,19 @@ fn refused(pod: &Pod) -> Option<&'static str> {
         })
         .then_some(crate::agents::sandbox::LAYOUT_MISMATCH)
 }
+fn unschedulable(pod: &Pod) -> Option<&'static str> {
+    pod.status
+        .as_ref()?
+        .conditions
+        .as_deref()?
+        .iter()
+        .any(|condition| {
+            condition.type_ == "PodScheduled"
+                && condition.status == "False"
+                && condition.reason.as_deref() == Some("Unschedulable")
+        })
+        .then_some("Unschedulable")
+}
 fn application_stopped(pod: &Pod) -> bool {
     pod.status
         .as_ref()
@@ -95,6 +109,20 @@ fn application_stopped(pod: &Pod) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pod_no_node_has_room_for_reports_unschedulable() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "status": {
+                "phase": "Pending",
+                "conditions": [{"type": "PodScheduled", "status": "False", "reason": "Unschedulable"}]
+            }
+        }))
+        .unwrap();
+        let observed = Observation::pod(&pod);
+        assert_eq!(observed.reason, Some("Unschedulable"));
+        assert!(!observed.recovery);
+    }
 
     #[test]
     fn sandbox_exit_requires_recovery_even_while_the_pod_reports_running() {

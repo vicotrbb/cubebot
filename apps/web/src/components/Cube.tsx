@@ -77,7 +77,8 @@ export function moodOf(agent: {
   if (agent.activity === 'working') return 'working'
   if (agent.activity === 'dreaming') return 'dreaming'
   if (agent.activity === 'sleeping') return 'sleeping'
-  if (agent.activity === 'stopped') return 'stopped'
+  if (agent.activity === 'stopped' || agent.activity === 'unscheduled')
+    return 'stopped'
   return 'idle'
 }
 

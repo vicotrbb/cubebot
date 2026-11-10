@@ -338,6 +338,9 @@
 .dot--sleeping {
   background: var(--sleep);
 }
+.dot--unscheduled {
+  background: var(--warn);
+}
 .dot--retired {
   background: var(--wood-deep);
 }
