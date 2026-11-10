@@ -51,13 +51,7 @@ impl Work {
         let Some(human) = human else {
             return Ok(Err("this turn is no longer running".into()));
         };
-        if call.tool.starts_with("team_") {
-            let answer = crate::work::teams::tool(&mut tx, actor, human, call).await?;
-            tx.commit().await?;
-            return Ok(answer);
-        }
-        if call.tool.starts_with("task_") {
-            let answer = crate::work::tasks::tool(&mut tx, actor, turn, call).await?;
+        if let Some(answer) = family(&mut tx, actor, (turn, human), call).await? {
             tx.commit().await?;
             return Ok(answer);
         }
@@ -72,6 +66,30 @@ impl Work {
         tx.commit().await?;
         Ok(answer)
     }
+}
+
+/// Creation, team and task tools, which each answer on their own terms.
+async fn family(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: &RuntimeActor,
+    (turn, human): (Uuid, Uuid),
+    call: &RoutineCall,
+) -> Result<Option<Answer>, IdentityError> {
+    let tool = call.tool.as_str();
+    if tool == "platform_list" || tool.ends_with("_create") && tool != "routine_create" {
+        return Ok(Some(
+            crate::work::creations::tool(tx, actor, (turn, human), call).await?,
+        ));
+    }
+    if tool.starts_with("team_") {
+        return Ok(Some(
+            crate::work::teams::tool(tx, actor, human, call).await?,
+        ));
+    }
+    if tool.starts_with("task_") {
+        return Ok(Some(crate::work::tasks::tool(tx, actor, turn, call).await?));
+    }
+    Ok(None)
 }
 
 async fn dispatch(

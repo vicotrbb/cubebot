@@ -19,6 +19,7 @@ mod collaboration;
 mod connections;
 mod console;
 mod controller_config;
+mod creations;
 mod credential_encryption;
 mod desktop_http;
 mod docker_sandbox;

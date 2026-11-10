@@ -33,7 +33,7 @@ impl Work {
         let pending = sqlx::query!(
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
-                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, t.in_task,
+                a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, a.creates, t.in_task,
                 t.call_id IS NOT NULL AS "on_call!"
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
@@ -68,6 +68,7 @@ impl Work {
         let (command, command_only) = (pending.command, pending.command_only);
         let broadcast = pending.broadcast && !task;
         let knowledge_base = pending.knowledge_base;
+        let creates = pending.creates;
         let in_task = pending.in_task;
         let on_call = pending.on_call;
         if refused(tx, actor, turn, command_only).await? {
@@ -124,6 +125,7 @@ impl Work {
             knowledge_base,
             in_task,
             team_manager,
+            creates,
         }))
     }
 

@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE creation_requests c\n            SET status=$2, outcome=$3, created_id=$4\n            FROM chat_turns t\n            WHERE c.id=$1 AND t.id=c.turn_id\n            RETURNING c.agent_id, t.actor_id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "70351e98e4ba6ec597dcac88c1db6c97ba81499dd187d88a3d7c26d24db60b4b"
+}

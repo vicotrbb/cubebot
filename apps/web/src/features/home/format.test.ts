@@ -35,14 +35,17 @@ describe('headline', () => {
   })
   test('names what needs a person, most urgent first', () => {
     const line = headline({
-      agents: [{ activity: 'working', pending_login: true }, idle],
+      agents: [
+        { activity: 'working', pending_login: true },
+        { ...idle, pending_creations: 2 },
+      ],
       work: [{ status: 'waiting' }, { status: 'running' }],
       failedToday: 2,
       overBudget: 1,
     })
     expect(line.calm).toBe(false)
     expect(line.text).toBe(
-      '1 turn is waiting, 1 login is waiting, 2 turns failed today, 1 agent is over budget.',
+      '1 turn is waiting, 1 login is waiting, 2 requests need approval, 2 turns failed today, 1 agent is over budget.',
     )
     expect(line.state).toBe('1 of 2 agents working.')
   })

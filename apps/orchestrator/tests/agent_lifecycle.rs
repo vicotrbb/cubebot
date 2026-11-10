@@ -47,6 +47,7 @@ async fn revisions_and_lifecycle_intent_are_durable_and_retirement_is_terminal()
         task_lanes: Some(3),
         broadcast: Some(true),
         knowledge_base: Some(false),
+        creates: None,
         avatar: None,
     };
     let receipt = agents.update(&actor, id, &update).await.unwrap();
@@ -258,6 +259,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         task_lanes: None,
         broadcast: None,
         knowledge_base: None,
+        creates: None,
         avatar: None,
     };
     let second = UpdateAgent {
@@ -271,6 +273,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
         task_lanes: None,
         broadcast: None,
         knowledge_base: None,
+        creates: None,
         avatar: None,
     };
     let (first, second) = tokio::join!(

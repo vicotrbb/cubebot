@@ -325,7 +325,7 @@ Human members can read shared packages and contribute revisions. These capabilit
 
 Skill registration and dream results must make shared-library publication visible, including identity and revision. Publication does not prove that other agents adopted the skill. A failed registration must not appear discoverable, and a successful registration followed by failed local installation must remain a distinct recoverable outcome.
 
-Amended 2026-11-04: Cubebot ships default skills, `coding` and `design`, from `apps/orchestrator/skills`. The orchestrator adds each once at startup, installs it on every agent then and on each new agent after. They are ordinary library entries: people revise them, revisions pin as usual, and uninstalling one from an agent sticks. A name a person already took is left alone, and an upgrade never overwrites a shipped skill.
+Amended 2026-11-04: Cubebot ships default skills, `coding` and `design`, from `apps/orchestrator/skills`. The orchestrator adds each once at startup, installs it on every agent then and on each new agent after. They are ordinary library entries: people revise them, revisions pin as usual, and uninstalling one from an agent sticks. A name a person already took is left alone, and an upgrade never overwrites a shipped skill. Amended 2026-11-09: `create-agent` and `create-room-or-team` ship the same way, to go with the creation requests in [Agents ask to create agents, rooms and teams](agents.md#agents-ask-to-create-agents-rooms-and-teams).
 
 **Rationale.** Keeping skills private to the creating agent until explicitly shared was considered. The shared default supports installation-wide reuse and follows OpenBot's shared local-library direction while keeping independent installations.
 

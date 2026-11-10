@@ -37,4 +37,8 @@ test('an agent not working says so, and a waiting login comes first', () => {
     doingOf({ activity: 'working', pending_login: true }),
     'Waiting for you to log in',
   )
+  assert.equal(
+    doingOf({ activity: 'idle', pending_creations: 2 }),
+    'Waiting for your approval',
+  )
 })

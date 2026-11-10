@@ -144,6 +144,7 @@ mod tests {
             broadcast: false,
             knowledge_base: false,
             team_manager: false,
+            creates: false,
             connections: Vec::new(),
             in_task: false,
         }

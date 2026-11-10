@@ -429,6 +429,35 @@ function Capabilities({
           }
         />
       </div>
+      <div className="capability">
+        <div>
+          <p className="capability__name">Create agents, rooms and teams</p>
+          <p className="faint small">
+            Lets {agent.name} ask to create agents, rooms and teams for you.
+            Nothing is created until a person approves it in its conversation,
+            and it is created as that person.
+          </p>
+        </div>
+        <Switch
+          checked={agent.creates}
+          label={`${agent.name} may ask to create agents, rooms and teams`}
+          disabled={busy || agent.desired_state === 'retired'}
+          onChange={(creates) =>
+            void save(() =>
+              ok(
+                api.POST('/api/agents/{id}/definition', {
+                  params: { path: { id: agent.id } },
+                  body: {
+                    request_id: crypto.randomUUID(),
+                    ...definition(agent),
+                    creates,
+                  },
+                }),
+              ),
+            )
+          }
+        />
+      </div>
       <Alert>{error}</Alert>
     </section>
   )

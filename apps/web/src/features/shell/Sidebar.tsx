@@ -448,7 +448,9 @@ function AgentRow({ agent }: { agent: AgentSummary }) {
         <span className="row__label">{agent.name}</span>
         <span className="row__doing">{doingOf(agent)}</span>
       </span>
-      {agent.pending_login && <span className="row__flag">Needs you</span>}
+      {(agent.pending_login || agent.pending_creations > 0) && (
+        <span className="row__flag">Needs you</span>
+      )}
       <span
         className={`dot dot--${agent.activity}`}
         title={ACTIVITY[agent.activity] ?? agent.activity}

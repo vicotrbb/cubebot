@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE creation_requests SET status='pending', settled_by=NULL, settled_at=NULL WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bf24ef74bfe160b162791a60581978ccc1f0003c70d1a732cc25f03ac9fab0b1"
+}

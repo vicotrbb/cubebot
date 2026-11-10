@@ -22,6 +22,7 @@ export function pace(spent: number, budget: number | null | undefined): Pace {
 type Summary = {
   activity: string
   pending_login: boolean
+  pending_creations?: number
 }
 type Facts = {
   agents: Summary[]
@@ -33,9 +34,14 @@ type Facts = {
 export function headline({ agents, work, failedToday, overBudget }: Facts) {
   const waiting = work.filter((item) => item.status === 'waiting').length
   const logins = agents.filter((agent) => agent.pending_login).length
+  const approvals = agents.reduce(
+    (sum, agent) => sum + (agent.pending_creations ?? 0),
+    0,
+  )
   const needs = [
     plural(waiting, 'turn is waiting', 'turns are waiting'),
     plural(logins, 'login is waiting', 'logins are waiting'),
+    plural(approvals, 'request needs approval', 'requests need approval'),
     plural(failedToday, 'turn failed today', 'turns failed today'),
     plural(overBudget, 'agent is over budget', 'agents are over budget'),
   ].filter(Boolean)

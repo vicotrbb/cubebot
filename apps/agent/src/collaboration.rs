@@ -1,7 +1,9 @@
+mod creations;
 mod routines;
 mod tasks;
 mod teams;
 mod vault;
+pub use creations::definitions as creation_definitions;
 pub use teams::definitions as team_definitions;
 pub use vault::redacted;
 
@@ -120,7 +122,8 @@ impl Collaboration {
                     .vault(name, input)
                     .or_else(|| self.routine(name, id, input))
                     .or_else(|| self.task(name, id, input))
-                    .or_else(|| self.team(name, id, input));
+                    .or_else(|| self.team(name, id, input))
+                    .or_else(|| self.creation(name, id, input));
             }
         };
         let parsed = Send::deserialize(input)

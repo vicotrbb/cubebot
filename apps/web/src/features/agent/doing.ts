@@ -1,6 +1,7 @@
 type Doing = {
   activity: string
   pending_login?: boolean
+  pending_creations?: number
   current_tool?: string | null
   current_target?: string | null
 }
@@ -67,6 +68,7 @@ function working(tool: string | null | undefined, target?: string | null) {
 
 export function doingOf(agent: Doing) {
   if (agent.pending_login) return 'Waiting for you to log in'
+  if (agent.pending_creations) return 'Waiting for your approval'
   if (agent.activity === 'working')
     return working(agent.current_tool, agent.current_target)
   return IDLE[agent.activity] ?? agent.activity

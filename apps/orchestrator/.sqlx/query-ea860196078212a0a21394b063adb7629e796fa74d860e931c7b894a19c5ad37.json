@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE creation_requests\n            SET status='approved', settled_by=$3, settled_at=clock_timestamp()\n            WHERE id=$1 AND agent_id=$2 AND status='pending'\n            RETURNING kind, input\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "input",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "ea860196078212a0a21394b063adb7629e796fa74d860e931c7b894a19c5ad37"
+}
