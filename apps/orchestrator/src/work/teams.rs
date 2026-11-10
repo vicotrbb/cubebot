@@ -170,6 +170,9 @@ impl Work {
             return Err(IdentityError::Conflict);
         }
         placed(&org, Some(id), &input.team).map_err(|_| IdentityError::InvalidInput)?;
+        if input.team.members.is_empty() && org.iter().any(|team| team.parent == Some(id)) {
+            return Err(IdentityError::InvalidInput);
+        }
         write(&mut tx, id, &input.team).await?;
         let team = find(&load(&mut tx).await?, id)?;
         commit(tx).await?;
@@ -470,8 +473,8 @@ pub(super) fn checked(team: &SaveTeam) -> Result<(), &'static str> {
     if team.parent.is_some() != team.reports_to.is_some() {
         return Err("a team under another names who its manager reports to there");
     }
-    if !(1..=MEMBERS).contains(&team.members.len()) {
-        return Err("a team has 1 to 64 members");
+    if team.members.len() > MEMBERS {
+        return Err("a team has at most 64 members");
     }
     team.members.iter().try_for_each(member_checked)?;
     lines_checked(&team.members)
@@ -493,7 +496,7 @@ fn lines_checked(members: &[SaveMember]) -> Result<(), &'static str> {
     if agents.len() != members.len() {
         return Err("an agent is in a team once");
     }
-    if members.iter().filter(|m| m.reports_to.is_none()).count() != 1 {
+    if !members.is_empty() && members.iter().filter(|m| m.reports_to.is_none()).count() != 1 {
         return Err("a team has exactly one manager");
     }
     for member in members {
@@ -628,7 +631,7 @@ pub(super) mod tests {
         );
         assert!(checked(&draft(vec![member(a, None), member(b, Some(c))])).is_err());
         assert!(checked(&draft(vec![member(a, None), member(a, None)])).is_err());
-        assert!(checked(&draft(vec![])).is_err());
+        assert!(checked(&draft(vec![])).is_ok());
     }
 
     #[test]

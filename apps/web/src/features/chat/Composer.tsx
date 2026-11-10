@@ -1,5 +1,5 @@
 import { CornerDownLeft, Paperclip } from 'lucide-react'
-import { useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { failure, messageProblem, rejectedInput } from '../../api/client'
 import { Alert } from '../../components/primitives'
 import { useMentions, type Mentionable } from './MentionMenu'
@@ -55,6 +55,12 @@ export function Composer({
     write(`${draftKey}:request`, '')
   }
   const mentions = useMentions(mentionables, area, text, edit, draftKey)
+  useLayoutEffect(() => {
+    const element = area.current
+    if (!element) return
+    element.style.height = 'auto'
+    element.style.height = `${Math.min(element.scrollHeight, 240)}px`
+  }, [text])
   async function submit() {
     const problem = messageProblem(text)
     if (problem) {
@@ -114,8 +120,6 @@ export function Composer({
           onChange={(event) => {
             edit(event.target.value)
             mentions.track(event.target)
-            event.target.style.height = 'auto'
-            event.target.style.height = `${Math.min(event.target.scrollHeight, 240)}px`
           }}
           onSelect={(event) => mentions.track(event.currentTarget)}
           onBlur={mentions.close}

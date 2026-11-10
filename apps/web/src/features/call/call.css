@@ -303,6 +303,3 @@
   outline: 2px solid var(--orange);
   outline-offset: 2px;
 }
-.speech-form {
-  max-width: 62ch;
-}

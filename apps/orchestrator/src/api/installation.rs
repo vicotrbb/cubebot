@@ -35,11 +35,13 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(installation, events, settings, save_settings))]
+#[openapi(paths(installation, events, settings, save_settings, about))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
+    crate::operations::about::mark_start();
     Router::new()
+        .route("/api/installation/about", get(about))
         .route("/api/installation", get(installation))
         .route(
             "/api/installation/settings",
@@ -154,6 +156,18 @@ fn view(settings: Settings, storage: Option<&Storage>) -> SettingsView {
             }
         }),
     }
+}
+
+#[utoipa::path(get, path = "/api/installation/about", operation_id = "installation_about", responses((status = 200, body = crate::operations::about::About)))]
+async fn about(
+    State(api): State<Api>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    administrator(&api, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(crate::operations::about::about(&api.pool).await?),
+    ))
 }
 
 async fn administrator(api: &Api, headers: &HeaderMap) -> Result<Uuid, IdentityError> {

@@ -328,10 +328,14 @@ a.org__agent:hover {
   font-weight: var(--w-strong);
   color: var(--orange-text);
 }
-.team-form__add {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+.team-form__people {
+  display: grid;
+  gap: 6px;
+}
+.team-form__people h3 {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
 }
 .team-form__problems {
   margin: 0;

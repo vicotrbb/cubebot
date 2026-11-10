@@ -2,18 +2,29 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, failure, ok } from '../api/client'
-import { keys, notRetired, useAgents } from '../app/queries'
+import { keys, useAgents, useSession } from '../app/queries'
+import { AddMember, MemberList } from '../components/MemberPicker'
+import {
+  agentOptions,
+  memberKey,
+  without,
+  type MemberOption,
+} from '../components/members'
 import { Alert, Field } from '../components/primitives'
-import { AgentChoices } from '../features/rooms/Members'
+import { settlePeople, usePeopleCandidates } from '../features/rooms/Members'
 
 export const Route = createFileRoute('/_app/rooms/new')({ component: NewRoom })
 
 function NewRoom() {
   const agents = useAgents()
+  const administrator = Boolean(useSession().data?.administrator)
+  const { people, grants } = usePeopleCandidates(administrator)
   const navigate = useNavigate()
   const client = useQueryClient()
   const [name, setName] = useState('')
-  const [members, setMembers] = useState<string[]>([])
+  const [members, setMembers] = useState<MemberOption[]>([])
+  const ids = (kind: MemberOption['kind']) =>
+    members.filter((member) => member.kind === kind).map((member) => member.id)
   const [requestId] = useState(() => crypto.randomUUID())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -32,9 +43,10 @@ function NewRoom() {
             try {
               const room = await ok(
                 api.POST('/api/rooms', {
-                  body: { request_id: requestId, name, agents: members },
+                  body: { request_id: requestId, name, agents: ids('agent') },
                 }),
               )
+              await settlePeople(room.id, [], ids('person'), grants)
               await client.invalidateQueries({ queryKey: keys.rooms })
               await navigate({
                 to: '/rooms/$roomId',
@@ -56,16 +68,43 @@ function NewRoom() {
               autoFocus
             />
           </Field>
-          <AgentChoices
-            agents={notRetired(agents.data)}
-            chosen={members}
-            onChange={setMembers}
-          />
+          <fieldset className="member-field">
+            <legend>Members</legend>
+            <p className="small faint">
+              Optional. Agents in a room can delegate to and message each other;
+              people here can read and write in it. Add anyone later from the
+              room.
+            </p>
+            <MemberList
+              members={members}
+              busy={busy}
+              removable={() => true}
+              onRemove={(gone) =>
+                setMembers((current) =>
+                  current.filter(
+                    (member) => memberKey(member) !== memberKey(gone),
+                  ),
+                )
+              }
+              empty="No members yet."
+            />
+            <AddMember
+              options={without(
+                [...agentOptions(agents.data ?? []), ...people],
+                members,
+              )}
+              busy={busy}
+              placeholder={
+                administrator ? 'Search agents and people' : 'Search agents'
+              }
+              onAdd={(member) => setMembers((current) => [...current, member])}
+            />
+          </fieldset>
           <Alert>{error}</Alert>
           <div className="actions">
             <button
               className="btn btn--primary"
-              disabled={busy || !name.trim() || members.length === 0}
+              disabled={busy || !name.trim()}
             >
               {busy ? 'Creating…' : 'Create room'}
             </button>

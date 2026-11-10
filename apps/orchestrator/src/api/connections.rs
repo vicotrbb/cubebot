@@ -1,7 +1,15 @@
 //! Human administration never returns recoverable provider credentials.
 use crate::{
-    connections::{ConfigureProvider, Connections, ListModels, ModelsError, SignInError},
-    identity::{Identity, IdentityError, audit::Event},
+    agents::AgentId,
+    connections::{
+        AgentModel, ConfigureProvider, Connections, ListModels, ModelsError, SetAgentModel,
+        SignInError,
+    },
+    identity::{
+        Actor, Identity, IdentityError,
+        access::{Capability, Scope},
+        audit::Event,
+    },
 };
 use axum::{
     Json, Router,
@@ -10,6 +18,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
+use cubebot_protocol::runtime::ProviderKind;
 use serde_json::json;
 
 #[derive(Clone)]
@@ -33,7 +42,10 @@ struct Api {
     sign_out_chatgpt,
     sign_out_supergrok,
     save_minimax_plan,
-    sign_out_minimax
+    sign_out_minimax,
+    agent_model,
+    set_agent_model,
+    agent_models
 ))]
 pub(super) struct Doc;
 
@@ -44,6 +56,11 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
         .route("/api/provider/saved", get(saved))
         .route("/api/provider/saved/{provider}", delete(forget))
         .route("/api/provider/subscriptions", get(subscriptions))
+        .route(
+            "/api/agents/{agent}/model",
+            get(agent_model).put(set_agent_model),
+        )
+        .route("/api/agents/{agent}/models", post(agent_models))
         // Each plan's path carries its own sign-out: a `{provider}` route would lose to these.
         .route(
             "/api/provider/subscriptions/chatgpt",
@@ -142,7 +159,71 @@ async fn models(
     Json(input): Json<ListModels>,
 ) -> Result<Response, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
-    match api.connections.models(&actor, &input).await {
+    listing(api.connections.models(&actor, &input).await)
+}
+
+async fn manager(api: &Api, headers: &HeaderMap, agent: AgentId) -> Result<Actor, IdentityError> {
+    let actor = super::identity::actor(&api.identity, headers).await?;
+    api.identity
+        .authorize(
+            &actor,
+            Scope::Agent { id: agent.0 },
+            Capability::AgentManage,
+        )
+        .await?;
+    Ok(actor)
+}
+
+#[utoipa::path(get, path = "/api/agents/{agent}/model", params(("agent" = uuid::Uuid, Path)), responses((status = 200, body = AgentModel)))]
+async fn agent_model(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+) -> Result<impl IntoResponse, IdentityError> {
+    manager(&api, &headers, agent).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.connections.agent_model(agent).await?),
+    ))
+}
+
+#[utoipa::path(put, path = "/api/agents/{agent}/model", params(("agent" = uuid::Uuid, Path)), request_body = SetAgentModel, responses((status = 200, body = AgentModel)))]
+async fn set_agent_model(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+    Json(input): Json<SetAgentModel>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = manager(&api, &headers, agent).await?;
+    let model = api.connections.set_agent_model(agent, &input).await?;
+    let event = Event::by(actor.id, "agent.model_set")
+        .on(agent.0)
+        .detail(json!({ "chosen": input.chosen }));
+    api.identity.audit(event).await;
+    Ok(([("cache-control", "no-store")], Json(model)))
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgentModels {
+    pub provider: ProviderKind,
+}
+
+#[utoipa::path(post, path = "/api/agents/{agent}/models", params(("agent" = uuid::Uuid, Path)), request_body = AgentModels, responses((status = 200, body = Vec<crate::connections::ModelChoice>), (status = 422), (status = 502)))]
+async fn agent_models(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+    Json(input): Json<AgentModels>,
+) -> Result<Response, IdentityError> {
+    manager(&api, &headers, agent).await?;
+    listing(api.connections.agent_models(agent, input.provider).await)
+}
+
+fn listing(
+    result: Result<Vec<crate::connections::ModelChoice>, ModelsError>,
+) -> Result<Response, IdentityError> {
+    match result {
         Ok(models) => Ok(([("cache-control", "no-store")], Json(models)).into_response()),
         Err(ModelsError::Identity(error)) => Err(error),
         Err(ModelsError::Provider(error)) => {

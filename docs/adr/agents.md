@@ -311,7 +311,7 @@ Consequences: the task system must define when originating and dependent work is
 
 ## Default agent model with optional purpose overrides
 
-Accepted 2026-10-23.
+Accepted 2026-10-23. Amended 2026-11-10 at the user's request: the agent's own default model ships, picked by anyone who manages the agent (`agent.manage`) on its Usage tab. Without one, the agent uses the installation's provider and model from AI providers. A choice names a provider and a model: a model on the provider in use, or on a provider whose key is saved (`provider_saved`); personal plans other than the one in use are not offered. The choice is stored on the agent (`model_provider`, `model`, `model_context_window`, migrations/0072) with the window the model list reported, else the window configured for that provider, and is audited as `agent.model_set`. The provider in use still decides access first, so a choice never reaches an agent that connection does not serve. If the chosen provider's saved key is forgotten, the agent uses the installation's default and its Usage tab says so; this one fallback is a deliberate exception to the no-fallback rule below, so removing a key never strands an agent. The dreaming model remains the only purpose override.
 
 **Decision.** Each agent has one default model and optional model overrides for memory extraction, dreaming, and context compaction. An unspecified purpose inherits the default. The user selected this model on 2026-10-23. Authorized managers configure these choices from the installation-managed connections the agent may use under [Installation-managed provider connections](identity.md#installation-managed-provider-connections) and [Installation-wide connection access by default](identity.md#installation-wide-connection-access-by-default).
 
@@ -733,6 +733,8 @@ Accepted 2026-11-08, as the user specified it that day.
 - **Storage.** `teams` and `team_members` hold the whole organization, which is small, so the orchestrator loads it at once and checks it in Rust; writes take one advisory lock so two edits cannot combine into a cycle, and the reporting foreign keys are checked at commit because a save replaces a whole roster.
 
 **Rationale.** Agents with roles, a shared brief and a clear manager coordinate the way people in an organization do, and a person can hand work to a team without knowing who in it does what. Reusing rooms for the team's conversation keeps one collaboration model. Alternatives the user turned down on 2026-11-08: an overseer agent outside the team instead of nesting, a manager reporting to any agent with no team relation, editing reserved to administrators, team text only in team-related turns, and messaging along the org chart or across all teams.
+
+Amended 2026-11-10 at the user's request: a team may be created with no agents and filled later; the one-manager and reporting rules apply once it has members, and a team with teams under it keeps its members. People join a team as people with access to its room: adding one in the team editor grants them reading and writing in that room, the same grants Platform › Groups and access sets, and the team page lists them.
 
 **Open details.** Agents deleting teams (they ask to create them under [Agents ask to create agents, rooms and teams](#agents-ask-to-create-agents-rooms-and-teams)); a team's own budget ([Agent usage and monthly budgets](#agent-usage-and-monthly-budgets)); moving or copying an agent's memory between roles; very large organizations, where loading every team per turn would need a cache.
 

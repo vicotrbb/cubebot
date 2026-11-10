@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT DISTINCT a.id, a.login AS name\n        FROM access_grants g\n        JOIN human_accounts a ON a.id=g.account_id AND a.active\n        WHERE g.scope_kind='room' AND g.scope_id=$1 AND g.capability='conversation.read' AND g.revoked_at IS NULL\n        ORDER BY a.login, a.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2408018c2df593bec0edb6c4ea31f75c008fc57498d6d4c3d4a706afcc38cf57"
+}

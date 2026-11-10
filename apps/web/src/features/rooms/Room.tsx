@@ -56,6 +56,12 @@ const ROUTING: Record<string, string> = {
 const TASK_ROUTING: Record<string, string> = {
   routing: 'The orchestrator is reading this…',
 }
+function routingNote(message: RoomMessage, task: boolean) {
+  if (message.note === 'no_agents')
+    return 'No agent was in the room to read this.'
+  return (task ? TASK_ROUTING : ROUTING)[message.routing]
+}
+
 const DELIVERY: Record<string, string> = {
   queued: 'queued',
   running: 'working…',
@@ -236,9 +242,9 @@ export function RoomView({
                       steering.
                     </p>
                   )}
-                  {(task ? TASK_ROUTING : ROUTING)[message.routing] && (
+                  {routingNote(message, task) && (
                     <p className="small faint" role="status">
-                      {(task ? TASK_ROUTING : ROUTING)[message.routing]}
+                      {routingNote(message, task)}
                     </p>
                   )}
                 </div>

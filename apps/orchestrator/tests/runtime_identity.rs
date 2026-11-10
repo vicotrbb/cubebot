@@ -1848,3 +1848,68 @@ async fn a_lost_sandbox_interrupts_its_running_turn() {
     server.abort();
     f.task.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_agent_thinks_with_its_chosen_model_on_a_saved_provider() {
+    use cubebot_orchestrator::connections::{
+        ConfigureProvider, Connections, Credentials, ModelRef, SetAgentModel,
+    };
+    use cubebot_protocol::runtime::ProviderKind::{Anthropic, Openai};
+    let f = fixture().await;
+    let (auth, _work, admin, _conversation) = native_chat_setup(&f, "Hello").await;
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    connections
+        .configure(
+            &admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 1,
+                provider: Anthropic,
+                model: "default-model".into(),
+                context_window: Some(200_000),
+                api_key: Some("anthropic-key".into()),
+                access: None,
+            },
+        )
+        .await
+        .unwrap();
+    let agent = f.agent;
+    let chosen = ModelRef {
+        provider: Openai,
+        model: "chosen-model".into(),
+        context_window: None,
+    };
+    let unknown = SetAgentModel {
+        chosen: Some(ModelRef {
+            provider: cubebot_protocol::runtime::ProviderKind::Gemini,
+            ..chosen.clone()
+        }),
+    };
+    assert!(connections.set_agent_model(agent, &unknown).await.is_err());
+    let described = connections
+        .set_agent_model(
+            agent,
+            &SetAgentModel {
+                chosen: Some(chosen.clone()),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(described.providers, vec![Anthropic, Openai]);
+    assert_eq!(described.chosen, Some(chosen));
+    assert_eq!(described.default.unwrap().model, "default-model");
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let turn = delivery(&mut channel).await;
+    assert_eq!(turn["provider"], "openai");
+    assert_eq!(turn["model"], "chosen-model");
+    assert_eq!(turn["api_key"], "controlled-key");
+    assert_eq!(turn["context_window"], 128_000);
+    server.abort();
+}

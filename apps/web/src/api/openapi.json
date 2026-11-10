@@ -339,6 +339,120 @@
         }
       }
     },
+    "/api/agents/{agent}/model": {
+      "get": {
+        "tags": [],
+        "operationId": "agent_model",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentModel"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "operationId": "set_agent_model",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAgentModel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentModel"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/models": {
+      "post": {
+        "tags": [],
+        "operationId": "agent_models",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentModels"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelChoice"
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": ""
+          },
+          "502": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{agent}/routines": {
       "get": {
         "tags": [],
@@ -3848,6 +3962,24 @@
         }
       }
     },
+    "/api/installation/about": {
+      "get": {
+        "tags": [],
+        "operationId": "installation_about",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/About"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/installation/backup": {
       "get": {
         "tags": [],
@@ -5840,6 +5972,70 @@
   },
   "components": {
     "schemas": {
+      "About": {
+        "type": "object",
+        "required": [
+          "version",
+          "installation_id",
+          "installed_at",
+          "uptime_seconds",
+          "postgres_version",
+          "database_bytes",
+          "people",
+          "agents",
+          "rooms",
+          "teams"
+        ],
+        "properties": {
+          "agents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "database_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "installation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "installed_at": {
+            "type": "string"
+          },
+          "model": {
+            "type": ["string", "null"]
+          },
+          "namespace": {
+            "type": ["string", "null"]
+          },
+          "people": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "postgres_version": {
+            "type": "string"
+          },
+          "provider": {
+            "type": ["string", "null"]
+          },
+          "rooms": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "teams": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uptime_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
       "Accept": {
         "type": "object",
         "required": ["request_id", "token", "password"],
@@ -6226,6 +6422,48 @@
             "$ref": "#/components/schemas/McpTransport"
           }
         }
+      },
+      "AgentModel": {
+        "type": "object",
+        "required": ["providers"],
+        "properties": {
+          "chosen": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              }
+            ]
+          },
+          "default": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              }
+            ]
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderKind"
+            }
+          }
+        }
+      },
+      "AgentModels": {
+        "type": "object",
+        "required": ["provider"],
+        "properties": {
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          }
+        },
+        "additionalProperties": false
       },
       "AgentSpeech": {
         "type": "object",
@@ -8979,6 +9217,23 @@
           }
         }
       },
+      "ModelRef": {
+        "type": "object",
+        "required": ["provider", "model"],
+        "properties": {
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          }
+        },
+        "additionalProperties": false
+      },
       "ModelSpend": {
         "type": "object",
         "required": ["provider", "model", "tokens", "cost_usd"],
@@ -9972,6 +10227,7 @@
           "id",
           "name",
           "members",
+          "people",
           "manage",
           "last_sequence",
           "read_sequence",
@@ -10003,6 +10259,12 @@
           },
           "name": {
             "type": "string"
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            }
           },
           "read_sequence": {
             "type": "integer",
@@ -10615,6 +10877,22 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetAgentModel": {
+        "type": "object",
+        "properties": {
+          "chosen": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ModelRef"
+              }
+            ]
           }
         },
         "additionalProperties": false

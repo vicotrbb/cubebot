@@ -1,11 +1,19 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Crown, Plus, Trash2 } from 'lucide-react'
+import { Crown, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { keys } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
+import { AddMember, MemberList } from '../../components/MemberPicker'
+import {
+  agentOptions,
+  memberKey,
+  without,
+  type MemberOption,
+} from '../../components/members'
 import { Alert, Field } from '../../components/primitives'
+import { settlePeople, usePeopleCandidates } from '../rooms/Members'
 import {
   bossChoices,
   makeManager,
@@ -33,6 +41,7 @@ export function TeamEditor({
   draft: initial,
   teams,
   agents,
+  people: present = [],
   onDone,
   onCancel,
 }: {
@@ -40,11 +49,14 @@ export function TeamEditor({
   draft?: SaveTeam
   teams: Team[]
   agents: AgentSummary[]
+  people?: MemberOption[]
   onDone: (team: Team) => void
   onCancel: () => void
 }) {
   const client = useQueryClient()
   const [draft, setDraft] = useState<SaveTeam>(initial ?? EMPTY)
+  const [people, setPeople] = useState<MemberOption[]>(present)
+  const candidates = usePeopleCandidates(true)
   const [requestId] = useState(() => crypto.randomUUID())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -71,9 +83,16 @@ export function TeamEditor({
               body: { request_id: requestId, team: draft },
             }),
           )
+      await settlePeople(
+        saved.room,
+        present.map((person) => person.id),
+        people.map((person) => person.id),
+        candidates.grants,
+      )
       await Promise.all([
         client.invalidateQueries({ queryKey: keys.teams }),
         client.invalidateQueries({ queryKey: keys.rooms }),
+        client.invalidateQueries({ queryKey: ['grants'] }),
       ])
       onDone(saved)
     } catch (caught) {
@@ -126,7 +145,14 @@ export function TeamEditor({
         </Field>
       </fieldset>
       <Placement draft={draft} team={team} teams={teams} set={set} />
-      <Seats draft={draft} agents={agents} setDraft={setDraft} />
+      <Seats
+        draft={draft}
+        agents={agents}
+        setDraft={setDraft}
+        people={people}
+        setPeople={setPeople}
+        candidates={candidates.people}
+      />
       {tried && blocked.length > 0 && (
         <ul className="team-form__problems" role="alert">
           {blocked.map((problem) => (
@@ -211,14 +237,39 @@ function Seats({
   draft,
   agents,
   setDraft,
+  people,
+  setPeople,
+  candidates,
 }: {
   draft: SaveTeam
   agents: AgentSummary[]
   setDraft: (change: (current: SaveTeam) => SaveTeam) => void
+  people: MemberOption[]
+  setPeople: (change: (current: MemberOption[]) => MemberOption[]) => void
+  candidates: MemberOption[]
 }) {
-  const [adding, setAdding] = useState('')
-  const seated = new Set(draft.members.map((member) => member.agent))
-  const free = agents.filter((agent) => !seated.has(agent.id))
+  const seated = draft.members.map((member): MemberOption => ({
+    kind: 'agent',
+    id: member.agent,
+    name: '',
+  }))
+  const options = without(
+    [...agentOptions(agents), ...candidates],
+    [...seated, ...people],
+  )
+  const seat = (agent: string) =>
+    setDraft((current) => ({
+      ...current,
+      members: [
+        ...current.members,
+        {
+          agent,
+          title: current.members.length === 0 ? 'Manager' : '',
+          role: '',
+          reports_to: managerOf(current)?.agent ?? null,
+        },
+      ],
+    }))
   const named = new Map(agents.map((agent) => [agent.id, agent]))
   const manager = managerOf(draft)?.agent
   const update = (agent: string, change: Partial<SaveTeam['members'][0]>) =>
@@ -328,46 +379,41 @@ function Seats({
           )
         })}
       </ul>
-      {free.length > 0 && (
-        <div className="team-form__add">
-          <label className="field">
-            <span className="sr-only">Agent to add</span>
-            <select
-              value={adding}
-              onChange={(event) => setAdding(event.target.value)}
-            >
-              <option value="">Choose an agent…</option>
-              {free.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn btn--sm"
-            disabled={!adding}
-            onClick={() => {
-              setDraft((current) => ({
-                ...current,
-                members: [
-                  ...current.members,
-                  {
-                    agent: adding,
-                    title: current.members.length === 0 ? 'Manager' : '',
-                    role: '',
-                    reports_to: managerOf(current)?.agent ?? null,
-                  },
-                ],
-              }))
-              setAdding('')
-            }}
-          >
-            <Plus /> Add to team
-          </button>
+      {draft.members.length === 0 && (
+        <p className="members__empty">
+          No agents yet. The first one you add leads the team as its manager.
+        </p>
+      )}
+      {people.length > 0 && (
+        <div className="team-form__people">
+          <h3>People</h3>
+          <MemberList
+            members={people}
+            busy={false}
+            removable={() => true}
+            onRemove={(gone) =>
+              setPeople((current) =>
+                current.filter(
+                  (person) => memberKey(person) !== memberKey(gone),
+                ),
+              )
+            }
+            empty=""
+          />
         </div>
       )}
+      <AddMember
+        options={options}
+        onAdd={(member) =>
+          member.kind === 'agent'
+            ? seat(member.id)
+            : setPeople((current) => [...current, member])
+        }
+      />
+      <p className="small faint">
+        Agents take a seat with a title and a line to the manager. People can
+        read and write in the team room.
+      </p>
     </fieldset>
   )
 }

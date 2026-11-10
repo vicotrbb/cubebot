@@ -25,6 +25,7 @@ pub struct Room {
     pub id: Uuid,
     pub name: String,
     pub members: Vec<Member>,
+    pub people: Vec<Member>,
     /// The viewer may change the members.
     pub manage: bool,
     /// The newest message's sequence, 0 without messages.
@@ -408,7 +409,7 @@ async fn insert_room(
 }
 
 fn sized(agents: &[Uuid]) -> bool {
-    (1..=32).contains(&agents.len())
+    agents.len() <= 32
 }
 
 async fn add_members(
@@ -469,6 +470,7 @@ async fn room(
         id: row.id,
         name: row.name,
         members: members(tx, id).await?,
+        people: people(tx, id).await?,
         manage: allowed(tx, actor, id, "room.manage").await?,
         last_sequence: row.last_sequence,
         read_sequence: row.read_sequence,
@@ -522,6 +524,25 @@ async fn lines(
     Ok(lines.into_iter().rev().collect::<Vec<_>>().join("\n"))
 }
 
+async fn people(
+    tx: &mut Transaction<'_, Postgres>,
+    room: Uuid,
+) -> Result<Vec<Member>, sqlx::Error> {
+    sqlx::query_as!(
+        Member,
+        "
+        SELECT DISTINCT a.id, a.login AS name
+        FROM access_grants g
+        JOIN human_accounts a ON a.id=g.account_id AND a.active
+        WHERE g.scope_kind='room' AND g.scope_id=$1 AND g.capability='conversation.read' AND g.revoked_at IS NULL
+        ORDER BY a.login, a.id
+        ",
+        room,
+    )
+    .fetch_all(&mut **tx)
+    .await
+}
+
 pub(super) async fn members(
     tx: &mut Transaction<'_, Postgres>,
     room: Uuid,
@@ -547,19 +568,20 @@ async fn post(
     room: Uuid,
     input: &SendMessage,
 ) -> Result<Uuid, IdentityError> {
+    let members = members(tx, room).await?;
     let mentioned = match super::tasks::person_wrote(tx, room, &input.message).await? {
         Some(mentioned) => mentioned,
-        None => mentioned(&input.message, &members(tx, room).await?),
+        None => mentioned(&input.message, &members),
     };
-    let routing = if mentioned.is_empty() {
-        "routing"
-    } else {
-        "routed"
+    let (routing, note) = match (mentioned.is_empty(), members.is_empty()) {
+        (false, _) => ("routed", None),
+        (true, true) => ("no_action", Some("no_agents")),
+        (true, false) => ("routing", None),
     };
     let id = sqlx::query_scalar!(
         "
-        INSERT INTO room_messages (room_id, actor_id, request_id, message, routing)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO room_messages (room_id, actor_id, request_id, message, routing, note)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id
         ",
         room,
@@ -567,6 +589,7 @@ async fn post(
         input.request_id,
         &input.message,
         routing,
+        note,
     )
     .fetch_one(&mut **tx)
     .await?;

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO room_messages (room_id, actor_id, request_id, message, routing)\n        VALUES ($1, $2, $3, $4, $5)\n        RETURNING id\n        ",
+  "query": "\n        INSERT INTO room_messages (room_id, actor_id, request_id, message, routing, note)\n        VALUES ($1, $2, $3, $4, $5, $6)\n        RETURNING id\n        ",
   "describe": {
     "columns": [
       {
@@ -15,6 +15,7 @@
         "Uuid",
         "Uuid",
         "Text",
+        "Text",
         "Text"
       ]
     },
@@ -22,5 +23,5 @@
       false
     ]
   },
-  "hash": "64b5930b16ba78d994a62b4c30095626f58df2864cc83b4760b18bdabc2e7c68"
+  "hash": "275b13066f19f7bc8bbd5bfac6adad1b4f2b826dae399510e605fa9d97de249c"
 }

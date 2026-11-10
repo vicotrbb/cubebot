@@ -1,3 +1,5 @@
+import type { components } from '../../api/schema'
+
 /** OpenAI reports no context windows, so its families get the input size their documentation gives. */
 const FAMILIES: [RegExp, number][] = [
   [/^gpt-4\.1/, 1_047_576],
@@ -20,4 +22,21 @@ export function suggestedWindow(
 export function tokens(count: number) {
   if (count >= 1_000_000) return `${Number((count / 1_000_000).toFixed(2))}M`
   return `${Math.round(count / 1000)}K`
+}
+
+export const PROVIDER_NAMES: Record<
+  components['schemas']['ProviderKind'],
+  string
+> = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
+  gemini: 'Google Gemini',
+  grok: 'xAI Grok',
+  chatgpt: 'ChatGPT plan',
+  supergrok: 'Grok plan',
+  minimax: 'MiniMax',
+  minimax_cn: 'MiniMax (mainland China)',
+  minimax_plan: 'MiniMax M Plan',
+  minimax_plan_cn: 'MiniMax M Plan (mainland China)',
 }

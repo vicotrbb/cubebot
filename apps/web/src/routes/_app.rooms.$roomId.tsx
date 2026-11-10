@@ -6,7 +6,7 @@ import {
   useChildMatches,
 } from '@tanstack/react-router'
 import { ChevronLeft, Hash, Users, UsersRound, X } from 'lucide-react'
-import { type RoomSummary } from '../api/types'
+import { type AgentSummary, type RoomSummary } from '../api/types'
 import { keys, useAgents, useRooms, useSession } from '../app/queries'
 import { Empty, Skeleton } from '../components/primitives'
 import { Members } from '../features/rooms/Members'
@@ -60,11 +60,17 @@ function RoomScreen() {
               to="/rooms/$roomId/members"
               params={{ roomId: room.id }}
               className="btn btn--sm"
-              aria-label={editable(room) ? 'Edit members' : 'Members'}
+              aria-label={
+                editable(room, session.data.administrator)
+                  ? 'Edit members'
+                  : 'Members'
+              }
             >
               <Users />
               <span className="agent-head__word">
-                {editable(room) ? 'Edit members' : 'Members'}
+                {editable(room, session.data.administrator)
+                  ? 'Edit members'
+                  : 'Members'}
               </span>
             </Link>
           )}
@@ -98,6 +104,7 @@ function RoomScreen() {
               <RoomMembersPanel
                 room={room}
                 agents={agents.data ?? []}
+                administrator={session.data.administrator}
                 onSaved={(changed) =>
                   client.setQueryData<RoomSummary[]>(keys.rooms, (current) =>
                     current?.map((known) =>
@@ -119,49 +126,29 @@ function RoomScreen() {
 function RoomMembersPanel({
   room,
   agents,
+  administrator,
   onSaved,
 }: {
   room: RoomSummary
-  agents: Parameters<typeof Members>[0]['agents']
+  agents: AgentSummary[]
+  administrator: boolean
   onSaved: (room: RoomSummary) => void
 }) {
   return (
     <section className="panel__section">
       <h2>Members</h2>
-      {room.team && (
-        <p className="small faint">
-          Agents follow the{' '}
-          <Link to="/teams/$teamId" params={{ teamId: room.team }}>
-            team
-          </Link>
-          : its members and the managers of the teams under it.
-        </p>
-      )}
-      {editable(room) ? (
-        <Members
-          key={room.members.map((m) => m.id).join()}
-          room={room}
-          agents={agents}
-          onSaved={onSaved}
-        />
-      ) : (
-        <ul className="list">
-          {room.members.map((member) => (
-            <li key={member.id}>
-              <Link to="/agents/$agentId" params={{ agentId: member.id }}>
-                {member.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <Members
+        room={room}
+        agents={agents}
+        administrator={administrator}
+        onSaved={onSaved}
+      />
     </section>
   )
 }
 
-/** A team room's agents follow its team, and an archived room keeps its last members. */
-function editable(room: RoomSummary) {
-  return room.manage && !room.team && !room.archived
+function editable(room: RoomSummary, administrator: boolean) {
+  return !room.archived && (administrator || (room.manage && !room.team))
 }
 
 function RoomTitle({ room }: { room: RoomSummary }) {
@@ -186,7 +173,7 @@ function RoomTitle({ room }: { room: RoomSummary }) {
           {room.archived
             ? 'Archived: its team was deleted'
             : room.members.map((member) => member.name).join(', ') ||
-              'No members'}
+              'No agents yet'}
         </p>
       </div>
     </>
