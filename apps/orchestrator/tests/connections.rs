@@ -200,6 +200,7 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
             "hubspot",
             "discord",
             "readwise",
+            "whoop",
             "rss",
             "calendly",
             "home-assistant",

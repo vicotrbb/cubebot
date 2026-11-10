@@ -58,6 +58,8 @@ pub enum Category {
     Work,
     Chat,
     Home,
+    /// Wearables and health data.
+    Health,
     Finance,
     Notifications,
     /// Databases, object storage and file servers.

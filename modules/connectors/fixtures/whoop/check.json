@@ -1,0 +1,17 @@
+{
+  "config": {},
+  "credential": { "kind": "token", "token": "whoop-test-token" },
+  "account": "jsmith123@whoop.com",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.prod.whoop.com/developer/v2/user/profile/basic",
+      "body": {
+        "user_id": 10129,
+        "email": "jsmith123@whoop.com",
+        "first_name": "John",
+        "last_name": "Smith"
+      }
+    }
+  ]
+}

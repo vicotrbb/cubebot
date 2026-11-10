@@ -16,6 +16,7 @@ export const CATEGORIES: Record<Category, string> = {
   work: 'Work',
   chat: 'Chat',
   home: 'Home',
+  health: 'Health',
   finance: 'Finance',
   notifications: 'Notifications',
   data: 'Data',

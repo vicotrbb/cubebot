@@ -21,6 +21,7 @@ static ALL: &[&dyn Connector] = &[
     &crate::hubspot::Hubspot,
     &crate::discord::Discord,
     &crate::readwise::Readwise,
+    &crate::whoop::Whoop,
     &crate::rss::Rss,
     &crate::calendly::Calendly,
     &crate::home_assistant::HomeAssistant,
