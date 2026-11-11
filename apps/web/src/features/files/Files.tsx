@@ -26,6 +26,7 @@ import {
   when,
 } from '../../components/primitives'
 import { FileViewer } from './FileViewer'
+import { uploadFile } from './upload'
 import { fileSize } from './viewer'
 import './files.css'
 
@@ -497,31 +498,6 @@ function list(view: View, parent: string | undefined) {
     return ok(api.GET('/api/files', { params: { query: { parent } } }))
   if (view === 'shared') return ok(api.GET('/api/files/shared'))
   return ok(api.GET('/api/files', { params: { query: {} } }))
-}
-
-async function uploadFile(file: File, parent: string | undefined) {
-  const query = new URLSearchParams({
-    name: file.name,
-    request_id: crypto.randomUUID(),
-  })
-  if (parent) query.set('parent', parent)
-  const response = await fetch(`/api/files?${query}`, {
-    method: 'POST',
-    body: file,
-    credentials: 'same-origin',
-    headers: { 'content-type': file.type || 'application/octet-stream' },
-  })
-  if (response.status === 507)
-    throw new Error(
-      'The installation is out of file storage. Delete files or ask an administrator.',
-    )
-  if (response.status === 413)
-    throw new Error(
-      `${file.name} is larger than this installation’s upload limit. An administrator can raise it under Platform › General.`,
-    )
-  if (response.status === 409)
-    throw new Error(`A file named ${file.name} is already in this folder.`)
-  if (!response.ok) throw new ApiError(response.status)
 }
 
 function Breadcrumbs({

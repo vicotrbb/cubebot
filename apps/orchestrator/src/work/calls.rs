@@ -129,6 +129,7 @@ impl Work {
         let input = SendMessage {
             request_id: Uuid::new_v4(),
             message: text.to_owned(),
+            attachments: Vec::new(),
         };
         let turn = self.send_in(actor, agent.0, &input, Some(call)).await?;
         Ok(turn.id)

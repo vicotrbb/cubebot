@@ -446,3 +446,88 @@ async fn administrators_change_the_name_quota_and_upload_limit_at_once() {
             .unwrap();
     assert_eq!(audited, 2);
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn people_attach_only_their_own_uploads_and_the_agent_reads_them() {
+    let f = fixture().await;
+    let directory: PathBuf = std::env::temp_dir().join(format!("cubebot-files-{}", Uuid::new_v4()));
+    let identity = Identity::new(f.pool.clone());
+    let admin = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap()
+        .token;
+    let alice = person(&identity, &admin, "alice").await;
+    let storage = Storage::start(f.pool.clone(), directory, quota(1 << 30))
+        .await
+        .unwrap();
+    let router = console(&f.pool, storage.clone()).await;
+    let named = |name: &str| format!("name={name}&request_id={}", Uuid::new_v4());
+    let photo = id(&upload(&router, &admin, "/api/files", &named("photo.png"), b"png").await);
+    let theirs = id(&upload(&router, &alice, "/api/files", &named("a.pdf"), b"pdf").await);
+    let messages = format!("/api/conversations/{}/messages", f.agent.0);
+    let message = |files: Vec<&str>| json!({"request_id": Uuid::new_v4(), "message": "", "attachments": files});
+
+    let refused = json(&router, &admin, "POST", &messages, message(vec![&theirs])).await;
+    assert_eq!(refused.status, 400);
+    let twice = json(
+        &router,
+        &admin,
+        "POST",
+        &messages,
+        message(vec![&photo, &photo]),
+    )
+    .await;
+    assert_eq!(twice.status, 400);
+    let sent = json(&router, &admin, "POST", &messages, message(vec![&photo])).await;
+    assert!(sent.status < 300, "{} {:?}", sent.status, sent.body);
+    let turn = id(&sent);
+    assert_eq!(
+        sent.json()["message_attachments"][0]["file"],
+        photo.as_str()
+    );
+    assert_eq!(sent.json()["attachments"], json!([]));
+
+    let content = format!("/api/attachments/{turn}/{photo}/content");
+    assert_eq!(get(&router, &admin, &content).await.body, &b"png"[..]);
+    assert_eq!(get(&router, &alice, &content).await.status, 404);
+    let agent = cubebot_orchestrator::storage::Principal::Agent(f.agent);
+    assert!(storage.open(agent, photo.parse().unwrap()).await.is_ok());
+    let agent = cubebot_orchestrator::storage::Principal::Agent(f.agent);
+    assert!(storage.open(agent, theirs.parse().unwrap()).await.is_err());
+
+    let name: String = sqlx::query_scalar("SELECT name FROM agents WHERE id=$1")
+        .bind(f.agent.0)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    let room = json!({"request_id": Uuid::new_v4(), "name": "Design", "agents": [f.agent.0]});
+    let room = id(&json(&router, &admin, "POST", "/api/rooms", room).await);
+    let chart = id(&upload(&router, &admin, "/api/files", &named("chart.png"), b"chart").await);
+    let posted = json!({"request_id": Uuid::new_v4(), "message": format!("@{name} look"), "attachments": [chart]});
+    let posted = json(
+        &router,
+        &admin,
+        "POST",
+        &format!("/api/rooms/{room}/messages"),
+        posted,
+    )
+    .await;
+    assert!(posted.status < 300, "{} {:?}", posted.status, posted.body);
+    let message = id(&posted);
+    assert_eq!(posted.json()["attachments"][0]["file"], chart.as_str());
+    let content = format!("/api/attachments/{message}/{chart}/content");
+    assert_eq!(get(&router, &admin, &content).await.body, &b"chart"[..]);
+    assert_eq!(get(&router, &alice, &content).await.status, 404);
+    let delivered: Uuid = sqlx::query_scalar(
+        "SELECT x.file_id FROM turn_attachments x JOIN chat_turns t ON t.id=x.turn_id WHERE t.room_message_id=$1 AND x.inbound",
+    )
+    .bind(message.parse::<Uuid>().unwrap())
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(delivered.to_string(), chart);
+    let agent = cubebot_orchestrator::storage::Principal::Agent(f.agent);
+    assert!(storage.open(agent, delivered).await.is_ok());
+}

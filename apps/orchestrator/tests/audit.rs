@@ -234,6 +234,7 @@ async fn a_broadcast_reaches_every_agent_that_is_not_retired_once() {
     let input = SendMessage {
         request_id: Uuid::new_v4(),
         message: "Release freeze starts at noon.".into(),
+        attachments: Vec::new(),
     };
     let sent = work.broadcast(&admin, &input).await.unwrap();
     let delivered: Vec<&str> = sent
@@ -290,6 +291,7 @@ async fn a_broadcast_reaches_every_agent_that_is_not_retired_once() {
     let theirs = SendMessage {
         request_id: Uuid::new_v4(),
         message: "hi all".into(),
+        attachments: Vec::new(),
     };
     assert!(work.broadcast(&member, &theirs).await.is_err());
     assert_eq!(work.broadcast_sequence(&member).await.unwrap(), None);

@@ -642,13 +642,19 @@
   background: var(--orange-wash);
   color: var(--ink);
 }
+.mention-menu__person {
+  width: 22px;
+  height: 22px;
+  font-size: var(--t-xs);
+}
 .mention-menu__name {
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.composer__input {
+.composer__input,
+.composer__mirror {
   display: block;
   width: 100%;
   border: 0;
@@ -662,11 +668,189 @@
   max-height: 240px;
   line-height: 1.5;
 }
+.composer__mirror {
+  position: absolute;
+  inset: 0 0 auto;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+}
+.composer__mirror,
+.composer__input--mirrored {
+  scrollbar-gutter: stable;
+}
+.composer__input--mirrored::selection {
+  color: var(--ink);
+}
+.composer__input--mirrored {
+  position: relative;
+  color: transparent;
+  caret-color: var(--ink);
+}
+.mention {
+  border-radius: 4px;
+  background: var(--orange-wash);
+  box-shadow: 0 0 0 2px var(--orange-wash);
+  color: var(--orange-text);
+}
+.md .mention {
+  font-weight: 600;
+}
 .composer__input:focus {
   outline: none;
 }
 .composer__input::placeholder {
   color: var(--ink-faint);
+}
+.composer__box[data-dropping] {
+  border-color: var(--orange);
+  box-shadow: 0 0 0 3px var(--orange-wash);
+}
+.composer__drop {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--orange-wash) 92%, transparent);
+  color: var(--orange-text);
+  font-size: var(--t-md);
+  font-weight: 600;
+  pointer-events: none;
+}
+.composer__drop svg {
+  width: 18px;
+  height: 18px;
+}
+.composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px 2px;
+  list-style: none;
+}
+.composer-file {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 64px;
+  max-width: 240px;
+  padding: 0 14px 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--inset);
+  color: var(--ink);
+}
+.composer-file--image {
+  width: 64px;
+  padding: 0;
+}
+.composer-file--image img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.composer-file__icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--orange-text);
+}
+.composer-file__text {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.composer-file__name {
+  overflow: hidden;
+  font-size: var(--t-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-file__text small {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+.composer-file--uploading img,
+.composer-file--uploading .composer-file__text {
+  opacity: 0.45;
+}
+.composer-file--failed {
+  border-color: var(--danger);
+  background: var(--danger-wash);
+}
+.composer-file__state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--ink);
+}
+.composer-file__state svg {
+  width: 20px;
+  height: 20px;
+}
+.composer-file__retry {
+  color: var(--danger);
+  cursor: pointer;
+}
+.composer-file__retry:focus-visible {
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
+}
+.composer-file__remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--raised);
+  color: var(--ink-soft);
+  box-shadow: 0 2px 6px -2px rgb(var(--shadow) / 0.35);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--quick),
+    color var(--quick);
+}
+.composer-file:hover .composer-file__remove,
+.composer-file:focus-within .composer-file__remove,
+.composer-file--failed .composer-file__remove {
+  opacity: 1;
+}
+.composer-file__remove:hover {
+  color: var(--ink);
+}
+.composer-file__remove svg {
+  width: 13px;
+  height: 13px;
+}
+@media (hover: none) {
+  .composer-file__remove {
+    opacity: 1;
+  }
+}
+.msg__body > .attachments {
+  margin-top: 6px;
 }
 .composer__bar {
   display: flex;

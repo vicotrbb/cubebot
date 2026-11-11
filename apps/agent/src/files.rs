@@ -4,9 +4,10 @@ use crate::{
     tools::{Registry, Running, parse},
 };
 use cubebot_protocol::{
-    runtime::{FileShare, ShareKind, SharePermission},
+    runtime::{FileShare, ShareKind, SharePermission, TurnFile},
     terminal::Outcome,
 };
+use cubebot_providers::Message;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::io;
@@ -93,6 +94,41 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
         ));
     }
     tools
+}
+
+const SEEN: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const LARGEST_IMAGE: u64 = 5 * 1024 * 1024;
+
+pub async fn images(client: Option<&MemoryClient>, files: &[TurnFile]) -> Vec<Message> {
+    let mut images = Vec::new();
+    let Some(client) = client else {
+        return images;
+    };
+    for file in files {
+        let Some(media_type) = file
+            .content_type
+            .as_deref()
+            .filter(|kind| SEEN.contains(kind))
+        else {
+            continue;
+        };
+        if file.size > LARGEST_IMAGE {
+            continue;
+        }
+        let Ok(Ok(response)) = client.file_content(file.file).await else {
+            tracing::warn!(file = %file.file, "an attached image could not be read");
+            continue;
+        };
+        let Ok(bytes) = response.bytes().await else {
+            continue;
+        };
+        use base64::Engine;
+        images.push(Message::Image {
+            media_type: media_type.into(),
+            data: base64::engine::general_purpose::STANDARD.encode(bytes),
+        });
+    }
+    images
 }
 
 pub fn call<'a>(

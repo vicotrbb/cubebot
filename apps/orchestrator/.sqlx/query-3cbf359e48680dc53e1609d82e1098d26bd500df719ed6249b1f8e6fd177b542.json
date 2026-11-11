@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO turn_attachments (turn_id, file_id, inbound)\n        SELECT t.id, x.file_id, true\n        FROM room_message_attachments x\n        JOIN chat_turns t ON t.room_message_id=x.room_message_id AND t.conversation_id=$2\n        WHERE x.room_message_id=$1\n        ORDER BY x.created_at\n        ON CONFLICT DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3cbf359e48680dc53e1609d82e1098d26bd500df719ed6249b1f8e6fd177b542"
+}

@@ -207,6 +207,7 @@ async fn a_call_is_one_message_whose_turns_are_ordinary_chat_turns() {
     let typed = |message: &str| SendMessage {
         request_id: Uuid::new_v4(),
         message: message.to_owned(),
+        attachments: Vec::new(),
     };
     let before = work
         .send(&world.admin, world.agent, &typed("typed before"))

@@ -133,11 +133,12 @@ export function Conversation({
                 )
               : 'Enter sends · Shift+Enter for a new line'
           }
-          send={async (request_id, message) => {
+          attachable
+          send={async (request_id, message, attachments) => {
             const turn = await ok(
               api.POST('/api/conversations/{conversation}/messages', {
                 params: { path: { conversation: id } },
-                body: { request_id, message },
+                body: { request_id, message, attachments },
               }),
             )
             add(turn)
@@ -324,6 +325,7 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
               <span className="msg__author">{via ? capital(via) : you}</span>
             </div>
             <Markdown text={shownRequest(turn)} />
+            <Attachments turn={turn.id} items={turn.message_attachments} />
           </>
         )}
       </div>

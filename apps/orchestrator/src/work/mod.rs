@@ -60,6 +60,8 @@ pub struct Conversation {
 pub struct SendMessage {
     pub request_id: Uuid,
     pub message: String,
+    #[serde(default)]
+    pub attachments: Vec<Uuid>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -78,6 +80,7 @@ pub struct Turn {
     pub steering: Vec<Steering>,
     /// Files the agent sent with this reply.
     pub attachments: Vec<terminal::ReplyAttachment>,
+    pub message_attachments: Vec<terminal::ReplyAttachment>,
     /// Set when this message is a whole voice call, whose turns it holds.
     pub call: Option<CallRecord>,
 }
@@ -105,6 +108,7 @@ impl From<TurnRow> for Turn {
             children: Vec::new(),
             steering: Vec::new(),
             attachments: Vec::new(),
+            message_attachments: Vec::new(),
             call: None,
         }
     }
@@ -198,17 +202,7 @@ impl Work {
         access::lock_actor(&mut tx, actor).await?;
         let agent = access::conversation(&mut tx, actor, conversation, "conversation.send").await?;
         let conversation = agent.0;
-        sqlx::query!(
-            "
-            SELECT id
-            FROM agents
-            WHERE id=$1
-            FOR UPDATE
-            ",
-            agent.0,
-        )
-        .fetch_all(&mut *tx)
-        .await?;
+        lock_agent(&mut tx, agent).await?;
         if let Some(previous) = replayed(&mut tx, actor, conversation, input).await? {
             return Ok(previous);
         }
@@ -228,9 +222,74 @@ impl Work {
         )
         .fetch_one(&mut *tx)
         .await?;
+        let mut turn = Turn::from(turn);
+        turn.message_attachments = attach_sent(&mut tx, actor, turn.id, &input.attachments).await?;
         tx.commit().await?;
-        Ok(turn.into())
+        Ok(turn)
     }
+}
+
+async fn lock_agent(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    agent: AgentId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "
+        SELECT id
+        FROM agents
+        WHERE id=$1
+        FOR UPDATE
+        ",
+        agent.0,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(())
+}
+
+async fn attach_sent(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &Actor,
+    turn: Uuid,
+    files: &[Uuid],
+) -> Result<Vec<terminal::ReplyAttachment>, IdentityError> {
+    owned(tx, actor, files).await?;
+    sqlx::query!(
+        "
+        INSERT INTO turn_attachments (turn_id, file_id, inbound)
+        SELECT $1, file, true FROM unnest($2::uuid[]) WITH ORDINALITY AS a(file, position)
+        ORDER BY position
+        ",
+        turn,
+        files,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(terminal::sent(tx, &[turn])
+        .await?
+        .remove(&turn)
+        .unwrap_or_default())
+}
+
+pub(super) async fn owned(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &Actor,
+    files: &[Uuid],
+) -> Result<(), IdentityError> {
+    let owned = sqlx::query_scalar!(
+        r#"
+        SELECT count(*) AS "owned!"
+        FROM files
+        WHERE id=ANY($1) AND owner_account_id=$2 AND blob_id IS NOT NULL
+        "#,
+        files,
+        actor.id,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    (owned == files.len() as i64)
+        .then_some(())
+        .ok_or(IdentityError::InvalidInput)
 }
 
 async fn replayed(
@@ -292,12 +351,25 @@ pub(super) async fn wake(
 }
 
 pub(super) fn validate(input: &SendMessage) -> Result<(), IdentityError> {
+    let mut seen = std::collections::HashSet::new();
+    let files = &input.attachments;
     if input.request_id.is_nil()
-        || input.message.trim().is_empty()
+        || (input.message.trim().is_empty() && files.is_empty())
+        || files.len() > terminal::ATTACHMENTS as usize
+        || !files.iter().all(|file| seen.insert(file))
         || input.message.len() > 16384
         || input.message.contains('\0')
     {
         return Err(IdentityError::InvalidInput);
     }
     Ok(())
+}
+
+pub(super) fn text_only(input: &SendMessage) -> Result<(), IdentityError> {
+    validate(input)?;
+    input
+        .attachments
+        .is_empty()
+        .then_some(())
+        .ok_or(IdentityError::InvalidInput)
 }

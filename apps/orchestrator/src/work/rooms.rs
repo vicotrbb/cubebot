@@ -67,6 +67,7 @@ pub struct RoomMessage {
     pub routing: String,
     /// The coordinator's question, the continued task's agent, or the failure reason.
     pub note: Option<String>,
+    pub attachments: Vec<super::terminal::ReplyAttachment>,
     pub deliveries: Vec<Delivery>,
 }
 
@@ -92,6 +93,7 @@ impl From<MessageRow> for RoomMessage {
             message: row.message,
             routing: row.routing,
             note: row.note,
+            attachments: Vec::new(),
             deliveries: Vec::new(),
         }
     }
@@ -622,10 +624,32 @@ async fn post(
     )
     .fetch_one(&mut **tx)
     .await?;
+    attach_message(tx, actor, id, &input.attachments).await?;
     for agent in mentioned {
         deliver(tx, id, agent).await?;
     }
     Ok(id)
+}
+
+async fn attach_message(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: &Actor,
+    message: Uuid,
+    files: &[Uuid],
+) -> Result<(), IdentityError> {
+    super::owned(tx, actor, files).await?;
+    sqlx::query!(
+        "
+        INSERT INTO room_message_attachments (room_message_id, file_id)
+        SELECT $1, file FROM unnest($2::uuid[]) WITH ORDINALITY AS a(file, position)
+        ORDER BY position
+        ",
+        message,
+        files,
+    )
+    .execute(&mut **tx)
+    .await?;
+    Ok(())
 }
 
 pub(super) async fn deliver(
@@ -644,6 +668,21 @@ pub(super) async fn deliver(
         WHERE m.id=$1
         ON CONFLICT (room_message_id,conversation_id) WHERE room_message_id IS NOT NULL DO NOTHING
         "#,
+        message,
+        agent,
+    )
+    .execute(&mut **tx)
+    .await?;
+    sqlx::query!(
+        "
+        INSERT INTO turn_attachments (turn_id, file_id, inbound)
+        SELECT t.id, x.file_id, true
+        FROM room_message_attachments x
+        JOIN chat_turns t ON t.room_message_id=x.room_message_id AND t.conversation_id=$2
+        WHERE x.room_message_id=$1
+        ORDER BY x.created_at
+        ON CONFLICT DO NOTHING
+        ",
         message,
         agent,
     )
@@ -711,6 +750,10 @@ async fn attach(
     messages: &mut [RoomMessage],
 ) -> Result<(), IdentityError> {
     let ids: Vec<Uuid> = messages.iter().map(|message| message.id).collect();
+    let mut sent = super::terminal::sent(tx, &ids).await?;
+    for message in messages.iter_mut() {
+        message.attachments = sent.remove(&message.id).unwrap_or_default();
+    }
     let deliveries = sqlx::query!(
         r#"
         SELECT t.id AS turn, t.room_message_id AS "room_message_id!", t.conversation_id AS agent_id, a.name AS agent, t.status, t.response, t.error

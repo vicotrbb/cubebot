@@ -1,4 +1,4 @@
-use crate::storage::{Principal, Storage};
+use crate::storage::Storage;
 use crate::{
     agents::AgentId,
     identity::{Identity, IdentityError},
@@ -76,9 +76,7 @@ async fn attachment(
 ) -> Result<Response, super::files::Failure> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     let owner = api.work.attachment_owner(&actor, turn, file).await?;
-    let (entry, bytes) = super::files::configured(storage)?
-        .open(Principal::Agent(owner), file)
-        .await?;
+    let (entry, bytes) = super::files::configured(storage)?.open(owner, file).await?;
     Ok(super::files::download(entry, bytes, &headers).await)
 }
 

@@ -24,6 +24,7 @@ fn message(text: &str) -> SendMessage {
     SendMessage {
         request_id: Uuid::new_v4(),
         message: text.into(),
+        attachments: Vec::new(),
     }
 }
 

@@ -105,6 +105,7 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     let message = SendMessage {
         request_id: Uuid::new_v4(),
         message: "hello".into(),
+        attachments: Vec::new(),
     };
     work.send(&admin, conversation.id, &message).await.unwrap();
     assert_eq!(runtime.start(Uuid::new_v4()).await.0, 409);

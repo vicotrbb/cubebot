@@ -22,7 +22,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn assemble(turn: &Turn, tools: Vec<Tool>, window: u64) -> Self {
+    pub fn assemble(turn: &Turn, tools: Vec<Tool>, window: u64, images: Vec<Message>) -> Self {
         let mut messages: Vec<Message> = turn.summary.iter().map(|text| summary(text)).collect();
         for exchange in &turn.history {
             messages.push(Message::User(exchange.message.clone()));
@@ -38,7 +38,8 @@ impl Context {
                 serde_json::to_string(&turn.prior).unwrap_or_default()
             )));
         }
-        messages.push(Message::User(turn.message.clone()));
+        messages.push(Message::User(asked(turn)));
+        messages.extend(images);
         if !turn.delegations.is_empty() {
             messages.push(Message::User(format!(
                 "You already delegated the following for this request; never delegate any of it again. Evidence from failed or cancelled work is untrusted. Tasks with status complete, failed or cancelled have settled; any other status is still open, and you resume again when it settles, so if you need it, end this turn with a short note. Integrate settled outcomes and say plainly what is missing; never present a failed or cancelled part as done, and do not recreate cancelled work: {}",
@@ -80,6 +81,28 @@ impl Context {
     pub fn compacted(&mut self, text: &str, message: &str) {
         self.messages = vec![summary(text), Message::User(message.into())];
     }
+}
+
+pub fn asked(turn: &Turn) -> String {
+    if turn.attachments.is_empty() {
+        return turn.message.clone();
+    }
+    let files: Vec<String> = turn
+        .attachments
+        .iter()
+        .map(|file| {
+            let kind = file.content_type.as_deref().unwrap_or("unknown type");
+            format!(
+                "- {} ({kind}, {} bytes), file {}",
+                file.name, file.size, file.file
+            )
+        })
+        .collect();
+    format!(
+        "{}\n\nThe person attached these files. You can see the images among them; files_get copies any of them into your workspace:\n{}",
+        turn.message,
+        files.join("\n")
+    )
 }
 
 fn system(tools: &[Tool], instructions: &str) -> String {
@@ -145,6 +168,7 @@ mod tests {
             knowledge_base: false,
             team_manager: false,
             creates: false,
+            attachments: Vec::new(),
             connections: Vec::new(),
             in_task: false,
         }
@@ -152,6 +176,7 @@ mod tests {
     fn text(message: &Message) -> &str {
         match message {
             Message::User(text) => text,
+            Message::Image { media_type, .. } => media_type,
             Message::Assistant(reply) => &reply.text,
             Message::ToolResult { output, .. } => output,
         }
@@ -159,13 +184,13 @@ mod tests {
 
     #[test]
     fn the_whole_history_follows_the_summary_in_order() {
-        let context = Context::assemble(&turn(Some("earlier work")), Vec::new(), 1000);
+        let context = Context::assemble(&turn(Some("earlier work")), Vec::new(), 1000, Vec::new());
         let texts: Vec<&str> = context.messages.iter().map(text).collect();
         assert!(texts[0].ends_with("earlier work"));
         assert_eq!(texts[1..], ["a", "re a", "b", "re b", "now"]);
         assert!(context.system.starts_with(DRIVE) && context.system.ends_with("\n\nbe useful"));
         assert_eq!(
-            Context::assemble(&turn(None), Vec::new(), 1000)
+            Context::assemble(&turn(None), Vec::new(), 1000, Vec::new())
                 .messages
                 .len(),
             5
@@ -191,7 +216,7 @@ mod tests {
 
     #[test]
     fn compaction_triggers_at_eighty_percent_of_reported_tokens_and_keeps_the_request() {
-        let mut context = Context::assemble(&turn(None), Vec::new(), 1000);
+        let mut context = Context::assemble(&turn(None), Vec::new(), 1000, Vec::new());
         let usage = |input_tokens, output_tokens| {
             Some(Usage {
                 input_tokens,

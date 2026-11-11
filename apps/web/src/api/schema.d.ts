@@ -4222,6 +4222,7 @@ export interface components {
       agents: string[]
     }
     RoomMessage: {
+      attachments: components['schemas']['ReplyAttachment'][]
       author: string
       /**
        * Format: uuid
@@ -4440,6 +4441,7 @@ export interface components {
       title: string
     }
     SendMessage: {
+      attachments?: string[]
       message: string
       /** Format: uuid */
       request_id: string
@@ -4874,6 +4876,7 @@ export interface components {
       /** Format: uuid */
       id: string
       message: string
+      message_attachments: components['schemas']['ReplyAttachment'][]
       origin?: null | components['schemas']['Origin']
       response?: string | null
       /** Format: int64 */

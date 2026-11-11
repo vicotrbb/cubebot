@@ -44,3 +44,30 @@ export function complete(
     caret: mention.start + inserted.length,
   }
 }
+
+export type Span = { text: string; mention: boolean }
+
+export function mentionSpans(text: string, names: string[]): Span[] {
+  const longest = [...names].sort((a, b) => b.length - a.length)
+  const spans: Span[] = []
+  let from = 0
+  for (let at = text.indexOf('@'); at >= 0; at = text.indexOf('@', at + 1)) {
+    if (at < from || (at > 0 && WORD.test(text[at - 1] ?? ''))) continue
+    const name = longest.find((candidate) => named(text, at + 1, candidate))
+    if (!name) continue
+    if (at > from) spans.push({ text: text.slice(from, at), mention: false })
+    spans.push({ text: text.slice(at, at + 1 + name.length), mention: true })
+    from = at + 1 + name.length
+  }
+  if (from < text.length) spans.push({ text: text.slice(from), mention: false })
+  return spans
+}
+
+function named(text: string, at: number, name: string) {
+  const end = at + name.length
+  return (
+    name.length > 0 &&
+    text.slice(at, end).toLowerCase() === name.toLowerCase() &&
+    !WORD.test(text[end] ?? '')
+  )
+}

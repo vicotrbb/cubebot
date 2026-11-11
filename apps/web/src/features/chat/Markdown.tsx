@@ -1,10 +1,18 @@
 import type { Token, Tokens } from 'marked'
-import { lazy, Suspense, useMemo, type ReactNode } from 'react'
+import {
+  createContext,
+  lazy,
+  Suspense,
+  use,
+  useMemo,
+  type ReactNode,
+} from 'react'
 import { CodeBlock } from '../../components/CodeBlock'
 import { Frame } from '../../components/Frame'
 import { framed, framedSvg } from '../../components/framePage'
 import { TablePreview } from '../files/TablePreview'
 import { PreviewBlock } from './Preview'
+import { mentionSpans } from './mentions'
 import { inlineImage, safeHref, tokensOf } from './tokens'
 import './markdown.css'
 
@@ -14,6 +22,8 @@ const Diagram = lazy(() =>
   })),
 )
 const MathView = lazy(() => import('./Math'))
+
+export const MentionNames = createContext<string[]>([])
 
 /** Built as React elements: raw HTML in a message stays visible text and can never run. */
 export function Markdown({ text }: { text: string }) {
@@ -42,7 +52,8 @@ const RENDERERS: Record<string, (token: never) => ReactNode> = {
   br: () => <br />,
   html: (token: Tokens.HTML) => token.raw,
   escape: (token: Tokens.Escape) => token.text,
-  text: (token: Tokens.Text) => inline(token.tokens, token.text),
+  text: (token: Tokens.Text) =>
+    token.tokens ? blocks(token.tokens) : <Plain text={token.text} />,
   paragraph: (token: Tokens.Paragraph) => <p>{inline(token.tokens)}</p>,
   heading: (token: Tokens.Heading) => {
     const Tag = `h${token.depth}` as Heading
@@ -66,6 +77,20 @@ const RENDERERS: Record<string, (token: never) => ReactNode> = {
   ),
   mathInline: (token: { text: string }) => <Formula text={token.text} />,
   mathInlineAlt: (token: { text: string }) => <Formula text={token.text} />,
+}
+
+function Plain({ text }: { text: string }) {
+  const names = use(MentionNames)
+  if (names.length === 0) return text
+  return mentionSpans(text, names).map((span, index) =>
+    span.mention ? (
+      <span key={index} className="mention">
+        {span.text}
+      </span>
+    ) : (
+      span.text
+    ),
+  )
 }
 
 function LinkTo({ token }: { token: Tokens.Link }) {

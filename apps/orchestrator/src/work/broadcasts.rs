@@ -132,7 +132,7 @@ impl Work {
         actor: &Actor,
         input: &SendMessage,
     ) -> Result<BroadcastMessage, IdentityError> {
-        super::validate(input)?;
+        super::text_only(input)?;
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
         crate::identity::administrator(&mut *tx, actor.id).await?;

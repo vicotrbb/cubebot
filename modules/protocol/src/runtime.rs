@@ -167,6 +167,17 @@ pub struct Turn {
     /// The agent may ask to create agents, rooms and teams, which a person then approves.
     #[serde(default)]
     pub creates: bool,
+    #[serde(default)]
+    pub attachments: Vec<TurnFile>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TurnFile {
+    pub file: Uuid,
+    pub name: String,
+    pub content_type: Option<String>,
+    pub size: u64,
 }
 
 /// A native connection (docs/adr/identity.md#native-connectors) as one turn sees it: no secret.
@@ -636,6 +647,7 @@ mod tests {
             knowledge_base: false,
             team_manager: false,
             creates: false,
+            attachments: Vec::new(),
             connections: Vec::new(),
             in_task: false,
         }));

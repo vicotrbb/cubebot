@@ -340,8 +340,23 @@ async fn saved(mut result: Value, id: Uuid, tools: Option<&Registry>) -> Result<
 
 /// The input with the workspace file it names under [`ATTACH`] read in, as the tool user.
 async fn attached(mut input: Value, tools: Option<&Registry>) -> Result<Value, String> {
+    let mut budget = LARGEST;
+    if let Some(files) = input.get_mut("files").and_then(Value::as_array_mut) {
+        for file in files {
+            read_in(file, tools, &mut budget).await?;
+        }
+    }
+    read_in(&mut input, tools, &mut budget).await?;
+    Ok(input)
+}
+
+async fn read_in(
+    input: &mut Value,
+    tools: Option<&Registry>,
+    budget: &mut usize,
+) -> Result<(), String> {
     let Some(path) = input[ATTACH].as_str().map(str::to_owned) else {
-        return Ok(input);
+        return Ok(());
     };
     let tools =
         tools.ok_or("files can be uploaded only with a workspace, and this agent has none")?;
@@ -353,20 +368,21 @@ async fn attached(mut input: Value, tools: Option<&Registry>) -> Result<Value, S
     let mut bytes = Vec::new();
     let stdout = reader.stdout.take().ok_or_else(unreadable)?;
     stdout
-        .take(LARGEST as u64 + 1)
+        .take(*budget as u64 + 1)
         .read_to_end(&mut bytes)
         .await
         .map_err(|_| unreadable())?;
-    if bytes.len() > LARGEST {
+    if bytes.len() > *budget {
         let _ = reader.kill().await;
-        return Err(format!("{path} is larger than 25 MiB"));
+        return Err(format!("{path} takes the upload past 25 MiB"));
     }
     if !reader.wait().await.is_ok_and(|status| status.success()) {
         return Err(unreadable());
     }
+    *budget -= bytes.len();
     let name = path.rsplit('/').next().unwrap_or("upload");
     input[ATTACH] = json!(Attachment::new(name, &bytes));
-    Ok(input)
+    Ok(())
 }
 
 /// A vendor's file name as a plain name in one folder: no paths, no hidden files.
@@ -473,6 +489,8 @@ mod tests {
         assert_eq!(attached(plain.clone(), None).await, Ok(plain));
         let upload = json!({ATTACH: "notes/a.pdf"});
         assert!(attached(upload, None).await.is_err());
+        let nested = json!({"files": [{"path": "a", "text": "a"}, {"path": "b", ATTACH: "b.png"}]});
+        assert!(attached(nested, None).await.is_err());
     }
 
     #[test]

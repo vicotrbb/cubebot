@@ -181,6 +181,7 @@ async fn team_rooms_follow_rosters_and_nesting_and_a_deleted_team_archives_its_r
             &SendMessage {
                 request_id: Uuid::new_v4(),
                 message: "hello".into(),
+                attachments: Vec::new(),
             },
         )
         .await,
@@ -267,6 +268,7 @@ async fn an_administrator_deletes_a_room_but_not_a_live_team_room() {
             &SendMessage {
                 request_id: Uuid::new_v4(),
                 message: "Still here?".into(),
+                attachments: Vec::new(),
             },
         )
         .await;

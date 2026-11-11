@@ -4,6 +4,7 @@ use super::Work;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
+    storage::Principal,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -11,7 +12,7 @@ use sqlx::{Postgres, Transaction};
 use std::collections::HashMap;
 use uuid::Uuid;
 
-const ATTACHMENTS: i64 = 10;
+pub(super) const ATTACHMENTS: i64 = 10;
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
 pub struct Progress {
@@ -79,7 +80,7 @@ pub(super) async fn attachments(
         FROM turn_attachments a
         JOIN files f ON f.id=a.file_id
         JOIN blobs b ON b.id=f.blob_id
-        WHERE a.turn_id=ANY($1)
+        WHERE a.turn_id=ANY($1) AND NOT a.inbound
         ORDER BY a.created_at
         ",
         turns,
@@ -97,6 +98,39 @@ pub(super) async fn attachments(
                 content_type: row.content_type,
                 size: row.size,
             });
+    }
+    Ok(grouped)
+}
+
+pub(super) async fn sent(
+    tx: &mut Transaction<'_, Postgres>,
+    owners: &[Uuid],
+) -> Result<HashMap<Uuid, Vec<ReplyAttachment>>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT a.owner AS "owner!", f.id, f.name, f.content_type, b.size
+        FROM (
+            SELECT turn_id AS owner, file_id, created_at FROM turn_attachments WHERE inbound
+            UNION ALL
+            SELECT room_message_id, file_id, created_at FROM room_message_attachments
+        ) a
+        JOIN files f ON f.id=a.file_id
+        JOIN blobs b ON b.id=f.blob_id
+        WHERE a.owner=ANY($1)
+        ORDER BY a.created_at
+        "#,
+        owners,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    let mut grouped = HashMap::<Uuid, Vec<ReplyAttachment>>::new();
+    for row in rows {
+        grouped.entry(row.owner).or_default().push(ReplyAttachment {
+            file: row.id,
+            name: row.name,
+            content_type: row.content_type,
+            size: row.size,
+        });
     }
     Ok(grouped)
 }
@@ -162,7 +196,7 @@ impl Work {
             return Ok(Err("this turn is no longer running".into()));
         }
         let held = sqlx::query_scalar!(
-            r#"SELECT count(*) AS "held!" FROM turn_attachments WHERE turn_id=$1"#,
+            r#"SELECT count(*) AS "held!" FROM turn_attachments WHERE turn_id=$1 AND NOT inbound"#,
             turn,
         )
         .fetch_one(&mut *tx)
@@ -204,24 +238,44 @@ impl Work {
         actor: &Actor,
         turn: Uuid,
         file: Uuid,
-    ) -> Result<AgentId, IdentityError> {
-        sqlx::query_scalar!(
+    ) -> Result<Principal, IdentityError> {
+        let owner = sqlx::query!(
             r#"
-            SELECT t.conversation_id AS "agent: AgentId"
-            FROM turn_attachments x
-            JOIN chat_turns t ON t.id=x.turn_id
-            LEFT JOIN room_messages m ON m.id=t.room_message_id
-            LEFT JOIN tasks k ON k.room_id=m.room_id
+            SELECT f.owner_account_id, f.owner_agent_id
+            FROM files f
             JOIN human_accounts a ON a.id=$1 AND a.active
-            WHERE x.turn_id=$2 AND x.file_id=$3
-                AND (a.role='administrator'
-                    OR k.created_by=a.id
-                    OR k.id IS NULL AND EXISTS(
-                    SELECT 1 FROM effective_human_grants g
-                    WHERE g.actor_id=a.id AND g.capability='conversation.read'
-                        AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id)
-                            OR (g.scope_kind='room' AND g.scope_id=m.room_id))
-                ))
+            WHERE f.id=$3 AND (
+                EXISTS(
+                    SELECT 1
+                    FROM turn_attachments x
+                    JOIN chat_turns t ON t.id=x.turn_id
+                    LEFT JOIN room_messages m ON m.id=t.room_message_id
+                    LEFT JOIN tasks k ON k.room_id=m.room_id
+                    WHERE x.turn_id=$2 AND x.file_id=f.id
+                        AND (a.role='administrator'
+                            OR k.created_by=a.id
+                            OR k.id IS NULL AND EXISTS(
+                            SELECT 1 FROM effective_human_grants g
+                            WHERE g.actor_id=a.id AND g.capability='conversation.read'
+                                AND ((g.scope_kind='conversation' AND g.scope_id=t.conversation_id)
+                                    OR (g.scope_kind='room' AND g.scope_id=m.room_id))
+                        ))
+                )
+                OR EXISTS(
+                    SELECT 1
+                    FROM room_message_attachments x
+                    JOIN room_messages m ON m.id=x.room_message_id
+                    LEFT JOIN tasks k ON k.room_id=m.room_id
+                    WHERE x.room_message_id=$2 AND x.file_id=f.id
+                        AND (a.role='administrator'
+                            OR k.created_by=a.id
+                            OR k.id IS NULL AND EXISTS(
+                            SELECT 1 FROM effective_human_grants g
+                            WHERE g.actor_id=a.id AND g.capability='conversation.read'
+                                AND g.scope_kind='room' AND g.scope_id=m.room_id
+                        ))
+                )
+            )
             "#,
             actor.id,
             turn,
@@ -229,7 +283,12 @@ impl Work {
         )
         .fetch_optional(&self.pool)
         .await?
-        .ok_or(IdentityError::NotFound)
+        .ok_or(IdentityError::NotFound)?;
+        match (owner.owner_account_id, owner.owner_agent_id) {
+            (Some(account), _) => Ok(Principal::Person(account)),
+            (None, Some(agent)) => Ok(Principal::Agent(AgentId(agent))),
+            (None, None) => Err(IdentityError::NotFound),
+        }
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id, conversation = %conversation, turn = %turn))]
@@ -254,9 +313,11 @@ impl Work {
         let ids: Vec<_> = turns.iter().map(|turn| turn.id).collect();
         let mut grouped = tool_progress(tx, &ids).await?;
         let mut attachments = attachments(tx, &ids).await?;
+        let mut sent = sent(tx, &ids).await?;
         for turn in turns.iter_mut() {
             turn.terminal = grouped.remove(&turn.id).unwrap_or_default();
             turn.attachments = attachments.remove(&turn.id).unwrap_or_default();
+            turn.message_attachments = sent.remove(&turn.id).unwrap_or_default();
         }
         Self::collaboration(tx, turns, &ids).await
     }
