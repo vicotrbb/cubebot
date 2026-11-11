@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.12'
+export const version = 'v0.2.13'
 export const released = '2026-11-10'
 
 export const docs = {
@@ -154,6 +154,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.13',
+    date: '2026-11-11',
+    title: 'Files in chat, and agents that ship',
+    items: [
+      'Attach images and files to messages in chats and rooms by picking, pasting or dropping them; agents see the images',
+      '@mentions of agents and people are highlighted as you type and in the conversation',
+      'The calendar opens faster: provider reads reuse connections and nearby weeks load ahead',
+      'GitHub agents push files to a branch and merge pull requests, on by default for new connections',
+    ],
+  },
   {
     tag: 'v0.2.12',
     date: '2026-11-10',
