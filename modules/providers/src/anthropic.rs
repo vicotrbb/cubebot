@@ -155,6 +155,20 @@ impl Provider for Anthropic {
     }
 }
 
+fn turn(message: &Message) -> Value {
+    match message {
+        Message::User(text) => json!({"role":"user","content":text}),
+        Message::Image { media_type, data } => json!({"role":"user","content":[
+            {"type":"image","source":{"type":"base64","media_type":media_type,"data":data}}
+        ]}),
+        Message::Assistant(reply) if reply.native.is_array() => {
+            json!({"role":"assistant","content":reply.native})
+        }
+        Message::Assistant(reply) => json!({"role":"assistant","content":reply.text}),
+        Message::ToolResult { output, .. } => json!({"role":"user","content":output}),
+    }
+}
+
 fn body(request: &Request, native: bool) -> Result<Value, Error> {
     // The Messages API requires an output limit; callers pass the model's own.
     let limit = request
@@ -166,11 +180,6 @@ fn body(request: &Request, native: bool) -> Result<Value, Error> {
     let mut messages: Vec<Value> = Vec::new();
     for message in request.messages {
         let value = match message {
-            Message::User(text) => json!({"role":"user","content":text}),
-            Message::Assistant(reply) if reply.native.is_array() => {
-                json!({"role":"assistant","content":reply.native})
-            }
-            Message::Assistant(reply) => json!({"role":"assistant","content":reply.text}),
             Message::ToolResult {
                 call_id,
                 output,
@@ -193,6 +202,7 @@ fn body(request: &Request, native: bool) -> Result<Value, Error> {
                 }
                 json!({"role":"user","content":[result]})
             }
+            other => turn(other),
         };
         messages.push(value);
     }

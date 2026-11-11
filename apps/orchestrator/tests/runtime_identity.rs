@@ -1053,6 +1053,7 @@ pub(crate) async fn native_chat_setup(
         &SendMessage {
             request_id: Uuid::new_v4(),
             message: message.into(),
+            attachments: Vec::new(),
         },
     )
     .await
@@ -1318,6 +1319,7 @@ async fn send(
         &cubebot_orchestrator::work::SendMessage {
             request_id: Uuid::new_v4(),
             message: message.into(),
+            attachments: Vec::new(),
         },
     )
     .await

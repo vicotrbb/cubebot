@@ -102,6 +102,7 @@ impl Work {
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let mcp_servers = mcp_servers(tx, connections, actor).await;
         let connections = native_connections(tx, connections, actor).await;
+        let attachments = files(tx, turn).await?;
         Ok(Some(Turn {
             turn,
             sequence: last as u64 + 1,
@@ -126,6 +127,7 @@ impl Work {
             in_task,
             team_manager,
             creates,
+            attachments,
         }))
     }
 
@@ -386,6 +388,23 @@ async fn earlier(
 
 /// Rooms and the main conversation stay out of each other's context; a task room's agent is a fork
 /// that adds nothing back, since `history` never reads a room's turns or their summaries.
+async fn files(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+) -> Result<Vec<cubebot_protocol::runtime::TurnFile>, sqlx::Error> {
+    let sent = super::terminal::sent(tx, &[turn]).await?.remove(&turn);
+    Ok(sent
+        .unwrap_or_default()
+        .into_iter()
+        .map(|file| cubebot_protocol::runtime::TurnFile {
+            file: file.file,
+            name: file.name,
+            content_type: file.content_type,
+            size: file.size.max(0) as u64,
+        })
+        .collect())
+}
+
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,

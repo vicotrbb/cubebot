@@ -1,3 +1,4 @@
+import { usePrefetchQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Layers, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -10,7 +11,7 @@ import type { AgentSummary } from '../../api/types'
 import { Skeleton } from '../../components/primitives'
 import { useProfile } from '../shell/AboutYou'
 import { useIsPhone } from '../shell/viewport'
-import { useCalendar } from './api'
+import { calendarQuery, useCalendar } from './api'
 import { Editor, type Editing } from './EventForm'
 import {
   addDays,
@@ -62,10 +63,41 @@ const SPARE = [
 /** Calendar events and agents' routines on one timeline, in the viewer's time zone. */
 export function Calendar(props: Place & { onGo: (place: Place) => void }) {
   const profile = useProfile()
-  if (profile.isPending) return <div className="page calendar" />
+  if (profile.isPending)
+    return (
+      <div className="page calendar">
+        <Warm {...props} />
+      </div>
+    )
   return (
     <CalendarPage zone={userZone(profile.data?.time_zone ?? '')} {...props} />
   )
+}
+
+function Warm({ view, date }: Place) {
+  const phone = useIsPhone()
+  const zone = userZone('')
+  const span = spanOf(view, date ?? nowIn(zone).day, zone, phone)
+  usePrefetchQuery(calendarQuery(span.from, span.to, zone))
+  return null
+}
+
+function useNeighbors(
+  calendar: { isSuccess: boolean; isPlaceholderData: boolean },
+  view: View,
+  date: string,
+  zone: string,
+  phone: boolean,
+) {
+  const client = useQueryClient()
+  const settled = calendar.isSuccess && !calendar.isPlaceholderData
+  useEffect(() => {
+    if (!settled) return
+    for (const by of [-1, 1] as const) {
+      const next = spanOf(view, step(view, date, by, phone), zone, phone)
+      void client.prefetchQuery(calendarQuery(next.from, next.to, zone))
+    }
+  }, [settled, client, view, date, zone, phone])
 }
 
 /** The days a view shows and the instants they span. */
@@ -96,6 +128,7 @@ function CalendarPage({
     [view, date, zone, phone],
   )
   const calendar = useCalendar(span.from, span.to, zone)
+  useNeighbors(calendar, view, date, zone, phone)
   // The app shell renders pages only once the session is known, so the key is final here.
   const [hidden, toggle] = useHidden(session.data?.id ?? '')
   const overlays = useOverlays(date)

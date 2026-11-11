@@ -78,6 +78,10 @@ impl Skills {
         Self { client, turn }
     }
 
+    pub fn client(&self) -> Option<&MemoryClient> {
+        self.client.as_ref()
+    }
+
     pub fn call<'a>(
         &'a self,
         name: &str,

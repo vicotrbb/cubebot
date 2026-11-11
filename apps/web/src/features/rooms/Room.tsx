@@ -18,7 +18,8 @@ import { can } from '../../api/types'
 import { Attachments } from '../chat/Attachments'
 import { Composer } from '../chat/Composer'
 import { Retry, Stop } from '../chat/Conversation'
-import { Markdown } from '../chat/Markdown'
+import { Markdown, MentionNames } from '../chat/Markdown'
+import type { Mentionable } from '../chat/MentionMenu'
 import { WorkCard, WorkLog } from '../chat/WorkCard'
 import '../chat/chat.css'
 import { ORCHESTRATOR_AVATAR } from '../tasks/orchestrator'
@@ -89,6 +90,7 @@ export function Room({
       note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
       empty="Mention members with @name to ask each of them, or write without a mention and the coordinator picks one owner."
       mentionable={room.members}
+      people={room.people}
       closed={room.archived}
     />
   )
@@ -103,6 +105,7 @@ export function RoomView({
   note,
   empty,
   mentionable,
+  people = [],
   task = false,
   closed = false,
 }: {
@@ -114,6 +117,7 @@ export function RoomView({
   note: string
   empty: string
   mentionable?: { id: string; name: string }[]
+  people?: { id: string; name: string }[]
   task?: boolean
   /** History only: the room takes no new messages. */
   closed?: boolean
@@ -127,6 +131,14 @@ export function RoomView({
   useFollowEnd(scroller, pinned)
   const agents = useAgents()
   const agentOf = (id: string) => agents.data?.find((agent) => agent.id === id)
+  const mentionables: Mentionable[] = [
+    ...(mentionable ?? agents.data ?? []).map((member) => ({
+      id: member.id,
+      name: member.name,
+      avatar: agentOf(member.id)?.avatar ?? null,
+    })),
+    ...people.map((person) => ({ ...person, person: true })),
+  ]
   const known = useRef(messages)
   useEffect(() => {
     known.current = messages
@@ -192,152 +204,156 @@ export function RoomView({
       }))
   return (
     <section className="conversation" aria-label={label}>
-      <div
-        ref={scroller}
-        className="transcript"
-        tabIndex={0}
-        aria-label="Room messages"
-        onScroll={(event) => {
-          const element = event.currentTarget
-          pinned.current =
-            element.scrollHeight - element.scrollTop - element.clientHeight < 80
-        }}
-      >
-        {!loaded && <Skeleton lines={4} width="60%" />}
-        {loaded && messages.length === 0 && (
-          <Empty title="Nothing here yet.">{empty}</Empty>
-        )}
-        {loaded && rows.length > shown && (
-          <button
-            type="button"
-            className="btn btn--sm transcript__earlier"
-            onClick={() => {
-              pinned.current = false
-              setShown((count) => count + PAGE)
-            }}
-          >
-            Show earlier messages
-          </button>
-        )}
-        {rows
-          .slice(Math.max(0, rows.length - shown))
-          .map(({ message, deliveries }) => (
-            <article className="exchange" key={message.id}>
-              <div
-                className={
-                  message.orchestrator || message.author_agent_id
-                    ? 'msg msg--agent'
-                    : 'msg msg--person'
-                }
-              >
-                <AuthorAvatar message={message} agents={agents.data} />
-                <div className="msg__body">
-                  <div className="msg__head">
-                    <span className="msg__author">{message.author}</span>
-                  </div>
-                  <Markdown text={message.message} />
-                  {message.routing === 'continued' && (
-                    <p className="small faint" role="status">
-                      Coordinator added this to {message.note}’s open task as
-                      steering.
-                    </p>
-                  )}
-                  {routingNote(message, task) && (
-                    <p className="small faint" role="status">
-                      {routingNote(message, task)}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {message.routing === 'clarify' && (
-                <div className="msg msg--agent">
-                  <span
-                    className="avatar-initial msg__avatar"
-                    aria-hidden="true"
-                  >
-                    C
-                  </span>
+      <MentionNames value={mentionables.map((member) => member.name)}>
+        <div
+          ref={scroller}
+          className="transcript"
+          tabIndex={0}
+          aria-label="Room messages"
+          onScroll={(event) => {
+            const element = event.currentTarget
+            pinned.current =
+              element.scrollHeight - element.scrollTop - element.clientHeight <
+              80
+          }}
+        >
+          {!loaded && <Skeleton lines={4} width="60%" />}
+          {loaded && messages.length === 0 && (
+            <Empty title="Nothing here yet.">{empty}</Empty>
+          )}
+          {loaded && rows.length > shown && (
+            <button
+              type="button"
+              className="btn btn--sm transcript__earlier"
+              onClick={() => {
+                pinned.current = false
+                setShown((count) => count + PAGE)
+              }}
+            >
+              Show earlier messages
+            </button>
+          )}
+          {rows
+            .slice(Math.max(0, rows.length - shown))
+            .map(({ message, deliveries }) => (
+              <article className="exchange" key={message.id}>
+                <div
+                  className={
+                    message.orchestrator || message.author_agent_id
+                      ? 'msg msg--agent'
+                      : 'msg msg--person'
+                  }
+                >
+                  <AuthorAvatar message={message} agents={agents.data} />
                   <div className="msg__body">
                     <div className="msg__head">
-                      <span className="msg__author">Coordinator</span>
+                      <span className="msg__author">{message.author}</span>
                     </div>
-                    <Markdown text={message.note ?? ''} />
-                  </div>
-                </div>
-              )}
-              {deliveries.map((item) => (
-                <div className="msg msg--agent agent-message" key={item.turn}>
-                  <DeliveryAvatar
-                    agent={agentOf(item.agent_id)}
-                    name={item.agent}
-                  />
-                  <div className="msg__body">
-                    <div className="msg__head">
-                      <span className="msg__author">{item.agent}</span>
-                      <span className="faint small">
-                        · {DELIVERY[item.status] ?? item.status}
-                      </span>
-                    </div>
-                    {item.terminal.length > 0 && (
-                      <WorkLog
-                        tools={item.terminal}
-                        running={item.status === 'running'}
-                      >
-                        {item.terminal.map((tool) => (
-                          <WorkCard key={tool.id} tool={tool} />
-                        ))}
-                      </WorkLog>
-                    )}
-                    <Markdown text={item.response ?? item.partial ?? ''} />
-                    <Attachments turn={item.turn} items={item.attachments} />
-                    {item.status === 'failed' && item.error && (
-                      <p className="small" style={{ color: 'var(--danger)' }}>
-                        {item.error.replaceAll('_', ' ')}
+                    <Markdown text={message.message} />
+                    <Attachments
+                      turn={message.id}
+                      items={message.attachments}
+                    />
+                    {message.routing === 'continued' && (
+                      <p className="small faint" role="status">
+                        Coordinator added this to {message.note}’s open task as
+                        steering.
                       </p>
                     )}
-                    <DeliveryActions
-                      item={item}
-                      agent={agentOf(item.agent_id)}
-                      session={session}
-                    />
+                    {routingNote(message, task) && (
+                      <p className="small faint" role="status">
+                        {routingNote(message, task)}
+                      </p>
+                    )}
                   </div>
                 </div>
-              ))}
-            </article>
-          ))}
-      </div>
-      <Alert>{readError}</Alert>
-      {closed ? (
-        <p className="room__closed small faint">
-          This room was deleted. Its history stays for administrators; nobody
-          can write here.
-        </p>
-      ) : (
-        <Composer
-          draftKey={draftKey}
-          label="Message the room"
-          placeholder={placeholder}
-          note={note}
-          mentionables={(mentionable ?? agents.data ?? []).map((member) => ({
-            id: member.id,
-            name: member.name,
-            avatar: agentOf(member.id)?.avatar ?? null,
-          }))}
-          send={async (request_id, message) => {
-            const posted = await ok(
-              api.POST('/api/rooms/{room}/messages', {
-                params: { path: { room: roomId } },
-                body: { request_id, message },
-              }),
-            )
-            setMessages((current) =>
-              current.some((known) => known.id === posted.id)
-                ? current
-                : merge(current, [posted]),
-            )
-          }}
-        />
-      )}
+                {message.routing === 'clarify' && (
+                  <div className="msg msg--agent">
+                    <span
+                      className="avatar-initial msg__avatar"
+                      aria-hidden="true"
+                    >
+                      C
+                    </span>
+                    <div className="msg__body">
+                      <div className="msg__head">
+                        <span className="msg__author">Coordinator</span>
+                      </div>
+                      <Markdown text={message.note ?? ''} />
+                    </div>
+                  </div>
+                )}
+                {deliveries.map((item) => (
+                  <div className="msg msg--agent agent-message" key={item.turn}>
+                    <DeliveryAvatar
+                      agent={agentOf(item.agent_id)}
+                      name={item.agent}
+                    />
+                    <div className="msg__body">
+                      <div className="msg__head">
+                        <span className="msg__author">{item.agent}</span>
+                        <span className="faint small">
+                          · {DELIVERY[item.status] ?? item.status}
+                        </span>
+                      </div>
+                      {item.terminal.length > 0 && (
+                        <WorkLog
+                          tools={item.terminal}
+                          running={item.status === 'running'}
+                        >
+                          {item.terminal.map((tool) => (
+                            <WorkCard key={tool.id} tool={tool} />
+                          ))}
+                        </WorkLog>
+                      )}
+                      <Markdown text={item.response ?? item.partial ?? ''} />
+                      <Attachments turn={item.turn} items={item.attachments} />
+                      {item.status === 'failed' && item.error && (
+                        <p className="small" style={{ color: 'var(--danger)' }}>
+                          {item.error.replaceAll('_', ' ')}
+                        </p>
+                      )}
+                      <DeliveryActions
+                        item={item}
+                        agent={agentOf(item.agent_id)}
+                        session={session}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </article>
+            ))}
+        </div>
+        <Alert>{readError}</Alert>
+        {closed ? (
+          <p className="room__closed small faint">
+            This room was deleted. Its history stays for administrators; nobody
+            can write here.
+          </p>
+        ) : (
+          <Composer
+            draftKey={draftKey}
+            label="Message the room"
+            placeholder={placeholder}
+            note={note}
+            mentionables={mentionables}
+            attachable
+            send={async (request_id, message, attachments) => {
+              const posted = await ok(
+                api.POST('/api/rooms/{room}/messages', {
+                  params: { path: { room: roomId } },
+                  body: { request_id, message, attachments },
+                }),
+              )
+              setMessages((current) =>
+                current.some((known) => known.id === posted.id)
+                  ? current
+                  : merge(current, [posted]),
+              )
+            }}
+          />
+        )}
+      </MentionNames>
     </section>
   )
 }

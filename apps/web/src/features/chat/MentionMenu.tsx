@@ -1,11 +1,19 @@
-import { useState, type KeyboardEvent, type RefObject } from 'react'
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react'
 import { Cube, type Avatar } from '../../components/Cube'
+import { PersonAvatar } from '../../components/PersonAvatar'
 import { complete, mentionAt, suggest, type MentionQuery } from './mentions'
 
 export type Mentionable = {
   id: string
   name: string
   avatar?: Avatar | null
+  person?: boolean
 }
 
 export function useMentions(
@@ -19,6 +27,14 @@ export function useMentions(
   const [active, setActive] = useState(0)
   const options = mention && people ? suggest(people, mention.query) : []
   const listId = `mentions-${id}`
+  const caret = useRef<number | null>(null)
+  useLayoutEffect(() => {
+    const element = area.current
+    if (caret.current === null || !element) return
+    element.focus()
+    element.setSelectionRange(caret.current, caret.current)
+    caret.current = null
+  }, [area, text])
   function track(element: HTMLTextAreaElement) {
     if (!people) return
     const found = mentionAt(element.value, element.selectionStart)
@@ -30,12 +46,9 @@ export function useMentions(
     const element = area.current
     if (!element || !mention) return
     const done = complete(text, element.selectionStart, mention, person.name)
+    caret.current = done.caret
     edit(done.text)
     setMention(null)
-    requestAnimationFrame(() => {
-      element.focus()
-      element.setSelectionRange(done.caret, done.caret)
-    })
   }
   function steer(event: KeyboardEvent<HTMLTextAreaElement>) {
     const chosen = options[active] ?? options[0]
@@ -75,7 +88,15 @@ export function useMentions(
           onMouseEnter={() => setActive(index)}
           onClick={() => pick(person)}
         >
-          <Cube avatar={person.avatar ?? null} size={22} />
+          {person.person ? (
+            <PersonAvatar
+              account={person.id}
+              name={person.name}
+              className="mention-menu__person"
+            />
+          ) : (
+            <Cube avatar={person.avatar ?? null} size={22} />
+          )}
           <span className="mention-menu__name">{person.name}</span>
         </li>
       ))}

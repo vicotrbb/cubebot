@@ -13,6 +13,9 @@ pub(crate) fn body(request: &Request, tool: fn(&Tool) -> Value) -> Value {
         }
         match message {
             Message::User(text) => messages.push(json!({"role":"user","content":text})),
+            Message::Image { media_type, data } => messages.push(json!({"role":"user","content":[
+                {"type":"image_url","image_url":{"url":format!("data:{media_type};base64,{data}")}}
+            ]})),
             Message::Assistant(reply) => match &reply.native {
                 Value::Object(_) => messages.push(reply.native.clone()),
                 _ => messages.push(json!({"role":"assistant","content":reply.text})),

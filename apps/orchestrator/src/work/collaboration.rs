@@ -98,7 +98,7 @@ impl Work {
         turn: Uuid,
         input: &SendMessage,
     ) -> Result<Steering, IdentityError> {
-        super::validate(input)?;
+        super::text_only(input)?;
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
         let agent = access::conversation(&mut tx, actor, conversation, "conversation.send").await?;

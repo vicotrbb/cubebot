@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"owned!\"\n        FROM files\n        WHERE id=ANY($1) AND owner_account_id=$2 AND blob_id IS NOT NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owned!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "53bf6271f9636f0f41883c323b6c2e088bd1adc4fdf65c826b1fd14c4f8be44f"
+}

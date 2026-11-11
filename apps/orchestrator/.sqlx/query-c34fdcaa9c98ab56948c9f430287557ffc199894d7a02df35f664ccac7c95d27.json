@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO turn_attachments (turn_id, file_id, inbound)\n        SELECT $1, file, true FROM unnest($2::uuid[]) WITH ORDINALITY AS a(file, position)\n        ORDER BY position\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c34fdcaa9c98ab56948c9f430287557ffc199894d7a02df35f664ccac7c95d27"
+}

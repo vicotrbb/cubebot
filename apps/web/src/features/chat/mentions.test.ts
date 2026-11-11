@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { complete, mentionAt, suggest } from './mentions'
+import { complete, mentionAt, mentionSpans, suggest } from './mentions'
 
 const members = [{ name: 'Ayla' }, { name: 'Test Agent' }, { name: 'Bob' }]
 const names = (query: string) => suggest(members, query).map((m) => m.name)
@@ -32,4 +32,20 @@ test('completing replaces the typed mention and leaves the caret after it', () =
     text: '@Bob ',
     caret: 5,
   })
+})
+
+test('spans mark whole member names after a word-starting @, longest first', () => {
+  const marked = (text: string) =>
+    mentionSpans(text, ['Ada', 'Ada Lovelace', 'Bob'])
+      .filter((span) => span.mention)
+      .map((span) => span.text)
+  assert.deepEqual(marked('@ada Lovelace and @Bob.'), ['@ada Lovelace', '@Bob'])
+  assert.deepEqual(marked('@Ada, hi'), ['@Ada'])
+  assert.deepEqual(marked('mail bob@ada.example or @adam or @bobby'), [])
+  assert.deepEqual(
+    mentionSpans('hi @Bob!', ['Bob'])
+      .map((span) => span.text)
+      .join(''),
+    'hi @Bob!',
+  )
 })

@@ -2,8 +2,8 @@
 //! token (https://docs.github.com/rest). The orchestrator runs the app's sign-in with the
 //! functions below; the agent always holds a bearer token: an installation token or the PAT.
 use crate::{
-    Account, Answer, Auth, Category, Connector, Context, Credential, Error, Event, EventSpec,
-    Field, FieldKind, Level, Manifest, Poll, Risk, Step, ToolSpec,
+    Account, Answer, Attachment, Auth, Category, Connector, Context, Credential, Error, Event,
+    EventSpec, Field, FieldKind, Level, Manifest, Poll, Risk, Step, ToolSpec,
 };
 use base64::{
     Engine,
@@ -35,7 +35,7 @@ pub struct Github;
 static MANIFEST: Manifest = Manifest {
     id: "github",
     name: "GitHub",
-    description: "Search, read and work on issues, pull requests and files in GitHub repositories.",
+    description: "Search, read and work on issues, pull requests, branches and files in GitHub repositories.",
     category: Category::Dev,
     auth: &[
         Auth::GithubApp {
@@ -142,6 +142,20 @@ static MANIFEST: Manifest = Manifest {
             input: r#"{"type":"object","properties":{"repo":{"type":"string","description":"owner/name"},"title":{"type":"string"},"head":{"type":"string","description":"The branch with the changes, or owner:branch from a fork."},"base":{"type":"string","description":"The branch to merge into."},"body":{"type":"string"},"draft":{"type":"boolean"}},"required":["repo","title","head","base"],"additionalProperties":false}"#,
         },
         ToolSpec {
+            name: "push_files",
+            description: "Commit files to a branch as one commit, creating the branch from base when it does not exist yet; the repository's workflows start.",
+            risk: Risk::Send,
+            product: None,
+            input: r#"{"type":"object","properties":{"repo":{"type":"string","description":"owner/name"},"branch":{"type":"string","description":"The branch to commit to, such as fix/login-timeout."},"base":{"type":"string","description":"Where a new branch starts: a branch, tag or commit. The default branch when left out."},"message":{"type":"string","description":"The commit message."},"files":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","properties":{"path":{"type":"string","description":"The path in the repository, such as src/main.rs."},"text":{"type":"string","description":"The file's whole new content."},"workspace_file":{"type":"string","description":"A file in your workspace to commit instead of text."},"delete":{"type":"boolean","description":"Remove the file instead."}},"required":["path"],"additionalProperties":false}}},"required":["repo","branch","message","files"],"additionalProperties":false}"#,
+        },
+        ToolSpec {
+            name: "merge_pull_request",
+            description: "Merge a pull request into its base branch; the repository's workflows start.",
+            risk: Risk::Send,
+            product: None,
+            input: r#"{"type":"object","properties":{"repo":{"type":"string","description":"owner/name"},"number":{"type":"integer","minimum":1},"method":{"type":"string","enum":["merge","squash","rebase"]},"title":{"type":"string","description":"The merge commit's title."},"message":{"type":"string","description":"The merge commit's message."},"sha":{"type":"string","description":"Merge only while the pull request's head is still this commit."}},"required":["repo","number"],"additionalProperties":false}"#,
+        },
+        ToolSpec {
             name: "list_notifications",
             description: "The account's unread notifications, newest first. Needs a classic token.",
             risk: Risk::Read,
@@ -154,7 +168,7 @@ static MANIFEST: Manifest = Manifest {
         description: "A new or updated GitHub notification. Only a classic token can read them.",
         product: None,
     }],
-    level: Level::Write,
+    level: Level::Full,
     guide: &[
         Step {
             title: "Create the GitHub App",
@@ -173,7 +187,7 @@ static MANIFEST: Manifest = Manifest {
             body: "Instead of an app, generate a fine-grained token: choose its repositories and grant the repository permissions below. Notifications need a classic token with the notifications and repo scopes; GitHub refuses them to fine-grained and app tokens.",
             link: Some("https://github.com/settings/personal-access-tokens/new"),
             copy: Some(
-                "Contents: Read-only\nIssues: Read and write\nPull requests: Read and write\nMetadata: Read-only",
+                "Contents: Read and write\nIssues: Read and write\nPull requests: Read and write\nMetadata: Read-only",
             ),
         },
     ],
@@ -190,7 +204,7 @@ pub fn app_manifest(name: &str, url: &str, redirect_url: &str) -> Value {
         "public": false,
         "hook_attributes": {"url": url, "active": false},
         "default_permissions": {
-            "contents": "read",
+            "contents": "write",
             "issues": "write",
             "pull_requests": "write",
             "metadata": "read",
@@ -407,6 +421,52 @@ struct Pull {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Push {
+    repo: String,
+    branch: String,
+    base: Option<String>,
+    message: String,
+    files: Vec<Pushed>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Pushed {
+    path: String,
+    text: Option<String>,
+    workspace_file: Option<Attachment>,
+    #[serde(default)]
+    delete: bool,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct Merge {
+    #[serde(skip_serializing)]
+    repo: String,
+    #[serde(skip_serializing)]
+    number: u64,
+    #[serde(
+        rename(serialize = "merge_method"),
+        skip_serializing_if = "Option::is_none"
+    )]
+    method: Option<String>,
+    #[serde(
+        rename(serialize = "commit_title"),
+        skip_serializing_if = "Option::is_none"
+    )]
+    title: Option<String>,
+    #[serde(
+        rename(serialize = "commit_message"),
+        skip_serializing_if = "Option::is_none"
+    )]
+    message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sha: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Notifications {
     #[serde(default)]
     all: bool,
@@ -442,12 +502,8 @@ impl Connector for Github {
                 "get_file" => get_file(cx, input).await,
                 "list_pull_requests" => list_pulls(cx, input).await,
                 "get_pull_request_diff" => diff(cx, input).await,
-                "create_issue" => create_issue(cx, input).await,
-                "update_issue" => update_issue(cx, input).await,
-                "comment" => comment(cx, input).await,
-                "create_pull_request" => create_pull(cx, input).await,
                 "list_notifications" => list_notifications(cx, input).await,
-                _ => Err(Error::UnknownTool),
+                _ => change(cx, tool, input).await,
             }
         })
     }
@@ -815,6 +871,158 @@ async fn create_pull(cx: &Context, input: Value) -> Result<Value, Error> {
     Ok(json!({"number": made["number"], "url": made["html_url"]}))
 }
 
+async fn change(cx: &Context, tool: &str, input: Value) -> Result<Value, Error> {
+    match tool {
+        "create_issue" => create_issue(cx, input).await,
+        "update_issue" => update_issue(cx, input).await,
+        "comment" => comment(cx, input).await,
+        "create_pull_request" => create_pull(cx, input).await,
+        "push_files" => push_files(cx, input).await,
+        "merge_pull_request" => merge_pull(cx, input).await,
+        _ => Err(Error::UnknownTool),
+    }
+}
+
+fn reference(text: &str) -> Result<&str, Error> {
+    let plain = text
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || b"-_./".contains(&b));
+    let valid = plain
+        && !text.is_empty()
+        && !text.contains("..")
+        && !text.starts_with(['/', '.'])
+        && !text.ends_with(['/', '.']);
+    valid
+        .then_some(text)
+        .ok_or_else(|| Error::Invalid(format!("{text} is not a branch, tag or commit name")))
+}
+
+async fn push_files(cx: &Context, input: Value) -> Result<Value, Error> {
+    let push: Push = crate::input(input)?;
+    let repo = repo(&push.repo)?;
+    let branch = reference(&push.branch)?;
+    if push.files.is_empty() {
+        return Err(Error::Invalid("files must name at least one file".into()));
+    }
+    let contents = push
+        .files
+        .iter()
+        .map(|file| content(file).map(|content| (file.path.as_str(), content)))
+        .collect::<Result<Vec<_>, _>>()?;
+    let (head, created) = head_of(cx, repo, branch, push.base.as_deref()).await?;
+    let commit = commit(cx, repo, &head, &push.message, contents).await?;
+    let sha = commit["sha"].as_str().unwrap_or_default();
+    move_branch(cx, repo, branch, sha, created).await?;
+    Ok(json!({"branch": branch, "commit": sha, "created": created, "url": commit["html_url"]}))
+}
+
+async fn commit(
+    cx: &Context,
+    repo: &str,
+    head: &str,
+    message: &str,
+    contents: Vec<(&str, Content<'_>)>,
+) -> Result<Value, Error> {
+    let parent = format!("/repos/{repo}/git/commits/{head}");
+    let parent = cx.json(api(cx, Method::GET, &parent)?).await?;
+    let mut entries = Vec::with_capacity(contents.len());
+    for (path, content) in contents {
+        entries.push(entry(cx, repo, path, content).await?);
+    }
+    let tree = json!({"base_tree": parent["tree"]["sha"], "tree": entries});
+    let trees = format!("/repos/{repo}/git/trees");
+    let tree = cx.json(api(cx, Method::POST, &trees)?.json(&tree)).await?;
+    let commit = json!({"message": message, "tree": tree["sha"], "parents": [head]});
+    let commits = format!("/repos/{repo}/git/commits");
+    cx.json(api(cx, Method::POST, &commits)?.json(&commit))
+        .await
+}
+
+async fn move_branch(
+    cx: &Context,
+    repo: &str,
+    branch: &str,
+    sha: &str,
+    created: bool,
+) -> Result<Value, Error> {
+    let moved = if created {
+        let body = json!({"ref": format!("refs/heads/{branch}"), "sha": sha});
+        api(cx, Method::POST, &format!("/repos/{repo}/git/refs"))?.json(&body)
+    } else {
+        let body = json!({"sha": sha, "force": false});
+        let path = format!("/repos/{repo}/git/refs/heads/{branch}");
+        api(cx, Method::PATCH, &path)?.json(&body)
+    };
+    cx.json(moved).await
+}
+
+async fn head_of(
+    cx: &Context,
+    repo: &str,
+    branch: &str,
+    base: Option<&str>,
+) -> Result<(String, bool), Error> {
+    let path = format!("/repos/{repo}/git/ref/heads/{branch}");
+    let (found, created) = match cx.json(api(cx, Method::GET, &path)?).await {
+        Ok(found) => (found["object"]["sha"].clone(), false),
+        Err(Error::NotFound(_)) => {
+            let from = reference(base.unwrap_or("HEAD"))?;
+            let path = format!("/repos/{repo}/commits/{from}");
+            (
+                cx.json(api(cx, Method::GET, &path)?).await?["sha"].clone(),
+                true,
+            )
+        }
+        Err(error) => return Err(error),
+    };
+    let sha = found
+        .as_str()
+        .ok_or_else(|| Error::Rejected(format!("GitHub named no commit for {branch}")))?;
+    Ok((sha.into(), created))
+}
+
+enum Content<'a> {
+    Text(&'a str),
+    Upload(&'a Attachment),
+    Delete,
+}
+
+fn content(file: &Pushed) -> Result<Content<'_>, Error> {
+    match (&file.text, &file.workspace_file, file.delete) {
+        (Some(text), None, false) => Ok(Content::Text(text)),
+        (None, Some(upload), false) => Ok(Content::Upload(upload)),
+        (None, None, true) => Ok(Content::Delete),
+        _ => Err(Error::Invalid(format!(
+            "{}: give exactly one of text, workspace_file or delete",
+            file.path
+        ))),
+    }
+}
+
+async fn entry(cx: &Context, repo: &str, path: &str, content: Content<'_>) -> Result<Value, Error> {
+    let blob = |sha: Value| json!({"path": path, "mode": "100644", "type": "blob", "sha": sha});
+    match content {
+        Content::Text(text) => {
+            Ok(json!({"path": path, "mode": "100644", "type": "blob", "content": text}))
+        }
+        Content::Upload(upload) => {
+            let body = json!({"content": STANDARD.encode(upload.bytes()?), "encoding": "base64"});
+            let made = cx
+                .json(api(cx, Method::POST, &format!("/repos/{repo}/git/blobs"))?.json(&body))
+                .await?;
+            Ok(blob(made["sha"].clone()))
+        }
+        Content::Delete => Ok(blob(Value::Null)),
+    }
+}
+
+async fn merge_pull(cx: &Context, input: Value) -> Result<Value, Error> {
+    let merge: Merge = crate::input(input)?;
+    let path = format!("/repos/{}/pulls/{}/merge", repo(&merge.repo)?, merge.number);
+    let merged = cx.json(api(cx, Method::PUT, &path)?.json(&merge)).await?;
+    Ok(json!({"merged": merged["merged"], "sha": merged["sha"], "message": merged["message"]}))
+}
+
 async fn list_notifications(cx: &Context, input: Value) -> Result<Value, Error> {
     let wanted: Notifications = crate::input(input)?;
     let query = [
@@ -1174,5 +1382,132 @@ mod tests {
         );
         assert_eq!(refused.cursor.as_deref(), Some("2014-11-07T22:01:45Z"));
         fixture.finish().await;
+    }
+
+    #[tokio::test]
+    async fn push_files_commits_every_file_once_and_starts_a_missing_branch_from_base() {
+        let repo = "/api.github.com/repos/octocat/Hello-World";
+        let fixture = Fixture::start(vec![
+            Exchange::new("GET", &format!("{repo}/git/ref/heads/fix/typo"), 404, json!({"message": "Not Found"})),
+            Exchange::new("GET", &format!("{repo}/commits/main"), 200, json!({"sha": "base1"})),
+            Exchange::new("GET", &format!("{repo}/git/commits/base1"), 200, json!({"sha": "base1", "tree": {"sha": "tree0"}})),
+            Exchange::new("POST", &format!("{repo}/git/blobs"), 201, json!({"sha": "blob1"})),
+            Exchange::new("POST", &format!("{repo}/git/trees"), 201, json!({"sha": "tree1"})),
+            Exchange::new("POST", &format!("{repo}/git/commits"), 201, json!({"sha": "c1", "html_url": "https://github.com/octocat/Hello-World/commit/c1"})),
+            Exchange::new("POST", &format!("{repo}/git/refs"), 201, json!({"ref": "refs/heads/fix/typo"})),
+        ])
+        .await;
+        let cx = pat(&fixture);
+        let files = json!([
+            {"path": "README.md", "text": "Hello"},
+            {"path": "logo.png", "workspace_file": Attachment::new("logo.png", b"\x89PNG")},
+            {"path": "old.txt", "delete": true},
+        ]);
+        let input = json!({"repo": "octocat/Hello-World", "branch": "fix/typo", "base": "main", "message": "Fix typo", "files": files});
+        let pushed = Github.call(&cx, "push_files", input).await.unwrap();
+        assert_eq!(pushed["commit"], "c1");
+        assert_eq!(pushed["created"], true);
+        let seen = fixture.finish().await;
+        assert_eq!(
+            seen[3].json(),
+            json!({"content": "iVBORw==", "encoding": "base64"})
+        );
+        assert_eq!(
+            seen[4].json(),
+            json!({"base_tree": "tree0", "tree": [
+                {"path": "README.md", "mode": "100644", "type": "blob", "content": "Hello"},
+                {"path": "logo.png", "mode": "100644", "type": "blob", "sha": "blob1"},
+                {"path": "old.txt", "mode": "100644", "type": "blob", "sha": null},
+            ]})
+        );
+        assert_eq!(
+            seen[5].json(),
+            json!({"message": "Fix typo", "tree": "tree1", "parents": ["base1"]})
+        );
+        assert_eq!(
+            seen[6].json(),
+            json!({"ref": "refs/heads/fix/typo", "sha": "c1"})
+        );
+    }
+
+    #[tokio::test]
+    async fn push_files_moves_an_existing_branch_without_force() {
+        let repo = "/api.github.com/repos/octocat/Hello-World";
+        let fixture = Fixture::start(vec![
+            Exchange::new(
+                "GET",
+                &format!("{repo}/git/ref/heads/main"),
+                200,
+                json!({"object": {"sha": "h1"}}),
+            ),
+            Exchange::new(
+                "GET",
+                &format!("{repo}/git/commits/h1"),
+                200,
+                json!({"tree": {"sha": "t0"}}),
+            ),
+            Exchange::new(
+                "POST",
+                &format!("{repo}/git/trees"),
+                201,
+                json!({"sha": "t1"}),
+            ),
+            Exchange::new(
+                "POST",
+                &format!("{repo}/git/commits"),
+                201,
+                json!({"sha": "c2"}),
+            ),
+            Exchange::new(
+                "PATCH",
+                &format!("{repo}/git/refs/heads/main"),
+                200,
+                json!({"ref": "refs/heads/main"}),
+            ),
+        ])
+        .await;
+        let cx = pat(&fixture);
+        let input = json!({"repo": "octocat/Hello-World", "branch": "main", "message": "Note", "files": [{"path": "a.md", "text": "a"}]});
+        let pushed = Github.call(&cx, "push_files", input).await.unwrap();
+        assert_eq!(pushed["created"], false);
+        let seen = fixture.finish().await;
+        assert_eq!(seen[4].json(), json!({"sha": "c2", "force": false}));
+    }
+
+    #[tokio::test]
+    async fn push_files_refuses_unclear_files_and_unsafe_branch_names() {
+        let fixture = Fixture::start(vec![]).await;
+        let cx = pat(&fixture);
+        let call = |branch: &str, file: Value| json!({"repo": "octocat/Hello-World", "branch": branch, "message": "m", "files": [file]});
+        for input in [
+            call("../main", json!({"path": "a", "text": "a"})),
+            call("a?b", json!({"path": "a", "text": "a"})),
+            call("x", json!({"path": "a"})),
+            call("x", json!({"path": "a", "text": "a", "delete": true})),
+        ] {
+            let refused = Github.call(&cx, "push_files", input).await;
+            assert!(matches!(refused, Err(Error::Invalid(_))), "{refused:?}");
+        }
+        assert!(fixture.finish().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn merge_pull_request_sends_github_names() {
+        let fixture = Fixture::start(vec![Exchange::new(
+            "PUT",
+            "/api.github.com/repos/octocat/Hello-World/pulls/7/merge",
+            200,
+            json!({"sha": "m1", "merged": true, "message": "Pull Request successfully merged"}),
+        )])
+        .await;
+        let cx = pat(&fixture);
+        let input = json!({"repo": "octocat/Hello-World", "number": 7, "method": "squash", "title": "Ship it"});
+        let merged = Github.call(&cx, "merge_pull_request", input).await.unwrap();
+        assert_eq!(merged["merged"], true);
+        let seen = fixture.finish().await;
+        assert_eq!(
+            seen[0].json(),
+            json!({"merge_method": "squash", "commit_title": "Ship it"})
+        );
     }
 }

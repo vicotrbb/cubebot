@@ -10355,9 +10355,16 @@
           "orchestrator",
           "message",
           "routing",
+          "attachments",
           "deliveries"
         ],
         "properties": {
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReplyAttachment"
+            }
+          },
           "author": {
             "type": "string"
           },
@@ -10924,6 +10931,13 @@
         "type": "object",
         "required": ["request_id", "message"],
         "properties": {
+          "attachments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
           "message": {
             "type": "string"
           },
@@ -11996,7 +12010,8 @@
           "terminal",
           "children",
           "steering",
-          "attachments"
+          "attachments",
+          "message_attachments"
         ],
         "properties": {
           "attachments": {
@@ -12033,6 +12048,12 @@
           },
           "message": {
             "type": "string"
+          },
+          "message_attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReplyAttachment"
+            }
           },
           "origin": {
             "oneOf": [

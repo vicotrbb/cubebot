@@ -357,7 +357,8 @@ async fn start<P: Provider>(
     let Some(window) = turn.context_window.or(limits.context_window) else {
         return failed("provider_invalid_response");
     };
-    let mut context = Context::assemble(turn, tools, window);
+    let images = crate::files::images(skills.client(), &turn.attachments).await;
+    let mut context = Context::assemble(turn, tools, window, images);
     if let Some(connected) = connections.prompt() {
         context.system = format!("{}\n\n{connected}", context.system);
     }
@@ -683,7 +684,7 @@ impl<P: Provider> Session<'_, P> {
             return keep_context();
         }
         self.run.emit(summary, None);
-        context.compacted(&reply.text, &self.turn.message);
+        context.compacted(&reply.text, &crate::context::asked(self.turn));
     }
 }
 

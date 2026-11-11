@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT a.turn_id, f.id, f.name, f.content_type, b.size\n        FROM turn_attachments a\n        JOIN files f ON f.id=a.file_id\n        JOIN blobs b ON b.id=f.blob_id\n        WHERE a.turn_id=ANY($1)\n        ORDER BY a.created_at\n        ",
+  "query": "\n        SELECT a.owner AS \"owner!\", f.id, f.name, f.content_type, b.size\n        FROM (\n            SELECT turn_id AS owner, file_id, created_at FROM turn_attachments WHERE inbound\n            UNION ALL\n            SELECT room_message_id, file_id, created_at FROM room_message_attachments\n        ) a\n        JOIN files f ON f.id=a.file_id\n        JOIN blobs b ON b.id=f.blob_id\n        WHERE a.owner=ANY($1)\n        ORDER BY a.created_at\n        ",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "turn_id",
+        "name": "owner!",
         "type_info": "Uuid"
       },
       {
@@ -35,12 +35,12 @@
       ]
     },
     "nullable": [
-      false,
+      null,
       false,
       false,
       true,
       false
     ]
   },
-  "hash": "0ce8f8ef6a3fff25fef67d8bbb87e84c780d57c0ba9582f10b7005a3b59d01db"
+  "hash": "74ec1fbdbafe358e401b6d279bbc15dbeb0977d385cdc0710803028a1ca281a9"
 }

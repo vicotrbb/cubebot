@@ -198,6 +198,9 @@ fn body(request: &Request, dialect: Dialect) -> Value {
     for message in request.messages {
         match message {
             Message::User(text) => input.push(json!({"role":"user","content":text})),
+            Message::Image { media_type, data } => input.push(json!({"role":"user","content":[
+                {"type":"input_image","image_url":format!("data:{media_type};base64,{data}")}
+            ]})),
             Message::Assistant(reply) => match &reply.native {
                 Value::Array(items) => input.extend(items.iter().cloned()),
                 _ => input.push(json!({"role":"assistant","content":reply.text})),

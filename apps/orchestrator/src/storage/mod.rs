@@ -333,6 +333,8 @@ impl Storage {
                     WHERE f.id = $1),
                 (SELECT 1 FROM human_accounts
                     WHERE id = $2 AND active AND role = 'administrator'),
+                (SELECT 1 FROM turn_attachments x JOIN chat_turns t ON t.id = x.turn_id
+                    WHERE x.file_id = $1 AND x.inbound AND t.conversation_id = $3),
                 (SELECT MAX(CASE s.permission WHEN 'write' THEN 2 ELSE 1 END)
                     FROM chain c JOIN file_shares s ON s.file_id = c.id
                     WHERE s.account_id = $2 OR s.agent_id = $3 OR s.team_id IN (

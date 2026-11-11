@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT count(*) AS \"held!\" FROM turn_attachments WHERE turn_id=$1",
+  "query": "SELECT count(*) AS \"held!\" FROM turn_attachments WHERE turn_id=$1 AND NOT inbound",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       null
     ]
   },
-  "hash": "6eed613878d5bdea6743950220442949e96ea6faad56bcd32526ecdf2cea7359"
+  "hash": "3b7aa43e4017fafb642b50dafbf6f3c0c84c6f6d326ae0f250a426f96f58069a"
 }

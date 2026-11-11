@@ -84,7 +84,9 @@ Live browser and desktop control follows [Live browser viewing and explicit huma
 
 **Rationale.** Cached offline reading with queued chat messages, or a broader queue of offline management operations, was considered. Online operations with drafts avoid those additional synchronization contracts while preserving unfinished writing.
 
-**Open details.** Draft persistence mechanism, retention, size limits and cleanup including logout; attachment handling; connection detection; submission reconciliation; stale-state presentation; and refresh behavior after reconnection.
+**Attachments.** Settled 2026-11-10 at the user's request. A person attaches up to ten files to a chat or room message by picking, pasting or dropping them. Each uploads at once into the person's own *Chat uploads* folder in Files, and the message carries the uploaded files' ids, so only files the sender owns can be attached and a message may be files alone. The agent is told each file's name, type, size and id, sees attached PNG, JPEG, GIF and WebP images up to 5 MiB as image input, and copies any of them into its workspace with `files_get`; it may read a file attached to a turn in its own conversation. A room message's files reach each agent it is delivered to. Pending uploads are not kept with the draft. *Chosen here:* the folder name, the 5 MiB image limit, and a short random suffix when a name is taken.
+
+**Open details.** Draft persistence mechanism, retention, size limits and cleanup including logout; connection detection; submission reconciliation; stale-state presentation; and refresh behavior after reconnection.
 
 **Validation scenarios.** Preserve a draft through connection loss; avoid automatic sending on reconnect; isolate drafts by installation and user; deny sending after access is revoked; reconcile an acknowledgement lost after message acceptance; identify stale views; and prevent replay of disconnected browser or desktop input.
 

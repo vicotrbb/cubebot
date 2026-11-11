@@ -144,6 +144,10 @@ pub struct Reply {
 #[derive(Clone)]
 pub enum Message {
     User(String),
+    Image {
+        media_type: String,
+        data: String,
+    },
     Assistant(Reply),
     ToolResult {
         call_id: String,

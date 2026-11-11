@@ -5,7 +5,7 @@ use base64::Engine;
 use reqwest::{Method, RequestBuilder, Response, StatusCode, Url};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, sync::LazyLock, time::Duration};
 
 /// A tool result holding this key is a file: the agent saves it in its workspace and answers
 /// with the path, so the model never reads raw bytes.
@@ -83,20 +83,23 @@ pub struct Context {
     origin: Option<Url>,
 }
 
+static HTTP: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    // Without a usable TLS stack nothing can be reached; each call reports that.
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(60))
+        .user_agent(concat!("cubebot/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .unwrap_or_default()
+});
+
 impl Context {
     pub fn new(config: Value, credential: Credential) -> Self {
-        // Without a usable TLS stack nothing can be reached; each call reports that.
-        let http = reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(60))
-            .user_agent(concat!("cubebot/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .unwrap_or_default();
         Self {
             config,
             credential,
-            http,
+            http: HTTP.clone(),
             origin: None,
         }
     }
