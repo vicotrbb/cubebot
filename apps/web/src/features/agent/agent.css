@@ -143,6 +143,17 @@
   .agent-head__word {
     display: none;
   }
+  /* The member names keep to one line beside the Team room link instead of wrapping into a narrow column. */
+  .agent-head__title p > a {
+    flex: none;
+    white-space: nowrap;
+  }
+  .agent-head__members {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .agent-screen[data-panel='true'] .conversation,
   .agent-screen[data-panel='true'] .login-handoff {
     display: none;

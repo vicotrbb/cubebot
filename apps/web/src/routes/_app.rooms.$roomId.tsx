@@ -174,10 +174,12 @@ function RoomTitle({ room }: { room: RoomSummary }) {
               {' · '}
             </>
           )}
-          {room.archived
-            ? 'Deleted; administrators can still read it'
-            : room.members.map((member) => member.name).join(', ') ||
-              'No agents yet'}
+          <span className="agent-head__members">
+            {room.archived
+              ? 'Deleted; administrators can still read it'
+              : room.members.map((member) => member.name).join(', ') ||
+                'No agents yet'}
+          </span>
         </p>
       </div>
     </>
