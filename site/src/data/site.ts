@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.13'
-export const released = '2026-11-10'
+export const version = 'v0.2.14'
+export const released = '2026-11-13'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -154,6 +154,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.14',
+    date: '2026-11-13',
+    title: 'The console fits your phone',
+    items: [
+      'The installed app clears the iPhone status bar and notch',
+      'Text fields no longer zoom the page when you tap them on a phone',
+      'A room header keeps its member names on one line, and the composer hint sits under Send',
+    ],
+  },
   {
     tag: 'v0.2.13',
     date: '2026-11-11',
