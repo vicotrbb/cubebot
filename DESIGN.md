@@ -865,7 +865,7 @@ A full-height two-column grid: 248px sidebar (`console-sidebar-w`) and a flexibl
 
 Rhythm: 10px between actions and chips, 12px between form columns, 16px between form fields and panel sections, 6px inside a message body, 4px between exchanges, 30px sidebar rows 1px apart with 14px above each section, 2px between segmented tabs.
 
-Phones (≤ 820px): the sidebar becomes its own page, a fixed 58px bottom bar (`console-bottombar-h`, plus the safe-area inset) with four items takes over navigation, the panel goes full width and hides the conversation behind it, the agent head's word hides, transcript and composer pad 12px, broadcast replies indent 22px, the login banner's actions drop below its text. Under 640px a page head's title takes its own line above a long tab row and audit times drop under the sentence; under 560px profile sections stack and the Appearance control stretches full width. The avatar builder stacks under 420px.
+Phones (≤ 820px): the sidebar becomes its own page, a fixed 58px bottom bar (`console-bottombar-h`, plus the safe-area inset) with four items takes over navigation, the panel goes full width and hides the conversation behind it, the page clears the status bar and notch (`env(safe-area-inset-top)` padding on the main column), form fields hold 16px text so iOS does not zoom on focus, the agent head's word hides, a room head's member names keep to one ellipsised line, transcript and composer pad 12px, broadcast replies indent 22px, the login banner's actions drop below its text. Under 640px a page head's title takes its own line above a long tab row and audit times drop under the sentence; under 560px profile sections stack and the Appearance control stretches full width. The avatar builder stacks under 420px.
 
 ### Elevation & Depth
 
@@ -954,7 +954,7 @@ One message to every agent, answered in place. The channel's head and relayed me
 
 #### Composer
 
-`console-composer`: a Raised 10px box with a Line Strong border and a 1px soft drop; a borderless 0.9375rem textarea (11px 14px 4px, 44–240px tall) over a bar (4px 8px 8px 10px) holding the queue note (ellipsised, wraps on phones) and the primary Send; while a turn runs the danger Cancel appears in the message actions. Focus-within deepens the border to warm ink at 0.38 with a neutral 3px halo (the composer does not turn orange). The `@` mention menu floats above it: Raised, 10px, Line Strong border, Float, 4px padding, 6px 10px items whose selected row is Orange Wash. Read-only composers lose the box and gain a top Line.
+`console-composer`: a Raised 10px box with a Line Strong border and a 1px soft drop; a borderless 0.9375rem textarea (11px 14px 4px, 44–240px tall) over a bar (4px 8px 8px 10px) holding the queue note (ellipsised; on phones it takes its own line under the controls) and the primary Send; while a turn runs the danger Cancel appears in the message actions. Focus-within deepens the border to warm ink at 0.38 with a neutral 3px halo (the composer does not turn orange). The `@` mention menu floats above it: Raised, 10px, Line Strong border, Float, 4px padding, 6px 10px items whose selected row is Orange Wash. Read-only composers lose the box and gain a top Line.
 
 #### Navigation
 

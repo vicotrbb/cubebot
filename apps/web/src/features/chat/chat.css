@@ -874,7 +874,17 @@
   .composer {
     padding: 6px 12px 12px;
   }
+  /* The hint takes its own full-width line under the controls, so it neither squeezes them nor wraps into a narrow column. */
+  .composer__bar {
+    flex-wrap: wrap;
+  }
+  .composer__bar .btn--primary {
+    margin-left: auto;
+  }
   .composer__note {
+    order: 1;
+    flex: 1 0 100%;
+    width: auto;
     white-space: normal;
     overflow: visible;
     text-overflow: clip;

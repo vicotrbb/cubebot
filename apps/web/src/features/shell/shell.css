@@ -535,8 +535,13 @@ img.avatar-initial {
   .shell {
     grid-template-columns: 1fr;
   }
+  /* The installed app draws under the status bar and notch (viewport-fit=cover), so the page clears them. */
   .shell__main {
+    padding-top: env(safe-area-inset-top);
     padding-bottom: calc(var(--bottombar-h) + env(safe-area-inset-bottom));
+  }
+  .shell__main:has(> .sidebar--page) {
+    background: var(--sidebar);
   }
   .page__body {
     padding: 16px;

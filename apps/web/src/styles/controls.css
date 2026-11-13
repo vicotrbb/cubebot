@@ -646,14 +646,16 @@ details.disclosure[open] > summary::before {
   .btn--icon.btn--sm {
     width: 44px;
   }
+  /* iOS Safari zooms the page when a focused field's text is under 16px, and an installed app stays zoomed. Component rules set smaller sizes, so this one is !important. */
   .input,
   .field input:not([type='checkbox']):not([type='radio']):not([type='file']),
   .field textarea,
   .field select,
   input:not([type='checkbox'], [type='radio'], [type='file']),
   select,
-  textarea {
-    font-size: 1rem;
+  textarea,
+  .composer__mirror {
+    font-size: 1rem !important;
   }
   .input,
   .field input:not([type='checkbox']):not([type='radio']):not([type='file']),
