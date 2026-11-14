@@ -16,7 +16,7 @@
     },
     "apps/web": {
       "name": "@cubebot/web",
-      "version": "0.2.13",
+      "version": "0.2.14",
       "dependencies": {
         "@tanstack/react-query": "5.105.1",
         "@tanstack/react-router": "1.170.46",
