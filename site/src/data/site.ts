@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.14'
-export const released = '2026-11-13'
+export const version = 'v0.2.15'
+export const released = '2026-11-14'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -154,6 +154,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.15',
+    date: '2026-11-14',
+    title: 'Up-to-date dependencies',
+    items: [
+      'The WebSocket library behind agent connections and the desktop view moves to its latest release',
+      'Build and release tooling is updated, with no change to how Cubebot runs',
+      'The repository now has a security policy, a code of conduct and issue templates',
+    ],
+  },
   {
     tag: 'v0.2.14',
     date: '2026-11-13',
