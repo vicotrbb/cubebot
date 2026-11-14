@@ -2,6 +2,10 @@
 
 Read [ARCHITECTURE](ARCHITECTURE.md) and the relevant [decisions](docs/adr/README.md) before changing behavior. [AGENTS.md](AGENTS.md) holds the repository rules for people and coding agents alike.
 
+## Set up
+
+Install the tools and run the dev loop as the [README](README.md#develop) describes.
+
 ## Before you open a change
 
 ```sh
@@ -23,7 +27,7 @@ Existing code predates the first three rules: it uses runtime `sqlx::query` thro
 
 ## Decisions
 
-A change that contradicts an accepted decision needs the user's acceptance first. Amend the decision's section in its area document and record what it replaced under **What changed**, as the [decision index](docs/adr/README.md) describes.
+A change that contradicts an accepted decision needs a maintainer's agreement first: open an issue describing it before you start. Once agreed, amend the decision's section in its area document and record what it replaced under **What changed**, as the [decision index](docs/adr/README.md) describes.
 
 ## License
 

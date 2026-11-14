@@ -1,0 +1,46 @@
+name: Bug report
+description: Something does not work as it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Shown under Platform › General.
+      placeholder: 0.2.14
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed with
+      options: [Installer (Docker), Helm chart, From a checkout]
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Agent sandbox
+      options: [kvm, container, off]
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: From `cubebot logs` or the orchestrator pod. Remove secrets first.
+      render: text

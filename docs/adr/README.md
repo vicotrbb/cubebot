@@ -16,7 +16,7 @@ Each section states the decision as it stands today, with its rationale, open de
 
 ## Changing a decision
 
-A change that contradicts an accepted decision needs the user's acceptance first. Then edit the decision's section in place: add an `Amended <date>` line, state the new decision, and record what it replaced under **What changed**. A new decision area gets a new section in the closest document. Record unresolved details explicitly; silence is not acceptance.
+A change that contradicts an accepted decision needs a maintainer's agreement first, through an issue opened before the work starts. Then edit the decision's section in place: add an `Amended <date>` line, state the new decision, and record what it replaced under **What changed**. A new decision area gets a new section in the closest document. Record unresolved details explicitly; silence is not acceptance.
 
 ## Former ADR numbers
 
