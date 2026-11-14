@@ -294,8 +294,10 @@ def lost_sandbox(f, identity, current, evidence):
     )
     wait_for(
         "committed effect",
-        lambda: called(f, turn, "echo committed", finished=True)
-        and called(f, turn, "sleep 120", finished=False),
+        lambda: (
+            called(f, turn, "echo committed", finished=True)
+            and called(f, turn, "sleep 120", finished=False)
+        ),
     )
     # The guest's ext4 commits every 5 seconds; after that the effect is on the disk.
     time.sleep(10)
@@ -347,9 +349,15 @@ def computer_use(f, evidence):
     f.k("patch", "configmap", "controller", "--type", "merge", "-p", json.dumps(patch))
     wait_for(
         "the orchestrator's mounted configuration",
-        lambda: "computer_use_enabled"
-        in f.k(
-            "exec", "deploy/orchestrator", "--", "cat", "/etc/controller/config.json"
+        lambda: (
+            "computer_use_enabled"
+            in f.k(
+                "exec",
+                "deploy/orchestrator",
+                "--",
+                "cat",
+                "/etc/controller/config.json",
+            )
         ),
     )
     signal(f, f.platform("orchestrator"), "SIGKILL")

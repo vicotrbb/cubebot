@@ -321,17 +321,19 @@ class DockerShell:
         probe = f"import socket; socket.create_connection(('127.0.0.1', {PORT}), 1)"
         wait_for(
             "the scripted model",
-            lambda: run(
-                "docker",
-                "exec",
-                name,
-                "python3",
-                "-c",
-                probe,
-                check=False,
-                capture_output=True,
-            ).returncode
-            == 0,
+            lambda: (
+                run(
+                    "docker",
+                    "exec",
+                    name,
+                    "python3",
+                    "-c",
+                    probe,
+                    check=False,
+                    capture_output=True,
+                ).returncode
+                == 0
+            ),
             timeout=30,
         )
 
