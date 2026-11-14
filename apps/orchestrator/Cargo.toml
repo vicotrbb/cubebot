@@ -58,7 +58,7 @@ utoipa = { version = "5.5", features = ["uuid"] }
 [dev-dependencies]
 futures-util = "0.3"
 http-body-util = "0.1"
-tokio-tungstenite = "0.29"
+tokio-tungstenite = "0.30"
 tower = { version = "0.5", features = ["util"] }
 tokio = { workspace = true, features = ["process", "io-util"] }
 

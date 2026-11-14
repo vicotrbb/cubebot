@@ -285,5 +285,5 @@ def forward(f):
 def available(f):
     try:
         return f.request("/api/health/live", token="")["status"] == "alive"
-    except (OSError, AssertionError):
+    except OSError, AssertionError:
         return False

@@ -338,7 +338,7 @@ def qualify(directory: Path):
 def live(api):
     try:
         return api("/api/health/live") == {"status": "alive"}
-    except (OSError, AssertionError):
+    except OSError, AssertionError:
         return False
 
 
