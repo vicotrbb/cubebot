@@ -1,5 +1,6 @@
 import { AudioLines, Mic, MicOff, Video, VideoOff } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Cube } from '../../components/Cube'
 import { Alert, Field } from '../../components/primitives'
 import type { Joining } from './useMeeting'
 import { usePreview, type Preview } from './usePreview'
@@ -208,6 +209,12 @@ export function GreenRoom({
   }
   return (
     <div className="green-room night">
+      {guest && (
+        <div className="green-room__brand">
+          <Cube size={20} />
+          Cubebot
+        </div>
+      )}
       <div className="green-room__frame">
         <section
           className="green-room__preview"

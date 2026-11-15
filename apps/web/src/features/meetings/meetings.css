@@ -656,6 +656,17 @@
   padding: max(24px, env(safe-area-inset-top)) 24px
     max(24px, env(safe-area-inset-bottom));
 }
+.green-room__brand {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-lg);
+  font-weight: var(--w-head);
+  letter-spacing: -0.01em;
+}
 .green-room__frame {
   width: min(1080px, 100%);
   display: grid;
@@ -876,6 +887,11 @@
     flex-wrap: wrap;
     justify-content: space-between;
   }
+  .green-room__brand {
+    position: static;
+    justify-self: start;
+    margin-bottom: 14px;
+  }
   .green-room {
     place-items: start center;
     padding: max(16px, env(safe-area-inset-top)) 16px
@@ -886,9 +902,7 @@
     gap: 20px;
   }
   .green-room__mirror {
-    aspect-ratio: 4 / 5;
-    max-height: 52dvh;
-    margin-inline: auto;
+    aspect-ratio: 1;
   }
   .green-room__details {
     max-width: none;
