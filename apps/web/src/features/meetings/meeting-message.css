@@ -1,0 +1,181 @@
+.meeting-message {
+  margin: 6px 0;
+  padding: 0 8px;
+}
+.meeting-message__row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  padding: 8px 10px 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--quick) var(--settle);
+}
+.meeting-message__row:hover {
+  border-color: var(--line-strong);
+}
+.meeting-message__icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-md);
+  background: var(--orange-wash);
+  color: var(--orange-text);
+}
+.meeting-message__icon svg {
+  width: 17px;
+  height: 17px;
+}
+[data-live='true'] .meeting-message__icon::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.meeting-message__text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.meeting-message__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  min-width: 0;
+  font-size: var(--t-lg);
+  font-weight: var(--w-strong);
+}
+.meeting-message__name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.meeting-message__time {
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.meeting-message__summary {
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.meeting-message__chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--ink-faint);
+  transition: transform var(--quick) var(--settle);
+}
+[data-open='true'] > .meeting-message__row .meeting-message__chevron {
+  transform: rotate(90deg);
+}
+.meeting-message__body {
+  display: grid;
+  gap: 14px;
+  max-width: 78ch;
+  margin: 8px 0 0 16px;
+  padding: 2px 0 4px 12px;
+  border-left: 1px solid var(--line-strong);
+}
+.meeting-message__section {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.meeting-message__label {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+}
+.meeting-message__present {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--t-md);
+}
+.meeting-message__lines {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.meeting-line {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+  font-size: var(--t-md);
+  line-height: 1.46;
+}
+.meeting-line__who {
+  font-size: var(--t-sm);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+.meeting-line[data-own='true'] .meeting-line__who {
+  color: var(--orange-text);
+}
+.meeting-line__at {
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-variant-numeric: tabular-nums;
+}
+.meeting-line__text {
+  grid-column: 1 / -1;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.meeting-message__more,
+.meeting-message__empty {
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: var(--t-md);
+}
+.meeting-message__turns {
+  margin-left: -8px;
+}
+.meeting-message__open {
+  justify-self: start;
+  color: var(--orange-text);
+  font-size: var(--t-md);
+  font-weight: var(--w-strong);
+  text-underline-offset: 3px;
+}
+@media (max-width: 640px) {
+  .meeting-message__body {
+    margin-left: 8px;
+    padding-left: 10px;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .meeting-message__icon,
+  :root:not([data-theme='light'])
+    .meeting-line[data-own='true']
+    .meeting-line__who,
+  :root:not([data-theme='light']) .meeting-message__open {
+    color: var(--orange-top);
+  }
+}
+:root[data-theme='dark'] .meeting-message__icon,
+:root[data-theme='dark'] .meeting-line[data-own='true'] .meeting-line__who,
+:root[data-theme='dark'] .meeting-message__open {
+  color: var(--orange-top);
+}

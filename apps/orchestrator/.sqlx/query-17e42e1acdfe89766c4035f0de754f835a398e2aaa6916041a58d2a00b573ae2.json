@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meetings SET ended_at=clock_timestamp(), summary='We ship on Friday.' WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "17e42e1acdfe89766c4035f0de754f835a398e2aaa6916041a58d2a00b573ae2"
+}

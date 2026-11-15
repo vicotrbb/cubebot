@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, status, response, completed_at, meeting_id)\n            SELECT a.agent_id, m.owner_id, gen_random_uuid(),\n                format(E'Meeting \"%s\" ended. Summary:\\n%s', m.title, left($2, 4000)),\n                'complete', '', clock_timestamp(), m.id\n            FROM (SELECT DISTINCT agent_id FROM meeting_attendance WHERE meeting_id=$1 AND agent_id IS NOT NULL) a\n            JOIN meetings m ON m.id=$1\n            WHERE NOT EXISTS(\n                SELECT 1 FROM chat_turns t\n                WHERE t.meeting_id=$1 AND t.conversation_id=a.agent_id AND t.response=''\n            )\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "08b2b961a5a07ae2e8e7058c7770c183772fa8ef2811fc6913acb6e68109de5b"
+}

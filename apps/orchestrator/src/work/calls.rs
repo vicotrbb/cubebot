@@ -1,4 +1,4 @@
-use super::{SendMessage, Turn, TurnRow, Work, access};
+use super::{SendMessage, Turn, TurnRow, Within, Work, access};
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
@@ -131,7 +131,11 @@ impl Work {
             message: text.to_owned(),
             attachments: Vec::new(),
         };
-        let turn = self.send_in(actor, agent.0, &input, Some(call)).await?;
+        let within = Within {
+            call: Some(call),
+            ..Within::default()
+        };
+        let turn = self.send_in(actor, agent.0, &input, within).await?;
         Ok(turn.id)
     }
 

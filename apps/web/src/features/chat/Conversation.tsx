@@ -8,6 +8,7 @@ import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Skeleton } from '../../components/primitives'
 import { useFollowEnd } from './useFollowEnd'
 import { CallMessage } from '../call/CallMessage'
+import { MeetingMessage } from '../meetings/MeetingMessage'
 import { Attachments } from './Attachments'
 import { Composer } from './Composer'
 import { Markdown } from './Markdown'
@@ -106,6 +107,20 @@ export function Conversation({
                 />
               ))}
             </CallMessage>
+          ) : turn.meeting ? (
+            <MeetingMessage key={turn.id} meeting={turn.meeting}>
+              {turn.meeting.turns.map((said) => (
+                <Exchange
+                  key={said.id}
+                  agent={agent}
+                  turn={said}
+                  streaming={undefined}
+                  you={you}
+                  canSend={canSend}
+                  onOpenThread={() => onOpenThread(said)}
+                />
+              ))}
+            </MeetingMessage>
           ) : (
             <Exchange
               key={turn.id}
@@ -126,7 +141,7 @@ export function Conversation({
           label="Send message"
           placeholder={`Message ${agent.name}`}
           note={
-            last && !last.call && isOpen(last)
+            last && !last.call && !last.meeting && isOpen(last)
               ? queuedLabel(agent.activity).replace(
                   'Queued',
                   'Your message queues',

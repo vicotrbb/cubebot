@@ -220,6 +220,10 @@ pub struct Turn {
     pub creates: bool,
     #[serde(default)]
     pub attachments: Vec<TurnFile>,
+    #[serde(default)]
+    pub talk_only: bool,
+    #[serde(default)]
+    pub meeting: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -704,6 +708,8 @@ mod tests {
             attachments: Vec::new(),
             connections: Vec::new(),
             in_task: false,
+            talk_only: false,
+            meeting: None,
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));

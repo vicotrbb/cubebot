@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.meeting_id,\n            CASE WHEN a.account_id IS NOT NULL THEN 'account'\n                WHEN a.agent_id IS NOT NULL THEN 'agent' ELSE 'guest' END AS \"kind!\",\n            COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, a.guest_name) AS \"name!\"\n        FROM meeting_attendance a\n        LEFT JOIN human_accounts h ON h.id=a.account_id\n        LEFT JOIN agents g ON g.id=a.agent_id\n        WHERE a.meeting_id=ANY($1)\n        GROUP BY 1, 2, 3\n        ORDER BY a.meeting_id, min(a.joined_at)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meeting_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "f71a6faeae38a7fa6d1b70a76c150a543cbc506ea387b55bf0be8c220f130fe1"
+}

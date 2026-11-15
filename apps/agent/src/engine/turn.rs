@@ -9,7 +9,7 @@ use cubebot_protocol::{
 };
 use cubebot_providers::{
     Anthropic, Error, Event as ProviderEvent, FunctionCall, Gemini, Grok, Limits, Message, OpenAi,
-    OpenRouter, Provider, Reply, Request, Usage,
+    OpenRouter, Provider, Reply, Request, Tool, Usage,
 };
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use std::{
@@ -312,8 +312,52 @@ async fn start<P: Provider>(
     if !capabilities.tool_calls {
         return failed("provider_rejected");
     }
-    if let Some(registry) = registry {
+    if let Some(registry) = registry.filter(|_| !turn.talk_only) {
         registry.connect_mcp(&turn.mcp_servers).await;
+    }
+    let tools = offered(turn, registry, connections);
+    let limits = if capabilities.model_limits {
+        tokio::select! {
+            limits = provider.limits(&turn.model, &turn.api_key) => limits,
+            _ = cancel.wait_for(|cancelled| *cancelled) => return failed("cancelled"),
+        }
+    } else {
+        Ok(Limits::default())
+    };
+    let limits = match limits {
+        Ok(limits) => limits,
+        Err(error) => return failed(error.code()),
+    };
+    let Some(window) = turn.context_window.or(limits.context_window) else {
+        return failed("provider_invalid_response");
+    };
+    let images = crate::files::images(skills.client(), &turn.attachments).await;
+    let mut context = Context::assemble(turn, tools, window, images);
+    if let Some(connected) = connections.prompt().filter(|_| !turn.talk_only) {
+        context.system = format!("{}\n\n{connected}", context.system);
+    }
+    Session {
+        provider: &provider,
+        turn,
+        key: (turn.api_key.clone(), turn.api_key_expires_at),
+        max_output_tokens: limits.max_output_tokens,
+        run,
+        store,
+        tools: registry,
+        memories,
+        skills,
+        collaboration,
+        connections,
+        cancel,
+        desktop: None,
+    }
+    .converse(&mut context)
+    .await
+}
+
+fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) -> Vec<Tool> {
+    if turn.talk_only {
+        return Vec::new();
     }
     let mut tools = crate::memory::definitions();
     tools.extend(crate::skills::definitions());
@@ -342,43 +386,7 @@ async fn start<P: Provider>(
             .flat_map(Registry::definitions)
             .filter(|tool| !(turn.task && tool.computer)),
     );
-    let limits = if capabilities.model_limits {
-        tokio::select! {
-            limits = provider.limits(&turn.model, &turn.api_key) => limits,
-            _ = cancel.wait_for(|cancelled| *cancelled) => return failed("cancelled"),
-        }
-    } else {
-        Ok(Limits::default())
-    };
-    let limits = match limits {
-        Ok(limits) => limits,
-        Err(error) => return failed(error.code()),
-    };
-    let Some(window) = turn.context_window.or(limits.context_window) else {
-        return failed("provider_invalid_response");
-    };
-    let images = crate::files::images(skills.client(), &turn.attachments).await;
-    let mut context = Context::assemble(turn, tools, window, images);
-    if let Some(connected) = connections.prompt() {
-        context.system = format!("{}\n\n{connected}", context.system);
-    }
-    Session {
-        provider: &provider,
-        turn,
-        key: (turn.api_key.clone(), turn.api_key_expires_at),
-        max_output_tokens: limits.max_output_tokens,
-        run,
-        store,
-        tools: registry,
-        memories,
-        skills,
-        collaboration,
-        connections,
-        cancel,
-        desktop: None,
-    }
-    .converse(&mut context)
-    .await
+    tools
 }
 
 struct Session<'a, P> {
@@ -522,6 +530,9 @@ impl<P: Provider> Session<'_, P> {
 
     /// Connection tools a search found join the context for the rest of the turn.
     fn load(&self, context: &mut Context, calls: &[FunctionCall]) {
+        if self.turn.talk_only {
+            return;
+        }
         let queries = calls
             .iter()
             .filter(|call| call.name == crate::connections::FIND)
@@ -575,7 +586,7 @@ impl<P: Provider> Session<'_, P> {
                 self.connections,
             ),
             calls,
-            self.turn.task,
+            (self.turn.task, self.turn.talk_only),
         );
         let mut running = FuturesUnordered::new();
         let mut unfinished = Vec::new();
@@ -642,7 +653,7 @@ impl<P: Provider> Session<'_, P> {
     }
 
     async fn extract(&mut self, context: &Context) -> Result<(), &'static str> {
-        let Some(prompt) = self.memories.extraction() else {
+        let Some(prompt) = self.memories.extraction().filter(|_| !self.turn.talk_only) else {
             return Ok(());
         };
         let mut messages = context.messages.clone();
@@ -724,7 +735,7 @@ fn prepare<'a>(
     tools: Option<&'a Registry>,
     (memories, skills, collaboration, connections): Knowledge<'a>,
     calls: &[FunctionCall],
-    task: bool,
+    lanes: (bool, bool),
 ) -> Vec<(Uuid, String, serde_json::Value, crate::tools::Running<'a>)> {
     calls
         .iter()
@@ -732,7 +743,7 @@ fn prepare<'a>(
             let id = Uuid::new_v4();
             let parsed = serde_json::from_str(&call.arguments);
             let running = match &parsed {
-                Ok(input) => lane(task, tools, &call.name, input).and_then(|()| {
+                Ok(input) => lane(lanes, tools, &call.name, input).and_then(|()| {
                     memories
                         .call(&call.name, input)
                         .or_else(|| skills.call(&call.name, id, input, tools))
@@ -770,11 +781,14 @@ fn on_desktop(tools: &Registry, call: &FunctionCall) -> bool {
 }
 
 fn lane(
-    task: bool,
+    (task, talk_only): (bool, bool),
     tools: Option<&Registry>,
     name: &str,
     input: &serde_json::Value,
 ) -> Result<(), &'static str> {
+    if talk_only {
+        return Err("this request offers no tools");
+    }
     if !task {
         return Ok(());
     }
@@ -847,7 +861,7 @@ mod tests {
             None,
             (&knowledge.0, &knowledge.1, &knowledge.2, &knowledge.3),
             &[call],
-            true,
+            (true, false),
         );
         let (_, _, _, running) = prepared.into_iter().next().unwrap();
         let Outcome::Exited { output, .. } = running.await else {
@@ -874,7 +888,7 @@ mod tests {
         };
         let calls = [call("main"), call("research")];
         let knowledge = (&knowledge.0, &knowledge.1, &knowledge.2, &knowledge.3);
-        let mut prepared = prepare(None, knowledge, &calls, true).into_iter();
+        let mut prepared = prepare(None, knowledge, &calls, (true, false)).into_iter();
         let outputs = [
             prepared.next().unwrap().3.await,
             prepared.next().unwrap().3.await,
@@ -888,6 +902,48 @@ mod tests {
         };
         assert!(main.contains("main browser session"), "{main}");
         assert_eq!(own, "The call was not run: no tool has this name.");
+    }
+
+    #[tokio::test]
+    async fn a_talk_only_turn_offers_no_tools_and_runs_none() {
+        let mut turn: Turn = serde_json::from_value(serde_json::json!({
+            "turn": Uuid::nil(), "sequence": 1, "message": "hi", "instructions": "",
+            "provider": "anthropic", "model": "m", "api_key": "k", "context_window": 1000,
+            "summary": null, "history": [], "prior": [], "knowledge_base": true,
+            "team_manager": true, "creates": true, "broadcast": true,
+        }))
+        .unwrap();
+        let connections = Connections::new(None, &[]);
+        let registry = Registry::with_desktop();
+        assert!(!offered(&turn, Some(&registry), &connections).is_empty());
+        turn.talk_only = true;
+        assert!(offered(&turn, Some(&registry), &connections).is_empty());
+        let knowledge = (
+            Memories::new(None),
+            Skills::new(None, Uuid::nil()),
+            Collaboration::new(None, Uuid::nil(), Default::default()),
+            connections,
+        );
+        let call = FunctionCall {
+            call_id: "call".into(),
+            name: "remember".into(),
+            arguments: r#"{"content":"the guest's claim","memory":null,"revision":null}"#.into(),
+        };
+        let prepared = prepare(
+            Some(&registry),
+            (&knowledge.0, &knowledge.1, &knowledge.2, &knowledge.3),
+            &[call],
+            (false, true),
+        );
+        let (_, _, _, running) = prepared.into_iter().next().unwrap();
+        let Outcome::Exited { output, .. } = running.await else {
+            panic!("a refusal is an exited outcome");
+        };
+        assert_eq!(
+            output,
+            "The call was not run: this request offers no tools."
+        );
+        assert!(knowledge.0.take().is_empty());
     }
 
     #[test]

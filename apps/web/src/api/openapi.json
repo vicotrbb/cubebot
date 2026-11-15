@@ -9821,11 +9821,95 @@
         },
         "additionalProperties": false
       },
+      "MeetingLine": {
+        "type": "object",
+        "required": ["kind", "speaker", "own", "text", "at"],
+        "properties": {
+          "at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "own": {
+            "type": "boolean"
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
       "MeetingLink": {
         "type": "object",
         "properties": {
           "link": {
             "type": ["string", "null"]
+          }
+        }
+      },
+      "MeetingPresence": {
+        "type": "object",
+        "required": ["kind", "name"],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingRecord": {
+        "type": "object",
+        "required": ["id", "title", "present", "transcript", "lines", "turns"],
+        "properties": {
+          "duration_seconds": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "ended_at": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lines": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "present": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingPresence"
+            }
+          },
+          "started_at": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "transcript": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingLine"
+            }
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            }
           }
         }
       },
@@ -12986,6 +13070,16 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "meeting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingRecord"
+              }
+            ]
           },
           "message": {
             "type": "string"

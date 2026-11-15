@@ -26,6 +26,9 @@ impl Context {
         let mut messages: Vec<Message> = turn.summary.iter().map(|text| summary(text)).collect();
         for exchange in &turn.history {
             messages.push(Message::User(exchange.message.clone()));
+            if exchange.response.is_empty() {
+                continue;
+            }
             messages.push(Message::Assistant(Reply {
                 text: exchange.response.clone(),
                 calls: Vec::new(),
@@ -173,6 +176,8 @@ mod tests {
             attachments: Vec::new(),
             connections: Vec::new(),
             in_task: false,
+            talk_only: false,
+            meeting: None,
         }
     }
     fn text(message: &Message) -> &str {
@@ -182,6 +187,15 @@ mod tests {
             Message::Assistant(reply) => &reply.text,
             Message::ToolResult { output, .. } => output,
         }
+    }
+
+    #[test]
+    fn an_exchange_nobody_answered_adds_only_its_message() {
+        let mut turn = turn(None);
+        turn.history[0].response.clear();
+        let context = Context::assemble(&turn, Vec::new(), 1000, Vec::new());
+        let texts: Vec<&str> = context.messages.iter().map(text).collect();
+        assert_eq!(texts, ["a", "b", "re b", "now"]);
     }
 
     #[test]

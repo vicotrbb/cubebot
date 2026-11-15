@@ -3917,8 +3917,37 @@ export interface components {
       /** @default [] */
       emails: string[]
     }
+    MeetingLine: {
+      /** Format: int64 */
+      at: number
+      kind: string
+      own: boolean
+      speaker: string
+      text: string
+    }
     MeetingLink: {
       link?: string | null
+    }
+    MeetingPresence: {
+      kind: string
+      name: string
+    }
+    MeetingRecord: {
+      /** Format: int64 */
+      duration_seconds?: number | null
+      /** Format: int64 */
+      ended_at?: number | null
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      lines: number
+      present: components['schemas']['MeetingPresence'][]
+      /** Format: int64 */
+      started_at?: number | null
+      summary?: string | null
+      title: string
+      transcript: components['schemas']['MeetingLine'][]
+      turns: components['schemas']['Turn'][]
     }
     MeetingSettings: {
       agent_mode: components['schemas']['AgentMode']
@@ -5159,6 +5188,7 @@ export interface components {
       error?: string | null
       /** Format: uuid */
       id: string
+      meeting?: null | components['schemas']['MeetingRecord']
       message: string
       message_attachments: components['schemas']['ReplyAttachment'][]
       origin?: null | components['schemas']['Origin']
