@@ -23,7 +23,7 @@ body:
     attributes:
       label: Version
       description: Shown under Platform › General.
-      placeholder: 0.2.16
+      placeholder: 0.3.0
     validations:
       required: true
   - type: dropdown
