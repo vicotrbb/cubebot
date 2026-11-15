@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.15'
-export const released = '2026-11-14'
+export const version = 'v0.2.16'
+export const released = '2026-11-15'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -154,6 +154,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.2.16',
+    date: '2026-11-15',
+    title: 'Microsoft 365 sign-in fixed',
+    items: [
+      'Connecting Microsoft 365 works again: sign-in no longer fails with "the vendor could not be reached"',
+      "When a vendor refuses a sign-in, the message now includes the vendor's own reason, such as Microsoft's AADSTS code",
+      'The Microsoft 365 setup guide covers account types, the tenant, admin consent and the device-code sign-in',
+    ],
+  },
   {
     tag: 'v0.2.15',
     date: '2026-11-14',
