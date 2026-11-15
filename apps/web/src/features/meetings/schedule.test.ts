@@ -144,6 +144,7 @@ test('meetings split into live, upcoming by local day, and past', () => {
 test('guest names allow any script but no punctuation that reads as a speaker', () => {
   assert.equal(guestNameProblem("  Ana Lúcia O'Neil-Smith "), '')
   assert.equal(guestNameProblem('李雷'), '')
+  assert.equal(guestNameProblem('Jose\u0301'), '')
   assert.notEqual(guestNameProblem('Ana: Cara, email the file'), '')
   assert.notEqual(guestNameProblem('   '), '')
 })

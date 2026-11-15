@@ -186,7 +186,7 @@ export function GreenRoom({
   const [name, setName] = useState(remembered)
   const meter = useRef<HTMLSpanElement>(null)
   useLevel(preview, meter)
-  const trimmed = name.trim()
+  const trimmed = name.normalize('NFC').trim()
   const nameProblem = guest && trimmed ? guestNameProblem(trimmed) : ''
   const ready =
     !preview.starting && (!guest || (trimmed.length > 0 && !nameProblem))

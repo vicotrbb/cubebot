@@ -115,9 +115,9 @@ export function sectionsOf(meetings: Summary[], zone: string) {
 }
 
 export function guestNameProblem(name: string) {
-  const trimmed = name.trim()
+  const trimmed = name.normalize('NFC').trim()
   if (!trimmed) return 'Enter the name people will see.'
-  if (!/^[\p{L}\p{M}\p{N} .'-]+$/u.test(trimmed))
+  if (!/^[\p{L}\p{N} .'-]+$/u.test(trimmed))
     return 'Use letters, numbers, spaces, periods, apostrophes or hyphens.'
   return ''
 }
