@@ -664,6 +664,16 @@ export function MeetingRoom({
             <Lock /> Locked
           </span>
         )}
+        {room.preparing && (
+          <span className="meeting-top__flag" role="status">
+            Getting speech ready
+            <progress
+              max={1}
+              value={room.preparing.share}
+              aria-label="Downloading speech models"
+            />
+          </span>
+        )}
       </header>
       <main ref={main} className="meeting-main">
         {presenter ? (

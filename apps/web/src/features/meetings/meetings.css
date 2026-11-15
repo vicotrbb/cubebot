@@ -48,6 +48,11 @@
   font-size: var(--t-xs);
   font-weight: var(--w-strong);
 }
+.meeting-top__flag progress {
+  width: 72px;
+  height: 6px;
+  accent-color: var(--orange);
+}
 .meeting-top__flag svg {
   width: 13px;
   height: 13px;
