@@ -154,7 +154,7 @@ export function modeLabel(
   return 'Watching the agent'
 }
 
-async function paint(
+export async function paint(
   context: CanvasRenderingContext2D,
   tiles: NonNullable<Frame['tiles']>,
 ) {
