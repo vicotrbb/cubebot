@@ -169,7 +169,7 @@ fn wait(clock: Instant, now: Instant) -> Option<Duration> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::room::Command;
+    use super::super::room::{Command, Seating};
     use super::*;
 
     #[test]
@@ -209,7 +209,7 @@ mod tests {
         tokio::spawn(async move { stage.play(0, &audio).await });
         let mut ahead = Duration::ZERO;
         while let Some(command) = sent.recv().await {
-            let Command::AgentAudio { slot, frame } = command else {
+            let Command::Agent(Seating::Audio { slot, frame }) = command else {
                 continue;
             };
             assert_eq!((slot, frame.len()), (3, 7 + 3_200));

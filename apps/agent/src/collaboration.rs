@@ -9,7 +9,7 @@ pub use vault::redacted;
 
 use crate::{control::MemoryClient, tools::Running};
 use cubebot_protocol::{
-    runtime::{Broadcast, Collaborate, RequestLogin},
+    runtime::{Broadcast, Collaborate, MeetingScreen, RequestLogin},
     terminal::Outcome,
 };
 use serde::Deserialize;
@@ -87,6 +87,14 @@ pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot
     tools
 }
 
+pub fn meeting_definitions() -> Vec<cubebot_providers::Tool> {
+    vec![cubebot_providers::Tool::strict(
+        "meeting_screen",
+        "Show your own desktop live to everyone in this meeting, guests included, or stop showing it. Share only when seeing your screen helps the people in the meeting, and stop when it no longer does.",
+        json!({"share":{"type":"boolean","description":"True to start showing your desktop to everyone in the meeting; false to stop."}}),
+    )]
+}
+
 impl Collaboration {
     pub fn new(client: Option<MemoryClient>, turn: Uuid, steering: Steering) -> Self {
         Self {
@@ -117,6 +125,7 @@ impl Collaboration {
             "send_message" => false,
             "request_login" => return Some(self.login(id, input)),
             "broadcast" => return Some(self.broadcast(id, input)),
+            "meeting_screen" => return Some(self.meeting_screen(input)),
             _ => {
                 return self
                     .vault(name, input)
@@ -186,6 +195,26 @@ impl Collaboration {
                 Ok(Ok(agents)) => (Some(0), format!("Broadcast to {agents} agents.")),
                 Ok(Err(reason)) => (Some(1), format!("Not broadcast: {reason}.")),
                 Err(_) => (None, "The orchestrator did not answer; the broadcast may or may not have been sent. Do not send it again.".into()),
+            };
+            Outcome::Exited { code, output }
+        }))
+    }
+
+    fn meeting_screen(&self, input: &Value) -> Result<Running<'_>, &'static str> {
+        let share = input["share"]
+            .as_bool()
+            .ok_or("share must be true or false")?;
+        let request = MeetingScreen { share };
+        Ok(Box::pin(async move {
+            let sent = match &self.client {
+                Some(client) => client.meeting_screen(self.turn, &request).await,
+                None => Err(crate::control::Error::Unavailable(None)),
+            };
+            let (code, output) = match sent {
+                Ok(Ok(())) if share => (Some(0), "Everyone in the meeting now sees your desktop.".to_owned()),
+                Ok(Ok(())) => (Some(0), "Your desktop is no longer shown in the meeting.".to_owned()),
+                Ok(Err(reason)) => (Some(1), format!("Not changed: {reason}")),
+                Err(_) => (None, "The orchestrator did not answer; the meeting may or may not show your desktop.".into()),
             };
             Outcome::Exited { code, output }
         }))

@@ -524,7 +524,7 @@ async fn an_attachment_is_read_through_the_reply_and_only_by_who_may_read_it() {
         ("chart.png", Some("image/png"), 9)
     );
 
-    let console = cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None)
+    let console = cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None, None)
         .await
         .unwrap()
         .layer(Extension(storage));

@@ -1,3 +1,4 @@
+use super::screens::{self, Answer, Presenter};
 use super::wire::{self, Client, Kind, Media, Participant, Server, Stream, Waiting};
 use crate::agents::Avatar;
 use crate::identity::audit::Event as Audit;
@@ -18,7 +19,6 @@ const CODEC_CHARS: usize = 64;
 const EMPTY_GRACE: Duration = Duration::from_secs(300);
 const KEYFRAME_SPACING: Duration = Duration::from_secs(1);
 const ENDED: &str = "The meeting has ended.";
-const NO_AGENT_SCREENS: &str = "Agents cannot share their screen in meetings yet.";
 const FULL_NOTICE: &str = "The meeting is full.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -60,6 +60,11 @@ pub enum Event {
     },
     AgentRemoved {
         slot: u16,
+    },
+    Present {
+        agent: Uuid,
+        share: bool,
+        presenter: Presenter,
     },
 }
 
@@ -133,19 +138,7 @@ pub(super) enum Command {
     Subscribe {
         events: mpsc::Sender<Event>,
     },
-    AddAgent {
-        agent: Uuid,
-        name: String,
-        avatar: Avatar,
-        reply: oneshot::Sender<Option<u16>>,
-    },
-    RemoveAgent {
-        slot: u16,
-    },
-    AgentAudio {
-        slot: u16,
-        frame: Bytes,
-    },
+    Agent(Seating),
     AgentScreen {
         slot: u16,
         sharing: bool,
@@ -153,6 +146,31 @@ pub(super) enum Command {
     Announce {
         message: Server,
         to: Option<u16>,
+    },
+}
+
+pub(super) enum Seating {
+    Add {
+        agent: Uuid,
+        name: String,
+        avatar: Avatar,
+        reply: oneshot::Sender<Option<u16>>,
+    },
+    Remove {
+        slot: u16,
+    },
+    Audio {
+        slot: u16,
+        frame: Bytes,
+    },
+    Present {
+        agent: Uuid,
+        share: bool,
+        reply: oneshot::Sender<Answer>,
+    },
+    MayPresent {
+        slot: u16,
+        agents: Vec<Uuid>,
     },
 }
 
@@ -193,6 +211,7 @@ struct Seat {
     blocked: HashSet<(u16, Stream)>,
     asked: HashMap<Stream, Instant>,
     attendance: Option<Uuid>,
+    presents: HashSet<Uuid>,
 }
 
 impl Seat {
@@ -210,6 +229,7 @@ impl Seat {
             blocked: HashSet::new(),
             asked: HashMap::new(),
             attendance: None,
+            presents: HashSet::new(),
         }
     }
 
@@ -221,14 +241,22 @@ impl Seat {
     }
 
     fn agent(&self) -> bool {
-        matches!(self.who, Who::Agent { .. })
+        self.agent_id().is_some()
+    }
+
+    fn agent_id(&self) -> Option<Uuid> {
+        match self.who {
+            Who::Agent { agent, .. } => Some(agent),
+            _ => None,
+        }
     }
 
     fn guest(&self) -> bool {
         matches!(self.who, Who::Guest { .. })
     }
 
-    fn participant(&self, slot: u16, owner: Uuid, members: bool) -> Participant {
+    fn participant(&self, slot: u16, owner: Uuid, viewer: Option<&HashSet<Uuid>>) -> Participant {
+        let members = viewer.is_some();
         let (kind, account, agent, avatar) = match &self.who {
             Who::Member(account) => (Kind::Person, Some(*account), None, None),
             Who::Guest { .. } => (Kind::Guest, None, None, None),
@@ -246,6 +274,9 @@ impl Seat {
             camera: self.camera,
             screen: self.screen,
             hand: self.hand,
+            can_present: agent
+                .zip(viewer)
+                .map(|(agent, presents)| presents.contains(&agent)),
         }
     }
 }
@@ -349,7 +380,19 @@ impl Room {
             Command::Link { token } => self.relink(token),
             Command::Flags { open_join, locked } => self.flags(open_join, locked),
             Command::Subscribe { events } => self.events = Some(events),
-            Command::AddAgent {
+            Command::Agent(seating) => self.seating(seating),
+            Command::AgentScreen { slot, sharing } => self.agent_screen(slot, sharing),
+            Command::Announce { message, to } => self.announce(&message, to),
+        }
+        while let Some(slot) = self.slow.pop() {
+            tracing::warn!(meeting = %self.id, slot, "meeting participant too far behind");
+            self.leave(slot, None);
+        }
+    }
+
+    fn seating(&mut self, seating: Seating) {
+        match seating {
+            Seating::Add {
                 agent,
                 name,
                 avatar,
@@ -357,14 +400,14 @@ impl Room {
             } => {
                 let _ = reply.send(self.add_agent(agent, name, avatar));
             }
-            Command::RemoveAgent { slot } => self.remove_agent(slot),
-            Command::AgentAudio { slot, frame } => self.agent_audio(slot, frame),
-            Command::AgentScreen { slot, sharing } => self.agent_screen(slot, sharing),
-            Command::Announce { message, to } => self.announce(&message, to),
-        }
-        while let Some(slot) = self.slow.pop() {
-            tracing::warn!(meeting = %self.id, slot, "meeting participant too far behind");
-            self.leave(slot, None);
+            Seating::Remove { slot } => self.remove_agent(slot),
+            Seating::Audio { slot, frame } => self.agent_audio(slot, frame),
+            Seating::Present {
+                agent,
+                share,
+                reply,
+            } => self.agent_present(agent, share, reply),
+            Seating::MayPresent { slot, agents } => self.may_present(slot, agents),
         }
     }
 
@@ -432,25 +475,30 @@ impl Room {
         }
     }
 
+    fn listing(&self, viewer: Option<&HashSet<Uuid>>) -> Message {
+        let participants = self
+            .seats
+            .iter()
+            .filter(|(_, seat)| seat.admitted)
+            .map(|(&slot, seat)| seat.participant(slot, self.owner, viewer))
+            .collect();
+        Server::Roster { participants }.message()
+    }
+
     fn roster(&mut self) {
-        let listed = |members: bool| {
-            let participants = self
-                .seats
-                .iter()
-                .filter(|(_, seat)| seat.admitted)
-                .map(|(&slot, seat)| seat.participant(slot, self.owner, members))
-                .collect();
-            Server::Roster { participants }.message()
-        };
-        let (members, guests) = (listed(true), listed(false));
-        for (&slot, seat) in &self.seats {
-            if seat.admitted {
-                let roster = if seat.member().is_some() {
-                    &members
-                } else {
-                    &guests
-                };
-                tell(&mut self.slow, slot, seat, roster.clone());
+        let guests = self.listing(None);
+        let rosters: Vec<(u16, Message)> = self
+            .seats
+            .iter()
+            .filter(|(_, seat)| seat.admitted && seat.out.is_some())
+            .map(|(&slot, seat)| match seat.member() {
+                Some(_) => (slot, self.listing(Some(&seat.presents))),
+                None => (slot, guests.clone()),
+            })
+            .collect();
+        for (slot, roster) in rosters {
+            if let Some(seat) = self.seats.get(&slot) {
+                tell(&mut self.slow, slot, seat, roster);
             }
         }
     }
@@ -676,7 +724,7 @@ impl Room {
                 height,
             } => self.track(slot, stream, codec, (width, height)),
             Client::WantKeyframe { source, stream } => self.ask_keyframe(source, stream),
-            Client::Present { .. } => self.present(slot),
+            Client::Present { source, share } => self.present(slot, source, share),
             ordered @ (Client::Admit { .. }
             | Client::Deny { .. }
             | Client::Remove { .. }
@@ -735,11 +783,22 @@ impl Room {
         self.broadcast(&server, Some(slot));
     }
 
-    fn present(&mut self, slot: u16) {
-        let notice = Server::Notice {
-            text: NO_AGENT_SCREENS.into(),
+    fn present(&mut self, slot: u16, source: u16, share: bool) {
+        let Some(account) = self.seats.get(&slot).and_then(Seat::member) else {
+            let notice = Server::Notice {
+                text: screens::GUESTS.into(),
+            };
+            return self.send(slot, &notice);
         };
-        self.send(slot, &notice);
+        let Some(agent) = self.seats.get(&source).and_then(Seat::agent_id) else {
+            return;
+        };
+        let presenter = Presenter::Member { slot, account };
+        self.emit(Event::Present {
+            agent,
+            share,
+            presenter,
+        });
     }
 
     fn waiting_slot(&self, id: &str) -> Option<(u16, String)> {
@@ -859,6 +918,30 @@ impl Room {
     fn agent_audio(&self, slot: u16, frame: Bytes) {
         if self.seats.get(&slot).is_some_and(Seat::agent) {
             self.relay_audio(slot, &Message::Binary(frame));
+        }
+    }
+
+    fn agent_present(&mut self, agent: Uuid, share: bool, reply: oneshot::Sender<Answer>) {
+        if !self
+            .seats
+            .values()
+            .any(|seat| seat.agent_id() == Some(agent))
+        {
+            let _ = reply.send(Err(screens::NOT_SEATED));
+            return;
+        }
+        let presenter = Presenter::Agent(reply);
+        self.emit(Event::Present {
+            agent,
+            share,
+            presenter,
+        });
+    }
+
+    fn may_present(&mut self, slot: u16, agents: Vec<Uuid>) {
+        if let Some(seat) = self.seats.get_mut(&slot) {
+            seat.presents.extend(agents);
+            self.roster();
         }
     }
 

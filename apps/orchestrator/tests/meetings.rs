@@ -1173,3 +1173,99 @@ async fn an_agent_uninvited_during_the_meeting_leaves_and_one_invited_joins_at_o
     )
     .await;
 }
+
+async fn agent_seat(socket: &mut Socket, check: impl Fn(&Value) -> bool) -> Value {
+    loop {
+        let roster = until(socket, "roster").await;
+        let seats = roster["participants"].as_array().unwrap();
+        if let Some(agent) = seats.iter().find(|seat| seat["kind"] == "agent")
+            && check(agent)
+        {
+            return agent.clone();
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_member_who_may_view_an_agents_desktop_shows_it_to_everyone_and_a_guest_may_not() {
+    use cubebot_orchestrator::agents::sandbox::{Desktop, Runtime};
+    let w = world().await;
+    let cara = agent(&w, "Cara").await;
+    let grant = GrantRequest {
+        request_id: Uuid::new_v4(),
+        recipient: Recipient::User { id: w.bo.id },
+        capability: Capability::BrowserView,
+        scope: Scope::Agent { id: cara },
+    };
+    w.identity.grant(&w.admin, &grant).await.unwrap();
+    let desktop = Desktop::new(
+        Arc::new(crate::desktop_http::StandIn),
+        &Runtime::Container { class: None },
+    );
+    let meetings =
+        Meetings::new(w.pool.clone(), None, Some(CONSOLE.into())).with_desktop(Some(desktop));
+    let input = new(json!({"title": "Demo", "open_join": true,
+        "invite": {"agents": [cara], "accounts": [w.bo.id, w.cy.id]}}));
+    let (meeting, _) = meetings.create(&w.admin, &input).await.unwrap();
+    let router =
+        cubebot_orchestrator::api::meetings_router(w.pool.clone(), CONSOLE, meetings.clone());
+    let (origin, task) = http_server(router).await;
+    let served = Served {
+        origin,
+        _task: task,
+    };
+
+    let (mut bo, _) = member(&served, &token_of(&w, "bob").await, meeting.id).await;
+    let seat = agent_seat(&mut bo, |agent| agent["can_present"] == true).await;
+    let slot = seat["slot"].clone();
+    let (mut cy, _) = member(&served, &token_of(&w, "cyd").await, meeting.id).await;
+    let seen = agent_seat(&mut cy, |_| true).await;
+    assert_eq!(seen["can_present"], false);
+    let mut dee = guest(&served, meeting.link.as_ref().unwrap(), "Dee").await;
+    let seen = agent_seat(&mut dee, |_| true).await;
+    assert!(seen.get("can_present").is_none());
+
+    say(
+        &mut dee,
+        json!({"kind": "present", "source": slot, "share": true}),
+    )
+    .await;
+    let notice = until(&mut dee, "notice").await;
+    assert_eq!(
+        notice["text"],
+        "Only signed-in members can ask an agent to share its screen."
+    );
+    say(
+        &mut cy,
+        json!({"kind": "present", "source": slot, "share": true}),
+    )
+    .await;
+    let notice = until(&mut cy, "notice").await;
+    assert_eq!(notice["text"], "You may not view this agent's desktop.");
+
+    say(
+        &mut bo,
+        json!({"kind": "present", "source": slot, "share": true}),
+    )
+    .await;
+    let frame = until(&mut dee, "desktop").await;
+    assert_eq!(frame["source"], slot);
+    assert_eq!(frame["tiles"][0]["png"], "iVBORw0KGgo=");
+    agent_seat(&mut bo, |agent| agent["screen"] == true).await;
+    until(&mut cy, "desktop").await;
+
+    say(
+        &mut bo,
+        json!({"kind": "present", "source": slot, "share": false}),
+    )
+    .await;
+    let ended = loop {
+        let frame = until(&mut dee, "desktop").await;
+        if frame["ended"] == true {
+            break frame;
+        }
+    };
+    assert_eq!((ended["source"].clone(), ended.get("tiles")), (slot, None));
+    agent_seat(&mut bo, |agent| agent["screen"] == false).await;
+}

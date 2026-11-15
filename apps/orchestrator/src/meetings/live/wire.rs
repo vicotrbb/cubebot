@@ -182,6 +182,8 @@ pub struct Participant {
     pub camera: bool,
     pub screen: bool,
     pub hand: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub can_present: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -396,6 +398,7 @@ mod tests {
             camera: false,
             screen: false,
             hand: false,
+            can_present: None,
         };
         assert_eq!(
             text(&Server::Roster {

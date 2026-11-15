@@ -2,18 +2,20 @@ mod attendants;
 mod floor;
 mod hearing;
 mod room;
+mod screens;
 mod socket;
 mod voices;
 pub mod wire;
 
 pub use room::{Event, Refusal};
+pub use screens::{Answer, Presenter};
 pub use socket::{Entry, Recheck};
 
 use super::summary::summarize;
-use crate::agents::Avatar;
+use crate::agents::{Avatar, sandbox::Desktop};
 use crate::connections::Connections;
 use crate::speech::Speech;
-use room::{Command, Joined, Joiner, Loaded, Record, Room, Who};
+use room::{Command, Joined, Joiner, Loaded, Record, Room, Seating, Who};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -28,8 +30,9 @@ const EVENTS: usize = 1024;
 pub struct Live {
     pool: PgPool,
     rooms: Arc<Mutex<HashMap<Uuid, Handle>>>,
-    speech: Speech,
+    pub(super) speech: Speech,
     connections: Option<Connections>,
+    pub(super) desktop: Option<Desktop>,
 }
 
 #[derive(Clone)]
@@ -45,6 +48,7 @@ impl Live {
             rooms: Arc::default(),
             speech,
             connections,
+            desktop: None,
         }
     }
 
@@ -181,23 +185,24 @@ impl Handle {
 
     pub async fn add_agent(&self, agent: Uuid, name: String, avatar: Avatar) -> Option<u16> {
         let (reply, answer) = oneshot::channel();
-        let add = Command::AddAgent {
+        let add = Seating::Add {
             agent,
             name,
             avatar,
             reply,
         };
-        self.command(add).await;
+        self.command(Command::Agent(add)).await;
         answer.await.ok().flatten()
     }
 
     pub async fn remove_agent(&self, slot: u16) -> bool {
-        self.command(Command::RemoveAgent { slot }).await
+        self.command(Command::Agent(Seating::Remove { slot })).await
     }
 
     pub async fn agent_audio(&self, slot: u16, rate: u32, pcm: &[u8]) -> bool {
         let frame = wire::audio(slot, rate, pcm);
-        self.command(Command::AgentAudio { slot, frame }).await
+        self.command(Command::Agent(Seating::Audio { slot, frame }))
+            .await
     }
 
     pub async fn agent_screen(&self, slot: u16, sharing: bool) -> bool {
@@ -206,6 +211,22 @@ impl Handle {
 
     pub async fn announce(&self, message: Server, to: Option<u16>) -> bool {
         self.command(Command::Announce { message, to }).await
+    }
+
+    pub async fn present(&self, agent: Uuid, share: bool) -> Answer {
+        let (reply, answer) = oneshot::channel();
+        let present = Seating::Present {
+            agent,
+            share,
+            reply,
+        };
+        self.command(Command::Agent(present)).await;
+        answer.await.unwrap_or(Err(Refusal::Gone.reason()))
+    }
+
+    pub async fn may_present(&self, slot: u16, agents: Vec<Uuid>) -> bool {
+        self.command(Command::Agent(Seating::MayPresent { slot, agents }))
+            .await
     }
 }
 

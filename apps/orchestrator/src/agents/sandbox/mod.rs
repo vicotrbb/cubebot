@@ -12,7 +12,9 @@ use std::{
     pin::Pin,
     sync::{Arc, Mutex},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+
+const RESPONSE_LIMIT: u64 = 32 << 20;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -101,7 +103,7 @@ type Opening = Pin<Box<dyn Future<Output = Result<ExecChannel, Error>> + Send>>;
 #[derive(Clone)]
 pub struct Desktop {
     open: Arc<dyn Fn(AgentId) -> Opening + Send + Sync>,
-    pub viewers: Arc<Mutex<HashMap<AgentId, usize>>>,
+    viewers: Arc<Mutex<HashMap<AgentId, usize>>>,
 }
 
 impl Desktop {
@@ -119,6 +121,66 @@ impl Desktop {
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn open(&self, agent: AgentId) -> Result<ExecChannel, Error> {
         (self.open)(agent).await
+    }
+
+    pub async fn channel(&self, agent: AgentId) -> Result<DesktopChannel, Error> {
+        Ok(DesktopChannel::new(self.open(agent).await?))
+    }
+
+    fn viewers(&self) -> std::sync::MutexGuard<'_, HashMap<AgentId, usize>> {
+        self.viewers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub fn watch(&self, agent: AgentId) {
+        *self.viewers().entry(agent).or_default() += 1;
+    }
+
+    pub fn unwatch(&self, agent: AgentId) -> bool {
+        let mut viewers = self.viewers();
+        let count = viewers.entry(agent).or_default();
+        *count = count.saturating_sub(1);
+        let last = *count == 0;
+        if last {
+            viewers.remove(&agent);
+        }
+        last
+    }
+}
+
+pub type ChannelError = Box<dyn std::error::Error + Send + Sync>;
+
+pub struct DesktopChannel {
+    input: Box<dyn AsyncWrite + Send + Unpin>,
+    output: BufReader<Box<dyn AsyncRead + Send + Unpin>>,
+    _session: Box<dyn Send>,
+}
+
+impl DesktopChannel {
+    pub fn new(channel: ExecChannel) -> Self {
+        Self {
+            input: channel.stdin,
+            output: BufReader::new(channel.stdout),
+            _session: channel._session,
+        }
+    }
+
+    pub async fn request(
+        &mut self,
+        request: &cubebot_protocol::desktop::HostRequest,
+    ) -> Result<String, ChannelError> {
+        let mut line = serde_json::to_vec(request)?;
+        line.push(b'\n');
+        self.input.write_all(&line).await?;
+        self.input.flush().await?;
+        let mut response = Vec::new();
+        let mut bounded = (&mut self.output).take(RESPONSE_LIMIT);
+        bounded.read_until(b'\n', &mut response).await?;
+        if response.pop() != Some(b'\n') {
+            return Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into());
+        }
+        Ok(String::from_utf8(response).map_err(|error| error.utf8_error())?)
     }
 }
 

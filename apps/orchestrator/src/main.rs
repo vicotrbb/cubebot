@@ -264,8 +264,10 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             let storage = shared_files(&pool).await?;
             let controller = configured_controller(&pool).await?;
             let backups = backups(&pool, &url, storage.clone())?;
+            let desktop = controller.desktop();
             let Ok(router) =
-                cubebot_orchestrator::api::configured_router(pool, origin, config).await
+                cubebot_orchestrator::api::configured_router(pool, origin, config, desktop.clone())
+                    .await
             else {
                 controller
                     .release()
@@ -273,8 +275,8 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                     .map_err(failure("startup cleanup could not release ownership"))?;
                 return Err("identity configuration failed".into());
             };
-            let router =
-                with_storage(controller.routes(router), storage).layer(axum::Extension(backups));
+            let router = with_storage(controller.routes(router, desktop), storage)
+                .layer(axum::Extension(backups));
             Ok((router, Some(controller)))
         }
         Err(std::env::VarError::NotPresent) => {

@@ -1,4 +1,5 @@
 use crate::{
+    agents::runtime::{RuntimeAccess, RuntimeIdentity},
     identity::{Identity, IdentityError, audit::Event},
     meetings::{
         ChangeMeeting, EmailConnection, JoinedMeeting, Meeting, MeetingLink, MeetingSettings,
@@ -13,6 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
+use cubebot_protocol::runtime::MeetingScreen;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -20,6 +22,7 @@ use uuid::Uuid;
 struct Api {
     identity: Identity,
     meetings: Meetings,
+    runtime: RuntimeIdentity,
 }
 
 #[derive(utoipa::OpenApi)]
@@ -39,7 +42,8 @@ struct Api {
 ))]
 pub(super) struct Doc;
 
-pub(super) fn router(identity: Identity, meetings: Meetings) -> Router {
+pub(super) fn router(pool: sqlx::PgPool, identity: Identity, meetings: Meetings) -> Router {
+    let runtime = RuntimeIdentity::docker(pool);
     Router::new()
         .route("/api/meetings", get(list).post(create))
         .route(
@@ -56,8 +60,16 @@ pub(super) fn router(identity: Identity, meetings: Meetings) -> Router {
         .route("/api/meetings/{id}/link", post(link))
         .route("/api/meetings/{id}/live", get(live))
         .route("/api/meetings/link/{token}/join", post(join_link))
+        .route(
+            "/api/runtime/turns/{turn}/meeting-screen",
+            post(agent_screen),
+        )
         .layer(DefaultBodyLimit::max(32 * 1024))
-        .with_state(Api { identity, meetings })
+        .with_state(Api {
+            identity,
+            meetings,
+            runtime,
+        })
 }
 
 #[utoipa::path(get, path = "/api/meetings", operation_id = "list_meetings", responses((status = 200, body = Vec<MeetingSummary>)))]
@@ -244,4 +256,28 @@ async fn join_link(
     let actor = super::identity::actor(&api.identity, &headers).await?;
     let id = api.meetings.join_by_link(&actor, &token).await?;
     Ok(Json(JoinedMeeting { id }))
+}
+
+async fn agent_screen(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(turn): Path<Uuid>,
+    Json(input): Json<MeetingScreen>,
+) -> Result<Response, super::runtime::Failure> {
+    let bearer =
+        super::bearer(&headers).ok_or(super::runtime::Failure(StatusCode::UNAUTHORIZED))?;
+    let actor = api
+        .runtime
+        .authenticate(bearer, RuntimeAccess::Active)
+        .await?;
+    let live = api.meetings.live();
+    let answer = live.agent_screen(&actor, turn, input.share).await;
+    Ok(match answer {
+        Ok(Ok(_)) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(reason)) => super::refused(reason),
+        Err(error) => {
+            tracing::warn!(?error, "meeting screen request failed");
+            StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    })
 }

@@ -92,21 +92,27 @@ impl Controller {
             Mode::DatabaseOnly => axum::Router::new(),
         }
     }
-    pub fn routes(&self, console: axum::Router) -> axum::Router {
+    pub fn desktop(&self) -> Option<Desktop> {
+        match &self.mode {
+            Mode::Kubernetes(lifecycle) => Some(Desktop::new(
+                lifecycle.sandbox.clone(),
+                lifecycle.sandbox.layout.runtime(),
+            )),
+            Mode::Docker(lifecycle) => Some(Desktop::new(
+                lifecycle.sandbox.clone(),
+                lifecycle.sandbox.runtime(),
+            )),
+            Mode::DatabaseOnly => None,
+        }
+    }
+    pub fn routes(&self, console: axum::Router, desktop: Option<Desktop>) -> axum::Router {
         let router = console
             .merge(self.runtime_router())
             .layer(axum::Extension(self.installation()));
-        let desktop = match &self.mode {
-            Mode::Kubernetes(lifecycle) => Desktop::new(
-                lifecycle.sandbox.clone(),
-                lifecycle.sandbox.layout.runtime(),
-            ),
-            Mode::Docker(lifecycle) => {
-                Desktop::new(lifecycle.sandbox.clone(), lifecycle.sandbox.runtime())
-            }
-            Mode::DatabaseOnly => return router,
-        };
-        router.layer(axum::Extension(desktop))
+        match desktop {
+            Some(desktop) => router.layer(axum::Extension(desktop)),
+            None => router,
+        }
     }
     pub fn installation(&self) -> Installation {
         match &self.mode {

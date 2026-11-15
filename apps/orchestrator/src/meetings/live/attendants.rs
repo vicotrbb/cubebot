@@ -1,11 +1,17 @@
 use super::floor::{CHOOSER, Decision, Floor};
 use super::hearing::{Ears, Preparing};
 use super::room::idle;
+use super::screens::{
+    NOT_ALLOWED, NOT_SEATED, Presenter, SHARING, STOPPED, Sharing, TURNED_OFF, UNAVAILABLE, Watcher,
+};
 use super::voices::Voice;
 use super::wire::{AgentState, Server};
 use super::{Event, Handle, Live};
-use crate::agents::{AgentId, Avatar};
-use crate::identity::{Actor, IdentityError};
+use crate::agents::{AgentId, Avatar, sandbox::Desktop};
+use crate::identity::{
+    Actor, Identity, IdentityError,
+    access::{Capability, Scope},
+};
 use crate::meetings::AgentMode;
 use crate::speech::{self, Heard, Provider, Sentences, Tts};
 use crate::work::{Reply, ReplyEvent, Work};
@@ -113,6 +119,7 @@ struct Attendants {
     transcript: Vec<String>,
     following: Option<Following>,
     notes: mpsc::UnboundedSender<Note>,
+    screens: HashMap<Uuid, Sharing>,
 }
 
 #[tracing::instrument(skip_all, fields(meeting = %id))]
@@ -151,6 +158,7 @@ pub(super) async fn attend(live: Live, id: Uuid, room: Handle, inbox: Inbox) {
         transcript: Vec::new(),
         following: None,
         notes,
+        screens: HashMap::new(),
     };
     attendants.run(inbox, receiver).await;
 }
@@ -189,8 +197,13 @@ impl Attendants {
                     ears: None,
                 };
                 self.people.insert(slot, person);
+                self.screens.values().for_each(Sharing::repaint);
                 if !std::mem::replace(&mut self.opened, true) {
                     self.roll().await;
+                }
+                if let Some(account) = account {
+                    let agents = self.agents.keys().copied().collect();
+                    self.offer(slot, account, agents).await;
                 }
             }
             Event::Left { slot } => {
@@ -206,7 +219,107 @@ impl Attendants {
                     self.dismiss(agent, false).await;
                 }
             }
+            Event::Present {
+                agent,
+                share,
+                presenter,
+            } => self.present(agent, share, presenter).await,
         }
+    }
+
+    async fn screens_on(&self) -> bool {
+        let on = sqlx::query_scalar!("SELECT agent_screens FROM meeting_settings")
+            .fetch_one(&self.live.pool)
+            .await;
+        on.unwrap_or_else(|error| {
+            tracing::warn!(?error, "meeting settings unreadable");
+            false
+        })
+    }
+
+    async fn may_view(&self, account: Uuid, agent: Uuid) -> bool {
+        let pool = &self.live.pool;
+        let Ok(Some(member)) = actor(pool, account).await else {
+            return false;
+        };
+        let scope = Scope::Agent { id: agent };
+        let identity = Identity::new(pool.clone());
+        let allowed = identity.authorize(&member, scope, Capability::BrowserView);
+        allowed.await.is_ok()
+    }
+
+    async fn offer(&self, slot: u16, account: Uuid, agents: Vec<Uuid>) {
+        if agents.is_empty() || self.live.desktop.is_none() || !self.screens_on().await {
+            return;
+        }
+        let mut allowed = Vec::new();
+        for agent in agents {
+            if self.may_view(account, agent).await {
+                allowed.push(agent);
+            }
+        }
+        if !allowed.is_empty() {
+            self.room.may_present(slot, allowed).await;
+        }
+    }
+
+    async fn screen_allowed(
+        &self,
+        agent: Uuid,
+        share: bool,
+        presenter: &Presenter,
+    ) -> Result<Desktop, &'static str> {
+        if !self.agents.contains_key(&agent) {
+            return Err(NOT_SEATED);
+        }
+        let desktop = self.live.desktop.clone().ok_or(UNAVAILABLE)?;
+        if share && !self.screens_on().await {
+            return Err(TURNED_OFF);
+        }
+        if let Presenter::Member { account, .. } = presenter
+            && !self.may_view(*account, agent).await
+        {
+            return Err(NOT_ALLOWED);
+        }
+        Ok(desktop)
+    }
+
+    async fn present(&mut self, agent: Uuid, share: bool, presenter: Presenter) {
+        let answer = match self.screen_allowed(agent, share, &presenter).await {
+            Ok(desktop) if share => return self.share(agent, desktop, presenter),
+            Ok(_) => {
+                if let Some(sharing) = self.screens.get_mut(&agent) {
+                    sharing.stop();
+                }
+                Ok(STOPPED)
+            }
+            Err(refusal) => Err(refusal),
+        };
+        presenter.answer(&self.room, answer).await;
+    }
+
+    fn share(&mut self, agent: Uuid, desktop: Desktop, presenter: Presenter) {
+        let Some(slot) = self.agents.get(&agent).map(|present| present.slot) else {
+            return;
+        };
+        let room = self.room.clone();
+        if self.screens.get(&agent).is_some_and(Sharing::sharing) {
+            tokio::spawn(async move { presenter.answer(&room, Ok(SHARING)).await });
+            return;
+        }
+        let previous = self.screens.remove(&agent);
+        let watcher = Watcher::new(desktop, agent);
+        let (sharing, start) = Sharing::start(watcher, room.clone(), slot, previous);
+        self.screens.insert(agent, sharing);
+        tokio::spawn(async move {
+            let started = start.await.unwrap_or(false);
+            let answer = if started {
+                Ok(SHARING)
+            } else {
+                Err(UNAVAILABLE)
+            };
+            presenter.answer(&room, answer).await;
+        });
     }
 
     fn hear(&mut self, slot: u16, pcm: &[u8]) {
@@ -302,6 +415,14 @@ impl Attendants {
         };
         self.agents.insert(agent.id, present);
         self.state(slot, AgentState::Listening).await;
+        let members: Vec<(u16, Uuid)> = self
+            .people
+            .iter()
+            .filter_map(|(&slot, person)| Some((slot, person.account?)))
+            .collect();
+        for (member, account) in members {
+            self.offer(member, account, vec![agent.id]).await;
+        }
     }
 
     fn load_voice(&self, agent: Uuid) {
@@ -329,6 +450,7 @@ impl Attendants {
         let Some(present) = self.agents.remove(&agent) else {
             return;
         };
+        self.screens.remove(&agent);
         if self.floor.front().is_some_and(|(front, _)| front == agent) {
             self.following = None;
         }

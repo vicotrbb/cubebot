@@ -11,7 +11,7 @@ pub use public::{JoinedMeeting, PublicMeeting};
 pub use settings::{MeetingSettings, SaveMeetingSettings};
 
 use crate::{
-    agents::Avatar,
+    agents::{Avatar, sandbox::Desktop},
     connections::Connections,
     identity::{Actor, IdentityError, oidc::Config},
     speech::Speech,
@@ -230,7 +230,12 @@ impl Meetings {
     }
 
     pub fn with_speech(mut self, speech: Speech) -> Self {
-        self.live = live::Live::new(self.pool.clone(), self.connections.clone(), speech);
+        self.live.speech = speech;
+        self
+    }
+
+    pub fn with_desktop(mut self, desktop: Option<Desktop>) -> Self {
+        self.live.desktop = desktop;
         self
     }
 

@@ -373,6 +373,9 @@ fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) 
         turn.broadcast,
         turn.in_task,
     ));
+    if desktop && turn.meeting.is_some() {
+        tools.extend(crate::collaboration::meeting_definitions());
+    }
     if turn.team_manager {
         tools.extend(crate::collaboration::team_definitions());
     }
@@ -944,6 +947,29 @@ mod tests {
             "The call was not run: this request offers no tools."
         );
         assert!(knowledge.0.take().is_empty());
+    }
+
+    #[test]
+    fn meeting_screen_is_offered_only_in_a_meeting_turn_with_a_desktop_and_tools() {
+        let mut turn: Turn = serde_json::from_value(serde_json::json!({
+            "turn": Uuid::nil(), "sequence": 1, "message": "hi", "instructions": "",
+            "provider": "anthropic", "model": "m", "api_key": "k", "context_window": 1000,
+            "summary": null, "history": [], "prior": [],
+        }))
+        .unwrap();
+        let connections = Connections::new(None, &[]);
+        let desktop = Registry::with_desktop();
+        let offers = |turn: &Turn, registry: Option<&Registry>| {
+            offered(turn, registry, &connections)
+                .iter()
+                .any(|tool| tool.name == "meeting_screen")
+        };
+        assert!(!offers(&turn, Some(&desktop)));
+        turn.meeting = Some(Uuid::nil());
+        assert!(offers(&turn, Some(&desktop)));
+        assert!(!offers(&turn, None));
+        turn.talk_only = true;
+        assert!(!offers(&turn, Some(&desktop)));
     }
 
     #[test]

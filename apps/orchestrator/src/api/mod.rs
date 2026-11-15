@@ -126,9 +126,9 @@ pub fn meetings_router(
     origin: &str,
     meetings: crate::meetings::Meetings,
 ) -> Router {
-    let mut identity = crate::identity::Identity::new(pool);
+    let mut identity = crate::identity::Identity::new(pool.clone());
     identity.browser_origin = Some(origin.to_owned());
-    public::router(&identity, meetings.clone()).merge(meetings::router(identity, meetings))
+    public::router(&identity, meetings.clone()).merge(meetings::router(pool, identity, meetings))
 }
 
 pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
@@ -159,6 +159,7 @@ pub async fn configured_router(
     pool: sqlx::PgPool,
     origin: Option<String>,
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
+    desktop: Option<crate::agents::sandbox::Desktop>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
         .map(|path| crate::connections::Credentials::from_file(std::path::Path::new(&path)))
@@ -166,7 +167,7 @@ pub async fn configured_router(
         .map_err(|error| {
             crate::identity::IdentityError::CredentialUnavailable(Some(error.into()))
         })?;
-    configured_router_with_credentials(pool, origin, config, credentials).await
+    assembled(pool, origin, config, credentials, desktop).await
 }
 
 pub async fn configured_router_with_credentials(
@@ -174,6 +175,16 @@ pub async fn configured_router_with_credentials(
     origin: Option<String>,
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     credentials: Option<crate::connections::Credentials>,
+) -> Result<Router, crate::identity::IdentityError> {
+    assembled(pool, origin, config, credentials, None).await
+}
+
+async fn assembled(
+    pool: sqlx::PgPool,
+    origin: Option<String>,
+    config: Option<(crate::identity::oidc::Config, Option<String>)>,
+    credentials: Option<crate::connections::Credentials>,
+    desktop: Option<crate::agents::sandbox::Desktop>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let mut identity = crate::identity::Identity::new(pool.clone());
     if let Some(origin) = origin {
@@ -199,10 +210,11 @@ pub async fn configured_router_with_credentials(
         connections.clone(),
         identity.browser_origin.clone(),
     )?
-    .with_speech(speech.clone());
+    .with_speech(speech.clone())
+    .with_desktop(desktop);
     routes = routes
         .merge(public::router(&identity, meetings.clone()))
-        .merge(meetings::router(identity.clone(), meetings));
+        .merge(meetings::router(pool.clone(), identity.clone(), meetings));
     routes = routes.merge(calls::router(
         pool,
         identity.clone(),
