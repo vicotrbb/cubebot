@@ -59,8 +59,12 @@ struct TokenResponse {
 /// An OAuth endpoint's answer other than success.
 #[derive(Debug)]
 pub(super) enum Failure {
-    /// The vendor's OAuth error code, such as `invalid_grant` or `authorization_pending`.
-    Oauth(String),
+    /// The vendor's OAuth error code, such as `invalid_grant` or `authorization_pending`, and its
+    /// `error_description`, which names the actual cause (Microsoft's AADSTS codes live there).
+    Oauth {
+        code: String,
+        detail: Option<String>,
+    },
     /// Unreachable, a server fault or a malformed answer: nothing was decided.
     Unavailable(Option<Source>),
 }
@@ -85,8 +89,8 @@ impl From<sqlx::Error> for SignInError {
 impl From<Failure> for SignInError {
     fn from(failure: Failure) -> Self {
         match failure {
-            Failure::Oauth(code) => {
-                tracing::warn!(%code, "subscription sign-in refused");
+            Failure::Oauth { code, detail } => {
+                tracing::warn!(%code, ?detail, "subscription sign-in refused");
                 Self::Refused("sign_in_refused")
             }
             Failure::Unavailable(source) => Self::Unreachable(source),
@@ -247,9 +251,13 @@ async fn posted(
         #[derive(Deserialize)]
         struct Refusal {
             error: String,
+            error_description: Option<String>,
         }
         if let Ok(refusal) = serde_json::from_slice::<Refusal>(&body) {
-            return Err(Failure::Oauth(bounded(refusal.error)));
+            return Err(Failure::Oauth {
+                code: bounded(refusal.error),
+                detail: refusal.error_description.and_then(described),
+            });
         }
     }
     tracing::warn!(
@@ -264,6 +272,18 @@ fn bounded(mut code: String) -> String {
     code.retain(|character| character.is_ascii_alphanumeric() || "_-.".contains(character));
     code.truncate(64);
     code
+}
+
+/// A vendor's own explanation, shown to the person and logged, so it is bounded and single-line.
+fn described(text: String) -> Option<String> {
+    let line: String = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(400)
+        .collect();
+    (!line.is_empty()).then_some(line)
 }
 
 /// A token-endpoint request, validated; `previous` keeps a refresh token the vendor did not rotate.
@@ -399,7 +419,7 @@ impl Device {
             (1..=most).contains(&text.len()) && text.bytes().all(|b| b.is_ascii_graphic())
         };
         ((controlled || (ours(url.host_str()?) && url.scheme() == "https"))
-            && printable(&self.device_code, 1024)
+            && printable(&self.device_code, 16 * 1024)
             && printable(&self.user_code, 32)
             && (60..=3600).contains(&self.expires_in))
         .then(|| {
@@ -414,10 +434,9 @@ impl Device {
 /// A device-grant poll's answer short of tokens.
 pub(super) enum Waiting {
     /// Not approved yet; `slower` when the vendor asked to poll less often.
-    Pending {
-        slower: bool,
-    },
-    Refused(&'static str),
+    Pending { slower: bool },
+    /// The sign-in code to show, and the vendor's explanation when it gave one.
+    Refused(&'static str, Option<String>),
 }
 
 /// Polls the token endpoint for a device grant.
@@ -427,14 +446,14 @@ pub(super) async fn device_tokens(
 ) -> Result<Result<Grant, Waiting>, Failure> {
     match tokens(url, form, None).await {
         Ok(grant) => Ok(Ok(grant)),
-        Err(Failure::Oauth(code)) => Ok(Err(match code.as_str() {
+        Err(Failure::Oauth { code, detail }) => Ok(Err(match code.as_str() {
             "authorization_pending" => Waiting::Pending { slower: false },
             "slow_down" => Waiting::Pending { slower: true },
             "access_denied" | "authorization_denied" | "authorization_declined" => {
-                Waiting::Refused("sign_in_denied")
+                Waiting::Refused("sign_in_denied", detail)
             }
-            "expired_token" | "code_expired" => Waiting::Refused("sign_in_expired"),
-            _ => Waiting::Refused("sign_in_refused"),
+            "expired_token" | "code_expired" => Waiting::Refused("sign_in_expired", detail),
+            _ => Waiting::Refused("sign_in_refused", detail),
         })),
         Err(failure) => Err(failure),
     }
@@ -797,7 +816,7 @@ async fn trouble(
     failure: Failure,
 ) -> Result<(), IdentityError> {
     let (problem, cause) = match failure {
-        Failure::Oauth(code) => ("sign_in_again", code),
+        Failure::Oauth { code, .. } => ("sign_in_again", code),
         Failure::Unavailable(source) => (
             "refresh_failing",
             source.map(|source| source.to_string()).unwrap_or_default(),

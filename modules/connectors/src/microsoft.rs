@@ -263,7 +263,7 @@ static MANIFEST: Manifest = Manifest {
     guide: &[
         Step {
             title: "Register an app",
-            body: "In Microsoft Entra (or the Azure portal's App registrations) choose New registration. Name it Cubebot, choose \"Accounts in any organizational directory and personal Microsoft accounts\", and leave the redirect URI empty.",
+            body: "In Microsoft Entra (or the Azure portal), open App registrations and choose New registration. Name it Cubebot. Under Supported account types, choose \"Accounts in any organizational directory and personal Microsoft accounts\" to connect an outlook.com, hotmail.com or live.com address; a work or school account alone also works with \"this organizational directory only\". Leave the redirect URI empty and choose Register.",
             link: Some(
                 "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
             ),
@@ -271,21 +271,27 @@ static MANIFEST: Manifest = Manifest {
         },
         Step {
             title: "Allow public client flows",
-            body: "Under Authentication, set \"Allow public client flows\" to Yes and save. Cubebot signs in with a device code, so the app needs no secret and no redirect address, and this works behind NAT.",
+            body: "Open the app's Authentication page (in the newer Entra layout, its Settings tab), turn on \"Allow public client flows\" and choose Save. Without it Microsoft refuses the sign-in with AADSTS70002, \"must be marked as 'mobile'\". Cubebot signs in with a device code, so the app needs no client secret and no redirect URI, and it works behind NAT. A saved change can take a minute or two to apply.",
             link: None,
             copy: None,
         },
         Step {
             title: "Add API permissions",
-            body: "Under API permissions choose Add a permission › Microsoft Graph › Delegated permissions, and add these.",
+            body: "Under API permissions choose Add a permission › Microsoft Graph › Delegated permissions (not Application permissions), and add these; User.Read is usually there already. Only the products you tick below are asked for. A personal account approves them itself at sign-in. In a work or school tenant that lets users approve only some apps, an admin must also choose \"Grant admin consent\" on this page.",
             link: None,
             copy: Some(
                 "offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Files.ReadWrite Tasks.ReadWrite",
             ),
         },
         Step {
-            title: "Copy the client ID and sign in",
-            body: "Copy the Application (client) ID from the Overview page and paste it below. Then open the address shown, enter the code and sign in with the account to connect.",
+            title: "Fill in the tenant and client ID",
+            body: "From the app's Overview page, copy the Application (client) ID into the field below. For Tenant, match the account types you chose: common for any account, consumers for personal accounts only, organizations for work or school accounts only. An app limited to its own directory needs that directory's Directory (tenant) ID from the Overview page instead.",
+            link: None,
+            copy: None,
+        },
+        Step {
+            title: "Sign in with a code",
+            body: "Choose Sign in. Cubebot shows a short code and Microsoft's address; open it on any device, enter the code, pick the account to connect and accept the permissions. Cubebot finishes on its own a few seconds later. The code lasts 15 minutes; if it runs out, choose Sign in again. If Microsoft refuses, the message here includes its AADSTS code, which names the setting to fix.",
             link: None,
             copy: None,
         },

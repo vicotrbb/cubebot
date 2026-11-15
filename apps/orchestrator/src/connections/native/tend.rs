@@ -422,7 +422,7 @@ impl Connections {
 fn renewal(failure: Failure) -> Renewal {
     tracing::warn!(?failure, "connection refresh failed");
     match failure {
-        Failure::Oauth(_) => {
+        Failure::Oauth { .. } => {
             Renewal::Refused("The account refused the saved sign-in; sign in again.".into())
         }
         Failure::Unavailable(_) => {
