@@ -121,7 +121,7 @@ impl Connections {
                 })?;
                 Ok(None)
             }
-            Waiting::Refused(code) => {
+            Waiting::Refused(code, _) => {
                 self.sign_ins.finish(sign_in);
                 Err(SignInError::Refused(code))
             }

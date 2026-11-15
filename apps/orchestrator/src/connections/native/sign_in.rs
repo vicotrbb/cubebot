@@ -131,7 +131,21 @@ fn said(error: SignInError) -> ConnectError {
 
 impl From<Failure> for ConnectError {
     fn from(failure: Failure) -> Self {
-        said(failure.into())
+        let detail = match &failure {
+            Failure::Oauth { detail, .. } => detail.clone(),
+            Failure::Unavailable(_) => None,
+        };
+        explained(said(failure.into()), detail)
+    }
+}
+
+/// Adds the vendor's own explanation to a refusal, so the person sees what to fix.
+fn explained(error: ConnectError, detail: Option<String>) -> ConnectError {
+    match (error, detail) {
+        (ConnectError::Refused(message), Some(detail)) => {
+            ConnectError::Refused(format!("{message} The vendor said: {detail}"))
+        }
+        (error, _) => error,
     }
 }
 
@@ -297,7 +311,9 @@ impl Connections {
             subscriptions::device(url, &[("client_id", client_id), ("scope", &scopes)]).await?;
         let (page, interval) = device
             .validated(|_| true, self.controlled())
-            .ok_or(Failure::Unavailable(None))?;
+            .ok_or_else(|| {
+                Failure::Unavailable(Some("the device sign-in answer was malformed".into()))
+            })?;
         let step = Step::Device {
             device_code: device.device_code,
             interval,
@@ -452,7 +468,9 @@ impl Connections {
                 });
                 Ok(None)
             }
-            Err(Waiting::Refused(code)) => Err(said(SignInError::Refused(code))),
+            Err(Waiting::Refused(code, detail)) => {
+                Err(explained(said(SignInError::Refused(code)), detail))
+            }
         }
     }
 

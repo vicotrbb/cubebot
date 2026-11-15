@@ -534,6 +534,39 @@ async fn an_oauth_sign_in_lands_on_a_pasted_loopback_address_and_renews_before_e
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_refused_sign_in_shows_the_vendors_own_explanation() {
+    let f = fixture().await;
+    let identity = Identity::new(f.pool.clone());
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let vendor = Vendor::default();
+    let origin = vendor.serve().await;
+    let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]))
+        .with_vendor_for_loopback_tests(&origin);
+    vendor.answer(
+        "/login.microsoftonline.com/common/oauth2/v2.0/devicecode",
+        400,
+        json!({"error": "invalid_client", "error_description": "AADSTS70002: The provided client is not supported for this feature.\r\nThe client application must be marked as 'mobile.'"}),
+    );
+    let input: StartSignIn = serde_json::from_value(json!({"connector": "microsoft", "slug": "outlook", "auth": "oauth2",
+        "config": {"client_id": "11111111-2222-3333-4444-555555555555", "tenant": "common", "products": ["mail"]}})).unwrap();
+    let Err(ConnectError::Refused(message)) = connections
+        .start_connection_sign_in(admin.id, input, None)
+        .await
+    else {
+        panic!("a refusal");
+    };
+    assert!(
+        message.ends_with("The vendor said: AADSTS70002: The provided client is not supported for this feature. The client application must be marked as 'mobile.'"),
+        "{message}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn a_device_sign_in_waits_for_approval_without_any_redirect() {
     let f = fixture().await;
     let identity = Identity::new(f.pool.clone());
@@ -547,7 +580,9 @@ async fn a_device_sign_in_waits_for_approval_without_any_redirect() {
     let connections = Connections::new(f.pool.clone(), Credentials::new([7; 32]))
         .with_vendor_for_loopback_tests(&origin);
     let tenant = "/login.microsoftonline.com/organizations/oauth2/v2.0";
-    vendor.answer(&format!("{tenant}/devicecode"), 200, json!({"device_code": "device-secret", "user_code": "ABCD-EFGH", "verification_uri": "https://microsoft.com/devicelogin", "expires_in": 900, "interval": 1}));
+    // Microsoft's real device codes run past 1 KiB (1045 characters seen live).
+    let device_code = "F".repeat(1100);
+    vendor.answer(&format!("{tenant}/devicecode"), 200, json!({"device_code": device_code, "user_code": "ABCD-EFGH", "verification_uri": "https://microsoft.com/devicelogin", "expires_in": 900, "interval": 1}));
     let input: StartSignIn = serde_json::from_value(json!({"connector": "microsoft", "slug": "outlook", "auth": "oauth2",
         "config": {"client_id": "11111111-2222-3333-4444-555555555555", "tenant": "organizations", "products": ["mail"]}})).unwrap();
     let SignInStarted::Device {

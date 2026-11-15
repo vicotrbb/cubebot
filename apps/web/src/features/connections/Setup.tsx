@@ -49,7 +49,7 @@ export function Setup({
     callback && catalog.callback_redirect
       ? catalog.callback_redirect
       : catalog.loopback_redirect
-  const vendor = auth.kind === 'oauth2' || auth.kind === 'github_app'
+  const vendor = returnsHere(auth)
   return (
     <section className="sheet__section setup" aria-labelledby="setup-title">
       <Heading
@@ -125,6 +125,11 @@ function Heading({
       )}
     </div>
   )
+}
+
+/** Whether the vendor redirects back; a device-code sign-in never does. */
+function returnsHere(auth: Manifest['auth'][number]) {
+  return (auth.kind === 'oauth2' && !auth.device) || auth.kind === 'github_app'
 }
 
 /** With a public address the vendor can return here instead of to a pasted loopback page. */

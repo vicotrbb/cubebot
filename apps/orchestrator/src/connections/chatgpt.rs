@@ -257,7 +257,10 @@ pub(super) async fn refresh(
         .fetch_one(&mut **tx)
         .await
         .map_err(|error| Failure::Unavailable(Some(error.into())))?
-        .ok_or(Failure::Oauth("invalid_client".into()))?;
+        .ok_or(Failure::Oauth {
+            code: "invalid_client".into(),
+            detail: None,
+        })?;
     super::subscriptions::tokens(
         token_url(vendor)?,
         &[
@@ -277,7 +280,10 @@ pub(super) async fn revoke(
     client_id: Option<&str>,
     tokens: &Tokens,
 ) -> Result<(), Failure> {
-    let client_id = client_id.ok_or(Failure::Oauth("invalid_client".into()))?;
+    let client_id = client_id.ok_or(Failure::Oauth {
+        code: "invalid_client".into(),
+        detail: None,
+    })?;
     let url = super::subscriptions::endpoint(vendor, ISSUER, "api/accounts/oauth/revoke")?;
     super::subscriptions::post(
         url,
