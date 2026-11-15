@@ -170,6 +170,8 @@ PWA use is online, with local drafts and optional push. Cache the application sh
 
 A person can also call an agent ([Voice calls over the chat pipeline](docs/adr/console.md#voice-calls-over-the-chat-pipeline)). The browser streams 16 kHz PCM over a WebSocket to the orchestrator, whose speech module turns finished sentences into ordinary chat turns and the agent's streamed text into audio. The agent sees text only, and the conversation shows the whole call as one message. Embedded models download on first use into the orchestrator's data directory.
 
+People can also meet ([Meetings Cubebot owns](docs/adr/console.md#meetings-cubebot-owns)): each participant's browser sends audio and WebCodecs video over one WebSocket that the orchestrator relays to the others, transcribes per speaker, and answers through agents' ordinary chat turns spoken with the call pipeline. Guests reach only `/m/<token>` and `/api/public/meetings/`, which the chart can publish on a separate host.
+
 ## Operations and simplicity choices
 
 Use PostgreSQL-backed scheduling and inbox/outbox records instead of adding Redis, Kafka, or a workflow server. Keep application history in relational state instead of reconstructing everything from an event log. The workload does not yet justify a service mesh, separate vector database, S3 compatibility layer, custom agent CRDs, or multiple orchestration services.
