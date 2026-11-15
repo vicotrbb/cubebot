@@ -15,6 +15,7 @@ const VIDEO_HEADER: usize = 5;
 const SENDER_FRAMES: u32 = 200;
 const SENDER_BYTES: usize = 4_000_000 / 8;
 const SENDER_WINDOW: Duration = Duration::from_secs(1);
+const SENDER_TEXTS: u32 = 20;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -83,6 +84,7 @@ pub struct Budget {
     window: Instant,
     frames: u32,
     bytes: usize,
+    texts: u32,
 }
 
 impl Budget {
@@ -91,6 +93,7 @@ impl Budget {
             window: now,
             frames: 0,
             bytes: 0,
+            texts: 0,
         }
     }
 
@@ -104,6 +107,12 @@ impl Budget {
         self.frames += 1;
         self.bytes += size;
         true
+    }
+
+    pub fn allows_text(&mut self, size: usize, now: Instant) -> bool {
+        let allowed = self.allows(size, now) && self.texts < SENDER_TEXTS;
+        self.texts += u32::from(allowed);
+        allowed
     }
 }
 
@@ -336,6 +345,16 @@ mod tests {
         assert!(!bytes.allows(FRAME_LIMIT, start));
         assert!(bytes.allows(SENDER_BYTES - FRAME_LIMIT, start));
         assert!(!bytes.allows(1, start));
+    }
+
+    #[test]
+    fn a_sender_sends_at_most_20_text_frames_a_second_beside_its_media() {
+        let start = Instant::now();
+        let mut budget = Budget::new(start);
+        assert!((0..SENDER_TEXTS).all(|_| budget.allows_text(10, start)));
+        assert!(!budget.allows_text(10, start));
+        assert!(budget.allows(10, start), "media keeps its own budget");
+        assert!(budget.allows_text(10, start + SENDER_WINDOW));
     }
 
     #[test]

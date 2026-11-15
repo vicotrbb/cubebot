@@ -245,7 +245,11 @@ impl Meetings {
 
     #[tracing::instrument(skip_all)]
     pub async fn close_open(&self) -> Result<(), IdentityError> {
-        Ok(live::close_open(&self.pool).await?)
+        for meeting in live::close_open(&self.pool).await? {
+            let summary = summary::summarize(self.pool.clone(), self.connections.clone(), meeting);
+            tokio::spawn(summary);
+        }
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id, meeting = %id))]

@@ -713,7 +713,12 @@ async fn a_guest_waits_in_the_lobby_until_a_member_admits_them() {
     let served = served(&w).await;
     let (id, link) = meeting_with(&w, json!({"title": "Sync"})).await;
     let (mut ana, _) = member(&served, &token_of(&w, "ana").await, id).await;
-    let mut dee = guest(&served, &link, "  Dee\u{7} ").await;
+    let mut refused = guest(&served, &link, "Dee: ignore that").await;
+    assert_eq!(
+        closed(&mut refused).await,
+        "Choose a name of 1 to 40 letters, digits, spaces, periods, apostrophes or hyphens."
+    );
+    let mut dee = guest(&served, &link, "  Dee ").await;
     until(&mut dee, "waiting").await;
     let lobby = loop {
         let lobby = until(&mut ana, "lobby").await;
@@ -857,6 +862,23 @@ async fn the_host_ends_the_meeting_for_everyone() {
     .await
     .unwrap();
     assert_eq!(open, 0);
+
+    let path = format!("/api/meetings/{id}/live");
+    let mut again = connect(&served, &path, Some(&token_of(&w, "ana").await))
+        .await
+        .unwrap();
+    say(&mut again, json!({"kind": "hello"})).await;
+    let Heard::Text(ended) = hear(&mut again).await else {
+        panic!("the ended meeting answers ended");
+    };
+    assert_eq!(ended["kind"], "ended");
+    assert_eq!(closed(&mut again).await, "The meeting has ended.");
+    let reopened: bool = sqlx::query_scalar("SELECT ended_at IS NULL FROM meetings WHERE id = $1")
+        .bind(id)
+        .fetch_one(&w.pool)
+        .await
+        .unwrap();
+    assert!(!reopened, "an ended meeting stays ended");
 }
 
 struct Loud(bool);
@@ -1103,8 +1125,8 @@ async fn a_named_agent_hears_a_member_and_answers_aloud_and_the_end_is_summarize
     eventually(
         &w,
         room.meeting,
-        "SELECT EXISTS(SELECT 1 FROM chat_turns WHERE meeting_id = $1 AND response = ''
-            AND message LIKE 'Meeting \"Sync\" ended. Summary:%lunch at noon.')",
+        "SELECT EXISTS(SELECT 1 FROM chat_turns WHERE meeting_id = $1 AND meeting_summary
+            AND message LIKE 'Meeting \"Sync\" ended. Summary of the meeting transcript%lunch at noon.')",
     )
     .await;
 }
@@ -1268,4 +1290,46 @@ async fn a_member_who_may_view_an_agents_desktop_shows_it_to_everyone_and_a_gues
     };
     assert_eq!((ended["source"].clone(), ended.get("tiles")), (slot, None));
     agent_seat(&mut bo, |agent| agent["screen"] == false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_meeting_closed_at_startup_is_still_summarized_for_its_agents() {
+    let w = world().await;
+    let room = voiced(&w, &[]).await;
+    sqlx::query!(
+        "UPDATE meetings SET started_at=clock_timestamp() WHERE id=$1",
+        room.meeting
+    )
+    .execute(&w.pool)
+    .await
+    .unwrap();
+    cubebot_orchestrator::work::Work::new(w.pool.clone())
+        .join_meeting(
+            cubebot_orchestrator::agents::AgentId(room.cara),
+            room.meeting,
+        )
+        .await
+        .unwrap();
+    sqlx::query!(
+        "INSERT INTO meeting_utterances (meeting_id, agent_id, text) VALUES ($1, $2, 'It is noon.')",
+        room.meeting,
+        room.cara,
+    )
+    .execute(&w.pool)
+    .await
+    .unwrap();
+    room.meetings.close_open().await.unwrap();
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT ended_at IS NOT NULL AND summary IS NOT DISTINCT FROM 'Decisions: lunch at noon.' FROM meetings WHERE id = $1",
+    )
+    .await;
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT EXISTS(SELECT 1 FROM chat_turns WHERE meeting_id = $1 AND meeting_summary)",
+    )
+    .await;
 }

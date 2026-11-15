@@ -1,3 +1,5 @@
+use super::attendants::may_view;
+use super::room::idle;
 use super::wire::Server;
 use super::{Handle, Live};
 use crate::agents::runtime::RuntimeActor;
@@ -10,10 +12,11 @@ use std::future::Future;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
-use tokio::time::MissedTickBehavior;
+use tokio::time::{Instant, MissedTickBehavior};
 use uuid::Uuid;
 
 const POLL: Duration = Duration::from_millis(100);
+const REPAINT: Duration = Duration::from_secs(2);
 pub(super) const SHARING: &str = "Your desktop is now shown to everyone in the meeting.";
 pub(super) const STOPPED: &str = "The desktop is no longer shown in the meeting.";
 pub(super) const UNAVAILABLE: &str = "The agent's desktop is not available right now.";
@@ -24,6 +27,8 @@ pub(super) const NOT_ALLOWED: &str = "You may not view this agent's desktop.";
 pub(super) const GUESTS: &str = "Only signed-in members can ask an agent to share its screen.";
 const NOT_LIVE: &str = "The meeting is not live.";
 const NOT_MEETING: &str = "This turn is not part of a meeting.";
+const TALK_ONLY: &str = "This request may not share your desktop.";
+const NOT_PERMITTED: &str = "The person you are answering may not view your desktop.";
 
 pub type Answer = Result<&'static str, &'static str>;
 
@@ -162,8 +167,9 @@ async fn share<D: Desk>(
     let _ = started.send(opened.is_ok());
     match opened {
         Ok(()) => {
-            room.agent_screen(slot, true).await;
-            relay(&mut desk, &room, slot, &mut repaints).await;
+            let (refresh, refreshes) = mpsc::channel(1);
+            room.agent_screen(slot, Some(refresh)).await;
+            relay(&mut desk, &room, slot, (&mut repaints, refreshes)).await;
             ended(&room, slot).await;
         }
         Err(error) => tracing::info!(?error, slot, "meeting screen share not started"),
@@ -178,18 +184,40 @@ async fn ended(room: &Handle, slot: u16) {
         ended: true,
     };
     room.announce(ended, None).await;
-    room.agent_screen(slot, false).await;
+    room.agent_screen(slot, None).await;
 }
 
-async fn relay<D: Desk>(desk: &mut D, room: &Handle, slot: u16, repaints: &mut mpsc::Receiver<()>) {
+fn repaint_at(due: Option<Instant>, painted: Option<Instant>) -> Option<Instant> {
+    let now = Instant::now();
+    due.or_else(|| Some(painted.map_or(now, |at| (at + REPAINT).max(now))))
+}
+
+async fn relay<D: Desk>(
+    desk: &mut D,
+    room: &Handle,
+    slot: u16,
+    (repaints, mut refreshes): (&mut mpsc::Receiver<()>, mpsc::Receiver<()>),
+) {
     let mut ticks = tokio::time::interval(POLL);
     ticks.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let (mut due, mut painted) = (None, None);
     loop {
         let polled = tokio::select! {
             repaint = repaints.recv() => match repaint {
-                Some(()) => desk.open().await.map(|()| Vec::new()),
+                Some(()) => {
+                    due = repaint_at(due, painted);
+                    continue;
+                }
                 None => return,
             },
+            Some(()) = refreshes.recv() => {
+                due = repaint_at(due, painted);
+                continue;
+            }
+            () = idle(due) => {
+                (due, painted) = (None, Some(Instant::now()));
+                desk.open().await.map(|()| Vec::new())
+            }
             _ = ticks.tick() => desk.frame().await,
         };
         if !deliver(room, slot, polled).await {
@@ -228,9 +256,9 @@ impl Live {
         turn: Uuid,
         share: bool,
     ) -> Result<Answer, sqlx::Error> {
-        let meeting = sqlx::query_scalar!(
+        let asked = sqlx::query!(
             "
-            SELECT meeting_id
+            SELECT meeting_id, actor_id, talk_only
             FROM chat_turns
             WHERE id=$1 AND conversation_id=$2 AND status='running' AND attempt_id=$3
             ",
@@ -239,11 +267,17 @@ impl Live {
             actor.attempt.0,
         )
         .fetch_optional(&self.pool)
-        .await?
-        .flatten();
-        let Some(meeting) = meeting else {
+        .await?;
+        let Some((meeting, asked)) = asked.and_then(|asked| Some((asked.meeting_id?, asked)))
+        else {
             return Ok(Err(NOT_MEETING));
         };
+        if asked.talk_only {
+            return Ok(Err(TALK_ONLY));
+        }
+        if !may_view(&self.pool, asked.actor_id, actor.agent.0).await {
+            return Ok(Err(NOT_PERMITTED));
+        }
         let Some(room) = self.room(meeting) else {
             return Ok(Err(NOT_LIVE));
         };
@@ -313,7 +347,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             match command {
-                Command::AgentScreen { sharing, .. } => return Seen::Screen(sharing),
+                Command::AgentScreen { refresh, .. } => return Seen::Screen(refresh.is_some()),
                 Command::Announce {
                     message:
                         Server::Desktop {
@@ -350,6 +384,32 @@ mod tests {
         assert!(matches!(next(&mut received).await, Seen::Screen(false)));
         sharing.task.await.unwrap();
         assert!(*fake.closed.lock().unwrap());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn the_room_asks_for_repaints_and_gets_at_most_one_every_two_seconds() {
+        let (handle, mut received) = room();
+        let fake = Fake::default();
+        let (_sharing, start) = Sharing::start(fake.clone(), handle, 4, None);
+        assert!(start.await.unwrap());
+        let refresh = loop {
+            if let Some(Command::AgentScreen {
+                refresh: Some(refresh),
+                ..
+            }) = received.recv().await
+            {
+                break refresh;
+            }
+        };
+        assert!(matches!(next(&mut received).await, Seen::Tiles(2)));
+        let begun = Instant::now();
+        refresh.try_send(()).unwrap();
+        assert!(matches!(next(&mut received).await, Seen::Tiles(2)));
+        assert!(begun.elapsed() < REPAINT);
+        refresh.try_send(()).unwrap();
+        assert!(matches!(next(&mut received).await, Seen::Tiles(2)));
+        assert!(begun.elapsed() >= REPAINT);
+        assert_eq!(*fake.opened.lock().unwrap(), 3);
     }
 
     #[tokio::test]

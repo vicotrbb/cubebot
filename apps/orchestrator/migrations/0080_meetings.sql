@@ -75,5 +75,6 @@ CREATE INDEX meeting_utterances_meeting ON meeting_utterances (meeting_id, seque
 
 ALTER TABLE chat_turns
     ADD COLUMN meeting_id uuid REFERENCES meetings(id) ON DELETE SET NULL,
-    ADD COLUMN talk_only boolean NOT NULL DEFAULT false;
+    ADD COLUMN talk_only boolean NOT NULL DEFAULT false,
+    ADD COLUMN meeting_summary boolean NOT NULL DEFAULT false;
 CREATE INDEX chat_turns_meeting ON chat_turns (meeting_id) WHERE meeting_id IS NOT NULL;

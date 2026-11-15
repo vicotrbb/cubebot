@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO meeting_utterances (meeting_id, agent_id, text) VALUES ($1, $2, 'It is noon.')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "431981793445777fba198cf44e140940387fba1fa6187ec7a9a116eee4f0c237"
+}

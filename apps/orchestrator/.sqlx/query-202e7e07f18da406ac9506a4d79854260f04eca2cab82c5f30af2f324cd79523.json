@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE meetings m\n        SET ended_at=GREATEST(m.started_at,\n            (SELECT max(GREATEST(a.joined_at, a.left_at)) FROM meeting_attendance a WHERE a.meeting_id=m.id),\n            (SELECT max(u.at) FROM meeting_utterances u WHERE u.meeting_id=m.id))\n        WHERE m.started_at IS NOT NULL AND m.ended_at IS NULL\n        RETURNING m.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "202e7e07f18da406ac9506a4d79854260f04eca2cab82c5f30af2f324cd79523"
+}

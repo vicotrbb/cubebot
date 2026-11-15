@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT meeting_id AS \"meeting_id!\", id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE meeting_id=ANY($1) AND conversation_id=$2 AND response IS DISTINCT FROM ''\n            ORDER BY sequence\n            ",
+  "query": "\n            SELECT meeting_id AS \"meeting_id!\", id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE meeting_id=ANY($1) AND conversation_id=$2 AND NOT meeting_summary\n            ORDER BY sequence\n            ",
   "describe": {
     "columns": [
       {
@@ -55,5 +55,5 @@
       true
     ]
   },
-  "hash": "bf21e7f242470c7fe87af6b155f3b6f81444ac7572b94cdc4951323354ff79d4"
+  "hash": "15133b5a1a5a3202f9a48491c403891823e79c1153c7a3d7ce8a96276f6c40da"
 }

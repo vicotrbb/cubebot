@@ -212,6 +212,10 @@ async fn assembled(
     )?
     .with_speech(speech.clone())
     .with_desktop(desktop);
+    meetings
+        .close_open()
+        .await
+        .inspect_err(|error| tracing::error!(?error, "live meetings could not be closed"))?;
     routes = routes
         .merge(public::router(&identity, meetings.clone()))
         .merge(meetings::router(pool.clone(), identity.clone(), meetings));

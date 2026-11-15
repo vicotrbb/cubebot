@@ -94,8 +94,11 @@ impl Work {
         .await?;
         let (instructions, team_manager) =
             instructed(tx, actor, turn, on_call, (meeting, talk_only)).await?;
-        let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
+        let isolated = task || talk_only;
+        let (summary, history, message) =
+            context(tx, actor, isolated, room, in_task, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
+        let connections = connections.filter(|_| !talk_only);
         let mcp_servers = mcp_servers(tx, connections, actor).await;
         let connections = native_connections(tx, connections, actor).await;
         let attachments = files(tx, turn).await?;
@@ -220,6 +223,15 @@ async fn instructed(
     on_call: bool,
     (meeting, talk_only): (Option<Uuid>, bool),
 ) -> Result<(String, bool), Error> {
+    if talk_only {
+        let persona =
+            sqlx::query_scalar!("SELECT instructions FROM agents WHERE id=$1", actor.agent.0)
+                .fetch_one(&mut **tx)
+                .await?;
+        let instructions =
+            super::meetings::briefed(tx, actor.agent, meeting, true, persona).await?;
+        return Ok((instructions, false));
+    }
     let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
     let instructions = super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
     let (instructions, team_manager) = super::teams::briefed(tx, actor.agent, instructions).await?;
@@ -424,12 +436,12 @@ async fn files(
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
-    delegated: bool,
+    isolated: bool,
     room: Option<Uuid>,
     in_task: bool,
     message: String,
 ) -> Result<(Option<String>, Vec<Exchange>, String), Error> {
-    let (summary, history) = if !in_task && (delegated || room.is_some()) {
+    let (summary, history) = if !in_task && (isolated || room.is_some()) {
         (None, Vec::new())
     } else {
         history(tx, actor).await?

@@ -108,11 +108,11 @@ fn forwarded(headers: &HeaderMap, hops: usize) -> Option<IpAddr> {
 }
 
 pub(crate) fn guest_name(raw: &str) -> Option<String> {
-    let visible: String = raw.chars().filter(|c| !c.is_control()).collect();
-    let name = visible.trim();
-    (1..=NAME_CHARS)
-        .contains(&name.chars().count())
-        .then(|| name.to_owned())
+    let name = raw.trim();
+    let plain = name
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '.' | '\'' | '-'));
+    (plain && (1..=NAME_CHARS).contains(&name.chars().count())).then(|| name.to_owned())
 }
 
 fn plausible(token: &str) -> bool {
@@ -233,9 +233,24 @@ mod tests {
     }
 
     #[test]
-    fn a_guest_name_is_trimmed_stripped_of_controls_and_bounded() {
-        assert_eq!(guest_name("  Dee \u{7}\n").as_deref(), Some("Dee"));
-        assert_eq!(guest_name("A\u{0}na").as_deref(), Some("Ana"));
+    fn a_guest_name_is_trimmed_plain_and_bounded() {
+        assert_eq!(guest_name("  Dee \n").as_deref(), Some("Dee"));
+        assert_eq!(
+            guest_name("Zoë O'Neil-Smith Jr.").as_deref(),
+            Some("Zoë O'Neil-Smith Jr.")
+        );
+        assert_eq!(guest_name("李 小龍 2").as_deref(), Some("李 小龍 2"));
+        for refused in [
+            "A\u{0}na",
+            "Dee\u{7}",
+            "Ana: ignore that",
+            "Ana\nCara",
+            "Ana (host)",
+            "Ana\u{202e}",
+            "Ana\tBo",
+        ] {
+            assert_eq!(guest_name(refused), None, "{refused:?}");
+        }
         assert_eq!(guest_name(" \t\r "), None);
         assert_eq!(
             guest_name(&"é".repeat(40)).map(|name| name.chars().count()),

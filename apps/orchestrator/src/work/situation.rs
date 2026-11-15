@@ -94,7 +94,7 @@ impl Work {
             SELECT g.id,
                 (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status IN ('queued','running','delegated','waiting')) AS "open_turns!",
                 (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status='failed' AND t.status_at >= date_trunc('day', clock_timestamp(), 'UTC')) AS "failed_today!",
-                (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '7 days' AND t.response IS DISTINCT FROM '') AS "turns_week!",
+                (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '7 days' AND NOT t.meeting_summary) AS "turns_week!",
                 COALESCE((SELECT sum(u.input_tokens + u.output_tokens) FROM usage_events u WHERE u.agent_id=g.id AND u.created_at > clock_timestamp() - interval '7 days'), 0)::int8 AS "tokens_week!",
                 COALESCE((SELECT sum(u.cost_usd) FROM usage_events u WHERE u.agent_id=g.id AND u.created_at > clock_timestamp() - interval '7 days'), 0) AS "cost_week_usd!",
                 COALESCE((SELECT sum(u.cost_usd) FROM usage_events u WHERE u.agent_id=g.id AND u.created_at >= date_trunc('month', clock_timestamp(), 'UTC')), 0) AS "cost_month_usd!",
@@ -139,7 +139,7 @@ impl Work {
                 FROM chat_turns t
                 LEFT JOIN room_messages m ON m.id=t.room_message_id
                 LEFT JOIN rooms r ON r.id=m.room_id
-                WHERE t.conversation_id=ANY($1) AND t.status IN ('complete','failed','cancelled') AND t.response IS DISTINCT FROM ''
+                WHERE t.conversation_id=ANY($1) AND t.status IN ('complete','failed','cancelled') AND NOT t.meeting_summary
                     AND (m.room_id IS NULL OR r.task OR $2 OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=$3 AND p.scope_kind='room' AND p.scope_id=m.room_id AND p.capability='conversation.read'))
                 ORDER BY t.status_at DESC
                 LIMIT 12)

@@ -6,6 +6,7 @@ use axum::body::Bytes;
 use axum::extract::ws::{CloseFrame, Message, Utf8Bytes};
 use serde_json::json;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 use tokio::sync::mpsc::{self, error::TrySendError};
 use tokio::sync::oneshot;
@@ -84,24 +85,52 @@ pub(super) struct Joined {
     pub inbound: Inbound,
 }
 
+pub(super) enum Out {
+    Frame(Message),
+    Roster,
+}
+
+pub(super) type Latest = Arc<Mutex<Option<Message>>>;
+
+pub(super) fn opened(roster: &Latest, out: Out) -> Option<Message> {
+    match out {
+        Out::Frame(message) => Some(message),
+        Out::Roster => roster.lock().unwrap_or_else(PoisonError::into_inner).take(),
+    }
+}
+
 pub(super) struct Inbound {
-    pub control: mpsc::Receiver<Message>,
+    pub control: mpsc::Receiver<Out>,
     pub media: mpsc::Receiver<Message>,
+    pub roster: Latest,
 }
 
 struct Outbound {
-    control: mpsc::Sender<Message>,
+    control: mpsc::Sender<Out>,
     media: mpsc::Sender<Message>,
+    roster: Latest,
 }
 
 fn outbound() -> (Outbound, Inbound) {
     let (control, control_rx) = mpsc::channel(CONTROL_QUEUE);
     let (media, media_rx) = mpsc::channel(MEDIA_QUEUE);
+    let roster = Latest::default();
     let inbound = Inbound {
         control: control_rx,
         media: media_rx,
+        roster: roster.clone(),
     };
-    (Outbound { control, media }, inbound)
+    let outbound = Outbound {
+        control,
+        media,
+        roster,
+    };
+    (outbound, inbound)
+}
+
+pub(super) struct Subscriber {
+    pub control: mpsc::UnboundedSender<Event>,
+    pub audio: mpsc::Sender<Event>,
 }
 
 pub(super) fn close(code: u16, reason: &'static str) -> Message {
@@ -136,12 +165,12 @@ pub(super) enum Command {
         locked: bool,
     },
     Subscribe {
-        events: mpsc::Sender<Event>,
+        events: Subscriber,
     },
     Agent(Seating),
     AgentScreen {
         slot: u16,
-        sharing: bool,
+        refresh: Option<mpsc::Sender<()>>,
     },
     Announce {
         message: Server,
@@ -212,6 +241,7 @@ struct Seat {
     asked: HashMap<Stream, Instant>,
     attendance: Option<Uuid>,
     presents: HashSet<Uuid>,
+    refresh: Option<mpsc::Sender<()>>,
 }
 
 impl Seat {
@@ -230,6 +260,7 @@ impl Seat {
             asked: HashMap::new(),
             attendance: None,
             presents: HashSet::new(),
+            refresh: None,
         }
     }
 
@@ -285,7 +316,19 @@ fn tell(slow: &mut Vec<u16>, slot: u16, seat: &Seat, message: Message) {
     let Some(out) = &seat.out else {
         return;
     };
-    if let Err(TrySendError::Full(_)) = out.control.try_send(message) {
+    if let Err(TrySendError::Full(_)) = out.control.try_send(Out::Frame(message)) {
+        slow.push(slot);
+    }
+}
+
+fn post_roster(slow: &mut Vec<u16>, slot: u16, seat: &Seat, roster: Message) {
+    let Some(out) = &seat.out else {
+        return;
+    };
+    let mut latest = out.roster.lock().unwrap_or_else(PoisonError::into_inner);
+    if latest.replace(roster).is_none()
+        && let Err(TrySendError::Full(_)) = out.control.try_send(Out::Roster)
+    {
         slow.push(slot);
     }
 }
@@ -332,7 +375,7 @@ pub(super) struct Room {
     deadline: Option<Instant>,
     slow: Vec<u16>,
     records: mpsc::UnboundedSender<Record>,
-    events: Option<mpsc::Sender<Event>>,
+    events: Option<Subscriber>,
 }
 
 impl Room {
@@ -381,7 +424,7 @@ impl Room {
             Command::Flags { open_join, locked } => self.flags(open_join, locked),
             Command::Subscribe { events } => self.events = Some(events),
             Command::Agent(seating) => self.seating(seating),
-            Command::AgentScreen { slot, sharing } => self.agent_screen(slot, sharing),
+            Command::AgentScreen { slot, refresh } => self.agent_screen(slot, refresh),
             Command::Announce { message, to } => self.announce(&message, to),
         }
         while let Some(slot) = self.slow.pop() {
@@ -415,8 +458,8 @@ impl Room {
         let ended = Server::Ended.message();
         for seat in self.seats.values() {
             if let Some(out) = &seat.out {
-                let _ = out.control.try_send(ended.clone());
-                let _ = out.control.try_send(close(1000, ENDED));
+                let _ = out.control.try_send(Out::Frame(ended.clone()));
+                let _ = out.control.try_send(Out::Frame(close(1000, ENDED)));
             }
         }
         self.seats.clear();
@@ -444,12 +487,19 @@ impl Room {
         let Some(events) = &self.events else {
             return;
         };
-        match events.try_send(event) {
-            Err(TrySendError::Closed(_)) => self.events = None,
-            Err(TrySendError::Full(_)) => {
-                tracing::warn!(meeting = %self.id, "meeting event dropped: subscriber behind");
+        let open = if matches!(event, Event::Microphone { .. }) {
+            match events.audio.try_send(event) {
+                Err(TrySendError::Full(_)) => {
+                    tracing::debug!(meeting = %self.id, "meeting audio dropped: listeners behind");
+                    true
+                }
+                sent => sent.is_ok(),
             }
-            Ok(()) => {}
+        } else {
+            events.control.send(event).is_ok()
+        };
+        if !open {
+            self.events = None;
         }
     }
 
@@ -469,9 +519,41 @@ impl Room {
     }
 
     fn announce(&mut self, server: &Server, to: Option<u16>) {
-        match to {
-            Some(slot) => self.send(slot, server),
-            None => self.broadcast(server, None),
+        match (server, to) {
+            (
+                Server::Desktop {
+                    source,
+                    tiles: Some(_),
+                    ..
+                },
+                None,
+            ) => self.tiles(*source, server),
+            (_, Some(slot)) => self.send(slot, server),
+            (_, None) => self.broadcast(server, None),
+        }
+    }
+
+    fn tiles(&self, source: u16, server: &Server) {
+        let frame = server.message();
+        let mut dropped = false;
+        for (&slot, seat) in &self.seats {
+            if let Some(out) = seat
+                .out
+                .as_ref()
+                .filter(|_| seat.admitted && slot != source)
+            {
+                dropped |= matches!(
+                    out.media.try_send(frame.clone()),
+                    Err(TrySendError::Full(_))
+                );
+            }
+        }
+        let refresh = self
+            .seats
+            .get(&source)
+            .and_then(|seat| seat.refresh.as_ref());
+        if let Some(refresh) = refresh.filter(|_| dropped) {
+            let _ = refresh.try_send(());
         }
     }
 
@@ -498,7 +580,7 @@ impl Room {
             .collect();
         for (slot, roster) in rosters {
             if let Some(seat) = self.seats.get(&slot) {
-                tell(&mut self.slow, slot, seat, roster);
+                post_roster(&mut self.slow, slot, seat, roster);
             }
         }
     }
@@ -541,7 +623,6 @@ impl Room {
         let (out, inbound) = outbound();
         let seat = Seat::new(joiner.who, joiner.name, Some(out));
         self.seats.insert(slot, seat);
-        self.deadline = None;
         if waits {
             self.send(slot, &Server::Waiting);
             self.lobby(None);
@@ -557,6 +638,7 @@ impl Room {
         };
         let attendance = Uuid::new_v4();
         seat.admitted = true;
+        self.deadline = None;
         seat.attendance = Some(attendance);
         let (account, guest, name) = (seat.member(), seat.guest(), seat.name.clone());
         if !std::mem::replace(&mut self.started, true) {
@@ -635,7 +717,7 @@ impl Room {
             return;
         };
         if let (Some(reason), Some(out)) = (reason, &seat.out) {
-            let _ = out.control.try_send(close(1000, reason));
+            let _ = out.control.try_send(Out::Frame(close(1000, reason)));
         }
         for other in self.seats.values_mut() {
             other.blocked.retain(|(from, _)| *from != slot);
@@ -651,7 +733,10 @@ impl Room {
                 self.emit(Event::Left { slot });
             }
         }
-        let people = self.seats.values().any(|seat| !seat.agent());
+        let people = self
+            .seats
+            .values()
+            .any(|seat| seat.admitted && !seat.agent());
         if !people && self.deadline.is_none() {
             self.deadline = Some(Instant::now() + EMPTY_GRACE);
         }
@@ -751,8 +836,12 @@ impl Room {
     }
 
     fn state(&mut self, slot: u16, [mic, camera, screen, hand]: [bool; 4]) {
-        if let Some(seat) = self.seats.get_mut(&slot) {
-            (seat.mic, seat.camera, seat.screen, seat.hand) = (mic, camera, screen, hand);
+        let Some(seat) = self.seats.get_mut(&slot) else {
+            return;
+        };
+        let state = (mic, camera, screen, hand);
+        if (seat.mic, seat.camera, seat.screen, seat.hand) != state {
+            (seat.mic, seat.camera, seat.screen, seat.hand) = state;
             self.roster();
         }
     }
@@ -773,14 +862,18 @@ impl Room {
             width,
             height,
         };
-        if let Some(seat) = self.seats.get_mut(&slot) {
-            if live {
-                seat.tracks.insert(stream, server.message());
-            } else {
-                seat.tracks.remove(&stream);
-            }
+        let Some(seat) = self.seats.get_mut(&slot) else {
+            return;
+        };
+        let message = server.message();
+        let changed = if live {
+            seat.tracks.insert(stream, message.clone()).as_ref() != Some(&message)
+        } else {
+            seat.tracks.remove(&stream).is_some()
+        };
+        if changed {
+            self.broadcast(&server, Some(slot));
         }
-        self.broadcast(&server, Some(slot));
     }
 
     fn present(&mut self, slot: u16, source: u16, share: bool) {
@@ -945,9 +1038,10 @@ impl Room {
         }
     }
 
-    fn agent_screen(&mut self, slot: u16, sharing: bool) {
+    fn agent_screen(&mut self, slot: u16, refresh: Option<mpsc::Sender<()>>) {
         if let Some(seat) = self.seats.get_mut(&slot).filter(|seat| seat.agent()) {
-            seat.screen = sharing;
+            seat.screen = refresh.is_some();
+            seat.refresh = refresh;
             self.roster();
         }
     }
@@ -994,8 +1088,8 @@ mod tests {
 
     fn texts(inbound: &mut Inbound) -> Vec<serde_json::Value> {
         let mut seen = Vec::new();
-        while let Ok(message) = inbound.control.try_recv() {
-            if let Message::Text(text) = message {
+        while let Ok(out) = inbound.control.try_recv() {
+            if let Some(Message::Text(text)) = super::opened(&inbound.roster, out) {
                 seen.push(serde_json::from_str(&text).unwrap());
             }
         }
@@ -1136,15 +1230,160 @@ mod tests {
             room.add_agent(Uuid::from_u128(6), "Full".into(), avatar),
             None
         );
-        let roster = texts(&mut person.inbound).pop().unwrap();
+        let seen = texts(&mut person.inbound);
+        let roster = seen.iter().find(|value| value["kind"] == "roster").unwrap();
         assert_eq!(
             roster["participants"][1]["agent"],
             json!(Uuid::from_u128(5))
         );
         room.agent_audio(slot, wire::audio(slot, 24_000, &[0, 0]));
         assert!(person.inbound.media.try_recv().is_ok());
-        room.agent_screen(slot, true);
+        let (refresh, _) = mpsc::channel(1);
+        room.agent_screen(slot, Some(refresh));
         let roster = texts(&mut person.inbound).pop().unwrap();
         assert_eq!(roster["participants"][1]["screen"], true);
+    }
+
+    fn scout(room: &mut Room) -> u16 {
+        let avatar: Avatar =
+            serde_json::from_value(json!({"paint": "sky", "eyes": "wink", "accessory": "crown"}))
+                .unwrap();
+        room.add_agent(Uuid::from_u128(5), "Scout".into(), avatar)
+            .unwrap()
+    }
+
+    #[test]
+    fn state_and_track_frames_that_change_nothing_reach_no_one() {
+        let (mut room, _stored) = opened(true, 12);
+        let sender = member(&mut room, 1);
+        let mut receiver = member(&mut room, 2);
+        texts(&mut receiver.inbound);
+        room.state(sender.slot, [true, false, false, false]);
+        room.state(sender.slot, [true, false, false, false]);
+        assert_eq!(kinds(&mut receiver.inbound), vec!["roster"]);
+        let track = || Client::Track {
+            stream: Stream::Camera,
+            codec: Some("vp8".into()),
+            width: 640,
+            height: 480,
+        };
+        room.said(sender.slot, track());
+        room.said(sender.slot, track());
+        assert_eq!(kinds(&mut receiver.inbound), vec!["track"]);
+        let off = || Client::Track {
+            stream: Stream::Camera,
+            codec: None,
+            width: 0,
+            height: 0,
+        };
+        room.said(sender.slot, off());
+        room.said(sender.slot, off());
+        assert_eq!(kinds(&mut receiver.inbound), vec!["track"]);
+    }
+
+    #[test]
+    fn a_receiver_holds_at_most_one_roster_the_latest_and_is_never_dropped_for_rosters() {
+        let (mut room, _stored) = opened(true, 12);
+        let sender = member(&mut room, 1);
+        let mut receiver = member(&mut room, 2);
+        texts(&mut receiver.inbound);
+        for turn in 0..CONTROL_QUEUE * 2 {
+            let on = turn % 2 == 0;
+            room.handle(Command::Said {
+                slot: sender.slot,
+                message: Client::State {
+                    mic: on,
+                    camera: false,
+                    screen: false,
+                    hand: !on,
+                },
+            });
+        }
+        room.state(sender.slot, [false, true, false, false]);
+        assert_eq!(room.seated(), 2, "the receiver keeps its seat");
+        let seen = texts(&mut receiver.inbound);
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0]["participants"][0]["camera"], true);
+    }
+
+    #[test]
+    fn desktop_tiles_a_receiver_cannot_take_are_dropped_and_ask_the_share_to_repaint() {
+        let (mut room, _stored) = opened(true, 12);
+        let mut receiver = member(&mut room, 1);
+        let slot = scout(&mut room);
+        let (refresh, mut refreshes) = mpsc::channel(1);
+        room.agent_screen(slot, Some(refresh));
+        let tiles = Server::Desktop {
+            source: slot,
+            tiles: Some(Vec::new()),
+            ended: false,
+        };
+        for _ in 0..MEDIA_QUEUE {
+            room.handle(Command::Announce {
+                message: tiles.clone(),
+                to: None,
+            });
+        }
+        assert!(refreshes.try_recv().is_err());
+        room.handle(Command::Announce {
+            message: tiles,
+            to: None,
+        });
+        assert!(refreshes.try_recv().is_ok());
+        assert_eq!(room.seated(), 2, "the slow receiver keeps its seat");
+        let Ok(Message::Text(first)) = receiver.inbound.media.try_recv() else {
+            panic!("tiles travel with the media");
+        };
+        assert!(first.contains("desktop"));
+    }
+
+    #[test]
+    fn only_admitted_people_keep_the_room_open() {
+        let (mut room, _stored) = opened(false, 12);
+        let dee = guest(&mut room, "Dee").ok().unwrap();
+        assert!(
+            room.deadline.is_some(),
+            "a guest in the lobby keeps nothing open"
+        );
+        let host = member(&mut room, 1);
+        assert!(room.deadline.is_none());
+        scout(&mut room);
+        room.leave(host.slot, None);
+        assert!(
+            room.deadline.is_some(),
+            "a waiting guest and an agent are not people in the room"
+        );
+        room.leave(dee.slot, None);
+        assert!(room.deadline.is_some());
+    }
+
+    #[test]
+    fn room_events_are_never_dropped_and_only_microphone_audio_may_be() {
+        let (mut room, _stored) = opened(true, 12);
+        let (control, mut events) = mpsc::unbounded_channel();
+        let (audio, mut heard) = mpsc::channel(1);
+        room.handle(Command::Subscribe {
+            events: Subscriber { control, audio },
+        });
+        for slot in 0..2000 {
+            room.emit(Event::Left { slot });
+        }
+        for _ in 0..3 {
+            room.emit(Event::Microphone {
+                slot: 1,
+                pcm: Bytes::from_static(&[0, 0]),
+            });
+        }
+        let mut left = 0;
+        while let Ok(Event::Left { .. }) = events.try_recv() {
+            left += 1;
+        }
+        assert_eq!(left, 2000);
+        assert!(heard.try_recv().is_ok());
+        assert!(
+            heard.try_recv().is_err(),
+            "audio beyond the queue is dropped"
+        );
+        assert!(room.events.is_some());
     }
 }

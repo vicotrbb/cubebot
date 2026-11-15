@@ -15,7 +15,7 @@ use super::summary::summarize;
 use crate::agents::{Avatar, sandbox::Desktop};
 use crate::connections::Connections;
 use crate::speech::Speech;
-use room::{Command, Joined, Joiner, Loaded, Record, Room, Seating, Who};
+use room::{Command, Joined, Joiner, Loaded, Record, Room, Seating, Subscriber, Who};
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -93,9 +93,8 @@ impl Live {
     }
 
     async fn open(&self, id: Uuid, guest: bool) -> Result<Handle, Refusal> {
-        let existing = self.rooms().get(&id).cloned();
-        if let Some(room) = existing {
-            return alive(room);
+        if let Some(room) = self.room(id) {
+            return Ok(room);
         }
         let loaded = load(&self.pool, id)
             .await
@@ -104,7 +103,7 @@ impl Live {
                 Refusal::Gone
             })?
             .ok_or(Refusal::Gone)?;
-        if guest && loaded.ended {
+        if loaded.ended {
             return Err(Refusal::Ended);
         }
         if guest && loaded.locked {
@@ -122,15 +121,18 @@ impl Live {
     fn spawn(&self, id: Uuid, loaded: Loaded) -> Handle {
         let (commands, receiver) = mpsc::channel(COMMANDS);
         let (records, stored) = mpsc::unbounded_channel();
-        let (events, heard) = mpsc::channel(EVENTS);
+        let (control, events) = mpsc::unbounded_channel();
+        let (audio, heard) = mpsc::channel(EVENTS);
         let (invited, invitations) = mpsc::channel(1);
-        let _ = commands.try_send(Command::Subscribe { events });
+        let subscriber = Subscriber { control, audio };
+        let _ = commands.try_send(Command::Subscribe { events: subscriber });
         let room = Room::new(id, loaded, records);
         let handle = Handle { commands, invited };
         let live = self.clone();
         let kept = handle.clone();
         let inbox = attendants::Inbox {
-            events: heard,
+            events,
+            audio: heard,
             invited: invitations,
         };
         let attending = tokio::spawn(attendants::attend(self.clone(), id, handle.clone(), inbox));
@@ -176,13 +178,6 @@ impl Handle {
         self.commands.send(command).await.is_ok()
     }
 
-    pub async fn subscribe(&self) -> Option<mpsc::Receiver<Event>> {
-        let (events, receiver) = mpsc::channel(EVENTS);
-        self.command(Command::Subscribe { events })
-            .await
-            .then_some(receiver)
-    }
-
     pub async fn add_agent(&self, agent: Uuid, name: String, avatar: Avatar) -> Option<u16> {
         let (reply, answer) = oneshot::channel();
         let add = Seating::Add {
@@ -205,8 +200,8 @@ impl Handle {
             .await
     }
 
-    pub async fn agent_screen(&self, slot: u16, sharing: bool) -> bool {
-        self.command(Command::AgentScreen { slot, sharing }).await
+    pub async fn agent_screen(&self, slot: u16, refresh: Option<mpsc::Sender<()>>) -> bool {
+        self.command(Command::AgentScreen { slot, refresh }).await
     }
 
     pub async fn announce(&self, message: Server, to: Option<u16>) -> bool {
@@ -271,7 +266,7 @@ async fn store(pool: &PgPool, id: Uuid, record: Record) -> Result<(), sqlx::Erro
     match record {
         Record::Started => {
             sqlx::query!(
-                "UPDATE meetings SET started_at=COALESCE(started_at, clock_timestamp()), ended_at=NULL WHERE id=$1",
+                "UPDATE meetings SET started_at=COALESCE(started_at, clock_timestamp()) WHERE id=$1",
                 id,
             )
             .execute(pool)
@@ -331,18 +326,19 @@ async fn end(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     Ok(ended.rows_affected() == 1)
 }
 
-pub(super) async fn close_open(pool: &PgPool) -> Result<(), sqlx::Error> {
+pub(super) async fn close_open(pool: &PgPool) -> Result<Vec<Uuid>, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    sqlx::query!(
+    let ended = sqlx::query_scalar!(
         "
         UPDATE meetings m
         SET ended_at=GREATEST(m.started_at,
             (SELECT max(GREATEST(a.joined_at, a.left_at)) FROM meeting_attendance a WHERE a.meeting_id=m.id),
             (SELECT max(u.at) FROM meeting_utterances u WHERE u.meeting_id=m.id))
         WHERE m.started_at IS NOT NULL AND m.ended_at IS NULL
+        RETURNING m.id
         ",
     )
-    .execute(&mut *tx)
+    .fetch_all(&mut *tx)
     .await?;
     sqlx::query!(
         "
@@ -353,5 +349,6 @@ pub(super) async fn close_open(pool: &PgPool) -> Result<(), sqlx::Error> {
     )
     .execute(&mut *tx)
     .await?;
-    tx.commit().await
+    tx.commit().await?;
+    Ok(ended)
 }

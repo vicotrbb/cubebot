@@ -301,10 +301,6 @@ async fn startup_records(pool: &sqlx::PgPool) -> Result<(), Box<dyn Error + Send
         .close_open_calls()
         .await
         .map_err(failure("open calls could not be closed"))?;
-    cubebot_orchestrator::meetings::Meetings::new(pool.clone(), None, None)
-        .close_open()
-        .await
-        .map_err(failure("live meetings could not be closed"))?;
     Ok(())
 }
 

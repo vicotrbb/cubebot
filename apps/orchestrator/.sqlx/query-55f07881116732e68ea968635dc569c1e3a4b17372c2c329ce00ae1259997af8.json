@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT message, status, response, actor_id FROM chat_turns WHERE conversation_id=$1",
+  "query": "SELECT message, status, response, actor_id, meeting_summary FROM chat_turns WHERE conversation_id=$1",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "actor_id",
         "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "meeting_summary",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       false,
       false,
       true,
+      false,
       false
     ]
   },
-  "hash": "b301d6426f2e8a48d720bbbf0a4d02ce500e4574a5ff5bae7b6522ed8afd168c"
+  "hash": "55f07881116732e68ea968635dc569c1e3a4b17372c2c329ce00ae1259997af8"
 }

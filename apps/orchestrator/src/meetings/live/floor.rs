@@ -8,6 +8,7 @@ use uuid::Uuid;
 const MERGE: Duration = Duration::from_millis(700);
 const HOLD: Duration = Duration::from_secs(15);
 const HANDOFFS: u8 = 2;
+const PENDING: usize = 2;
 
 pub(super) const CHOOSER: &str = "You decide whether one AI agent in a live meeting should answer what was just said. You have no tools and do no work yourself. Pick an agent only when it is addressed, when a question is put to the group that one agent is clearly suited to answer, or when the person is continuing an exchange with that agent. Otherwise no agent answers: people talking among themselves, small talk, thanks and statements need no answer. Reply with JSON only, one of: {\"agent\":\"<agent id>\"} or {\"agent\":null}.";
 
@@ -36,11 +37,17 @@ struct Waiting {
     at: Instant,
 }
 
+struct Queued {
+    agent: Uuid,
+    turn: Uuid,
+    asker: Option<u16>,
+}
+
 #[derive(Default)]
 pub(super) struct Floor {
     agents: Vec<Seated>,
     waiting: BTreeMap<u16, Waiting>,
-    queue: VecDeque<(Uuid, Uuid)>,
+    queue: VecDeque<Queued>,
     handoffs: u8,
 }
 
@@ -57,7 +64,7 @@ impl Floor {
 
     pub(super) fn unseat(&mut self, agent: Uuid) {
         self.agents.retain(|seated| seated.id != agent);
-        self.queue.retain(|(queued, _)| *queued != agent);
+        self.queue.retain(|queued| queued.agent != agent);
     }
 
     pub(super) fn started(&mut self, slot: u16, now: Instant) {
@@ -172,12 +179,17 @@ impl Floor {
         )
     }
 
-    pub(super) fn queue(&mut self, agent: Uuid, turn: Uuid) {
-        self.queue.push_back((agent, turn));
+    pub(super) fn admits(&self, agent: Uuid, asker: Option<u16>) -> bool {
+        let mut pending = self.queue.iter().filter(|queued| queued.agent == agent);
+        pending.clone().count() < PENDING && pending.all(|queued| queued.asker != asker)
+    }
+
+    pub(super) fn queue(&mut self, agent: Uuid, turn: Uuid, asker: Option<u16>) {
+        self.queue.push_back(Queued { agent, turn, asker });
     }
 
     pub(super) fn front(&self) -> Option<(Uuid, Uuid)> {
-        self.queue.front().copied()
+        self.queue.front().map(|queued| (queued.agent, queued.turn))
     }
 
     pub(super) fn pop(&mut self) {
@@ -185,7 +197,15 @@ impl Floor {
     }
 
     pub(super) fn waits(&self, agent: Uuid) -> bool {
-        self.queue.iter().any(|(queued, _)| *queued == agent)
+        self.queue.iter().any(|queued| queued.agent == agent)
+    }
+
+    pub(super) fn interrupt(&mut self, agent: Uuid) {
+        let front = self.queue.pop_front();
+        self.queue.retain(|queued| queued.agent != agent);
+        if let Some(front) = front {
+            self.queue.push_front(front);
+        }
     }
 }
 
@@ -279,14 +299,48 @@ mod tests {
     fn one_agent_speaks_at_a_time_and_the_others_queue() {
         let mut floor = floor();
         let (first, second) = (Uuid::from_u128(10), Uuid::from_u128(11));
-        floor.queue(DEX, first);
-        floor.queue(CARA, second);
+        floor.queue(DEX, first, Some(4));
+        floor.queue(CARA, second, Some(4));
         assert_eq!(floor.front(), Some((DEX, first)));
         assert!(floor.waits(CARA));
         floor.pop();
         assert_eq!(floor.front(), Some((CARA, second)));
         assert!(!floor.waits(DEX));
         floor.unseat(CARA);
+        assert_eq!(floor.front(), None);
+    }
+
+    #[test]
+    fn an_agent_holds_at_most_two_pending_turns_and_one_per_asker() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(20 + n);
+        assert!(floor.admits(CARA, Some(4)));
+        floor.queue(CARA, turn(0), Some(4));
+        assert!(!floor.admits(CARA, Some(4)), "one pending turn per asker");
+        assert!(floor.admits(DEX, Some(4)));
+        assert!(floor.admits(CARA, None));
+        floor.queue(CARA, turn(1), None);
+        assert!(!floor.admits(CARA, Some(5)), "two pending turns per agent");
+        floor.pop();
+        assert!(floor.admits(CARA, Some(4)));
+    }
+
+    #[test]
+    fn a_person_speaking_drops_the_speaking_agents_queued_replies_only() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(30 + n);
+        floor.queue(CARA, turn(0), Some(4));
+        floor.queue(DEX, turn(1), Some(4));
+        floor.queue(CARA, turn(2), Some(5));
+        floor.interrupt(CARA);
+        assert_eq!(
+            floor.front(),
+            Some((CARA, turn(0))),
+            "the answering turn stays"
+        );
+        floor.pop();
+        assert_eq!(floor.front(), Some((DEX, turn(1))));
+        floor.pop();
         assert_eq!(floor.front(), None);
     }
 

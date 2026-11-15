@@ -1,5 +1,5 @@
-use super::room::{Command, Inbound, Joiner, Who, close};
-use super::wire::{self, Budget, Client};
+use super::room::{Command, Inbound, Joiner, Refusal, Who, close, opened};
+use super::wire::{self, Budget, Client, Server};
 use super::{Handle, Live};
 use crate::identity::Identity;
 use crate::meetings::{attendee, public::guest_name};
@@ -11,13 +11,14 @@ use std::time::Duration;
 use tokio::time::Instant;
 use uuid::Uuid;
 
-const SILENCE: Duration = Duration::from_secs(15);
+const SILENCE: Duration = Duration::from_secs(45);
 const RECHECK: Duration = Duration::from_secs(30);
 const DRAIN: Duration = Duration::from_secs(5);
 const QUIET: &str = "The connection went quiet.";
 const ACCESS_ENDED: &str = "Your access to this meeting ended.";
 const HELLO: &str = "The meeting did not hear who you are.";
-const NAME: &str = "Choose a name of 1 to 40 characters.";
+const NAME: &str =
+    "Choose a name of 1 to 40 letters, digits, spaces, periods, apostrophes or hyphens.";
 
 pub struct Recheck {
     pub identity: Identity,
@@ -66,7 +67,12 @@ impl Live {
         };
         let (room, joined) = match self.enter(id, joiner).await {
             Ok(entered) => entered,
-            Err(refusal) => return refuse(socket, refusal.reason()).await,
+            Err(refusal) => {
+                if refusal == Refusal::Ended {
+                    let _ = socket.send(Server::Ended.message()).await;
+                }
+                return refuse(socket, refusal.reason()).await;
+            }
         };
         let watch = recheck.map(|recheck| Watch {
             recheck,
@@ -127,12 +133,20 @@ async fn hello(socket: &mut WebSocket) -> Option<Option<String>> {
     }
 }
 
-async fn write(mut sink: SplitSink<WebSocket, Message>, mut inbound: Inbound) {
+async fn write(mut sink: SplitSink<WebSocket, Message>, inbound: Inbound) {
+    let Inbound {
+        mut control,
+        mut media,
+        roster,
+    } = inbound;
     loop {
         let message = tokio::select! {
             biased;
-            Some(message) = inbound.control.recv() => message,
-            Some(message) = inbound.media.recv() => message,
+            Some(out) = control.recv() => match opened(&roster, out) {
+                Some(message) => message,
+                None => continue,
+            },
+            Some(message) = media.recv() => message,
             else => return,
         };
         let closing = matches!(message, Message::Close(_));
@@ -181,7 +195,7 @@ async fn forward(room: &Handle, slot: u16, message: Message, budget: &mut Budget
                 room.media(slot, media);
             }
         }
-        Message::Text(text) if budget.allows(text.len(), now) => {
+        Message::Text(text) if budget.allows_text(text.len(), now) => {
             let said = serde_json::from_str::<Client>(&text).ok();
             if let Some(message) =
                 said.filter(|said| !matches!(said, Client::Ping | Client::Hello { .. }))
