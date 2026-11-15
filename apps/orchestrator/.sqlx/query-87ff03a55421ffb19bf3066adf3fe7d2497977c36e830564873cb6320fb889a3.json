@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id FROM meetings m JOIN meeting_settings s ON s.guests\n            WHERE m.link_token=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "87ff03a55421ffb19bf3066adf3fe7d2497977c36e830564873cb6320fb889a3"
+}

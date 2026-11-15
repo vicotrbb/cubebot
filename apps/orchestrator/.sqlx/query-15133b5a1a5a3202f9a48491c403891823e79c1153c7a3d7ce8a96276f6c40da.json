@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT meeting_id AS \"meeting_id!\", id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE meeting_id=ANY($1) AND conversation_id=$2 AND NOT meeting_summary\n            ORDER BY sequence\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meeting_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "sequence",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "response",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "15133b5a1a5a3202f9a48491c403891823e79c1153c7a3d7ce8a96276f6c40da"
+}

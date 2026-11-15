@@ -9,6 +9,7 @@ pub(crate) mod settings;
 pub use embedded::{Piper, Silero, Zipformer, piper, recognizer};
 pub use models::{Asset, LESSAC, Models, RYAN, SILERO, ZIPFORMER};
 pub use pipeline::{Activity, Heard, Listener, Sentences, Vad};
+pub(crate) use pipeline::{listen, samples};
 pub use session::Session;
 pub use settings::{AgentSpeech, Route, SaveSpeech, SpeechSettings};
 
@@ -142,6 +143,8 @@ pub struct Engines {
 
 pub type StandIn = Arc<dyn Fn() -> Engines + Send + Sync>;
 
+pub(crate) type Hearing = (Box<dyn Vad>, Box<dyn Stt>);
+
 #[derive(Clone)]
 pub struct Speech {
     models: Option<Arc<Models>>,
@@ -189,22 +192,75 @@ impl Speech {
             return Ok(stand_in());
         }
         let vad = self.silero(progress).await?;
-        let stt: Box<dyn Stt> = match route.stt {
+        let stt = self.stt(agent, route.stt, progress).await?;
+        let tts = self.tts(agent, route, progress).await?;
+        Ok(Engines { vad, stt, tts })
+    }
+
+    #[tracing::instrument(skip_all, fields(provider = provider.as_str()))]
+    pub(crate) async fn hearing(
+        &self,
+        agents: &[crate::agents::AgentId],
+        provider: Provider,
+        progress: &(dyn Fn(&'static str, u64, u64) + Sync),
+    ) -> Result<Hearing, SpeechError> {
+        if let Some(stand_in) = &self.stand_in {
+            let engines = stand_in();
+            return Ok((engines.vad, engines.stt));
+        }
+        let vad = self.silero(progress).await?;
+        for agent in agents {
+            match self.stt(*agent, provider, progress).await {
+                Ok(stt) => return Ok((vad, stt)),
+                Err(SpeechError::NoKey(_)) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok((vad, self.zipformer(progress).await?))
+    }
+
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
+    pub(crate) async fn voice(
+        &self,
+        agent: crate::agents::AgentId,
+        route: Route,
+        progress: &(dyn Fn(&'static str, u64, u64) + Sync),
+    ) -> Result<Box<dyn Tts>, SpeechError> {
+        match &self.stand_in {
+            Some(stand_in) => Ok(stand_in().tts),
+            None => self.tts(agent, route, progress).await,
+        }
+    }
+
+    async fn stt(
+        &self,
+        agent: crate::agents::AgentId,
+        provider: Provider,
+        progress: &(dyn Fn(&'static str, u64, u64) + Sync),
+    ) -> Result<Box<dyn Stt>, SpeechError> {
+        Ok(match provider {
             Provider::Embedded => self.zipformer(progress).await?,
             provider => Box::new(
                 self.endpoints
                     .listener(provider, self.key(agent, provider).await?),
             ),
-        };
-        let tts: Box<dyn Tts> = match route.tts {
+        })
+    }
+
+    async fn tts(
+        &self,
+        agent: crate::agents::AgentId,
+        route: Route,
+        progress: &(dyn Fn(&'static str, u64, u64) + Sync),
+    ) -> Result<Box<dyn Tts>, SpeechError> {
+        Ok(match route.tts {
             Provider::Embedded => self.piper(route.voice, progress).await?,
             provider => Box::new(self.endpoints.speaker(
                 provider,
                 self.key(agent, provider).await?,
                 route.voice,
             )),
-        };
-        Ok(Engines { vad, stt, tts })
+        })
     }
 
     fn models(&self) -> Result<&Models, SpeechError> {

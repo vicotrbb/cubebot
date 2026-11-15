@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meeting_attendance SET left_at=clock_timestamp() WHERE id=$1 AND left_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2be28d0434e9ed4886ac7b2756ec0bdbc8f290dde367ea58f715a1e81e9b453b"
+}

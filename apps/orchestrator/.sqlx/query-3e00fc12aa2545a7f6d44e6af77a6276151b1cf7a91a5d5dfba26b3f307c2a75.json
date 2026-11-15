@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO meetings\n                (title, description, owner_id, starts_at, ends_at, link_token, open_join, agent_mode)\n            VALUES ($1, $2, $3, to_timestamp($4::bigint), to_timestamp($5::bigint), $6, $7,\n                COALESCE($8, (SELECT agent_mode FROM meeting_settings)))\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Text",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3e00fc12aa2545a7f6d44e6af77a6276151b1cf7a91a5d5dfba26b3f307c2a75"
+}

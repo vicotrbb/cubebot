@@ -77,6 +77,14 @@ spec:
               value: /etc/cubebot/control/tls.key
             - name: CUBEBOT_PUBLIC_ORIGIN
               value: {{ required "publicOrigin is required" .Values.publicOrigin | quote }}
+            {{- with .Values.meetings.publicOrigin }}
+            - name: CUBEBOT_MEETINGS_ORIGIN
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.meetings.trustedProxyHops }}
+            - name: CUBEBOT_TRUSTED_PROXY_HOPS
+              value: {{ . | quote }}
+            {{- end }}
             - name: CUBEBOT_CONTROLLER_CONFIG
               value: /etc/controller/config.json
             - name: CUBEBOT_CREDENTIAL_KEY_FILE

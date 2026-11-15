@@ -34,7 +34,7 @@ impl Work {
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
                 a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, a.creates, t.in_task,
-                t.call_id IS NOT NULL AS "on_call!"
+                t.call_id IS NOT NULL AS "on_call!", t.meeting_id, t.talk_only
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -71,6 +71,7 @@ impl Work {
         let creates = pending.creates;
         let in_task = pending.in_task;
         let on_call = pending.on_call;
+        let (meeting, talk_only) = (pending.meeting_id, pending.talk_only);
         if refused(tx, actor, turn, command_only).await? {
             return Ok(None);
         }
@@ -91,15 +92,13 @@ impl Work {
         )
         .execute(&mut **tx)
         .await?;
-        let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
-        let instructions =
-            super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
         let (instructions, team_manager) =
-            super::teams::briefed(tx, actor.agent, instructions).await?;
-        let instructions = super::calls::spoken(instructions, on_call);
-        let instructions = crate::identity::profiles::introduced(tx, turn, instructions).await?;
-        let (summary, history, message) = context(tx, actor, task, room, in_task, message).await?;
+            instructed(tx, actor, turn, on_call, (meeting, talk_only)).await?;
+        let isolated = task || talk_only;
+        let (summary, history, message) =
+            context(tx, actor, isolated, room, in_task, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
+        let connections = connections.filter(|_| !talk_only);
         let mcp_servers = mcp_servers(tx, connections, actor).await;
         let connections = native_connections(tx, connections, actor).await;
         let attachments = files(tx, turn).await?;
@@ -129,6 +128,8 @@ impl Work {
             team_manager,
             creates,
             attachments,
+            talk_only,
+            meeting,
         }))
     }
 
@@ -213,6 +214,32 @@ impl Work {
         crate::knowledge::recover_dreams(&self.pool).await?;
         Ok(())
     }
+}
+
+async fn instructed(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &RuntimeActor,
+    turn: Uuid,
+    on_call: bool,
+    (meeting, talk_only): (Option<Uuid>, bool),
+) -> Result<(String, bool), Error> {
+    if talk_only {
+        let persona =
+            sqlx::query_scalar!("SELECT instructions FROM agents WHERE id=$1", actor.agent.0)
+                .fetch_one(&mut **tx)
+                .await?;
+        let instructions =
+            super::meetings::briefed(tx, actor.agent, meeting, true, persona).await?;
+        return Ok((instructions, false));
+    }
+    let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
+    let instructions = super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
+    let (instructions, team_manager) = super::teams::briefed(tx, actor.agent, instructions).await?;
+    let instructions = super::calls::spoken(instructions, on_call);
+    let instructions =
+        super::meetings::briefed(tx, actor.agent, meeting, talk_only, instructions).await?;
+    let instructions = crate::identity::profiles::introduced(tx, turn, instructions).await?;
+    Ok((instructions, team_manager))
 }
 
 async fn append(
@@ -409,12 +436,12 @@ async fn files(
 async fn context(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     actor: &RuntimeActor,
-    delegated: bool,
+    isolated: bool,
     room: Option<Uuid>,
     in_task: bool,
     message: String,
 ) -> Result<(Option<String>, Vec<Exchange>, String), Error> {
-    let (summary, history) = if !in_task && (delegated || room.is_some()) {
+    let (summary, history) = if !in_task && (isolated || room.is_some()) {
         (None, Vec::new())
     } else {
         history(tx, actor).await?

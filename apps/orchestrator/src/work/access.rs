@@ -24,7 +24,7 @@ pub(super) async fn lock_actor(
     Ok(())
 }
 
-pub(super) async fn conversation(
+pub(crate) async fn conversation(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
     id: Uuid,

@@ -86,7 +86,8 @@ export function useConversation(id: string) {
   }, [id])
   // A call's own sequence is older than the turns it holds, which are what unread counts.
   const final = turns.at(-1)
-  const last = final?.call?.turns.at(-1)?.sequence ?? final?.sequence ?? 0
+  const held = final?.call?.turns ?? final?.meeting?.turns
+  const last = held?.at(-1)?.sequence ?? final?.sequence ?? 0
   useEffect(() => {
     if (loaded && last > 0) void markRead('conversations', id, last)
   }, [id, loaded, last])

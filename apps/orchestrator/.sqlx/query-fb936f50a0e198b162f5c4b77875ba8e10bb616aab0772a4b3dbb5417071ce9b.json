@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT meeting_id AS \"meeting_id!\", kind AS \"kind!\", speaker AS \"speaker!\", own AS \"own!\",\n            text AS \"text!\", at AS \"at!\", total AS \"total!\"\n        FROM (\n            SELECT u.meeting_id, u.sequence,\n                CASE WHEN u.account_id IS NOT NULL THEN 'account'\n                    WHEN u.agent_id IS NOT NULL THEN 'agent' ELSE 'guest' END AS kind,\n                COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, u.guest_name) AS speaker,\n                u.agent_id IS NOT DISTINCT FROM $2 AS own,\n                u.text, extract(epoch FROM u.at)::int8 AS at,\n                row_number() OVER (PARTITION BY u.meeting_id ORDER BY u.sequence) AS position,\n                count(*) OVER (PARTITION BY u.meeting_id) AS total\n            FROM meeting_utterances u\n            LEFT JOIN human_accounts h ON h.id=u.account_id\n            LEFT JOIN agents g ON g.id=u.agent_id\n            WHERE u.meeting_id=ANY($1)\n        ) t\n        WHERE position<=$3\n        ORDER BY meeting_id, sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meeting_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "speaker!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "own!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "text!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "at!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "total!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "fb936f50a0e198b162f5c4b77875ba8e10bb616aab0772a4b3dbb5417071ce9b"
+}

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT CASE WHEN a.account_id IS NOT NULL THEN 'account'\n                    WHEN a.agent_id IS NOT NULL THEN 'agent' ELSE 'guest' END AS \"kind!\",\n                a.account_id AS account, a.agent_id AS agent,\n                COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, a.guest_name || ' (guest)') AS \"name!\",\n                (to_jsonb(a.joined_at) #>> '{}') AS \"joined_at!\", (to_jsonb(a.left_at) #>> '{}') AS left_at\n            FROM meeting_attendance a\n            LEFT JOIN human_accounts h ON h.id=a.account_id\n            LEFT JOIN agents g ON g.id=a.agent_id\n            WHERE a.meeting_id=$1\n            ORDER BY a.joined_at, a.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "account",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "joined_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "left_at",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      true,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "74bfccd98a7ba280bb1513032cb73ae25f6dd736a912fb8c85e5c802b6181c50"
+}

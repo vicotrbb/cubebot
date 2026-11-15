@@ -65,6 +65,7 @@ services:
       CUBEBOT_CREDENTIAL_KEY_FILE: /state/credential.key
       CUBEBOT_PUBLIC_ORIGIN: http://localhost:${CUBEBOT_PORT:-3000}
       CUBEBOT_STORAGE_DIRECTORY: /var/lib/cubebot/files
+      CUBEBOT_TRUSTED_PROXY_HOPS: '1'
       CUBEBOT_INSTALLATION_NAME: ${CUBEBOT_INSTALLATION_NAME:-Cubebot}
       RUST_LOG: ${RUST_LOG:-info}
       # Backups (Platform › Backup shows each value set here as read-only); empty is unset.

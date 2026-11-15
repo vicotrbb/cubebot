@@ -101,7 +101,7 @@ async fn person(identity: &Identity, admin: &str, login: &str) -> String {
 }
 
 async fn console(pool: &sqlx::PgPool, storage: Storage) -> Router {
-    cubebot_orchestrator::api::configured_router(pool.clone(), None, None)
+    cubebot_orchestrator::api::configured_router(pool.clone(), None, None, None)
         .await
         .unwrap()
         .layer(Extension(storage))

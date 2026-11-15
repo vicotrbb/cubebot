@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meetings SET started_at=clock_timestamp() WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1bbd466535b5ce73fdacc30947f2f31246db288c061f50eee9c22bd7944054b8"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT min(sequence) AS \"sequence!\" FROM meeting_attendance WHERE meeting_id=$1 AND agent_id=$2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "617050a1c7155ea7bfcd8922051000b08ab91fc9c44a6ae43d63cce3cca0bdb9"
+}

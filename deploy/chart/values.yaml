@@ -53,6 +53,20 @@ httpRoute:
   parentRefs: []
   hostnames: []
 
+# Meeting links and their public entry; see deploy/README.md, Meetings.
+meetings:
+  publicOrigin: ''
+  trustedProxyHops: 1
+  publicIngress:
+    enabled: false
+    className: ''
+    annotations: {}
+    tlsSecret: ''
+  publicHttpRoute:
+    enabled: false
+    annotations: {}
+    parentRefs: []
+
 # Shared files people and agents keep.
 storage:
   size: 10Gi

@@ -4724,6 +4724,389 @@
         }
       }
     },
+    "/api/meetings": {
+      "get": {
+        "tags": [],
+        "operationId": "list_meetings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MeetingSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_meeting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMeeting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meeting"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/email-connections": {
+      "get": {
+        "tags": [],
+        "operationId": "meeting_email_connections",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EmailConnection"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/link/{token}/join": {
+      "post": {
+        "tags": [],
+        "operationId": "join_meeting_by_link",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinedMeeting"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/settings": {
+      "get": {
+        "tags": [],
+        "operationId": "read_meeting_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "operationId": "save_meeting_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveMeetingSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}": {
+      "get": {
+        "tags": [],
+        "operationId": "read_meeting",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meeting"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "cancel_meeting",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [],
+        "operationId": "update_meeting",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeMeeting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/invitations": {
+      "post": {
+        "tags": [],
+        "operationId": "invite_to_meeting",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewInvitations"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/invitations/{invitation}": {
+      "delete": {
+        "tags": [],
+        "operationId": "remove_meeting_invitation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{id}/link": {
+      "post": {
+        "tags": [],
+        "operationId": "set_meeting_link",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetLink"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingLink"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/provider": {
       "get": {
         "tags": [],
@@ -5118,6 +5501,40 @@
             "description": ""
           },
           "502": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/public/meetings/{token}": {
+      "get": {
+        "tags": [],
+        "operationId": "public_meeting",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicMeeting"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "429": {
             "description": ""
           }
         }
@@ -6493,6 +6910,10 @@
           }
         }
       },
+      "AgentMode": {
+        "type": "string",
+        "enum": ["relevant", "named"]
+      },
       "AgentModel": {
         "type": "object",
         "required": ["providers", "provider_efforts"],
@@ -6796,6 +7217,32 @@
       "AttemptId": {
         "type": "string",
         "format": "uuid"
+      },
+      "Attendance": {
+        "type": "object",
+        "required": ["kind", "name", "joined_at"],
+        "properties": {
+          "account": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "joined_at": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "left_at": {
+            "type": ["string", "null"]
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       },
       "AuditEntry": {
         "type": "object",
@@ -7387,6 +7834,40 @@
           "time_zone": {
             "type": ["string", "null"],
             "description": "The event's own `time_zone` when its detail has one, else the viewer's zone."
+          },
+          "title": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChangeMeeting": {
+        "type": "object",
+        "properties": {
+          "agent_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentMode"
+              }
+            ]
+          },
+          "description": {
+            "type": ["string", "null"]
+          },
+          "ends_at": {
+            "type": ["string", "null"]
+          },
+          "locked": {
+            "type": ["boolean", "null"]
+          },
+          "open_join": {
+            "type": ["boolean", "null"]
+          },
+          "starts_at": {
+            "type": ["string", "null"]
           },
           "title": {
             "type": ["string", "null"]
@@ -8156,6 +8637,25 @@
         "type": "string",
         "enum": ["minimal", "low", "medium", "high", "xhigh", "max"]
       },
+      "EmailConnection": {
+        "type": "object",
+        "required": ["id", "slug", "connector"],
+        "properties": {
+          "account": {
+            "type": ["string", "null"]
+          },
+          "connector": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
       "Event": {
         "type": "object",
         "required": ["id", "turn_id", "payload"],
@@ -8923,7 +9423,17 @@
           },
           "kind": {
             "type": "string",
-            "description": "`event`, `routine` (an upcoming run), `run` (a run that happened) or `digest` (a day of a\nroutine that runs more than hourly)."
+            "description": "`event`, `routine` (an upcoming run), `run` (a run that happened), `digest` (a day of a\nroutine that runs more than hourly) or `meeting`."
+          },
+          "meeting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingDetail"
+              }
+            ]
           },
           "routine": {
             "oneOf": [
@@ -8945,6 +9455,16 @@
           "title": {
             "type": "string",
             "description": "Untrusted vendor text for an event."
+          }
+        }
+      },
+      "JoinedMeeting": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
@@ -9201,6 +9721,346 @@
         "type": "string",
         "enum": ["stdio", "http"]
       },
+      "Meeting": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "description",
+          "owner",
+          "owner_name",
+          "state",
+          "open_join",
+          "locked",
+          "agent_mode",
+          "created_at",
+          "invitations",
+          "attendance",
+          "utterances"
+        ],
+        "properties": {
+          "agent_mode": {
+            "$ref": "#/components/schemas/AgentMode"
+          },
+          "attendance": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Attendance"
+            }
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": ["string", "null"]
+          },
+          "ends_at": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingInvitation"
+            }
+          },
+          "link": {
+            "type": ["string", "null"]
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "open_join": {
+            "type": "boolean"
+          },
+          "owner": {
+            "type": "boolean"
+          },
+          "owner_name": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": ["string", "null"]
+          },
+          "starts_at": {
+            "type": ["string", "null"]
+          },
+          "state": {
+            "type": "string"
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "utterances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Utterance"
+            }
+          }
+        }
+      },
+      "MeetingDetail": {
+        "type": "object",
+        "required": ["id", "state", "owner", "join"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "join": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingInvitation": {
+        "type": "object",
+        "required": ["id", "kind", "name"],
+        "properties": {
+          "account": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "avatar": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Avatar"
+              }
+            ]
+          },
+          "email": {
+            "type": ["string", "null"]
+          },
+          "email_error": {
+            "type": ["string", "null"]
+          },
+          "emailed_at": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingInvite": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "default": []
+          },
+          "agents": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "default": []
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          }
+        },
+        "additionalProperties": false
+      },
+      "MeetingLine": {
+        "type": "object",
+        "required": ["kind", "speaker", "own", "text", "at"],
+        "properties": {
+          "at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "own": {
+            "type": "boolean"
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingLink": {
+        "type": "object",
+        "properties": {
+          "link": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "MeetingPresence": {
+        "type": "object",
+        "required": ["kind", "name"],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingRecord": {
+        "type": "object",
+        "required": ["id", "title", "present", "transcript", "lines", "turns"],
+        "properties": {
+          "duration_seconds": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "ended_at": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lines": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "present": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingPresence"
+            }
+          },
+          "started_at": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "summary": {
+            "type": ["string", "null"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "transcript": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingLine"
+            }
+          },
+          "turns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Turn"
+            }
+          }
+        }
+      },
+      "MeetingSettings": {
+        "type": "object",
+        "required": [
+          "agents_join",
+          "agent_screens",
+          "guests",
+          "max_participants",
+          "agent_mode"
+        ],
+        "properties": {
+          "agent_mode": {
+            "$ref": "#/components/schemas/AgentMode"
+          },
+          "agent_screens": {
+            "type": "boolean"
+          },
+          "agents_join": {
+            "type": "boolean"
+          },
+          "guests": {
+            "type": "boolean"
+          },
+          "max_participants": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "public_origin": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "MeetingSummary": {
+        "type": "object",
+        "required": ["id", "title", "owner_name", "state", "people", "agents"],
+        "properties": {
+          "agents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ended_at": {
+            "type": ["string", "null"]
+          },
+          "ends_at": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_name": {
+            "type": "string"
+          },
+          "people": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "started_at": {
+            "type": ["string", "null"]
+          },
+          "starts_at": {
+            "type": ["string", "null"]
+          },
+          "state": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "Member": {
         "type": "object",
         "required": ["id", "name"],
@@ -9453,6 +10313,58 @@
           "time_zone": {
             "type": ["string", "null"],
             "description": "The viewer's IANA zone; the profile's, else UTC, when absent."
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewInvitations": {
+        "type": "object",
+        "properties": {
+          "email_connection": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "invite": {
+            "$ref": "#/components/schemas/MeetingInvite"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewMeeting": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "agent_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentMode"
+              }
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "email_connection": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "ends_at": {
+            "type": ["string", "null"]
+          },
+          "invite": {
+            "$ref": "#/components/schemas/MeetingInvite"
+          },
+          "open_join": {
+            "type": "boolean"
+          },
+          "starts_at": {
+            "type": ["string", "null"]
           },
           "title": {
             "type": "string"
@@ -10092,6 +11004,27 @@
           "revision": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "PublicMeeting": {
+        "type": "object",
+        "required": ["title", "host", "state", "locked", "lobby"],
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "lobby": {
+            "type": "boolean"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -10786,6 +11719,35 @@
         },
         "additionalProperties": false
       },
+      "SaveMeetingSettings": {
+        "type": "object",
+        "required": [
+          "agents_join",
+          "agent_screens",
+          "guests",
+          "max_participants",
+          "agent_mode"
+        ],
+        "properties": {
+          "agent_mode": {
+            "$ref": "#/components/schemas/AgentMode"
+          },
+          "agent_screens": {
+            "type": "boolean"
+          },
+          "agents_join": {
+            "type": "boolean"
+          },
+          "guests": {
+            "type": "boolean"
+          },
+          "max_participants": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
       "SaveMember": {
         "type": "object",
         "required": ["agent", "title", "role"],
@@ -11128,6 +12090,16 @@
             "type": ["number", "null"],
             "format": "double",
             "description": "US dollars per calendar month in UTC; `null` removes the limit."
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetLink": {
+        "type": "object",
+        "required": ["enabled"],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -11571,11 +12543,11 @@
           },
           "id": {
             "type": "string",
-            "description": "`calendar:<connection>:<calendar>`, `calendar:<connection>` for a connection whose\ncalendars could not be listed, or `agent:<agent>`."
+            "description": "`calendar:<connection>:<calendar>`, `calendar:<connection>` for a connection whose\ncalendars could not be listed, `agent:<agent>`, or `meetings`."
           },
           "kind": {
             "type": "string",
-            "description": "`calendar` or `agent`."
+            "description": "`calendar`, `agent` or `meetings`."
           },
           "name": {
             "type": "string"
@@ -12198,6 +13170,16 @@
             "type": "string",
             "format": "uuid"
           },
+          "meeting": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingRecord"
+              }
+            ]
+          },
           "message": {
             "type": "string"
           },
@@ -12533,6 +13515,28 @@
           }
         },
         "additionalProperties": false
+      },
+      "Utterance": {
+        "type": "object",
+        "required": ["sequence", "kind", "speaker", "text", "at"],
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
       },
       "VaultField": {
         "type": "string",

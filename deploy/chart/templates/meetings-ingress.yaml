@@ -1,0 +1,51 @@
+{{- with .Values.meetings.publicIngress }}
+{{- if .enabled }}
+{{- $host := (urlParse (required "meetings.publicOrigin is required for meetings.publicIngress" $.Values.meetings.publicOrigin)).host }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cubebot-meetings
+  labels: {{- include "cubebot.labels" $ | nindent 4 }}
+  {{- with .annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .tlsSecret }}
+  tls:
+    - secretName: {{ . }}
+      hosts: [{{ $host | quote }}]
+  {{- end }}
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: /api/public/meetings
+            pathType: Prefix
+            backend:
+              service:
+                name: orchestrator
+                port:
+                  number: 8080
+          {{- range list "/m" "/assets" "/fonts" "/icons" }}
+          - path: {{ . }}
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 3000
+          {{- end }}
+          {{- range list "/call-capture.js" "/favicon.svg" "/manifest.webmanifest" "/apple-touch-icon.png" }}
+          - path: {{ . }}
+            pathType: Exact
+            backend:
+              service:
+                name: web
+                port:
+                  number: 3000
+          {{- end }}
+{{- end }}
+{{- end }}

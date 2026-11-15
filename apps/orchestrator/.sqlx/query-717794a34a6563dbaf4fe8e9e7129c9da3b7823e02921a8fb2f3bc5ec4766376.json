@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, actor_id, message, talk_only FROM chat_turns WHERE meeting_id=$1 AND response IS NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "talk_only",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "717794a34a6563dbaf4fe8e9e7129c9da3b7823e02921a8fb2f3bc5ec4766376"
+}

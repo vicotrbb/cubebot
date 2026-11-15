@@ -21,10 +21,13 @@ import { Route as AppMenuRouteImport } from './routes/_app.menu'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppSituationRouteImport } from './routes/_app.situation'
 import { Route as AppYouRouteImport } from './routes/_app.you'
+import { Route as MTokenRouteImport } from './routes/m.$token'
 import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agentId'
 import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
 import { Route as AppKbIndexRouteImport } from './routes/_app.kb.index'
 import { Route as AppKbPageIdRouteImport } from './routes/_app.kb.$pageId'
+import { Route as AppMeetingsIndexRouteImport } from './routes/_app.meetings.index'
+import { Route as AppMeetingsMeetingIdRouteImport } from './routes/_app.meetings.$meetingId'
 import { Route as AppPlatformAuditRouteImport } from './routes/_app.platform.audit'
 import { Route as AppPlatformBackupRouteImport } from './routes/_app.platform.backup'
 import { Route as AppPlatformConnectionsRouteImport } from './routes/_app.platform.connections'
@@ -32,6 +35,7 @@ import { Route as AppPlatformGeneralRouteImport } from './routes/_app.platform.g
 import { Route as AppPlatformGroupsRouteImport } from './routes/_app.platform.groups'
 import { Route as AppPlatformHealthRouteImport } from './routes/_app.platform.health'
 import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
+import { Route as AppPlatformMeetingsRouteImport } from './routes/_app.platform.meetings'
 import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
 import { Route as AppPlatformProvidersRouteImport } from './routes/_app.platform.providers'
 import { Route as AppPlatformSignInRouteImport } from './routes/_app.platform.sign-in'
@@ -120,6 +124,11 @@ const AppYouRoute = AppYouRouteImport.update({
   path: '/you',
   getParentRoute: () => AppRoute,
 } as any)
+const MTokenRoute = MTokenRouteImport.update({
+  id: '/m/$token',
+  path: '/m/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAgentsAgentIdRoute = AppAgentsAgentIdRouteImport.update({
   id: '/agents/$agentId',
   path: '/agents/$agentId',
@@ -139,6 +148,16 @@ const AppKbPageIdRoute = AppKbPageIdRouteImport.update({
   id: '/$pageId',
   path: '/$pageId',
   getParentRoute: () => AppKbRoute,
+} as any)
+const AppMeetingsIndexRoute = AppMeetingsIndexRouteImport.update({
+  id: '/meetings/',
+  path: '/meetings/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMeetingsMeetingIdRoute = AppMeetingsMeetingIdRouteImport.update({
+  id: '/meetings/$meetingId',
+  path: '/meetings/$meetingId',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppPlatformAuditRoute = AppPlatformAuditRouteImport.update({
   id: '/audit',
@@ -173,6 +192,11 @@ const AppPlatformHealthRoute = AppPlatformHealthRouteImport.update({
 const AppPlatformMcpRoute = AppPlatformMcpRouteImport.update({
   id: '/mcp',
   path: '/mcp',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformMeetingsRoute = AppPlatformMeetingsRouteImport.update({
+  id: '/meetings',
+  path: '/meetings',
   getParentRoute: () => AppPlatformRoute,
 } as any)
 const AppPlatformPeopleRoute = AppPlatformPeopleRouteImport.update({
@@ -332,9 +356,11 @@ export interface FileRoutesByFullPath {
   '/platform': typeof AppPlatformRouteWithChildren
   '/situation': typeof AppSituationRoute
   '/you': typeof AppYouRoute
+  '/m/$token': typeof MTokenRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
   '/kb/$pageId': typeof AppKbPageIdRoute
+  '/meetings/$meetingId': typeof AppMeetingsMeetingIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
   '/platform/backup': typeof AppPlatformBackupRoute
   '/platform/connections': typeof AppPlatformConnectionsRoute
@@ -342,6 +368,7 @@ export interface FileRoutesByFullPath {
   '/platform/groups': typeof AppPlatformGroupsRoute
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
+  '/platform/meetings': typeof AppPlatformMeetingsRoute
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
@@ -355,6 +382,7 @@ export interface FileRoutesByFullPath {
   '/teams/$teamId': typeof AppTeamsTeamIdRoute
   '/teams/new': typeof AppTeamsNewRoute
   '/kb/': typeof AppKbIndexRoute
+  '/meetings/': typeof AppMeetingsIndexRoute
   '/skills/': typeof AppSkillsIndexRoute
   '/tasks/': typeof AppTasksIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
@@ -382,10 +410,12 @@ export interface FileRoutesByTo {
   '/platform': typeof AppPlatformRouteWithChildren
   '/situation': typeof AppSituationRoute
   '/you': typeof AppYouRoute
+  '/m/$token': typeof MTokenRoute
   '/': typeof AppIndexRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
   '/kb/$pageId': typeof AppKbPageIdRoute
+  '/meetings/$meetingId': typeof AppMeetingsMeetingIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
   '/platform/backup': typeof AppPlatformBackupRoute
   '/platform/connections': typeof AppPlatformConnectionsRoute
@@ -393,6 +423,7 @@ export interface FileRoutesByTo {
   '/platform/groups': typeof AppPlatformGroupsRoute
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
+  '/platform/meetings': typeof AppPlatformMeetingsRoute
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
@@ -406,6 +437,7 @@ export interface FileRoutesByTo {
   '/teams/$teamId': typeof AppTeamsTeamIdRoute
   '/teams/new': typeof AppTeamsNewRoute
   '/kb': typeof AppKbIndexRoute
+  '/meetings': typeof AppMeetingsIndexRoute
   '/skills': typeof AppSkillsIndexRoute
   '/tasks': typeof AppTasksIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
@@ -436,10 +468,12 @@ export interface FileRoutesById {
   '/_app/platform': typeof AppPlatformRouteWithChildren
   '/_app/situation': typeof AppSituationRoute
   '/_app/you': typeof AppYouRoute
+  '/m/$token': typeof MTokenRoute
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/_app/agents/new': typeof AppAgentsNewRoute
   '/_app/kb/$pageId': typeof AppKbPageIdRoute
+  '/_app/meetings/$meetingId': typeof AppMeetingsMeetingIdRoute
   '/_app/platform/audit': typeof AppPlatformAuditRoute
   '/_app/platform/backup': typeof AppPlatformBackupRoute
   '/_app/platform/connections': typeof AppPlatformConnectionsRoute
@@ -447,6 +481,7 @@ export interface FileRoutesById {
   '/_app/platform/groups': typeof AppPlatformGroupsRoute
   '/_app/platform/health': typeof AppPlatformHealthRoute
   '/_app/platform/mcp': typeof AppPlatformMcpRoute
+  '/_app/platform/meetings': typeof AppPlatformMeetingsRoute
   '/_app/platform/people': typeof AppPlatformPeopleRoute
   '/_app/platform/providers': typeof AppPlatformProvidersRoute
   '/_app/platform/sign-in': typeof AppPlatformSignInRoute
@@ -460,6 +495,7 @@ export interface FileRoutesById {
   '/_app/teams/$teamId': typeof AppTeamsTeamIdRoute
   '/_app/teams/new': typeof AppTeamsNewRoute
   '/_app/kb/': typeof AppKbIndexRoute
+  '/_app/meetings/': typeof AppMeetingsIndexRoute
   '/_app/skills/': typeof AppSkillsIndexRoute
   '/_app/tasks/': typeof AppTasksIndexRoute
   '/_app/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
@@ -491,9 +527,11 @@ export interface FileRouteTypes {
     | '/platform'
     | '/situation'
     | '/you'
+    | '/m/$token'
     | '/agents/$agentId'
     | '/agents/new'
     | '/kb/$pageId'
+    | '/meetings/$meetingId'
     | '/platform/audit'
     | '/platform/backup'
     | '/platform/connections'
@@ -501,6 +539,7 @@ export interface FileRouteTypes {
     | '/platform/groups'
     | '/platform/health'
     | '/platform/mcp'
+    | '/platform/meetings'
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
@@ -514,6 +553,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/teams/new'
     | '/kb/'
+    | '/meetings/'
     | '/skills/'
     | '/tasks/'
     | '/agents/$agentId/about'
@@ -541,10 +581,12 @@ export interface FileRouteTypes {
     | '/platform'
     | '/situation'
     | '/you'
+    | '/m/$token'
     | '/'
     | '/agents/$agentId'
     | '/agents/new'
     | '/kb/$pageId'
+    | '/meetings/$meetingId'
     | '/platform/audit'
     | '/platform/backup'
     | '/platform/connections'
@@ -552,6 +594,7 @@ export interface FileRouteTypes {
     | '/platform/groups'
     | '/platform/health'
     | '/platform/mcp'
+    | '/platform/meetings'
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
@@ -565,6 +608,7 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/teams/new'
     | '/kb'
+    | '/meetings'
     | '/skills'
     | '/tasks'
     | '/agents/$agentId/about'
@@ -594,10 +638,12 @@ export interface FileRouteTypes {
     | '/_app/platform'
     | '/_app/situation'
     | '/_app/you'
+    | '/m/$token'
     | '/_app/'
     | '/_app/agents/$agentId'
     | '/_app/agents/new'
     | '/_app/kb/$pageId'
+    | '/_app/meetings/$meetingId'
     | '/_app/platform/audit'
     | '/_app/platform/backup'
     | '/_app/platform/connections'
@@ -605,6 +651,7 @@ export interface FileRouteTypes {
     | '/_app/platform/groups'
     | '/_app/platform/health'
     | '/_app/platform/mcp'
+    | '/_app/platform/meetings'
     | '/_app/platform/people'
     | '/_app/platform/providers'
     | '/_app/platform/sign-in'
@@ -618,6 +665,7 @@ export interface FileRouteTypes {
     | '/_app/teams/$teamId'
     | '/_app/teams/new'
     | '/_app/kb/'
+    | '/_app/meetings/'
     | '/_app/skills/'
     | '/_app/tasks/'
     | '/_app/agents/$agentId/about'
@@ -639,6 +687,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   SignInRoute: typeof SignInRoute
+  MTokenRoute: typeof MTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -727,6 +776,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppYouRouteImport
       parentRoute: typeof AppRoute
     }
+    '/m/$token': {
+      id: '/m/$token'
+      path: '/m/$token'
+      fullPath: '/m/$token'
+      preLoaderRoute: typeof MTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/agents/$agentId': {
       id: '/_app/agents/$agentId'
       path: '/agents/$agentId'
@@ -754,6 +810,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/kb/$pageId'
       preLoaderRoute: typeof AppKbPageIdRouteImport
       parentRoute: typeof AppKbRoute
+    }
+    '/_app/meetings/': {
+      id: '/_app/meetings/'
+      path: '/meetings'
+      fullPath: '/meetings/'
+      preLoaderRoute: typeof AppMeetingsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/meetings/$meetingId': {
+      id: '/_app/meetings/$meetingId'
+      path: '/meetings/$meetingId'
+      fullPath: '/meetings/$meetingId'
+      preLoaderRoute: typeof AppMeetingsMeetingIdRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/platform/audit': {
       id: '/_app/platform/audit'
@@ -802,6 +872,13 @@ declare module '@tanstack/react-router' {
       path: '/mcp'
       fullPath: '/platform/mcp'
       preLoaderRoute: typeof AppPlatformMcpRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/meetings': {
+      id: '/_app/platform/meetings'
+      path: '/meetings'
+      fullPath: '/platform/meetings'
+      preLoaderRoute: typeof AppPlatformMeetingsRouteImport
       parentRoute: typeof AppPlatformRoute
     }
     '/_app/platform/people': {
@@ -1023,6 +1100,7 @@ interface AppPlatformRouteChildren {
   AppPlatformGroupsRoute: typeof AppPlatformGroupsRoute
   AppPlatformHealthRoute: typeof AppPlatformHealthRoute
   AppPlatformMcpRoute: typeof AppPlatformMcpRoute
+  AppPlatformMeetingsRoute: typeof AppPlatformMeetingsRoute
   AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
   AppPlatformProvidersRoute: typeof AppPlatformProvidersRoute
   AppPlatformSignInRoute: typeof AppPlatformSignInRoute
@@ -1039,6 +1117,7 @@ const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformGroupsRoute: AppPlatformGroupsRoute,
   AppPlatformHealthRoute: AppPlatformHealthRoute,
   AppPlatformMcpRoute: AppPlatformMcpRoute,
+  AppPlatformMeetingsRoute: AppPlatformMeetingsRoute,
   AppPlatformPeopleRoute: AppPlatformPeopleRoute,
   AppPlatformProvidersRoute: AppPlatformProvidersRoute,
   AppPlatformSignInRoute: AppPlatformSignInRoute,
@@ -1109,12 +1188,14 @@ interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppAgentsAgentIdRoute: typeof AppAgentsAgentIdRouteWithChildren
   AppAgentsNewRoute: typeof AppAgentsNewRoute
+  AppMeetingsMeetingIdRoute: typeof AppMeetingsMeetingIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRouteWithChildren
   AppRoomsNewRoute: typeof AppRoomsNewRoute
   AppSkillsSkillIdRoute: typeof AppSkillsSkillIdRoute
   AppTasksTaskIdRoute: typeof AppTasksTaskIdRoute
   AppTeamsTeamIdRoute: typeof AppTeamsTeamIdRoute
   AppTeamsNewRoute: typeof AppTeamsNewRoute
+  AppMeetingsIndexRoute: typeof AppMeetingsIndexRoute
   AppSkillsIndexRoute: typeof AppSkillsIndexRoute
   AppTasksIndexRoute: typeof AppTasksIndexRoute
   AppAgentsAgentIdDesktopRoute: typeof AppAgentsAgentIdDesktopRoute
@@ -1133,12 +1214,14 @@ const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppAgentsAgentIdRoute: AppAgentsAgentIdRouteWithChildren,
   AppAgentsNewRoute: AppAgentsNewRoute,
+  AppMeetingsMeetingIdRoute: AppMeetingsMeetingIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRouteWithChildren,
   AppRoomsNewRoute: AppRoomsNewRoute,
   AppSkillsSkillIdRoute: AppSkillsSkillIdRoute,
   AppTasksTaskIdRoute: AppTasksTaskIdRoute,
   AppTeamsTeamIdRoute: AppTeamsTeamIdRoute,
   AppTeamsNewRoute: AppTeamsNewRoute,
+  AppMeetingsIndexRoute: AppMeetingsIndexRoute,
   AppSkillsIndexRoute: AppSkillsIndexRoute,
   AppTasksIndexRoute: AppTasksIndexRoute,
   AppAgentsAgentIdDesktopRoute: AppAgentsAgentIdDesktopRoute,
@@ -1149,6 +1232,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   SignInRoute: SignInRoute,
+  MTokenRoute: MTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

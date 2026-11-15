@@ -195,6 +195,13 @@
   border-width: 0 0 2px 2px;
   transform: translateY(-1px) rotate(-45deg);
 }
+.cal-source__icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--ink-faint);
+  stroke-width: 1.75;
+}
 .cal-source .cube {
   flex: none;
 }

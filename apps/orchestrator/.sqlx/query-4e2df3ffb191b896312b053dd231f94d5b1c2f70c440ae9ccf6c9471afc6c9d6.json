@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO meetings (title, owner_id, agent_mode, started_at)\n        VALUES ($1, $2, 'relevant', clock_timestamp())\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4e2df3ffb191b896312b053dd231f94d5b1c2f70c440ae9ccf6c9471afc6c9d6"
+}

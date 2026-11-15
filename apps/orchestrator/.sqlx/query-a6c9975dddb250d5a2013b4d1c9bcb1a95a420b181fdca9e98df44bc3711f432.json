@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO skill_installations (agent_id, skill_id, revision) SELECT $1, id, revision FROM skills ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a6c9975dddb250d5a2013b4d1c9bcb1a95a420b181fdca9e98df44bc3711f432"
+}

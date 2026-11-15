@@ -2,7 +2,7 @@
 use crate::{
     agents::{
         AgentId, Agents,
-        sandbox::{Desktop, ExecChannel},
+        sandbox::{Desktop, DesktopChannel},
     },
     identity::{
         Actor, Identity, IdentityError,
@@ -25,18 +25,15 @@ use cubebot_protocol::desktop::{self, Action, HostRequest, LINE_LIMIT, Mode};
 use serde::Deserialize;
 use serde_json::json;
 use std::time::Duration;
-use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use uuid::Uuid;
 
 const FRAME_INTERVAL: Duration = Duration::from_millis(50);
 const RECHECK: Duration = Duration::from_secs(30);
-const RESPONSE_LIMIT: u64 = 32 << 20;
 
 #[derive(Debug)]
 enum Closing {
     InvalidMessage(serde_json::Error),
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
-    Truncated,
     NotRecorded,
     AccessEnded,
     Disconnected(axum::Error),
@@ -46,7 +43,7 @@ impl std::fmt::Display for Closing {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::InvalidMessage(_) => "invalid desktop message",
-            Self::Unavailable(_) | Self::Truncated => "the desktop is unavailable",
+            Self::Unavailable(_) => "the desktop is unavailable",
             Self::NotRecorded => "the desktop session could not be recorded",
             Self::AccessEnded => "access to this desktop ended",
             Self::Disconnected(_) => "the viewer disconnected",
@@ -60,7 +57,7 @@ impl std::error::Error for Closing {
             Self::InvalidMessage(error) => Some(error),
             Self::Unavailable(error) => Some(error.as_ref()),
             Self::Disconnected(error) => Some(error),
-            Self::Truncated | Self::NotRecorded | Self::AccessEnded => None,
+            Self::NotRecorded | Self::AccessEnded => None,
         }
     }
 }
@@ -166,7 +163,7 @@ async fn connect(
         return Err(IdentityError::NotFound);
     };
     let channel = desktop
-        .open(agent)
+        .channel(agent)
         .await
         .map_err(|_| IdentityError::Conflict)?;
     let session = api.agents.start_desktop(agent, actor.id).await?;
@@ -178,7 +175,7 @@ async fn connect(
         actor,
         session,
         holding: false,
-        channel: Channel::new(channel),
+        channel,
     };
     Ok(upgrade
         .max_message_size(LINE_LIMIT)
@@ -203,13 +200,13 @@ struct Session {
     actor: Actor,
     session: Uuid,
     holding: bool,
-    channel: Channel,
+    channel: DesktopChannel,
 }
 
 impl Session {
     #[tracing::instrument(skip_all, fields(agent = %self.agent.0, session = %self.session))]
     async fn run(mut self, mut socket: WebSocket) {
-        *self.viewers().entry(self.agent).or_default() += 1;
+        self.desktop.watch(self.agent);
         let _ = self.mode(Mode::Watch, None, false).await;
         if let Err(reason) = self.serve(&mut socket).await {
             let close = CloseFrame {
@@ -221,31 +218,11 @@ impl Session {
         self.leave().await;
     }
 
-    fn viewers(&self) -> std::sync::MutexGuard<'_, std::collections::HashMap<AgentId, usize>> {
-        self.desktop
-            .viewers
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
     async fn leave(&mut self) {
-        let remaining = {
-            let mut viewers = self.viewers();
-            let count = viewers.entry(self.agent).or_default();
-            *count = count.saturating_sub(1);
-            let remaining = *count;
-            if remaining == 0 {
-                viewers.remove(&self.agent);
-            }
-            remaining
-        };
-        let mode = if remaining == 0 {
-            Mode::Agent
-        } else {
-            Mode::Watch
-        };
+        let last = self.desktop.unwatch(self.agent);
+        let mode = if last { Mode::Agent } else { Mode::Watch };
         let account = self.holding.then_some(self.actor.id);
-        if account.is_some() || remaining == 0 {
+        if account.is_some() || last {
             let _ = self.mode(mode, account, false).await;
         }
         if let Err(error) = self.api.agents.end_desktop(self.session).await {
@@ -269,7 +246,7 @@ impl Session {
                     Some(Ok(_)) => {}
                 },
                 _ = frames.tick() => {
-                    let frame = self.channel.request(&HostRequest::Frame).await?;
+                    let frame = self.channel.request(&HostRequest::Frame).await.map_err(Closing::Unavailable)?;
                     send(socket, frame).await?;
                 }
                 _ = recheck.tick() => self.recheck().await?,
@@ -286,7 +263,13 @@ impl Session {
             Viewer::Input { t, action } => {
                 let account = self.actor.id;
                 let input = HostRequest::Input { account, action };
-                (t, self.channel.request(&input).await?)
+                (
+                    t,
+                    self.channel
+                        .request(&input)
+                        .await
+                        .map_err(Closing::Unavailable)?,
+                )
             }
         };
         let mut answer: serde_json::Value = serde_json::from_str(&line).map_err(unavailable)?;
@@ -363,7 +346,11 @@ impl Session {
             account,
             handoff,
         };
-        let line = self.channel.request(&request).await?;
+        let line = self
+            .channel
+            .request(&request)
+            .await
+            .map_err(Closing::Unavailable)?;
         let changed = serde_json::from_str::<desktop::Response>(&line)
             .is_ok_and(|response| response.error.is_none());
         if changed && account.is_some() {
@@ -414,7 +401,7 @@ pub(super) async fn fill(
     text: String,
     account: Option<Uuid>,
 ) -> Result<Result<(), String>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut channel = Channel::new(desktop.open(agent).await?);
+    let mut channel = desktop.channel(agent).await?;
     let request = HostRequest::Fill {
         item,
         text,
@@ -423,39 +410,6 @@ pub(super) async fn fill(
     let line = channel.request(&request).await?;
     let response: desktop::Response = serde_json::from_str(&line)?;
     Ok(response.error.map_or(Ok(()), Err))
-}
-
-struct Channel {
-    input: Box<dyn AsyncWrite + Send + Unpin>,
-    output: BufReader<Box<dyn AsyncRead + Send + Unpin>>,
-    _session: Box<dyn Send>,
-}
-
-impl Channel {
-    fn new(channel: ExecChannel) -> Self {
-        Self {
-            input: channel.stdin,
-            output: BufReader::new(channel.stdout),
-            _session: channel._session,
-        }
-    }
-
-    async fn request(&mut self, request: &HostRequest) -> Result<String, Closing> {
-        let mut line = serde_json::to_vec(request).map_err(unavailable)?;
-        line.push(b'\n');
-        self.input.write_all(&line).await.map_err(unavailable)?;
-        self.input.flush().await.map_err(unavailable)?;
-        let mut response = Vec::new();
-        let mut bounded = (&mut self.output).take(RESPONSE_LIMIT);
-        bounded
-            .read_until(b'\n', &mut response)
-            .await
-            .map_err(unavailable)?;
-        if response.pop() != Some(b'\n') {
-            return Err(Closing::Truncated);
-        }
-        String::from_utf8(response).map_err(|error| unavailable(error.utf8_error()))
-    }
 }
 
 #[cfg(test)]

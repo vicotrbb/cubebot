@@ -1,7 +1,10 @@
 //! HTTP and lifecycle work settle before consuming the installation ownership guard.
 use crate::agents::kubernetes::{Controller, Error};
-use axum::{Router, serve::Listener};
-use std::{fmt::Debug, future::Future, io, net::SocketAddr, sync::Arc, time::Duration};
+use axum::{
+    Router,
+    serve::{Listener, ListenerExt},
+};
+use std::{future::Future, io, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, watch},
@@ -83,8 +86,7 @@ pub async fn serve<L>(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), Error>
 where
-    L: Listener,
-    L::Addr: Debug,
+    L: Listener<Addr = SocketAddr>,
 {
     coordinate(listener, control, router, &mut controller, shutdown).await?;
     if let Some(controller) = controller {
@@ -100,13 +102,17 @@ async fn coordinate<L>(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), Error>
 where
-    L: Listener,
-    L::Addr: Debug,
+    L: Listener<Addr = SocketAddr>,
 {
     let (stop, receiver) = watch::channel(false);
-    let public = axum::serve(listener, router.clone())
-        .with_graceful_shutdown(wait_stop(receiver.clone()))
-        .into_future();
+    let public = axum::serve(
+        listener.tap_io(|_| ()),
+        router
+            .clone()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(wait_stop(receiver.clone()))
+    .into_future();
     let control = serve_control(control, router, receiver.clone());
     let server = async { tokio::try_join!(public, control).map(|_| ()) };
     let lifecycle = run_controller(controller, receiver);

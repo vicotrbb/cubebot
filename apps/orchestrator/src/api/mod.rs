@@ -15,8 +15,10 @@ mod installation;
 mod invitations;
 mod knowledge_base;
 mod mcp;
+mod meetings;
 mod memories;
 mod oidc;
+mod public;
 mod rooms;
 mod routines;
 mod runtime;
@@ -82,6 +84,8 @@ pub fn openapi() -> String {
     doc.merge(creations::Doc::openapi());
     doc.merge(calls::Doc::openapi());
     doc.merge(calendar::Doc::openapi());
+    doc.merge(meetings::Doc::openapi());
+    doc.merge(public::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
     doc.merge(teams::Doc::openapi());
     doc.merge(memories::Doc::openapi());
@@ -117,6 +121,16 @@ pub fn calls_router(pool: sqlx::PgPool, origin: &str, speech: crate::speech::Spe
     calls::router(pool, identity, speech, None)
 }
 
+pub fn meetings_router(
+    pool: sqlx::PgPool,
+    origin: &str,
+    meetings: crate::meetings::Meetings,
+) -> Router {
+    let mut identity = crate::identity::Identity::new(pool.clone());
+    identity.browser_origin = Some(origin.to_owned());
+    public::router(&identity, meetings.clone()).merge(meetings::router(pool, identity, meetings))
+}
+
 pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
@@ -145,6 +159,7 @@ pub async fn configured_router(
     pool: sqlx::PgPool,
     origin: Option<String>,
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
+    desktop: Option<crate::agents::sandbox::Desktop>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
         .map(|path| crate::connections::Credentials::from_file(std::path::Path::new(&path)))
@@ -152,7 +167,7 @@ pub async fn configured_router(
         .map_err(|error| {
             crate::identity::IdentityError::CredentialUnavailable(Some(error.into()))
         })?;
-    configured_router_with_credentials(pool, origin, config, credentials).await
+    assembled(pool, origin, config, credentials, desktop).await
 }
 
 pub async fn configured_router_with_credentials(
@@ -160,6 +175,16 @@ pub async fn configured_router_with_credentials(
     origin: Option<String>,
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     credentials: Option<crate::connections::Credentials>,
+) -> Result<Router, crate::identity::IdentityError> {
+    assembled(pool, origin, config, credentials, None).await
+}
+
+async fn assembled(
+    pool: sqlx::PgPool,
+    origin: Option<String>,
+    config: Option<(crate::identity::oidc::Config, Option<String>)>,
+    credentials: Option<crate::connections::Credentials>,
+    desktop: Option<crate::agents::sandbox::Desktop>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let mut identity = crate::identity::Identity::new(pool.clone());
     if let Some(origin) = origin {
@@ -180,6 +205,20 @@ pub async fn configured_router_with_credentials(
     let speech = crate::speech::Speech::environment(connections.clone());
     let events = crate::calendar::Calendar::new(pool.clone(), connections.clone());
     routes = routes.merge(calendar::router(identity.clone(), events));
+    let meetings = crate::meetings::Meetings::environment(
+        pool.clone(),
+        connections.clone(),
+        identity.browser_origin.clone(),
+    )?
+    .with_speech(speech.clone())
+    .with_desktop(desktop);
+    meetings
+        .close_open()
+        .await
+        .inspect_err(|error| tracing::error!(?error, "live meetings could not be closed"))?;
+    routes = routes
+        .merge(public::router(&identity, meetings.clone()))
+        .merge(meetings::router(pool.clone(), identity.clone(), meetings));
     routes = routes.merge(calls::router(
         pool,
         identity.clone(),

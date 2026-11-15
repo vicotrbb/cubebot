@@ -1917,6 +1917,134 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/meetings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_meetings']
+    put?: never
+    post: operations['create_meeting']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/email-connections': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['meeting_email_connections']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/link/{token}/join': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['join_meeting_by_link']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['read_meeting_settings']
+    put: operations['save_meeting_settings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['read_meeting']
+    put?: never
+    post?: never
+    delete: operations['cancel_meeting']
+    options?: never
+    head?: never
+    patch: operations['update_meeting']
+    trace?: never
+  }
+  '/api/meetings/{id}/invitations': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['invite_to_meeting']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{id}/invitations/{invitation}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['remove_meeting_invitation']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{id}/link': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['set_meeting_link']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/provider': {
     parameters: {
       query?: never
@@ -2113,6 +2241,22 @@ export interface paths {
     put?: never
     /** 202 until the person approves on xAI's page; then the signed-in plan. */
     post: operations['poll_supergrok']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/public/meetings/{token}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['public_meeting']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -2690,6 +2834,8 @@ export interface components {
       name: string
       transport: components['schemas']['McpTransport']
     }
+    /** @enum {string} */
+    AgentMode: 'relevant' | 'named'
     AgentModel: {
       chosen?: null | components['schemas']['ModelRef']
       default?: null | components['schemas']['ModelRef']
@@ -2774,6 +2920,16 @@ export interface components {
     }
     /** Format: uuid */
     AttemptId: string
+    Attendance: {
+      /** Format: uuid */
+      account?: string | null
+      /** Format: uuid */
+      agent?: string | null
+      joined_at: string
+      kind: string
+      left_at?: string | null
+      name: string
+    }
     AuditEntry: {
       /** Format: uuid */
       actor?: string | null
@@ -3008,6 +3164,15 @@ export interface components {
       start?: string | null
       /** @description The event's own `time_zone` when its detail has one, else the viewer's zone. */
       time_zone?: string | null
+      title?: string | null
+    }
+    ChangeMeeting: {
+      agent_mode?: null | components['schemas']['AgentMode']
+      description?: string | null
+      ends_at?: string | null
+      locked?: boolean | null
+      open_join?: boolean | null
+      starts_at?: string | null
       title?: string | null
     }
     ChatgptSignIn: {
@@ -3283,6 +3448,13 @@ export interface components {
     }
     /** @enum {string} */
     Effort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+    EmailConnection: {
+      account?: string | null
+      connector: string
+      /** Format: uuid */
+      id: string
+      slug: string
+    }
     Event: {
       /**
        * Format: int64
@@ -3623,16 +3795,21 @@ export interface components {
       /** @description Stable across reads. */
       id: string
       /**
-       * @description `event`, `routine` (an upcoming run), `run` (a run that happened) or `digest` (a day of a
-       *     routine that runs more than hourly).
+       * @description `event`, `routine` (an upcoming run), `run` (a run that happened), `digest` (a day of a
+       *     routine that runs more than hourly) or `meeting`.
        */
       kind: string
+      meeting?: null | components['schemas']['MeetingDetail']
       routine?: null | components['schemas']['RoutineDetail']
       source: string
       /** @description RFC 3339 in UTC, or `YYYY-MM-DD` when `all_day`. */
       start: string
       /** @description Untrusted vendor text for an event. */
       title: string
+    }
+    JoinedMeeting: {
+      /** Format: uuid */
+      id: string
     }
     KeyView: {
       /** Format: int64 */
@@ -3725,6 +3902,113 @@ export interface components {
     }
     /** @enum {string} */
     McpTransport: 'stdio' | 'http'
+    Meeting: {
+      agent_mode: components['schemas']['AgentMode']
+      attendance: components['schemas']['Attendance'][]
+      created_at: string
+      description: string
+      ended_at?: string | null
+      ends_at?: string | null
+      /** Format: uuid */
+      id: string
+      invitations: components['schemas']['MeetingInvitation'][]
+      link?: string | null
+      locked: boolean
+      open_join: boolean
+      owner: boolean
+      owner_name: string
+      started_at?: string | null
+      starts_at?: string | null
+      state: string
+      summary?: string | null
+      title: string
+      utterances: components['schemas']['Utterance'][]
+    }
+    MeetingDetail: {
+      /** Format: uuid */
+      id: string
+      join: string
+      owner: string
+      state: string
+    }
+    MeetingInvitation: {
+      /** Format: uuid */
+      account?: string | null
+      /** Format: uuid */
+      agent?: string | null
+      avatar?: null | components['schemas']['Avatar']
+      email?: string | null
+      email_error?: string | null
+      emailed_at?: string | null
+      /** Format: uuid */
+      id: string
+      kind: string
+      name: string
+    }
+    MeetingInvite: {
+      /** @default [] */
+      accounts: string[]
+      /** @default [] */
+      agents: string[]
+      /** @default [] */
+      emails: string[]
+    }
+    MeetingLine: {
+      /** Format: int64 */
+      at: number
+      kind: string
+      own: boolean
+      speaker: string
+      text: string
+    }
+    MeetingLink: {
+      link?: string | null
+    }
+    MeetingPresence: {
+      kind: string
+      name: string
+    }
+    MeetingRecord: {
+      /** Format: int64 */
+      duration_seconds?: number | null
+      /** Format: int64 */
+      ended_at?: number | null
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      lines: number
+      present: components['schemas']['MeetingPresence'][]
+      /** Format: int64 */
+      started_at?: number | null
+      summary?: string | null
+      title: string
+      transcript: components['schemas']['MeetingLine'][]
+      turns: components['schemas']['Turn'][]
+    }
+    MeetingSettings: {
+      agent_mode: components['schemas']['AgentMode']
+      agent_screens: boolean
+      agents_join: boolean
+      guests: boolean
+      /** Format: int32 */
+      max_participants: number
+      public_origin?: string | null
+    }
+    MeetingSummary: {
+      /** Format: int64 */
+      agents: number
+      ended_at?: string | null
+      ends_at?: string | null
+      /** Format: uuid */
+      id: string
+      owner_name: string
+      /** Format: int64 */
+      people: number
+      started_at?: string | null
+      starts_at?: string | null
+      state: string
+      title: string
+    }
     Member: {
       /** Format: uuid */
       id: string
@@ -3837,6 +4121,22 @@ export interface components {
       start: string
       /** @description The viewer's IANA zone; the profile's, else UTC, when absent. */
       time_zone?: string | null
+      title: string
+    }
+    NewInvitations: {
+      /** Format: uuid */
+      email_connection?: string | null
+      invite?: components['schemas']['MeetingInvite']
+    }
+    NewMeeting: {
+      agent_mode?: null | components['schemas']['AgentMode']
+      description?: string
+      /** Format: uuid */
+      email_connection?: string | null
+      ends_at?: string | null
+      invite?: components['schemas']['MeetingInvite']
+      open_join?: boolean
+      starts_at?: string | null
       title: string
     }
     NewPage: {
@@ -4095,6 +4395,13 @@ export interface components {
       reasoning_effort?: null | components['schemas']['Effort']
       /** Format: int64 */
       revision: number
+    }
+    PublicMeeting: {
+      host: string
+      lobby: boolean
+      locked: boolean
+      state: string
+      title: string
     }
     PublishSkill: {
       files: components['schemas']['BTreeMap']
@@ -4376,6 +4683,14 @@ export interface components {
       /** @description HTTP only: an `https://` or `http://` endpoint. */
       url?: string | null
     }
+    SaveMeetingSettings: {
+      agent_mode: components['schemas']['AgentMode']
+      agent_screens: boolean
+      agents_join: boolean
+      guests: boolean
+      /** Format: int32 */
+      max_participants: number
+    }
     SaveMember: {
       /** Format: uuid */
       agent: string
@@ -4498,6 +4813,9 @@ export interface components {
        * @description US dollars per calendar month in UTC; `null` removes the limit.
        */
       monthly_budget_usd?: number | null
+    }
+    SetLink: {
+      enabled: boolean
     }
     Settings: {
       /** @description Shown in the console and to agents; the deployment's name when empty. */
@@ -4657,10 +4975,10 @@ export interface components {
       connector?: string | null
       /**
        * @description `calendar:<connection>:<calendar>`, `calendar:<connection>` for a connection whose
-       *     calendars could not be listed, or `agent:<agent>`.
+       *     calendars could not be listed, `agent:<agent>`, or `meetings`.
        */
       id: string
-      /** @description `calendar` or `agent`. */
+      /** @description `calendar`, `agent` or `meetings`. */
       kind: string
       name: string
       /** @description Why its events are missing, worded for the person. */
@@ -4913,6 +5231,7 @@ export interface components {
       error?: string | null
       /** Format: uuid */
       id: string
+      meeting?: null | components['schemas']['MeetingRecord']
       message: string
       message_attachments: components['schemas']['ReplyAttachment'][]
       origin?: null | components['schemas']['Origin']
@@ -5025,6 +5344,14 @@ export interface components {
       /** Format: int64 */
       expected_revision: number
       team: components['schemas']['SaveTeam']
+    }
+    Utterance: {
+      at: string
+      kind: string
+      /** Format: int64 */
+      sequence: number
+      speaker: string
+      text: string
     }
     /** @enum {string} */
     VaultField: 'username' | 'secret'
@@ -8666,6 +8993,397 @@ export interface operations {
       }
     }
   }
+  list_meetings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingSummary'][]
+        }
+      }
+    }
+  }
+  create_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewMeeting']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Meeting']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  meeting_email_connections: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['EmailConnection'][]
+        }
+      }
+    }
+  }
+  join_meeting_by_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['JoinedMeeting']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  read_meeting_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingSettings']
+        }
+      }
+    }
+  }
+  save_meeting_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveMeetingSettings']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  read_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Meeting']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  cancel_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  update_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeMeeting']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  invite_to_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewInvitations']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  remove_meeting_invitation: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        invitation: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  set_meeting_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetLink']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingLink']
+        }
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   inspect: {
     parameters: {
       query?: never
@@ -9049,6 +9767,39 @@ export interface operations {
         content?: never
       }
       502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  public_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PublicMeeting']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      429: {
         headers: {
           [name: string]: unknown
         }

@@ -20,8 +20,9 @@ import {
   Sun,
   SunMoon,
   UserRound,
+  Video,
 } from 'lucide-react'
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { AgentSummary, RoomSummary } from '../../api/types'
 import {
   notRetired,
@@ -44,6 +45,7 @@ import { Cube, moodOf } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Menu } from '../../components/primitives'
 import { doingOf } from '../agent/doing'
+import { NewMeeting } from '../meetings/NewMeeting'
 import { isRunning, pileOf, titleOf } from '../tasks/status'
 import { TaskMark } from '../tasks/TaskMark'
 import '../tasks/tasks.css'
@@ -67,6 +69,7 @@ export const PLATFORM = [
   ['/platform/sign-in', 'Sign-in'],
   ['/platform/providers', 'AI providers'],
   ['/platform/speech', 'Speech'],
+  ['/platform/meetings', 'Meetings'],
   ['/platform/tasks', 'Tasks'],
   ['/platform/connections', 'Connections'],
   ['/platform/mcp', 'MCP servers'],
@@ -111,7 +114,7 @@ export function Sidebar({
             <Search />
           </button>
         )}
-        {administrator && <NewMenu />}
+        <NewMenu administrator={administrator} />
       </header>
       <nav className="sidebar__scroll" aria-label="Workspace">
         <Link
@@ -141,6 +144,14 @@ export function Sidebar({
         >
           <CalendarDays className="row__icon" />
           <span className="row__label">Calendar</span>
+        </Link>
+        <Link
+          to="/meetings"
+          className="row row--page"
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <Video className="row__icon" />
+          <span className="row__label">Meetings</span>
         </Link>
         {administrator && <BroadcastRow />}
         <Favorites />
@@ -494,24 +505,39 @@ function RowSkeleton() {
   )
 }
 
-function NewMenu() {
+function NewMenu({ administrator }: { administrator: boolean }) {
+  const [meeting, setMeeting] = useState(false)
   return (
-    <Menu
-      className="menu--right"
-      trigger={<Plus />}
-      triggerClassName="btn btn--ghost btn--icon btn--sm"
-      label="New"
-    >
-      <Link to="/agents/new" className="menu__item">
-        New agent
-      </Link>
-      <Link to="/teams/new" className="menu__item">
-        New team
-      </Link>
-      <Link to="/rooms/new" className="menu__item">
-        New room
-      </Link>
-    </Menu>
+    <>
+      <Menu
+        className="menu--right"
+        trigger={<Plus />}
+        triggerClassName="btn btn--ghost btn--icon btn--sm"
+        label="New"
+      >
+        <button
+          type="button"
+          className="menu__item"
+          onClick={() => setMeeting(true)}
+        >
+          New meeting
+        </button>
+        {administrator && (
+          <>
+            <Link to="/agents/new" className="menu__item">
+              New agent
+            </Link>
+            <Link to="/teams/new" className="menu__item">
+              New team
+            </Link>
+            <Link to="/rooms/new" className="menu__item">
+              New room
+            </Link>
+          </>
+        )}
+      </Menu>
+      <NewMeeting open={meeting} onClose={() => setMeeting(false)} />
+    </>
   )
 }
 

@@ -4,6 +4,7 @@ import {
   CircleSlash,
   CircleX,
   Repeat,
+  Video,
 } from 'lucide-react'
 import type { MouseEvent } from 'react'
 import type { Schemas } from '../../api/types'
@@ -38,6 +39,8 @@ function outcomeOf(item: Item) {
 export function Glyph({ item }: { item: Item }) {
   if (item.kind === 'routine')
     return <Repeat className="cal-glyph" aria-hidden="true" />
+  if (item.kind === 'meeting')
+    return <Video className="cal-glyph" aria-hidden="true" />
   if (item.kind !== 'run') return null
   const { status, look } = outcomeOf(item)
   const Icon = look[1]
@@ -68,6 +71,7 @@ export function labelOf(item: Merged, look: Look) {
     run: `${outcomeOf(item).look[0]}, run of ${look.sourceName(item)}`,
     digest: `routine of ${look.sourceName(item)}`,
     event: look.sourceName(item),
+    meeting: 'meeting',
   }
   return `${titleOf(item)}, ${when}, ${what[item.kind] ?? ''}`
 }

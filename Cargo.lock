@@ -880,6 +880,7 @@ dependencies = [
  "aes-gcm 0.10.3",
  "argon2 0.5.3",
  "axum",
+ "base64 0.22.1",
  "bzip2 0.4.4",
  "chrono",
  "chrono-tz",

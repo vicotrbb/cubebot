@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id, m.title, m.description, m.owner_id=$2 AS \"owner!\",\n                COALESCE(NULLIF(o.profile->>'name', ''), o.login) AS \"owner_name!\",\n                CASE WHEN m.ended_at IS NOT NULL THEN 'ended'\n                    WHEN m.started_at IS NOT NULL THEN 'live' ELSE 'scheduled' END AS \"state!\",\n                (to_jsonb(m.starts_at) #>> '{}') AS starts_at, (to_jsonb(m.ends_at) #>> '{}') AS ends_at,\n                m.link_token, m.open_join, m.locked, m.agent_mode AS \"agent_mode: AgentMode\",\n                (to_jsonb(m.started_at) #>> '{}') AS started_at, (to_jsonb(m.ended_at) #>> '{}') AS ended_at,\n                m.summary, (to_jsonb(m.created_at) #>> '{}') AS \"created_at!\"\n            FROM meetings m\n            JOIN human_accounts o ON o.id=m.owner_id\n            WHERE m.id=$1 AND (m.owner_id=$2 OR EXISTS(\n                SELECT 1 FROM meeting_invitations i WHERE i.meeting_id=m.id AND i.account_id=$2\n            ))\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "state!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "starts_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "ends_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "link_token",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "open_join",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "locked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "agent_mode: AgentMode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "started_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "ended_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "summary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "a49d69256b316f67968c15871dfd891022250ee0105a53fd67c978a1b750326f"
+}

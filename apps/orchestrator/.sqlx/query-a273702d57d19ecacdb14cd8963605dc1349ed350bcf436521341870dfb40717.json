@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.title, m.description, extract(epoch FROM m.starts_at)::bigint AS starts,\n                extract(epoch FROM m.ends_at)::bigint AS ends, m.link_token AS token,\n                h.profile->>'time_zone' AS zone\n            FROM meetings m\n            JOIN human_accounts h ON h.id=$2\n            WHERE m.id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "starts",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "ends",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "token",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "zone",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "a273702d57d19ecacdb14cd8963605dc1349ed350bcf436521341870dfb40717"
+}

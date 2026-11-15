@@ -48,6 +48,7 @@ nix = { version = "0.31", default-features = false, features = ["fs"] }
 kube = { version = "4.2.0", default-features = false, features = ["client", "rustls-tls", "ring", "ws"] }
 k8s-openapi = { version = "0.28.0", features = ["v1_36"] }
 aes-gcm = "0.10"
+base64 = "0.22.1"
 bzip2 = "0.4"
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "stream", "json"] }
 # 2.0 ships without the espeak-ng frontend and cannot run Piper.
@@ -60,7 +61,7 @@ futures-util = "0.3"
 http-body-util = "0.1"
 tokio-tungstenite = "0.30"
 tower = { version = "0.5", features = ["util"] }
-tokio = { workspace = true, features = ["process", "io-util"] }
+tokio = { workspace = true, features = ["process", "io-util", "test-util"] }
 
 [lints]
 workspace = true

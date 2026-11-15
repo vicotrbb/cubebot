@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.id, a.name, a.avatar AS \"avatar: Json<Avatar>\", left(a.instructions, 300) AS \"about!\"\n        FROM meeting_invitations i\n        JOIN agents a ON a.id=i.agent_id\n        JOIN meeting_settings s ON s.agents_join\n        WHERE i.meeting_id=$1 AND a.desired_state<>'retired'\n        ORDER BY i.created_at, i.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "avatar: Json<Avatar>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "about!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "6cd6c9f823bd51984ea32d7fd8d7bbbb64c598651fecc77f644a95b74096c818"
+}

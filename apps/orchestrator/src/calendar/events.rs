@@ -479,6 +479,7 @@ fn item(
             link: text(&event["link"]),
         }),
         routine: None,
+        meeting: None,
     })
 }
 
@@ -510,6 +511,7 @@ pub(super) fn created(new: &NewEvent, made: &Value) -> Item {
             link: text(&made["link"]),
         }),
         routine: None,
+        meeting: None,
         source,
     }
 }

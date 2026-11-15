@@ -93,14 +93,23 @@ impl Listener {
     }
 }
 
-pub(super) fn listen(
+pub(crate) fn samples(bytes: &[u8]) -> Option<Vec<f32>> {
+    bytes.len().is_multiple_of(2).then(|| {
+        bytes
+            .chunks_exact(2)
+            .map(|pair| f32::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0)
+            .collect()
+    })
+}
+
+pub(crate) fn listen(
     mut listener: Listener,
     mut audio: mpsc::Receiver<Vec<f32>>,
-    out: mpsc::UnboundedSender<Heard>,
+    mut out: impl FnMut(Heard) -> bool,
 ) {
     while let Some(samples) = audio.blocking_recv() {
         for heard in listener.hear(&samples) {
-            if out.send(heard).is_err() {
+            if !out(heard) {
                 return;
             }
         }
@@ -248,6 +257,12 @@ mod tests {
             finals: finals.into(),
         };
         Listener::new(Box::new(Loud(false)), Box::new(stt))
+    }
+
+    #[test]
+    fn audio_frames_decode_and_reject_a_split_sample() {
+        assert_eq!(samples(&[0, 0x40, 0, 0xC0]), Some(vec![0.5, -0.5]));
+        assert_eq!(samples(&[0]), None);
     }
 
     #[test]

@@ -5,6 +5,7 @@ pub mod calendar;
 pub mod connections;
 pub mod identity;
 pub mod knowledge;
+pub mod meetings;
 pub mod operations;
 pub mod speech;
 pub mod storage;

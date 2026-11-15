@@ -103,11 +103,13 @@ export function AddMember({
   onAdd,
   busy = false,
   placeholder = 'Search agents and people',
+  label = 'Add member',
 }: {
   options: MemberOption[]
   onAdd: (member: MemberOption) => void
   busy?: boolean
   placeholder?: string
+  label?: string
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -167,7 +169,7 @@ export function AddMember({
         title={options.length === 0 ? 'Everyone is already here' : undefined}
         onClick={() => setOpen(true)}
       >
-        <UserPlus /> Add member
+        <UserPlus /> {label}
       </button>
     )
   return (

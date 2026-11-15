@@ -171,7 +171,7 @@ async fn read(
         r#"
         SELECT g.monthly_budget_usd, g.daily_budget_usd,
             (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status='waiting' AND t.error='budget_exhausted') AS "paused!",
-            (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days') AS "turns!",
+            (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days' AND NOT t.meeting_summary) AS "turns!",
             (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.created_at > clock_timestamp() - interval '30 days' AND (t.status='failed' OR (t.status='waiting' AND t.error<>'budget_exhausted'))) AS "failed!"
         FROM agents g
         WHERE g.id=$1

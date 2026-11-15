@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id, a.sequence AS \"sequence!\", m.title,\n                extract(epoch FROM m.started_at)::int8 AS started_at,\n                extract(epoch FROM m.ended_at)::int8 AS ended_at,\n                extract(epoch FROM m.ended_at - m.started_at)::int8 AS duration_seconds,\n                m.summary\n            FROM (\n                SELECT meeting_id, min(sequence) AS sequence\n                FROM meeting_attendance\n                WHERE agent_id=$1 AND sequence IS NOT NULL\n                GROUP BY meeting_id\n            ) a\n            JOIN meetings m ON m.id=a.meeting_id\n            WHERE a.sequence>$2\n            ORDER BY a.sequence\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "sequence!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "started_at",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "ended_at",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_seconds",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "summary",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      null,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "b0080b518c872fbf1cf31cd2f2eba5df631e9dbc978389f91005e639e56ca307"
+}

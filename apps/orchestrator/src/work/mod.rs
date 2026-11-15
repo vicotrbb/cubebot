@@ -1,5 +1,5 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
-mod access;
+pub(crate) mod access;
 mod activity;
 mod broadcasts;
 mod calls;
@@ -9,6 +9,7 @@ mod creations;
 mod cursors;
 mod events;
 mod handoffs;
+mod meetings;
 mod retry;
 mod rooms;
 pub mod routines;
@@ -27,11 +28,13 @@ pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use calls::{CallRecord, Reply, ReplyEvent};
 pub use collaboration::Steering;
 pub(crate) use collaboration::cancel_open;
+pub(crate) use coordinator::ask_as;
 pub use coordinator::{coordinate, route};
 pub use creations::{CreationRequest, DeclineCreation};
 pub use cursors::ReadCursor;
 pub use events::{Event, Page};
 pub use handoffs::{DeclineLogin, LoginHandoff};
+pub use meetings::{MeetingLine, MeetingPresence, MeetingRecord};
 pub use retry::RetryMessage;
 pub use rooms::{CreateRoom, Delivery, Member, Room, RoomMembers, RoomMessage, RoomSequence};
 use serde::{Deserialize, Serialize};
@@ -83,6 +86,7 @@ pub struct Turn {
     pub message_attachments: Vec<terminal::ReplyAttachment>,
     /// Set when this message is a whole voice call, whose turns it holds.
     pub call: Option<CallRecord>,
+    pub meeting: Option<MeetingRecord>,
 }
 
 pub(super) struct TurnRow {
@@ -110,8 +114,16 @@ impl From<TurnRow> for Turn {
             attachments: Vec::new(),
             message_attachments: Vec::new(),
             call: None,
+            meeting: None,
         }
     }
+}
+
+#[derive(Clone, Copy, Default)]
+pub(super) struct Within {
+    pub call: Option<Uuid>,
+    pub meeting: Option<Uuid>,
+    pub talk_only: bool,
 }
 
 impl Work {
@@ -160,7 +172,7 @@ impl Work {
             "
             SELECT id, sequence, message, status, response, error
             FROM chat_turns
-            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND sequence>$2
+            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND meeting_id IS NULL AND sequence>$2
             ORDER BY sequence
             LIMIT 100
             ",
@@ -174,6 +186,7 @@ impl Work {
         .collect();
         Self::progress(&mut tx, &mut turns).await?;
         turns.extend(Self::calls_after(&mut tx, canonical.0, after).await?);
+        turns.extend(Self::meetings_after(&mut tx, canonical.0, after).await?);
         turns.sort_by_key(|turn| turn.sequence);
         turns.truncate(100);
         tx.commit().await?;
@@ -187,7 +200,8 @@ impl Work {
         conversation: Uuid,
         input: &SendMessage,
     ) -> Result<Turn, IdentityError> {
-        self.send_in(actor, conversation, input, None).await
+        self.send_in(actor, conversation, input, Within::default())
+            .await
     }
 
     async fn send_in(
@@ -195,7 +209,7 @@ impl Work {
         actor: &Actor,
         conversation: Uuid,
         input: &SendMessage,
-        call: Option<Uuid>,
+        within: Within,
     ) -> Result<Turn, IdentityError> {
         validate(input)?;
         let mut tx = self.pool.begin().await?;
@@ -207,26 +221,38 @@ impl Work {
             return Ok(previous);
         }
         wake(&mut tx, agent).await?;
-        let turn = sqlx::query_as!(
-            TurnRow,
-            "
-            INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, sequence, message, status, response, error
-            ",
-            conversation,
-            actor.id,
-            input.request_id,
-            &input.message,
-            call,
-        )
-        .fetch_one(&mut *tx)
-        .await?;
+        let turn = queue(&mut tx, actor, conversation, input, within).await?;
         let mut turn = Turn::from(turn);
         turn.message_attachments = attach_sent(&mut tx, actor, turn.id, &input.attachments).await?;
         tx.commit().await?;
         Ok(turn)
     }
+}
+
+async fn queue(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: &Actor,
+    conversation: Uuid,
+    input: &SendMessage,
+    within: Within,
+) -> Result<TurnRow, sqlx::Error> {
+    sqlx::query_as!(
+        TurnRow,
+        "
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id, meeting_id, talk_only)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, sequence, message, status, response, error
+        ",
+        conversation,
+        actor.id,
+        input.request_id,
+        &input.message,
+        within.call,
+        within.meeting,
+        within.talk_only,
+    )
+    .fetch_one(&mut **tx)
+    .await
 }
 
 async fn lock_agent(

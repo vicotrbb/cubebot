@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT NOT EXISTS(\n            SELECT 1 FROM unnest($1::uuid[]) wanted\n            WHERE NOT EXISTS(SELECT 1 FROM human_accounts a WHERE a.id=wanted AND a.active)\n        ) AS \"active!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b502ff94de9a534f81ad4b46f93d16e259c5f04327898fde08b262bdae08bdf6"
+}

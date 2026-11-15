@@ -35,6 +35,8 @@ mod knowledge_base;
 mod kubernetes_http;
 mod kubernetes_policy;
 mod mcp;
+mod meeting_turns;
+mod meetings;
 mod memories;
 mod memory_agent;
 mod memory_http;

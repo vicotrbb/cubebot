@@ -220,6 +220,10 @@ pub struct Turn {
     pub creates: bool,
     #[serde(default)]
     pub attachments: Vec<TurnFile>,
+    #[serde(default)]
+    pub talk_only: bool,
+    #[serde(default)]
+    pub meeting: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -360,6 +364,12 @@ pub struct Broadcast {
 #[serde(deny_unknown_fields)]
 pub struct Broadcasted {
     pub agents: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MeetingScreen {
+    pub share: bool,
 }
 
 /// A vault item (docs/adr/identity.md#a-vault-the-desktop-arbiter-fills) from `GET /api/runtime/vault`: never its secret.
@@ -704,6 +714,8 @@ mod tests {
             attachments: Vec::new(),
             connections: Vec::new(),
             in_task: false,
+            talk_only: false,
+            meeting: None,
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));

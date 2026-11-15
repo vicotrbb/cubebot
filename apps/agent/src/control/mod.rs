@@ -361,6 +361,18 @@ impl MemoryClient {
     }
 
     #[tracing::instrument(skip_all, fields(turn = %turn))]
+    pub async fn meeting_screen(
+        &self,
+        turn: Uuid,
+        request: &runtime::MeetingScreen,
+    ) -> Result<Result<(), String>, Error> {
+        accepted(
+            self.post(&format!("turns/{turn}/meeting-screen"), request)
+                .await?,
+        )
+    }
+
+    #[tracing::instrument(skip_all, fields(turn = %turn))]
     pub async fn broadcast(
         &self,
         turn: Uuid,

@@ -1,4 +1,4 @@
-use super::pipeline::{self, Heard, Listener, Sentences};
+use super::pipeline::{self, Heard, Listener, Sentences, samples};
 use super::settings::route;
 use super::{Audio, Engines, Speech, SpeechError};
 use crate::{
@@ -51,15 +51,6 @@ struct Line {
 
 fn text(value: &Value) -> Message {
     Message::Text(value.to_string().into())
-}
-
-fn samples(bytes: &[u8]) -> Option<Vec<f32>> {
-    bytes.len().is_multiple_of(2).then(|| {
-        bytes
-            .chunks_exact(2)
-            .map(|pair| f32::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0)
-            .collect()
-    })
 }
 
 fn frame(audio: &Audio) -> Message {
@@ -265,7 +256,9 @@ fn start(call: Uuid, engines: Engines) -> Line {
     let epoch = Arc::new(AtomicU64::new(0));
     let listener = Listener::new(vad, stt);
     let failures = heard_tx.clone();
-    std::thread::spawn(move || pipeline::listen(listener, audio_rx, heard_tx));
+    std::thread::spawn(move || {
+        pipeline::listen(listener, audio_rx, |heard| heard_tx.send(heard).is_ok());
+    });
     let speaking = epoch.clone();
     std::thread::spawn(move || pipeline::speak(tts, sentences_rx, speaking, speech_tx, failures));
     Line {
@@ -391,12 +384,6 @@ impl Line {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn audio_frames_decode_and_reject_a_split_sample() {
-        assert_eq!(samples(&[0, 0x40, 0, 0xC0]), Some(vec![0.5, -0.5]));
-        assert_eq!(samples(&[0]), None);
-    }
 
     #[test]
     fn an_audio_frame_leads_with_its_rate() {
