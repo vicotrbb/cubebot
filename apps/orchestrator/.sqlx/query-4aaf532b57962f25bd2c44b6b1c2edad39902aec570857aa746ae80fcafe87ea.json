@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM meeting_join_tokens WHERE participant_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4aaf532b57962f25bd2c44b6b1c2edad39902aec570857aa746ae80fcafe87ea"
+}

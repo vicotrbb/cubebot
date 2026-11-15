@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, lobby, (to_jsonb(expires_at) #>> '{}') AS expires_at,\n                (to_jsonb(revoked_at) #>> '{}') AS revoked_at,\n                (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > clock_timestamp()))\n                    AS \"active!\",\n                (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            FROM meeting_links WHERE meeting_id = $1\n            ORDER BY created_at, id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "lobby",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "revoked_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "active!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "27a544533511d6f88e9c64b0433d875cceb78cc0a3af42797603af46b48a0805"
+}

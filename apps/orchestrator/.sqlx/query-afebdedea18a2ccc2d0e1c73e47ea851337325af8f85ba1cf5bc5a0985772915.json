@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO meetings (created_by, title, consent_notice, agent_mode)\n            SELECT a.id, $2, COALESCE($3, s.consent_notice), COALESCE($4, s.agent_mode)\n            FROM human_accounts a CROSS JOIN meeting_settings s\n            WHERE a.id = $1 AND a.active\n            RETURNING id, title, consent_notice, agent_mode AS \"agent_mode: MeetingAgentMode\",\n                (to_jsonb(created_at) #>> '{}') AS \"created_at!\",\n                (to_jsonb(ended_at) #>> '{}') AS ended_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "consent_notice",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_mode: MeetingAgentMode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "ended_at",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "afebdedea18a2ccc2d0e1c73e47ea851337325af8f85ba1cf5bc5a0985772915"
+}

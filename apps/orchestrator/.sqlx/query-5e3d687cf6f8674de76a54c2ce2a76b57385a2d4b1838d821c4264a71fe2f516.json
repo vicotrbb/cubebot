@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT count(*) AS \"guests!\" FROM meeting_participants\n            WHERE meeting_id = $1 AND kind = 'guest' AND status IN ('waiting', 'admitted')\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "guests!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5e3d687cf6f8674de76a54c2ce2a76b57385a2d4b1838d821c4264a71fe2f516"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meeting_settings SET lobby_default=$1, consent_notice=$2, agent_mode=$3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "638c0a4f96ec7826226372c48f2414e95400048223cb942a2deff337ea0973d3"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM meeting_join_tokens WHERE participant_id = $1 AND expires_at <= clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "53ae7a252c2c418ce26d536da87ad42de99ec5e49c693da221d6744dceded0db"
+}

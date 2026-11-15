@@ -9,6 +9,7 @@ The [manifesto](../../MANIFESTO.md) defines the project intent. These documents 
 | [Sandbox and isolation](sandbox.md) | the sandbox boundary, the in-house VMM and the declared `kvm` and `container` runtimes, the desktop, software installation, network access and the browser |
 | [Rooms and delegation](rooms.md) | room routing and mentions, agent messaging and delegation, steering, cancellation, failure containment and completion |
 | [Memory, skills and files](memory.md) | agent memory, retrieval, compaction, dreaming and human correction, skills, durable and shared-file storage, retention |
+| [Meetings](meetings.md) | Cubebot's own meeting tool: ownership, the SFU proposal, guest links and tokens, agents as participants, transcript, phases |
 | [Console](console.md) | the TanStack Start frontend, the conversation-first workspace, online operation with local drafts, notifications |
 | [Packaging and operations](packaging.md) | the installation namespace, PostgreSQL deployment, qualification targets, backup, restore, maintenance and upgrades |
 

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT l.id AS link, l.lobby, m.id AS meeting, m.title, m.consent_notice\n            FROM meeting_links l\n            JOIN meetings m ON m.id = l.meeting_id\n            WHERE l.token_digest = $1 AND l.revoked_at IS NULL\n                AND (l.expires_at IS NULL OR l.expires_at > clock_timestamp())\n                AND m.ended_at IS NULL\n            FOR UPDATE OF m\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "lobby",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "meeting",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "consent_notice",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "22e274910d540cd4a18a34ae2bd89058f89c3a2d3cae6d2810999a506a394153"
+}

@@ -15,6 +15,7 @@ mod installation;
 mod invitations;
 mod knowledge_base;
 mod mcp;
+mod meetings;
 mod memories;
 mod oidc;
 mod rooms;
@@ -94,6 +95,7 @@ pub fn openapi() -> String {
     doc.merge(routines::Doc::openapi());
     doc.merge(tasks::Doc::openapi());
     doc.merge(usage::Doc::openapi());
+    doc.merge(meetings::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
 
@@ -131,6 +133,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(routines::router(pool.clone(), identity.clone()))
         .merge(tasks::router(pool.clone(), identity.clone()))
         .merge(usage::router(pool.clone(), identity.clone()))
+        .merge(meetings::router(pool.clone(), identity.clone()))
         .merge(memories::router(pool.clone(), identity.clone()))
         .merge(skills::router(pool.clone(), identity.clone()))
         .merge(files::router(identity.clone()))

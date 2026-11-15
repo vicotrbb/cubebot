@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO meeting_links (meeting_id, token_digest, lobby, expires_at)\n            SELECT $1, $2, COALESCE($3, s.lobby_default),\n                clock_timestamp() + make_interval(secs => $4::double precision)\n            FROM meeting_settings s\n            RETURNING id, lobby, (to_jsonb(expires_at) #>> '{}') AS expires_at,\n                (to_jsonb(revoked_at) #>> '{}') AS revoked_at,\n                (revoked_at IS NULL AND (expires_at IS NULL OR expires_at > clock_timestamp()))\n                    AS \"active!\",\n                (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "lobby",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "revoked_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "active!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bool",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "2740964471a61ce2791fc3372dbe81b22236a2252b7759280ca7297cadd764c6"
+}

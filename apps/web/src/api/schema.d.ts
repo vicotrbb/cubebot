@@ -1917,6 +1917,218 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/meeting-guests/join': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * No login: the link's token is the credential. The response holds a short-lived join token
+     *     for this one meeting, which no console route accepts. An unknown, revoked or expired link and
+     *     an ended meeting all answer 404.
+     */
+    post: operations['guest_join']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meeting-guests/refresh': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Send the join token as a bearer token. Returns a new one for where the guest stands now: a
+     *     lobby token while they wait, a media token once admitted.
+     */
+    post: operations['guest_refresh']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The caller's own meetings, newest first. */
+    get: operations['list_meetings']
+    put?: never
+    post: operations['create_meeting']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/settings': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The Meetings tab's installation defaults. */
+    get: operations['meeting_settings']
+    /** Administrators only. */
+    put: operations['save_meeting_settings']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** With its participants and links; a link's token is never repeated. */
+    get: operations['read_meeting']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/agents': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Needs `conversation.send` on the agent, as a call does. */
+    post: operations['invite_meeting_agent']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/end': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** For good: nobody can join afterwards and nothing more is recorded. */
+    post: operations['end_meeting']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/links': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** The response carries the link's token once; it cannot be read back. */
+    post: operations['create_meeting_link']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/links/{link}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /** Stops new guests and ends the access of those who came in through the link. */
+    delete: operations['revoke_meeting_link']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/participants/{participant}/admit': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Lets a waiting guest in. */
+    post: operations['admit_guest']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/participants/{participant}/deny': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Turns a waiting guest away or removes an admitted one; their tokens stop working at once. */
+    post: operations['deny_guest']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/meetings/{meeting}/transcript': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** A page of segments, oldest first. */
+    get: operations['meeting_transcript']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/provider': {
     parameters: {
       query?: never
@@ -3112,6 +3324,12 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    CreateMeeting: {
+      agent_mode?: null | components['schemas']['MeetingAgentMode']
+      /** @description `None` takes the installation's setting. */
+      consent_notice?: boolean | null
+      title: string
+    }
     CreateMemory: {
       content: string
     }
@@ -3142,6 +3360,11 @@ export interface components {
       /** Format: uuid */
       id: string
       name: string
+    }
+    CreatedMeetingLink: {
+      link: components['schemas']['MeetingLink']
+      /** @description The secret half of the public link; anyone holding it can ask to join. */
+      token: string
     }
     CreatedRoutine: {
       routine: components['schemas']['Routine']
@@ -3490,6 +3713,26 @@ export interface components {
     }
     /** Format: uuid */
     GroupId: string
+    GuestAccess: {
+      /** @description Show the guest that agents may listen and a transcript is kept. */
+      consent_notice: boolean
+      /** Format: int64 */
+      expires_in_seconds: number
+      /** Format: uuid */
+      meeting: string
+      meeting_title: string
+      /** Format: uuid */
+      participant: string
+      scope: components['schemas']['JoinTokenScope']
+      status: components['schemas']['MeetingParticipantStatus']
+      token: string
+    }
+    GuestJoin: {
+      /** @description The link's secret token. */
+      link: string
+      /** @description What the others see. */
+      name: string
+    }
     /**
      * @description One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:
      *     it never reached the routine.
@@ -3583,6 +3826,11 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    InviteMeetingAgent: {
+      /** Format: uuid */
+      agent: string
+      mode?: null | components['schemas']['MeetingAgentMode']
+    }
     Item: {
       all_day: boolean
       editable: boolean
@@ -3603,6 +3851,11 @@ export interface components {
       /** @description Untrusted vendor text for an event. */
       title: string
     }
+    /**
+     * @description `Lobby` may only ask whether the host has admitted the guest; `Media` may join the call.
+     * @enum {string}
+     */
+    JoinTokenScope: 'lobby' | 'media'
     KeyView: {
       /** Format: int64 */
       downloaded_at_unix?: number | null
@@ -3694,6 +3947,65 @@ export interface components {
     }
     /** @enum {string} */
     McpTransport: 'stdio' | 'http'
+    Meeting: {
+      agent_mode: components['schemas']['MeetingAgentMode']
+      consent_notice: boolean
+      created_at: string
+      /** @description `None` while the meeting is open. */
+      ended_at?: string | null
+      /** Format: uuid */
+      id: string
+      title: string
+    }
+    /**
+     * @description How an agent takes part. Phase 1 stores the choice; the speaking policy that acts on it comes
+     *     with the agent bridge.
+     * @enum {string}
+     */
+    MeetingAgentMode: 'listen_only' | 'on_mention' | 'proactive'
+    MeetingDetail: {
+      links: components['schemas']['MeetingLink'][]
+      meeting: components['schemas']['Meeting']
+      participants: components['schemas']['MeetingParticipant'][]
+    }
+    /** @description A link's record. Its token is shown once, when it is created, and is never stored. */
+    MeetingLink: {
+      /** @description Not revoked and not expired: a new guest can join with it. */
+      active: boolean
+      created_at: string
+      expires_at?: string | null
+      /** Format: uuid */
+      id: string
+      lobby: boolean
+      revoked_at?: string | null
+    }
+    MeetingParticipant: {
+      /**
+       * Format: uuid
+       * @description The agent, for an agent participant.
+       */
+      agent?: string | null
+      agent_mode?: null | components['schemas']['MeetingAgentMode']
+      created_at: string
+      /** Format: uuid */
+      id: string
+      kind: components['schemas']['MeetingParticipantKind']
+      name: string
+      status: components['schemas']['MeetingParticipantStatus']
+    }
+    /** @enum {string} */
+    MeetingParticipantKind: 'agent' | 'guest'
+    /** @enum {string} */
+    MeetingParticipantStatus: 'invited' | 'waiting' | 'admitted' | 'denied'
+    /** @description The installation's Meetings tab. A meeting copies these when it is created. */
+    MeetingSettings: {
+      /** @description How an invited agent takes part unless the invitation says otherwise. */
+      agent_mode: components['schemas']['MeetingAgentMode']
+      /** @description Tell everyone in a meeting that agents listen and a transcript is kept. */
+      consent_notice: boolean
+      /** @description A new link holds guests in a lobby until the host admits them. */
+      lobby_default: boolean
+    }
     Member: {
       /** Format: uuid */
       id: string
@@ -3807,6 +4119,15 @@ export interface components {
       /** @description The viewer's IANA zone; the profile's, else UTC, when absent. */
       time_zone?: string | null
       title: string
+    }
+    NewMeetingLink: {
+      /**
+       * Format: int64
+       * @description How long new guests can join with this link, from 60 seconds to a year; `None` for no limit.
+       */
+      expires_in_seconds?: number | null
+      /** @description `None` takes the installation's setting. */
+      lobby?: boolean | null
     }
     NewPage: {
       body?: string
@@ -4858,6 +5179,15 @@ export interface components {
       name: string
       product?: string | null
       risk: components['schemas']['Risk']
+    }
+    TranscriptSegment: {
+      /** Format: uuid */
+      participant?: string | null
+      /** Format: int64 */
+      sequence: number
+      speaker: string
+      spoken_at: string
+      text: string
     }
     /** @description A connection event that runs a routine (docs/adr/agents.md#scheduled-and-event-triggered-work). */
     Trigger: {
@@ -8617,6 +8947,404 @@ export interface operations {
     requestBody?: never
     responses: {
       204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  guest_join: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GuestJoin']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['GuestAccess']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      429: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  guest_refresh: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['GuestAccess']
+        }
+      }
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  list_meetings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Meeting'][]
+        }
+      }
+    }
+  }
+  create_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateMeeting']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Meeting']
+        }
+      }
+    }
+  }
+  meeting_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingSettings']
+        }
+      }
+    }
+  }
+  save_meeting_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MeetingSettings']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  read_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingDetail']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  invite_meeting_agent: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InviteMeetingAgent']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingParticipant']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  end_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  create_meeting_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewMeetingLink']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CreatedMeetingLink']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  revoke_meeting_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+        link: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  admit_guest: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+        participant: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingParticipant']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  deny_guest: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        meeting: string
+        participant: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['MeetingParticipant']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  meeting_transcript: {
+    parameters: {
+      query?: {
+        /** @description Only segments after this sequence number; 0 for the start. */
+        after?: number
+      }
+      header?: never
+      path: {
+        meeting: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TranscriptSegment'][]
+        }
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

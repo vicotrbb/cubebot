@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, kind AS \"kind: MeetingParticipantKind\", agent_id AS agent, name,\n                status AS \"status: MeetingParticipantStatus\", agent_mode AS \"agent_mode: MeetingAgentMode\",\n                (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            FROM meeting_participants WHERE meeting_id = $1\n            ORDER BY created_at, id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind: MeetingParticipantKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: MeetingParticipantStatus",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "agent_mode: MeetingAgentMode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "45266ded3ace49cc480d25a40d872fc8b1ff6bc73195586cdc62d0aad403662d"
+}

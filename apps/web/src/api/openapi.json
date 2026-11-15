@@ -4724,6 +4724,475 @@
         }
       }
     },
+    "/api/meeting-guests/join": {
+      "post": {
+        "tags": [],
+        "summary": "No login: the link's token is the credential. The response holds a short-lived join token\nfor this one meeting, which no console route accepts. An unknown, revoked or expired link and\nan ended meeting all answer 404.",
+        "operationId": "guest_join",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuestJoin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestAccess"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "429": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meeting-guests/refresh": {
+      "post": {
+        "tags": [],
+        "summary": "Send the join token as a bearer token. Returns a new one for where the guest stands now: a\nlobby token while they wait, a media token once admitted.",
+        "operationId": "guest_refresh",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuestAccess"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings": {
+      "get": {
+        "tags": [],
+        "summary": "The caller's own meetings, newest first.",
+        "operationId": "list_meetings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Meeting"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_meeting",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMeeting"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meeting"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meetings/settings": {
+      "get": {
+        "tags": [],
+        "summary": "The Meetings tab's installation defaults.",
+        "operationId": "meeting_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingSettings"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "Administrators only.",
+        "operationId": "save_meeting_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}": {
+      "get": {
+        "tags": [],
+        "summary": "With its participants and links; a link's token is never repeated.",
+        "operationId": "read_meeting",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/agents": {
+      "post": {
+        "tags": [],
+        "summary": "Needs `conversation.send` on the agent, as a call does.",
+        "operationId": "invite_meeting_agent",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteMeetingAgent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/end": {
+      "post": {
+        "tags": [],
+        "summary": "For good: nobody can join afterwards and nothing more is recorded.",
+        "operationId": "end_meeting",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/links": {
+      "post": {
+        "tags": [],
+        "summary": "The response carries the link's token once; it cannot be read back.",
+        "operationId": "create_meeting_link",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewMeetingLink"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedMeetingLink"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/links/{link}": {
+      "delete": {
+        "tags": [],
+        "summary": "Stops new guests and ends the access of those who came in through the link.",
+        "operationId": "revoke_meeting_link",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "link",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/participants/{participant}/admit": {
+      "post": {
+        "tags": [],
+        "summary": "Lets a waiting guest in.",
+        "operationId": "admit_guest",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "participant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/participants/{participant}/deny": {
+      "post": {
+        "tags": [],
+        "summary": "Turns a waiting guest away or removes an admitted one; their tokens stop working at once.",
+        "operationId": "deny_guest",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "participant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingParticipant"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/meetings/{meeting}/transcript": {
+      "get": {
+        "tags": [],
+        "summary": "A page of segments, oldest first.",
+        "operationId": "meeting_transcript",
+        "parameters": [
+          {
+            "name": "meeting",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Only segments after this sequence number; 0 for the start.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TranscriptSegment"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/provider": {
       "get": {
         "tags": [],
@@ -7672,6 +8141,31 @@
         },
         "additionalProperties": false
       },
+      "CreateMeeting": {
+        "type": "object",
+        "required": ["title"],
+        "properties": {
+          "agent_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingAgentMode",
+                "description": "`None` takes the installation's setting."
+              }
+            ]
+          },
+          "consent_notice": {
+            "type": ["boolean", "null"],
+            "description": "`None` takes the installation's setting."
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "CreateMemory": {
         "type": "object",
         "required": ["content"],
@@ -7759,6 +8253,19 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "CreatedMeetingLink": {
+        "type": "object",
+        "required": ["link", "token"],
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/MeetingLink"
+          },
+          "token": {
+            "type": "string",
+            "description": "The secret half of the public link; anyone holding it can ask to join."
           }
         }
       },
@@ -8575,6 +9082,64 @@
         "type": "string",
         "format": "uuid"
       },
+      "GuestAccess": {
+        "type": "object",
+        "required": [
+          "meeting",
+          "meeting_title",
+          "participant",
+          "status",
+          "scope",
+          "token",
+          "expires_in_seconds",
+          "consent_notice"
+        ],
+        "properties": {
+          "consent_notice": {
+            "type": "boolean",
+            "description": "Show the guest that agents may listen and a transcript is kept."
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "meeting": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "meeting_title": {
+            "type": "string"
+          },
+          "participant": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/JoinTokenScope"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MeetingParticipantStatus"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "GuestJoin": {
+        "type": "object",
+        "required": ["link", "name"],
+        "properties": {
+          "link": {
+            "type": "string",
+            "description": "The link's secret token."
+          },
+          "name": {
+            "type": "string",
+            "description": "What the others see."
+          }
+        },
+        "additionalProperties": false
+      },
       "HookDelivery": {
         "type": "object",
         "description": "One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:\nit never reached the routine.",
@@ -8782,6 +9347,28 @@
         },
         "additionalProperties": false
       },
+      "InviteMeetingAgent": {
+        "type": "object",
+        "required": ["agent"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingAgentMode",
+                "description": "`None` takes the meeting's setting."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
       "Item": {
         "type": "object",
         "required": [
@@ -8844,6 +9431,11 @@
             "description": "Untrusted vendor text for an event."
           }
         }
+      },
+      "JoinTokenScope": {
+        "type": "string",
+        "description": "`Lobby` may only ask whether the host has admitted the guest; `Media` may join the call.",
+        "enum": ["lobby", "media"]
       },
       "KeyView": {
         "type": "object",
@@ -9097,6 +9689,156 @@
       "McpTransport": {
         "type": "string",
         "enum": ["stdio", "http"]
+      },
+      "Meeting": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "consent_notice",
+          "agent_mode",
+          "created_at"
+        ],
+        "properties": {
+          "agent_mode": {
+            "$ref": "#/components/schemas/MeetingAgentMode"
+          },
+          "consent_notice": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": ["string", "null"],
+            "description": "`None` while the meeting is open."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "MeetingAgentMode": {
+        "type": "string",
+        "description": "How an agent takes part. Phase 1 stores the choice; the speaking policy that acts on it comes\nwith the agent bridge.",
+        "enum": ["listen_only", "on_mention", "proactive"]
+      },
+      "MeetingDetail": {
+        "type": "object",
+        "required": ["meeting", "participants", "links"],
+        "properties": {
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingLink"
+            }
+          },
+          "meeting": {
+            "$ref": "#/components/schemas/Meeting"
+          },
+          "participants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingParticipant"
+            }
+          }
+        }
+      },
+      "MeetingLink": {
+        "type": "object",
+        "description": "A link's record. Its token is shown once, when it is created, and is never stored.",
+        "required": ["id", "lobby", "active", "created_at"],
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Not revoked and not expired: a new guest can join with it."
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lobby": {
+            "type": "boolean"
+          },
+          "revoked_at": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "MeetingParticipant": {
+        "type": "object",
+        "required": ["id", "kind", "name", "status", "created_at"],
+        "properties": {
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The agent, for an agent participant."
+          },
+          "agent_mode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MeetingAgentMode"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MeetingParticipantKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MeetingParticipantStatus"
+          }
+        }
+      },
+      "MeetingParticipantKind": {
+        "type": "string",
+        "enum": ["agent", "guest"]
+      },
+      "MeetingParticipantStatus": {
+        "type": "string",
+        "enum": ["invited", "waiting", "admitted", "denied"]
+      },
+      "MeetingSettings": {
+        "type": "object",
+        "description": "The installation's Meetings tab. A meeting copies these when it is created.",
+        "required": ["lobby_default", "consent_notice", "agent_mode"],
+        "properties": {
+          "agent_mode": {
+            "$ref": "#/components/schemas/MeetingAgentMode",
+            "description": "How an invited agent takes part unless the invitation says otherwise."
+          },
+          "consent_notice": {
+            "type": "boolean",
+            "description": "Tell everyone in a meeting that agents listen and a transcript is kept."
+          },
+          "lobby_default": {
+            "type": "boolean",
+            "description": "A new link holds guests in a lobby until the host admits them."
+          }
+        },
+        "additionalProperties": false
       },
       "Member": {
         "type": "object",
@@ -9353,6 +10095,21 @@
           },
           "title": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "NewMeetingLink": {
+        "type": "object",
+        "properties": {
+          "expires_in_seconds": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "description": "How long new guests can join with this link, from 60 seconds to a year; `None` for no limit."
+          },
+          "lobby": {
+            "type": ["boolean", "null"],
+            "description": "`None` takes the installation's setting."
           }
         },
         "additionalProperties": false
@@ -11981,6 +12738,29 @@
           },
           "risk": {
             "$ref": "#/components/schemas/Risk"
+          }
+        }
+      },
+      "TranscriptSegment": {
+        "type": "object",
+        "required": ["sequence", "speaker", "spoken_at", "text"],
+        "properties": {
+          "participant": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "speaker": {
+            "type": "string"
+          },
+          "spoken_at": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
           }
         }
       },

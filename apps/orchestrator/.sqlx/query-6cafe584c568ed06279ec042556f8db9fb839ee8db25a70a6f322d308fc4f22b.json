@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO meeting_participants (meeting_id, kind, agent_id, name, status, agent_mode)\n            SELECT m.id, 'agent', a.id, a.name, 'invited', COALESCE($3, m.agent_mode)\n            FROM meetings m CROSS JOIN agents a\n            WHERE m.id = $1 AND a.id = $2\n            RETURNING id, kind AS \"kind: MeetingParticipantKind\", agent_id AS agent, name,\n                status AS \"status: MeetingParticipantStatus\", agent_mode AS \"agent_mode: MeetingAgentMode\",\n                (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind: MeetingParticipantKind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: MeetingParticipantStatus",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "agent_mode: MeetingAgentMode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "6cafe584c568ed06279ec042556f8db9fb839ee8db25a70a6f322d308fc4f22b"
+}

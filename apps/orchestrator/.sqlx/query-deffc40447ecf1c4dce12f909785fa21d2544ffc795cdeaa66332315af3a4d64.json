@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.id, m.title, m.consent_notice, m.agent_mode AS \"agent_mode: MeetingAgentMode\",\n                (to_jsonb(m.created_at) #>> '{}') AS \"created_at!\",\n                (to_jsonb(m.ended_at) #>> '{}') AS ended_at\n            FROM meetings m\n            JOIN human_accounts a ON a.id = m.created_by AND a.active\n            WHERE m.created_by = $1\n            ORDER BY m.created_at DESC, m.id\n            LIMIT 200\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "consent_notice",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_mode: MeetingAgentMode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "ended_at",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "deffc40447ecf1c4dce12f909785fa21d2544ffc795cdeaa66332315af3a4d64"
+}

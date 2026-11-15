@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT p.meeting_id AS meeting, m.title, m.consent_notice, p.id AS participant,\n            p.status AS \"status: MeetingParticipantStatus\", t.scope AS \"scope: JoinTokenScope\"\n        FROM meeting_join_tokens t\n        JOIN meeting_participants p ON p.id = t.participant_id\n        JOIN meetings m ON m.id = p.meeting_id\n        JOIN meeting_links l ON l.id = p.link_id\n        WHERE t.token_digest = $1 AND t.expires_at > clock_timestamp()\n            AND m.ended_at IS NULL AND l.revoked_at IS NULL\n            AND p.status IN ('waiting', 'admitted')\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "meeting",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "consent_notice",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "participant",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: MeetingParticipantStatus",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "scope: JoinTokenScope",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e1b1199bedee9c525f77228e6893a2ced4957344b59aabdc4adde8edcebbb669"
+}

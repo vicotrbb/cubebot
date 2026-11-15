@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO meeting_join_tokens (token_digest, participant_id, scope, expires_at)\n        VALUES ($1, $2, $3, clock_timestamp() + make_interval(secs => $4::double precision))\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e85a6570614f561f1b41378c7f007041ac49f4532c26d6d3e45dd62cc2e73f6a"
+}

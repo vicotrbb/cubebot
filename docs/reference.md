@@ -202,6 +202,17 @@ Each agent has one memory pool in `memories`, with every revision in `memory_rev
 
 `GET /api/speech` reads the installation's settings, without any key, and `PUT /api/speech` changes them for administrators. `PUT /api/agents/{id}/speech` sets an agent's overrides and needs `agent.manage`. A call's turns are `chat_turns` rows with `call_id`; `GET /api/conversations/{id}/messages` returns them inside one message whose `call` field is set. Embedded models download into `speech-models` under `CUBEBOT_STORAGE_DIRECTORY`; a call without that directory can only fail on the Silero model, which every provider needs. `just speech-check` runs the embedded models on real audio, and `just call-check` runs a whole call in a browser. See [the decision](adr/console.md#voice-calls-over-the-chat-pipeline).
 
+### Meetings
+
+[Cubebot Meetings](adr/meetings.md) is **proposed**; phase 1 is the orchestrator's records and API, with no media yet. Everything under `/api/meetings` belongs to the person who created the meeting; an administrator cannot read another person's meeting, and a missing or foreign meeting is 404.
+
+- Settings: `GET /api/meetings/settings` and, for administrators, `PUT` (`lobby_default`, `consent_notice`, `agent_mode` of `listen_only`, `on_mention` or `proactive`). The defaults are lobby on, consent notice on and `on_mention`. A meeting copies the notice and mode when it is created.
+- Hosts: `POST /api/meetings` (`title`, optional `consent_notice` and `agent_mode`), `GET /api/meetings`, `GET /api/meetings/{id}` (with participants and links), `POST .../end` (409 once ended), `POST .../links` (optional `lobby` and `expires_in_seconds` from 60 to a year; the response's `token` is the only time it is shown, and only its SHA-256 is stored), `DELETE .../links/{link}`, `POST .../agents` (`agent`, optional `mode`; needs `conversation.send` on the agent; 409 when already invited), `POST .../participants/{id}/admit` and `.../deny`, and `GET .../transcript?after=` (a page of up to 1000 segments).
+- Guests, with no login: `POST /api/meeting-guests/join` (`link`, `name`) answers 201 with a join token. A `lobby` token (30 minutes) can only ask whether the guest has been admitted; a `media` token (5 minutes) is for the media side and is issued only to an admitted guest. `POST /api/meeting-guests/refresh` with the token as a bearer returns a new one that matches the guest's standing. An unknown, revoked or expired link and an ended meeting are all 404; a meeting takes at most 100 waiting or admitted guests (429 beyond). A join token is not a session: every other route answers it with 401.
+- A token works only while its guest is waiting or admitted, the link they came through is not revoked and the meeting is open. Revoking a link, denying a guest or ending the meeting therefore ends access at once; a link's expiry only stops new guests.
+- Audit entries: `meeting.create`, `meeting.end`, `meeting.configure`, `meeting.link_create`, `meeting.link_revoke`, `meeting.agent_invite`, `meeting.admit`, `meeting.deny` and `meeting.join`.
+- Transcript segments are recorded by the orchestrator's speech and agent-bridge code (`Meetings::append_segment`); no HTTP route writes them.
+
 ### Routines
 
 [Routines](adr/agents.md#routines). `routines` holds each agent's routines; every run is a `chat_turns` row with `routine_id`, `origin` (`person`, `agent`, `schedule`, `webhook`) and the routine's `command` copied in, and `routine_hooks` keeps a day of webhook deliveries for replay and the rate window.

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO meeting_transcript_segments (meeting_id, participant_id, speaker, text)\n            SELECT m.id, $2, $3, $4\n            FROM meetings m\n            WHERE m.id = $1 AND m.ended_at IS NULL\n                AND ($2::uuid IS NULL OR EXISTS (\n                    SELECT 1 FROM meeting_participants p\n                    WHERE p.id = $2 AND p.meeting_id = m.id AND p.status IN ('invited', 'admitted')))\n            RETURNING sequence\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "69eb3ce6c9bec7e3ac2c3e0d1038f48581d9098ecec4b607524386d8a9a22811"
+}

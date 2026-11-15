@@ -70,6 +70,7 @@ The backend is a modular monolith. Modules own rules and transactions; they are 
 | Connections and tools | Provider and integration registry, credential refresh, per-agent eligibility and tool configuration | resolve_connection(...); sandbox_credentials(agent) |
 | Storage | Upload lifecycle, immutable blobs, domain references, integrity, controlled reclamation | publish(...); read(reference); reconcile_upload(...) |
 | Speech | Voice calls: one STT and one TTS trait, embedded and external providers, turn-taking; no audio reaches an agent | Stt::finish(...); Tts::speak(...) |
+| Meetings | Proposed: meetings, public links, guest join tokens, agents as participants and the transcript; the SFU carries media and holds no state ([Meetings](docs/adr/meetings.md)) | Meetings::create(...); Meetings::join(...); Meetings::verify(...) |
 | Operations | Maintenance, backup/restore, upgrades, health, audit and user notifications | enter_maintenance(...); capture_backup(...); restore(...) |
 
 Keep task scheduling, messaging, triggers, and budgets inside Work initially because they must agree on admission and root-goal identity. Knowledge can contain private memory and skill submodules with distinct permissions. Extract a new module only when it has an independent invariant or demonstrated implementation variation.
