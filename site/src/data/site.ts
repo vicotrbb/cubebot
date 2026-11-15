@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.3.0'
+export const version = 'v0.3.1'
 export const released = '2026-11-15'
 
 export const docs = {
@@ -146,6 +146,12 @@ export const timeline = [
     title: 'Agents that build',
     body: 'Ask an agent to set up your platform.',
   },
+  {
+    date: 'Nov 15',
+    datetime: '2026-11-15',
+    title: 'Meetings',
+    body: 'Video, voice and screens, with your agents.',
+  },
 ] as const
 
 export const next = [
@@ -154,6 +160,18 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.3.1',
+    date: '2026-11-15',
+    title: 'Meetings with your agents',
+    items: [
+      'Start a meeting now or schedule one, with video, voice and screen sharing, from the New menu, the Calendar or the new Meetings page',
+      'Invite people, agents and any email address, also while the meeting runs; invitations go out through your own Gmail, Outlook or email connection',
+      'Agents hear everyone, answer when named or clearly addressed, speak in their own voice, can share their desktop, and keep the transcript and a summary in their chat',
+      'Share a link anyone can open: guests wait in a lobby until someone lets them in, and nothing a guest says gives an agent its tools',
+      'Kubernetes installs can publish the meeting links alone on a second, public ingress and keep the console private',
+    ],
+  },
   {
     tag: 'v0.3.0',
     date: '2026-11-15',
