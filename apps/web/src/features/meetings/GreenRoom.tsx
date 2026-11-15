@@ -27,7 +27,6 @@ export const initialOf = (name: string) =>
 
 function useLevel(
   preview: Preview,
-  context: AudioContext,
   meter: React.RefObject<HTMLElement | null>,
 ) {
   useEffect(() => {
@@ -36,6 +35,8 @@ function useLevel(
       meter.current?.style.setProperty('--level', '0')
       return
     }
+    const context = new AudioContext()
+    void context.resume()
     const source = context.createMediaStreamSource(new MediaStream([track]))
     const analyser = context.createAnalyser()
     analyser.fftSize = 512
@@ -55,9 +56,9 @@ function useLevel(
     })
     return () => {
       cancelAnimationFrame(frame)
-      source.disconnect()
+      void context.close()
     }
-  }, [context, meter, preview.mic, preview.stream, preview.starting])
+  }, [meter, preview.mic, preview.stream, preview.starting])
 }
 
 function Mirror({ preview, name }: { preview: Preview; name: string }) {
@@ -180,25 +181,17 @@ export function GreenRoom({
   onJoin: (joining: Joining) => void
 }) {
   const preview = usePreview()
-  const [context] = useState(() => new AudioContext())
   const [name, setName] = useState(remembered)
   const meter = useRef<HTMLSpanElement>(null)
-  const joined = useRef(false)
-  useLevel(preview, context, meter)
-  useEffect(
-    () => () => {
-      if (!joined.current) void context.close()
-    },
-    [context],
-  )
+  useLevel(preview, meter)
   const trimmed = name.trim()
   const ready = !preview.starting && (!guest || trimmed.length > 0)
   const join = () => {
     if (!ready) return
+    const context = new AudioContext()
     void context.resume()
     if (guest) remember(trimmed)
     preview.hand()
-    joined.current = true
     onJoin({
       url,
       name: guest ? trimmed : undefined,
