@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.2.16'
+export const version = 'v0.3.0'
 export const released = '2026-11-15'
 
 export const docs = {
@@ -154,6 +154,18 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.3.0',
+    date: '2026-11-15',
+    title: 'Reasoning effort, password import and a security pass',
+    items: [
+      'Set how hard agents think: a default per AI provider and a level of its own for any agent, sent the way each vendor documents',
+      'Import the passwords Chrome, Edge, Brave, Firefox or Safari saved into the vault, read in your browser and never uploaded',
+      'Rename connections, and give them underscores, so one connector can hold several accounts such as google_work and google_personal',
+      'Knowledge base pages pick from about 300 searchable emoji',
+      'Agents type a saved login only into its own site, private rooms stay private on the situation and activity screens, and pages no longer load outside images',
+    ],
+  },
   {
     tag: 'v0.2.16',
     date: '2026-11-15',
