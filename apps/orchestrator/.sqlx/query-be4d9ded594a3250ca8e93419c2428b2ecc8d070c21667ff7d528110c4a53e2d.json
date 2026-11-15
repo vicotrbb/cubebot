@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS (\n            SELECT 1 FROM meetings m\n            JOIN human_accounts a ON a.id = m.created_by AND a.active\n            WHERE m.id = $1 AND m.created_by = $2\n        ) AS \"owned!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owned!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "be4d9ded594a3250ca8e93419c2428b2ecc8d070c21667ff7d528110c4a53e2d"
+}

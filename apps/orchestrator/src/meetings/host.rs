@@ -160,7 +160,7 @@ impl Meetings {
     #[tracing::instrument(skip_all, fields(actor = %actor.id, meeting = %meeting))]
     pub async fn get(&self, actor: &Actor, meeting: Uuid) -> Result<MeetingDetail, IdentityError> {
         let mut tx = self.pool.begin().await?;
-        lock_owned(&mut tx, actor, meeting).await?;
+        owned(&mut *tx, actor, meeting).await?;
         let record = sqlx::query_as!(
             Meeting,
             r#"
@@ -417,7 +417,7 @@ impl Meetings {
         after: i64,
     ) -> Result<Vec<TranscriptSegment>, IdentityError> {
         let mut tx = self.pool.begin().await?;
-        lock_owned(&mut tx, actor, meeting).await?;
+        owned(&mut *tx, actor, meeting).await?;
         let segments = sqlx::query_as!(
             TranscriptSegment,
             r#"
@@ -475,8 +475,30 @@ impl Meetings {
     }
 }
 
-/// Locks the caller's own meeting and says whether it has ended. Someone else's meeting does not
-/// exist as far as the caller can tell.
+/// Someone else's meeting does not exist as far as the caller can tell. Reads use this; anything
+/// that changes a meeting locks it with [`lock_owned`], as the guest join path does.
+async fn owned(
+    executor: impl sqlx::PgExecutor<'_>,
+    actor: &Actor,
+    meeting: Uuid,
+) -> Result<(), IdentityError> {
+    let owned = sqlx::query_scalar!(
+        r#"
+        SELECT EXISTS (
+            SELECT 1 FROM meetings m
+            JOIN human_accounts a ON a.id = m.created_by AND a.active
+            WHERE m.id = $1 AND m.created_by = $2
+        ) AS "owned!"
+        "#,
+        meeting,
+        actor.id,
+    )
+    .fetch_one(executor)
+    .await?;
+    owned.then_some(()).ok_or(IdentityError::NotFound)
+}
+
+/// Locks the caller's own meeting and says whether it has ended.
 async fn lock_owned(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
