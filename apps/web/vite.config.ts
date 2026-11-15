@@ -4,6 +4,12 @@ import { nitro } from 'nitro/vite'
 import { defineConfig } from 'vite'
 
 export default defineConfig(({ command }) => ({
+  server: {
+    proxy:
+      command === 'serve'
+        ? { '/api': { target: 'http://127.0.0.1:8080', ws: true } }
+        : {},
+  },
   plugins: [
     tanstackStart(),
     nitro({

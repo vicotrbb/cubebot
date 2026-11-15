@@ -46,7 +46,6 @@ export function MeetingPage({ id, join }: { id: string; join: boolean }) {
   const record = useMeetingRecord(id)
   const navigate = useNavigate()
   const [stage, setStage] = useState<Stage>(join ? 'green' : 'detail')
-  const [attempt, setAttempt] = useState(0)
   const zone = useZone()
   const toDetail = () => {
     setStage('detail')
@@ -76,7 +75,6 @@ export function MeetingPage({ id, join }: { id: string; join: boolean }) {
   if (typeof stage === 'object')
     return (
       <MeetingRoom
-        key={attempt}
         joining={stage}
         invite={<InvitePanel meeting={meeting} />}
         ended={
@@ -85,7 +83,7 @@ export function MeetingPage({ id, join }: { id: string; join: boolean }) {
           </button>
         }
         onLeave={toDetail}
-        onRejoin={() => setAttempt((count) => count + 1)}
+        onRejoin={() => setStage('green')}
       />
     )
   return (

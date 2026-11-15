@@ -1,5 +1,11 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
-import { connect, type Devices, type Engine, type Self } from './media/engine'
+import {
+  connect,
+  stopTracks,
+  type Devices,
+  type Engine,
+  type Self,
+} from './media/engine'
 import {
   dropped,
   EMPTY_ROOM,
@@ -34,9 +40,13 @@ export function useMeeting(joining: Joining) {
   const [self, setSelf] = useState<Self>(joining.self)
   const engine = useRef<Engine | null>(null)
   const setup = useRef(joining)
+  const mounts = useRef(0)
   useEffect(() => {
+    mounts.current += 1
+    const mount = mounts.current
+    const joined = setup.current
     const started = connect({
-      ...setup.current,
+      ...joined,
       onServer: (server) => dispatch({ server }),
       onSelf: setSelf,
       onClosed: (lost) => dispatch({ lost }),
@@ -47,6 +57,11 @@ export function useMeeting(joining: Joining) {
       release()
       started.close()
       engine.current = null
+      setTimeout(() => {
+        if (mounts.current !== mount) return
+        stopTracks(joined.local)
+        void joined.context.close()
+      }, 0)
     }
   }, [])
   return { room, self, engine }

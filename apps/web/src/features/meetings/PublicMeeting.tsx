@@ -104,7 +104,6 @@ export function PublicMeeting({ token }: { token: string }) {
   })
   const session = useSession()
   const [joining, setJoining] = useState<Joining | null>(null)
-  const [attempt, setAttempt] = useState(0)
   if (meeting.isPending)
     return <div className="meeting-outcome night" aria-busy="true" />
   if (meeting.isError)
@@ -147,10 +146,9 @@ export function PublicMeeting({ token }: { token: string }) {
   if (joining)
     return (
       <MeetingRoom
-        key={attempt}
         joining={joining}
         onLeave={() => setJoining(null)}
-        onRejoin={() => setAttempt((count) => count + 1)}
+        onRejoin={() => setJoining(null)}
       />
     )
   const member = session.data

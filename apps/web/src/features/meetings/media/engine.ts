@@ -35,7 +35,10 @@ export const screenSupported = () =>
   typeof navigator.mediaDevices?.getDisplayMedia === 'function' &&
   videoSupported()
 
-function stopTracks(stream: MediaStream | null, kind?: 'audio' | 'video') {
+export function stopTracks(
+  stream: MediaStream | null,
+  kind?: 'audio' | 'video',
+) {
   for (const track of stream?.getTracks() ?? [])
     if (!kind || track.kind === kind) {
       track.stop()
@@ -235,7 +238,6 @@ export function connect(setup: Setup) {
       mic?.close()
       for (const encoding of encoders.values()) encoding.stop()
       stopTracks(screen)
-      stopTracks(setup.local)
       views.close()
       voices.close()
       socket.close()

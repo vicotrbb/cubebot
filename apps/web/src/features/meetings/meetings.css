@@ -558,6 +558,7 @@
   min-height: 0;
   overflow: auto;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 18px;
   padding: 14px 14px 18px;
