@@ -121,6 +121,55 @@ impl ProviderKind {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum Effort {
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+    Max,
+}
+impl Effort {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Minimal => "minimal",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Xhigh => "xhigh",
+            Self::Max => "max",
+        }
+    }
+    pub fn parse(value: &str) -> Option<Self> {
+        use Effort::*;
+        [Minimal, Low, Medium, High, Xhigh, Max]
+            .into_iter()
+            .find(|effort| effort.as_str() == value)
+    }
+}
+
+impl ProviderKind {
+    pub fn efforts(self) -> &'static [Effort] {
+        use Effort::*;
+        match self {
+            Self::Openai | Self::Chatgpt | Self::Openrouter => {
+                &[Minimal, Low, Medium, High, Xhigh, Max]
+            }
+            Self::Anthropic => &[Low, Medium, High, Xhigh, Max],
+            Self::Gemini => &[Minimal, Low, Medium, High, Xhigh],
+            Self::Grok => &[Low, Medium, High, Xhigh],
+            Self::Supergrok
+            | Self::Minimax
+            | Self::MinimaxCn
+            | Self::MinimaxPlan
+            | Self::MinimaxPlanCn => &[],
+        }
+    }
+}
+
 /// The one active turn. Provider material is current at delivery; never log it.
 #[derive(Serialize, Deserialize)]
 pub struct Turn {
@@ -136,6 +185,8 @@ pub struct Turn {
     #[serde(default)]
     pub api_key_expires_at: Option<i64>,
     pub context_window: Option<u64>,
+    #[serde(default)]
+    pub effort: Option<Effort>,
     pub summary: Option<String>,
     pub history: Vec<Exchange>,
     pub prior: Vec<TurnEvent>,
@@ -348,6 +399,8 @@ pub enum VaultField {
 pub struct VaultFill {
     pub item: Uuid,
     pub field: VaultField,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
 }
 /// `POST /api/runtime/vault`. A refusal is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
@@ -631,6 +684,7 @@ mod tests {
             api_key: "k".into(),
             api_key_expires_at: None,
             context_window: None,
+            effort: None,
             summary: None,
             history: Vec::new(),
             prior: Vec::new(),

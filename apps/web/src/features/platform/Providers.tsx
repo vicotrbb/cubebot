@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { components } from '../../api/schema'
 import { Alert, Field, Skeleton, Status } from '../../components/primitives'
+import { type Effort, EffortField, offered } from './Effort'
 import { COMMON_WINDOWS, suggestedWindow, tokens } from './models'
 import { PLANS, PlanBlock, type PlanKind } from './Plan'
 import './platform.css'
@@ -310,6 +311,7 @@ function draftFor(choice: Current | Saved | null | undefined) {
   return {
     model: choice?.model ?? '',
     window: choice?.context_window ? String(choice.context_window) : '',
+    effort: choice?.reasoning_effort ?? null,
   }
 }
 
@@ -326,6 +328,7 @@ function useSaveConnection(
     model: string
     window: string
     key: string
+    effort: Effort | null
   }) {
     setBusy(true)
     setError('')
@@ -339,6 +342,9 @@ function useSaveConnection(
             model: body.model,
             context_window: body.window === '' ? null : Number(body.window),
             api_key: body.key || null,
+            reasoning_effort: offered(body.provider, body.effort)
+              ? body.effort
+              : null,
           },
         }),
       )
@@ -391,7 +397,11 @@ function ProviderForm({
   const choose = (id: string) => {
     const reported = list.models?.find((choice) => choice.id === id)
     const suggestion = suggestedWindow(id, reported?.context_window)
-    setDraft({ model: id, window: suggestion ? String(suggestion.tokens) : '' })
+    setDraft({
+      ...draft,
+      model: id,
+      window: suggestion ? String(suggestion.tokens) : '',
+    })
   }
   const ready = [
     draft.model,
@@ -441,6 +451,12 @@ function ProviderForm({
         }
         value={draft.window}
         onChange={(window) => setDraft({ ...draft, window })}
+      />
+      <EffortField
+        provider={provider}
+        value={draft.effort}
+        inherited={`Default leaves it to ${name}, per model.`}
+        onChange={(effort) => setDraft({ ...draft, effort })}
       />
       <Alert>{connection.error || forget.error}</Alert>
       <div className="actions">

@@ -34,6 +34,7 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         context_window: Some(200_000),
         api_key: Some("secret-provider-key".into()),
         access: None,
+        reasoning_effort: None,
     };
     assert!(matches!(
         connections.configure(&member, &input).await,
@@ -115,9 +116,40 @@ async fn provider_is_encrypted_durable_and_administered_with_revision_checks() {
         restarted.inspect(&admin).await.unwrap().unwrap().model,
         "other-model"
     );
-    let switched = ConfigureProvider {
+    let leveled = |effort| ConfigureProvider {
         request_id: Uuid::new_v4(),
         expected_revision: 3,
+        provider: cubebot_protocol::runtime::ProviderKind::Anthropic,
+        model: "other-model".into(),
+        context_window: None,
+        api_key: None,
+        access: None,
+        reasoning_effort: Some(Some(effort)),
+    };
+    use cubebot_protocol::runtime::Effort::{Minimal, Xhigh};
+    assert!(matches!(
+        restarted.configure(&admin, &leveled(Minimal)).await,
+        Err(IdentityError::InvalidInput)
+    ));
+    restarted.configure(&admin, &leveled(Xhigh)).await.unwrap();
+    let current = restarted.inspect(&admin).await.unwrap().unwrap();
+    assert_eq!(current.reasoning_effort, Some(Xhigh));
+    let kept = ConfigureProvider {
+        request_id: Uuid::new_v4(),
+        expected_revision: 4,
+        provider: cubebot_protocol::runtime::ProviderKind::Anthropic,
+        model: "other-model".into(),
+        context_window: None,
+        api_key: None,
+        access: None,
+        reasoning_effort: None,
+    };
+    restarted.configure(&admin, &kept).await.unwrap();
+    let current = restarted.inspect(&admin).await.unwrap().unwrap();
+    assert_eq!(current.reasoning_effort, Some(Xhigh));
+    let switched = ConfigureProvider {
+        request_id: Uuid::new_v4(),
+        expected_revision: 5,
         provider: cubebot_protocol::runtime::ProviderKind::Openrouter,
         context_window: Some(200_000),
         ..model_only
@@ -152,6 +184,7 @@ async fn switching_providers_keeps_each_key_until_it_is_forgotten() {
         context_window: Some(200_000),
         api_key: key.map(Into::into),
         access: None,
+        reasoning_effort: None,
     };
     let input = configure(0, Openai, "gpt", Some("openai-key"));
     connections.configure(&admin, &input).await.unwrap();
@@ -222,6 +255,7 @@ async fn about_reports_the_running_installation_and_its_default_model() {
                 context_window: Some(200_000),
                 api_key: Some("anthropic-key".into()),
                 access: None,
+                reasoning_effort: None,
             },
         )
         .await

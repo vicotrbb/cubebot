@@ -14,6 +14,7 @@ use cubebot_protocol::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -36,6 +37,31 @@ pub struct SaveVaultItem {
     #[serde(default)]
     pub access: Option<ProviderAccess>,
 }
+
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ImportVault {
+    #[serde(default)]
+    pub access: Option<ProviderAccess>,
+    pub logins: Vec<ImportedLogin>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ImportedLogin {
+    pub name: String,
+    pub site: String,
+    pub username: String,
+    pub secret: String,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct VaultImported {
+    pub imported: usize,
+    pub skipped: usize,
+}
+
+pub const MOST_IMPORTED: usize = 5000;
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct VaultSummary {
@@ -287,6 +313,70 @@ impl Connections {
         Ok(row.into())
     }
 
+    #[tracing::instrument(skip_all, fields(actor = %actor, logins = input.logins.len()))]
+    pub async fn import_vault_items(
+        &self,
+        actor: Uuid,
+        input: &ImportVault,
+    ) -> Result<VaultImported, IdentityError> {
+        let refused = |login: &ImportedLogin| {
+            let (site, username) = (Some(login.site.as_str()), Some(login.username.as_str()));
+            problem(
+                VaultKind::Login,
+                &login.name,
+                site,
+                username,
+                Some(&login.secret),
+            )
+            .is_some()
+        };
+        if input.logins.len() > MOST_IMPORTED || input.logins.iter().any(refused) {
+            return Err(IdentityError::InvalidInput);
+        }
+        let access = input.access.clone().unwrap_or_default();
+        let mut tx = self.pool.begin().await?;
+        validate_access(&mut tx, &access).await?;
+        let mut saved: HashSet<(String, String)> = sqlx::query!(
+            r#"
+            SELECT site AS "site!", username AS "username!"
+            FROM vault_items
+            WHERE agent_id IS NULL AND kind = 'login'
+            "#,
+        )
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|row| (host(&row.site), row.username))
+        .collect();
+        let mut imported = 0;
+        for login in &input.logins {
+            if !saved.insert((host(&login.site), login.username.clone())) {
+                continue;
+            }
+            let id = Uuid::new_v4();
+            let ciphertext = self.seal(&mut *tx, id, &login.secret).await?;
+            sqlx::query!(
+                r#"
+                INSERT INTO vault_items (id, kind, name, site, username, ciphertext, access, created_by)
+                VALUES ($1, 'login', $2, $3, $4, $5, $6, $7)
+                "#,
+                id,
+                login.name,
+                login.site,
+                login.username,
+                ciphertext,
+                sqlx::types::Json(&access) as _,
+                actor,
+            )
+            .execute(&mut *tx)
+            .await?;
+            imported += 1;
+        }
+        tx.commit().await?;
+        let skipped = input.logins.len() - imported;
+        Ok(VaultImported { imported, skipped })
+    }
+
     #[tracing::instrument(skip_all, fields(item = %item))]
     pub async fn update_vault_item(
         &self,
@@ -344,6 +434,28 @@ impl Connections {
         .fetch_optional(&self.pool)
         .await?;
         deleted.ok_or(IdentityError::NotFound)
+    }
+
+    pub(crate) async fn tried_login_site(
+        &self,
+        agent: AgentId,
+        item: Uuid,
+    ) -> Result<Option<String>, IdentityError> {
+        let site = sqlx::query_scalar!(
+            "
+            UPDATE vault_items
+            SET last_tried_at=clock_timestamp()
+            WHERE id=$2 AND kind='login' AND (agent_id=$1
+                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'
+                    OR access->'agents' @> jsonb_build_array($1::uuid))))
+            RETURNING site
+            ",
+            agent.0,
+            item,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(site.flatten())
     }
 
     /// Never log the returned text.

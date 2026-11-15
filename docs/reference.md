@@ -277,7 +277,7 @@ bun run build
 bun run --cwd apps/web start
 ```
 
-The frontend server listens on port 3000 by default. Set `HOST=127.0.0.1` for local-only production preview. Its [documented Bun deployment adapter](https://tanstack.com/start/latest/docs/framework/react/guide/hosting#bun) is Nitro, pinned to `3.0.260903-beta`. The current build emits upstream bundler warnings about React Router's `use client` directives; the local browser check found no console errors or warnings.
+The frontend server listens on port 3000 by default. No other site may show the console in an iframe unless `CUBEBOT_FRAME_ANCESTORS` lists their origins, space-separated (`https://ha.example.com:8123`); the chart sets it from `web.frameAncestors`, and an invalid list refuses every embedding. Set `HOST=127.0.0.1` for local-only production preview. Its [documented Bun deployment adapter](https://tanstack.com/start/latest/docs/framework/react/guide/hosting#bun) is Nitro, pinned to `3.0.260903-beta`. The current build emits upstream bundler warnings about React Router's `use client` directives; the local browser check found no console errors or warnings.
 
 ```sh
 docker build -t cubebot-orchestrator:dev -f apps/orchestrator/Dockerfile .

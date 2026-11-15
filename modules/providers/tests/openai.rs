@@ -46,6 +46,7 @@ fn request<'a>(messages: &'a [Message], tools: &'a [Tool]) -> Request<'a> {
         messages,
         tools,
         tools_disabled: false,
+        effort: None,
         max_output_tokens: None,
     }
 }

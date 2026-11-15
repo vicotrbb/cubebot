@@ -35,6 +35,9 @@ pub(crate) fn body(request: &Request, tool: fn(&Tool) -> Value) -> Value {
     if let Some(limit) = request.max_output_tokens {
         body["max_tokens"] = json!(limit);
     }
+    if let Some(effort) = request.effort {
+        body["reasoning_effort"] = json!(effort);
+    }
     if !request.tools.is_empty() {
         body["tools"] = request.tools.iter().map(tool).collect();
         if request.tools_disabled {
@@ -235,5 +238,30 @@ fn failure(code: &Value) -> Error {
     match code.as_u64() {
         Some(429 | 500..=599) => Error::Transient(None),
         _ => Error::Rejected,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effort_is_the_top_level_reasoning_effort() {
+        let request = Request {
+            model: "m",
+            key: "",
+            system: "",
+            messages: &[],
+            tools: &[],
+            tools_disabled: false,
+            effort: Some("low"),
+            max_output_tokens: None,
+        };
+        assert_eq!(body(&request, function)["reasoning_effort"], "low");
+        let plain = Request {
+            effort: None,
+            ..request
+        };
+        assert!(body(&plain, function).get("reasoning_effort").is_none());
     }
 }

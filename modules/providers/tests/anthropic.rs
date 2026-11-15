@@ -151,6 +151,7 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         messages: &history,
         tools: &tools,
         tools_disabled: false,
+        effort: None,
         max_output_tokens: Some(128_000),
     };
     let events: Vec<Event> = provider
@@ -222,6 +223,7 @@ async fn truncated_and_overloaded_streams_are_errors_not_replies() {
         messages: &[],
         tools: &[],
         tools_disabled: false,
+        effort: None,
         max_output_tokens: Some(1),
     };
     let events: Vec<_> = provider.stream(&request).collect().await;
@@ -291,6 +293,7 @@ async fn computer_toolset_calls_become_computer_calls_and_echo_their_toolset() {
         messages: &history,
         tools: &tools,
         tools_disabled: false,
+        effort: None,
         max_output_tokens: Some(1000),
     };
     let events: Vec<Event> = provider

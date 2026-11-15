@@ -1,7 +1,9 @@
 //! No response carries a secret.
 use crate::{
     agents::{AgentId, sandbox::Desktop},
-    connections::{Connections, SaveVaultItem, VaultSummary},
+    connections::{
+        Connections, ImportVault, MOST_IMPORTED, SaveVaultItem, VaultImported, VaultSummary,
+    },
     identity::{
         Actor, Identity, IdentityError,
         access::{Capability, Scope},
@@ -33,12 +35,16 @@ pub(super) struct FillVaultItem {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(list, create, update, delete, agent_items, fill))]
+#[openapi(paths(list, create, import, update, delete, agent_items, fill))]
 pub(super) struct Doc;
 
 pub(super) fn router(identity: Identity, connections: Connections) -> Router {
     Router::new()
         .route("/api/vault", get(list).post(create))
+        .route(
+            "/api/vault/import",
+            post(import).layer(DefaultBodyLimit::max(MOST_IMPORTED * 2048)),
+        )
         .route("/api/vault/{item}", put(update).delete(delete))
         .route("/api/agents/{id}/vault", get(agent_items))
         .route("/api/agents/{id}/vault/{item}/fill", post(fill))
@@ -99,6 +105,21 @@ async fn create(
     let item = api.connections.create_vault_item(actor.id, &input).await?;
     audit(&api, &actor, "vault.create", &item).await;
     Ok(Json(item))
+}
+
+#[utoipa::path(post, path = "/api/vault/import", operation_id = "import_vault", request_body = ImportVault, responses((status = 200, body = VaultImported), (status = 400)))]
+async fn import(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Json(input): Json<ImportVault>,
+) -> Result<Json<VaultImported>, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    allowed(&api, &actor, None, Capability::BrowserControl).await?;
+    let done = api.connections.import_vault_items(actor.id, &input).await?;
+    let detail = json!({"imported": done.imported, "skipped": done.skipped});
+    let event = Event::by(actor.id, "vault.import").detail(detail);
+    api.identity.audit(event).await;
+    Ok(Json(done))
 }
 
 async fn audit(api: &Api, actor: &Actor, kind: &'static str, item: &VaultSummary) {

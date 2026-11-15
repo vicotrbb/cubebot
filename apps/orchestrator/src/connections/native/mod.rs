@@ -247,7 +247,7 @@ fn slug(slug: &str) -> Result<(), ConnectError> {
     cubebot_connectors::slug_valid(slug)
         .then_some(())
         .ok_or_else(|| {
-            ConnectError::Invalid("a name is 1 to 32 lowercase letters, digits or hyphens".into())
+            ConnectError::Invalid("a name is 1 to 32 lowercase letters, digits, hyphens or single underscores, not ending in one".into())
         })
 }
 

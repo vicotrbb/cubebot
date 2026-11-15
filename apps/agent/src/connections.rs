@@ -113,10 +113,11 @@ impl Connections {
             .split(|c: char| !c.is_alphanumeric() && c != '-')
             .filter(|word| word.len() > 1)
             .collect();
+        let names = query.split(|c: char| !c.is_alphanumeric() && !matches!(c, '-' | '_'));
         let named: Vec<&Offered> = self
             .offered
             .iter()
-            .filter(|offered| words.contains(&offered.connection.slug.as_str()))
+            .filter(|offered| names.clone().any(|name| name == offered.connection.slug))
             .collect();
         let pool = if named.is_empty() {
             self.offered.iter().collect()
@@ -468,6 +469,34 @@ mod tests {
         );
         let prompt = connections.prompt().unwrap();
         assert!(prompt.contains("- gmail-work (Google, victor@example.com): full, including sending; events for routine triggers: mail.received, event.starting"), "{prompt}");
+    }
+
+    #[test]
+    fn a_slug_with_underscores_is_named_in_search_and_routes_its_calls() {
+        let connections = Connections::new(
+            None,
+            &[
+                connection("google_work", "google", "full"),
+                connection("google_home", "google", "full"),
+            ],
+        );
+        let named = connections.search("google_home send email");
+        assert!(
+            !named.is_empty()
+                && named
+                    .iter()
+                    .all(|tool| tool.name.starts_with("google_home__"))
+        );
+        assert!(
+            connections
+                .call("google_work__gmail_send", Uuid::new_v4(), &json!([]), None)
+                .is_some()
+        );
+        assert!(
+            connections
+                .call("google__work__gmail_send", Uuid::new_v4(), &json!([]), None)
+                .is_none()
+        );
     }
 
     #[test]

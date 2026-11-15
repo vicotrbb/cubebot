@@ -40,7 +40,77 @@
   border-radius: var(--r-md);
   background: var(--inset);
 }
+.vault-import {
+  gap: 14px;
+}
+.vault-import__how {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--inset);
+  font-size: var(--t-sm);
+}
+.vault-import__how div {
+  display: grid;
+  grid-template-columns: 17ch 1fr;
+  gap: 12px;
+}
+.vault-import__how dt {
+  font-weight: var(--w-label);
+  color: var(--ink);
+}
+.vault-import__how dd {
+  margin: 0;
+  color: var(--ink-soft);
+}
+.vault-import__drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 72px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-lg);
+  color: var(--ink-soft);
+  font-weight: var(--w-label);
+  cursor: pointer;
+  transition:
+    border-color var(--quick),
+    background var(--quick),
+    color var(--quick);
+}
+.vault-import__drop:hover,
+.vault-import__drop:focus-within {
+  border-color: var(--orange);
+  background: var(--orange-wash);
+  color: var(--orange-text);
+}
+.vault-import__drop:focus-within {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.vault-import__drop svg {
+  width: 18px;
+  height: 18px;
+}
+.vault-import__drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.vault-import__left ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
 @media (max-width: 640px) {
+  .vault-import__how div {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
   .vault-page__head {
     flex-direction: column;
   }

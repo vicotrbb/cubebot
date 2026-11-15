@@ -3,14 +3,15 @@ use crate::{Auth, FieldKind, Manifest};
 use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 
-/// A connection's slug: it prefixes tools as `<slug>__<tool>`, so it holds no underscores.
 pub fn slug_valid(slug: &str) -> bool {
     let bytes = slug.as_bytes();
     (1..=32).contains(&bytes.len())
         && bytes[0].is_ascii_alphanumeric()
+        && !slug.contains("__")
+        && !slug.ends_with('_')
         && bytes
             .iter()
-            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'-')
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_'))
 }
 
 /// The first problem with `config` and `secrets` for signing in with `auth`, worded for the person.
@@ -103,8 +104,8 @@ mod tests {
 
     #[test]
     fn slugs_are_short_lowercase_and_never_split_tool_names() {
-        assert!(slug_valid("gmail-work") && slug_valid("n0"));
-        for bad in ["", "-a", "Gmail", "a__b", "a_b", &"a".repeat(33)] {
+        assert!(slug_valid("gmail-work") && slug_valid("n0") && slug_valid("google_personal"));
+        for bad in ["", "-a", "_a", "a_", "Gmail", "a__b", &"a".repeat(33)] {
             assert!(!slug_valid(bad), "{bad}");
         }
     }

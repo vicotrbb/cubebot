@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT credential, context_window FROM provider_saved WHERE provider = $1",
+  "query": "SELECT credential, context_window, reasoning_effort FROM provider_saved WHERE provider = $1",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,11 @@
         "ordinal": 1,
         "name": "context_window",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "reasoning_effort",
+        "type_info": "Text"
       }
     ],
     "parameters": {
@@ -21,8 +26,9 @@
     },
     "nullable": [
       false,
+      true,
       true
     ]
   },
-  "hash": "5060e8ffaae765e483525d64f32f568b582bd0d8ff4ba36836b59db5c0792b72"
+  "hash": "4e5b1b9a06f903f8840a34cf7ed2e95866b0270fa8e84263ae81d9365af51723"
 }

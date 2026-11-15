@@ -26,6 +26,11 @@ spec:
         - name: web
           image: {{ include "cubebot.image" (list $ "web") }}
           securityContext: {{- include "cubebot.restricted" . | nindent 12 }}
+          {{- with .Values.web.frameAncestors }}
+          env:
+            - name: CUBEBOT_FRAME_ANCESTORS
+              value: {{ . | quote }}
+          {{- end }}
           ports:
             - name: http
               containerPort: 3000

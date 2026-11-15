@@ -51,7 +51,8 @@ impl Work {
                 LEFT JOIN room_messages m ON m.id=t.room_message_id
                 LEFT JOIN tasks k ON k.room_id=m.room_id
                 WHERE t.status IN ('waiting','failed')
-                  AND (a.role='administrator' OR k.created_by=a.id OR (k.id IS NULL AND EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read')))
+                  AND (a.role='administrator' OR k.created_by=a.id OR (k.id IS NULL AND EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read')
+                      AND (m.room_id IS NULL OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='room' AND p.scope_id=m.room_id AND p.capability='conversation.read'))))
                 UNION ALL
                 SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login)
                 FROM invitations v

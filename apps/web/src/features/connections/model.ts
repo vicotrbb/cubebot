@@ -115,9 +115,11 @@ export function suggestedSlug(manifest: Manifest, taken: string[]) {
 }
 
 export function slugProblem(slug: string) {
-  return /^[a-z0-9][a-z0-9-]{0,31}$/.test(slug)
+  return /^[a-z0-9][a-z0-9_-]{0,31}$/.test(slug) &&
+    !slug.includes('__') &&
+    !slug.endsWith('_')
     ? ''
-    : 'Use 1 to 32 lowercase letters, digits or hyphens, starting with a letter or digit.'
+    : 'Use 1 to 32 lowercase letters, digits, hyphens or single underscores, starting with a letter or digit and not ending in an underscore.'
 }
 
 /** Guide text with this installation's redirect address filled in. */

@@ -104,6 +104,8 @@ services:
   web:
     image: ${CUBEBOT_REGISTRY:-ghcr.io/vicotrbb}/cubebot-web:${CUBEBOT_VERSION:-local}
     restart: unless-stopped
+    environment:
+      CUBEBOT_FRAME_ANCESTORS: ${CUBEBOT_FRAME_ANCESTORS:-}
     logging: *logging
     security_opt:
       - no-new-privileges:true

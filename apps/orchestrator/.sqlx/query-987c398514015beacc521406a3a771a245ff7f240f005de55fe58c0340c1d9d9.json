@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE vault_items\n            SET last_tried_at=clock_timestamp()\n            WHERE id=$2 AND kind='login' AND (agent_id=$1\n                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'\n                    OR access->'agents' @> jsonb_build_array($1::uuid))))\n            RETURNING site\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "site",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "987c398514015beacc521406a3a771a245ff7f240f005de55fe58c0340c1d9d9"
+}

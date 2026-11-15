@@ -136,6 +136,7 @@ async fn skills_publish_revise_install_load_and_come_from_dreams() {
                 context_window: Some(128_000),
                 api_key: Some("controlled-key".into()),
                 access: None,
+                reasoning_effort: None,
             },
         )
         .await

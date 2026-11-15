@@ -6,6 +6,12 @@ import type { AgentSummary } from '../../api/types'
 import { CardSelect, type CardOption } from '../../components/CardSelect'
 import { Cube } from '../../components/Cube'
 import { Alert, Skeleton, Status } from '../../components/primitives'
+import {
+  type Effort,
+  EFFORT_NAMES,
+  EffortField,
+  offered,
+} from '../platform/Effort'
 import { PROVIDER_NAMES, suggestedWindow } from '../platform/models'
 import { ModelField } from '../platform/Providers'
 import '../platform/platform.css'
@@ -31,7 +37,7 @@ export function AgentModel({ agent }: { agent: AgentSummary }) {
       <h2>Model</h2>
       {described.data ? (
         <ModelForm
-          key={JSON.stringify(described.data.chosen)}
+          key={JSON.stringify([described.data.chosen, described.data.effort])}
           agent={agent}
           described={described.data}
         />
@@ -56,6 +62,8 @@ function ModelForm({
   const [draft, setDraft] = useState(() =>
     saved ? draftFor(saved.provider, saved) : null,
   )
+  const { provider, level, setEffort, moved } = useEffort(described, draft)
+  const changed = differs(draft, saved) || moved
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -73,6 +81,7 @@ function ModelForm({
               model: draft.model,
               context_window: draft.window,
             },
+            effort: level,
           },
         }),
       )
@@ -93,8 +102,8 @@ function ModelForm({
       }}
     >
       <p className="panel__lead">
-        What {agent.name} thinks with. The platform default follows AI
-        providers; a model of its own stays until you change it here.
+        What {agent.name} thinks with, and how hard. The platform defaults
+        follow AI providers; choices of its own stay until you change them here.
       </p>
       <CardSelect
         label={`What ${agent.name} thinks with`}
@@ -118,18 +127,47 @@ function ModelForm({
           }
         />
       )}
+      {provider && (
+        <EffortField
+          provider={provider}
+          value={level}
+          inherited={inheritedEffort(described, provider)}
+          onChange={setEffort}
+        />
+      )}
       <Alert>{error}</Alert>
       <Status>{notice}</Status>
       <div className="actions">
         <button
           className="btn btn--sm"
-          disabled={busy || !differs(draft, saved) || !ready(draft)}
+          disabled={busy || !changed || !ready(draft)}
         >
-          {busy ? 'Saving…' : 'Save model'}
+          {busy ? 'Saving…' : 'Save'}
         </button>
       </div>
     </form>
   )
+}
+
+function useEffort(described: Described, draft: Draft | null) {
+  const [effort, setEffort] = useState<Effort | null>(described.effort ?? null)
+  const provider = draft?.provider ?? described.default?.provider
+  const level = provider && offered(provider, effort) ? effort : null
+  return {
+    provider,
+    level,
+    setEffort,
+    moved: level !== (described.effort ?? null),
+  }
+}
+
+function inheritedEffort(described: Described, provider: Provider) {
+  const set = described.provider_efforts.find(
+    (entry) => entry.provider === provider,
+  )?.effort
+  return set
+    ? `Default follows AI providers: ${EFFORT_NAMES[set]}.`
+    : `Default follows AI providers, which leaves it to ${PROVIDER_NAMES[provider]}.`
 }
 
 function choices(

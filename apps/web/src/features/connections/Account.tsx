@@ -19,9 +19,11 @@ import {
   LEVELS,
   permitted,
   RISK_LABEL,
+  slugProblem,
 } from './model'
 
 type Change = {
+  slug?: string
   level?: Level
   disabled_tools?: string[]
   access?: Connection['access']
@@ -65,9 +67,11 @@ export function Account({
       await client.invalidateQueries({ queryKey: CONNECTIONS_KEY })
     }
   }
-  const change = (body: Change) =>
-    act('save', () =>
-      answer(api.PUT('/api/connections/{id}', { ...path, body })),
+  const change = (body: Change, done = '') =>
+    act(
+      'save',
+      () => answer(api.PUT('/api/connections/{id}', { ...path, body })),
+      done,
     )
   const test = () =>
     act(
@@ -158,6 +162,12 @@ export function Account({
               ? `Its access token renews before ${when(connection.expires_at)}.`
               : ''}
           </p>
+          <Name
+            key={connection.slug}
+            connection={connection}
+            busy={Boolean(busy)}
+            onRename={(slug) => void change({ slug }, `Renamed to ${slug}.`)}
+          />
           <Permission
             connection={connection}
             busy={Boolean(busy)}
@@ -180,6 +190,58 @@ export function Account({
         </div>
       )}
     </li>
+  )
+}
+
+function Name({
+  connection,
+  busy,
+  onRename,
+}: {
+  connection: Connection
+  busy: boolean
+  onRename: (slug: string) => void
+}) {
+  const [slug, setSlug] = useState(connection.slug)
+  const problem = slug === connection.slug ? '' : slugProblem(slug)
+  const id = `name-${connection.id}`
+  return (
+    <form
+      className="account__part"
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!problem && slug !== connection.slug) onRename(slug)
+      }}
+    >
+      <label htmlFor={id}>
+        <h4>Name</h4>
+      </label>
+      <div className="account__rename">
+        <input
+          id={id}
+          className="input"
+          value={slug}
+          maxLength={32}
+          spellCheck={false}
+          autoComplete="off"
+          aria-invalid={Boolean(problem)}
+          aria-describedby={`${id}-hint`}
+          disabled={busy}
+          onChange={(event) => setSlug(event.target.value.toLowerCase())}
+        />
+        <button
+          type="submit"
+          className="btn btn--sm"
+          disabled={busy || Boolean(problem) || slug === connection.slug}
+        >
+          Rename
+        </button>
+      </div>
+      <p id={`${id}-hint`} className="small faint">
+        {problem ||
+          `Agents call its tools as ${slug || 'name'}__tool. Use a name per account, like google_work and google_personal.`}
+      </p>
+    </form>
   )
 }
 

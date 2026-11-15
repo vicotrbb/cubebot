@@ -111,6 +111,17 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
         .unwrap()
         .parse()
         .unwrap();
+    let deploy = save(json!({"kind":"secret","name":"Deploy token","secret":PASSWORD}))
+        .await
+        .unwrap()
+        .text()
+        .await
+        .unwrap();
+    let deploy: Uuid = serde_json::from_str::<Value>(&deploy).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
 
     let model = Arc::new(Model::default());
     let put = json!({"kind":"secret","name":"API key","site":null,"username":null,"secret":MADE});
@@ -119,7 +130,7 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
             Step::Reply(json!([call("vault_list", json!({}))])),
             Step::Reply(json!([call(
                 "vault_fill",
-                json!({"item":item,"field":"secret"})
+                json!({"item":deploy,"field":"secret"})
             )])),
             Step::Reply(json!([call("vault_put", put)])),
             Step::Reply(json!([text("Filled and saved.")])),
@@ -156,7 +167,7 @@ async fn a_fill_types_the_secret_without_it_reaching_the_ledger_or_records() {
     let fills: Vec<Value> = arbiter.0.lock().unwrap().clone();
     assert_eq!(
         fills,
-        [json!({"fill":{"item":item,"text":PASSWORD,"account":null}})]
+        [json!({"fill":{"item":deploy,"text":PASSWORD,"account":null}})]
     );
 
     let ledger: Vec<String> = sqlx::query_scalar!(
@@ -335,6 +346,11 @@ async fn a_login_the_vault_holds_is_filled_before_a_person_is_asked() {
             && refused.contains(&item.to_string()),
         "{refused}"
     );
+    let unfocused = requests[2].to_string();
+    assert!(
+        unfocused.contains("a login is typed only into its own site"),
+        "{unfocused}"
+    );
     assert!(
         requests[3]
             .to_string()
@@ -348,16 +364,55 @@ async fn a_login_the_vault_holds_is_filled_before_a_person_is_asked() {
     .fetch_all(&f.pool)
     .await
     .unwrap();
-    assert_eq!(
-        kinds,
-        [
-            ("vault.fill".into(), Some(agent)),
-            ("login.request".into(), Some(agent))
-        ]
-    );
+    assert_eq!(kinds, [("login.request".into(), Some(agent))]);
 
     drop(child);
     server.abort();
     provider_task.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_import_seals_new_logins_once_and_refuses_a_file_with_an_invalid_one() {
+    use cubebot_orchestrator::connections::{Connections, ImportVault, ImportedLogin};
+    let f = fixture().await;
+    let (_, _, admin, _) = native_chat_setup(&f, "unused").await;
+    let vault = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let login = |site: &str, username: &str| ImportedLogin {
+        name: site.into(),
+        site: site.into(),
+        username: username.into(),
+        secret: PASSWORD.into(),
+    };
+    let file = ImportVault {
+        access: None,
+        logins: vec![
+            login("https://github.com/login", "octocat"),
+            login("https://www.github.com", "octocat"),
+            login("https://news.ycombinator.com", "pg"),
+        ],
+    };
+    let first = vault.import_vault_items(admin.id, &file).await.unwrap();
+    assert_eq!((first.imported, first.skipped), (2, 1));
+    let again = vault.import_vault_items(admin.id, &file).await.unwrap();
+    assert_eq!((again.imported, again.skipped), (0, 3));
+    let invalid = ImportVault {
+        access: None,
+        logins: vec![
+            login("https://example.com", "me"),
+            login("https://example.org", ""),
+        ],
+    };
+    assert!(vault.import_vault_items(admin.id, &invalid).await.is_err());
+    let items = vault.installation_vault().await.unwrap();
+    let sites: Vec<_> = items
+        .iter()
+        .filter_map(|item| item.site.as_deref())
+        .collect();
+    assert_eq!(
+        sites,
+        ["https://github.com/login", "https://news.ycombinator.com"]
+    );
     f.task.abort();
 }

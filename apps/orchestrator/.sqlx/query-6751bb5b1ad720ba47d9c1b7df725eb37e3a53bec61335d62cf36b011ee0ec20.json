@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO vault_items (id, kind, name, site, username, ciphertext, access, created_by)\n                VALUES ($1, 'login', $2, $3, $4, $5, $6, $7)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6751bb5b1ad720ba47d9c1b7df725eb37e3a53bec61335d62cf36b011ee0ec20"
+}

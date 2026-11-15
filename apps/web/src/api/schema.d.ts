@@ -2458,6 +2458,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/vault/import': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['import_vault']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/vault/{item}': {
     parameters: {
       query?: never
@@ -2677,6 +2693,8 @@ export interface components {
     AgentModel: {
       chosen?: null | components['schemas']['ModelRef']
       default?: null | components['schemas']['ModelRef']
+      effort?: null | components['schemas']['Effort']
+      provider_efforts: components['schemas']['ProviderEffort'][]
       providers: components['schemas']['ProviderKind'][]
     }
     AgentModels: {
@@ -3043,6 +3061,7 @@ export interface components {
       expected_revision: number
       model: string
       provider?: components['schemas']['ProviderKind']
+      reasoning_effort?: null | components['schemas']['Effort']
       /** Format: uuid */
       request_id: string
     }
@@ -3262,6 +3281,8 @@ export interface components {
       /** Format: uuid */
       skill: string
     }
+    /** @enum {string} */
+    Effort: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
     Event: {
       /**
        * Format: int64
@@ -3530,6 +3551,16 @@ export interface components {
      * @description The raw bytes of a JPEG or PNG; a schema only, the handlers take `Bytes`.
      */
     Image: string
+    ImportVault: {
+      access?: null | components['schemas']['ProviderAccess']
+      logins: components['schemas']['ImportedLogin'][]
+    }
+    ImportedLogin: {
+      name: string
+      secret: string
+      site: string
+      username: string
+    }
     InstallSkill: {
       /** Format: int64 */
       revision: number
@@ -4038,6 +4069,10 @@ export interface components {
           /** @enum {string} */
           mode: 'explicit_grants'
         }
+    ProviderEffort: {
+      effort?: null | components['schemas']['Effort']
+      provider: components['schemas']['ProviderKind']
+    }
     /** @enum {string} */
     ProviderKind:
       | 'openai'
@@ -4057,6 +4092,7 @@ export interface components {
       context_window?: number | null
       model: string
       provider: components['schemas']['ProviderKind']
+      reasoning_effort?: null | components['schemas']['Effort']
       /** Format: int64 */
       revision: number
     }
@@ -4411,6 +4447,7 @@ export interface components {
       context_window?: number | null
       model: string
       provider: components['schemas']['ProviderKind']
+      reasoning_effort?: null | components['schemas']['Effort']
     }
     Scope:
       | {
@@ -4448,6 +4485,7 @@ export interface components {
     }
     SetAgentModel: {
       chosen?: null | components['schemas']['ModelRef']
+      effort?: null | components['schemas']['Effort']
     }
     SetBudget: {
       /**
@@ -4990,6 +5028,10 @@ export interface components {
     }
     /** @enum {string} */
     VaultField: 'username' | 'secret'
+    VaultImported: {
+      imported: number
+      skipped: number
+    }
     /** @enum {string} */
     VaultKind: 'login' | 'secret'
     VaultSummary: {
@@ -9634,6 +9676,35 @@ export interface operations {
         content: {
           'application/json': components['schemas']['VaultSummary']
         }
+      }
+    }
+  }
+  import_vault: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ImportVault']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['VaultImported']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

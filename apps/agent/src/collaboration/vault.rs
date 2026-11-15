@@ -40,7 +40,7 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     ];
     tools.extend(desktop.then(|| tool(
         "vault_fill",
-        "Type a username or secret from your vault at the desktop's keyboard focus without seeing it. Click the field first, then take a screenshot to check.",
+        "Type a username or secret from your vault at the desktop's keyboard focus without seeing it. Click the field first, then take a screenshot to check. A login types only while the focused browser page is on its own site.",
         json!({
             "item":text("The item's id from vault_list."),
             "field":{"type":"string","enum":["username","secret"],"description":"secret is a login's password or a secret's value."},
@@ -75,13 +75,18 @@ impl Collaboration {
                 let fill = Fill::deserialize(input)
                     .ok()
                     .and_then(|fill| Some((Uuid::parse_str(&fill.item).ok()?, fill.field)))
-                    .map(|(item, field)| VaultFill { item, field });
-                let Some(fill) = fill else {
+                    .map(|(item, field)| VaultFill {
+                        item,
+                        field,
+                        page: None,
+                    });
+                let Some(mut fill) = fill else {
                     return Some(Err(
                         "item is an id from vault_list and field is username or secret",
                     ));
                 };
                 Box::pin(async move {
+                    fill.page = crate::tools::browser::focused_page().await;
                     let client = self.client.as_ref();
                     let sent = match client {
                         Some(client) => client.vault_fill(&fill).await,

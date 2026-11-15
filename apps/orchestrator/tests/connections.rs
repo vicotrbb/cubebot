@@ -915,6 +915,18 @@ async fn an_apps_client_credentials_are_traded_for_tokens_again_before_they_laps
             .starts_with(&format!("Basic {basic} "))
     );
     assert_eq!(vendor.seen(me).pop().unwrap(), "Bearer zoom-access-3 ");
+    let rename = |slug: &str| serde_json::from_value(json!({ "slug": slug })).unwrap();
+    let renamed = connections
+        .update_connection(saved.id, rename("zoom_work"))
+        .await
+        .unwrap();
+    assert_eq!(renamed.slug, "zoom_work");
+    assert!(
+        connections
+            .update_connection(saved.id, rename("zoom__work"))
+            .await
+            .is_err()
+    );
 
     // A revoked app needs its secret entered again.
     sqlx::query!("UPDATE connections SET expires_at = clock_timestamp()")

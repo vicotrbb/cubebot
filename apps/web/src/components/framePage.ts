@@ -1,6 +1,6 @@
 /** Blocks the network, so a page cannot call out with what it holds or load what it was not given. */
 const POLICY =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:"
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; form-action 'none'"
 
 const REPORT_HEIGHT = `<script>addEventListener('DOMContentLoaded',function(){var r=document.documentElement,s=function(){parent.postMessage({frameHeight:r.scrollHeight},'*')};new ResizeObserver(s).observe(r);s()})</script>`
 

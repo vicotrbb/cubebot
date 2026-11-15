@@ -12,7 +12,7 @@ use std::{
     path::Path,
     process::Stdio,
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
@@ -70,8 +70,33 @@ struct BrowserTool {
     browser: Arc<Browser>,
 }
 
+static BROWSER: OnceLock<Arc<Browser>> = OnceLock::new();
+
+pub(crate) async fn focused_page() -> Option<String> {
+    let browser = BROWSER.get()?;
+    let (cdp, pages) = {
+        let state = browser.state.lock().await;
+        let pages: Vec<Page> = state.pages.values().cloned().collect();
+        (state.cdp.clone()?, pages)
+    };
+    let probe = json!({"expression":"[location.href, document.hasFocus()]","returnByValue":true});
+    for page in pages {
+        let Ok(state) = cdp
+            .send(Some(&page.session), "Runtime.evaluate", probe.clone())
+            .await
+        else {
+            continue;
+        };
+        let value = &state["result"]["value"];
+        if value[1] == true {
+            return value[0].as_str().map(str::to_owned);
+        }
+    }
+    None
+}
+
 pub(super) fn tools() -> Vec<Box<dyn Tool>> {
-    let browser = Arc::new(Browser::default());
+    let browser = BROWSER.get_or_init(Arc::default).clone();
     let starting = browser.clone();
     tokio::spawn(async move {
         if let Err(error) = starting.state.lock().await.cdp().await {

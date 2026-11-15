@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT model_effort FROM agents WHERE id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "model_effort",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "eca2d71aa401f249186439ed0a481d43c160e0cf3fef392b4959460695269a2d"
+}

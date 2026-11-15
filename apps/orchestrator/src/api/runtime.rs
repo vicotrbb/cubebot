@@ -403,7 +403,19 @@ async fn vault_fill(
     Json(input): Json<VaultFill>,
 ) -> Result<Response, Failure> {
     let actor = active(&identity, &headers).await?;
-    let text = vault_of(&identity)?
+    let vault = vault_of(&identity)?;
+    let site = vault.tried_login_site(actor.agent, input.item).await;
+    if let Some(site) = site.map_err(vault_unavailable)?
+        && !input
+            .page
+            .as_deref()
+            .is_some_and(|page| crate::connections::same_site(&site, page))
+    {
+        return Ok(refused(
+            "a login is typed only into its own site: open it in the browser and focus the field first",
+        ));
+    }
+    let text = vault
         .vault_fill_text(actor.agent, None, input.item, input.field)
         .await
         .map_err(vault_unavailable)?;

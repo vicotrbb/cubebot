@@ -87,6 +87,7 @@ async fn a_start_with_a_different_key_refuses_and_the_original_key_starts() {
         context_window: Some(200_000),
         api_key: Some("secret-provider-key".into()),
         access: None,
+        reasoning_effort: None,
     };
     Connections::new(pool.clone(), Credentials::new([7; 32]))
         .configure(&admin, &input)
