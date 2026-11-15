@@ -113,3 +113,11 @@ export function sectionsOf(meetings: Summary[], zone: string) {
     .map(([day, meetings]) => ({ day, meetings }))
   return { live, upcoming, past }
 }
+
+export function guestNameProblem(name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) return 'Enter the name people will see.'
+  if (!/^[\p{L}\p{M}\p{N} .'-]+$/u.test(trimmed))
+    return 'Use letters, numbers, spaces, periods, apostrophes or hyphens.'
+  return ''
+}

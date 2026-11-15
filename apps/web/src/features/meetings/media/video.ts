@@ -209,7 +209,13 @@ export function pictures(
         askKeyframe(source, stream)
       },
     })
-    decoder.configure({ codec, optimizeForLatency: true })
+    try {
+      decoder.configure({ codec, optimizeForLatency: true })
+    } catch {
+      decoder.close()
+      target.codec = null
+      return
+    }
     target.decoder = decoder
     target.waitingForKey = true
   }

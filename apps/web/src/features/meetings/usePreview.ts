@@ -63,11 +63,17 @@ export function usePreview() {
   )
   const [starting, setStarting] = useState(true)
   const handed = useRef(false)
+  const active = useRef(false)
 
   const start = useCallback(
     async (kind: 'audio' | 'video', device?: string) => {
       try {
-        replace(stream, kind, await grab(kind, device))
+        const got = await grab(kind, device)
+        if (!active.current && !handed.current) {
+          for (const track of got.getTracks()) track.stop()
+          return false
+        }
+        replace(stream, kind, got)
         setProblems((current) => ({ ...current, [kind]: undefined }))
         return true
       } catch (error) {
@@ -84,6 +90,7 @@ export function usePreview() {
 
   useEffect(() => {
     let live = true
+    active.current = true
     void (async () => {
       const heard = await start('audio')
       const seen = await start('video')
@@ -103,6 +110,7 @@ export function usePreview() {
     })()
     return () => {
       live = false
+      active.current = false
       if (!handed.current) for (const track of stream.getTracks()) track.stop()
     }
   }, [start, stream])

@@ -2,6 +2,7 @@ import { AudioLines, Mic, MicOff, Video, VideoOff } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Cube } from '../../components/Cube'
 import { Alert, Field } from '../../components/primitives'
+import { guestNameProblem } from './schedule'
 import type { Joining } from './useMeeting'
 import { usePreview, type Preview } from './usePreview'
 
@@ -186,7 +187,9 @@ export function GreenRoom({
   const meter = useRef<HTMLSpanElement>(null)
   useLevel(preview, meter)
   const trimmed = name.trim()
-  const ready = !preview.starting && (!guest || trimmed.length > 0)
+  const nameProblem = guest && trimmed ? guestNameProblem(trimmed) : ''
+  const ready =
+    !preview.starting && (!guest || (trimmed.length > 0 && !nameProblem))
   const join = () => {
     if (!ready) return
     const context = new AudioContext()
@@ -243,10 +246,12 @@ export function GreenRoom({
                 maxLength={40}
                 autoComplete="name"
                 required
+                aria-invalid={nameProblem ? true : undefined}
                 onChange={(event) => setName(event.target.value)}
               />
             </Field>
           )}
+          <Alert>{nameProblem}</Alert>
           <DevicePicker
             label="Microphone"
             devices={preview.microphones}

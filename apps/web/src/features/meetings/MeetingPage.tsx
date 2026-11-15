@@ -83,7 +83,10 @@ export function MeetingPage({ id, join }: { id: string; join: boolean }) {
           </button>
         }
         onLeave={toDetail}
-        onRejoin={() => setStage('green')}
+        onRejoin={() => {
+          setStage('green')
+          void record.refetch()
+        }}
       />
     )
   return (
