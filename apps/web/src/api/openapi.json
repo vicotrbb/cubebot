@@ -4804,6 +4804,40 @@
         }
       }
     },
+    "/api/meetings/link/{token}/join": {
+      "post": {
+        "tags": [],
+        "operationId": "join_meeting_by_link",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JoinedMeeting"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/meetings/settings": {
       "get": {
         "tags": [],
@@ -5467,6 +5501,40 @@
             "description": ""
           },
           "502": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/public/meetings/{token}": {
+      "get": {
+        "tags": [],
+        "operationId": "public_meeting",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicMeeting"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          },
+          "429": {
             "description": ""
           }
         }
@@ -9390,6 +9458,16 @@
           }
         }
       },
+      "JoinedMeeting": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "KeyView": {
         "type": "object",
         "required": ["present"],
@@ -10926,6 +11004,27 @@
           "revision": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "PublicMeeting": {
+        "type": "object",
+        "required": ["title", "host", "state", "locked", "lobby"],
+        "properties": {
+          "host": {
+            "type": "string"
+          },
+          "lobby": {
+            "type": "boolean"
+          },
+          "locked": {
+            "type": "boolean"
+          },
+          "state": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },

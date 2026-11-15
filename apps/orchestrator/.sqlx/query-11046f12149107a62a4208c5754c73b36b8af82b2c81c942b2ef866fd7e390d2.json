@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meetings SET started_at=COALESCE(started_at, clock_timestamp()), ended_at=NULL WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11046f12149107a62a4208c5754c73b36b8af82b2c81c942b2ef866fd7e390d2"
+}

@@ -61,6 +61,29 @@ describe('audit sentences', () => {
     assert.equal(target('meeting.configure', {}, null, null), null)
   })
 
+  test('meeting room actions name the guest or participant', () => {
+    assert.equal(
+      phrase('meeting.guest_join', { name: 'Planning', guest: 'Dee' }),
+      'joined as the guest Dee in',
+    )
+    assert.equal(
+      phrase('meeting.deny', { guest: 'Dee' }),
+      'turned away the guest Dee from',
+    )
+    assert.equal(
+      phrase('meeting.remove', { participant: 'Bob' }),
+      'removed Bob from',
+    )
+    assert.equal(
+      phrase('meeting.lock', { locked: false }),
+      'unlocked the meeting',
+    )
+    assert.equal(
+      target('meeting.admit', { name: 'Planning', guest: 'Dee' }, null, 'abc'),
+      'Planning',
+    )
+  })
+
   test('an unknown kind still reads', () => {
     assert.equal(phrase('files.share_link', {}), 'files share link')
   })

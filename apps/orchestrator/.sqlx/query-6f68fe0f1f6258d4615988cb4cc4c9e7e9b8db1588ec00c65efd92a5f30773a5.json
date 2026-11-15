@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT m.title, COALESCE(NULLIF(o.profile->>'name', ''), o.login) AS \"host!\",\n                CASE WHEN m.ended_at IS NOT NULL THEN 'ended'\n                    WHEN m.started_at IS NOT NULL THEN 'live' ELSE 'scheduled' END AS \"state!\",\n                m.locked, NOT m.open_join AS \"lobby!\"\n            FROM meetings m\n            JOIN human_accounts o ON o.id=m.owner_id\n            JOIN meeting_settings s ON s.guests\n            WHERE m.link_token=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "host!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "state!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "locked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "lobby!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      null
+    ]
+  },
+  "hash": "6f68fe0f1f6258d4615988cb4cc4c9e7e9b8db1588ec00c65efd92a5f30773a5"
+}

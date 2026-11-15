@@ -18,6 +18,7 @@ mod mcp;
 mod meetings;
 mod memories;
 mod oidc;
+mod public;
 mod rooms;
 mod routines;
 mod runtime;
@@ -84,6 +85,7 @@ pub fn openapi() -> String {
     doc.merge(calls::Doc::openapi());
     doc.merge(calendar::Doc::openapi());
     doc.merge(meetings::Doc::openapi());
+    doc.merge(public::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
     doc.merge(teams::Doc::openapi());
     doc.merge(memories::Doc::openapi());
@@ -187,7 +189,9 @@ pub async fn configured_router_with_credentials(
         connections.clone(),
         identity.browser_origin.clone(),
     )?;
-    routes = routes.merge(meetings::router(identity.clone(), meetings));
+    routes = routes
+        .merge(public::router(&identity, meetings.clone()))
+        .merge(meetings::router(identity.clone(), meetings));
     routes = routes.merge(calls::router(
         pool,
         identity.clone(),

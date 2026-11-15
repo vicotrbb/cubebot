@@ -106,6 +106,17 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
       ? 'made a new link for the meeting'
       : 'turned off the link of the meeting',
   'meeting.configure': () => 'changed the meeting settings',
+  'meeting.guest_join': (detail) =>
+    `joined as the guest ${text(detail.guest) || 'without a name'} in`,
+  'meeting.admit': (detail) =>
+    `let the guest ${text(detail.guest) || 'without a name'} into`,
+  'meeting.deny': (detail) =>
+    `turned away the guest ${text(detail.guest) || 'without a name'} from`,
+  'meeting.remove': (detail) =>
+    `removed ${text(detail.participant) || 'someone'} from`,
+  'meeting.lock': (detail) =>
+    detail.locked ? 'locked the meeting' : 'unlocked the meeting',
+  'meeting.end': () => 'ended the meeting',
 }
 
 function invitees(detail: Detail) {

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE meeting_attendance a SET left_at=GREATEST(a.joined_at, m.ended_at)\n        FROM meetings m\n        WHERE m.id=a.meeting_id AND a.left_at IS NULL AND m.ended_at IS NOT NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c39edf24bf846a4cb6aa35dddfccf819466676f8891154f2bf0af64fa65ca408"
+}

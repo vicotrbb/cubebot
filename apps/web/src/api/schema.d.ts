@@ -1949,6 +1949,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/meetings/link/{token}/join': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['join_meeting_by_link']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/meetings/settings': {
     parameters: {
       query?: never
@@ -2225,6 +2241,22 @@ export interface paths {
     put?: never
     /** 202 until the person approves on xAI's page; then the signed-in plan. */
     post: operations['poll_supergrok']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/public/meetings/{token}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['public_meeting']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -3775,6 +3807,10 @@ export interface components {
       /** @description Untrusted vendor text for an event. */
       title: string
     }
+    JoinedMeeting: {
+      /** Format: uuid */
+      id: string
+    }
     KeyView: {
       /** Format: int64 */
       downloaded_at_unix?: number | null
@@ -4359,6 +4395,13 @@ export interface components {
       reasoning_effort?: null | components['schemas']['Effort']
       /** Format: int64 */
       revision: number
+    }
+    PublicMeeting: {
+      host: string
+      lobby: boolean
+      locked: boolean
+      state: string
+      title: string
     }
     PublishSkill: {
       files: components['schemas']['BTreeMap']
@@ -9035,6 +9078,39 @@ export interface operations {
       }
     }
   }
+  join_meeting_by_link: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['JoinedMeeting']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   read_meeting_settings: {
     parameters: {
       query?: never
@@ -9691,6 +9767,39 @@ export interface operations {
         content?: never
       }
       502: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  public_meeting: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        token: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PublicMeeting']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      429: {
         headers: {
           [name: string]: unknown
         }

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(NULLIF(h.profile->>'name', ''), h.login) AS \"name!\"\n        FROM meetings m\n        JOIN human_accounts h ON h.id=$2\n        WHERE m.id=$1 AND (m.owner_id=$2 OR EXISTS(\n            SELECT 1 FROM meeting_invitations i WHERE i.meeting_id=m.id AND i.account_id=$2\n        ))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b12fa4e386dd92a49b181afb604179d1662306f6b8ce5207e5a1ccb02b1d3277"
+}

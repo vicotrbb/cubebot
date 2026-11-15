@@ -1,15 +1,16 @@
 use crate::{
     identity::{Identity, IdentityError, audit::Event},
     meetings::{
-        ChangeMeeting, EmailConnection, Meeting, MeetingLink, MeetingSettings, MeetingSummary,
-        Meetings, NewInvitations, NewMeeting, SaveMeetingSettings, SetLink,
+        ChangeMeeting, EmailConnection, JoinedMeeting, Meeting, MeetingLink, MeetingSettings,
+        MeetingSummary, Meetings, NewInvitations, NewMeeting, SaveMeetingSettings, SetLink,
+        live::{Entry, Recheck, wire::FRAME_LIMIT},
     },
 };
 use axum::{
     Json, Router,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, Path, State, ws::WebSocketUpgrade},
     http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
 };
 use serde_json::json;
@@ -33,7 +34,8 @@ struct Api {
     link,
     email_connections,
     read_settings,
-    save_settings
+    save_settings,
+    join_link
 ))]
 pub(super) struct Doc;
 
@@ -52,6 +54,8 @@ pub(super) fn router(identity: Identity, meetings: Meetings) -> Router {
             delete(uninvite),
         )
         .route("/api/meetings/{id}/link", post(link))
+        .route("/api/meetings/{id}/live", get(live))
+        .route("/api/meetings/link/{token}/join", post(join_link))
         .layer(DefaultBodyLimit::max(32 * 1024))
         .with_state(Api { identity, meetings })
 }
@@ -197,4 +201,47 @@ async fn save_settings(
     let event = Event::by(actor.id, "meeting.configure").detail(json!(input));
     api.identity.audit(event).await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[tracing::instrument(skip_all, fields(meeting = %id))]
+async fn live(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    upgrade: WebSocketUpgrade,
+) -> Result<Response, IdentityError> {
+    let token = super::browser::credential(&api.identity, &headers)?.to_owned();
+    let console = api.identity.browser_origin.as_deref();
+    if !headers.contains_key("authorization")
+        && !super::public::origin_allowed(&headers, console, &api.meetings, true)
+    {
+        return Err(IdentityError::Forbidden);
+    }
+    let actor = api.identity.authenticate(&token).await?;
+    let name = api.meetings.attendee(&actor, id).await?;
+    let recheck = Recheck {
+        identity: api.identity.clone(),
+        token,
+    };
+    let entry = Entry::Member {
+        account: actor.id,
+        name,
+        recheck,
+    };
+    let live = api.meetings.live().clone();
+    Ok(upgrade
+        .max_message_size(FRAME_LIMIT)
+        .max_frame_size(FRAME_LIMIT)
+        .on_upgrade(move |socket| live.attend(socket, id, entry)))
+}
+
+#[utoipa::path(post, path = "/api/meetings/link/{token}/join", operation_id = "join_meeting_by_link", params(("token" = String, Path)), responses((status = 200, body = JoinedMeeting), (status = 404), (status = 409)))]
+async fn join_link(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(token): Path<String>,
+) -> Result<Json<JoinedMeeting>, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let id = api.meetings.join_by_link(&actor, &token).await?;
+    Ok(Json(JoinedMeeting { id }))
 }

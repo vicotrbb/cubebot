@@ -1,9 +1,12 @@
 mod calendar;
 mod invitations;
+pub mod live;
+pub mod public;
 mod settings;
 
 pub(crate) use calendar::items as calendar_items;
 pub use invitations::{EmailConnection, Invited};
+pub use public::{JoinedMeeting, PublicMeeting};
 pub use settings::{MeetingSettings, SaveMeetingSettings};
 
 use crate::{
@@ -16,6 +19,7 @@ use chrono::DateTime;
 use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, Transaction, types::Json};
+use std::sync::Arc;
 use uuid::Uuid;
 
 const TITLE_CHARS: usize = 200;
@@ -45,6 +49,9 @@ pub struct Meetings {
     pool: PgPool,
     connections: Option<Connections>,
     origin: Option<String>,
+    live: live::Live,
+    limiter: Arc<public::Limiter>,
+    hops: usize,
 }
 
 #[derive(Default, Deserialize, utoipa::ToSchema)]
@@ -190,9 +197,12 @@ impl Access {
 impl Meetings {
     pub fn new(pool: PgPool, connections: Option<Connections>, origin: Option<String>) -> Self {
         Self {
+            live: live::Live::new(pool.clone()),
             pool,
             connections,
             origin,
+            limiter: Arc::default(),
+            hops: 0,
         }
     }
 
@@ -206,7 +216,27 @@ impl Meetings {
             Err(std::env::VarError::NotPresent) => console,
             Err(error) => return Err(IdentityError::Invalid(error.into())),
         };
-        Ok(Self::new(pool, connections, origin))
+        let hops = public::trusted_hops()?;
+        Ok(Self {
+            hops,
+            ..Self::new(pool, connections, origin)
+        })
+    }
+
+    pub fn live(&self) -> &live::Live {
+        &self.live
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn close_open(&self) -> Result<(), IdentityError> {
+        Ok(live::close_open(&self.pool).await?)
+    }
+
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, meeting = %id))]
+    pub async fn attendee(&self, actor: &Actor, id: Uuid) -> Result<String, IdentityError> {
+        attendee(&self.pool, actor.id, id)
+            .await?
+            .ok_or(IdentityError::NotFound)
     }
 
     fn link(&self, token: Option<String>) -> Option<String> {
@@ -310,7 +340,7 @@ impl Meetings {
         let schedule = schedule(change.starts_at.as_deref(), change.ends_at.as_deref())?;
         let mut tx = self.pool.begin().await?;
         access(&mut tx, actor, id).await?.owned()?;
-        let title = sqlx::query_scalar!(
+        let updated = sqlx::query!(
             "
             UPDATE meetings
             SET title=COALESCE($2, title), description=COALESCE($3, description),
@@ -319,7 +349,7 @@ impl Meetings {
                 open_join=COALESCE($6, open_join), locked=COALESCE($7, locked),
                 agent_mode=COALESCE($8, agent_mode)
             WHERE id=$1
-            RETURNING title
+            RETURNING title, open_join, locked
             ",
             id,
             new_title,
@@ -333,7 +363,10 @@ impl Meetings {
         .fetch_one(&mut *tx)
         .await?;
         tx.commit().await?;
-        Ok(title)
+        if change.open_join.is_some() || change.locked.is_some() {
+            self.live.flags(id, updated.open_join, updated.locked).await;
+        }
+        Ok(updated.title)
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id, meeting = %id))]
@@ -364,6 +397,7 @@ impl Meetings {
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
+        self.live.relink(id, token.clone()).await;
         let link = MeetingLink {
             link: self.link(token),
         };
@@ -547,6 +581,27 @@ async fn access(
     .fetch_optional(&mut **tx)
     .await?
     .ok_or(IdentityError::NotFound)
+}
+
+pub(crate) async fn attendee(
+    pool: &PgPool,
+    account: Uuid,
+    id: Uuid,
+) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        SELECT COALESCE(NULLIF(h.profile->>'name', ''), h.login) AS "name!"
+        FROM meetings m
+        JOIN human_accounts h ON h.id=$2
+        WHERE m.id=$1 AND (m.owner_id=$2 OR EXISTS(
+            SELECT 1 FROM meeting_invitations i WHERE i.meeting_id=m.id AND i.account_id=$2
+        ))
+        "#,
+        id,
+        account,
+    )
+    .fetch_optional(pool)
+    .await
 }
 
 fn token() -> String {

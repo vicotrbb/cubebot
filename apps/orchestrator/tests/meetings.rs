@@ -511,3 +511,347 @@ async fn the_meeting_routes_answer_beside_a_meeting_id() {
         .await;
     assert_eq!(status, 422, "the read-only origin is not a setting");
 }
+
+const CONSOLE: &str = "https://console.example.com";
+
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+struct Served {
+    origin: String,
+    _task: tokio::task::JoinHandle<()>,
+}
+
+async fn served(w: &World) -> Served {
+    let router = cubebot_orchestrator::api::configured_router_with_credentials(
+        w.pool.clone(),
+        Some(CONSOLE.into()),
+        None,
+        Some(Credentials::new([7; 32])),
+    )
+    .await
+    .unwrap();
+    let (origin, task) = http_server(router).await;
+    Served {
+        origin,
+        _task: task,
+    }
+}
+
+async fn token_of(w: &World, name: &str) -> String {
+    let password = format!("{name} member password");
+    w.identity.login(name, &password).await.unwrap().token
+}
+
+async fn connect(
+    served: &Served,
+    path: &str,
+    bearer: Option<&str>,
+) -> Result<Socket, tokio_tungstenite::tungstenite::Error> {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let url = format!("{}{path}", served.origin.replacen("http", "ws", 1));
+    let mut request = url.into_client_request().unwrap();
+    let headers = request.headers_mut();
+    headers.insert("origin", CONSOLE.parse().unwrap());
+    if let Some(bearer) = bearer {
+        headers.insert("authorization", format!("Bearer {bearer}").parse().unwrap());
+    }
+    tokio_tungstenite::connect_async(request)
+        .await
+        .map(|(socket, _)| socket)
+}
+
+async fn say(socket: &mut Socket, value: Value) {
+    use futures_util::SinkExt;
+    let text = tokio_tungstenite::tungstenite::Message::Text(value.to_string().into());
+    socket.send(text).await.unwrap();
+}
+
+enum Heard {
+    Text(Value),
+    Binary(Vec<u8>),
+    Closed(String),
+}
+
+async fn hear(socket: &mut Socket) -> Heard {
+    use futures_util::StreamExt;
+    use tokio_tungstenite::tungstenite::Message;
+    loop {
+        let next = tokio::time::timeout(std::time::Duration::from_secs(10), socket.next())
+            .await
+            .expect("a frame from the room");
+        match next {
+            Some(Ok(Message::Text(text))) => {
+                return Heard::Text(serde_json::from_str(&text).unwrap());
+            }
+            Some(Ok(Message::Binary(bytes))) => return Heard::Binary(bytes.to_vec()),
+            Some(Ok(Message::Close(frame))) => {
+                return Heard::Closed(
+                    frame
+                        .map(|frame| frame.reason.to_string())
+                        .unwrap_or_default(),
+                );
+            }
+            Some(Ok(_)) => {}
+            _ => return Heard::Closed(String::new()),
+        }
+    }
+}
+
+async fn until(socket: &mut Socket, kind: &str) -> Value {
+    loop {
+        match hear(socket).await {
+            Heard::Text(value) if value["kind"] == kind => return value,
+            Heard::Closed(reason) => panic!("closed waiting for {kind}: {reason}"),
+            _ => {}
+        }
+    }
+}
+
+async fn closed(socket: &mut Socket) -> String {
+    loop {
+        if let Heard::Closed(reason) = hear(socket).await {
+            return reason;
+        }
+    }
+}
+
+async fn member(served: &Served, token: &str, meeting: Uuid) -> (Socket, u16) {
+    let path = format!("/api/meetings/{meeting}/live");
+    let mut socket = connect(served, &path, Some(token)).await.unwrap();
+    say(&mut socket, json!({"kind": "hello"})).await;
+    let welcome = until(&mut socket, "welcome").await;
+    (socket, welcome["you"].as_u64().unwrap() as u16)
+}
+
+async fn guest(served: &Served, link: &str, name: &str) -> Socket {
+    let token = link.rsplit('/').next().unwrap();
+    let path = format!("/api/public/meetings/{token}/live");
+    let mut socket = connect(served, &path, None).await.unwrap();
+    say(&mut socket, json!({"kind": "hello", "name": name})).await;
+    socket
+}
+
+async fn eventually(w: &World, id: Uuid, check: &str) {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let held: bool = sqlx::query_scalar(check)
+            .bind(id)
+            .fetch_one(&w.pool)
+            .await
+            .unwrap();
+        if held {
+            return;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "never held: {check}"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+async fn meeting_with(w: &World, input: Value) -> (Uuid, String) {
+    let (meeting, _) = w.meetings.create(&w.ana, &new(input)).await.unwrap();
+    (meeting.id, meeting.link.unwrap())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn two_members_hear_each_other_by_slot() {
+    let w = world().await;
+    let served = served(&w).await;
+    let (id, _) = meeting_with(
+        &w,
+        json!({"title": "Sync", "invite": {"accounts": [w.bo.id]}}),
+    )
+    .await;
+    let (mut ana, ana_slot) = member(&served, &token_of(&w, "ana").await, id).await;
+    let (mut bob, bob_slot) = member(&served, &token_of(&w, "bob").await, id).await;
+    assert_ne!(ana_slot, bob_slot);
+    let outsider = connect(
+        &served,
+        &format!("/api/meetings/{id}/live"),
+        Some(&token_of(&w, "cyd").await),
+    )
+    .await;
+    assert!(outsider.is_err(), "only participants join");
+    for socket in [&mut ana, &mut bob] {
+        say(
+            socket,
+            json!({"kind": "state", "mic": true, "camera": false, "screen": false, "hand": false}),
+        )
+        .await;
+        use futures_util::SinkExt;
+        let frame = tokio_tungstenite::tungstenite::Message::Binary(vec![1, 7, 0, 9, 0].into());
+        socket.send(frame).await.unwrap();
+    }
+    for (socket, from) in [(&mut ana, bob_slot), (&mut bob, ana_slot)] {
+        let audio = loop {
+            if let Heard::Binary(bytes) = hear(socket).await {
+                break bytes;
+            }
+        };
+        let [low, high] = from.to_le_bytes();
+        assert_eq!(audio, vec![1, low, high, 0x80, 0x3e, 0, 0, 7, 0, 9, 0]);
+    }
+    eventually(
+        &w,
+        id,
+        "SELECT started_at IS NOT NULL FROM meetings WHERE id = $1",
+    )
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_guest_waits_in_the_lobby_until_a_member_admits_them() {
+    let w = world().await;
+    let served = served(&w).await;
+    let (id, link) = meeting_with(&w, json!({"title": "Sync"})).await;
+    let (mut ana, _) = member(&served, &token_of(&w, "ana").await, id).await;
+    let mut dee = guest(&served, &link, "  Dee\u{7} ").await;
+    until(&mut dee, "waiting").await;
+    let lobby = loop {
+        let lobby = until(&mut ana, "lobby").await;
+        if lobby["waiting"]
+            .as_array()
+            .is_some_and(|waiting| !waiting.is_empty())
+        {
+            break lobby;
+        }
+    };
+    assert_eq!(lobby["waiting"][0]["name"], "Dee");
+    say(
+        &mut ana,
+        json!({"kind": "admit", "id": lobby["waiting"][0]["id"]}),
+    )
+    .await;
+    let welcome = until(&mut dee, "welcome").await;
+    assert_eq!(
+        (welcome["member"].clone(), welcome["host"].clone()),
+        (json!(false), json!(false))
+    );
+    let roster = until(&mut dee, "roster").await;
+    let host = &roster["participants"][0];
+    assert_eq!(host["name"], "ana");
+    assert!(
+        host.get("account").is_none(),
+        "guests never see account ids"
+    );
+    eventually(&w, id, "SELECT EXISTS(SELECT 1 FROM meeting_attendance WHERE meeting_id = $1 AND guest_name = 'Dee')").await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn guests_are_refused_when_the_link_is_off_the_meeting_locked_or_full() {
+    let w = world().await;
+    let served = served(&w).await;
+    let (id, link) = meeting_with(
+        &w,
+        json!({"title": "Sync", "open_join": true, "invite": {"accounts": [w.bo.id]}}),
+    )
+    .await;
+    let settings = serde_json::from_value(json!({"agents_join": true, "agent_screens": true,
+        "guests": true, "max_participants": 2, "agent_mode": "relevant"}))
+    .unwrap();
+    w.meetings.save_settings(&w.admin, &settings).await.unwrap();
+    let ana_token = token_of(&w, "ana").await;
+    let patch = |locked: bool| {
+        openidconnect::reqwest::Client::new()
+            .patch(format!("{}/api/meetings/{id}", served.origin))
+            .bearer_auth(&ana_token)
+            .json(&json!({"locked": locked}))
+            .send()
+    };
+    assert_eq!(patch(true).await.unwrap().status(), 204);
+    let mut refused = guest(&served, &link, "Dee").await;
+    assert_eq!(closed(&mut refused).await, "The host locked the meeting.");
+    assert_eq!(patch(false).await.unwrap().status(), 204);
+    let (_ana, _) = member(&served, &ana_token, id).await;
+    let (_bob, _) = member(&served, &token_of(&w, "bob").await, id).await;
+    let mut full = guest(&served, &link, "Dee").await;
+    assert_eq!(closed(&mut full).await, "The meeting is full.");
+
+    w.meetings.set_link(&w.ana, id, false).await.unwrap();
+    let token = link.rsplit('/').next().unwrap();
+    let off = connect(&served, &format!("/api/public/meetings/{token}/live"), None).await;
+    assert!(off.is_err(), "a link that is off is unknown");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn the_public_lookup_answers_five_fields_or_the_same_404() {
+    let w = world().await;
+    let served = served(&w).await;
+    let (_, link) = meeting_with(&w, json!({"title": "Sync"})).await;
+    let token = link.rsplit('/').next().unwrap();
+    let http = openidconnect::reqwest::Client::new();
+    let get = |path: String| http.get(format!("{}{path}", served.origin)).send();
+    let found = get(format!("/api/public/meetings/{token}")).await.unwrap();
+    assert_eq!(found.status(), 200);
+    assert_eq!(
+        found.json::<Value>().await.unwrap(),
+        json!({"title": "Sync", "host": "ana", "state": "scheduled", "locked": false, "lobby": true})
+    );
+    let unknown = get(format!("/api/public/meetings/{}", "x".repeat(43)))
+        .await
+        .unwrap();
+    assert_eq!(unknown.status(), 404);
+    let unknown_body = unknown.text().await.unwrap();
+    let cyd = token_of(&w, "cyd").await;
+    let join = |token: String| {
+        http.post(format!("{}/api/meetings/link/{token}/join", served.origin))
+            .bearer_auth(&cyd)
+            .send()
+    };
+    let joined: Value = join(token.to_owned()).await.unwrap().json().await.unwrap();
+    let id: Uuid = serde_json::from_value(joined["id"].clone()).unwrap();
+    assert_eq!(w.meetings.meeting(&w.cy, id).await.unwrap().title, "Sync");
+    sqlx::query("UPDATE meetings SET started_at = now(), ended_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(&w.pool)
+        .await
+        .unwrap();
+    assert_eq!(join(token.to_owned()).await.unwrap().status(), 409);
+    let settings = serde_json::from_value(json!({"agents_join": true, "agent_screens": true,
+        "guests": false, "max_participants": 12, "agent_mode": "relevant"}))
+    .unwrap();
+    w.meetings.save_settings(&w.admin, &settings).await.unwrap();
+    let disabled = get(format!("/api/public/meetings/{token}")).await.unwrap();
+    assert_eq!(disabled.status(), 404);
+    assert_eq!(disabled.text().await.unwrap(), unknown_body);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn the_host_ends_the_meeting_for_everyone() {
+    let w = world().await;
+    let served = served(&w).await;
+    let (id, _) = meeting_with(
+        &w,
+        json!({"title": "Sync", "invite": {"accounts": [w.bo.id]}}),
+    )
+    .await;
+    let (mut ana, _) = member(&served, &token_of(&w, "ana").await, id).await;
+    let (mut bob, _) = member(&served, &token_of(&w, "bob").await, id).await;
+    say(&mut bob, json!({"kind": "end"})).await;
+    say(&mut ana, json!({"kind": "end"})).await;
+    until(&mut bob, "ended").await;
+    until(&mut ana, "ended").await;
+    assert_eq!(closed(&mut bob).await, "The meeting has ended.");
+    eventually(
+        &w,
+        id,
+        "SELECT ended_at IS NOT NULL FROM meetings WHERE id = $1",
+    )
+    .await;
+    let open: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM meeting_attendance WHERE meeting_id = $1 AND left_at IS NULL",
+    )
+    .bind(id)
+    .fetch_one(&w.pool)
+    .await
+    .unwrap();
+    assert_eq!(open, 0);
+}
