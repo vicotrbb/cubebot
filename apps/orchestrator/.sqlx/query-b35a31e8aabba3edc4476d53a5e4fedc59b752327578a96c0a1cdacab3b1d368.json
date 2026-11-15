@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT u.sequence,\n                CASE WHEN u.account_id IS NOT NULL THEN 'account'\n                    WHEN u.agent_id IS NOT NULL THEN 'agent' ELSE 'guest' END AS \"kind!\",\n                COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, u.guest_name || ' (guest)') AS \"speaker!\",\n                u.text, (to_jsonb(u.at) #>> '{}') AS \"at!\"\n            FROM meeting_utterances u\n            LEFT JOIN human_accounts h ON h.id=u.account_id\n            LEFT JOIN agents g ON g.id=u.agent_id\n            WHERE u.meeting_id=$1\n            ORDER BY u.sequence\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sequence",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "speaker!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "text",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      null
+    ]
+  },
+  "hash": "b35a31e8aabba3edc4476d53a5e4fedc59b752327578a96c0a1cdacab3b1d368"
+}

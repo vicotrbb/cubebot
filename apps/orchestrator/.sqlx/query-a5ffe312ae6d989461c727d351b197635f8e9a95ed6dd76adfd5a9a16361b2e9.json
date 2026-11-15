@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM agents WHERE id=ANY($1) AND desired_state='retired') AS \"retired!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "retired!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a5ffe312ae6d989461c727d351b197635f8e9a95ed6dd76adfd5a9a16361b2e9"
+}

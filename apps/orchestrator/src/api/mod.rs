@@ -15,6 +15,7 @@ mod installation;
 mod invitations;
 mod knowledge_base;
 mod mcp;
+mod meetings;
 mod memories;
 mod oidc;
 mod rooms;
@@ -82,6 +83,7 @@ pub fn openapi() -> String {
     doc.merge(creations::Doc::openapi());
     doc.merge(calls::Doc::openapi());
     doc.merge(calendar::Doc::openapi());
+    doc.merge(meetings::Doc::openapi());
     doc.merge(rooms::Doc::openapi());
     doc.merge(teams::Doc::openapi());
     doc.merge(memories::Doc::openapi());
@@ -180,6 +182,12 @@ pub async fn configured_router_with_credentials(
     let speech = crate::speech::Speech::environment(connections.clone());
     let events = crate::calendar::Calendar::new(pool.clone(), connections.clone());
     routes = routes.merge(calendar::router(identity.clone(), events));
+    let meetings = crate::meetings::Meetings::environment(
+        pool.clone(),
+        connections.clone(),
+        identity.browser_origin.clone(),
+    )?;
+    routes = routes.merge(meetings::router(identity.clone(), meetings));
     routes = routes.merge(calls::router(
         pool,
         identity.clone(),

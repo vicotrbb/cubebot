@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE meeting_invitations\n            SET emailed_at=CASE WHEN $2::text IS NULL THEN now() END, email_error=$2\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f54f2e1f0aea6e4acf395986c95d2f4d7592d16d679f8ec60afa4227bdc8061"
+}

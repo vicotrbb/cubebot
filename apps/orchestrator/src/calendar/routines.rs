@@ -143,6 +143,7 @@ fn run(routine: &Routine, at: i64) -> Item {
         editable: true,
         event: None,
         routine: Some(detail(routine)),
+        meeting: None,
     }
 }
 
@@ -162,6 +163,7 @@ fn digest(routine: &Routine, date: NaiveDate, runs: u32) -> Item {
             runs: Some(runs),
             ..detail(routine)
         }),
+        meeting: None,
     }
 }
 
@@ -247,6 +249,7 @@ fn happened(routine: &Routine, run: Ran) -> Item {
             turn: Some(run.turn),
             ..detail(routine)
         }),
+        meeting: None,
     }
 }
 

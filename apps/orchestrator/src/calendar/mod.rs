@@ -33,9 +33,9 @@ pub struct CalendarRange {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct Source {
     /// `calendar:<connection>:<calendar>`, `calendar:<connection>` for a connection whose
-    /// calendars could not be listed, or `agent:<agent>`.
+    /// calendars could not be listed, `agent:<agent>`, or `meetings`.
     pub id: String,
-    /// `calendar` or `agent`.
+    /// `calendar`, `agent` or `meetings`.
     pub kind: &'static str,
     pub name: String,
     /// The connection's account a calendar belongs to.
@@ -52,8 +52,8 @@ pub struct Source {
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct Item {
-    /// `event`, `routine` (an upcoming run), `run` (a run that happened) or `digest` (a day of a
-    /// routine that runs more than hourly).
+    /// `event`, `routine` (an upcoming run), `run` (a run that happened), `digest` (a day of a
+    /// routine that runs more than hourly) or `meeting`.
     pub kind: &'static str,
     /// Stable across reads.
     pub id: String,
@@ -68,6 +68,7 @@ pub struct Item {
     pub editable: bool,
     pub event: Option<EventDetail>,
     pub routine: Option<RoutineDetail>,
+    pub meeting: Option<MeetingDetail>,
 }
 
 /// What a write names the event by. Google and Microsoft name an occurrence by its own `event`
@@ -102,6 +103,14 @@ pub struct RoutineDetail {
     /// A run's turn status, or `failed`.
     pub outcome: Option<String>,
     pub turn: Option<Uuid>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct MeetingDetail {
+    pub id: Uuid,
+    pub state: String,
+    pub owner: String,
+    pub join: String,
 }
 
 #[derive(Deserialize, utoipa::IntoParams)]
@@ -212,13 +221,17 @@ impl Calendar {
     ) -> Result<CalendarRange, IdentityError> {
         let bounds = bounds(&window.from, &window.to)?;
         let zone = self.zone(actor, window.time_zone.as_deref()).await?;
-        let (events, routines) = tokio::join!(
+        let (events, routines, meetings) = tokio::join!(
             self.events(actor.id, bounds, zone),
-            routines::items(&self.pool, actor.id, bounds, zone)
+            routines::items(&self.pool, actor.id, bounds, zone),
+            crate::meetings::calendar_items(&self.pool, actor.id, bounds)
         );
         let ((mut sources, mut items), (agents, routines)) = (events?, routines?);
+        let (meetings, meeting_items) = meetings?;
         sources.extend(agents);
+        sources.extend(meetings);
         items.extend(routines);
+        items.extend(meeting_items);
         items.sort_by(|a, b| a.start.cmp(&b.start).then_with(|| a.id.cmp(&b.id)));
         Ok(CalendarRange { sources, items })
     }
@@ -437,7 +450,7 @@ fn date(text: &str) -> Option<NaiveDate> {
 }
 
 /// Unix seconds as RFC 3339 in UTC.
-fn utc(at: i64) -> String {
+pub(crate) fn utc(at: i64) -> String {
     DateTime::from_timestamp(at, 0)
         .unwrap_or_default()
         .format("%Y-%m-%dT%H:%M:%SZ")

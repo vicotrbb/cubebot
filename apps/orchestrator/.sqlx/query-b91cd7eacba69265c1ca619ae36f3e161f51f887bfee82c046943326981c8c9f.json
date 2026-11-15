@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT agents_join FROM meeting_settings",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agents_join",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b91cd7eacba69265c1ca619ae36f3e161f51f887bfee82c046943326981c8c9f"
+}

@@ -97,6 +97,27 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
   'login.decline': () => 'declined the login request of',
   'broadcast.send': (detail) =>
     `broadcast to ${Number(detail.agents) || 0} ${Number(detail.agents) === 1 ? 'agent' : 'agents'}`,
+  'meeting.create': () => 'created the meeting',
+  'meeting.update': () => 'changed the meeting',
+  'meeting.cancel': () => 'cancelled the meeting',
+  'meeting.invite': (detail) => `invited ${invitees(detail)} to the meeting`,
+  'meeting.link': (detail) =>
+    detail.enabled
+      ? 'made a new link for the meeting'
+      : 'turned off the link of the meeting',
+  'meeting.configure': () => 'changed the meeting settings',
+}
+
+function invitees(detail: Detail) {
+  const counted = [
+    [Number(detail.accounts) || 0, 'member', 'members'],
+    [Number(detail.agents) || 0, 'agent', 'agents'],
+    [Number(detail.emails) || 0, 'email address', 'email addresses'],
+  ] as const
+  const named = counted
+    .filter(([count]) => count > 0)
+    .map(([count, one, many]) => `${count} ${count === 1 ? one : many}`)
+  return named.join(', ') || 'nobody'
 }
 
 const SELF: Record<string, (detail: Detail) => string> = {
@@ -127,6 +148,7 @@ const COMPLETE = new Set([
   'provider.sign_out',
   'login.request',
   'broadcast.send',
+  'meeting.configure',
 ])
 
 export function phrase(kind: string, detail: Detail, self = false) {

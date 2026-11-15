@@ -1,5 +1,5 @@
 //! Durable text conversations. Human access and machine execution are separate boundaries.
-mod access;
+pub(crate) mod access;
 mod activity;
 mod broadcasts;
 mod calls;

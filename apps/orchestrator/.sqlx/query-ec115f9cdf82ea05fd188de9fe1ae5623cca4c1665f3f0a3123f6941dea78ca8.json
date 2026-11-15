@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH visible AS (\n                SELECT m.*, row_number() OVER (\n                    PARTITION BY m.ended_at IS NULL ORDER BY m.ended_at DESC\n                ) AS recent\n                FROM meetings m\n                WHERE m.owner_id=$1 OR EXISTS(\n                    SELECT 1 FROM meeting_invitations i WHERE i.meeting_id=m.id AND i.account_id=$1\n                )\n            )\n            SELECT v.id, v.title, COALESCE(NULLIF(o.profile->>'name', ''), o.login) AS \"owner_name!\",\n                CASE WHEN v.ended_at IS NOT NULL THEN 'ended'\n                    WHEN v.started_at IS NOT NULL THEN 'live' ELSE 'scheduled' END AS \"state!\",\n                (to_jsonb(v.starts_at) #>> '{}') AS starts_at, (to_jsonb(v.ends_at) #>> '{}') AS ends_at,\n                (to_jsonb(v.started_at) #>> '{}') AS started_at, (to_jsonb(v.ended_at) #>> '{}') AS ended_at,\n                (SELECT count(*) FROM meeting_invitations i\n                    WHERE i.meeting_id=v.id AND i.agent_id IS NULL) AS \"people!\",\n                (SELECT count(*) FROM meeting_invitations i\n                    WHERE i.meeting_id=v.id AND i.agent_id IS NOT NULL) AS \"agents!\"\n            FROM visible v\n            JOIN human_accounts o ON o.id=v.owner_id\n            WHERE (v.ended_at IS NOT NULL AND v.recent <= 50)\n                OR (v.ended_at IS NULL AND (v.started_at IS NOT NULL OR v.starts_at IS NULL\n                    OR v.starts_at >= now() - interval '1 day'))\n            ORDER BY v.ended_at IS NOT NULL, v.started_at IS NULL, v.ended_at DESC,\n                COALESCE(v.starts_at, v.created_at), v.id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "state!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "starts_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "ends_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "started_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "ended_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "people!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "agents!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ec115f9cdf82ea05fd188de9fe1ae5623cca4c1665f3f0a3123f6941dea78ca8"
+}

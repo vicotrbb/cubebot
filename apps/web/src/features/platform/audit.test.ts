@@ -44,6 +44,23 @@ describe('audit sentences', () => {
     assert.ok(!isSelf('session.sign_in', null, null))
   })
 
+  test('meeting invitations are counted without addresses', () => {
+    assert.equal(
+      phrase('meeting.invite', {
+        name: 'Planning',
+        accounts: 1,
+        agents: 2,
+        emails: 0,
+      }),
+      'invited 1 member, 2 agents to the meeting',
+    )
+    assert.equal(
+      target('meeting.invite', { name: 'Planning' }, null, 'abc'),
+      'Planning',
+    )
+    assert.equal(target('meeting.configure', {}, null, null), null)
+  })
+
   test('an unknown kind still reads', () => {
     assert.equal(phrase('files.share_link', {}), 'files share link')
   })
