@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT v.id, v.name, v.site AS \"site!\",\n            COALESCE(v.last_used_at >= t.created_at, false) AS \"filled!\"\n        FROM vault_items v, chat_turns t\n        WHERE t.id=$2 AND v.kind='login'\n            AND (v.agent_id=$1\n                OR (v.agent_id IS NULL AND (v.access->>'mode' = 'all_agents'\n                    OR v.access->'agents' @> jsonb_build_array($1::uuid))))\n        ORDER BY v.agent_id IS NULL, v.name\n        ",
+  "query": "\n        SELECT v.id, v.name, v.site AS \"site!\",\n            COALESCE(GREATEST(v.last_used_at, v.last_tried_at) >= t.created_at, false) AS \"filled!\"\n        FROM vault_items v, chat_turns t\n        WHERE t.id=$2 AND v.kind='login'\n            AND (v.agent_id=$1\n                OR (v.agent_id IS NULL AND (v.access->>'mode' = 'all_agents'\n                    OR v.access->'agents' @> jsonb_build_array($1::uuid))))\n        ORDER BY v.agent_id IS NULL, v.name\n        ",
   "describe": {
     "columns": [
       {
@@ -37,5 +37,5 @@
       null
     ]
   },
-  "hash": "0ef6fd16341319b880739c8238935410f62c0933684293370465c539bdd045e0"
+  "hash": "04a0bf81269597ca3bfddd3ca74b07f80eec4682c14e25edccdb4f2b138a296d"
 }

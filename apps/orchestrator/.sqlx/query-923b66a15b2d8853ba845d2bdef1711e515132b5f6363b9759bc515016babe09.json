@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT site AS \"site!\", username AS \"username!\"\n            FROM vault_items\n            WHERE agent_id IS NULL AND kind = 'login'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "site!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "username!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "923b66a15b2d8853ba845d2bdef1711e515132b5f6363b9759bc515016babe09"
+}

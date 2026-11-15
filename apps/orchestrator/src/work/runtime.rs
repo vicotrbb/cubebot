@@ -113,6 +113,7 @@ impl Work {
             api_key: inference.api_key,
             api_key_expires_at: inference.api_key_expires_at,
             context_window: inference.context_window,
+            effort: inference.effort,
             summary,
             history,
             prior,
@@ -685,6 +686,7 @@ async fn inference(
             api_key: String::new(),
             api_key_expires_at: None,
             context_window: None,
+            effort: None,
         })),
         None => {
             wait(tx, turn, "provider_unavailable").await?;

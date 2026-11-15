@@ -6,6 +6,7 @@ import {
   grouped,
   matches,
   permitted,
+  slugProblem,
   standing,
   suggestedSlug,
   value,
@@ -99,4 +100,11 @@ test('names and values are typed for the server', () => {
   assert.equal(value(field('number'), ' 993 '), 993)
   assert.deepEqual(value(field('lines'), '/v1\n\n /v2 '), ['/v1', '/v2'])
   assert.equal(value(field('text'), '  '), undefined)
+})
+
+test('a name may hold single underscores but never one that splits tool names', () => {
+  for (const good of ['google_work', 'gmail-2', 'n0'])
+    assert.equal(slugProblem(good), '', good)
+  for (const bad of ['', '_a', 'a_', 'a__b', 'Gmail', 'a'.repeat(33)])
+    assert.notEqual(slugProblem(bad), '', bad)
 })

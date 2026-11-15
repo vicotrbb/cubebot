@@ -508,6 +508,22 @@ dialog.sheet::backdrop {
   font-size: var(--t-md);
   font-weight: var(--w-strong);
 }
+.account__rename {
+  display: flex;
+  gap: 8px;
+  max-width: 420px;
+}
+.account__rename input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
+.account__rename input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+.account__part:has(input[aria-invalid='true']) > .small {
+  color: var(--danger);
+}
 .account__row {
   display: flex;
   align-items: center;

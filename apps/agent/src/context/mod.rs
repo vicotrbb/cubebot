@@ -63,6 +63,7 @@ impl Context {
             tools: &self.tools,
             tools_disabled: false,
             max_output_tokens,
+            effort: turn.effort.map(cubebot_protocol::runtime::Effort::as_str),
         }
     }
 
@@ -151,6 +152,7 @@ mod tests {
             api_key: "k".into(),
             api_key_expires_at: None,
             context_window: Some(1000),
+            effort: None,
             summary: summary.map(Into::into),
             history: ["a", "b"]
                 .map(|text| Exchange {

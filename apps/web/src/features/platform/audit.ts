@@ -64,6 +64,8 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
   'vault.create': () => 'saved the vault item',
   'vault.update': () => 'changed the vault item',
   'vault.delete': () => 'deleted the vault item',
+  'vault.import': (detail) =>
+    `imported ${Number(detail.imported) || 0} browser logins into the vault`,
   'vault.fill': (detail) =>
     `filled the ${detail.field === 'username' ? 'username' : 'password'} of`,
   'mcp.create': () => 'added the MCP server',

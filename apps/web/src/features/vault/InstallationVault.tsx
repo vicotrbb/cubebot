@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  FileUp,
   KeyRound,
   LockKeyhole,
   MoreHorizontal,
@@ -21,6 +22,7 @@ import {
   Skeleton,
   when,
 } from '../../components/primitives'
+import { ImportLogins } from './ImportLogins'
 import { LoginFields, TYPABLE } from './ItemForm'
 import './vault.css'
 
@@ -34,6 +36,7 @@ export function InstallationVault() {
     queryFn: () => ok(api.GET('/api/vault')),
   })
   const [editing, setEditing] = useState<VaultItem | 'new' | null>(null)
+  const [importing, setImporting] = useState(false)
   const [error, setError] = useState('')
   const refresh = () => client.invalidateQueries({ queryKey: ['vault'] })
   async function remove(item: VaultItem) {
@@ -56,13 +59,18 @@ export function InstallationVault() {
     }
   }
   const newItem = (
-    <button
-      type="button"
-      className="btn btn--primary"
-      onClick={() => setEditing('new')}
-    >
-      <Plus /> New item
-    </button>
+    <div className="actions">
+      <button type="button" className="btn" onClick={() => setImporting(true)}>
+        <FileUp /> Import from browser
+      </button>
+      <button
+        type="button"
+        className="btn btn--primary"
+        onClick={() => setEditing('new')}
+      >
+        <Plus /> New item
+      </button>
+    </div>
   )
   return (
     <div className="vault-page">
@@ -77,8 +85,9 @@ export function InstallationVault() {
       <Alert>{items.error ? failure(items.error) : error}</Alert>
       {items.data?.length === 0 && (
         <Empty title="The installation vault is empty." action={newItem}>
-          Save a login or secret once, choose which agents may use it, and they
-          fill it on their desktops while the value stays hidden from them.
+          Save a login or secret once, or import the passwords your browser
+          saved, choose which agents may use them, and they fill them on their
+          desktops while the values stay hidden from them.
         </Empty>
       )}
       {Boolean(items.data?.length) && (
@@ -93,6 +102,20 @@ export function InstallationVault() {
           ))}
         </ul>
       )}
+      <Dialog
+        open={importing}
+        title="Import browser passwords"
+        onClose={() => setImporting(false)}
+      >
+        {importing && (
+          <ImportLogins
+            onDone={() => {
+              setImporting(false)
+              void refresh()
+            }}
+          />
+        )}
+      </Dialog>
       <Dialog
         open={editing !== null}
         title={

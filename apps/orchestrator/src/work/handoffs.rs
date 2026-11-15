@@ -216,7 +216,7 @@ async fn unfilled_login(
     let logins = sqlx::query!(
         r#"
         SELECT v.id, v.name, v.site AS "site!",
-            COALESCE(v.last_used_at >= t.created_at, false) AS "filled!"
+            COALESCE(GREATEST(v.last_used_at, v.last_tried_at) >= t.created_at, false) AS "filled!"
         FROM vault_items v, chat_turns t
         WHERE t.id=$2 AND v.kind='login'
             AND (v.agent_id=$1

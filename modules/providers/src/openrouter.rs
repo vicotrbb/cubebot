@@ -101,8 +101,18 @@ impl Provider for OpenRouter {
             let builder = self.http.post(self.url("chat/completions")?);
             let mut body = completions::body(request, completions::function);
             body["usage"] = json!({"include":true});
+            reasoned(&mut body);
             crate::send(self.authorized(builder, request.key).json(&body)).await
         })
+    }
+}
+
+fn reasoned(body: &mut Value) {
+    if let Some(effort) = body
+        .as_object_mut()
+        .and_then(|b| b.remove("reasoning_effort"))
+    {
+        body["reasoning"] = json!({"effort":effort});
     }
 }
 
@@ -116,4 +126,19 @@ fn price(entry: &Value) -> Option<crate::Price> {
         cached_per_token: rate("input_cache_read").unwrap_or(input),
         output_per_token: output,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effort_moves_into_the_reasoning_object() {
+        let mut body = json!({"model":"m","reasoning_effort":"high"});
+        reasoned(&mut body);
+        assert_eq!(body, json!({"model":"m","reasoning":{"effort":"high"}}));
+        let mut plain = json!({"model":"m"});
+        reasoned(&mut plain);
+        assert_eq!(plain, json!({"model":"m"}));
+    }
 }

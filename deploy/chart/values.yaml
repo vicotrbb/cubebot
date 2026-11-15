@@ -171,6 +171,7 @@ orchestrator:
       memory: 2Gi
 
 web:
+  frameAncestors: ''
   resources:
     requests:
       cpu: 50m

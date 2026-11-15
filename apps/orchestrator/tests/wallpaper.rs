@@ -39,6 +39,7 @@ async fn a_manager_sets_the_wallpaper_the_agent_fetches_it_and_a_reset_falls_bac
                 context_window: Some(128_000),
                 api_key: Some("controlled-key".into()),
                 access: None,
+                reasoning_effort: None,
             },
         )
         .await

@@ -23,6 +23,7 @@ import {
   when,
 } from '../../components/primitives'
 import { useAgents } from '../../app/queries'
+import { EMOJI, emojiMatches, symbol, terms } from './emoji'
 import { useIsPhone } from '../shell/viewport'
 import {
   attachmentUrl,
@@ -156,21 +157,6 @@ function Author({ page }: { page: Page }) {
   )
 }
 
-const ICONS = [
-  '📄',
-  '📌',
-  '📚',
-  '🧭',
-  '🛠️',
-  '🧪',
-  '💡',
-  '✅',
-  '🚀',
-  '🔒',
-  '🧩',
-  '🗺️',
-]
-
 function IconPick({
   page,
   onPick,
@@ -179,47 +165,151 @@ function IconPick({
   onPick: (icon: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (event: PointerEvent) => {
+      if (!box.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [open])
+  const close = () => {
+    setOpen(false)
+    trigger.current?.focus()
+  }
   return (
-    <div className="kb-icon">
+    <div className="kb-icon" ref={box}>
       <button
+        ref={trigger}
         type="button"
         className="kb-icon__button"
         aria-label={page.icon ? 'Change icon' : 'Add an icon'}
+        aria-haspopup="dialog"
+        aria-expanded={open}
         data-empty={!page.icon}
         onClick={() => setOpen(!open)}
       >
         {page.icon ?? <Plus />}
       </button>
       {open && (
-        <div className="kb-icon__list">
-          {ICONS.map((icon) => (
+        <EmojiPanel
+          current={page.icon}
+          onClose={close}
+          onPick={(icon) => {
+            onPick(icon)
+            close()
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function EmojiPanel({
+  current,
+  onPick,
+  onClose,
+}: {
+  current: string | null | undefined
+  onPick: (icon: string) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const scroller = useRef<HTMLDivElement>(null)
+  const found = query.trim() ? emojiMatches(query) : null
+  const jump = (id: string) => {
+    const section = scroller.current?.querySelector<HTMLElement>(
+      `[data-group="${id}"]`,
+    )
+    scroller.current?.scrollTo({ top: section?.offsetTop ?? 0 })
+  }
+  const grid = (entries: string[]) => (
+    <div className="kb-icon__grid">
+      {entries.map((entry) => (
+        <button
+          key={entry}
+          type="button"
+          className="kb-icon__choice"
+          title={terms(entry)}
+          aria-label={terms(entry).split(' ')[0]}
+          aria-pressed={symbol(entry) === current}
+          onClick={() => onPick(symbol(entry))}
+        >
+          {symbol(entry)}
+        </button>
+      ))}
+    </div>
+  )
+  return (
+    <div
+      className="kb-icon__panel"
+      role="dialog"
+      aria-label="Page icon"
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape') return
+        event.stopPropagation()
+        onClose()
+      }}
+    >
+      <div className="kb-icon__top">
+        <input
+          className="input"
+          type="search"
+          autoFocus
+          placeholder="Search icons"
+          aria-label="Search icons"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' || !found?.[0]) return
+            event.preventDefault()
+            onPick(symbol(found[0]))
+          }}
+        />
+        {current && (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => onPick('')}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+      {!found && (
+        <div className="kb-icon__tabs">
+          {EMOJI.map((group) => (
             <button
-              key={icon}
+              key={group.id}
               type="button"
-              className="kb-icon__choice"
-              onClick={() => {
-                onPick(icon)
-                setOpen(false)
-              }}
+              title={group.label}
+              aria-label={group.label}
+              onClick={() => jump(group.id)}
             >
-              {icon}
+              {symbol(group.emoji[0] ?? '')}
             </button>
           ))}
-          {page.icon && (
-            <button
-              type="button"
-              className="kb-icon__choice"
-              aria-label="Remove the icon"
-              onClick={() => {
-                onPick('')
-                setOpen(false)
-              }}
-            >
-              <X />
-            </button>
-          )}
         </div>
       )}
+      <div className="kb-icon__scroll" ref={scroller}>
+        {found &&
+          (found.length > 0 ? (
+            grid(found)
+          ) : (
+            <p className="small faint kb-icon__none">
+              No icon matches {query.trim()}.
+            </p>
+          ))}
+        {!found &&
+          EMOJI.map((group) => (
+            <section key={group.id} data-group={group.id}>
+              <h6>{group.label}</h6>
+              {grid(group.emoji)}
+            </section>
+          ))}
+      </div>
     </div>
   )
 }

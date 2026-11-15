@@ -193,6 +193,7 @@ async fn a_signed_in_plan_serves_only_its_owner_and_rotates_its_refresh_token_on
         context_window: Some(256_000),
         api_key: None,
         access: None,
+        reasoning_effort: None,
     };
     assert!(matches!(
         connections.configure(&other, &mine(Uuid::new_v4())).await,
@@ -474,6 +475,7 @@ async fn an_m_plan_key_serves_only_its_owner_and_is_never_shared() {
         context_window: Some(1_000_000),
         api_key: None,
         access: None,
+        reasoning_effort: None,
     };
     assert!(matches!(
         connections.configure(&other, &plan(Uuid::new_v4())).await,

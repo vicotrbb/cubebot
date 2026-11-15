@@ -1,6 +1,8 @@
-use super::{Connections, For, Inference, ModelChoice, ModelsError, models::listed};
+use super::{
+    Connections, For, Inference, ModelChoice, ModelsError, effort_offered, given, models::listed,
+};
 use crate::{agents::AgentId, identity::IdentityError};
-use cubebot_protocol::runtime::ProviderKind;
+use cubebot_protocol::runtime::{Effort, ProviderKind};
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 
@@ -18,12 +20,27 @@ pub struct AgentModel {
     pub chosen: Option<ModelRef>,
     pub default: Option<ModelRef>,
     pub providers: Vec<ProviderKind>,
+    pub effort: Option<Effort>,
+    pub provider_efforts: Vec<ProviderEffort>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ProviderEffort {
+    pub provider: ProviderKind,
+    pub effort: Option<Effort>,
 }
 
 #[derive(Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SetAgentModel {
     pub chosen: Option<ModelRef>,
+    #[serde(
+        default,
+        deserialize_with = "given",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[schema(value_type = Option<Effort>)]
+    pub effort: Option<Option<Effort>>,
 }
 
 impl ModelRef {
@@ -54,18 +71,30 @@ impl Connections {
         input: &SetAgentModel,
     ) -> Result<AgentModel, IdentityError> {
         let mut tx = self.pool.begin().await?;
+        let providers = choosable(&mut tx).await?;
         if let Some(chosen) = &input.chosen
-            && (!chosen.valid() || !choosable(&mut tx).await?.contains(&chosen.provider))
+            && (!chosen.valid() || !providers.contains(&chosen.provider))
         {
             return Err(IdentityError::InvalidInput);
         }
         let chosen = input.chosen.as_ref();
+        let provider = chosen
+            .map(|chosen| chosen.provider)
+            .or(providers.first().copied());
+        if let Some(Some(effort)) = input.effort
+            && !provider.is_some_and(|p| effort_offered(p, Some(effort)))
+        {
+            return Err(IdentityError::InvalidInput);
+        }
         let updated = sqlx::query!(
-            "UPDATE agents SET model_provider=$2, model=$3, model_context_window=$4 WHERE id=$1",
+            "UPDATE agents SET model_provider=$2, model=$3, model_context_window=$4,
+                model_effort=CASE WHEN $6 THEN $5 ELSE model_effort END WHERE id=$1",
             agent.0,
             chosen.map(|chosen| chosen.provider.as_str()),
             chosen.map(|chosen| chosen.model.trim()),
             chosen.and_then(|chosen| chosen.context_window),
+            input.effort.flatten().map(Effort::as_str),
+            input.effort.is_some(),
         )
         .execute(&mut *tx)
         .await?;
@@ -101,13 +130,28 @@ impl Connections {
         if !choosable(tx).await?.contains(&provider) {
             return Err(IdentityError::NotFound);
         }
-        if let Some((key, _)) = self.saved_material(tx, provider).await? {
+        if let Some((key, ..)) = self.saved_material(tx, provider).await? {
             return Ok(key);
         }
         Ok(self.connection(tx, For::Agent(agent)).await?.api_key)
     }
 
     pub(super) async fn chosen(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        agent: AgentId,
+        base: Inference,
+    ) -> Result<Inference, IdentityError> {
+        let own = own_effort(tx, agent).await?;
+        let inference = self.chosen_inference(tx, agent, base).await?;
+        let effort = own.or(inference.effort);
+        Ok(Inference {
+            effort: effort.filter(|_| effort_offered(inference.provider, effort)),
+            ..inference
+        })
+    }
+
+    async fn chosen_inference(
         &self,
         tx: &mut Transaction<'_, Postgres>,
         agent: AgentId,
@@ -123,7 +167,9 @@ impl Connections {
                 ..base
             });
         }
-        let Some((api_key, saved_window)) = self.saved_material(tx, chosen.provider).await? else {
+        let Some((api_key, saved_window, effort)) =
+            self.saved_material(tx, chosen.provider).await?
+        else {
             return Ok(base);
         };
         Ok(Inference {
@@ -132,8 +178,43 @@ impl Connections {
             api_key,
             api_key_expires_at: None,
             context_window: window(chosen.context_window.or(saved_window)),
+            effort,
         })
     }
+}
+
+async fn own_effort(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+) -> Result<Option<Effort>, sqlx::Error> {
+    let effort = sqlx::query_scalar!("SELECT model_effort FROM agents WHERE id=$1", agent.0)
+        .fetch_optional(&mut **tx)
+        .await?;
+    Ok(effort.flatten().as_deref().and_then(Effort::parse))
+}
+
+async fn provider_efforts(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<ProviderEffort>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT provider AS "provider!", reasoning_effort FROM provider_connection
+        UNION ALL
+        SELECT provider, reasoning_effort FROM provider_saved
+            WHERE provider NOT IN (SELECT provider FROM provider_connection)
+        "#
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            Some(ProviderEffort {
+                provider: ProviderKind::parse(&row.provider)?,
+                effort: row.reasoning_effort.as_deref().and_then(Effort::parse),
+            })
+        })
+        .collect())
 }
 
 fn window(tokens: Option<i64>) -> Option<u64> {
@@ -186,6 +267,8 @@ async fn described(
         chosen: chosen_model(tx, agent).await?,
         default,
         providers: choosable(tx).await?,
+        effort: own_effort(tx, agent).await?,
+        provider_efforts: provider_efforts(tx).await?,
     })
 }
 

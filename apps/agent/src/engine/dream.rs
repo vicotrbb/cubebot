@@ -102,6 +102,7 @@ async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
         messages: &messages,
         tools: &[],
         tools_disabled: true,
+        effort: None,
         max_output_tokens: None,
     };
     let reply = match dream.provider {
@@ -264,6 +265,7 @@ mod tests {
             messages: &[],
             tools: &[],
             tools_disabled: true,
+            effort: None,
             max_output_tokens: None,
         };
         let text = reply(Anthropic::for_loopback_tests(&origin), &request).await;

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT reasoning_effort AS \"effort?\" FROM (\n            SELECT reasoning_effort, 0 AS position FROM provider_connection WHERE provider = $1\n            UNION ALL\n            SELECT reasoning_effort, 1 FROM provider_saved WHERE provider = $1\n        ) kept\n        ORDER BY position\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "effort?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "34819f10dfa0fb85d1c35c27aa429217ffbb53710f1f79d306d87bd6d1d88be9"
+}

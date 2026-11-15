@@ -182,6 +182,7 @@ pub struct Request<'a> {
     /// The tools stay declared so the history remains valid, but the model may not call one.
     pub tools_disabled: bool,
     pub max_output_tokens: Option<u64>,
+    pub effort: Option<&'a str>,
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -72,6 +72,7 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
                 context_window: Some(128_000),
                 api_key: Some("controlled-key".into()),
                 access: None,
+                reasoning_effort: None,
             },
         )
         .await

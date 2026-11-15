@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE agents SET model_provider=$2, model=$3, model_context_window=$4,\n                model_effort=CASE WHEN $6 THEN $5 ELSE model_effort END WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5295eec8f78a2b32d1f1e9b1d5c2a871fc5d74fb9f86b6d8a8043f46bb76a029"
+}

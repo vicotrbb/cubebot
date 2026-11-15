@@ -145,6 +145,7 @@ async fn a_tool_call_round_trip_replays_the_thinking_unchanged() {
             tools,
             // Compaction disables tools; MiniMax still gets `auto`.
             tools_disabled: true,
+            effort: None,
             max_output_tokens: Some(131_072),
         }
     }
@@ -185,6 +186,7 @@ async fn a_rate_limit_waits_and_retries() {
         messages: &[Message::User("Hi".into())],
         tools: &[],
         tools_disabled: false,
+        effort: None,
         max_output_tokens: Some(1),
     };
     let events: Vec<_> = provider.stream(&request).collect().await;

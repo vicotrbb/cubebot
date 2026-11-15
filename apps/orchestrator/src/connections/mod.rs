@@ -22,10 +22,12 @@ pub(crate) use subscriptions::For;
 pub use subscriptions::{PlanKey, SignInError, SubscriptionSummary, keep_fresh};
 pub use supergrok::SupergrokSignIn;
 pub(crate) use vault::same_site;
-pub use vault::{SaveVaultItem, VaultSummary};
+pub use vault::{
+    ImportVault, ImportedLogin, MOST_IMPORTED, SaveVaultItem, VaultImported, VaultSummary,
+};
 
 use crate::identity::{Actor, IdentityError};
-use cubebot_protocol::runtime::ProviderKind;
+use cubebot_protocol::runtime::{Effort, ProviderKind};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, Transaction};
@@ -57,7 +59,21 @@ pub struct ConfigureProvider {
     pub api_key: Option<String>,
     #[serde(default)]
     pub access: Option<ProviderAccess>,
+    #[serde(
+        default,
+        deserialize_with = "given",
+        skip_serializing_if = "Option::is_none"
+    )]
+    #[schema(value_type = Option<Effort>)]
+    pub reasoning_effort: Option<Option<Effort>>,
 }
+
+pub(super) fn given<'de, D: serde::Deserializer<'de>>(
+    value: D,
+) -> Result<Option<Option<Effort>>, D::Error> {
+    Option::<Effort>::deserialize(value).map(Some)
+}
+
 fn openai() -> ProviderKind {
     ProviderKind::Openai
 }
@@ -70,6 +86,7 @@ pub struct ProviderSummary {
     pub revision: i64,
     #[schema(value_type = ProviderAccess)]
     pub access: sqlx::types::Json<ProviderAccess>,
+    pub reasoning_effort: Option<Effort>,
 }
 /// A provider that holds a key without being the one agents use.
 #[derive(Serialize, utoipa::ToSchema)]
@@ -77,12 +94,13 @@ pub struct SavedProvider {
     pub provider: ProviderKind,
     pub model: String,
     pub context_window: Option<i64>,
+    pub reasoning_effort: Option<Effort>,
 }
 
 type Access = sqlx::types::Json<ProviderAccess>;
-type SummaryRow = (String, String, Option<i64>, i64, Access);
+type SummaryRow = (String, String, Option<i64>, i64, Access, Option<String>);
 fn summary(
-    (provider, model, context_window, revision, access): SummaryRow,
+    (provider, model, context_window, revision, access, effort): SummaryRow,
 ) -> Result<ProviderSummary, IdentityError> {
     Ok(ProviderSummary {
         provider: ProviderKind::parse(&provider).ok_or(IdentityError::InvalidInput)?,
@@ -90,6 +108,7 @@ fn summary(
         context_window,
         revision,
         access,
+        reasoning_effort: effort.as_deref().and_then(Effort::parse),
     })
 }
 
@@ -101,6 +120,7 @@ pub(crate) struct Inference {
     /// Unix seconds when a subscription's access token expires.
     pub api_key_expires_at: Option<i64>,
     pub context_window: Option<u64>,
+    pub effort: Option<Effort>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, utoipa::ToSchema)]
@@ -152,7 +172,8 @@ impl Connections {
                 model AS "model!",
                 context_window AS "context_window?",
                 revision AS "revision!",
-                access AS "access!: Access"
+                access AS "access!: Access",
+                reasoning_effort
             FROM provider_connection
             "#,
         )
@@ -166,6 +187,7 @@ impl Connections {
                 row.context_window,
                 row.revision,
                 row.access,
+                row.reasoning_effort,
             ))
         })
         .transpose()
@@ -204,12 +226,14 @@ impl Connections {
         let encrypted = self
             .credential(&mut transaction, actor, input, revision)
             .await?;
-        self.set_aside(&mut transaction, input.provider).await?;
+        let kept = self.set_aside(&mut transaction, input.provider).await?;
+        let effort = input.reasoning_effort.unwrap_or(kept);
         sqlx::query!(
             "
             INSERT INTO provider_connection
-                (model, credential, key_version, revision, updated_by, access, provider, context_window)
-            VALUES ($1, $2, 1, $3, $4, $5, $6, $7)
+                (model, credential, key_version, revision, updated_by, access, provider, context_window,
+                 reasoning_effort)
+            VALUES ($1, $2, 1, $3, $4, $5, $6, $7, $8)
             ON CONFLICT (singleton) DO UPDATE SET
                 model = EXCLUDED.model,
                 credential = EXCLUDED.credential,
@@ -218,7 +242,8 @@ impl Connections {
                 updated_at = clock_timestamp(),
                 access = EXCLUDED.access,
                 provider = EXCLUDED.provider,
-                context_window = EXCLUDED.context_window
+                context_window = EXCLUDED.context_window,
+                reasoning_effort = EXCLUDED.reasoning_effort
             ",
             &input.model,
             encrypted,
@@ -227,14 +252,16 @@ impl Connections {
             sqlx::types::Json(&access) as _,
             input.provider.as_str(),
             input.context_window,
+            effort.map(Effort::as_str),
         )
         .execute(&mut *transaction)
         .await?;
         sqlx::query!(
             "
             INSERT INTO provider_commands
-                (actor_id, request_id, input_digest, model, revision, access, provider, context_window)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                (actor_id, request_id, input_digest, model, revision, access, provider, context_window,
+                 reasoning_effort)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             ",
             actor.id,
             input.request_id,
@@ -244,6 +271,7 @@ impl Connections {
             sqlx::types::Json(&access) as _,
             input.provider.as_str(),
             input.context_window,
+            effort.map(Effort::as_str),
         )
         .execute(&mut *transaction)
         .await?;
@@ -254,6 +282,7 @@ impl Connections {
             context_window: input.context_window,
             revision,
             access: sqlx::types::Json(access),
+            reasoning_effort: effort,
         })
     }
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
@@ -262,7 +291,7 @@ impl Connections {
         administrator(&mut transaction, actor).await?;
         let rows = sqlx::query!(
             "
-            SELECT provider, model, context_window
+            SELECT provider, model, context_window, reasoning_effort
             FROM provider_saved
             ORDER BY provider
             ",
@@ -277,6 +306,7 @@ impl Connections {
                         .ok_or(IdentityError::InvalidInput)?,
                     model: row.model,
                     context_window: row.context_window,
+                    reasoning_effort: row.reasoning_effort.as_deref().and_then(Effort::parse),
                 })
             })
             .collect()
@@ -413,6 +443,7 @@ impl Connections {
             api_key: self.saved_key(tx, provider).await?,
             api_key_expires_at: None,
             context_window: None,
+            effort: None,
         })
     }
 
@@ -482,7 +513,8 @@ impl Connections {
                 model AS "model!",
                 credential AS "credential?",
                 revision AS "revision!",
-                context_window AS "context_window?"
+                context_window AS "context_window?",
+                reasoning_effort
             FROM provider_connection
             WHERE $1::uuid IS NULL
                 -- A subscription holds no key here; its owner check comes with the token.
@@ -510,6 +542,7 @@ impl Connections {
             api_key,
             api_key_expires_at,
             context_window: row.context_window.map(|window| window as u64),
+            effort: row.reasoning_effort.as_deref().and_then(Effort::parse),
         })
     }
 
@@ -556,7 +589,7 @@ impl Connections {
         transaction: &mut Transaction<'_, Postgres>,
         provider: ProviderKind,
     ) -> Result<String, IdentityError> {
-        if let Some((key, _)) = self.saved_material(transaction, provider).await? {
+        if let Some((key, ..)) = self.saved_material(transaction, provider).await? {
             return Ok(key);
         }
         let saved = self
@@ -576,9 +609,9 @@ impl Connections {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         provider: ProviderKind,
-    ) -> Result<Option<(String, Option<i64>)>, IdentityError> {
+    ) -> Result<Option<(String, Option<i64>, Option<Effort>)>, IdentityError> {
         let Some(saved) = sqlx::query!(
-            "SELECT credential, context_window FROM provider_saved WHERE provider = $1",
+            "SELECT credential, context_window, reasoning_effort FROM provider_saved WHERE provider = $1",
             provider.as_str(),
         )
         .fetch_optional(&mut **transaction)
@@ -594,14 +627,16 @@ impl Connections {
         let key = String::from_utf8(secret).map_err(|error| {
             IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
         })?;
-        Ok(Some((key, saved.context_window)))
+        let effort = saved.reasoning_effort.as_deref().and_then(Effort::parse);
+        Ok(Some((key, saved.context_window, effort)))
     }
 
     async fn set_aside(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         next: ProviderKind,
-    ) -> Result<(), IdentityError> {
+    ) -> Result<Option<Effort>, IdentityError> {
+        let kept = kept_effort(transaction, next).await?;
         sqlx::query!(
             "
             DELETE FROM provider_saved
@@ -613,7 +648,7 @@ impl Connections {
         .await?;
         let outgoing = match self.connection(transaction, For::Installation).await {
             Ok(outgoing) if outgoing.provider != next => outgoing,
-            Ok(_) | Err(IdentityError::CredentialUnavailable(None)) => return Ok(()),
+            Ok(_) | Err(IdentityError::CredentialUnavailable(None)) => return Ok(kept),
             Err(error) => return Err(error),
         };
         let context = saved_context(transaction, outgoing.provider).await?;
@@ -623,17 +658,18 @@ impl Connections {
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
         sqlx::query!(
             "
-            INSERT INTO provider_saved (provider, model, context_window, credential)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO provider_saved (provider, model, context_window, credential, reasoning_effort)
+            VALUES ($1, $2, $3, $4, $5)
             ",
             outgoing.provider.as_str(),
             outgoing.model,
             outgoing.context_window.map(|window| window as i64),
             credential,
+            outgoing.effort.map(Effort::as_str),
         )
         .execute(&mut **transaction)
         .await?;
-        Ok(())
+        Ok(kept)
     }
 
     async fn next_revision(
@@ -739,6 +775,9 @@ fn validate(input: &ConfigureProvider) -> Result<(), IdentityError> {
     if input.provider.subscription() && (input.api_key.is_some() || input.access.is_some()) {
         return Err(IdentityError::InvalidInput);
     }
+    if !effort_offered(input.provider, input.reasoning_effort.flatten()) {
+        return Err(IdentityError::InvalidInput);
+    }
     if input.request_id.is_nil()
         || input.expected_revision < 0
         || input.model.is_empty()
@@ -816,6 +855,31 @@ async fn selected_access(
     Ok(access)
 }
 
+pub(super) fn effort_offered(provider: ProviderKind, effort: Option<Effort>) -> bool {
+    effort.is_none_or(|effort| provider.efforts().contains(&effort))
+}
+
+async fn kept_effort(
+    transaction: &mut Transaction<'_, Postgres>,
+    provider: ProviderKind,
+) -> Result<Option<Effort>, sqlx::Error> {
+    let kept = sqlx::query_scalar!(
+        r#"
+        SELECT reasoning_effort AS "effort?" FROM (
+            SELECT reasoning_effort, 0 AS position FROM provider_connection WHERE provider = $1
+            UNION ALL
+            SELECT reasoning_effort, 1 FROM provider_saved WHERE provider = $1
+        ) kept
+        ORDER BY position
+        LIMIT 1
+        "#,
+        provider.as_str(),
+    )
+    .fetch_optional(&mut **transaction)
+    .await?;
+    Ok(kept.flatten().as_deref().and_then(Effort::parse))
+}
+
 async fn previous(
     transaction: &mut Transaction<'_, Postgres>,
     actor: &Actor,
@@ -830,7 +894,8 @@ async fn previous(
             model AS "model!",
             context_window AS "context_window?",
             revision AS "revision!",
-            access AS "access!: Access"
+            access AS "access!: Access",
+            reasoning_effort
         FROM provider_commands
         WHERE actor_id = $1 AND request_id = $2
         "#,
@@ -851,6 +916,7 @@ async fn previous(
         previous.context_window,
         previous.revision,
         previous.access,
+        previous.reasoning_effort,
     ))
     .map(Some)
 }

@@ -1,5 +1,5 @@
 //! Every tool runs as a child under the sandbox's unprivileged tool user, so the kernel, not path checks, bounds what a call can touch.
-mod browser;
+pub(crate) mod browser;
 mod builtin;
 mod computer;
 mod mcp;

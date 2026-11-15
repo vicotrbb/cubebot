@@ -394,9 +394,13 @@ pub(super) async fn guard(
             SELECT 1
             FROM chat_turns c
             JOIN room_messages m ON m.id=c.room_message_id
-            JOIN tasks t ON t.room_id=m.room_id
             JOIN human_accounts a ON a.id=$1
-            WHERE c.id=$2 AND t.created_by<>a.id AND a.role<>'administrator'
+            LEFT JOIN tasks t ON t.room_id=m.room_id
+            WHERE c.id=$2 AND a.role<>'administrator'
+                AND CASE WHEN t.id IS NOT NULL THEN t.created_by<>a.id
+                    ELSE NOT EXISTS(SELECT 1 FROM effective_human_grants g WHERE g.actor_id=a.id
+                        AND g.scope_kind='room' AND g.scope_id=m.room_id AND g.capability='conversation.send')
+                END
         ) AS "refused!"
         "#,
         actor.id,

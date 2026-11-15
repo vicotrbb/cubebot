@@ -167,6 +167,7 @@ pub(super) async fn ask(
         messages: &messages,
         tools: &[],
         tools_disabled: false,
+        effort: None,
         max_output_tokens: Some(max_output_tokens),
     };
     let (text, usage) = through(inference.provider, &request)

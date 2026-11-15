@@ -215,6 +215,9 @@ fn body(request: &Request, native: bool) -> Result<Value, Error> {
     if !request.system.is_empty() {
         body["system"] = json!(request.system);
     }
+    if let Some(effort) = request.effort.filter(|_| native) {
+        body["output_config"] = json!({"effort":effort});
+    }
     if !request.tools.is_empty() {
         body["tools"] = if native {
             native_tools(request.tools)
@@ -529,12 +532,42 @@ mod tests {
             messages: &[],
             tools,
             tools_disabled: false,
+            effort: None,
             max_output_tokens: Some(1),
         };
         body(&request, true).unwrap()["tools"]
             .as_array()
             .unwrap()
             .clone()
+    }
+
+    #[test]
+    fn effort_goes_in_output_config_and_only_to_anthropic_itself() {
+        let request = Request {
+            model: "claude-opus-5-5",
+            key: "",
+            system: "",
+            messages: &[],
+            tools: &[],
+            tools_disabled: false,
+            effort: Some("xhigh"),
+            max_output_tokens: Some(1),
+        };
+        assert_eq!(
+            body(&request, true).unwrap()["output_config"],
+            json!({"effort":"xhigh"})
+        );
+        assert!(
+            body(&request, false)
+                .unwrap()
+                .get("output_config")
+                .is_none()
+        );
+        let plain = Request {
+            effort: None,
+            ..request
+        };
+        assert!(body(&plain, true).unwrap().get("output_config").is_none());
     }
 
     #[test]

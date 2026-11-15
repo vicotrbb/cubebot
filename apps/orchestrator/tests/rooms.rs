@@ -267,3 +267,70 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         .unwrap();
     assert_eq!(grown.members.len(), 2);
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_private_room_stays_private_to_someone_who_only_reads_the_agent() {
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let ada = agent(&pool, &admin, "Ada").await;
+    let work = Work::new(pool.clone());
+    let create = CreateRoom {
+        request_id: Uuid::new_v4(),
+        name: "Board".into(),
+        agents: vec![ada],
+    };
+    let room = work.create_room(&admin, &create).await.unwrap();
+    work.post_room_message(&admin, room.id, &message("@Ada the acquisition plan"))
+        .await
+        .unwrap();
+    let turn: Uuid = sqlx::query_scalar(
+        "SELECT id FROM chat_turns WHERE conversation_id=$1 AND room_message_id IS NOT NULL",
+    )
+    .bind(ada)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    identity
+        .create_account(&admin, "member", "member password", false, Uuid::new_v4())
+        .await
+        .unwrap();
+    let session = identity.login("member", "member password").await.unwrap();
+    let member = identity.authenticate(&session.token).await.unwrap();
+    for capability in [Capability::ConversationRead, Capability::ConversationSend] {
+        identity
+            .grant(
+                &admin,
+                &GrantRequest {
+                    request_id: Uuid::new_v4(),
+                    recipient: Recipient::User { id: member.id },
+                    scope: Scope::Conversation { id: ada },
+                    capability,
+                },
+            )
+            .await
+            .unwrap();
+    }
+    let seen = |situation: &cubebot_orchestrator::work::Situation| {
+        situation
+            .work
+            .iter()
+            .any(|open| open.message.contains("acquisition"))
+    };
+    assert!(seen(&work.situation(&admin).await.unwrap()));
+    assert!(!seen(&work.situation(&member).await.unwrap()));
+    assert!(matches!(
+        work.cancel(&member, ada, turn).await,
+        Err(IdentityError::NotFound)
+    ));
+    work.cancel(&admin, ada, turn).await.unwrap();
+}

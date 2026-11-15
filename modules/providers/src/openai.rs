@@ -262,6 +262,9 @@ fn prompted(body: &mut Value, request: &Request, dialect: Dialect) {
     } else if let Some(limit) = request.max_output_tokens {
         body["max_output_tokens"] = json!(limit);
     }
+    if let Some(effort) = request.effort {
+        body["reasoning"] = json!({"effort":effort});
+    }
 }
 
 fn declared(tool: &crate::Tool, dialect: Dialect) -> Value {
@@ -407,4 +410,34 @@ fn computer_call(item: &Value) -> Result<crate::FunctionCall, Error> {
         .ok_or(Error::InvalidResponse(None))?;
     let actions = json!({"actions":item["actions"]});
     call(call_id, "computer", actions.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effort_goes_in_the_reasoning_object_for_keys_and_plans() {
+        let request = Request {
+            model: "gpt",
+            key: "",
+            system: "",
+            messages: &[],
+            tools: &[],
+            tools_disabled: false,
+            effort: Some("minimal"),
+            max_output_tokens: None,
+        };
+        for dialect in [API, CHATGPT] {
+            assert_eq!(
+                body(&request, dialect)["reasoning"],
+                json!({"effort":"minimal"})
+            );
+        }
+        let plain = Request {
+            effort: None,
+            ..request
+        };
+        assert!(body(&plain, API).get("reasoning").is_none());
+    }
 }

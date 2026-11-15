@@ -1041,6 +1041,7 @@ pub(crate) async fn native_chat_setup(
                 context_window: Some(128_000),
                 api_key: Some("controlled-key".into()),
                 access: None,
+                reasoning_effort: None,
             },
         )
         .await
@@ -1872,6 +1873,7 @@ async fn an_agent_thinks_with_its_chosen_model_on_a_saved_provider() {
                 context_window: Some(200_000),
                 api_key: Some("anthropic-key".into()),
                 access: None,
+                reasoning_effort: None,
             },
         )
         .await
@@ -1887,17 +1889,39 @@ async fn an_agent_thinks_with_its_chosen_model_on_a_saved_provider() {
             provider: cubebot_protocol::runtime::ProviderKind::Gemini,
             ..chosen.clone()
         }),
+        effort: None,
     };
     assert!(connections.set_agent_model(agent, &unknown).await.is_err());
+    let undocumented = SetAgentModel {
+        chosen: None,
+        effort: Some(Some(cubebot_protocol::runtime::Effort::Minimal)),
+    };
+    assert!(
+        connections
+            .set_agent_model(agent, &undocumented)
+            .await
+            .is_err()
+    );
     let described = connections
         .set_agent_model(
             agent,
             &SetAgentModel {
                 chosen: Some(chosen.clone()),
+                effort: Some(Some(cubebot_protocol::runtime::Effort::Minimal)),
             },
         )
         .await
         .unwrap();
+    assert_eq!(
+        described.effort,
+        Some(cubebot_protocol::runtime::Effort::Minimal)
+    );
+    let unchanged: SetAgentModel = serde_json::from_value(json!({ "chosen": chosen })).unwrap();
+    let kept = connections
+        .set_agent_model(agent, &unchanged)
+        .await
+        .unwrap();
+    assert_eq!(kept.effort, described.effort);
     assert_eq!(described.providers, vec![Anthropic, Openai]);
     assert_eq!(described.chosen, Some(chosen));
     assert_eq!(described.default.unwrap().model, "default-model");
@@ -1913,5 +1937,6 @@ async fn an_agent_thinks_with_its_chosen_model_on_a_saved_provider() {
     assert_eq!(turn["model"], "chosen-model");
     assert_eq!(turn["api_key"], "controlled-key");
     assert_eq!(turn["context_window"], 128_000);
+    assert_eq!(turn["effort"], "minimal");
     server.abort();
 }

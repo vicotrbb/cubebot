@@ -5945,6 +5945,37 @@
         }
       }
     },
+    "/api/vault/import": {
+      "post": {
+        "tags": [],
+        "operationId": "import_vault",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportVault"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VaultImported"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/vault/{item}": {
       "put": {
         "tags": [],
@@ -6464,7 +6495,7 @@
       },
       "AgentModel": {
         "type": "object",
-        "required": ["providers"],
+        "required": ["providers", "provider_efforts"],
         "properties": {
           "chosen": {
             "oneOf": [
@@ -6485,6 +6516,22 @@
                 "$ref": "#/components/schemas/ModelRef"
               }
             ]
+          },
+          "effort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Effort"
+              }
+            ]
+          },
+          "provider_efforts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderEffort"
+            }
           },
           "providers": {
             "type": "array",
@@ -7473,6 +7520,16 @@
           "provider": {
             "$ref": "#/components/schemas/ProviderKind"
           },
+          "reasoning_effort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Effort"
+              }
+            ]
+          },
           "request_id": {
             "type": "string",
             "format": "uuid"
@@ -8095,6 +8152,10 @@
           }
         }
       },
+      "Effort": {
+        "type": "string",
+        "enum": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      },
       "Event": {
         "type": "object",
         "required": ["id", "turn_id", "payload"],
@@ -8650,6 +8711,48 @@
         "type": "string",
         "format": "binary",
         "description": "The raw bytes of a JPEG or PNG; a schema only, the handlers take `Bytes`."
+      },
+      "ImportVault": {
+        "type": "object",
+        "required": ["logins"],
+        "properties": {
+          "access": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProviderAccess"
+              }
+            ]
+          },
+          "logins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportedLogin"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "ImportedLogin": {
+        "type": "object",
+        "required": ["name", "site", "username", "secret"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "InstallSkill": {
         "type": "object",
@@ -9924,6 +10027,25 @@
           }
         ]
       },
+      "ProviderEffort": {
+        "type": "object",
+        "required": ["provider"],
+        "properties": {
+          "effort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Effort"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          }
+        }
+      },
       "ProviderKind": {
         "type": "string",
         "enum": [
@@ -9956,6 +10078,16 @@
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderKind"
+          },
+          "reasoning_effort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Effort"
+              }
+            ]
           },
           "revision": {
             "type": "integer",
@@ -10855,6 +10987,16 @@
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderKind"
+          },
+          "reasoning_effort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Effort"
+              }
+            ]
           }
         }
       },
@@ -10958,6 +11100,16 @@
               },
               {
                 "$ref": "#/components/schemas/ModelRef"
+              }
+            ]
+          },
+          "effort": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Effort"
               }
             ]
           }
@@ -12385,6 +12537,20 @@
       "VaultField": {
         "type": "string",
         "enum": ["username", "secret"]
+      },
+      "VaultImported": {
+        "type": "object",
+        "required": ["imported", "skipped"],
+        "properties": {
+          "imported": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
       },
       "VaultKind": {
         "type": "string",

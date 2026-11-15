@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT t.id AS turn, t.conversation_id AS agent, CASE WHEN r.task THEN NULL ELSE m.room_id END AS \"room?\", t.status, t.error,\n                CASE WHEN r.task THEN 'On a task' ELSE left(COALESCE(m.message, t.message), 160) END AS \"message!\",\n                (to_jsonb(t.status_at) #>> '{}') AS \"since!\"\n            FROM chat_turns t\n            LEFT JOIN room_messages m ON m.id=t.room_message_id\n            LEFT JOIN rooms r ON r.id=m.room_id\n            WHERE t.conversation_id=ANY($1) AND t.status IN ('queued','running','delegated','waiting')\n                AND (m.room_id IS NULL OR r.task OR $2 OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=$3 AND p.scope_kind='room' AND p.scope_id=m.room_id AND p.capability='conversation.read'))\n            ORDER BY t.status_at\n            LIMIT 50\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "room?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "error",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "message!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "since!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "593ca25b80d2efc83eb8a2007ec7a947131eae4968f7c1a2e7d0f13395369a4b"
+}

@@ -118,10 +118,13 @@ impl Work {
             LEFT JOIN room_messages m ON m.id=t.room_message_id
             LEFT JOIN rooms r ON r.id=m.room_id
             WHERE t.conversation_id=ANY($1) AND t.status IN ('queued','running','delegated','waiting')
+                AND (m.room_id IS NULL OR r.task OR $2 OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=$3 AND p.scope_kind='room' AND p.scope_id=m.room_id AND p.capability='conversation.read'))
             ORDER BY t.status_at
             LIMIT 50
             "#,
             &scope,
+            administrator,
+            actor.id,
         )
         .fetch_all(&mut *tx)
         .await?;
@@ -137,12 +140,14 @@ impl Work {
                 LEFT JOIN room_messages m ON m.id=t.room_message_id
                 LEFT JOIN rooms r ON r.id=m.room_id
                 WHERE t.conversation_id=ANY($1) AND t.status IN ('complete','failed','cancelled')
+                    AND (m.room_id IS NULL OR r.task OR $2 OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=$3 AND p.scope_kind='room' AND p.scope_id=m.room_id AND p.capability='conversation.read'))
                 ORDER BY t.status_at DESC
                 LIMIT 12)
                 UNION ALL
                 (SELECT 'dream', d.agent_id, NULL, NULL, left(d.report, 160), d.ended_at
                 FROM dream_runs d
                 WHERE d.agent_id=ANY($1) AND d.outcome IN ('completed','failed')
+                    AND ($2 OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=$3 AND p.scope_kind='agent' AND p.scope_id=d.agent_id AND p.capability IN ('memory.read','agent.manage')))
                 ORDER BY d.ended_at DESC
                 LIMIT 6)
                 UNION ALL
@@ -159,6 +164,8 @@ impl Work {
             LIMIT 14
             "#,
             &scope,
+            administrator,
+            actor.id,
         )
         .fetch_all(&mut *tx)
         .await?;
