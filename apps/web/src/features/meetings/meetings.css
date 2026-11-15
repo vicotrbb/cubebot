@@ -884,6 +884,11 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
   }
+  .green-room__mirror {
+    aspect-ratio: 4 / 5;
+    max-height: 52dvh;
+    margin-inline: auto;
+  }
   .green-room__details {
     max-width: none;
   }
