@@ -10,6 +10,8 @@ import {
   Field,
   Skeleton,
 } from '../../components/primitives'
+import { ScheduleMeeting } from '../meetings/NewMeeting'
+import { startingAt } from '../meetings/schedule'
 import { RoutineForm } from '../routines/Routines'
 import { CALENDAR_KEY, changeEvent, createEvent, useWrite } from './api'
 import {
@@ -90,12 +92,20 @@ function slotWords(slot: Slot) {
   return `${day}, ${hour}:${String(slot.minute % 60).padStart(2, '0')}`
 }
 
-/** Event or Routine, like the new-item sheet of iOS Calendar. */
+const KINDS = [
+  ['event', 'Event'],
+  ['meeting', 'Meeting'],
+  ['routine', 'Routine'],
+] as const
+
+type Kind = (typeof KINDS)[number][0]
+
+/** Event, Meeting or Routine, like the new-item sheet of iOS Calendar. */
 function NewItem({ slot, ...context }: Context & { slot: Slot }) {
   const calendars = writable(context.sources)
   const agents = ownAgents(context.sources, context.agents)
-  const [kind, setKind] = useState<'event' | 'routine'>(
-    calendars.length || !agents.length ? 'event' : 'routine',
+  const [kind, setKind] = useState<Kind>(
+    calendars.length ? 'event' : agents.length ? 'routine' : 'meeting',
   )
   return (
     <>
@@ -105,35 +115,48 @@ function NewItem({ slot, ...context }: Context & { slot: Slot }) {
           role="group"
           aria-label="Kind"
         >
-          {(['event', 'routine'] as const).map((each) => (
+          {KINDS.map(([each, label]) => (
             <button
               key={each}
               type="button"
               aria-pressed={kind === each}
               onClick={() => setKind(each)}
             >
-              {each === 'event' ? 'Event' : 'Routine'}
+              {label}
             </button>
           ))}
         </div>
         <p className="small faint">{slotWords(slot)}</p>
       </div>
-      {kind === 'event' ? (
-        calendars.length ? (
+      {kind === 'meeting' && (
+        <ScheduleMeeting
+          when={startingAt(slot.day, slot.minute ?? 9 * 60)}
+          stay
+          onDone={context.onClose}
+          onCancel={context.onClose}
+        />
+      )}
+      {kind === 'event' &&
+        (calendars.length ? (
           <EventForm slot={slot} {...context} />
         ) : (
           <Empty title="No calendar takes new events.">
             Connect a calendar with write access in Platform › Connections, or
             make a routine instead.
           </Empty>
-        )
-      ) : agents.length ? (
-        <RoutineCreate slot={slot} agents={agents} onClose={context.onClose} />
-      ) : (
-        <Empty title="No agents of yours yet.">
-          Create an agent to give it routines.
-        </Empty>
-      )}
+        ))}
+      {kind === 'routine' &&
+        (agents.length ? (
+          <RoutineCreate
+            slot={slot}
+            agents={agents}
+            onClose={context.onClose}
+          />
+        ) : (
+          <Empty title="No agents of yours yet.">
+            Create an agent to give it routines.
+          </Empty>
+        ))}
     </>
   )
 }

@@ -469,8 +469,8 @@ function Head({
       <button
         type="button"
         className="btn btn--ghost btn--icon btn--sm calendar__new"
-        aria-label="New event or routine"
-        title="New event or routine"
+        aria-label="New event, meeting or routine"
+        title="New event, meeting or routine"
         onClick={onNew}
       >
         <Plus />

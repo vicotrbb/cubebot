@@ -8,6 +8,8 @@ import {
   MapPin,
   Play,
   Repeat,
+  UserRound,
+  Video,
   X,
 } from 'lucide-react'
 import {
@@ -146,6 +148,7 @@ export function Popover({
       )}
       {item.kind === 'run' && <RunBody item={item} look={look} />}
       {item.kind === 'digest' && <DigestBody item={day} look={look} />}
+      {item.kind === 'meeting' && <MeetingBody item={item} look={look} />}
     </dialog>
   )
 }
@@ -567,5 +570,53 @@ function DigestBody({ item, look }: { item: Item; look: Look }) {
       </Row>
       <AgentRow item={item} look={look} />
     </div>
+  )
+}
+
+const MEETING_STATES: Record<string, string> = {
+  live: 'Happening now',
+  scheduled: 'Scheduled',
+  ended: 'Ended',
+}
+
+function MeetingBody({ item, look }: { item: Item; look: Look }) {
+  const meeting = item.meeting
+  if (!meeting) return null
+  const params = { meetingId: meeting.id }
+  return (
+    <>
+      <div className="cal-pop__body">
+        <When item={item} zone={look.zone} />
+        <Row icon={Video} label="State">
+          <span>{MEETING_STATES[meeting.state] ?? meeting.state}</span>
+        </Row>
+        <Row icon={UserRound} label="Host">
+          <span>{meeting.owner}</span>
+        </Row>
+      </div>
+      <div className="cal-pop__actions">
+        <Link
+          to="/meetings/$meetingId"
+          params={params}
+          className={
+            meeting.state === 'ended'
+              ? 'btn btn--sm'
+              : 'btn btn--ghost btn--sm cal-pop__lead'
+          }
+        >
+          Open
+        </Link>
+        {meeting.state !== 'ended' && (
+          <Link
+            to="/meetings/$meetingId"
+            params={params}
+            search={{ join: true }}
+            className="btn btn--primary btn--sm"
+          >
+            <Video aria-hidden="true" /> Join
+          </Link>
+        )}
+      </div>
+    </>
   )
 }

@@ -94,6 +94,12 @@ export function CommandPalette({
         hint: 'Page',
         go: go('/calendar'),
       },
+      {
+        key: 'p:meetings',
+        label: 'Meetings',
+        hint: 'Page',
+        go: go('/meetings'),
+      },
       { key: 'p:files', label: 'Files', hint: 'Page', go: go('/files') },
       { key: 'p:skills', label: 'Skills', hint: 'Page', go: go('/skills') },
       { key: 'p:kb', label: 'Knowledge base', hint: 'Page', go: go('/kb') },

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Lock } from 'lucide-react'
+import { Lock, Video } from 'lucide-react'
 import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
 import { Mark } from '../connections/Mark'
@@ -29,6 +29,7 @@ export function Sources({
     accounts.set(key, [...(accounts.get(key) ?? []), source])
   }
   const crew = sources.filter((each) => each.kind === 'agent')
+  const meetings = sources.find((each) => each.kind === 'meetings')
   return (
     <div className="cal-sources">
       <section aria-labelledby="cal-calendars">
@@ -38,6 +39,18 @@ export function Sources({
           <Account key={group[0]?.connection} group={group} {...toggles} />
         ))}
       </section>
+      {meetings && (
+        <section aria-labelledby="cal-meetings">
+          <h2 id="cal-meetings">Meetings</h2>
+          <ul>
+            <li>
+              <Toggle source={meetings} {...toggles}>
+                <Video className="cal-source__icon" aria-hidden="true" />
+              </Toggle>
+            </li>
+          </ul>
+        </section>
+      )}
       <section aria-labelledby="cal-agents">
         <h2 id="cal-agents">Agents</h2>
         {crew.length === 0 && (
