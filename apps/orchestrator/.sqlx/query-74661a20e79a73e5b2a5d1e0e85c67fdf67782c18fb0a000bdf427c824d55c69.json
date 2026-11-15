@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT m.owner_id, s.stt_provider AS \"stt_provider: Provider\"\n        FROM meetings m, speech_settings s\n        WHERE m.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "owner_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "stt_provider: Provider",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "74661a20e79a73e5b2a5d1e0e85c67fdf67782c18fb0a000bdf427c824d55c69"
+}

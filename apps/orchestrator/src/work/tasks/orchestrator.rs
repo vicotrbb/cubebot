@@ -125,7 +125,10 @@ async fn step(
     let reply = match (scripted, inference) {
         _ if due.attempts >= ATTEMPTS => Err("orchestrator_gave_up"),
         (Some(reply), _) => Ok(reply.to_owned()),
-        (None, Some(inference)) => coordinator::ask(pool, &inference, SYSTEM, &prompt, 4096).await,
+        (None, Some(inference)) => {
+            let vendor = connections.vendor();
+            coordinator::ask(pool, &inference, vendor, SYSTEM, &prompt, 4096).await
+        }
         (None, None) => Err("provider_unavailable"),
     };
     let proposal = reply.and_then(|text| parsed(&text).ok_or("invalid_orchestrator_result"));

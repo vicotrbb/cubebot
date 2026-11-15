@@ -3,6 +3,7 @@ mod invitations;
 pub mod live;
 pub mod public;
 mod settings;
+mod summary;
 
 pub(crate) use calendar::items as calendar_items;
 pub use invitations::{EmailConnection, Invited};
@@ -13,6 +14,7 @@ use crate::{
     agents::Avatar,
     connections::Connections,
     identity::{Actor, IdentityError, oidc::Config},
+    speech::Speech,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::DateTime;
@@ -197,7 +199,11 @@ impl Access {
 impl Meetings {
     pub fn new(pool: PgPool, connections: Option<Connections>, origin: Option<String>) -> Self {
         Self {
-            live: live::Live::new(pool.clone()),
+            live: live::Live::new(
+                pool.clone(),
+                connections.clone(),
+                Speech::environment(connections.clone()),
+            ),
             pool,
             connections,
             origin,
@@ -221,6 +227,11 @@ impl Meetings {
             hops,
             ..Self::new(pool, connections, origin)
         })
+    }
+
+    pub fn with_speech(mut self, speech: Speech) -> Self {
+        self.live = live::Live::new(self.pool.clone(), self.connections.clone(), speech);
+        self
     }
 
     pub fn live(&self) -> &live::Live {
@@ -301,6 +312,7 @@ impl Meetings {
             .add(&mut tx, actor, id, &input.invite, &emails, sender.as_ref())
             .await?;
         tx.commit().await?;
+        self.live.invitations_changed(id);
         self.deliver(actor, id, sender.as_ref(), &added).await?;
         Ok(added.counts(access.title))
     }
@@ -325,6 +337,7 @@ impl Meetings {
             return Err(IdentityError::NotFound);
         }
         tx.commit().await?;
+        self.live.invitations_changed(id);
         Ok(())
     }
 

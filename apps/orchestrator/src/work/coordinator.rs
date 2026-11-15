@@ -10,6 +10,7 @@ use cubebot_providers::{
     Anthropic, Event, Gemini, Grok, Message, OpenAi, OpenRouter, Provider, Request, Usage,
 };
 use futures_util::StreamExt;
+use reqwest::Url;
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::time::Duration;
@@ -59,7 +60,7 @@ pub async fn route(pool: &PgPool, connections: &Connections) -> Result<bool, Err
     };
     let inference = connections.coordinator(&mut tx, pending.sender).await.ok();
     tx.commit().await?;
-    dispatch(pool, &pending, inference).await
+    dispatch(pool, &pending, inference, connections.vendor()).await
 }
 
 #[tracing::instrument(skip_all, fields(message = %pending.id))]
@@ -67,9 +68,10 @@ async fn dispatch(
     pool: &PgPool,
     pending: &Pending,
     inference: Option<crate::connections::Inference>,
+    vendor: Option<&Url>,
 ) -> Result<bool, Error> {
     let reply = match inference {
-        Some(inference) => ask(pool, &inference, SYSTEM, &pending.prompt, 512).await,
+        Some(inference) => ask(pool, &inference, vendor, SYSTEM, &pending.prompt, 512).await,
         None => Err("provider_unavailable"),
     };
     let decision = reply.and_then(|text| decision(&text).ok_or("invalid_coordinator_result"));
@@ -152,9 +154,34 @@ async fn pending(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> Result<Optio
     Ok(Some(Pending { id, sender, prompt }))
 }
 
+#[tracing::instrument(skip_all, fields(person = %person))]
+pub(crate) async fn ask_as(
+    pool: &PgPool,
+    connections: Option<&Connections>,
+    person: Uuid,
+    (system, prompt): (&str, &str),
+    max_output_tokens: u64,
+) -> Result<String, &'static str> {
+    let connections = connections.ok_or("provider_unavailable")?;
+    let inference = async {
+        let mut tx = pool.begin().await?;
+        let inference = connections.coordinator(&mut tx, person).await?;
+        tx.commit().await?;
+        Ok::<_, crate::identity::IdentityError>(inference)
+    }
+    .await
+    .map_err(|error| {
+        tracing::warn!(?error, "coordinator provider unavailable");
+        "provider_unavailable"
+    })?;
+    let vendor = connections.vendor();
+    ask(pool, &inference, vendor, system, prompt, max_output_tokens).await
+}
+
 pub(super) async fn ask(
     pool: &PgPool,
     inference: &crate::connections::Inference,
+    vendor: Option<&Url>,
     system: &str,
     prompt: &str,
     max_output_tokens: u64,
@@ -170,7 +197,7 @@ pub(super) async fn ask(
         effort: None,
         max_output_tokens: Some(max_output_tokens),
     };
-    let (text, usage) = through(inference.provider, &request)
+    let (text, usage) = through(inference.provider, vendor, &request)
         .await
         .map_err(|error| error.code())?;
     if let Some(usage) = usage {
@@ -188,58 +215,90 @@ pub(super) async fn ask(
     Ok(text)
 }
 
+fn made<P>(
+    vendor: Option<&Url>,
+    new: fn() -> Result<P, cubebot_providers::Error>,
+    loopback: fn(&str) -> Result<P, cubebot_providers::Error>,
+) -> Result<P, cubebot_providers::Error> {
+    match vendor {
+        Some(origin) => loopback(origin.as_str()),
+        None => configured(new, loopback),
+    }
+}
+
 async fn through(
     provider: ProviderKind,
+    vendor: Option<&Url>,
     request: &Request<'_>,
 ) -> Result<(String, Option<Usage>), cubebot_providers::Error> {
     match provider {
         ProviderKind::Openai => {
-            complete(configured(OpenAi::new, OpenAi::for_loopback_tests), request).await
+            complete(
+                made(vendor, OpenAi::new, OpenAi::for_loopback_tests),
+                request,
+            )
+            .await
         }
         ProviderKind::Anthropic => {
             complete(
-                configured(Anthropic::new, Anthropic::for_loopback_tests),
+                made(vendor, Anthropic::new, Anthropic::for_loopback_tests),
                 request,
             )
             .await
         }
         ProviderKind::Openrouter => {
             complete(
-                configured(OpenRouter::new, OpenRouter::for_loopback_tests),
+                made(vendor, OpenRouter::new, OpenRouter::for_loopback_tests),
                 request,
             )
             .await
         }
         ProviderKind::Gemini => {
-            complete(configured(Gemini::new, Gemini::for_loopback_tests), request).await
+            complete(
+                made(vendor, Gemini::new, Gemini::for_loopback_tests),
+                request,
+            )
+            .await
         }
         ProviderKind::Grok => {
-            complete(configured(Grok::new, Grok::for_loopback_tests), request).await
+            complete(made(vendor, Grok::new, Grok::for_loopback_tests), request).await
         }
         ProviderKind::Chatgpt => {
             complete(
-                configured(OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests),
+                made(vendor, OpenAi::chatgpt, OpenAi::chatgpt_for_loopback_tests),
                 request,
             )
             .await
         }
         ProviderKind::Supergrok => {
             complete(
-                configured(OpenAi::supergrok, OpenAi::supergrok_for_loopback_tests),
+                made(
+                    vendor,
+                    OpenAi::supergrok,
+                    OpenAi::supergrok_for_loopback_tests,
+                ),
                 request,
             )
             .await
         }
         ProviderKind::Minimax | ProviderKind::MinimaxPlan => {
             complete(
-                configured(Anthropic::minimax, Anthropic::minimax_for_loopback_tests),
+                made(
+                    vendor,
+                    Anthropic::minimax,
+                    Anthropic::minimax_for_loopback_tests,
+                ),
                 request,
             )
             .await
         }
         ProviderKind::MinimaxCn | ProviderKind::MinimaxPlanCn => {
             complete(
-                configured(Anthropic::minimax_cn, Anthropic::minimax_for_loopback_tests),
+                made(
+                    vendor,
+                    Anthropic::minimax_cn,
+                    Anthropic::minimax_for_loopback_tests,
+                ),
                 request,
             )
             .await

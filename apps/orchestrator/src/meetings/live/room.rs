@@ -279,7 +279,7 @@ fn deliver(
     }
 }
 
-async fn idle(deadline: Option<Instant>) {
+pub(super) async fn idle(deadline: Option<Instant>) {
     match deadline {
         Some(at) => tokio::time::sleep_until(at).await,
         None => std::future::pending().await,
@@ -531,7 +531,7 @@ impl Room {
             member: account.is_some(),
             open_join: self.open_join,
             locked: self.locked,
-            captions: false,
+            captions: true,
         };
         self.send(slot, &welcome);
         self.roster();

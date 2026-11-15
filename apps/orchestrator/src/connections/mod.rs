@@ -143,7 +143,8 @@ impl Connections {
         }
     }
 
-    /// Sends subscription sign-in and refresh to a literal loopback origin instead of the vendors.
+    /// Sends subscription sign-in and refresh, and coordinator model calls, to a literal loopback
+    /// origin instead of the vendors.
     pub fn with_vendor_for_loopback_tests(mut self, origin: &str) -> Self {
         self.vendor = reqwest::Url::parse(origin)
             .ok()
@@ -152,7 +153,7 @@ impl Connections {
         self
     }
 
-    fn vendor(&self) -> Option<&reqwest::Url> {
+    pub(crate) fn vendor(&self) -> Option<&reqwest::Url> {
         self.vendor.as_ref()
     }
 

@@ -1,11 +1,18 @@
+mod attendants;
+mod floor;
+mod hearing;
 mod room;
 mod socket;
+mod voices;
 pub mod wire;
 
 pub use room::{Event, Refusal};
 pub use socket::{Entry, Recheck};
 
+use super::summary::summarize;
 use crate::agents::Avatar;
+use crate::connections::Connections;
+use crate::speech::Speech;
 use room::{Command, Joined, Joiner, Loaded, Record, Room, Who};
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -21,18 +28,23 @@ const EVENTS: usize = 1024;
 pub struct Live {
     pool: PgPool,
     rooms: Arc<Mutex<HashMap<Uuid, Handle>>>,
+    speech: Speech,
+    connections: Option<Connections>,
 }
 
 #[derive(Clone)]
 pub struct Handle {
     commands: mpsc::Sender<Command>,
+    invited: mpsc::Sender<()>,
 }
 
 impl Live {
-    pub(super) fn new(pool: PgPool) -> Self {
+    pub(super) fn new(pool: PgPool, connections: Option<Connections>, speech: Speech) -> Self {
         Self {
             pool,
             rooms: Arc::default(),
+            speech,
+            connections,
         }
     }
 
@@ -50,6 +62,12 @@ impl Live {
     pub(super) async fn relink(&self, id: Uuid, token: Option<String>) {
         if let Some(room) = self.room(id) {
             let _ = room.commands.send(Command::Link { token }).await;
+        }
+    }
+
+    pub(super) fn invitations_changed(&self, id: Uuid) {
+        if let Some(room) = self.room(id) {
+            let _ = room.invited.try_send(());
         }
     }
 
@@ -100,20 +118,38 @@ impl Live {
     fn spawn(&self, id: Uuid, loaded: Loaded) -> Handle {
         let (commands, receiver) = mpsc::channel(COMMANDS);
         let (records, stored) = mpsc::unbounded_channel();
+        let (events, heard) = mpsc::channel(EVENTS);
+        let (invited, invitations) = mpsc::channel(1);
+        let _ = commands.try_send(Command::Subscribe { events });
         let room = Room::new(id, loaded, records);
-        let handle = Handle { commands };
+        let handle = Handle { commands, invited };
         let live = self.clone();
         let kept = handle.clone();
+        let inbox = attendants::Inbox {
+            events: heard,
+            invited: invitations,
+        };
+        let attending = tokio::spawn(attendants::attend(self.clone(), id, handle.clone(), inbox));
         tokio::spawn(async move {
             let keeping = tokio::spawn(keep(live.pool.clone(), id, stored));
             room.run(receiver).await;
             let _ = keeping.await;
-            if let Err(error) = end(&live.pool, id).await {
-                tracing::warn!(?error, meeting = %id, "meeting end not recorded");
-            }
+            let _ = attending.await;
+            live.end(id).await;
             live.forget(id, &kept);
         });
         handle
+    }
+
+    async fn end(&self, id: Uuid) {
+        match end(&self.pool, id).await {
+            Ok(true) => {
+                let summary = summarize(self.pool.clone(), self.connections.clone(), id);
+                tokio::spawn(summary);
+            }
+            Ok(false) => {}
+            Err(error) => tracing::warn!(?error, meeting = %id, "meeting end not recorded"),
+        }
     }
 
     fn forget(&self, id: Uuid, room: &Handle) {
@@ -253,9 +289,9 @@ async fn store(pool: &PgPool, id: Uuid, record: Record) -> Result<(), sqlx::Erro
     Ok(())
 }
 
-pub(crate) async fn end(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
+async fn end(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
     let mut tx = pool.begin().await?;
-    sqlx::query!(
+    let ended = sqlx::query!(
         "
         UPDATE meetings SET ended_at=clock_timestamp()
         WHERE id=$1 AND started_at IS NOT NULL AND ended_at IS NULL
@@ -270,7 +306,8 @@ pub(crate) async fn end(pool: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
     )
     .execute(&mut *tx)
     .await?;
-    tx.commit().await
+    tx.commit().await?;
+    Ok(ended.rows_affected() == 1)
 }
 
 pub(super) async fn close_open(pool: &PgPool) -> Result<(), sqlx::Error> {

@@ -6,14 +6,17 @@ use crate::{
 use cubebot_orchestrator::{
     agents::{Agents, CreateAgent},
     calendar::{Calendar, Window},
-    connections::{Connections, Credentials, FinishSignIn, SignInStarted},
+    connections::{ConfigureProvider, Connections, Credentials, FinishSignIn, SignInStarted},
     identity::{
         Actor, Identity, IdentityError,
         access::{Capability, GrantRequest, Recipient, Scope},
     },
     meetings::{Meetings, NewInvitations, NewMeeting, SaveMeetingSettings},
+    speech::{Activity, Audio, Engines, Speech, SpeechError, Stt, Tts, Vad},
 };
 use serde_json::{Value, json};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 const ORIGIN: &str = "https://meet.example.com";
@@ -854,4 +857,319 @@ async fn the_host_ends_the_meeting_for_everyone() {
     .await
     .unwrap();
     assert_eq!(open, 0);
+}
+
+struct Loud(bool);
+impl Vad for Loud {
+    fn accept(&mut self, window: &[f32]) -> Activity {
+        let speaking = window[0] > 0.0;
+        let ended = self.0 && !speaking;
+        self.0 = speaking;
+        Activity { speaking, ended }
+    }
+}
+
+struct Script(Arc<Mutex<VecDeque<String>>>);
+impl Stt for Script {
+    fn accept(&mut self, _: &[f32]) -> Result<Option<String>, SpeechError> {
+        Ok(Some("Cara".to_owned()))
+    }
+    fn finish(&mut self) -> Result<String, SpeechError> {
+        Ok(self.0.lock().unwrap().pop_front().unwrap_or_default())
+    }
+}
+
+struct Says;
+impl Tts for Says {
+    fn speak(&self, text: &str, sink: &mut dyn FnMut(Audio) -> bool) -> Result<(), SpeechError> {
+        sink(Audio {
+            rate: 22050,
+            pcm: text.as_bytes().to_vec(),
+        });
+        Ok(())
+    }
+}
+
+async fn summarizer(axum::Json(body): axum::Json<Value>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let asked = body.to_string();
+    let text = if asked.contains("summary of a meeting") && asked.contains("Cara: It is noon.") {
+        "Decisions: lunch at noon."
+    } else {
+        "UNSCRIPTED"
+    };
+    let output = json!([{"type": "message", "content": [{"type": "output_text", "text": text}]}]);
+    let completed = json!({"type": "response.completed", "response": {"status": "completed",
+        "output": output, "usage": {"input_tokens": 10, "output_tokens": 5}}});
+    (
+        [("content-type", "text/event-stream")],
+        format!("data: {completed}\n\n"),
+    )
+        .into_response()
+}
+
+struct Voiced {
+    served: Served,
+    meetings: Meetings,
+    cara: Uuid,
+    meeting: Uuid,
+    link: String,
+    admin: String,
+}
+
+async fn voiced(w: &World, said: &[&str]) -> Voiced {
+    let script = Arc::new(Mutex::new(
+        said.iter().map(|line| (*line).to_owned()).collect(),
+    ));
+    let speech = Speech::stand_in(Arc::new(move || Engines {
+        vad: Box::new(Loud(false)),
+        stt: Box::new(Script(script.clone())),
+        tts: Box::new(Says),
+    }));
+    let model = axum::Router::new().route("/responses", axum::routing::post(summarizer));
+    let (model, _) = http_server(model).await;
+    let connections = Connections::new(w.pool.clone(), Credentials::new([7; 32]))
+        .with_vendor_for_loopback_tests(&format!("{model}/"));
+    connections
+        .configure(
+            &w.admin,
+            &ConfigureProvider {
+                request_id: Uuid::new_v4(),
+                expected_revision: 0,
+                provider: cubebot_protocol::runtime::ProviderKind::Openai,
+                model: "controlled-model".into(),
+                context_window: Some(128_000),
+                api_key: Some("controlled-key".into()),
+                access: None,
+                reasoning_effort: None,
+            },
+        )
+        .await
+        .unwrap();
+    let meetings =
+        Meetings::new(w.pool.clone(), Some(connections), Some(CONSOLE.into())).with_speech(speech);
+    let cara = agent(w, "Cara").await;
+    let input = new(
+        json!({"title": "Sync", "agent_mode": "named", "open_join": true,
+        "invite": {"agents": [cara]}}),
+    );
+    let (meeting, _) = meetings.create(&w.admin, &input).await.unwrap();
+    let router =
+        cubebot_orchestrator::api::meetings_router(w.pool.clone(), CONSOLE, meetings.clone());
+    let (origin, task) = http_server(router).await;
+    let admin = w
+        .identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap()
+        .token;
+    Voiced {
+        served: Served {
+            origin,
+            _task: task,
+        },
+        meetings,
+        cara,
+        meeting: meeting.id,
+        link: meeting.link.unwrap(),
+        admin,
+    }
+}
+
+async fn agent_slot(socket: &mut Socket) -> u16 {
+    loop {
+        let roster = until(socket, "roster").await;
+        let agents = roster["participants"].as_array().unwrap();
+        if let Some(agent) = agents.iter().find(|seat| seat["kind"] == "agent") {
+            assert_eq!(agent["name"], "Cara");
+            return agent["slot"].as_u64().unwrap() as u16;
+        }
+    }
+}
+
+async fn speaks(socket: &mut Socket) {
+    use futures_util::SinkExt;
+    say(
+        socket,
+        json!({"kind": "state", "mic": true, "camera": false, "screen": false, "hand": false}),
+    )
+    .await;
+    for sample in [16384_i16, 0] {
+        let mut frame = vec![1_u8];
+        frame.extend(std::iter::repeat_n(sample.to_le_bytes(), 512).flatten());
+        let frame = tokio_tungstenite::tungstenite::Message::Binary(frame.into());
+        socket.send(frame).await.unwrap();
+    }
+}
+
+async fn meeting_turn(w: &World, meeting: Uuid) -> (Uuid, Uuid, String, bool) {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        let turn = sqlx::query!(
+            "SELECT id, actor_id, message, talk_only FROM chat_turns WHERE meeting_id=$1 AND response IS NULL",
+            meeting,
+        )
+        .fetch_optional(&w.pool)
+        .await
+        .unwrap();
+        if let Some(turn) = turn {
+            return (turn.id, turn.actor_id, turn.message, turn.talk_only);
+        }
+        assert!(tokio::time::Instant::now() < deadline, "no meeting turn");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+async fn answers(w: &World, turn: Uuid, text: &str) {
+    sqlx::query!(
+        "INSERT INTO turn_events (turn_id, sequence, payload) VALUES ($1, 1, $2)",
+        turn,
+        json!({"kind": "text_delta", "text": text}),
+    )
+    .execute(&w.pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        "UPDATE chat_turns SET status='complete', response=$2, completed_at=clock_timestamp() WHERE id=$1",
+        turn,
+        text,
+    )
+    .execute(&w.pool)
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_named_agent_hears_a_member_and_answers_aloud_and_the_end_is_summarized() {
+    let w = world().await;
+    let room = voiced(&w, &["Cara, what time is it?"]).await;
+    let (mut admin, _) = member(&room.served, &room.admin, room.meeting).await;
+    let cara = agent_slot(&mut admin).await;
+    speaks(&mut admin).await;
+    let caption = loop {
+        let caption = until(&mut admin, "caption").await;
+        if caption["final"] == true {
+            break caption;
+        }
+    };
+    assert_eq!(caption["text"], "Cara, what time is it?");
+
+    let (turn, actor, message, talk_only) = meeting_turn(&w, room.meeting).await;
+    assert_eq!((actor, talk_only), (w.admin.id, false));
+    assert_eq!(message, "admin: Cara, what time is it?");
+    loop {
+        if until(&mut admin, "agent").await["state"] == "thinking" {
+            break;
+        }
+    }
+    answers(&w, turn, "It is noon.").await;
+
+    let [low, high] = cara.to_le_bytes();
+    let audio = loop {
+        if let Heard::Binary(frame) = hear(&mut admin).await
+            && frame[1..3] == [low, high]
+        {
+            break frame;
+        }
+    };
+    assert_eq!(&audio[3..7], 22050_u32.to_le_bytes());
+    assert_eq!(&audio[7..], b"It is noon.");
+    let spoken = loop {
+        let caption = until(&mut admin, "caption").await;
+        if caption["source"] == cara {
+            break caption;
+        }
+    };
+    assert_eq!(
+        (spoken["text"].clone(), spoken["final"].clone()),
+        (json!("It is noon."), json!(true))
+    );
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT count(*) = 2 FROM meeting_utterances WHERE meeting_id = $1",
+    )
+    .await;
+
+    say(&mut admin, json!({"kind": "end"})).await;
+    until(&mut admin, "ended").await;
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT summary IS NOT DISTINCT FROM 'Decisions: lunch at noon.' FROM meetings WHERE id = $1",
+    )
+    .await;
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT EXISTS(SELECT 1 FROM chat_turns WHERE meeting_id = $1 AND response = ''
+            AND message LIKE 'Meeting \"Sync\" ended. Summary:%lunch at noon.')",
+    )
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_guests_named_question_is_a_talk_only_turn_as_the_owner() {
+    let w = world().await;
+    let room = voiced(&w, &["Cara, can you hear me?"]).await;
+    let (mut admin, _) = member(&room.served, &room.admin, room.meeting).await;
+    agent_slot(&mut admin).await;
+    let mut dee = guest(&room.served, &room.link, "Dee").await;
+    until(&mut dee, "welcome").await;
+    speaks(&mut dee).await;
+    let (_, actor, message, talk_only) = meeting_turn(&w, room.meeting).await;
+    assert_eq!((actor, talk_only), (w.admin.id, true));
+    assert_eq!(message, "Dee (guest): Cara, can you hear me?");
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT EXISTS(SELECT 1 FROM meeting_utterances WHERE meeting_id = $1 AND guest_name = 'Dee')",
+    )
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_agent_uninvited_during_the_meeting_leaves_and_one_invited_joins_at_once() {
+    let w = world().await;
+    let room = voiced(&w, &[]).await;
+    let (mut admin, _) = member(&room.served, &room.admin, room.meeting).await;
+    agent_slot(&mut admin).await;
+    let invitation = room
+        .meetings
+        .meeting(&w.admin, room.meeting)
+        .await
+        .unwrap()
+        .invitations[0]
+        .id;
+    room.meetings
+        .uninvite(&w.admin, room.meeting, invitation)
+        .await
+        .unwrap();
+    loop {
+        let roster = until(&mut admin, "roster").await;
+        if roster["participants"].as_array().unwrap().len() == 1 {
+            break;
+        }
+    }
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT NOT EXISTS(SELECT 1 FROM meeting_attendance WHERE meeting_id = $1 AND agent_id IS NOT NULL AND left_at IS NULL)",
+    )
+    .await;
+    let again = invitations(json!({"invite": {"agents": [room.cara]}}));
+    room.meetings
+        .invite(&w.admin, room.meeting, &again)
+        .await
+        .unwrap();
+    agent_slot(&mut admin).await;
+    eventually(
+        &w,
+        room.meeting,
+        "SELECT EXISTS(SELECT 1 FROM meeting_attendance WHERE meeting_id = $1 AND agent_id IS NOT NULL AND left_at IS NULL)",
+    )
+    .await;
 }

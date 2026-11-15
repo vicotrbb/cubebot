@@ -28,6 +28,7 @@ pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use calls::{CallRecord, Reply, ReplyEvent};
 pub use collaboration::Steering;
 pub(crate) use collaboration::cancel_open;
+pub(crate) use coordinator::ask_as;
 pub use coordinator::{coordinate, route};
 pub use creations::{CreationRequest, DeclineCreation};
 pub use cursors::ReadCursor;

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT agent_mode AS \"agent_mode: AgentMode\" FROM meetings WHERE id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent_mode: AgentMode",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6c921fd3a21edede3de6a39babd26b0b06aff467c3d72b0c6ae3b2ba6e309f0e"
+}

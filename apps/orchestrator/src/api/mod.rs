@@ -121,6 +121,16 @@ pub fn calls_router(pool: sqlx::PgPool, origin: &str, speech: crate::speech::Spe
     calls::router(pool, identity, speech, None)
 }
 
+pub fn meetings_router(
+    pool: sqlx::PgPool,
+    origin: &str,
+    meetings: crate::meetings::Meetings,
+) -> Router {
+    let mut identity = crate::identity::Identity::new(pool);
+    identity.browser_origin = Some(origin.to_owned());
+    public::router(&identity, meetings.clone()).merge(meetings::router(identity, meetings))
+}
+
 pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
@@ -188,7 +198,8 @@ pub async fn configured_router_with_credentials(
         pool.clone(),
         connections.clone(),
         identity.browser_origin.clone(),
-    )?;
+    )?
+    .with_speech(speech.clone());
     routes = routes
         .merge(public::router(&identity, meetings.clone()))
         .merge(meetings::router(identity.clone(), meetings));
