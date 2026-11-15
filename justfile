@@ -66,6 +66,7 @@ chart:
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set admin.login=admin,admin.existingSecret=admin,control.existingSecret=control,ingress.enabled=false,httpRoute.enabled=true,httpRoute.parentRefs[0].name=public > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set sandbox.networkPolicy.ingressController.podSelector=null,uploads.maxBytes=null > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set externalDatabase.existingSecret=database > /dev/null
+    helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set 'meetings.publicOrigin=https://meet.example.com,meetings.publicIngress.enabled=true,meetings.publicHttpRoute.enabled=true,meetings.publicHttpRoute.parentRefs[0].name=public' > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set credentials.existingSecret=key,postgres.existingSecret=database > /dev/null
     helm template cubebot deploy/chart --values deploy/chart/ci/values.yaml --set backup.bucket=backups,backup.existingSecret=bucket,backup.bandwidthBytes=20971520,restore.enabled=true,restore.bucket=backups,restore.existingSecret=bucket,credentials.existingSecret=key > /dev/null
 
