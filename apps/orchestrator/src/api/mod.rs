@@ -115,6 +115,10 @@ fn bearer(headers: &axum::http::HeaderMap) -> Option<&str> {
         .strip_prefix("Bearer ")
 }
 
+pub fn public_host(router: Router, console: Option<&str>, meetings: Option<&str>) -> Router {
+    public::guarded(router, console, meetings)
+}
+
 pub fn calls_router(pool: sqlx::PgPool, origin: &str, speech: crate::speech::Speech) -> Router {
     let mut identity = crate::identity::Identity::new(pool.clone());
     identity.browser_origin = Some(origin.to_owned());

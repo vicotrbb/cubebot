@@ -101,3 +101,118 @@ async fn live(
         .max_frame_size(FRAME_LIMIT)
         .on_upgrade(move |socket| live.attend(socket, id, entry)))
 }
+
+pub(super) fn guarded(router: Router, console: Option<&str>, meetings: Option<&str>) -> Router {
+    match (meetings.map(host_key), console.map(host_key)) {
+        (Some(meetings), console) if console.as_ref() != Some(&meetings) => {
+            router.layer(axum::middleware::from_fn_with_state(meetings, public_only))
+        }
+        _ => router,
+    }
+}
+
+async fn public_only(
+    State(meetings): State<String>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let hosts = [
+        request
+            .headers()
+            .get(axum::http::header::HOST)
+            .and_then(|host| host.to_str().ok()),
+        request
+            .uri()
+            .authority()
+            .map(|authority| authority.as_str()),
+    ];
+    if refused(&meetings, &hosts, request.uri().path()) {
+        return IdentityError::NotFound.into_response();
+    }
+    next.run(request).await
+}
+
+fn refused(meetings: &str, hosts: &[Option<&str>], path: &str) -> bool {
+    let public = path == "/api/public/meetings" || path.starts_with("/api/public/meetings/");
+    !public
+        && hosts
+            .iter()
+            .flatten()
+            .any(|host| host_key(host) == meetings)
+}
+
+fn host_key(value: &str) -> String {
+    let value = value.split_once("://").map_or(value, |(_, rest)| rest);
+    let host = value
+        .split('/')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let host = host
+        .strip_suffix(":443")
+        .or_else(|| host.strip_suffix(":80"))
+        .unwrap_or(&host);
+    host.trim_end_matches('.').to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{host_key, refused};
+
+    const MEETINGS: &str = "meetings.example.com";
+
+    #[test]
+    fn hosts_compare_without_case_default_port_or_trailing_dot() {
+        for value in [
+            "https://Meetings.Example.com",
+            "https://meetings.example.com/",
+            "MEETINGS.example.com:443",
+            "meetings.example.com:80",
+            "meetings.example.com.",
+        ] {
+            assert_eq!(host_key(value), MEETINGS, "{value}");
+        }
+        assert_eq!(
+            host_key("meetings.example.com:8443"),
+            "meetings.example.com:8443"
+        );
+    }
+
+    #[test]
+    fn the_meetings_host_answers_only_the_public_meeting_routes() {
+        let on = [Some("Meetings.Example.com:443"), None];
+        assert!(!refused(MEETINGS, &on, "/api/public/meetings"));
+        assert!(!refused(MEETINGS, &on, "/api/public/meetings/token"));
+        assert!(!refused(MEETINGS, &on, "/api/public/meetings/token/live"));
+        for path in [
+            "/api/identity/me",
+            "/api/public/meetingsx",
+            "/api/public",
+            "/m/token",
+            "/",
+        ] {
+            assert!(refused(MEETINGS, &on, path), "{path}");
+        }
+        assert!(refused(
+            MEETINGS,
+            &[None, Some("meetings.example.com")],
+            "/api/agents"
+        ));
+        assert!(refused(
+            MEETINGS,
+            &[Some("console.example.com"), Some(MEETINGS)],
+            "/api/agents"
+        ));
+    }
+
+    #[test]
+    fn other_hosts_are_unaffected() {
+        for hosts in [
+            [Some("console.example.com"), None],
+            [Some("cubebot-orchestrator.cubebot.svc:8443"), None],
+            [None, None],
+        ] {
+            assert!(!refused(MEETINGS, &hosts, "/api/identity/me"));
+        }
+    }
+}
