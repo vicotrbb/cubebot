@@ -45,7 +45,7 @@ Manage the installation with the `cubebot` command:
 ```sh
 ~/.cubebot/cubebot up          # start
 ~/.cubebot/cubebot down        # stop, keeping your data
-~/.cubebot/cubebot update      # move to the latest release, or name one: update v0.3.5
+~/.cubebot/cubebot update      # move to the latest release, or name one: update v0.3.6
 ~/.cubebot/cubebot logs -f     # follow the logs
 ~/.cubebot/cubebot admin       # create the administrator if nobody has yet
 ~/.cubebot/cubebot uninstall   # remove everything this installation created, data included
