@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.3.1'
+export const version = 'v0.3.2'
 export const released = '2026-11-15'
 
 export const docs = {
@@ -160,6 +160,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.3.2',
+    date: '2026-11-15',
+    title: 'Fixes for agents, calls and meeting links',
+    items: [
+      'Agents whose sandbox the node refused to start, as can happen while a node restarts, now restart instead of staying stuck',
+      'ElevenLabs calls speak with a voice your account has, and a refused request now says why',
+      'Meeting links published through a Cloudflare tunnel work: the public route uses only path types the tunnel controller supports',
+      'The message box sits at the bottom of every chat again',
+    ],
+  },
   {
     tag: 'v0.3.1',
     date: '2026-11-15',
