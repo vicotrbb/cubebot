@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.3.3'
+export const version = 'v0.3.4'
 export const released = '2026-11-16'
 
 export const docs = {
@@ -160,6 +160,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.3.4',
+    date: '2026-11-16',
+    title: 'Agents speak in meetings again, and in Portuguese',
+    items: [
+      'An agent voice from ElevenLabs or OpenAI no longer stops after its first sentence and leaves every agent in the meeting thinking',
+      'A voice that fails tells the room and gives up the floor, so the next agent can still answer',
+      'Agents wait for you to finish a sentence before they answer, and a speaking agent shows that you can talk to interrupt it',
+      'A speech language setting lets the built-in engines hear and speak Brazilian Portuguese',
+    ],
+  },
   {
     tag: 'v0.3.3',
     date: '2026-11-16',
