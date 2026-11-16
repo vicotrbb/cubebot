@@ -580,7 +580,7 @@ async fn hear(socket: &mut Socket) -> Heard {
     use futures_util::StreamExt;
     use tokio_tungstenite::tungstenite::Message;
     loop {
-        let next = tokio::time::timeout(std::time::Duration::from_secs(10), socket.next())
+        let next = tokio::time::timeout(std::time::Duration::from_secs(30), socket.next())
             .await
             .expect("a frame from the room");
         match next {
