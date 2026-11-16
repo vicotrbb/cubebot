@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.3.5'
+export const version = 'v0.3.6'
 export const released = '2026-11-16'
 
 export const docs = {
@@ -160,6 +160,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.3.6',
+    date: '2026-11-16',
+    title: 'See how each agent computer is doing',
+    items: [
+      'The Status tab shows CPU, memory, storage and network for the agent computer, and the desktop view has an optional overlay with the same readings',
+      'Dreaming condenses harder: it merges memories by topic, drops resolved and one-off detail, and keeps each memory short',
+      'Importing passwords from Firefox works when several logins share a site',
+    ],
+  },
   {
     tag: 'v0.3.5',
     date: '2026-11-16',
