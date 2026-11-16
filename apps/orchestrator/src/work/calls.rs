@@ -36,7 +36,7 @@ pub enum ReplyEvent {
     Tool(String),
 }
 
-const SPOKEN: &str = "\n\nYou are on a voice call. What you write is read aloud and what you receive was transcribed from speech, so it may contain mistakes. Answer briefly in plain spoken sentences, without markdown, lists or code. Use your tools as usual, and say what you are doing before long work.";
+const SPOKEN: &str = "\n\nYou are on a voice call. What you write is read aloud and what you receive was transcribed from speech, so it may contain mistakes. Answer in two or three short spoken sentences, without markdown, lists or code, and let the person ask for more. Use your tools as usual, but before you use one, first write one short sentence saying what you are checking.";
 
 pub(super) fn spoken(instructions: String, on_call: bool) -> String {
     if on_call {

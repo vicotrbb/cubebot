@@ -448,7 +448,7 @@ fn in_meeting(title: &str, present: &[Present], talk_only: bool) -> String {
         names.join(", ")
     };
     let mut text = format!(
-        "\n\nYou are in a live meeting named \"{title}\". Present with you: {present}. You hear people through speech recognition, so words and names may be misheard. What you write is read aloud: answer briefly in plain spoken sentences, without markdown, lists or code. Others are talking too, so answer only what you were asked."
+        "\n\nYou are in a live meeting named \"{title}\". Present with you: {present}. You hear people through speech recognition, so words and names may be misheard. What you write is read aloud the moment you write it: answer in two or three short spoken sentences, without markdown, lists or code, and let people ask for more. Before you use a tool, first write one short sentence saying you are checking, so people are not left in silence. Others are talking too, so answer only what you were asked, and name another agent only when you need that agent to answer."
     );
     if talk_only {
         text.push_str(" This request came from a guest who is not signed in or from someone who may not send you requests. You have no tools for it, and you must not share private information from your memory, files or other conversations.");
@@ -481,6 +481,9 @@ mod tests {
             "{member}"
         );
         assert!(member.contains("misheard") && member.contains("without markdown"));
+        assert!(
+            member.contains("two or three short") && member.contains("saying you are checking")
+        );
         assert!(!member.contains("guest who is not signed in"));
         let guest = in_meeting("Weekly sync", &present, true);
         assert!(guest.starts_with(&member), "{guest}");

@@ -408,6 +408,62 @@ async fn next_turn(channel: &mut crate::runtime_identity::Socket) -> Value {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_spoken_turn_thinks_briefly_and_its_dated_message_returns_unchanged_in_history() {
+    let f = fixture().await;
+    let (auth, work, admin, agent) = native_chat_setup(&f, "Before the meeting").await;
+    sqlx::query!(
+        "UPDATE chat_turns SET status='complete', response='ok', completed_at=clock_timestamp() WHERE conversation_id=$1",
+        agent,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    sqlx::query!(
+        "UPDATE human_accounts SET profile=jsonb_build_object('time_zone', 'America/Sao_Paulo') WHERE id=$1",
+        admin.id,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let meeting = live_meeting(&f.pool, admin.id, "Standup").await;
+    attends(&f.pool, meeting, Some(admin.id), None).await;
+    work.join_meeting(AgentId(agent), meeting).await.unwrap();
+    let ask =
+        |text: &'static str| work.say_in_meeting(&admin, AgentId(agent), meeting, text, false);
+    let first = ask("admin: how are we doing?").await.unwrap();
+
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let claimed = next_turn(&mut channel).await;
+    assert_eq!(claimed["turn"], json!(first));
+    assert_eq!(claimed["effort"], "low");
+    let sent = claimed["message"].as_str().unwrap().to_owned();
+    assert!(
+        sent.starts_with("admin: how are we doing?\n\n(Sent ")
+            && sent.ends_with(", their local time.)"),
+        "{sent}"
+    );
+    let instructions = claimed["instructions"].as_str().unwrap();
+    assert!(!instructions.contains("local time"), "{instructions}");
+
+    completes(&f.pool, first, "Fine.").await;
+    ask("admin: and tomorrow?").await.unwrap();
+    report(&mut channel, json!({"type":"pull"})).await;
+    let next = next_turn(&mut channel).await;
+    let history = next["history"].as_array().unwrap();
+    assert_eq!(history.last().unwrap()["message"], json!(sent));
+    assert_eq!(next["instructions"], claimed["instructions"]);
+    server.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn a_guest_request_is_claimed_talk_only_with_the_meeting_and_nothing_private() {
     let f = fixture().await;
     let (auth, work, admin, agent) = native_chat_setup(&f, "Before the meetings").await;
