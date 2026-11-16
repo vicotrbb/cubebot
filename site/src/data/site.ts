@@ -163,8 +163,11 @@ export const releases = [
   {
     tag: 'v0.3.3',
     date: '2026-11-16',
-    title: 'A meeting host that serves only meetings',
+    title: 'Agents speak in meetings, and the public host serves only meetings',
     items: [
+      'Agents in a meeting take the floor and answer aloud again; the floor decision no longer runs out of room before it answers',
+      'ElevenLabs keys that cannot list voices, or are on a free plan, fall back to default voices that every plan can use',
+      'When an agent cannot speak, the room shows why instead of staying silent',
       'On its own public address, Cubebot now answers only meeting links, their files and the public meeting API, whatever the proxy in front routes to it',
       'Plain HTTP on the public meetings address redirects to HTTPS, which browsers then remember',
     ],
