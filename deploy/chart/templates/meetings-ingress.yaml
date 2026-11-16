@@ -29,18 +29,9 @@ spec:
                 name: orchestrator
                 port:
                   number: 8080
-          {{- range list "/m" "/assets" "/fonts" "/icons" }}
+          {{- range list "/m" "/assets" "/fonts" "/icons" "/call-capture.js" "/favicon.svg" "/manifest.webmanifest" "/apple-touch-icon.png" }}
           - path: {{ . }}
             pathType: Prefix
-            backend:
-              service:
-                name: web
-                port:
-                  number: 3000
-          {{- end }}
-          {{- range list "/call-capture.js" "/favicon.svg" "/manifest.webmanifest" "/apple-touch-icon.png" }}
-          - path: {{ . }}
-            pathType: Exact
             backend:
               service:
                 name: web

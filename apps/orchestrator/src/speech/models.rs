@@ -121,7 +121,7 @@ impl Models {
         let url = format!("{}/{}", self.releases, asset.url);
         let response = reqwest::get(url).await?;
         if !response.status().is_success() {
-            return Err(SpeechError::Refused(response.status().as_u16()));
+            return Err(SpeechError::Refused(response.status().as_u16(), None));
         }
         let total = response.content_length().unwrap_or(0);
         let mut body = response.bytes_stream();

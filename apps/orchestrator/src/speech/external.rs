@@ -1,12 +1,16 @@
 use super::{Audio, Provider, SAMPLE_RATE, SpeechError, Stt, Tts, Voice};
 use futures_util::StreamExt;
-use tokio::runtime::Handle;
+use serde_json::Value;
+use tokio::{runtime::Handle, sync::OnceCell};
 
 const OPENAI_STT: &str = "gpt-4o-mini-transcribe";
 const OPENAI_TTS: &str = "gpt-4o-mini-tts";
 const OPENAI_RATE: u32 = 24_000;
 const ELEVENLABS_STT: &str = "scribe_v1";
 const ELEVENLABS_TTS: &str = "eleven_flash_v2_5";
+const ELEVENLABS_FEMALE: &str = "21m00Tcm4TlvDq8ikWAM";
+const ELEVENLABS_MALE: &str = "pNInz6obpgDQGcFmaJgB";
+const REASON_LIMIT: usize = 240;
 
 #[derive(Clone)]
 pub struct Endpoints {
@@ -43,6 +47,7 @@ impl Endpoints {
             origin: self.origin(provider),
             key,
             voice,
+            voice_id: OnceCell::new(),
         }
     }
 
@@ -124,7 +129,7 @@ impl Transcriber {
         };
         let response = request.send().await?;
         if !response.status().is_success() {
-            return Err(SpeechError::Refused(response.status().as_u16()));
+            return Err(refused(response, &self.key).await);
         }
         let body = response.bytes().await?;
         let parsed: serde_json::Value =
@@ -157,16 +162,94 @@ pub struct Speaker {
     origin: String,
     key: String,
     voice: Voice,
+    voice_id: OnceCell<String>,
+}
+
+async fn refused(response: reqwest::Response, key: &str) -> SpeechError {
+    let status = response.status().as_u16();
+    let reason = response
+        .json::<Value>()
+        .await
+        .ok()
+        .and_then(|body| explained(&body, key));
+    SpeechError::Refused(status, reason)
+}
+
+fn explained(body: &Value, key: &str) -> Option<String> {
+    let message = ["/detail/message", "/error/message", "/detail", "/message"]
+        .iter()
+        .find_map(|pointer| body.pointer(pointer).and_then(Value::as_str))?;
+    let clean = if key.is_empty() {
+        message.to_owned()
+    } else {
+        message.replace(key, "[key]")
+    };
+    let clean: String = clean.trim().chars().take(REASON_LIMIT).collect();
+    (!clean.is_empty()).then_some(clean)
+}
+
+fn usual(voice: Voice) -> &'static str {
+    match voice {
+        Voice::Female => ELEVENLABS_FEMALE,
+        Voice::Male => ELEVENLABS_MALE,
+    }
+}
+
+fn id(entry: &Value) -> Option<&str> {
+    entry.get("voice_id").and_then(Value::as_str)
+}
+
+fn chosen(listed: &Value, voice: Voice) -> Option<String> {
+    let voices = listed.get("voices")?.as_array()?;
+    let premade = |entry: &&Value| entry.get("category").and_then(Value::as_str) == Some("premade");
+    let gender = match voice {
+        Voice::Female => "female",
+        Voice::Male => "male",
+    };
+    let gendered =
+        |entry: &&Value| entry.pointer("/labels/gender").and_then(Value::as_str) == Some(gender);
+    voices
+        .iter()
+        .find(|entry| id(entry) == Some(usual(voice)))
+        .or_else(|| voices.iter().filter(premade).find(gendered))
+        .or_else(|| voices.iter().find(premade))
+        .or_else(|| voices.first())
+        .and_then(id)
+        .map(str::to_owned)
 }
 
 impl Speaker {
-    fn request(&self, text: &str) -> (reqwest::RequestBuilder, u32) {
+    async fn voice_id(&self) -> &str {
+        self.voice_id
+            .get_or_init(|| async {
+                match self.listed().await {
+                    Ok(Some(id)) => id,
+                    Ok(None) => usual(self.voice).to_owned(),
+                    Err(error) => {
+                        tracing::warn!(%error, "elevenlabs voices could not be listed; using the usual voice");
+                        usual(self.voice).to_owned()
+                    }
+                }
+            })
+            .await
+    }
+
+    async fn listed(&self) -> Result<Option<String>, SpeechError> {
+        let response = self
+            .client
+            .get(format!("{}/v1/voices", self.origin))
+            .header("xi-api-key", &self.key)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(refused(response, &self.key).await);
+        }
+        Ok(chosen(&response.json::<Value>().await?, self.voice))
+    }
+
+    fn request(&self, text: &str, voice: &str) -> (reqwest::RequestBuilder, u32) {
         match self.provider {
             Provider::Elevenlabs => {
-                let voice = match self.voice {
-                    Voice::Female => "21m00Tcm4TlvDq8ikWAM",
-                    Voice::Male => "pNInz6obpgDQGcFmaJgB",
-                };
                 let url = format!(
                     "{}/v1/text-to-speech/{voice}/stream?output_format=pcm_16000",
                     self.origin
@@ -195,10 +278,14 @@ impl Speaker {
         text: &str,
         sink: &mut dyn FnMut(Audio) -> bool,
     ) -> Result<(), SpeechError> {
-        let (request, rate) = self.request(text);
+        let voice = match self.provider {
+            Provider::Elevenlabs => self.voice_id().await,
+            _ => "",
+        };
+        let (request, rate) = self.request(text, voice);
         let response = request.send().await?;
         if !response.status().is_success() {
-            return Err(SpeechError::Refused(response.status().as_u16()));
+            return Err(refused(response, &self.key).await);
         }
         let mut body = response.bytes_stream();
         let mut pcm = Vec::new();
@@ -228,7 +315,7 @@ mod tests {
         Json, Router,
         body::Bytes,
         http::{HeaderMap, StatusCode, Uri},
-        routing::post,
+        routing::{get, post},
     };
     use std::sync::{Arc, Mutex};
 
@@ -258,19 +345,27 @@ mod tests {
     async fn provider(status: StatusCode) -> (Endpoints, Log) {
         let log = Log::default();
         let (stt, tts) = (log.clone(), log.clone());
-        let app = Router::new().fallback(post(move |uri: Uri, headers: HeaderMap, body: Bytes| {
-            let (stt, tts) = (stt.clone(), tts.clone());
-            async move {
-                if uri.path().ends_with("transcriptions") || uri.path().ends_with("speech-to-text")
-                {
-                    record(&stt, &uri, &headers, &body);
-                    return (status, Json(serde_json::json!({"text": " hello there "})))
-                        .into_response();
+        let voices = serde_json::json!({"voices": [
+            {"voice_id": "cloned", "category": "cloned", "labels": {"gender": "female"}},
+            {"voice_id": "premade-male", "category": "premade", "labels": {"gender": "male"}},
+            {"voice_id": "premade-female", "category": "premade", "labels": {"gender": "female"}},
+        ]});
+        let app = Router::new()
+            .route("/v1/voices", get(move || async move { Json(voices) }))
+            .fallback(post(move |uri: Uri, headers: HeaderMap, body: Bytes| {
+                let (stt, tts) = (stt.clone(), tts.clone());
+                async move {
+                    if uri.path().ends_with("transcriptions")
+                        || uri.path().ends_with("speech-to-text")
+                    {
+                        record(&stt, &uri, &headers, &body);
+                        return (status, Json(serde_json::json!({"text": " hello there "})))
+                            .into_response();
+                    }
+                    record(&tts, &uri, &headers, &body);
+                    (status, vec![1u8, 0, 2]).into_response()
                 }
-                record(&tts, &uri, &headers, &body);
-                (status, vec![1u8, 0, 2]).into_response()
-            }
-        }));
+            }));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("http://{}", listener.local_addr().unwrap());
         tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
@@ -377,7 +472,7 @@ mod tests {
         speaks(
             Provider::Elevenlabs,
             Voice::Female,
-            "/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM/stream?output_format=pcm_16000",
+            "/v1/text-to-speech/premade-female/stream?output_format=pcm_16000",
             "k",
             &[ELEVENLABS_TTS],
             SAMPLE_RATE,
@@ -392,6 +487,54 @@ mod tests {
         let refused = tokio::task::spawn_blocking(move || tts.speak("Hi.", &mut |_| true))
             .await
             .unwrap();
-        assert!(matches!(refused, Err(SpeechError::Refused(401))));
+        assert!(matches!(refused, Err(SpeechError::Refused(401, _))));
+    }
+
+    #[test]
+    fn a_refusal_explains_itself_without_the_key() {
+        let body = serde_json::json!({"detail": {"status": "payment_required", "message": "Key sk_secret has no credits left."}});
+        assert_eq!(
+            explained(&body, "sk_secret").as_deref(),
+            Some("Key [key] has no credits left.")
+        );
+        let openai = serde_json::json!({"error": {"message": "Quota exceeded."}});
+        assert_eq!(explained(&openai, "k").as_deref(), Some("Quota exceeded."));
+        assert_eq!(
+            explained(&serde_json::json!({"detail": {"status": "x"}}), "k"),
+            None
+        );
+        let long = serde_json::json!({"detail": "x".repeat(1000)});
+        assert_eq!(
+            explained(&long, "k").map(|text| text.len()),
+            Some(REASON_LIMIT)
+        );
+    }
+
+    #[test]
+    fn the_voice_is_one_the_account_has() {
+        let listed = |voices: serde_json::Value| serde_json::json!({ "voices": voices });
+        let usual = listed(serde_json::json!([
+            {"voice_id": "premade-female", "category": "premade", "labels": {"gender": "female"}},
+            {"voice_id": ELEVENLABS_FEMALE, "category": "premade", "labels": {"gender": "female"}},
+        ]));
+        assert_eq!(
+            chosen(&usual, Voice::Female).as_deref(),
+            Some(ELEVENLABS_FEMALE)
+        );
+        let newer = listed(serde_json::json!([
+            {"voice_id": "library", "category": "professional", "labels": {"gender": "male"}},
+            {"voice_id": "premade-female", "category": "premade", "labels": {"gender": "female"}},
+            {"voice_id": "premade-male", "category": "premade", "labels": {"gender": "male"}},
+        ]));
+        assert_eq!(chosen(&newer, Voice::Male).as_deref(), Some("premade-male"));
+        let unlabelled = listed(serde_json::json!([
+            {"voice_id": "library", "category": "professional"},
+            {"voice_id": "premade", "category": "premade"},
+        ]));
+        assert_eq!(
+            chosen(&unlabelled, Voice::Female).as_deref(),
+            Some("premade")
+        );
+        assert_eq!(chosen(&listed(serde_json::json!([])), Voice::Male), None);
     }
 }
