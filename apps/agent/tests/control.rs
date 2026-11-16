@@ -96,7 +96,10 @@ async fn relay(channel: Channel, mut socket: WebSocket) {
         tokio::select! {
             incoming = socket.recv() => match incoming {
                 Some(Ok(Message::Text(text))) => {
-                    channel.reports.send(serde_json::from_str(&text).unwrap()).unwrap();
+                    let report: Value = serde_json::from_str(&text).unwrap();
+                    if report["type"] != "vitals" {
+                        channel.reports.send(report).unwrap();
+                    }
                 }
                 _ => return,
             },
