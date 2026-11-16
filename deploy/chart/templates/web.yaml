@@ -26,10 +26,24 @@ spec:
         - name: web
           image: {{ include "cubebot.image" (list $ "web") }}
           securityContext: {{- include "cubebot.restricted" . | nindent 12 }}
-          {{- with .Values.web.frameAncestors }}
+          {{- $meetings := "" }}
+          {{- with .Values.meetings.publicOrigin }}
+          {{- if ne (lower (urlParse .).host) (lower (urlParse $.Values.publicOrigin).host) }}
+          {{- $meetings = . }}
+          {{- end }}
+          {{- end }}
+          {{- if or .Values.web.frameAncestors $meetings }}
           env:
+            {{- with .Values.web.frameAncestors }}
             - name: CUBEBOT_FRAME_ANCESTORS
               value: {{ . | quote }}
+            {{- end }}
+            {{- with $meetings }}
+            - name: CUBEBOT_MEETINGS_ORIGIN
+              value: {{ . | quote }}
+            - name: CUBEBOT_PUBLIC_ORIGIN
+              value: {{ $.Values.publicOrigin | quote }}
+            {{- end }}
           {{- end }}
           ports:
             - name: http

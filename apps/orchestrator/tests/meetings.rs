@@ -789,6 +789,53 @@ async fn guests_are_refused_when_the_link_is_off_the_meeting_locked_or_full() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_distinct_meetings_host_answers_only_the_public_meeting_routes() {
+    let w = world().await;
+    let (_, link) = meeting_with(&w, json!({"title": "Sync"})).await;
+    let token = link.rsplit('/').next().unwrap();
+    let router = cubebot_orchestrator::api::configured_router_with_credentials(
+        w.pool.clone(),
+        Some(CONSOLE.into()),
+        None,
+        Some(Credentials::new([7; 32])),
+    )
+    .await
+    .unwrap();
+    let router = cubebot_orchestrator::api::public_host(router, Some(CONSOLE), Some(ORIGIN));
+    let (origin, _task) = http_server(router).await;
+    let session = token_of(&w, "ana").await;
+    let http = openidconnect::reqwest::Client::new();
+    let get = |host: &str, path: &str| {
+        http.get(format!("{origin}{path}"))
+            .header("host", host)
+            .bearer_auth(&session)
+            .send()
+    };
+    let unknown = get(
+        "console.example.com",
+        &format!("/api/public/meetings/{}", "x".repeat(43)),
+    )
+    .await
+    .unwrap();
+    assert_eq!(unknown.status(), 404);
+    let unknown = unknown.text().await.unwrap();
+    for host in ["meet.example.com", "MEET.example.com:443"] {
+        let me = get(host, "/api/identity/me").await.unwrap();
+        assert_eq!(me.status(), 404, "{host}");
+        assert_eq!(me.text().await.unwrap(), unknown);
+        let found = get(host, &format!("/api/public/meetings/{token}"))
+            .await
+            .unwrap();
+        assert_eq!(found.status(), 200, "{host}");
+    }
+    let me = get("console.example.com", "/api/identity/me")
+        .await
+        .unwrap();
+    assert_eq!(me.status(), 200);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn the_public_lookup_answers_five_fields_or_the_same_404() {
     let w = world().await;
     let served = served(&w).await;
