@@ -8,8 +8,8 @@ const OPENAI_TTS: &str = "gpt-4o-mini-tts";
 const OPENAI_RATE: u32 = 24_000;
 const ELEVENLABS_STT: &str = "scribe_v1";
 const ELEVENLABS_TTS: &str = "eleven_flash_v2_5";
-const ELEVENLABS_FEMALE: &str = "21m00Tcm4TlvDq8ikWAM";
-const ELEVENLABS_MALE: &str = "pNInz6obpgDQGcFmaJgB";
+const ELEVENLABS_FEMALE: &str = "EXAVITQu4vr4xnSDxMaL";
+const ELEVENLABS_MALE: &str = "JBFqnCBsd6RMkjVDRZzb";
 const REASON_LIMIT: usize = 240;
 
 #[derive(Clone)]

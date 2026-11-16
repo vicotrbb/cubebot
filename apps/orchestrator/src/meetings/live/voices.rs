@@ -1,5 +1,6 @@
 use super::Handle;
 use super::attendants::Note;
+use super::wire::Server;
 use crate::speech::{Audio, Tts};
 use std::sync::{
     Arc,
@@ -21,6 +22,7 @@ enum Line {
 
 enum Sound {
     Audio(u64, Audio),
+    Failed(u64, String),
     End(Uuid),
 }
 
@@ -33,15 +35,22 @@ pub(super) struct Voice {
 }
 
 impl Voice {
-    pub(super) fn new(room: Handle, slot: u16, spoken: mpsc::UnboundedSender<Note>) -> Self {
+    pub(super) fn new(
+        room: Handle,
+        slot: u16,
+        name: String,
+        spoken: mpsc::UnboundedSender<Note>,
+    ) -> Self {
         let (lines, waiting) = mpsc::unbounded_channel();
         let (sounds, heard) = mpsc::channel(SOUNDS);
         let epoch = Arc::new(AtomicU64::new(0));
         let stage = Stage {
             room,
             slot,
+            name,
             epoch: epoch.clone(),
             clock: Instant::now(),
+            failed: None,
         };
         tokio::spawn(stage.pace(heard, spoken));
         Self {
@@ -89,6 +98,7 @@ fn speak(
                     });
                     if let Err(error) = spoken {
                         tracing::warn!(?error, "meeting speech failed");
+                        let _ = sounds.blocking_send(Sound::Failed(said_in, error.to_string()));
                     }
                 }
                 !sounds.is_closed()
@@ -104,8 +114,10 @@ fn speak(
 struct Stage {
     room: Handle,
     slot: u16,
+    name: String,
     epoch: Arc<AtomicU64>,
     clock: Instant,
+    failed: Option<u64>,
 }
 
 impl Stage {
@@ -117,6 +129,7 @@ impl Stage {
         while let Some(sound) = sounds.recv().await {
             match sound {
                 Sound::Audio(said_in, audio) => self.play(said_in, &audio).await,
+                Sound::Failed(said_in, reason) => self.failed(said_in, reason).await,
                 Sound::End(turn) => {
                     tokio::time::sleep_until(self.clock).await;
                     if spoken.send(Note::Spoken(turn)).is_err() {
@@ -125,6 +138,15 @@ impl Stage {
                 }
             }
         }
+    }
+
+    async fn failed(&mut self, said_in: u64, reason: String) {
+        if self.failed == Some(said_in) {
+            return;
+        }
+        self.failed = Some(said_in);
+        let text = format!("{} could not speak: {reason}", self.name);
+        self.room.announce(Server::Notice { text }, None).await;
     }
 
     fn current(&mut self, said_in: u64) -> bool {
@@ -192,8 +214,10 @@ mod tests {
         let stage = Stage {
             room: Handle { commands, invited },
             slot: 3,
+            name: "Cara".to_owned(),
             epoch: Arc::new(AtomicU64::new(epoch)),
             clock: Instant::now(),
+            failed: None,
         };
         (stage, sent)
     }
@@ -219,6 +243,33 @@ mod tests {
             ahead += PIECE;
         }
         assert_eq!(ahead, Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn a_voice_that_fails_tells_the_room_once_per_reply() {
+        let (mut stage, mut sent) = stage(0);
+        tokio::spawn(async move {
+            stage.failed(0, "refused".to_owned()).await;
+            stage.failed(0, "refused".to_owned()).await;
+            stage.failed(1, "refused again".to_owned()).await;
+        });
+        let mut notices = Vec::new();
+        while let Some(command) = sent.recv().await {
+            if let Command::Announce {
+                message: Server::Notice { text },
+                to: None,
+            } = command
+            {
+                notices.push(text);
+            }
+        }
+        assert_eq!(
+            notices,
+            [
+                "Cara could not speak: refused",
+                "Cara could not speak: refused again"
+            ]
+        );
     }
 
     #[tokio::test(start_paused = true)]

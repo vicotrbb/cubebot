@@ -31,7 +31,7 @@ const CONTEXT: usize = 40;
 const RECENT: usize = 12;
 const LINE_BYTES: usize = 300;
 const ASKED_BYTES: usize = 2000;
-const CHOICE_TOKENS: u64 = 64;
+const CHOICE_TOKENS: u64 = 512;
 const STALL: Duration = Duration::from_secs(120);
 const NOT_HEARD: &str = "Speech recognition failed for your last sentence.";
 
@@ -437,7 +437,12 @@ impl Attendants {
             return;
         };
         self.floor.seat(agent.id, &agent.name, &agent.about);
-        let voice = Voice::new(self.room.clone(), slot, self.notes.clone());
+        let voice = Voice::new(
+            self.room.clone(),
+            slot,
+            agent.name.clone(),
+            self.notes.clone(),
+        );
         self.load_voice(agent.id);
         let present = Present {
             slot,

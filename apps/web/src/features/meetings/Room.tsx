@@ -456,6 +456,22 @@ function Bar(controls: Controls) {
   )
 }
 
+const NOTICE_FOR = 8000
+
+function RoomNotice({ text }: { text: string }) {
+  const [hidden, setHidden] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setHidden(true), NOTICE_FOR)
+    return () => clearTimeout(timer)
+  }, [])
+  if (hidden || !text) return null
+  return (
+    <p className="meeting-notice" role="status">
+      {text}
+    </p>
+  )
+}
+
 function Knock({
   room,
   engine,
@@ -683,6 +699,7 @@ export function MeetingRoom({
         )}
         {captions && <CaptionBand room={room} />}
         <Knock room={room} engine={current} onOpen={() => setPanel('people')} />
+        <RoomNotice key={room.notice} text={room.notice} />
       </main>
       {panel && (
         <Panel
