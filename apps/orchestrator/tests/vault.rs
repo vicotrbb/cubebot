@@ -416,3 +416,33 @@ async fn an_import_seals_new_logins_once_and_refuses_a_file_with_an_invalid_one(
     );
     f.task.abort();
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_import_names_two_accounts_on_one_site_apart() {
+    use cubebot_orchestrator::connections::{Connections, ImportVault, ImportedLogin};
+    let f = fixture().await;
+    let (_, _, admin, _) = native_chat_setup(&f, "unused").await;
+    let vault = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let login = |username: &str| ImportedLogin {
+        name: "google.com".into(),
+        site: "https://accounts.google.com".into(),
+        username: username.into(),
+        secret: PASSWORD.into(),
+    };
+    let file = ImportVault {
+        access: None,
+        logins: vec![login("work"), login("home")],
+    };
+    let done = vault.import_vault_items(admin.id, &file).await.unwrap();
+    assert_eq!((done.imported, done.skipped), (2, 0));
+    let names: Vec<_> = vault
+        .installation_vault()
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|item| item.name)
+        .collect();
+    assert_eq!(names, ["google.com", "google.com (home)"]);
+    f.task.abort();
+}

@@ -4,6 +4,7 @@ pub use docker::{Docker, DockerConfig};
 
 use super::AgentId;
 use crate::agents::kubernetes::Error;
+use cubebot_protocol::runtime::Vitals;
 use serde::Deserialize;
 use sqlx::PgPool;
 use std::{
@@ -104,6 +105,14 @@ type Opening = Pin<Box<dyn Future<Output = Result<ExecChannel, Error>> + Send>>;
 pub struct Desktop {
     open: Arc<dyn Fn(AgentId) -> Opening + Send + Sync>,
     viewers: Arc<Mutex<HashMap<AgentId, usize>>>,
+    vitals: Arc<Mutex<HashMap<AgentId, (std::time::Instant, Vitals)>>>,
+}
+
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct Reading {
+    pub seconds_ago: u64,
+    #[serde(flatten)]
+    pub vitals: Vitals,
 }
 
 impl Desktop {
@@ -115,7 +124,28 @@ impl Desktop {
                 Box::pin(async move { sandbox.exec_channel(agent, &command).await })
             }),
             viewers: Arc::default(),
+            vitals: Arc::default(),
         }
+    }
+
+    pub fn record(&self, agent: AgentId, vitals: Vitals) {
+        let mut readings = self
+            .vitals
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        readings.insert(agent, (std::time::Instant::now(), vitals));
+    }
+
+    pub fn reading(&self, agent: AgentId) -> Option<Reading> {
+        let readings = self
+            .vitals
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (at, vitals) = readings.get(&agent)?.clone();
+        Some(Reading {
+            seconds_ago: at.elapsed().as_secs(),
+            vitals,
+        })
     }
 
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]

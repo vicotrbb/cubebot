@@ -1570,6 +1570,38 @@
         }
       }
     },
+    "/api/agents/{id}/vitals": {
+      "get": {
+        "tags": [],
+        "operationId": "vitals",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reading"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/wallpaper": {
       "get": {
         "tags": [],
@@ -11064,6 +11096,24 @@
         },
         "additionalProperties": false
       },
+      "Reading": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Vitals"
+          },
+          {
+            "type": "object",
+            "required": ["seconds_ago"],
+            "properties": {
+              "seconds_ago": {
+                "type": "integer",
+                "format": "int64",
+                "minimum": 0
+              }
+            }
+          }
+        ]
+      },
       "Receipt": {
         "type": "object",
         "required": ["id", "revision"],
@@ -13092,6 +13142,23 @@
         "type": "string",
         "enum": ["system", "light", "dark"]
       },
+      "Throughput": {
+        "type": "object",
+        "required": ["received", "sent"],
+        "properties": {
+          "received": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "sent": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "Token": {
         "type": "object",
         "required": ["token"],
@@ -13528,6 +13595,23 @@
         },
         "additionalProperties": false
       },
+      "Usage": {
+        "type": "object",
+        "required": ["used", "total"],
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "used": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "Utterance": {
         "type": "object",
         "required": ["sequence", "kind", "speaker", "text", "at"],
@@ -13604,6 +13688,52 @@
             "type": ["string", "null"]
           }
         }
+      },
+      "Vitals": {
+        "type": "object",
+        "required": ["cpus"],
+        "properties": {
+          "cpu_percent": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
+          "cpus": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "disk": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Usage"
+              }
+            ]
+          },
+          "memory": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Usage"
+              }
+            ]
+          },
+          "network": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Throughput"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
       },
       "Voice": {
         "type": "string",

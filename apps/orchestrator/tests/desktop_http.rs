@@ -309,3 +309,62 @@ async fn a_person_watches_takes_control_and_hands_back_with_each_change_recorded
     }
     panic!("the closed desktop session was not ended");
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_running_agent_reports_its_computer_vitals_to_the_console() {
+    use crate::runtime_identity::{native_chat_setup, spawn_native_text};
+    let f = crate::runtime_support::fixture().await;
+    let (auth, _, _, agent) = native_chat_setup(&f, "Hello").await;
+    let desktop = Desktop::new(Arc::new(StandIn), &Runtime::Container { class: None });
+    let console = cubebot_orchestrator::api::configured_router_with_credentials(
+        f.pool.clone(),
+        None,
+        None,
+        None,
+    )
+    .await
+    .unwrap()
+    .layer(axum::Extension(desktop.clone()));
+    let (console, console_task) = http_server(console).await;
+    let token = Identity::new(f.pool.clone())
+        .login("admin", "administrator password")
+        .await
+        .unwrap()
+        .token;
+    let http = openidconnect::reqwest::Client::new();
+    let url = format!("{console}/api/agents/{agent}/vitals");
+    let read = || http.get(&url).bearer_auth(&token).send();
+    assert_eq!(http.get(&url).send().await.unwrap().status(), 401);
+    assert_eq!(read().await.unwrap().status(), 204, "no sample yet");
+
+    let (provider, provider_task) = http_server(axum::Router::new()).await;
+    let runtime = cubebot_orchestrator::api::runtime_router(auth).layer(axum::Extension(desktop));
+    let (origin, server) = http_server(runtime).await;
+    let child = spawn_native_text(&origin, &provider);
+    let mut reading = Value::Null;
+    for _ in 0..100 {
+        let response = read().await.unwrap();
+        if response.status() == 200 {
+            reading = response.json().await.unwrap();
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert!(
+        reading["cpus"].as_u64().is_some_and(|cpus| cpus >= 1),
+        "{reading}"
+    );
+    assert!(
+        reading["seconds_ago"].as_u64().is_some_and(|age| age < 5),
+        "{reading}"
+    );
+    let disk = &reading["disk"];
+    assert!(disk["total"].as_u64() >= disk["used"].as_u64() && disk["total"].as_u64() > Some(0));
+
+    drop(child);
+    server.abort();
+    provider_task.abort();
+    console_task.abort();
+    f.task.abort();
+}

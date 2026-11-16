@@ -59,6 +59,7 @@ async fn shutdown(terminate: &mut Signal) {
 
 /// The switchboard closes a channel silent this long.
 const SILENCE: Duration = Duration::from_secs(15);
+const VITALS: Duration = Duration::from_secs(3);
 
 enum Next {
     Exit,
@@ -87,6 +88,8 @@ struct Agent {
     /// Any workspace a restore left for this agent is back.
     restored: bool,
     backup: Option<tokio::task::JoinHandle<()>>,
+    vitals: crate::vitals::Sampler,
+    workspace: std::path::PathBuf,
 }
 
 impl Agent {
@@ -121,6 +124,9 @@ impl Agent {
             wallpaper: None,
             restored: false,
             backup: None,
+            vitals: crate::vitals::Sampler::default(),
+            workspace: std::env::var_os("CUBEBOT_WORKSPACE_DIRECTORY")
+                .map_or_else(|| "/".into(), Into::into),
         })
     }
 
@@ -150,6 +156,7 @@ impl Agent {
         }
         self.idle(&mut channel).await?;
         let mut heard = Instant::now();
+        let mut vitals = tokio::time::interval(VITALS);
         loop {
             let dream_at = self.dream_at;
             tokio::select! {
@@ -168,6 +175,10 @@ impl Agent {
                 }
                 Some(event) = self.events.recv() => self.forward(&mut channel, event).await?,
                 _ = until(dream_at) => self.dream(),
+                _ = vitals.tick() => {
+                    let sample = self.vitals.sample(&self.workspace);
+                    send(&mut channel, &Report::Vitals(sample)).await?;
+                }
                 // The switchboard pings every few seconds, so silence means a dead connection.
                 _ = tokio::time::sleep_until(heard + SILENCE) => return Ok(Next::Reconnect),
             }

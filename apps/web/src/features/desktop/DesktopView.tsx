@@ -1,7 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { ChevronLeft, Hand, Pause, Play, Power, Undo2 } from 'lucide-react'
-import { useRef, useState, type ReactNode } from 'react'
+import {
+  Activity,
+  ChevronLeft,
+  Hand,
+  Pause,
+  Play,
+  Power,
+  Undo2,
+} from 'lucide-react'
+import { useRef, useState, type ReactNode, type RefObject } from 'react'
 import { admin } from '../../api/admin'
 import { failure } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
@@ -10,6 +18,7 @@ import { Cube, moodOf } from '../../components/Cube'
 import { Alert } from '../../components/primitives'
 import { useIsPhone } from '../shell/viewport'
 import { FillPicker } from '../vault/FillPicker'
+import { VitalsOverlay } from '../vitals/Vitals'
 import { LoginBanner } from './LoginBanner'
 import {
   HEIGHT,
@@ -35,6 +44,7 @@ export function DesktopView({
   canManage: boolean
 }) {
   const [watching, setWatching] = useState(true)
+  const [vitals, setVitals] = useState(remembered)
   const phone = useIsPhone()
   const canvas = useRef<HTMLCanvasElement>(null)
   const running = agent.desired_state === 'running'
@@ -66,6 +76,8 @@ export function DesktopView({
           onWatch={() => setWatching(!watching)}
           onTake={takeControl}
           onHandBack={desk.handBack}
+          vitals={vitals}
+          onVitals={() => setVitals(remember(!vitals))}
         />
       </Head>
       <div className="desktop-notices">
@@ -79,16 +91,8 @@ export function DesktopView({
         <Alert>{desk.error}</Alert>
       </div>
       <div className="desktop-stage">
-        <div className="desktop-screen">
-          <canvas
-            ref={canvas}
-            width={WIDTH}
-            height={HEIGHT}
-            tabIndex={desk.holding ? 0 : -1}
-            role="img"
-            aria-label={`Agent desktop${desk.holding ? '. You have control: mouse and keyboard go to the agent.' : ''}`}
-            className={desk.holding ? 'controlling' : undefined}
-          />
+        <Screen canvas={canvas} holding={desk.holding}>
+          {vitals && <VitalsOverlay agent={agent} />}
           {watching && (
             <Overlay
               agent={agent}
@@ -98,7 +102,7 @@ export function DesktopView({
               canManage={canManage}
             />
           )}
-        </div>
+        </Screen>
       </div>
       <footer className="desktop-foot">
         {watching && desk.live && (
@@ -107,6 +111,31 @@ export function DesktopView({
         {phone && canControl && <PhoneNote />}
       </footer>
     </section>
+  )
+}
+
+function Screen({
+  canvas,
+  holding,
+  children,
+}: {
+  canvas: RefObject<HTMLCanvasElement | null>
+  holding: boolean
+  children: ReactNode
+}) {
+  return (
+    <div className="desktop-screen">
+      <canvas
+        ref={canvas}
+        width={WIDTH}
+        height={HEIGHT}
+        tabIndex={holding ? 0 : -1}
+        role="img"
+        aria-label={`Agent desktop${holding ? '. You have control: mouse and keyboard go to the agent.' : ''}`}
+        className={holding ? 'controlling' : undefined}
+      />
+      {children}
+    </div>
   )
 }
 
@@ -195,6 +224,8 @@ function Controls({
   onWatch,
   onTake,
   onHandBack,
+  vitals,
+  onVitals,
 }: {
   watching: boolean
   mode: Mode | null
@@ -203,9 +234,30 @@ function Controls({
   onWatch: () => void
   onTake: () => void
   onHandBack: () => void
+  vitals: boolean
+  onVitals: () => void
 }) {
   return (
     <div className="agent-head__actions">
+      <button
+        type="button"
+        className={
+          vitals
+            ? 'btn btn--sm desktop-vitals-toggle on'
+            : 'btn btn--sm btn--ghost desktop-vitals-toggle'
+        }
+        aria-pressed={vitals}
+        aria-label="Vitals overlay"
+        title={
+          vitals
+            ? 'Hide CPU, memory, storage and network'
+            : 'Show CPU, memory, storage and network'
+        }
+        onClick={onVitals}
+      >
+        <Activity />
+        <span className="agent-head__word">Vitals</span>
+      </button>
       <button
         type="button"
         className={holding ? 'btn btn--ghost btn--sm' : 'btn btn--sm'}
@@ -360,4 +412,23 @@ function PointerMark({
       {labels[source]}
     </span>
   )
+}
+
+const VITALS_KEY = 'cubebot:desktop-vitals'
+
+function remembered() {
+  try {
+    return localStorage.getItem(VITALS_KEY) === 'on'
+  } catch {
+    return false
+  }
+}
+
+function remember(on: boolean) {
+  try {
+    localStorage.setItem(VITALS_KEY, on ? 'on' : 'off')
+  } catch {
+    return on
+  }
+  return on
 }

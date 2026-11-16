@@ -410,3 +410,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.desktop-vitals-toggle.on svg {
+  color: var(--success);
+}

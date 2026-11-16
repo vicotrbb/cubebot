@@ -11,9 +11,9 @@ use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// shortcut: a run sees the 50 most recently changed memories, which bounds its prompt; page
+/// shortcut: a run sees the 120 most recently changed memories, which bounds its prompt; page
 /// through older memories once agents hold more than a run can consolidate.
-const DREAM_MEMORIES: i64 = 50;
+const DREAM_MEMORIES: i64 = 120;
 const DREAM_TURNS: i64 = 20;
 const DREAM_NEW_TURNS: i64 = 5;
 const LISTED_RUNS: i64 = 50;

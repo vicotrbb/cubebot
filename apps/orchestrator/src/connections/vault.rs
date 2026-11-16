@@ -117,6 +117,25 @@ fn stored(kind: VaultKind) -> &'static str {
     }
 }
 
+fn unique_name(taken: &mut HashSet<String>, name: &str, username: &str) -> String {
+    let named = (username.len() <= 128).then(|| format!(" ({username})"));
+    [Some(String::new()), named]
+        .into_iter()
+        .flatten()
+        .chain((2..).map(|n| format!(" {n}")))
+        .map(|suffix| format!("{}{suffix}", clip(name, 255 - suffix.len())))
+        .find(|candidate| taken.insert(candidate.clone()))
+        .unwrap_or_default()
+}
+
+fn clip(text: &str, most: usize) -> &str {
+    let mut end = most.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 fn host(site: &str) -> String {
     let site = site.trim().to_ascii_lowercase();
     let site = site
@@ -348,11 +367,18 @@ impl Connections {
         .into_iter()
         .map(|row| (host(&row.site), row.username))
         .collect();
+        let mut names: HashSet<String> =
+            sqlx::query_scalar!("SELECT name FROM vault_items WHERE agent_id IS NULL")
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .collect();
         let mut imported = 0;
         for login in &input.logins {
             if !saved.insert((host(&login.site), login.username.clone())) {
                 continue;
             }
+            let name = unique_name(&mut names, &login.name, &login.username);
             let id = Uuid::new_v4();
             let ciphertext = self.seal(&mut *tx, id, &login.secret).await?;
             sqlx::query!(
@@ -361,7 +387,7 @@ impl Connections {
                 VALUES ($1, 'login', $2, $3, $4, $5, $6, $7)
                 "#,
                 id,
-                login.name,
+                name,
                 login.site,
                 login.username,
                 ciphertext,
@@ -577,6 +603,18 @@ impl Connections {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_imported_name_already_taken_gains_its_username_then_a_counter() {
+        let mut taken = HashSet::from(["github.com".to_owned()]);
+        let mut name = |name: &str, username: &str| unique_name(&mut taken, name, username);
+        assert_eq!(name("github.com", "octocat"), "github.com (octocat)");
+        assert_eq!(name("github.com", "octocat"), "github.com 2");
+        assert_eq!(name("example.com", "me"), "example.com");
+        let (long, user) = ("é".repeat(200), "u".repeat(200));
+        assert_eq!(name(&long, &user), "é".repeat(127));
+        assert_eq!(name(&long, &user), format!("{} 2", "é".repeat(126)));
+    }
 
     #[test]
     fn a_login_serves_its_site_and_subdomains_only() {

@@ -4,6 +4,7 @@ import { admin, type AgentStatus } from '../../api/admin'
 import type { AgentSummary } from '../../api/types'
 import { keys } from '../../app/queries'
 import { Alert, Skeleton, when } from '../../components/primitives'
+import { VitalsSection } from '../vitals/Vitals'
 import { Lifecycle } from './About'
 
 export function StatusTab({ agent }: { agent: AgentSummary }) {
@@ -31,6 +32,7 @@ export function StatusTab({ agent }: { agent: AgentSummary }) {
         {status.isError && <Alert>The status could not be loaded.</Alert>}
         {status.data && <Rows s={status.data} activity={agent.activity} />}
       </section>
+      <VitalsSection agent={agent} />
       <Lifecycle
         agent={agent}
         onChanged={async () => {

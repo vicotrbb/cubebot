@@ -24,6 +24,7 @@ struct Channel {
     wallpaper: Option<i64>,
     /// The backup this connection last asked for the workspace.
     backup: Option<String>,
+    vitals: Option<(crate::agents::AgentId, crate::agents::sandbox::Desktop)>,
 }
 
 impl Channel {
@@ -41,8 +42,16 @@ impl Channel {
 
 impl RuntimeIdentity {
     #[tracing::instrument(skip_all)]
-    pub async fn serve(self, token: String, mut socket: WebSocket) {
-        let mut channel = Channel::default();
+    pub async fn serve(
+        self,
+        token: String,
+        mut socket: WebSocket,
+        vitals: Option<(crate::agents::AgentId, crate::agents::sandbox::Desktop)>,
+    ) {
+        let mut channel = Channel {
+            vitals,
+            ..Channel::default()
+        };
         // shortcut: each connection polls the ledger every second; use LISTEN/NOTIFY if
         // measured delivery latency or database load requires it.
         let mut tick = tokio::time::interval(Duration::from_secs(1));
@@ -97,6 +106,12 @@ impl RuntimeIdentity {
                     .await?;
                 channel.observe(turn, live, &event);
                 Ok(vec![Delivery::Ack { turn, sequence }])
+            }
+            Report::Vitals(vitals) => {
+                if let Some((agent, desktop)) = &channel.vitals {
+                    desktop.record(*agent, vitals);
+                }
+                Ok(Vec::new())
             }
             Report::Drained { request_id } => {
                 self.acknowledge_drain(token, request_id).await?;
