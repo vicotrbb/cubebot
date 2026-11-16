@@ -3,7 +3,7 @@ use crate::{
     agents::{kubernetes::Error, runtime::RuntimeActor},
     connections::Connections,
 };
-use cubebot_protocol::runtime::{EVENT_BYTES, Exchange, Turn, TurnEvent};
+use cubebot_protocol::runtime::{EVENT_BYTES, Effort, Exchange, ProviderKind, Turn, TurnEvent};
 use uuid::Uuid;
 
 const BUDGET_EXHAUSTED: &str = "budget_exhausted";
@@ -97,6 +97,7 @@ impl Work {
         let isolated = task || talk_only;
         let (summary, history, message) =
             context(tx, actor, isolated, room, in_task, message).await?;
+        let message = dated(tx, turn, talk_only, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let connections = connections.filter(|_| !talk_only);
         let mcp_servers = mcp_servers(tx, connections, actor).await;
@@ -112,7 +113,11 @@ impl Work {
             api_key: inference.api_key,
             api_key_expires_at: inference.api_key_expires_at,
             context_window: inference.context_window,
-            effort: inference.effort,
+            effort: spoken_effort(
+                inference.provider,
+                inference.effort,
+                (on_call, meeting.is_some()),
+            ),
             summary,
             history,
             prior,
@@ -214,6 +219,44 @@ impl Work {
         crate::knowledge::recover_dreams(&self.pool).await?;
         Ok(())
     }
+}
+
+async fn dated(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    talk_only: bool,
+    message: String,
+) -> Result<String, Error> {
+    if talk_only {
+        return Ok(message);
+    }
+    let stamp = sqlx::query_scalar!(
+        r#"
+        SELECT E'\n\n(Sent ' || to_char(t.created_at AT TIME ZONE z.name, 'Dy YYYY-MM-DD HH24:MI') || ', their local time.)' AS "stamp!"
+        FROM chat_turns t
+        JOIN human_accounts a ON a.id=t.actor_id
+        JOIN pg_timezone_names z ON z.name=a.profile->>'time_zone'
+        WHERE t.id=$1
+        "#,
+        turn,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(message + stamp.as_deref().unwrap_or_default())
+}
+
+fn spoken_effort(
+    provider: ProviderKind,
+    effort: Option<Effort>,
+    (on_call, in_meeting): (bool, bool),
+) -> Option<Effort> {
+    if !(on_call || in_meeting)
+        || effort == Some(Effort::Minimal)
+        || !provider.efforts().contains(&Effort::Low)
+    {
+        return effort;
+    }
+    Some(Effort::Low)
 }
 
 async fn instructed(
@@ -685,10 +728,15 @@ async fn history(
     let history = sqlx::query_as!(
         Exchange,
         r#"
-        SELECT message, response AS "response!"
-        FROM chat_turns
-        WHERE conversation_id=$1 AND room_message_id IS NULL AND status='complete' AND sequence>=$2
-        ORDER BY sequence
+        SELECT t.message || CASE WHEN t.talk_only THEN '' ELSE COALESCE(
+                E'\n\n(Sent ' || to_char(t.created_at AT TIME ZONE z.name, 'Dy YYYY-MM-DD HH24:MI') || ', their local time.)',
+                '') END AS "message!",
+            t.response AS "response!"
+        FROM chat_turns t
+        LEFT JOIN human_accounts a ON a.id=t.actor_id
+        LEFT JOIN pg_timezone_names z ON z.name=a.profile->>'time_zone'
+        WHERE t.conversation_id=$1 AND t.room_message_id IS NULL AND t.status='complete' AND t.sequence>=$2
+        ORDER BY t.sequence
         "#,
         actor.agent.0,
         from,
@@ -728,4 +776,35 @@ async fn provider(
     actor: &RuntimeActor,
 ) -> Option<crate::connections::Inference> {
     connections?.inference(tx, actor.agent).await.ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Effort, ProviderKind, spoken_effort};
+
+    #[test]
+    fn a_spoken_turn_thinks_briefly_where_the_provider_allows_it() {
+        let high = Some(Effort::High);
+        assert_eq!(
+            spoken_effort(ProviderKind::Anthropic, high, (false, true)),
+            Some(Effort::Low)
+        );
+        assert_eq!(
+            spoken_effort(ProviderKind::Anthropic, None, (true, false)),
+            Some(Effort::Low)
+        );
+        assert_eq!(
+            spoken_effort(ProviderKind::Anthropic, high, (false, false)),
+            high
+        );
+        let minimal = Some(Effort::Minimal);
+        assert_eq!(
+            spoken_effort(ProviderKind::Openai, minimal, (true, true)),
+            minimal
+        );
+        assert_eq!(
+            spoken_effort(ProviderKind::Minimax, None, (false, true)),
+            None
+        );
+    }
 }

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT E'\\n\\n(Sent ' || to_char(t.created_at AT TIME ZONE z.name, 'Dy YYYY-MM-DD HH24:MI') || ', their local time.)' AS \"stamp!\"\n        FROM chat_turns t\n        JOIN human_accounts a ON a.id=t.actor_id\n        JOIN pg_timezone_names z ON z.name=a.profile->>'time_zone'\n        WHERE t.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stamp!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "24f7688a09d9ca31db5a594a9866ccb6a0153d7bd51f30c6caf2c31f5ebabd8c"
+}

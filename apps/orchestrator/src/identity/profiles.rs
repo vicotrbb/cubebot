@@ -45,7 +45,7 @@ impl Profile {
     }
 
     /// The profile as a few lines for an agent's instructions; `None` when nothing is given.
-    fn introduction(&self, login: &str, local_time: Option<&str>) -> String {
+    fn introduction(&self, login: &str) -> String {
         let name = if self.name.is_empty() {
             login
         } else {
@@ -61,7 +61,6 @@ impl Profile {
         add("Role", &self.role);
         add("Prefers replies in", &self.language);
         add("Time zone", &self.time_zone);
-        add("Their local time now", local_time.unwrap_or_default());
         if !self.about.trim().is_empty() {
             lines.push(format!(
                 "What they want you to know, in their words:\n{}",
@@ -160,10 +159,7 @@ pub async fn introduced(
 ) -> Result<String, sqlx::Error> {
     let row = sqlx::query!(
         r#"
-        SELECT a.login, a.profile AS "profile: sqlx::types::Json<Profile>",
-            CASE WHEN EXISTS(SELECT 1 FROM pg_timezone_names z WHERE z.name = a.profile->>'time_zone')
-                THEN to_char(clock_timestamp() AT TIME ZONE (a.profile->>'time_zone'), 'Dy YYYY-MM-DD HH24:MI')
-            END AS local_time
+        SELECT a.login, a.profile AS "profile: sqlx::types::Json<Profile>"
         FROM chat_turns t
         JOIN human_accounts a ON a.id = t.actor_id
         WHERE t.id = $1
@@ -175,9 +171,7 @@ pub async fn introduced(
     Ok(match row {
         Some(row) => format!(
             "{instructions}\n\n## Who you are working with\n\n{}",
-            row.profile
-                .0
-                .introduction(&row.login, row.local_time.as_deref())
+            row.profile.0.introduction(&row.login)
         ),
         None => instructions,
     })
@@ -189,7 +183,7 @@ mod tests {
 
     #[test]
     fn an_empty_profile_introduces_only_the_login() {
-        let text = Profile::default().introduction("maya", None);
+        let text = Profile::default().introduction("maya");
         assert_eq!(text, "This turn is for maya (@maya).");
     }
 
@@ -202,10 +196,10 @@ mod tests {
             about: "  Keep it short.  ".into(),
             ..Profile::default()
         };
-        let text = profile.introduction("maya", Some("Fri 2026-11-06 21:04"));
+        let text = profile.introduction("maya");
         assert!(text.starts_with("This turn is for Maya (@maya)."));
         assert!(text.contains("- Pronouns: she/her"));
-        assert!(text.contains("- Their local time now: Fri 2026-11-06 21:04"));
+        assert!(text.contains("- Time zone: Europe/Lisbon") && !text.contains("local time"));
         assert!(text.ends_with("in their words:\nKeep it short."));
         assert!(!text.contains("Role"));
     }

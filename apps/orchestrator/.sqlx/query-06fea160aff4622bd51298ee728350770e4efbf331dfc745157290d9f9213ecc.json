@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.login, a.profile AS \"profile: sqlx::types::Json<Profile>\"\n        FROM chat_turns t\n        JOIN human_accounts a ON a.id = t.actor_id\n        WHERE t.id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "profile: sqlx::types::Json<Profile>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "06fea160aff4622bd51298ee728350770e4efbf331dfc745157290d9f9213ecc"
+}

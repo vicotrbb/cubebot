@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_accounts SET profile=jsonb_build_object('time_zone', 'America/Sao_Paulo') WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "463b12d17729370dbf57a097c5d295324067245ff9f334a53ba13e70ceb638ce"
+}
