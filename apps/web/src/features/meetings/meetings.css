@@ -355,6 +355,22 @@
   color: #cfc3b6;
 }
 
+.meeting-notice {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  max-width: min(560px, calc(100% - 36px));
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow: var(--float);
+  color: var(--ink);
+  font-size: var(--t-sm);
+  animation: meeting-in 220ms var(--settle);
+}
 .meeting-knock {
   position: absolute;
   top: 6px;
