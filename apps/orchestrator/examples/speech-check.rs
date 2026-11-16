@@ -1,6 +1,6 @@
 use cubebot_orchestrator::speech::{
-    Audio, Heard, LESSAC, Listener, Models, Piper, RYAN, SAMPLE_RATE, SILERO, Silero, Tts,
-    ZIPFORMER, Zipformer, piper, recognizer,
+    Audio, Heard, KOKORO, Kokoro, LESSAC, Listener, Models, Piper, RYAN, SAMPLE_RATE, SILERO,
+    Silero, Stt, Tts, WHISPER, Whisper, ZIPFORMER, Zipformer, kokoro, piper, recognizer, whisper,
 };
 use sherpa_onnx::OnlineRecognizer;
 use std::{
@@ -12,6 +12,8 @@ use std::{
 const SENTENCE: &str = "The weather in Paris is lovely this morning.";
 // Not "weather": Piper varies between runs and Zipformer sometimes hears its homophone.
 const HEARD_BACK: [&str; 2] = ["PARIS", "MORNING"];
+const FRASE: &str = "Oi Victor! Tenho algumas coisas interessantes sobre os projetos desta semana.";
+const OUVIDO: [&str; 3] = ["VICTOR", "INTERESSANTES", "PROJETOS"];
 const RECORDED: [&str; 2] = [
     "AFTER EARLY NIGHTFALL THE YELLOW LAMPS",
     "QUARTER OF THE BROTHELS",
@@ -42,7 +44,7 @@ fn hear(
             match item {
                 Heard::Partial(_) => partials += 1,
                 Heard::Utterance(said) => text = format!("{text} {said}"),
-                Heard::Speech => {}
+                Heard::Speech | Heard::Quiet => {}
                 Heard::Failed(error) => panic!("{error}"),
             }
         }
@@ -66,11 +68,15 @@ fn resampled(samples: &[f32], rate: u32) -> Vec<f32> {
         .collect()
 }
 
-fn speak(name: &str, tts: &Piper) -> Vec<f32> {
+fn speak(name: &str, tts: &dyn Tts) -> Vec<f32> {
+    speak_line(name, tts, SENTENCE)
+}
+
+fn speak_line(name: &str, tts: &dyn Tts, line: &str) -> Vec<f32> {
     let began = Instant::now();
     let mut first = None;
     let (mut pcm, mut rate) = (Vec::new(), 0);
-    tts.speak(SENTENCE, &mut |audio: Audio| {
+    tts.speak(line, &mut |audio: Audio| {
         first.get_or_insert_with(|| began.elapsed());
         rate = audio.rate;
         pcm.extend(audio.pcm);
@@ -112,6 +118,39 @@ fn together(directory: &Path, recognizer: &Arc<OnlineRecognizer>, samples: &[f32
         }
     });
     println!("three calls at once heard and spoke correctly");
+}
+
+async fn portuguese(models: &Models, report: &(dyn Fn(&'static str, u64, u64) + Sync)) {
+    let whisper_dir = models
+        .ensure(&WHISPER, report)
+        .await
+        .expect("whisper downloads");
+    let kokoro_dir = models
+        .ensure(&KOKORO, report)
+        .await
+        .expect("kokoro downloads");
+    let loading = Instant::now();
+    let ears = whisper(&whisper_dir, "pt").expect("whisper loads");
+    let voices = kokoro(&kokoro_dir, "pt-br").expect("kokoro loads");
+    println!(
+        "Portuguese models loaded in {:.2} s, RSS {} MB",
+        loading.elapsed().as_secs_f64(),
+        rss_mb()
+    );
+    for (name, sid) in [("Portuguese female", 42), ("Portuguese male", 43)] {
+        let spoken = speak_line(name, &Kokoro(voices.clone(), sid), FRASE);
+        let mut stt = Whisper::new(ears.clone());
+        let began = Instant::now();
+        stt.accept(&spoken).expect("whisper accepts");
+        let back = stt.finish().expect("whisper hears").to_uppercase();
+        println!(
+            "{name} heard back in {:.2} s: {back}",
+            began.elapsed().as_secs_f64()
+        );
+        for word in OUVIDO {
+            assert!(back.contains(word), "expected {word:?} in {back:?}");
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -182,6 +221,7 @@ async fn main() {
         }
     }
     together(&silero, &recognizer, recording.samples(), &female);
+    portuguese(&models, &report).await;
     println!("RSS after everything: {} MB", rss_mb());
     println!("embedded speech passed");
 }

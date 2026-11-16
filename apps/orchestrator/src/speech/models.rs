@@ -43,6 +43,26 @@ pub const RYAN: Asset = Asset {
     keep: &[".onnx", "tokens.txt", "/espeak-ng-data/"],
 };
 
+pub const WHISPER: Asset = Asset {
+    name: "sherpa-onnx-whisper-small",
+    url: "asr-models/sherpa-onnx-whisper-small.tar.bz2",
+    sha256: "486a46afbb7ba798507190ffe02fea2dd726049af212e774537efac6afb210a6",
+    file: "small",
+    keep: &[".int8.onnx", "small-tokens.txt"],
+};
+pub const KOKORO: Asset = Asset {
+    name: "kokoro-multi-lang-v1_0",
+    url: "tts-models/kokoro-multi-lang-v1_0.tar.bz2",
+    sha256: "60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4",
+    file: "model.onnx",
+    keep: &[
+        "/model.onnx",
+        "/voices.bin",
+        "/tokens.txt",
+        "/espeak-ng-data/",
+    ],
+};
+
 pub struct Models {
     root: PathBuf,
     releases: String,

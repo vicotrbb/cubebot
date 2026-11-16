@@ -3823,6 +3823,11 @@ export interface components {
       url: string
     }
     /**
+     * @description The language people speak; only the embedded engines need to know it.
+     * @enum {string}
+     */
+    Language: 'english' | 'portuguese'
+    /**
      * @description A connection's permission level: the tools at or below it are offered. With no approval queue,
      *     this is the safety control (docs/adr/agents.md#autonomous-tool-use-within-granted-permissions).
      * @enum {string}
@@ -4727,6 +4732,7 @@ export interface components {
       elevenlabs_key?: string | null
       /** @description Removes the stored ElevenLabs key. */
       forget_elevenlabs_key?: boolean
+      language?: components['schemas']['Language']
       stt_provider: components['schemas']['Provider']
       tts_provider: components['schemas']['Provider']
       voice: components['schemas']['Voice']
@@ -4989,6 +4995,7 @@ export interface components {
     /** @description The installation's speech settings; the key itself is never returned. */
     SpeechSettings: {
       elevenlabs_configured: boolean
+      language: components['schemas']['Language']
       stt_provider: components['schemas']['Provider']
       tts_provider: components['schemas']['Provider']
       voice: components['schemas']['Voice']

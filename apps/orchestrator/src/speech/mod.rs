@@ -6,8 +6,8 @@ mod pipeline;
 mod session;
 pub(crate) mod settings;
 
-pub use embedded::{Piper, Silero, Zipformer, piper, recognizer};
-pub use models::{Asset, LESSAC, Models, RYAN, SILERO, ZIPFORMER};
+pub use embedded::{Kokoro, Piper, Silero, Whisper, Zipformer, kokoro, piper, recognizer, whisper};
+pub use models::{Asset, KOKORO, LESSAC, Models, RYAN, SILERO, WHISPER, ZIPFORMER};
 pub use pipeline::{Activity, Heard, Listener, Sentences, Vad};
 pub(crate) use pipeline::{listen, samples};
 pub use session::Session;
@@ -55,6 +55,27 @@ impl Voice {
         match self {
             Self::Male => "male",
             Self::Female => "female",
+        }
+    }
+}
+
+/// The language people speak; only the embedded engines need to know it.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, utoipa::ToSchema,
+)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum Language {
+    #[default]
+    English,
+    Portuguese,
+}
+
+impl Language {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::English => "english",
+            Self::Portuguese => "portuguese",
         }
     }
 }
@@ -198,7 +219,7 @@ impl Speech {
             return Ok(stand_in());
         }
         let vad = self.silero(progress).await?;
-        let stt = self.stt(agent, route.stt, progress).await?;
+        let stt = self.stt(agent, route.stt, route.language, progress).await?;
         let tts = self.tts(agent, route, progress).await?;
         Ok(Engines { vad, stt, tts })
     }
@@ -208,6 +229,7 @@ impl Speech {
         &self,
         agents: &[crate::agents::AgentId],
         provider: Provider,
+        language: Language,
         progress: &(dyn Fn(&'static str, u64, u64) + Sync),
     ) -> Result<Hearing, SpeechError> {
         if let Some(stand_in) = &self.stand_in {
@@ -216,13 +238,13 @@ impl Speech {
         }
         let vad = self.silero(progress).await?;
         for agent in agents {
-            match self.stt(*agent, provider, progress).await {
+            match self.stt(*agent, provider, language, progress).await {
                 Ok(stt) => return Ok((vad, stt)),
                 Err(SpeechError::NoKey(_)) => {}
                 Err(error) => return Err(error),
             }
         }
-        Ok((vad, self.zipformer(progress).await?))
+        Ok((vad, self.listening(language, progress).await?))
     }
 
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
@@ -242,10 +264,11 @@ impl Speech {
         &self,
         agent: crate::agents::AgentId,
         provider: Provider,
+        language: Language,
         progress: &(dyn Fn(&'static str, u64, u64) + Sync),
     ) -> Result<Box<dyn Stt>, SpeechError> {
         Ok(match provider {
-            Provider::Embedded => self.zipformer(progress).await?,
+            Provider::Embedded => self.listening(language, progress).await?,
             provider => Box::new(
                 self.endpoints
                     .listener(provider, self.key(agent, provider).await?),
@@ -260,7 +283,7 @@ impl Speech {
         progress: &(dyn Fn(&'static str, u64, u64) + Sync),
     ) -> Result<Box<dyn Tts>, SpeechError> {
         Ok(match route.tts {
-            Provider::Embedded => self.piper(route.voice, progress).await?,
+            Provider::Embedded => self.speaking(route.language, route.voice, progress).await?,
             provider => Box::new(self.endpoints.speaker(
                 provider,
                 self.key(agent, provider).await?,

@@ -334,6 +334,7 @@ async fn work_that_outlives_a_call_keeps_the_message_open() {
         stt: cubebot_orchestrator::speech::Provider::Embedded,
         tts: cubebot_orchestrator::speech::Provider::Embedded,
         voice: cubebot_orchestrator::speech::Voice::Female,
+        language: cubebot_orchestrator::speech::Language::English,
     };
     let agent = AgentId(world.agent);
     let call = work.start_call(&world.admin, agent, route).await.unwrap();
@@ -365,6 +366,7 @@ async fn restart_closes_open_calls_at_the_last_thing_said() {
         stt: cubebot_orchestrator::speech::Provider::Embedded,
         tts: cubebot_orchestrator::speech::Provider::Embedded,
         voice: cubebot_orchestrator::speech::Voice::Female,
+        language: cubebot_orchestrator::speech::Language::English,
     };
     work.start_call(&world.admin, AgentId(world.agent), route)
         .await

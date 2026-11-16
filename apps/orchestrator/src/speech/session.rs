@@ -188,6 +188,7 @@ impl Session {
                 vec![json!({"kind":"interrupt"})]
             }
             Heard::Partial(text) => vec![json!({"kind":"partial","text":text})],
+            Heard::Quiet => Vec::new(),
             Heard::Failed(error) => {
                 tracing::warn!(?error, "speech failed");
                 vec![json!({"kind":"notice","text":error.to_string()})]

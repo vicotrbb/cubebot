@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COALESCE(a.stt_provider, s.stt_provider) AS \"stt!: Provider\",\n            COALESCE(a.tts_provider, s.tts_provider) AS \"tts!: Provider\",\n            COALESCE(a.voice, s.voice) AS \"voice!: Voice\",\n            s.language AS \"language: Language\"\n        FROM agents a\n        CROSS JOIN speech_settings s\n        WHERE a.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stt!: Provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "tts!: Provider",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "voice!: Voice",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "language: Language",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "6511c40e9789d2e1f8a1827a024bb9df08b7b3e63178c41e540b90887c3b327a"
+}

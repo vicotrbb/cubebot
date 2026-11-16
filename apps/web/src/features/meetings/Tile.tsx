@@ -163,6 +163,9 @@ export function Tile({
             {participant.screen
               ? 'Presenting'
               : AGENT_SAYS[agentState ?? 'listening']}
+            {agentState === 'speaking' && !participant.screen && (
+              <span className="tile__hint"> · talk to interrupt</span>
+            )}
           </span>
         )}
       </figcaption>

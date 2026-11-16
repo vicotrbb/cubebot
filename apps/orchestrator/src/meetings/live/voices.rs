@@ -2,6 +2,7 @@ use super::Handle;
 use super::attendants::Note;
 use super::wire::Server;
 use crate::speech::{Audio, Tts};
+use std::panic::AssertUnwindSafe;
 use std::sync::{
     Arc,
     atomic::{AtomicU64, Ordering},
@@ -14,6 +15,7 @@ use uuid::Uuid;
 const PIECE: Duration = Duration::from_millis(100);
 const LEAD: Duration = Duration::from_millis(300);
 const SOUNDS: usize = 32;
+const STOPPED: &str = "the speech engine stopped unexpectedly";
 
 enum Line {
     Say(u64, String),
@@ -91,15 +93,10 @@ fn speak(
         let open = match line {
             Line::Say(said_in, sentence) => {
                 let current = said_in == epoch.load(Ordering::SeqCst);
-                if let Some(tts) = tts.as_ref().filter(|_| current) {
-                    let spoken = tts.speak(&sentence, &mut |audio| {
-                        said_in == epoch.load(Ordering::SeqCst)
-                            && sounds.blocking_send(Sound::Audio(said_in, audio)).is_ok()
-                    });
-                    if let Err(error) = spoken {
-                        tracing::warn!(?error, "meeting speech failed");
-                        let _ = sounds.blocking_send(Sound::Failed(said_in, error.to_string()));
-                    }
+                if let Some(tts) = tts.as_ref().filter(|_| current)
+                    && let Err(reason) = voiced(tts.as_ref(), &sentence, said_in, epoch, sounds)
+                {
+                    let _ = sounds.blocking_send(Sound::Failed(said_in, reason));
                 }
                 !sounds.is_closed()
             }
@@ -109,6 +106,28 @@ fn speak(
             return;
         }
     }
+}
+
+fn voiced(
+    tts: &dyn Tts,
+    sentence: &str,
+    said_in: u64,
+    epoch: &AtomicU64,
+    sounds: &mpsc::Sender<Sound>,
+) -> Result<(), String> {
+    let spoken = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        tts.speak(sentence, &mut |audio| {
+            said_in == epoch.load(Ordering::SeqCst)
+                && sounds.blocking_send(Sound::Audio(said_in, audio)).is_ok()
+        })
+    }));
+    let Ok(spoken) = spoken else {
+        return Err(STOPPED.to_owned());
+    };
+    spoken.map_err(|error| {
+        tracing::warn!(?error, "meeting speech failed");
+        error.to_string()
+    })
 }
 
 struct Stage {
@@ -193,6 +212,7 @@ fn wait(clock: Instant, now: Instant) -> Option<Duration> {
 mod tests {
     use super::super::room::{Command, Seating};
     use super::*;
+    use crate::speech::SpeechError;
 
     #[test]
     fn agent_audio_goes_out_in_pieces_of_at_most_100_ms() {
@@ -270,6 +290,38 @@ mod tests {
                 "Cara could not speak: refused again"
             ]
         );
+    }
+
+    struct Broken;
+
+    impl Tts for Broken {
+        fn speak(&self, _: &str, _: &mut dyn FnMut(Audio) -> bool) -> Result<(), SpeechError> {
+            panic!("engine broke")
+        }
+    }
+
+    #[tokio::test]
+    async fn a_panicking_voice_still_reports_and_ends_its_turn() {
+        let (lines, waiting) = mpsc::unbounded_channel();
+        let (sounds, mut heard) = mpsc::channel(SOUNDS);
+        let epoch = Arc::new(AtomicU64::new(0));
+        let turn = Uuid::from_u128(7);
+        lines.send(Line::Say(0, "Hello.".to_owned())).unwrap();
+        lines.send(Line::Say(0, "Again.".to_owned())).unwrap();
+        lines.send(Line::End(turn)).unwrap();
+        drop(lines);
+        let tts: Option<Box<dyn Tts>> = Some(Box::new(Broken));
+        std::thread::spawn(move || speak(tts, waiting, &epoch, &sounds));
+        let mut seen = Vec::new();
+        while let Some(sound) = heard.recv().await {
+            seen.push(match sound {
+                Sound::Failed(_, reason) => reason,
+                Sound::End(ended) => ended.to_string(),
+                Sound::Audio(..) => "audio".to_owned(),
+            });
+        }
+        let failed = STOPPED.to_owned();
+        assert_eq!(seen, [failed.clone(), failed, turn.to_string()]);
     }
 
     #[tokio::test(start_paused = true)]

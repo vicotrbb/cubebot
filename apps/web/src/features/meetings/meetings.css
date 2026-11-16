@@ -170,6 +170,14 @@
   color: #cfc3b6;
   font-weight: 400;
 }
+.tile__hint {
+  color: #a99c8e;
+}
+@media (max-width: 640px) {
+  .tile__hint {
+    display: none;
+  }
+}
 .tile__muted {
   flex: none;
   width: 14px;
