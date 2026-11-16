@@ -1,7 +1,7 @@
 use super::Error;
 use crate::agents::AgentId;
 use k8s_openapi::{
-    api::core::v1::{ContainerStateTerminated, ContainerStatus, Pod},
+    api::core::v1::{ContainerStateTerminated, ContainerStatus, Pod, PodStatus},
     apimachinery::pkg::apis::meta::v1::ObjectMeta,
 };
 use uuid::Uuid;
@@ -87,8 +87,25 @@ pub fn termination_proven(pod: &Pod) -> bool {
     let shape = spec.containers.len() == 1 && spec.containers[0].name == "sandbox";
     let containers = status.container_statuses.as_deref().unwrap_or_default();
     let failed = status.phase.as_deref() == Some("Failed");
+    if failed && rejected_at_admission(status) {
+        return shape;
+    }
     let stopped = containers.len() == 1 && stopped_named(containers, "sandbox", failed);
     shape && stopped && init_stopped(pod, failed)
+}
+
+fn rejected_at_admission(status: &PodStatus) -> bool {
+    let rejected = status
+        .reason
+        .as_deref()
+        .is_some_and(|reason| reason == "UnexpectedAdmissionError" || reason.starts_with("OutOf"));
+    let never_created = status
+        .container_statuses
+        .iter()
+        .chain(status.init_container_statuses.iter())
+        .flatten()
+        .all(|container| container.container_id.as_deref().is_none_or(str::is_empty));
+    rejected && never_created
 }
 
 fn init_stopped(pod: &Pod, failed: bool) -> bool {

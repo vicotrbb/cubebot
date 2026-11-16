@@ -74,3 +74,41 @@ fn restartable_pods_do_not_prove_termination() {
     pod.spec.as_mut().unwrap().restart_policy = Some("Always".into());
     assert!(!termination_proven(&pod));
 }
+
+fn rejected(reason: &str, container_id: Option<&str>) -> Pod {
+    let mut pod = pod(&identity());
+    let mut container = json!({"name":"sandbox","image":"test","imageID":"","ready":false,"restartCount":0,"state":{"terminated":{"exitCode":137,"reason":"ContainerStatusUnknown","message":"The container could not be located when the pod was terminated"}}});
+    if let Some(id) = container_id {
+        container["containerID"] = json!(id);
+    }
+    pod.status = Some(
+        serde_json::from_value(json!({
+            "phase": "Failed",
+            "reason": reason,
+            "message": "Pod was rejected: Allocate failed due to no healthy devices present",
+            "containerStatuses": [container],
+        }))
+        .unwrap(),
+    );
+    pod
+}
+
+#[test]
+fn a_pod_the_kubelet_refused_to_admit_proves_termination() {
+    assert!(termination_proven(&rejected(
+        "UnexpectedAdmissionError",
+        None
+    )));
+    assert!(termination_proven(&rejected("OutOfmemory", Some(""))));
+    assert!(!termination_proven(&rejected(
+        "UnexpectedAdmissionError",
+        Some("containerd://abc")
+    )));
+    assert!(!termination_proven(&rejected("Evicted", None)));
+    let mut restartable = rejected("UnexpectedAdmissionError", None);
+    restartable.spec.as_mut().unwrap().restart_policy = Some("Always".into());
+    assert!(!termination_proven(&restartable));
+    let mut lost = rejected("UnexpectedAdmissionError", None);
+    lost.status.as_mut().unwrap().reason = Some("NodeLost".into());
+    assert!(!termination_proven(&lost));
+}
