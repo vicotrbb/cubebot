@@ -24,6 +24,7 @@ pub enum Heard {
     Speech,
     Partial(String),
     Utterance(String),
+    Quiet,
     Failed(SpeechError),
 }
 
@@ -78,9 +79,11 @@ impl Listener {
         if activity.ended && self.speaking {
             self.speaking = false;
             let text = self.stt.finish()?;
-            if !text.is_empty() {
-                heard.push(Heard::Utterance(text));
-            }
+            heard.push(if text.is_empty() {
+                Heard::Quiet
+            } else {
+                Heard::Utterance(text)
+            });
         }
         Ok(())
     }
@@ -286,6 +289,7 @@ mod tests {
         listener.hear(&[0.5; WINDOW]);
         let heard = listener.hear(&[0.0; WINDOW]);
         assert!(!heard.iter().any(|item| matches!(item, Heard::Utterance(_))));
+        assert!(matches!(heard.last(), Some(Heard::Quiet)));
     }
 
     #[test]

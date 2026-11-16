@@ -1,7 +1,7 @@
 use super::attendants::Note;
 use super::wire::Server;
 use crate::agents::AgentId;
-use crate::speech::{self, Heard, Listener, Provider, Speech};
+use crate::speech::{self, Heard, Language, Listener, Provider, Speech};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
 
@@ -40,6 +40,7 @@ pub(super) struct Ears {
     pub speech: Speech,
     pub agents: Vec<AgentId>,
     pub provider: Provider,
+    pub language: Language,
     pub notes: mpsc::UnboundedSender<Note>,
 }
 
@@ -56,7 +57,7 @@ impl Ears {
         let report = |model, received, total| preparing.report(model, received, total);
         let engines = self
             .speech
-            .hearing(&self.agents, self.provider, &report)
+            .hearing(&self.agents, self.provider, self.language, &report)
             .await;
         preparing.done();
         let notes = self.notes;

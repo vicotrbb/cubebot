@@ -12,6 +12,12 @@ import './call.css'
 
 type Provider = components['schemas']['Provider']
 type Settings = components['schemas']['SpeechSettings']
+type Language = components['schemas']['Language']
+
+const LANGUAGES: [Language, string][] = [
+  ['english', 'English'],
+  ['portuguese', 'Portuguese (Brazil)'],
+]
 
 const name = (provider: Provider) =>
   PROVIDER_OPTIONS.find(([id]) => id === provider)?.[1] ?? provider
@@ -35,6 +41,7 @@ function SpeechForm({ settings }: { settings: Settings }) {
   const [stt, setStt] = useState(settings.stt_provider)
   const [tts, setTts] = useState(settings.tts_provider)
   const [voice, setVoice] = useState(settings.voice)
+  const [language, setLanguage] = useState(settings.language)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -50,13 +57,14 @@ function SpeechForm({ settings }: { settings: Settings }) {
             stt_provider: stt,
             tts_provider: tts,
             voice,
+            language,
             elevenlabs_key: key || null,
             forget_elevenlabs_key: forget,
           },
         }),
       )
       setKey('')
-      setNotice('Saved. New calls use these settings.')
+      setNotice('Saved. New calls and meetings use these settings.')
       await client.invalidateQueries({ queryKey: ['speech'] })
     } catch (caught) {
       setError(failure(caught))
@@ -88,6 +96,10 @@ function SpeechForm({ settings }: { settings: Settings }) {
               Embedded runs on this installation and works offline. OpenAI uses
               the key under AI providers.
             </p>
+            <p>
+              Embedded hears and speaks only the language you choose. OpenAI and
+              ElevenLabs detect it on their own.
+            </p>
           </>
         }
       >
@@ -102,6 +114,20 @@ function SpeechForm({ settings }: { settings: Settings }) {
             value={tts}
             onChange={(provider) => provider && setTts(provider)}
           />
+        </div>
+        <div className="settings__pair">
+          <Field label="Language">
+            <select
+              value={language}
+              onChange={(event) => setLanguage(event.target.value as Language)}
+            >
+              {LANGUAGES.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </Field>
         </div>
       </Section>
       <Section

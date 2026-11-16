@@ -13,7 +13,7 @@ use crate::identity::{
     access::{Capability, Scope},
 };
 use crate::meetings::AgentMode;
-use crate::speech::{self, Heard, Provider, Sentences, Tts};
+use crate::speech::{self, Heard, Language, Provider, Sentences, Tts};
 use crate::work::{Reply, ReplyEvent, Work};
 use futures_util::{
     StreamExt,
@@ -34,15 +34,22 @@ const ASKED_BYTES: usize = 2000;
 const CHOICE_TOKENS: u64 = 512;
 const STALL: Duration = Duration::from_secs(120);
 const NOT_HEARD: &str = "Speech recognition failed for your last sentence.";
+const SOUNDED: Duration = Duration::from_secs(1);
 
 struct Person {
     account: Option<Uuid>,
     name: String,
     said: u64,
     ears: Option<mpsc::Sender<Vec<f32>>>,
+    talking: bool,
+    sounded: Instant,
 }
 
 impl Person {
+    fn talking(&self, now: Instant) -> bool {
+        self.talking && now.duration_since(self.sounded) < SOUNDED
+    }
+
     fn speaker(&self) -> String {
         match self.account {
             Some(_) => self.name.clone(),
@@ -140,6 +147,7 @@ struct Attendants {
     work: Work,
     owner: Uuid,
     provider: Provider,
+    language: Language,
     floor: Floor,
     people: HashMap<u16, Person>,
     agents: HashMap<Uuid, Present>,
@@ -155,7 +163,8 @@ struct Attendants {
 pub(super) async fn attend(live: Live, id: Uuid, room: Handle, inbox: Inbox) {
     let held = sqlx::query!(
         r#"
-        SELECT m.owner_id, s.stt_provider AS "stt_provider: Provider"
+        SELECT m.owner_id, s.stt_provider AS "stt_provider: Provider",
+            s.language AS "language: Language"
         FROM meetings m, speech_settings s
         WHERE m.id=$1
         "#,
@@ -179,6 +188,7 @@ pub(super) async fn attend(live: Live, id: Uuid, room: Handle, inbox: Inbox) {
         room,
         owner: held.owner_id,
         provider: held.stt_provider,
+        language: held.language,
         floor: Floor::default(),
         people: HashMap::new(),
         agents: HashMap::new(),
@@ -234,6 +244,8 @@ impl Attendants {
                     name,
                     said: 0,
                     ears: None,
+                    talking: false,
+                    sounded: Instant::now(),
                 };
                 self.people.insert(slot, person);
                 self.screens.values().for_each(Sharing::repaint);
@@ -248,6 +260,7 @@ impl Attendants {
             Event::Left { slot } => {
                 if let Some(person) = self.people.get_mut(&slot) {
                     person.ears = None;
+                    person.talking = false;
                 }
             }
             Event::Microphone { slot, pcm } => self.hear(slot, &pcm),
@@ -358,6 +371,9 @@ impl Attendants {
         let Some(samples) = speech::samples(pcm) else {
             return;
         };
+        if let Some(person) = self.people.get_mut(&slot) {
+            person.sounded = Instant::now();
+        }
         if self
             .people
             .get(&slot)
@@ -382,6 +398,7 @@ impl Attendants {
             speech: self.live.speech.clone(),
             agents: self.agents.keys().map(|agent| AgentId(*agent)).collect(),
             provider: self.provider,
+            language: self.language,
             notes: self.notes.clone(),
         }
     }
@@ -501,10 +518,14 @@ impl Attendants {
     }
 
     async fn heard(&mut self, slot: u16, heard: Heard) {
+        if let Some(person) = self.people.get_mut(&slot) {
+            person.talking = matches!(heard, Heard::Speech | Heard::Partial(_));
+        }
         match heard {
             Heard::Speech => self.started(slot).await,
             Heard::Partial(text) => self.caption(slot, text, false).await,
             Heard::Utterance(text) => self.utterance(slot, text).await,
+            Heard::Quiet => {}
             Heard::Failed(error) => {
                 tracing::warn!(?error, slot, "meeting speech not transcribed");
                 let text = NOT_HEARD.to_owned();
@@ -733,10 +754,18 @@ impl Attendants {
             .ok()
     }
 
+    fn talking(&self) -> bool {
+        let now = Instant::now();
+        self.people.values().any(|person| person.talking(now))
+    }
+
     async fn follow(&mut self) {
         let Some((agent, turn)) = self.floor.front() else {
             return;
         };
+        if !self.speaking(agent) && self.talking() {
+            return;
+        }
         let Some(reply) = self.read(turn).await else {
             return;
         };
@@ -950,6 +979,23 @@ mod tests {
         let long = "é".repeat(400);
         let clipped = brief(&[long], "Ana: ok");
         assert!(clipped.contains(&"é".repeat(150)) && !clipped.contains(&"é".repeat(151)));
+    }
+
+    #[test]
+    fn a_person_counts_as_talking_only_while_their_audio_still_arrives() {
+        let start = Instant::now();
+        let mut person = Person {
+            account: None,
+            name: "Ana".to_owned(),
+            said: 0,
+            ears: None,
+            talking: true,
+            sounded: start,
+        };
+        assert!(person.talking(start + Duration::from_millis(900)));
+        assert!(!person.talking(start + SOUNDED));
+        person.talking = false;
+        assert!(!person.talking(start));
     }
 
     #[test]

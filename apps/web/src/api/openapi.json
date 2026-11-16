@@ -9496,6 +9496,11 @@
         },
         "additionalProperties": false
       },
+      "Language": {
+        "type": "string",
+        "description": "The language people speak; only the embedded engines need to know it.",
+        "enum": ["english", "portuguese"]
+      },
       "Level": {
         "type": "string",
         "description": "A connection's permission level: the tools at or below it are offered. With no approval queue,\nthis is the safety control (docs/adr/agents.md#autonomous-tool-use-within-granted-permissions).",
@@ -11854,6 +11859,9 @@
             "type": "boolean",
             "description": "Removes the stored ElevenLabs key."
           },
+          "language": {
+            "$ref": "#/components/schemas/Language"
+          },
           "stt_provider": {
             "$ref": "#/components/schemas/Provider"
           },
@@ -12569,11 +12577,15 @@
           "stt_provider",
           "tts_provider",
           "voice",
+          "language",
           "elevenlabs_configured"
         ],
         "properties": {
           "elevenlabs_configured": {
             "type": "boolean"
+          },
+          "language": {
+            "$ref": "#/components/schemas/Language"
           },
           "stt_provider": {
             "$ref": "#/components/schemas/Provider"

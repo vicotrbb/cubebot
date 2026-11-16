@@ -273,11 +273,7 @@ impl Speaker {
         }
     }
 
-    async fn stream(
-        &self,
-        text: &str,
-        sink: &mut dyn FnMut(Audio) -> bool,
-    ) -> Result<(), SpeechError> {
+    async fn open(&self, text: &str) -> Result<(reqwest::Response, u32), SpeechError> {
         let voice = match self.provider {
             Provider::Elevenlabs => self.voice_id().await,
             _ => "",
@@ -287,24 +283,24 @@ impl Speaker {
         if !response.status().is_success() {
             return Err(refused(response, &self.key).await);
         }
+        Ok((response, rate))
+    }
+}
+
+impl Tts for Speaker {
+    fn speak(&self, text: &str, sink: &mut dyn FnMut(Audio) -> bool) -> Result<(), SpeechError> {
+        let (response, rate) = self.runtime.block_on(self.open(text))?;
         let mut body = response.bytes_stream();
         let mut pcm = Vec::new();
-        while let Some(chunk) = body.next().await {
+        while let Some(chunk) = self.runtime.block_on(body.next()) {
             pcm.extend_from_slice(&chunk?);
-            let whole = pcm.len() & !1;
-            let rest = pcm.split_off(whole);
+            let rest = pcm.split_off(pcm.len() & !1);
             if !pcm.is_empty() && !sink(Audio { rate, pcm }) {
                 return Ok(());
             }
             pcm = rest;
         }
         Ok(())
-    }
-}
-
-impl Tts for Speaker {
-    fn speak(&self, text: &str, sink: &mut dyn FnMut(Audio) -> bool) -> Result<(), SpeechError> {
-        self.runtime.block_on(self.stream(text, sink))
     }
 }
 
@@ -434,18 +430,15 @@ mod tests {
     ) {
         let (endpoints, log) = provider(StatusCode::OK).await;
         let tts = endpoints.speaker(kind, "k".to_owned(), voice);
-        let heard = tokio::task::spawn_blocking(move || {
-            let mut heard = Vec::new();
+        let (sounds, mut heard) = tokio::sync::mpsc::channel(4);
+        std::thread::spawn(move || {
             tts.speak("Hi.", &mut |audio| {
-                heard.push((audio.rate, audio.pcm));
-                true
+                sounds.blocking_send((audio.rate, audio.pcm)).is_ok()
             })
             .unwrap();
-            heard
-        })
-        .await
-        .unwrap();
-        assert_eq!(heard, [(rate, vec![1, 0])]);
+        });
+        assert_eq!(heard.recv().await, Some((rate, vec![1, 0])));
+        assert_eq!(heard.recv().await, None);
         let seen = log.lock().unwrap();
         assert_eq!(seen.path, path);
         assert_eq!(seen.auth, auth);

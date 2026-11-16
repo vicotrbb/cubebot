@@ -1,4 +1,4 @@
-use super::{Provider, Voice};
+use super::{Language, Provider, Voice};
 use crate::{
     agents::AgentId,
     connections::{Connections, key_valid},
@@ -12,6 +12,7 @@ pub struct Route {
     pub stt: Provider,
     pub tts: Provider,
     pub voice: Voice,
+    pub language: Language,
 }
 
 /// The installation's speech settings; the key itself is never returned.
@@ -20,6 +21,7 @@ pub struct SpeechSettings {
     pub stt_provider: Provider,
     pub tts_provider: Provider,
     pub voice: Voice,
+    pub language: Language,
     pub elevenlabs_configured: bool,
 }
 
@@ -29,6 +31,8 @@ pub struct SaveSpeech {
     pub stt_provider: Provider,
     pub tts_provider: Provider,
     pub voice: Voice,
+    #[serde(default)]
+    pub language: Language,
     /// `None` keeps the stored ElevenLabs key.
     #[serde(default)]
     pub elevenlabs_key: Option<String>,
@@ -52,7 +56,8 @@ pub async fn settings(pool: &PgPool) -> Result<SpeechSettings, IdentityError> {
         SpeechSettings,
         r#"
         SELECT stt_provider AS "stt_provider: Provider", tts_provider AS "tts_provider: Provider",
-            voice AS "voice: Voice", elevenlabs_credential IS NOT NULL AS "elevenlabs_configured!"
+            voice AS "voice: Voice", language AS "language: Language",
+            elevenlabs_credential IS NOT NULL AS "elevenlabs_configured!"
         FROM speech_settings
         "#,
     )
@@ -81,10 +86,11 @@ pub async fn save(
         return Err(IdentityError::Forbidden);
     }
     sqlx::query!(
-        "UPDATE speech_settings SET stt_provider=$1, tts_provider=$2, voice=$3",
+        "UPDATE speech_settings SET stt_provider=$1, tts_provider=$2, voice=$3, language=$4",
         input.stt_provider.as_str(),
         input.tts_provider.as_str(),
         input.voice.as_str(),
+        input.language.as_str(),
     )
     .execute(&mut *tx)
     .await?;
@@ -124,7 +130,8 @@ pub async fn route(pool: &PgPool, agent: AgentId) -> Result<Route, IdentityError
         r#"
         SELECT COALESCE(a.stt_provider, s.stt_provider) AS "stt!: Provider",
             COALESCE(a.tts_provider, s.tts_provider) AS "tts!: Provider",
-            COALESCE(a.voice, s.voice) AS "voice!: Voice"
+            COALESCE(a.voice, s.voice) AS "voice!: Voice",
+            s.language AS "language: Language"
         FROM agents a
         CROSS JOIN speech_settings s
         WHERE a.id=$1
@@ -138,5 +145,6 @@ pub async fn route(pool: &PgPool, agent: AgentId) -> Result<Route, IdentityError
         stt: row.stt,
         tts: row.tts,
         voice: row.voice,
+        language: row.language,
     })
 }
