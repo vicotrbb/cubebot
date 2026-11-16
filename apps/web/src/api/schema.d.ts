@@ -587,6 +587,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/vitals': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['vitals']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/wallpaper': {
     parameters: {
       query?: never
@@ -4420,6 +4436,10 @@ export interface components {
       /** Format: int64 */
       sequence: number
     }
+    Reading: components['schemas']['Vitals'] & {
+      /** Format: int64 */
+      seconds_ago: number
+    }
     Receipt: {
       /** Format: uuid */
       id: string
@@ -5212,6 +5232,12 @@ export interface components {
     }
     /** @enum {string} */
     Theme: 'system' | 'light' | 'dark'
+    Throughput: {
+      /** Format: int64 */
+      received: number
+      /** Format: int64 */
+      sent: number
+    }
     Token: {
       token: string
     }
@@ -5352,6 +5378,12 @@ export interface components {
       expected_revision: number
       team: components['schemas']['SaveTeam']
     }
+    Usage: {
+      /** Format: int64 */
+      total: number
+      /** Format: int64 */
+      used: number
+    }
     Utterance: {
       at: string
       kind: string
@@ -5382,6 +5414,15 @@ export interface components {
       name: string
       site?: string | null
       username?: string | null
+    }
+    Vitals: {
+      /** Format: double */
+      cpu_percent?: number | null
+      /** Format: int32 */
+      cpus: number
+      disk?: null | components['schemas']['Usage']
+      memory?: null | components['schemas']['Usage']
+      network?: null | components['schemas']['Throughput']
     }
     /** @enum {string} */
     Voice: 'male' | 'female'
@@ -6427,6 +6468,33 @@ export interface operations {
         content?: never
       }
       409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  vitals: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Reading']
+        }
+      }
+      204: {
         headers: {
           [name: string]: unknown
         }

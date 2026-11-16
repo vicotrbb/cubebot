@@ -12,7 +12,8 @@ use serde::Deserialize;
 use tokio::sync::watch;
 use uuid::Uuid;
 
-const CHANGES: usize = 50;
+const CHANGES: usize = 150;
+const MEMORY_BYTES: usize = 600;
 const SKILLS: usize = 1;
 
 const SYSTEM: &str = "You maintain your own long-term memory while you are idle.";
@@ -159,7 +160,12 @@ async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
         cached_input_tokens: usage.cached_input_tokens,
         cost_usd: usage.cost_usd,
     });
-    let plan = parse(&reply).ok_or_else(|| "The model's reply was not a JSON plan.".into());
+    let plan = parse(&reply)
+        .ok_or_else(|| "The model's reply was not a JSON plan.".to_owned())
+        .and_then(|plan| match forgets_everything(&plan, dream) {
+            true => Err("The plan would forget every memory, so none of it was applied.".into()),
+            false => Ok(plan),
+        });
     (plan, usage)
 }
 
@@ -192,9 +198,36 @@ fn prompt(dream: &Dream) -> String {
     let turns = serde_json::to_string(&dream.turns).unwrap_or_default();
     let skills = serde_json::to_string(&dream.skills).unwrap_or_default();
     let library = serde_json::to_string(&dream.library).unwrap_or_default();
+    let count = dream.memories.len();
+    let bytes: usize = dream
+        .memories
+        .iter()
+        .map(|memory| memory.content.len())
+        .sum();
     format!(
-        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision and files: {skills}\n\nEvery skill in the library others share, by name and description: {library}\n\nFirst, improve your memories. Merge duplicates: revise the one to keep so it states everything the others did, then forget the others. Reconcile contradictions when one claim is clearly newer or better supported; otherwise leave them and say so in the report. Rewrite stale or vague summaries, and make each memory self-contained, using the words someone would search for. Never invent or drop a detail, and leave good memories alone. Then look at the turns for skills, and be strict, because every skill is read by everyone and noise makes the library useless. Improve an installed skill when a turn shows it wrong or missing a step. Write a new one only when the turns show a multi-step procedure that worked, recurred or will clearly recur, that no skill in the library already covers, and that would save a future run real effort; a one-off task, a single command, a person's preference or a fact is not a skill. A preference or a fact belongs in memory. Propose at most one skill per run. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"report\":\"No changes needed.\"}}."
+        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision and files: {skills}\n\nEvery skill in the library others share, by name and description: {library}\n\nFirst, consolidate your memories aggressively: you hold {count} memories totaling {bytes} bytes, and fewer, shorter memories are faster to search and cheaper to read. Merge every group of memories about the same person, project, system or topic into one: revise the one to keep so it holds what still matters from all of them, then forget the others. Cut what no longer matters: resolved problems, finished one-off events, test runs, superseded states, step-by-step narration, anything another memory already states, and anything you can look up again. Keep every preference, standing rule, decision, commitment and open item that still applies, with the names and dates that make it useful. Reconcile contradictions when one claim is clearly newer or better supported; otherwise keep both and say so in the report. Write tersely: plain facts without filler, at most about {MEMORY_BYTES} bytes per memory unless it truly needs more, each self-contained and using the words someone would search for. Never invent anything. Leave a memory alone only when it is already short, distinct and current. Then look at the turns for skills, and be strict, because every skill is read by everyone and noise makes the library useless. Improve an installed skill when a turn shows it wrong or missing a step. Write a new one only when the turns show a multi-step procedure that worked, recurred or will clearly recur, that no skill in the library already covers, and that would save a future run real effort; a one-off task, a single command, a person's preference or a fact is not a skill. A preference or a fact belongs in memory. Propose at most one skill per run. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you merged, cut and changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"report\":\"No changes needed.\"}}."
     )
+}
+
+fn forgets_everything(plan: &Plan, dream: &Dream) -> bool {
+    let forgotten: std::collections::HashSet<Uuid> = plan
+        .changes
+        .iter()
+        .filter_map(|change| match change {
+            MemoryChange::Forget { memory, .. } => Some(*memory),
+            _ => None,
+        })
+        .collect();
+    let remembers = plan
+        .changes
+        .iter()
+        .any(|change| matches!(change, MemoryChange::Remember { .. }));
+    !remembers
+        && !dream.memories.is_empty()
+        && dream
+            .memories
+            .iter()
+            .all(|memory| forgotten.contains(&memory.id))
 }
 
 fn parse(reply: &str) -> Option<Plan> {
@@ -271,6 +304,48 @@ mod tests {
         let text = reply(Anthropic::for_loopback_tests(&origin), &request).await;
         assert_eq!(text.unwrap().0, "planned");
         server.abort();
+    }
+
+    #[test]
+    fn a_plan_that_forgets_every_memory_is_refused_and_a_merge_is_not() {
+        let (kept, merged) = (Uuid::new_v4(), Uuid::new_v4());
+        let memory = |id| cubebot_protocol::runtime::Memory {
+            id,
+            revision: 1,
+            content: "x".into(),
+        };
+        let dream = Dream {
+            provider: ProviderKind::Openai,
+            model: "m".into(),
+            api_key: "k".into(),
+            memories: vec![memory(kept), memory(merged)],
+            turns: Vec::new(),
+            skills: Vec::new(),
+            library: Vec::new(),
+        };
+        let forget = |memory| MemoryChange::Forget {
+            memory,
+            expected_revision: 1,
+        };
+        let revise = MemoryChange::Revise {
+            memory: kept,
+            expected_revision: 1,
+            content: "both".into(),
+        };
+        let plan = |changes| Plan {
+            changes,
+            skills: Vec::new(),
+            report: String::new(),
+        };
+        assert!(!forgets_everything(
+            &plan(vec![revise, forget(merged)]),
+            &dream
+        ));
+        assert!(forgets_everything(
+            &plan(vec![forget(kept), forget(merged)]),
+            &dream
+        ));
+        assert!(prompt(&dream).contains("you hold 2 memories totaling 2 bytes"));
     }
 
     #[test]

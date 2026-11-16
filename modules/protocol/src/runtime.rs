@@ -508,6 +508,34 @@ pub enum Report {
     Drained {
         request_id: Uuid,
     },
+    Vitals(Vitals),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct Vitals {
+    pub cpu_percent: Option<f64>,
+    pub cpus: u32,
+    pub memory: Option<Usage>,
+    pub disk: Option<Usage>,
+    pub network: Option<Throughput>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct Usage {
+    pub used: u64,
+    pub total: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(deny_unknown_fields)]
+pub struct Throughput {
+    pub received: u64,
+    pub sent: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -661,6 +689,29 @@ pub struct Memory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vitals_report_round_trips_with_its_tag() {
+        let vitals = Report::Vitals(Vitals {
+            cpu_percent: Some(12.5),
+            cpus: 2,
+            memory: Some(Usage { used: 1, total: 2 }),
+            disk: None,
+            network: Some(Throughput {
+                received: 3,
+                sent: 4,
+            }),
+        });
+        let text = serde_json::to_string(&vitals).unwrap();
+        assert!(
+            text.starts_with(r#"{"type":"vitals","cpu_percent":12.5"#),
+            "{text}"
+        );
+        assert!(matches!(
+            serde_json::from_str::<Report>(&text).unwrap(),
+            Report::Vitals(Vitals { cpus: 2, .. })
+        ));
+    }
 
     #[test]
     fn channel_messages_round_trip_with_their_tags() {

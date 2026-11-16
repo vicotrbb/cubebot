@@ -125,7 +125,7 @@ impl Memories {
         }
         let staged = serde_json::to_string(&*staged).unwrap_or_default();
         Some(format!(
-            "Before this turn ends: list up to {EXTRACTED} durable facts, decisions, preferences or commitments from the latest request and your work on it that are worth remembering in later conversations and that you have not already saved. Already staged this turn: {staged}. Keep each one self-contained, record claims as claims rather than facts, and skip anything transient. Never list notes about what was saved, corrected or forgotten, anything the user asked you not to keep, anything a memory search returned, or disagreements between the conversation and your memory: people correct memories directly, so memory wins. Reply with only a JSON array of strings, or [] when there is nothing worth keeping."
+            "Before this turn ends: list up to {EXTRACTED} durable facts, decisions, preferences or commitments from the latest request and your work on it that are worth remembering in later conversations and that you have not already saved. Already staged this turn: {staged}. Keep each one short and self-contained, one or two plain sentences, record claims as claims rather than facts, and skip anything transient. Never list notes about what was saved, corrected or forgotten, anything the user asked you not to keep, anything a memory search returned, or disagreements between the conversation and your memory: people correct memories directly, so memory wins. Reply with only a JSON array of strings, or [] when there is nothing worth keeping."
         ))
     }
 

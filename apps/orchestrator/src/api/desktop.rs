@@ -74,7 +74,7 @@ struct DesktopApi {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(pending_login, decline_login))]
+#[openapi(paths(pending_login, decline_login, vitals))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -82,6 +82,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         .route("/api/agents/{id}/desktop", get(connect))
         .route("/api/agents/{id}/login", get(pending_login))
         .route("/api/agents/{id}/login/decline", post(decline_login))
+        .route("/api/agents/{id}/vitals", get(vitals))
         .with_state(DesktopApi {
             identity,
             agents: Agents::new(pool.clone()),
@@ -133,6 +134,27 @@ async fn decline_login(
     } else {
         Err(IdentityError::NotFound)
     }
+}
+
+#[utoipa::path(get, path = "/api/agents/{id}/vitals", params(("id" = Uuid, Path)), responses((status = 200, body = crate::agents::sandbox::Reading), (status = 204)))]
+async fn vitals(
+    State(api): State<DesktopApi>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+    desktop: Option<Extension<Desktop>>,
+) -> Result<Response, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    if allowed(&api.identity, &actor, agent, Capability::BrowserView)
+        .await
+        .is_err()
+    {
+        allowed(&api.identity, &actor, agent, Capability::AgentManage).await?;
+    }
+    let reading = desktop.and_then(|Extension(desktop)| desktop.reading(agent));
+    Ok(match reading {
+        Some(reading) => ([("cache-control", "no-store")], Json(reading)).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    })
 }
 
 #[derive(Deserialize)]

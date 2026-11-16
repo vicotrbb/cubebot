@@ -82,16 +82,18 @@ async fn bootstrap(
 async fn channel(
     State(identity): State<RuntimeIdentity>,
     headers: HeaderMap,
+    desktop: Option<axum::Extension<crate::agents::sandbox::Desktop>>,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, Failure> {
     let token = bearer(&headers)?.to_owned();
-    identity
+    let actor = identity
         .authenticate(&token, RuntimeAccess::Recovery)
         .await
         .map_err(Failure::from)?;
+    let vitals = desktop.map(|axum::Extension(desktop)| (actor.agent, desktop));
     Ok(upgrade
         .max_message_size(2 * cubebot_protocol::runtime::EVENT_BYTES)
-        .on_upgrade(move |socket| identity.serve(token, socket)))
+        .on_upgrade(move |socket| identity.serve(token, socket, vitals)))
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
