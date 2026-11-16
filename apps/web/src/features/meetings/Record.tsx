@@ -167,22 +167,22 @@ export function Transcript({
       </p>
     )
   return (
-    <ol className="transcript" aria-label="Transcript">
+    <ol className="record-lines" aria-label="Transcript">
       {meeting.utterances.map((line) => (
         <li
           key={line.sequence}
-          className="transcript__line"
+          className="record-lines__line"
           data-agent={line.kind === 'agent' || undefined}
         >
           <SpeakerFace line={line} meeting={meeting} />
-          <div className="transcript__body">
-            <p className="transcript__head">
-              <span className="transcript__who">{line.speaker}</span>
-              <time className="transcript__at tabular" dateTime={line.at}>
+          <div className="record-lines__body">
+            <p className="record-lines__head">
+              <span className="record-lines__who">{line.speaker}</span>
+              <time className="record-lines__at tabular" dateTime={line.at}>
                 {formatTime(line.at, zone)}
               </time>
             </p>
-            <p className="transcript__text">{line.text}</p>
+            <p className="record-lines__text">{line.text}</p>
           </div>
         </li>
       ))}

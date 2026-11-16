@@ -78,8 +78,8 @@ pub enum SpeechError {
     NoDirectory,
     Io(std::io::Error),
     Http(reqwest::Error),
-    /// A provider refused the request; the status, never the body, which may echo the key.
-    Refused(u16),
+    /// A provider refused the request: its status and its own explanation, with the key removed.
+    Refused(u16, Option<String>),
     Checksum(&'static str),
     Model(&'static str),
     NoKey(Provider),
@@ -93,10 +93,16 @@ impl std::fmt::Display for SpeechError {
             }
             Self::Io(_) => formatter.write_str("the speech models could not be stored"),
             Self::Http(_) => formatter.write_str("the speech provider could not be reached"),
-            Self::Refused(status) => {
+            Self::Refused(status, None) => {
                 write!(
                     formatter,
                     "the speech provider refused the request ({status})"
+                )
+            }
+            Self::Refused(status, Some(reason)) => {
+                write!(
+                    formatter,
+                    "the speech provider refused the request ({status}): {reason}"
                 )
             }
             Self::Checksum(name) => {

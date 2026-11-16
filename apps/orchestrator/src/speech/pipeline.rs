@@ -297,12 +297,15 @@ mod tests {
 
     #[test]
     fn a_failed_transcript_is_reported_and_the_call_keeps_listening() {
-        let mut listener = listener(vec![Err(SpeechError::Refused(500)), Ok("next".to_owned())]);
+        let mut listener = listener(vec![
+            Err(SpeechError::Refused(500, None)),
+            Ok("next".to_owned()),
+        ]);
         listener.hear(&[0.5; WINDOW]);
         let heard = listener.hear(&[0.0; WINDOW]);
         assert!(matches!(
             heard.last(),
-            Some(Heard::Failed(SpeechError::Refused(500)))
+            Some(Heard::Failed(SpeechError::Refused(500, None)))
         ));
         listener.hear(&[0.5; WINDOW]);
         let heard = listener.hear(&[0.0; WINDOW]);
