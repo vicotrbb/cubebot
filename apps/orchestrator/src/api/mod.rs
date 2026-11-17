@@ -1,6 +1,7 @@
 mod access;
 mod activity;
 mod agents;
+mod apps;
 mod backup;
 mod browser;
 mod calendar;
@@ -79,6 +80,7 @@ pub fn openapi() -> String {
     doc.merge(backup::Doc::openapi());
     doc.merge(activity::Doc::openapi());
     doc.merge(agents::Doc::openapi());
+    doc.merge(apps::Doc::openapi());
     doc.merge(connections::Doc::openapi());
     doc.merge(work::Doc::openapi());
     doc.merge(desktop::Doc::openapi());
@@ -140,6 +142,7 @@ pub fn meetings_router(
 pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
+        .merge(apps::router(pool.clone(), identity.clone()))
         .merge(installation::router(pool.clone(), identity.clone()))
         .merge(backup::router(pool.clone(), identity.clone()))
         .merge(activity::router(pool.clone(), identity.clone()))

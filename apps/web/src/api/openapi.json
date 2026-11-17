@@ -1885,6 +1885,95 @@
         }
       }
     },
+    "/api/apps": {
+      "get": {
+        "tags": [],
+        "operationId": "list_apps",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/App"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/apps/{slug}": {
+      "delete": {
+        "tags": [],
+        "operationId": "remove_app",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/apps/{slug}/state": {
+      "post": {
+        "tags": [],
+        "operationId": "set_app_state",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetState"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/App"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/attachments/{turn}/{file}/content": {
       "get": {
         "tags": [],
@@ -7453,6 +7542,67 @@
           }
         }
       },
+      "App": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "description",
+          "icon",
+          "agent_id",
+          "agent_name",
+          "connections",
+          "state",
+          "updated_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent_name": {
+            "type": "string"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "memory": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AppState"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AppState": {
+        "type": "string",
+        "enum": ["starting", "running", "stopped", "updating", "failed"]
+      },
       "Attachment": {
         "type": "object",
         "required": ["id", "page", "name", "size", "created_at"],
@@ -8811,6 +8961,10 @@
             "format": "uuid"
           }
         }
+      },
+      "Desired": {
+        "type": "string",
+        "enum": ["running", "stopped"]
       },
       "DreamRevision": {
         "type": "object",
@@ -12450,6 +12604,16 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetState": {
+        "type": "object",
+        "required": ["desired"],
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/Desired"
           }
         },
         "additionalProperties": false

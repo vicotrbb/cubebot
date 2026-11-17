@@ -685,6 +685,54 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/apps': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_apps']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/apps/{slug}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['remove_app']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/apps/{slug}/state': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['set_app_state']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/attachments/{turn}/{file}/content': {
     parameters: {
       query?: never
@@ -2987,6 +3035,24 @@ export interface components {
       turns: number
       week: components['schemas']['Spend']
     }
+    App: {
+      /** Format: uuid */
+      agent_id: string
+      agent_name: string
+      connections: string[]
+      description: string
+      icon: string
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      memory?: number | null
+      name: string
+      slug: string
+      state: components['schemas']['AppState']
+      updated_at: string
+    }
+    /** @enum {string} */
+    AppState: 'starting' | 'running' | 'stopped' | 'updating' | 'failed'
     Attachment: {
       content_type?: string | null
       created_at: string
@@ -3494,6 +3560,8 @@ export interface components {
       /** Format: uuid */
       turn: string
     }
+    /** @enum {string} */
+    Desired: 'running' | 'stopped'
     /** @description A revision the run committed, with the content it replaced. */
     DreamRevision: {
       content: string
@@ -4925,6 +4993,9 @@ export interface components {
     }
     SetLink: {
       enabled: boolean
+    }
+    SetState: {
+      desired: components['schemas']['Desired']
     }
     Settings: {
       /** @description Shown in the console and to agents; the deployment's name when empty. */
@@ -6801,6 +6872,87 @@ export interface operations {
     requestBody?: never
     responses: {
       204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  list_apps: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['App'][]
+        }
+      }
+    }
+  }
+  remove_app: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        slug: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  set_app_state: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        slug: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetState']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['App']
+        }
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

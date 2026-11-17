@@ -32,6 +32,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/skills/{name}", get(skill))
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/people", get(people))
+        .route("/api/runtime/apps", get(apps))
         .route("/api/runtime/provider", get(provider))
         .route(
             "/api/runtime/connections/{id}/credential",
@@ -66,6 +67,21 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .layer(DefaultBodyLimit::max(20 * 1024))
         .layer(axum::middleware::map_response(no_store))
         .with_state(identity)
+}
+async fn apps(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<cubebot_protocol::apps::AppSpec>>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    let pool = identity.pool.clone();
+    crate::apps::Apps::new(pool.clone(), crate::identity::Identity::new(pool))
+        .specs(actor.agent)
+        .await
+        .map(Json)
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime apps request failed");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })
 }
 async fn bootstrap(
     State(identity): State<RuntimeIdentity>,

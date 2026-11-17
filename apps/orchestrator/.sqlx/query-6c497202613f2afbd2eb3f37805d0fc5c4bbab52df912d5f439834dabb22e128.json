@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT p.id, p.slug, p.name, p.description, p.icon, p.agent_id, g.name AS agent_name,\n                p.tools, p.desired, p.updating, p.reported, p.memory,\n                (to_jsonb(p.updated_at) #>> '{}') AS \"updated_at!\"\n            FROM apps p\n            JOIN agents g ON g.id = p.agent_id AND g.desired_state <> 'retired'\n            JOIN human_accounts a ON a.id = $1 AND a.active\n            WHERE a.role = 'administrator' OR EXISTS(\n                SELECT 1 FROM effective_human_grants e\n                WHERE e.actor_id = a.id AND e.scope_kind = 'conversation'\n                    AND e.scope_id = p.agent_id AND e.capability = 'conversation.send'\n            )\n            ORDER BY lower(p.name), p.slug\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "agent_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "tools",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 8,
+        "name": "desired",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "updating",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "reported",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "memory",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "6c497202613f2afbd2eb3f37805d0fc5c4bbab52df912d5f439834dabb22e128"
+}

@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT p.id, p.slug, p.name, p.description, p.icon, p.agent_id, g.name AS agent_name,\n                p.tools, p.desired, p.updating, p.reported, p.memory,\n                (to_jsonb(p.updated_at) #>> '{}') AS \"updated_at!\"\n            FROM apps p\n            JOIN agents g ON g.id = p.agent_id\n            WHERE p.slug = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "agent_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "tools",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 8,
+        "name": "desired",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "updating",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "reported",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "memory",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "1b693db1d53583b4b18674de86b3ce38090e06035c6f86e28e2525370831e639"
+}
