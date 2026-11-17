@@ -99,6 +99,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Create the GitHub release
-        run: gh release create "$TAG" digests.json --target "$GITHUB_SHA" --title "$TAG" --generate-notes ${{ github.event_name == 'workflow_dispatch' && '--draft' || '' }}
+        run: gh release create "$TAG" digests.json --target "$GITHUB_SHA" --title "$TAG" --generate-notes ${{ github.event_name == 'workflow_dispatch' && '--draft' || '' }} ${{ contains(inputs.tag || github.ref_name, '-') && '--prerelease --latest=false' || '' }}
         env:
           GH_TOKEN: ${{ github.token }}
