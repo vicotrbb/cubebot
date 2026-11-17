@@ -14,11 +14,13 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from pathlib import Path
 
 from cluster_chat_setup import wait_for
-from docker_desktop import Desktop, container
+from docker_desktop import CONSOLE, Desktop, container, surroundings
 from docker_sandbox import (
     IMAGES,
     INSTRUCTIONS,
@@ -42,7 +44,7 @@ from smoke import running
 
 PORT = 18080
 # The skills apps/orchestrator/skills ships, installed on every agent.
-SHIPPED = ("coding", "create-agent", "create-room-or-team", "design")
+SHIPPED = ("build-app", "coding", "create-agent", "create-room-or-team", "design")
 KEY_A = 38
 STAND_IN = r"""
 import http.server, json, re, sys
@@ -113,7 +115,56 @@ def connected(request, outputs):
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
 
+APP = '''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status</title>
+<link rel="stylesheet" href="./_cubebot/kit.css">
+<script src="./_cubebot/kit.js"></script>
+</head>
+<body>
+<main class="page">
+<header class="page__head"><h1>Status</h1></header>
+<div class="page__body">
+<div class="kit-grid">
+<section class="kit-card">
+<h2>Status page</h2>
+<p id="result">Loading</p>
+</section>
+</div>
+</div>
+</main>
+<script>
+var shown = document.getElementById('result')
+cubebot.call('status-page__get', { path: '/echo', query: {} }).then(
+  function (text) { shown.textContent = 'Live: ' + text },
+  function (error) { shown.textContent = 'Failed: ' + error.message })
+</script>
+</body>
+</html>'''
+
+
+# An app as a model would build one: write the page with bash, then register it, and a
+# second app on the same folder that declares no tools.
+def built(outputs):
+    app = {"description": "The status page, live.", "icon": "\U0001F4DF",
+           "folder": "apps/status", "command": None, "port": None}
+    steps = [
+        lambda: ("bash", {"command": "mkdir -p apps/status && cat > "
+                          "apps/status/index.html <<'EOF'\n" + APP + "\nEOF"}),
+        lambda: ("app_register", app | {"slug": "status", "name": "Status",
+                                        "tools": ["status-page__get"]}),
+        lambda: ("app_register", app | {"slug": "notes", "name": "Notes",
+                                        "tools": []}),
+    ]
+    return steps[len(outputs)]() if len(outputs) < len(steps) else None
+
+
 def step(request, outputs):
+    if "apps-" + MARKER in request:
+        return built(outputs)
     if "connections-" + MARKER in request:
         return connected(request, outputs)
     if SCRIPT in request:
@@ -375,7 +426,130 @@ def connections_turn(api, postgres, identity, marker, database):
         assert queried["code"] == 0 and user in json.dumps(queried), queried
         assert password not in journal, "a credential leaked"
         print("PASS an agent queried PostgreSQL over its own port from the sandbox")
-    echo.shutdown()
+    return echo
+
+
+POLICY = (
+    "sandbox allow-scripts allow-forms allow-popups allow-downloads; "
+    "default-src 'self'; "
+    "base-uri 'none'; frame-ancestors 'self'; connect-src 'self'; "
+    "img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; "
+    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' "
+    "'wasm-unsafe-eval'"
+)
+
+
+def relayed(api, path, method="GET", body=None, headers=None):
+    """A request as the app's frame makes it: no session, only the path's token."""
+    data = json.dumps(body).encode() if body is not None else None
+    request = urllib.request.Request(
+        api.base + path, data=data, headers=headers or {}, method=method
+    )
+    if data is not None:
+        request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(
+            request, timeout=30, context=api.context
+        ) as response:
+            return response.status, response.headers, response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, error.headers, error.read()
+
+
+def app_state(api, slug, state):
+    apps = {app["slug"]: app for app in api("/api/apps")}
+    return apps.get(slug) if apps.get(slug, {}).get("state") == state else None
+
+
+def apps_turn(api, postgres, identity, marker, console):
+    """An app the agent built is served through the relay with the platform's rules."""
+    path = f"/api/conversations/{identity}/messages"
+    message = command(message=f"Build me a status page app, apps-{marker}")
+    turn = api(path, message, expected=202)["id"]
+    wait_for("the apps turn", lambda: finished(api, identity, turn), timeout=180)
+    calls = tool_calls(postgres, turn)
+    assert [call["outcome"]["code"] for call in calls] == [0, 0, 0], calls
+    app = wait_for(
+        "the app running", lambda: app_state(api, "status", "running"), timeout=60
+    )
+    assert app["agent_id"] == identity, app
+    assert app["connections"] == [{"slug": "status-page", "connector": "http-api"}], app
+    print("PASS the agent wrote an app with bash and registered it; it runs")
+    prefix = api("/api/apps/status/views", method="POST")["path"]
+    assert prefix.startswith("/api/apps/status/v/"), prefix
+    status, headers, body = relayed(api, prefix)
+    assert status == 200 and b"_cubebot/kit.js" in body, (status, body[:200])
+    assert headers.get_all("Content-Security-Policy") == [POLICY], headers
+    assert headers["Access-Control-Allow-Origin"] == "*", headers
+    assert headers.get("Set-Cookie") is None, headers
+    status, headers, body = relayed(api, prefix + "_cubebot/kit.css")
+    assert status == 200 and b"--ground" in body, (status, body[:200])
+    assert headers["Content-Type"].startswith("text/css"), headers
+    call = {"tool": "status-page__get", "input": {"path": "/echo", "query": {}}}
+    status, _, body = relayed(api, prefix + "_cubebot/call", "POST", call)
+    answer = json.loads(body)
+    assert status == 200 and answer["ok"] is True, answer
+    assert "authorization" in answer["text"], answer
+    assert "echo-" not in answer["text"], "a credential leaked into the app"
+    other = {"tool": "github__get_issue", "input": {}}
+    status, _, body = relayed(api, prefix + "_cubebot/call", "POST", other)
+    assert status == 403 and json.loads(body)["ok"] is False, (status, body)
+    asked = {"Access-Control-Request-Method": "POST", "Origin": "null"}
+    asked["Access-Control-Request-Headers"] = "content-type"
+    status, headers, _ = relayed(api, prefix + "_cubebot/call", "OPTIONS", None, asked)
+    assert status == 204, status
+    assert headers["Access-Control-Allow-Headers"] == "content-type", headers
+    for escape in ("%2e%2e/%2e%2e/etc/passwd", "..%2f..%2f.cubebot-apps"):
+        status, _, body = relayed(api, prefix + escape)
+        assert status == 404 and b"root:" not in body, (escape, status, body[:200])
+    token = prefix.rstrip("/").rsplit("/", 1)[1]
+    status, _, _ = relayed(api, f"/api/apps/notes/v/{token}/")
+    assert status == 404, status
+    notes = api("/api/apps/notes/views", method="POST")["path"]
+    assert relayed(api, notes)[0] == 200
+    status, _, _ = relayed(api, notes + "_cubebot/call", "POST", call)
+    assert status == 403, status
+    print("PASS the relay serves the app with its policy and the kit, calls only the")
+    print("     declared tool, answers preflights, and keeps paths and tokens in place")
+    api("/api/apps/status/state", {"desired": "stopped"})
+    wait_for("the app stopped", lambda: app_state(api, "status", "stopped"), timeout=30)
+    assert relayed(api, prefix)[0] == 503
+    api("/api/apps/status/state", {"desired": "running"})
+    wait_for("the app running", lambda: app_state(api, "status", "running"), timeout=60)
+    assert relayed(api, prefix)[0] == 200
+    print("PASS Stop and Start from the API reached the agent's app")
+    if console:
+        console()
+
+
+def apps_console(address, ca, password):
+    evidence = Path(os.environ.get("CUBEBOT_APPS_EVIDENCE", "/tmp/cubebot-apps"))
+    evidence.mkdir(parents=True, exist_ok=True)
+    names = surroundings({"evidence": evidence}, address, ca)
+    try:
+        wait_for("the console", lambda: live(Api(CONSOLE, ca)), timeout=60)
+        environment = os.environ | {
+            "CUBEBOT_CONSOLE": CONSOLE,
+            "CUBEBOT_CONSOLE_LOGIN": "container-admin",
+            "CUBEBOT_CONSOLE_PASSWORD": password,
+            "CUBEBOT_EVIDENCE_DIRECTORY": str(evidence),
+        }
+        script = Path(__file__).with_name("apps_browser.mjs")
+        result = subprocess.run(
+            ["node", script],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        print(result.stdout + result.stderr)
+        assert result.returncode == 0, "the apps console check failed"
+    finally:
+        subprocess.run(["docker", "rm", "-f", *names], check=False, capture_output=True)
+    print(
+        "PASS console: the catalog and the framed app, wide and phone, light and dark;"
+    )
+    print(f"     {evidence}")
 
 
 def wave_two_connections(api, postgres):
@@ -582,7 +756,7 @@ def isolated(name, network):
         )
 
 
-def qualify(directory: Path, network):
+def qualify(directory: Path, network, console):
     with socket.socket() as probe:
         probe.bind((bridge(), 0))
         address = f"{bridge()}:{probe.getsockname()[1]}"
@@ -591,6 +765,7 @@ def qualify(directory: Path, network):
     settings = {"computer_use_enabled": True, "network": network}
     config.write_text(json.dumps(json.loads(config.read_text()) | settings))
     environment["CUBEBOT_STORAGE_DIRECTORY"] = str(directory / "storage")
+    environment["CUBEBOT_PUBLIC_ORIGIN"] = CONSOLE
     # Forwarded to each sandbox; the stand-in listens there.
     environment["CUBEBOT_TEST_PROVIDER_ORIGIN"] = f"http://127.0.0.1:{PORT}/"
     ca = directory / "ca/ca.crt"
@@ -603,7 +778,9 @@ def qualify(directory: Path, network):
         binary = [str(ROOT / "target/debug/cubebot-orchestrator")]
         with running(binary, ROOT, environment):
             wait_for("orchestrator HTTPS", lambda: live(api), timeout=30)
-            sign_in(api, database, "container-admin", secrets.token_urlsafe(24))
+            password = secrets.token_urlsafe(24)
+            sign_in(api, database, "container-admin", password)
+            watch = console and (lambda: console(address, ca, password))
             installation = api("/api/installation")
             assert installation["sandbox_runtime"] == "container", installation
             provider = command(
@@ -632,11 +809,13 @@ def qualify(directory: Path, network):
                 print(
                     "PASS an agent shared a file by login and wrote the knowledge base"
                 )
-                connections_turn(api, postgres, identity, marker, database)
+                echo = connections_turn(api, postgres, identity, marker, database)
                 print(
                     "PASS an agent found and called a connection tool with a credential"
                 )
                 print("     that the model, the journal and the tool user never saw")
+                apps_turn(api, postgres, identity, marker, watch)
+                echo.shutdown()
                 openrouter_turn(api, postgres, identity, marker)
                 print("PASS one turn through the OpenRouter adapter")
             except BaseException:
@@ -658,6 +837,14 @@ def qualify(directory: Path, network):
 def main():
     started = time.monotonic()
     build("container")
+    watched = bool(os.environ.get("CUBEBOT_PLAYWRIGHT_MODULE"))
+    if watched:
+        web = ["docker", "build", "-q", "-t", "cubebot-web:local"]
+        subprocess.run(web + ["-f", "apps/web/Dockerfile", "."], check=True, cwd=ROOT)
+    else:
+        print(
+            "SKIP apps console: set CUBEBOT_PLAYWRIGHT_MODULE to check it in Chromium"
+        )
     network = f"cubebot-check-{uuid.uuid4().hex[:12]}"
     subprocess.run(
         ["docker", "network", "create", "--opt"]
@@ -667,7 +854,7 @@ def main():
     )
     try:
         with tempfile.TemporaryDirectory() as directory:
-            qualify(Path(directory), network)
+            qualify(Path(directory), network, apps_console if watched else None)
     finally:
         subprocess.run(["docker", "network", "rm", network], check=False)
     print(f"container-check passed in {time.monotonic() - started:.0f}s")

@@ -57,7 +57,7 @@ class Api:
         )
         try:
             with urllib.request.urlopen(
-                request, timeout=10, context=self.context
+                request, timeout=30, context=self.context
             ) as response:
                 status, payload = response.status, response.read()
         except urllib.error.HTTPError as error:
