@@ -17,6 +17,7 @@ pub enum LivenessStatus {
 /// The exit status of a sandbox that refused a workspace volume laid out by the other runtime. Launchers report it.
 pub const LAYOUT_MISMATCH: u8 = 78;
 
+pub mod apps;
 pub mod desktop;
 pub mod guest;
 pub mod network;
