@@ -4,7 +4,7 @@ use http_body_util::{BodyExt, Full, Limited, combinators::BoxBody};
 use hyper::{
     Method, Request, Response, StatusCode,
     body::{Bytes, Incoming},
-    header::{CACHE_CONTROL, CONTENT_TYPE, UPGRADE},
+    header::{CACHE_CONTROL, CONTENT_TYPE, LOCATION, UPGRADE},
     server::conn::http1,
     service::service_fn,
     upgrade::OnUpgrade,
@@ -29,7 +29,7 @@ const KIT_CSS: &str = include_str!("../../../../modules/kit/kit.css");
 const KIT_JS: &str = include_str!("../../../../modules/kit/src/kit.js");
 const KIT_CACHE: &str = "public, max-age=86400";
 const CALL_LIMIT: usize = 64 * 1024;
-const FILE_LIMIT: u64 = 64 * 1024 * 1024;
+const FILE_LIMIT: u64 = 8 * 1024 * 1024;
 
 pub async fn serve(apps: Arc<Apps>) {
     match TcpListener::bind((Ipv4Addr::LOCALHOST, LOCAL_PORT)).await {
@@ -61,23 +61,27 @@ async fn listen(listener: TcpListener, apps: Arc<Apps>) {
 
 async fn answer(apps: Arc<Apps>, request: Request<Incoming>) -> Result<Response<Body>, Infallible> {
     let path = request.uri().path().to_owned();
-    let (slug, rest) = path
-        .trim_start_matches('/')
+    let trimmed = path.trim_start_matches('/');
+    let (slug, rest) = trimmed
         .split_once('/')
-        .unwrap_or((path.trim_start_matches('/'), ""));
+        .map_or((trimmed, None), |(slug, rest)| (slug, Some(rest)));
     let Some(spec) = apps.spec(slug) else {
         return Ok(plain(StatusCode::NOT_FOUND, "not found"));
     };
     if spec.desired == Desired::Stopped {
         return Ok(plain(StatusCode::SERVICE_UNAVAILABLE, "stopped"));
     }
+    let Some(rest) = rest else {
+        return Ok(redirect(slug, request.uri().query()));
+    };
     Ok(match rest {
         "_cubebot/kit.css" => kit(KIT_CSS, "text/css; charset=utf-8"),
         "_cubebot/kit.js" => kit(KIT_JS, "text/javascript; charset=utf-8"),
         "_cubebot/call" => call(&apps, &spec, request).await,
         _ => match (&spec.command, spec.port) {
             (Some(_), Some(port)) => proxy(port, rest, request).await,
-            _ => file(&apps, &spec, rest).await,
+            (Some(_), None) => plain(StatusCode::SERVICE_UNAVAILABLE, "unavailable"),
+            (None, _) => file(&apps, &spec, rest).await,
         },
     })
 }
@@ -91,6 +95,18 @@ fn full(status: StatusCode, content_type: &str, body: impl Into<Bytes>) -> Respo
     *response.status_mut() = status;
     if let Ok(value) = content_type.parse() {
         response.headers_mut().insert(CONTENT_TYPE, value);
+    }
+    response
+}
+
+fn redirect(slug: &str, query: Option<&str>) -> Response<Body> {
+    let location = match query {
+        Some(query) => format!("/{slug}/?{query}"),
+        None => format!("/{slug}/"),
+    };
+    let mut response = plain(StatusCode::PERMANENT_REDIRECT, "moved");
+    if let Ok(value) = location.parse() {
+        response.headers_mut().insert(LOCATION, value);
     }
     response
 }
@@ -397,13 +413,20 @@ mod tests {
 
     #[tokio::test]
     async fn stopped_apps_answer_503() {
-        let (_apps, sandbox, address) = serving(vec![spec("app", Desired::Stopped, &[])]).await;
+        let (apps, sandbox, address) = serving(vec![spec("app", Desired::Stopped, &[])]).await;
         assert_eq!(
             send(address, "GET /app/", "").await,
             (503, "stopped".into())
         );
         assert_eq!(send(address, "GET /app/_cubebot/kit.js", "").await.0, 503);
         assert_eq!(send(address, "GET /other/", "").await.0, 404);
+        let mut portless = spec("portless", Desired::Running, &[]);
+        portless.command = Some("true".into());
+        apps.specs.write().unwrap().push(portless);
+        assert_eq!(
+            send(address, "GET /portless/", "").await,
+            (503, "unavailable".into())
+        );
         std::fs::remove_dir_all(sandbox.workspace()).unwrap();
     }
 

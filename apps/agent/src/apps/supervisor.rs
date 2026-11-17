@@ -40,7 +40,7 @@ impl Process {
     ) -> Self {
         let launch = match (spec.desired, &spec.command, spec.port, sandbox) {
             (Desired::Stopped, ..) => Err(Reported::Stopped),
-            (Desired::Running, None, ..) => Err(Reported::Running),
+            (Desired::Running, None, _, Some(_)) => Err(Reported::Running),
             (Desired::Running, Some(command), Some(port), Some(sandbox)) => Ok(Run {
                 slug: spec.slug.clone(),
                 folder: spec.folder.clone(),
@@ -128,10 +128,10 @@ impl Run {
                 _ = child.wait() => return,
                 _ = &mut ready, if state == Reported::Starting => {
                     state = Reported::Running;
-                    self.report(state, group.and_then(memory));
+                    self.report(state, sample(group).await);
                 }
                 _ = status.tick() => {
-                    self.report(state, group.and_then(memory));
+                    self.report(state, sample(group).await);
                     self.trim().await;
                 }
             }
@@ -184,6 +184,14 @@ async fn ready(port: u16) {
     {
         tokio::time::sleep(READY_POLL).await;
     }
+}
+
+async fn sample(group: Option<u32>) -> Option<u64> {
+    let group = group?;
+    tokio::task::spawn_blocking(move || memory(group))
+        .await
+        .ok()
+        .flatten()
 }
 
 fn memory(group: u32) -> Option<u64> {
@@ -253,6 +261,39 @@ mod tests {
         assert!(elapsed >= BACKOFF * (1 + 2 + 4 + 8), "{elapsed:?}");
         let log = std::fs::read_to_string(sandbox.workspace().join(".cubebot-apps/crash.log"));
         assert_eq!(log.unwrap().matches("boom").count(), ATTEMPTS);
+        std::fs::remove_dir_all(sandbox.workspace()).unwrap();
+    }
+
+    #[test]
+    fn a_static_app_without_a_sandbox_is_not_reported_running() {
+        let (sender, mut reports) = mpsc::channel(4);
+        let spec = AppSpec {
+            slug: "site".into(),
+            name: "Site".into(),
+            folder: "site".into(),
+            command: None,
+            port: None,
+            tools: Vec::new(),
+            desired: Desired::Running,
+        };
+        let process = Process::start(&spec, &None, &sender);
+        assert!(process.task.is_none());
+        let reported = reports.try_recv().unwrap();
+        let failed = AppReport::State {
+            slug: "site".into(),
+            state: Reported::Failed,
+            memory: None,
+        };
+        assert_eq!(reported, failed);
+        let sandbox = crate::tools::tests::sandbox();
+        let process = Process::start(&spec, &Some(sandbox.clone()), &sender);
+        let running = AppReport::State {
+            slug: "site".into(),
+            state: Reported::Running,
+            memory: None,
+        };
+        assert_eq!(reports.try_recv().unwrap(), running);
+        drop(process);
         std::fs::remove_dir_all(sandbox.workspace()).unwrap();
     }
 
