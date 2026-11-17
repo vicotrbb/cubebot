@@ -88,6 +88,16 @@ async fn family(
             crate::work::teams::tool(tx, actor, human, call).await?,
         ));
     }
+    if tool.starts_with("wake_") {
+        return Ok(Some(
+            crate::work::wakes::tool(tx, actor.agent, human, call).await?,
+        ));
+    }
+    if tool == "request_attention" {
+        return Ok(Some(
+            crate::work::activity::attention(tx, turn, &call.input).await?,
+        ));
+    }
     if tool.starts_with("task_") {
         return Ok(Some(crate::work::tasks::tool(tx, actor, turn, call).await?));
     }

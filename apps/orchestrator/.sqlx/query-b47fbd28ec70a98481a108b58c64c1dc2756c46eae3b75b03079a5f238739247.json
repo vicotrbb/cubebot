@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT g.id AS agent, t.id AS turn, t.sequence, (to_jsonb(t.status_at) #>> '{}') AS \"at!\",\n                   left(t.response, 600) AS \"excerpt!\", n.unread AS \"unread!\"\n            FROM agents g\n            JOIN human_accounts a ON a.id=$1 AND a.active\n            CROSS JOIN LATERAL (\n                SELECT COALESCE((SELECT r.sequence FROM read_cursors r WHERE r.account_id=a.id AND r.scope_kind='conversation' AND r.scope_id=g.id), 0) AS seen\n            ) c\n            JOIN LATERAL (\n                SELECT u.id, u.sequence, u.status_at, u.response\n                FROM chat_turns u\n                WHERE u.conversation_id=g.id AND u.room_message_id IS NULL AND u.sequence > c.seen\n                  AND u.status='complete' AND u.response <> ''\n                ORDER BY u.sequence DESC\n                LIMIT 1\n            ) t ON true\n            CROSS JOIN LATERAL (\n                SELECT count(*) AS unread\n                FROM chat_turns u\n                WHERE u.conversation_id=g.id AND u.room_message_id IS NULL AND u.sequence > c.seen\n                  AND u.status='complete' AND u.response <> ''\n            ) n\n            WHERE g.desired_state<>'retired'\n              AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.read'))\n            ORDER BY t.status_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "sequence",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "excerpt!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "unread!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b47fbd28ec70a98481a108b58c64c1dc2756c46eae3b75b03079a5f238739247"
+}

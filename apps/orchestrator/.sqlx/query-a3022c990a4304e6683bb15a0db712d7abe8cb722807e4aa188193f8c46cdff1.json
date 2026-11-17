@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE chat_turns SET attention_settled_at=clock_timestamp() WHERE id=$1 AND attention_settled_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a3022c990a4304e6683bb15a0db712d7abe8cb722807e4aa188193f8c46cdff1"
+}

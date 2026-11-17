@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM wakes WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0b6b0228266d69be33be989c3f5f5232689b2187ba38de8fe5ec04822659596c"
+}

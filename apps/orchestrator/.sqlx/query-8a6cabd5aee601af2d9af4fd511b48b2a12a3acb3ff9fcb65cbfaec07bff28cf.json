@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS(SELECT 1 FROM chat_turns WHERE wake_id=$1 AND status='queued') AS \"pending!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pending!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8a6cabd5aee601af2d9af4fd511b48b2a12a3acb3ff9fcb65cbfaec07bff28cf"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"held!\" FROM wakes WHERE agent_id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "held!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "402bcd72ace48edd469c1a97ae1ca1667f6638e7d6763e844c4186dd30655365"
+}

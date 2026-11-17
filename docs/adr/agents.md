@@ -646,6 +646,24 @@ Accepted 2026-11-01. Amended 2026-11-09, at the user's direction: each routine's
 
 **Validation scenarios.** The next time of a schedule; a coalescing routine keeps one pending turn; a wrong secret is 401; a replayed idempotency key makes no second turn; a command-only routine completes without a provider request.
 
+## Wakes
+
+Accepted 2026-11-17, at the user's direction.
+
+**Decision.** A wake is a note an agent leaves itself: instructions and a time, once (`at` or `delay_minutes`, within a year) or on a five-field cron in an IANA zone read like a routine's. When it is due, the 30-second routine tick inserts a turn with origin `wake` in the agent's permanent conversation, woken like any message, whose text says who set it, followed by the instructions. A one-time wake is deleted once it fires; a repeating one moves to its next time and skips an occurrence while its previous turn is still queued. A wake is not a routine: it has no command, webhook or event trigger, and it never appears on the calendar. The agent's `wake_set`, `wake_list` and `wake_cancel` tools manage its own wakes and it may cancel only wakes it set; a tool call's id makes a retried `wake_set` idempotent. People list, create, edit and cancel any wake with `conversation.send` (`conversation.read` to list) on the agent's Wakes tab; a person's edit makes the wake theirs. An agent holds at most 32 wakes; a retired agent's wakes stop firing.
+
+**Rationale.** Waiting inside a turn holds a lane and a provider stream; a wake ends the turn and resumes on time through the ordinary turn path. Alternatives considered: telling agents to create routines for one-off waits, which fills routine lists and the calendar with notes that are not jobs.
+
+**Validation scenarios.** A wake needs exactly one time and a future one within a year; a due one-time wake makes one turn and is deleted; an agent cannot cancel a person's wake.
+
+## Needs you
+
+Accepted 2026-11-17, at the user's direction.
+
+**Decision.** An agent marks a reply as needing a person with the `request_attention` tool and a one-line summary of at most 280 bytes, stored on the turn. The console's Activity page lists, first, what needs the caller: those summaries, pending creation requests (approved or declined in place), login handoffs, and waiting or failed turns. Next it lists one row per agent whose permanent conversation holds completed replies past the caller's read cursor, with the latest reply shortened to a line, then informational updates. A summary is settled when a person sends a message in that conversation, posts in the room it came from, or marks it done. Updates about published skills leave once the caller has opened Activity after they arrived.
+
+**Rationale.** With many agents, reading every conversation to find the ones that are blocked does not scale; the agent knows when it needs a person and says so in one line. Alternatives considered: inferring the need from question marks in replies, which misfires on rhetorical questions and misses requests phrased as statements; summarizing each reply with a model in the orchestrator, which adds provider calls outside any agent's budget.
+
 ## Shared goal budgets with optional cost limits
 
 Accepted 2026-10-23. Amended 2026-10-27: budget limits are checked from ledger usage reports, not enforced per call ([Agent-centric execution in a sandbox boundary](sandbox.md#agent-centric-execution-in-a-sandbox-boundary)).

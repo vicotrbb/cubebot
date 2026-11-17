@@ -21,6 +21,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/activity/attention/{turn}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['settle_attention']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/activity/read': {
     parameters: {
       query?: never
@@ -31,6 +47,22 @@ export interface paths {
     get?: never
     /** Marks the caller's inbox as seen, on every device; its items stay until they are dealt with. */
     put: operations['read_activity']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/activity/replies': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['unread_replies']
+    put?: never
     post?: never
     delete?: never
     options?: never
@@ -285,6 +317,38 @@ export interface paths {
     put?: never
     post?: never
     delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/wakes': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['list_wakes']
+    put?: never
+    post: operations['create_wake']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{agent}/wakes/{wake}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['update_wake']
+    post?: never
+    delete: operations['delete_wake']
     options?: never
     head?: never
     patch?: never
@@ -2726,8 +2790,8 @@ export interface components {
       /** @description RFC 3339. */
       at: string
       /**
-       * @description `login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending`,
-       *     `dream_published_skill` or `agent_published_skill`.
+       * @description `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
+       *     `invitation_pending`, `dream_published_skill` or `agent_published_skill`.
        */
       kind: string
       /** Format: uuid */
@@ -3337,6 +3401,11 @@ export interface components {
       /** Format: uuid */
       request_id: string
       team: components['schemas']['SaveTeam']
+    }
+    CreateWake: {
+      /** Format: uuid */
+      request_id: string
+      wake: components['schemas']['SaveWake']
     }
     Created: {
       /** Format: uuid */
@@ -4210,7 +4279,7 @@ export interface components {
       turn: string
     }
     Origin: {
-      /** @description `approvals`, `broadcast`, `room`, `routine`, `delegation` or `message`. */
+      /** @description `approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`. */
       kind: string
       /** @description The room's or routine's name, the sending agent's, or a broadcast's sender. */
       name: string
@@ -4782,6 +4851,14 @@ export interface components {
       site?: string | null
       username?: string | null
     }
+    SaveWake: {
+      at?: string | null
+      /** Format: int64 */
+      delay_minutes?: number | null
+      instructions: string
+      schedule?: string | null
+      time_zone?: string | null
+    }
     /** @description A provider that holds a key without being the one agents use. */
     SavedProvider: {
       /** Format: int64 */
@@ -5331,6 +5408,18 @@ export interface components {
           /** @enum {string} */
           kind: 'error'
         }
+    UnreadReply: {
+      /** Format: uuid */
+      agent: string
+      at: string
+      excerpt: string
+      /** Format: int64 */
+      sequence: number
+      /** Format: uuid */
+      turn: string
+      /** Format: int64 */
+      unread: number
+    }
     UpdateAgent: {
       avatar?: null | components['schemas']['Avatar']
       /** @description Whether the agent may broadcast to every agent; `None` keeps the current setting. */
@@ -5426,6 +5515,16 @@ export interface components {
     }
     /** @enum {string} */
     Voice: 'male' | 'female'
+    Wake: {
+      created_at: string
+      /** Format: uuid */
+      id: string
+      instructions: string
+      next_at: string
+      schedule?: string | null
+      set_by: string
+      time_zone: string
+    }
     WebhookSecret: {
       secret: string
     }
@@ -5467,6 +5566,25 @@ export interface operations {
       }
     }
   }
+  settle_attention: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        turn: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   read_activity: {
     parameters: {
       query?: never
@@ -5481,6 +5599,25 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  unread_replies: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['UnreadReply'][]
+        }
       }
     }
   }
@@ -6040,6 +6177,98 @@ export interface operations {
         content: {
           'application/json': components['schemas']['AgentUsage']
         }
+      }
+    }
+  }
+  list_wakes: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Wake'][]
+        }
+      }
+    }
+  }
+  create_wake: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateWake']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Wake']
+        }
+      }
+    }
+  }
+  update_wake: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        wake: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveWake']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Wake']
+        }
+      }
+    }
+  }
+  delete_wake: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+        wake: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

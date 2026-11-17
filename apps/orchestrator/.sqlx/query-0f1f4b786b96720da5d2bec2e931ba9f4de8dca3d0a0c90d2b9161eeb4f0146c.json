@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM wakes WHERE id=$1 AND agent_id=$2 RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0f1f4b786b96720da5d2bec2e931ba9f4de8dca3d0a0c90d2b9161eeb4f0146c"
+}

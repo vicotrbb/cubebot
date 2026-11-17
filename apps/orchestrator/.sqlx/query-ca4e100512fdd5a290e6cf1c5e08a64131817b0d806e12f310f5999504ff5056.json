@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE chat_turns\n        SET attention_settled_at=clock_timestamp()\n        WHERE conversation_id=$1 AND room_message_id IS NULL AND attention IS NOT NULL AND attention_settled_at IS NULL\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca4e100512fdd5a290e6cf1c5e08a64131817b0d806e12f310f5999504ff5056"
+}

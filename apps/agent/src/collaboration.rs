@@ -3,6 +3,7 @@ mod routines;
 mod tasks;
 mod teams;
 mod vault;
+mod wakes;
 pub use creations::definitions as creation_definitions;
 pub use teams::definitions as team_definitions;
 pub use vault::redacted;
@@ -84,6 +85,7 @@ pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot
     }));
     tools.extend(vault::definitions(desktop));
     tools.extend(routines::definitions());
+    tools.extend(wakes::definitions());
     tools
 }
 
@@ -130,6 +132,7 @@ impl Collaboration {
                 return self
                     .vault(name, input)
                     .or_else(|| self.routine(name, id, input))
+                    .or_else(|| self.wake(name, id, input))
                     .or_else(|| self.task(name, id, input))
                     .or_else(|| self.team(name, id, input))
                     .or_else(|| self.creation(name, id, input));

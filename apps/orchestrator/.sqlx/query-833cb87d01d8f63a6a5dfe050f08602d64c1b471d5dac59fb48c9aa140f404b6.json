@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE wakes\n            SET instructions=$3, schedule=$4, time_zone=$5, next_at=to_timestamp($6), set_by='person', created_by=$7\n            WHERE id=$1 AND agent_id=$2\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Float8",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "833cb87d01d8f63a6a5dfe050f08602d64c1b471d5dac59fb48c9aa140f404b6"
+}

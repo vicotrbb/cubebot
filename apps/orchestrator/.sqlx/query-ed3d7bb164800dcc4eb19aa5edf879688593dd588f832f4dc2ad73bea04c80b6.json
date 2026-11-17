@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT w.id, w.agent_id AS \"agent: AgentId\", w.instructions, w.schedule, w.time_zone,\n            w.set_by, w.created_by, h.login\n        FROM wakes w\n        JOIN agents g ON g.id=w.agent_id AND g.desired_state<>'retired'\n        JOIN human_accounts h ON h.id=w.created_by\n        WHERE w.next_at <= clock_timestamp()\n        ORDER BY w.next_at\n        LIMIT 64\n        FOR UPDATE OF w SKIP LOCKED\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent: AgentId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "schedule",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "time_zone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "set_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "login",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ed3d7bb164800dcc4eb19aa5edf879688593dd588f832f4dc2ad73bea04c80b6"
+}

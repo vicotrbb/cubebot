@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE wakes SET next_at=to_timestamp($2) WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "412b7dcfa270979fe7961e4b5619861a21bc96e19dee773fb01d6afe666f6ce6"
+}

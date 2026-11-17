@@ -1,0 +1,77 @@
+.wakes {
+  display: grid;
+}
+.wake {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.wake:first-child {
+  padding-top: 0;
+}
+.wake:last-child {
+  border-bottom: 0;
+}
+.wake__icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-md);
+  background: var(--orange-wash);
+  color: var(--orange-text);
+}
+.wake__icon svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.9;
+}
+.wake__body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.wake__when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: var(--w-head);
+  font-variant-numeric: tabular-nums;
+}
+.wake__until {
+  color: var(--orange-text);
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+}
+.wake__text {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--t-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.wake__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.wake__actions {
+  display: inline-flex;
+  gap: 12px;
+}
+.wake__actions .link-btn {
+  min-height: 28px;
+}
+.wake-form {
+  margin-top: 12px;
+}
