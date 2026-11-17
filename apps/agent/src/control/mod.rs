@@ -310,6 +310,13 @@ impl MemoryClient {
         transport::decode(response.map_err(request_failed)?, 1024 * 1024).await
     }
 
+    #[tracing::instrument(skip_all)]
+    pub async fn apps(&self) -> Result<Vec<cubebot_protocol::apps::AppSpec>, Error> {
+        let url = self.url.join("apps").map_err(Error::configuration)?;
+        let response = self.http.get(url).bearer_auth(&self.token).send().await;
+        transport::decode(response.map_err(request_failed)?, 1024 * 1024).await
+    }
+
     /// A connection's short-lived credential, or the refusal's status: 404 when this agent may no
     /// longer use it, 409 when it needs signing in again. Never log it.
     #[tracing::instrument(skip_all, fields(connection = %connection))]

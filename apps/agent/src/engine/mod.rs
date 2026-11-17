@@ -136,6 +136,9 @@ impl Agent {
             client.bootstrap().await?;
             self.bootstrapped = true;
             self.memory = client.memory();
+            let sandbox = self.tools.as_ref().map(|tools| tools.sandbox().clone());
+            let apps = crate::apps::Apps::new(self.memory.clone(), sandbox);
+            tokio::spawn(crate::apps::run(Arc::new(apps)));
         }
         if !self.restored
             && let Some(memory) = &self.memory
