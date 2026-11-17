@@ -136,7 +136,9 @@ impl Collaboration {
     async fn precheck(&self, input: &Value) -> Option<String> {
         let client = self.client.as_ref()?;
         let workspace = std::env::var_os("CUBEBOT_WORKSPACE_DIRECTORY")?;
-        let granted = client.connections().await.ok()?;
+        let Ok(granted) = client.connections().await else {
+            return Some("Refused: could not check your connections; try again.".into());
+        };
         let connections = Connections::new(Some(client.clone()), &granted);
         refusal(Path::new(&workspace), input, &connections)
     }
@@ -179,6 +181,27 @@ mod tests {
             let refused = refusal(&root, &json!({"folder": bad}), &connections);
             assert!(refused.unwrap().contains("relative path"), "{bad}");
         }
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn register_accepts_a_tool_a_connection_offers() {
+        let root = workspace();
+        let gmail = cubebot_protocol::runtime::Connection {
+            id: Uuid::new_v4(),
+            connector: "google".into(),
+            slug: "gmail-work".into(),
+            account: None,
+            config: json!({}),
+            level: "write".into(),
+            disabled_tools: vec![],
+        };
+        let connections = Connections::new(None, &[gmail]);
+        let input = |tool: &str| json!({"folder": "budget", "tools": [tool]});
+        assert!(refusal(&root, &input("gmail-work__gmail_modify"), &connections).is_none());
+        assert!(refusal(&root, &input("gmail-work__gmail_send"), &connections).is_some());
+        assert!(refusal(&root, &input("other__gmail_modify"), &connections).is_some());
+        assert!(refusal(&root, &input("gmail_modify"), &connections).is_some());
         let _ = std::fs::remove_dir_all(root);
     }
 

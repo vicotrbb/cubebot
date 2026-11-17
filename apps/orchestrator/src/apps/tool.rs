@@ -87,7 +87,15 @@ impl Apps {
             Err(reason) => return Ok(Err(reason)),
         };
         let app = self.agent_state(agent, &slug, state).await?;
-        Ok(app.map(|app| format!("{} is now {:?}. {}", app.slug, app.state, url(&app.slug))))
+        Ok(app.map(|app| {
+            let state = serde_json::to_value(app.state).unwrap_or_default();
+            format!(
+                "{} is now {}. {}",
+                app.slug,
+                state.as_str().unwrap_or_default(),
+                url(&app.slug)
+            )
+        }))
     }
 
     async fn removed(&self, agent: AgentId, input: &Value) -> Result<Answer, IdentityError> {
