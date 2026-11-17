@@ -13,6 +13,7 @@ pub use credentials::{CredentialError, Credentials};
 pub use mcp::{AgentMcpServer, McpServerSummary, McpTransport, SaveMcpServer};
 pub(crate) use models::configured;
 pub use models::{ListModels, ModelChoice, ModelsError};
+pub(crate) use native::granted;
 pub use native::{
     AgentConnection, Catalog, ConnectError, ConnectionActivity, ConnectionEvent, ConnectionSummary,
     EventRoutine, FinishSignIn, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,

@@ -376,11 +376,10 @@ async fn native_connections(
     connections: Option<&Connections>,
     actor: &RuntimeActor,
 ) -> Vec<cubebot_protocol::runtime::Connection> {
-    let Some(connections) = connections else {
+    if connections.is_none() {
         return Vec::new();
-    };
-    connections
-        .runtime_connections(tx, actor.agent)
+    }
+    crate::connections::granted(&mut **tx, actor.agent)
         .await
         .unwrap_or_else(|error| {
             tracing::warn!(?error, "connections unavailable for the turn");

@@ -165,6 +165,32 @@ impl Connections {
         })))
     }
 
+    /// One tool call outside a turn, within the connections' configuration as of now.
+    pub async fn call_tool(&self, name: &str, input: &Value) -> Result<String, String> {
+        let client = self.client.as_ref().ok_or("no orchestrator to ask")?;
+        let granted = client
+            .connections()
+            .await
+            .map_err(|_| "the orchestrator could not be reached")?;
+        Self::new(self.client.clone(), &granted)
+            .invoke(name, input)
+            .await
+    }
+
+    async fn invoke(&self, name: &str, input: &Value) -> Result<String, String> {
+        let running = self
+            .call(name, Uuid::new_v4(), input, None)
+            .ok_or("this tool is not offered by an allowed connection")??;
+        match running.await {
+            Outcome::Exited {
+                code: Some(0),
+                output,
+            } => Ok(output),
+            Outcome::Exited { output, .. } => Err(output),
+            _ => Err("the vendor did not answer".into()),
+        }
+    }
+
     fn found(&self, query: &str) -> Outcome {
         let found = self.search(query);
         let output = if found.is_empty() {
@@ -446,6 +472,28 @@ mod tests {
         assert!(names.contains(&"gmail-work__gmail_modify"), "{names:?}");
         let refused = connections.call("gmail-work__gmail_send", Uuid::new_v4(), &json!({}), None);
         assert!(refused.is_none(), "a tool above the level is not callable");
+    }
+
+    #[tokio::test]
+    async fn a_switched_off_tool_is_refused_outside_a_turn() {
+        let connections = Connections::new(None, &[connection("gmail-work", "google", "full")]);
+        let refused = connections
+            .invoke("gmail-work__gmail_draft", &json!({}))
+            .await;
+        assert!(refused.is_err(), "{refused:?}");
+    }
+
+    #[tokio::test]
+    async fn a_tool_above_the_level_is_refused_outside_a_turn() {
+        let connections = Connections::new(None, &[connection("gmail-work", "google", "write")]);
+        let refused = connections
+            .invoke("gmail-work__gmail_send", &json!({}))
+            .await;
+        assert!(refused.is_err(), "{refused:?}");
+        let invalid = connections
+            .invoke("gmail-work__gmail_modify", &json!([]))
+            .await;
+        assert_eq!(invalid, Err("invalid tool arguments".into()));
     }
 
     #[test]

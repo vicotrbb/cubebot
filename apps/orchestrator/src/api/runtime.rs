@@ -34,6 +34,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/people", get(people))
         .route("/api/runtime/apps", get(apps))
         .route("/api/runtime/provider", get(provider))
+        .route("/api/runtime/connections", get(granted_connections))
         .route(
             "/api/runtime/connections/{id}/credential",
             get(connection_credential),
@@ -368,6 +369,22 @@ async fn provider(
         api_key: inference.api_key,
         api_key_expires_at: inference.api_key_expires_at,
     }))
+}
+async fn granted_connections(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<cubebot_protocol::runtime::Connection>>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    if identity.connections.is_none() {
+        return Err(Failure(StatusCode::SERVICE_UNAVAILABLE));
+    }
+    crate::connections::granted(&identity.pool, actor.agent)
+        .await
+        .map(Json)
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime connections unavailable");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })
 }
 /// 404 when the agent may no longer use the connection, 409 when it needs signing in again.
 async fn connection_credential(
