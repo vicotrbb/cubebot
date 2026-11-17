@@ -923,6 +923,7 @@ version = "0.3.7"
 dependencies = [
  "serde",
  "serde_json",
+ "tokio",
  "utoipa",
  "uuid",
 ]

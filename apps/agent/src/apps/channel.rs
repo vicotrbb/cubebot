@@ -1,36 +1,17 @@
 use super::Apps;
 use crate::control::{Channel, RuntimeClient};
-use cubebot_protocol::apps::{AppNotice, AppReport, Frame, LOCAL_PORT, decode, encode};
-use futures_util::{SinkExt, StreamExt};
-use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::TcpStream,
-    sync::{Semaphore, mpsc},
-    time::Instant,
+use cubebot_protocol::{
+    apps::{AppNotice, AppReport, Frame, LOCAL_PORT, decode},
+    lanes::{self, Lanes, Piece, Pipe},
 };
+use futures_util::{SinkExt, StreamExt};
+use std::{sync::Arc, time::Duration};
+use tokio::{net::TcpStream, sync::mpsc, time::Instant};
 use tokio_tungstenite::tungstenite::{Error, Message};
 
 const RECONNECT: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(15);
-const CHUNK: usize = 16 * 1024;
-const WINDOW: usize = 256 * 1024;
-const GRANT: usize = 64 * 1024;
-const FRAME_COST: usize = 64;
-const CHUNK_CREDIT: u32 = 16 * 1024 + 64;
 const OUTGOING: usize = 64;
-
-enum Out {
-    Data(u32, Vec<u8>),
-    Credit(u32, u32),
-    Close(u32),
-}
-
-struct Lane {
-    sender: mpsc::Sender<Vec<u8>>,
-    credit: Arc<Semaphore>,
-    owed: usize,
-}
 
 pub(super) async fn run(apps: Arc<Apps>, client: RuntimeClient) {
     let Some(mut reports) = apps.reports() else {
@@ -58,7 +39,7 @@ async fn link(
 ) {
     refresh(apps);
     let (out, mut outgoing) = mpsc::channel(OUTGOING);
-    let mut streams = HashMap::new();
+    let mut streams = Lanes::default();
     let mut heard = Instant::now();
     loop {
         let going = tokio::select! {
@@ -70,8 +51,8 @@ async fn link(
                 let text = serde_json::to_string(&report).unwrap_or_default();
                 channel.send(Message::Text(text.into())).await.is_ok()
             }
-            Some(item) = outgoing.recv() => {
-                let frame = outbound(&mut streams, item);
+            Some(piece) = outgoing.recv() => {
+                let frame = streams.outgoing(&piece);
                 channel.send(Message::Binary(frame.into())).await.is_ok()
             }
             () = tokio::time::sleep_until(heard + SILENCE) => false,
@@ -82,28 +63,10 @@ async fn link(
     }
 }
 
-fn outbound(streams: &mut HashMap<u32, Lane>, item: Out) -> Vec<u8> {
-    match item {
-        Out::Data(stream, data) => encode(&Frame::Data(stream, &data)),
-        Out::Credit(stream, bytes) => {
-            if let Some(lane) = streams.get_mut(&stream) {
-                lane.owed = lane
-                    .owed
-                    .saturating_sub(usize::try_from(bytes).unwrap_or(usize::MAX));
-            }
-            encode(&Frame::Credit(stream, bytes))
-        }
-        Out::Close(stream) => {
-            streams.remove(&stream);
-            encode(&Frame::Close(stream))
-        }
-    }
-}
-
 fn incoming(
     apps: &Arc<Apps>,
-    streams: &mut HashMap<u32, Lane>,
-    out: &mpsc::Sender<Out>,
+    streams: &mut Lanes,
+    out: &mpsc::Sender<Piece>,
     port: u16,
     message: Option<Result<Message, Error>>,
 ) -> bool {
@@ -123,112 +86,23 @@ fn incoming(
     }
 }
 
-fn deliver(streams: &mut HashMap<u32, Lane>, out: &mpsc::Sender<Out>, port: u16, bytes: &[u8]) {
-    let (stream, kept) = match decode(bytes) {
+fn deliver(streams: &mut Lanes, out: &mpsc::Sender<Piece>, port: u16, bytes: &[u8]) {
+    match decode(bytes) {
         Some(Frame::Open(stream)) => {
-            let (sender, received) = mpsc::channel(WINDOW / FRAME_COST);
-            let credit = Arc::new(Semaphore::new(WINDOW));
-            let lane = Lane {
-                sender,
-                credit: credit.clone(),
-                owed: 0,
-            };
+            let (lane, pipe) = lanes::lane();
             streams.insert(stream, lane);
-            tokio::spawn(pump(stream, port, received, credit, out.clone()));
-            return;
+            tokio::spawn(pump(stream, port, pipe, out.clone()));
         }
-        Some(Frame::Data(stream, data)) => (stream, accepted(streams.get_mut(&stream), data)),
-        Some(Frame::Credit(stream, bytes)) => (stream, credited(streams.get(&stream), bytes)),
-        Some(Frame::Close(stream)) => (stream, false),
-        None => return,
-    };
-    if !kept {
-        streams.remove(&stream);
+        Some(frame) => streams.receive(&frame),
+        None => {}
     }
 }
 
-fn accepted(lane: Option<&mut Lane>, data: &[u8]) -> bool {
-    let Some(lane) = lane else {
-        return true;
-    };
-    lane.owed += data.len() + FRAME_COST;
-    lane.owed <= WINDOW && lane.sender.try_send(data.to_vec()).is_ok()
-}
-
-fn credited(lane: Option<&Lane>, bytes: u32) -> bool {
-    let Some(lane) = lane else {
-        return true;
-    };
-    let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
-    if lane.credit.available_permits().saturating_add(bytes) > WINDOW {
-        return false;
-    }
-    lane.credit.add_permits(bytes);
-    true
-}
-
-async fn pump(
-    stream: u32,
-    port: u16,
-    inbound: mpsc::Receiver<Vec<u8>>,
-    credit: Arc<Semaphore>,
-    out: mpsc::Sender<Out>,
-) {
-    if let Ok(local) = TcpStream::connect(("127.0.0.1", port)).await {
-        let (reader, writer) = local.into_split();
-        tokio::select! {
-            () = send(stream, reader, &credit, &out) => {}
-            () = receive(stream, writer, inbound, &out) => {}
-        }
-    }
-    let _ = out.send(Out::Close(stream)).await;
-}
-
-async fn send(
-    stream: u32,
-    mut reader: impl AsyncRead + Unpin,
-    credit: &Semaphore,
-    out: &mpsc::Sender<Out>,
-) {
-    let mut buffer = vec![0; CHUNK];
-    loop {
-        let Ok(permit) = credit.acquire_many(CHUNK_CREDIT).await else {
-            return;
-        };
-        permit.forget();
-        let read = match reader.read(&mut buffer).await {
-            Ok(0) | Err(_) => return,
-            Ok(read) => read,
-        };
-        credit.add_permits(CHUNK - read);
-        if out
-            .send(Out::Data(stream, buffer[..read].to_vec()))
-            .await
-            .is_err()
-        {
-            return;
-        }
-    }
-}
-
-async fn receive(
-    stream: u32,
-    mut writer: impl AsyncWrite + Unpin,
-    mut inbound: mpsc::Receiver<Vec<u8>>,
-    out: &mpsc::Sender<Out>,
-) {
-    let mut written = 0;
-    while let Some(data) = inbound.recv().await {
-        if writer.write_all(&data).await.is_err() {
-            return;
-        }
-        written += data.len() + FRAME_COST;
-        if written >= GRANT {
-            let bytes = u32::try_from(written).unwrap_or(u32::MAX);
-            if out.send(Out::Credit(stream, bytes)).await.is_err() {
-                return;
-            }
-            written = 0;
+async fn pump(stream: u32, port: u16, pipe: Pipe, out: mpsc::Sender<Piece>) {
+    match TcpStream::connect(("127.0.0.1", port)).await {
+        Ok(local) => lanes::pump(stream, local, pipe, out).await,
+        Err(_) => {
+            let _ = out.send(Piece::Close(stream)).await;
         }
     }
 }
@@ -236,6 +110,11 @@ async fn receive(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cubebot_protocol::{
+        apps::encode,
+        lanes::{CHUNK, FRAME_COST, WINDOW},
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
     #[tokio::test]

@@ -20,6 +20,8 @@ pub const LAYOUT_MISMATCH: u8 = 78;
 pub mod apps;
 pub mod desktop;
 pub mod guest;
+#[cfg(feature = "lanes")]
+pub mod lanes;
 pub mod network;
 pub mod runtime;
 

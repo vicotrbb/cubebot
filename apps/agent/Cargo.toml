@@ -16,7 +16,7 @@ test = false
 cubebot-providers = { path = "../../modules/providers" }
 base64 = "0.22.1"
 sha2 = "0.10"
-cubebot-protocol.workspace = true
+cubebot-protocol = { workspace = true, features = ["lanes"] }
 cubebot-connectors.workspace = true
 serde.workspace = true
 serde_json = "1"
