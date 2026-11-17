@@ -851,7 +851,6 @@ impl Connections {
     }
 }
 
-/// The connections `agent` may use, for a turn or outside one; no credentials.
 pub(crate) async fn granted(
     executor: impl sqlx::PgExecutor<'_>,
     agent: AgentId,

@@ -303,7 +303,6 @@ impl MemoryClient {
         transport::decode(response.map_err(request_failed)?, 64 * 1024).await
     }
 
-    /// The connections this agent may use now, as a turn would receive them.
     #[tracing::instrument(skip_all)]
     pub async fn connections(&self) -> Result<Vec<runtime::Connection>, Error> {
         let url = self.url.join("connections").map_err(Error::configuration)?;

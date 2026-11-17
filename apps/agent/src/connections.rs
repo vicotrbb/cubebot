@@ -23,6 +23,7 @@ const RENEW_WITHIN: i64 = 90;
 /// A vendor call that takes longer is reported as not answered.
 const CALL_LIMIT: Duration = Duration::from_secs(120);
 const FOLDER: &str = "downloads";
+const NOT_OFFERED: &str = "this tool is not offered by an allowed connection";
 
 struct Offered {
     connection: Connection,
@@ -165,7 +166,6 @@ impl Connections {
         })))
     }
 
-    /// One tool call outside a turn, within the connections' configuration as of now.
     pub async fn call_tool(&self, name: &str, input: &Value) -> Result<String, String> {
         let client = self.client.as_ref().ok_or("no orchestrator to ask")?;
         let granted = client
@@ -180,14 +180,14 @@ impl Connections {
     async fn invoke(&self, name: &str, input: &Value) -> Result<String, String> {
         let running = self
             .call(name, Uuid::new_v4(), input, None)
-            .ok_or("this tool is not offered by an allowed connection")??;
+            .ok_or(NOT_OFFERED)??;
         match running.await {
             Outcome::Exited {
                 code: Some(0),
                 output,
             } => Ok(output),
             Outcome::Exited { output, .. } => Err(output),
-            _ => Err("the vendor did not answer".into()),
+            _ => Err("The vendor did not answer; it may or may not have happened.".into()),
         }
     }
 
@@ -480,7 +480,7 @@ mod tests {
         let refused = connections
             .invoke("gmail-work__gmail_draft", &json!({}))
             .await;
-        assert!(refused.is_err(), "{refused:?}");
+        assert_eq!(refused, Err(NOT_OFFERED.into()));
     }
 
     #[tokio::test]
@@ -489,7 +489,7 @@ mod tests {
         let refused = connections
             .invoke("gmail-work__gmail_send", &json!({}))
             .await;
-        assert!(refused.is_err(), "{refused:?}");
+        assert_eq!(refused, Err(NOT_OFFERED.into()));
         let invalid = connections
             .invoke("gmail-work__gmail_modify", &json!([]))
             .await;
