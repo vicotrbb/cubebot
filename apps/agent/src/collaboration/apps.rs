@@ -134,13 +134,21 @@ impl Collaboration {
     }
 
     async fn precheck(&self, input: &Value) -> Option<String> {
-        let client = self.client.as_ref()?;
         let workspace = std::env::var_os("CUBEBOT_WORKSPACE_DIRECTORY")?;
-        let Ok(granted) = client.connections().await else {
-            return Some("Refused: could not check your connections; try again.".into());
-        };
-        let connections = Connections::new(Some(client.clone()), &granted);
-        refusal(Path::new(&workspace), input, &connections)
+        match self.declared(input).await {
+            Ok(connections) => refusal(Path::new(&workspace), input, &connections),
+            Err(reason) => Some(reason),
+        }
+    }
+
+    async fn declared(&self, input: &Value) -> Result<Connections, String> {
+        if input["tools"].as_array().is_none_or(Vec::is_empty) {
+            return Ok(Connections::new(None, &[]));
+        }
+        let unchecked = || "Refused: could not check your connections; try again.".to_string();
+        let client = self.client.as_ref().ok_or_else(unchecked)?;
+        let granted = client.connections().await.map_err(|_| unchecked())?;
+        Ok(Connections::new(Some(client.clone()), &granted))
     }
 }
 
@@ -182,6 +190,16 @@ mod tests {
             assert!(refused.unwrap().contains("relative path"), "{bad}");
         }
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn no_tools_need_no_connections_but_declared_tools_fail_closed() {
+        let collaboration = Collaboration::new(None, Uuid::new_v4(), Default::default());
+        for input in [json!({}), json!({"tools": null}), json!({"tools": []})] {
+            assert!(collaboration.declared(&input).await.is_ok(), "{input}");
+        }
+        let refused = collaboration.declared(&json!({"tools": ["a__b"]})).await;
+        assert!(refused.err().unwrap().contains("try again"));
     }
 
     #[test]

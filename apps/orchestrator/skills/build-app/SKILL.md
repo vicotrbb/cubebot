@@ -22,7 +22,7 @@ Call `app_register` with a slug (lowercase letters, digits and hyphens, 2 to 40)
 
 - Use only relative URLs and relative redirects in pages and in your backend (`./app.js`, `api/items`, a redirect to `./login`). An absolute path such as `/api/items` escapes the app inside the frame and breaks.
 - Link the design kit with relative paths: `<link rel="stylesheet" href="./_cubebot/kit.css">` and a classic `<script src="./_cubebot/kit.js"></script>`. Do not make it a module, do not add `async` or `defer`, and do not inject it from another script: it reads `document.currentScript` to find its own address.
-- The entry page is `index.html` in the folder. `/{slug}` redirects to `/{slug}/`. Only `{slug}/_cubebot/*` is routed to the kit, so a page in a subfolder must link it with the right relative path, for example `../_cubebot/kit.css` one level down. Only files the tool user owns are served.
+- For a static app, the entry page is `index.html` in the folder. `/{slug}` redirects to `/{slug}/`. Only `{slug}/_cubebot/*` is routed to the kit, so a page in a subfolder must link it with the right relative path, for example `../_cubebot/kit.css` one level down. Only files the tool user owns are served. A backend app serves its own routes, except `_cubebot/*`.
 - The frame has an opaque origin, so there are no cookies, `localStorage`, `sessionStorage` or IndexedDB. Keep data in the app's folder; SQLite is fine. Static files over 8 MiB are not served.
 - A backend learns who is looking from the `x-cubebot-viewer-id` and `x-cubebot-viewer-name` request headers. Never ask the person to sign in.
 - Design for a 390 px wide phone first, then widen. Everything must work by touch and keyboard.
