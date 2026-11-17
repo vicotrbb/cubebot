@@ -170,9 +170,6 @@
   margin-right: 6px;
   color: var(--ink-faint);
 }
-.dot--failed {
-  background: var(--danger);
-}
 
 .app-marks {
   display: flex;
@@ -382,6 +379,16 @@
   }
   .app-card {
     min-height: 0;
+  }
+}
+.app-state__said {
+  display: contents;
+}
+@media (pointer: coarse) {
+  .app-toast a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

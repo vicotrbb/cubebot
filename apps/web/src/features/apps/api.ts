@@ -2,7 +2,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ok } from '../../api/client'
 import type { Schemas } from '../../api/types'
 import { keys } from '../../app/queries'
-import { answer, CONNECTIONS_KEY } from '../connections/api'
 
 export type App = Schemas['App']
 export type AppState = Schemas['AppState']
@@ -14,18 +13,6 @@ export function useApps(enabled = true) {
     enabled,
     refetchInterval: 5_000,
   })
-}
-
-export function useConnectors(administrator: boolean) {
-  const connections = useQuery({
-    queryKey: CONNECTIONS_KEY,
-    queryFn: () => answer(api.GET('/api/connections')),
-    enabled: administrator,
-    staleTime: 60_000,
-  })
-  return (slug: string) =>
-    connections.data?.find((connection) => connection.slug === slug)
-      ?.connector ?? slug
 }
 
 export function useAppActions() {

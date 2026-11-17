@@ -3,11 +3,11 @@ import { LayoutGrid, Plus } from 'lucide-react'
 import { useState } from 'react'
 import { logos } from '../../../../../modules/brand/logos'
 import type { AgentSummary } from '../../api/types'
-import { useAgents, useSession } from '../../app/queries'
+import { useAgents } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert } from '../../components/primitives'
 import { bytes } from '../vitals/reading'
-import { useApps, useConnectors, type App, type AppState } from './api'
+import { useApps, type App, type AppState } from './api'
 import { NewApp } from './NewApp'
 import './apps.css'
 
@@ -59,18 +59,12 @@ export function AppStanding({ app }: { app: App }) {
   )
 }
 
-function Marks({
-  app,
-  connectorOf,
-}: {
-  app: App
-  connectorOf: (slug: string) => string
-}) {
+function Marks({ app }: { app: App }) {
   if (app.connections.length === 0) return null
   return (
     <span className="app-marks">
-      {app.connections.map((slug) => {
-        const logo = logos[connectorOf(slug)]
+      {app.connections.map(({ slug, connector }) => {
+        const logo = connector ? logos[connector] : undefined
         return logo ? (
           <span key={slug} className="app-mark" title={slug}>
             <svg
@@ -93,11 +87,9 @@ function Marks({
 export function AppCard({
   app,
   agent,
-  connectorOf,
 }: {
   app: App
   agent: AgentSummary | undefined
-  connectorOf: (slug: string) => string
 }) {
   return (
     <Link
@@ -109,7 +101,7 @@ export function AppCard({
       <span className="app-card__head">
         <AppIcon app={app} />
         <span className="app-card__name">{app.name}</span>
-        <Marks app={app} connectorOf={connectorOf} />
+        <Marks app={app} />
       </span>
       <span className="app-card__description">{app.description}</span>
       <span className="app-card__foot">
@@ -125,8 +117,6 @@ export function AppCard({
 
 export function AppGrid({ apps }: { apps: App[] }) {
   const agents = useAgents()
-  const session = useSession()
-  const connectorOf = useConnectors(Boolean(session.data?.administrator))
   return (
     <ul className="apps__grid">
       {apps.map((app) => (
@@ -134,7 +124,6 @@ export function AppGrid({ apps }: { apps: App[] }) {
           <AppCard
             app={app}
             agent={agents.data?.find((agent) => agent.id === app.agent_id)}
-            connectorOf={connectorOf}
           />
         </li>
       ))}
@@ -154,9 +143,17 @@ export function GridSkeleton({ count = 3 }: { count?: number }) {
   )
 }
 
+function filterable(apps: App[] | undefined, agent: string | null) {
+  if (!apps || owners(apps).length < 2) return false
+  return apps.some((app) => app.agent_id === agent)
+}
+
 export function Apps() {
+  const apps = useApps()
   const [creating, setCreating] = useState(false)
   const [agent, setAgent] = useState<string | null>(null)
+  if (agent !== null && apps.data && !filterable(apps.data, agent))
+    setAgent(null)
   return (
     <div className="page">
       <header className="page__head apps-head">
@@ -201,7 +198,7 @@ function Catalog({
         <GridSkeleton />
       </div>
     )
-  if (apps.isError)
+  if (apps.isError && !apps.data)
     return (
       <div className="apps">
         <Alert>The apps could not be read. Retry shortly.</Alert>
@@ -212,7 +209,7 @@ function Catalog({
   return (
     <div className="apps">
       <Filters apps={apps.data} agent={agent} onAgent={onAgent} />
-      <AppGrid apps={shown.length > 0 ? shown : apps.data} />
+      <AppGrid apps={shown} />
     </div>
   )
 }

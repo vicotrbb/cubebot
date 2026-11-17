@@ -3055,7 +3055,7 @@ export interface components {
       /** Format: uuid */
       agent_id: string
       agent_name: string
-      connections: string[]
+      connections: components['schemas']['AppConnection'][]
       description: string
       icon: string
       /** Format: uuid */
@@ -3066,6 +3066,10 @@ export interface components {
       slug: string
       state: components['schemas']['AppState']
       updated_at: string
+    }
+    AppConnection: {
+      connector?: string | null
+      slug: string
     }
     /** @enum {string} */
     AppState:

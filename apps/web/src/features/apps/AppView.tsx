@@ -30,25 +30,16 @@ import {
   type App,
   type Opened,
 } from './api'
+import { useIsPhone } from '../shell/viewport'
 import { AgentCube, AppIcon, AppStanding } from './Apps'
 import { bridge, currentTheme } from './bridge'
 import './apps.css'
 
 const ALWAYS_FULL = '(max-width: 820px), (display-mode: standalone)'
-
-function useAlwaysFull() {
-  const [always, setAlways] = useState(() => matchMedia(ALWAYS_FULL).matches)
-  useEffect(() => {
-    const query = matchMedia(ALWAYS_FULL)
-    const update = () => setAlways(query.matches)
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
-  return always
-}
+const RENEW = 6 * 60 * 60 * 1000 + 60 * 1000
 
 function useFullScreen() {
-  const always = useAlwaysFull()
+  const always = useIsPhone(ALWAYS_FULL)
   const [chosen, setChosen] = useState(false)
   const full = always || chosen
   useEffect(() => {
@@ -87,7 +78,7 @@ export function AppView({ slug }: { slug: string }) {
         </div>
       </div>
     )
-  if (apps.isError)
+  if (apps.isError && !apps.data)
     return (
       <div className="page__body">
         <Alert>The app could not be read. Retry shortly.</Alert>
@@ -260,8 +251,9 @@ function More({
 }) {
   const actions = useAppActions()
   const navigate = useNavigate()
+  const trigger = useRef<HTMLElement>(null)
   const remove = async () => {
-    document.querySelector<HTMLElement>('.app-view__actions summary')?.focus()
+    trigger.current?.focus()
     const yes = await confirmAction({
       title: `Remove ${app.name}?`,
       body: `It stops and leaves the catalog for everyone. Its files stay in ${app.agent_name}'s workspace.`,
@@ -283,6 +275,7 @@ function More({
       className="menu--right"
       triggerClassName="btn btn--ghost btn--icon btn--sm"
       label="App actions"
+      triggerRef={trigger}
       trigger={<MoreHorizontal />}
     >
       {!screen.always && (
@@ -423,15 +416,17 @@ function Notice({
 }) {
   return (
     <div className="app-view__stage">
-      <div className="empty app-state" role="status">
+      <div className="empty app-state">
         <span className="app-state__icon">
           <AppIcon app={app} size="lg" />
           {busy && (
             <Loader className="spin app-state__busy" aria-hidden="true" />
           )}
         </span>
-        <h2>{title}</h2>
-        <p>{children}</p>
+        <div className="app-state__said" role="status">
+          <h2>{title}</h2>
+          <p>{children}</p>
+        </div>
         {action}
       </div>
     </div>
@@ -446,6 +441,23 @@ function Stage({
   ask: (text: string) => Promise<void>
 }) {
   const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let minted = Date.now()
+    const renew = () => {
+      minted = Date.now()
+      setAttempt((at) => at + 1)
+    }
+    const timer = window.setInterval(renew, RENEW)
+    const visible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - minted > RENEW)
+        renew()
+    }
+    document.addEventListener('visibilitychange', visible)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', visible)
+    }
+  }, [])
   return (
     <Framed
       key={attempt}

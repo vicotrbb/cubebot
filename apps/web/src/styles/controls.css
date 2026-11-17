@@ -344,6 +344,9 @@
 .dot--retired {
   background: var(--wood-deep);
 }
+.dot--failed {
+  background: var(--danger);
+}
 .spin {
   animation: spin 1.2s linear infinite;
 }

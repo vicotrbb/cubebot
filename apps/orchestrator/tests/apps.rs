@@ -103,7 +103,17 @@ async fn a_person_without_send_sees_no_apps() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(app.connections, ["whoop", "mail"]);
+    sqlx::query(
+        "INSERT INTO connections (id, connector, slug, auth, credential, level, created_by)
+         VALUES ($1, 'whoop', 'whoop', 'oauth2', '\\x00', 'read', $2)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(w.admin.id)
+    .execute(&w.pool)
+    .await
+    .unwrap();
+    let slugs: Vec<_> = app.connections.iter().map(|c| c.slug.as_str()).collect();
+    assert_eq!(slugs, ["whoop", "mail"]);
     assert_eq!(
         (app.agent_name.as_str(), app.state),
         ("Scout", AppState::Unavailable)
@@ -116,6 +126,12 @@ async fn a_person_without_send_sees_no_apps() {
     let listed = w.apps.list(&w.ana).await.unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].slug, "budget");
+    let connectors: Vec<_> = listed[0]
+        .connections
+        .iter()
+        .map(|c| c.connector.as_deref())
+        .collect();
+    assert_eq!(connectors, [Some("whoop"), None]);
     assert_eq!(w.apps.list(&w.admin).await.unwrap().len(), 1);
 }
 

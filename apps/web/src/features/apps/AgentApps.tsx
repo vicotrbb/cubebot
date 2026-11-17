@@ -7,7 +7,7 @@ import './apps.css'
 export function AgentApps({ agent }: { agent: AgentSummary }) {
   const apps = useApps()
   if (apps.isPending) return <GridSkeleton count={2} />
-  if (apps.isError)
+  if (apps.isError && !apps.data)
     return <Alert>The apps could not be read. Retry shortly.</Alert>
   const own = apps.data.filter((app) => app.agent_id === agent.id)
   if (own.length === 0)

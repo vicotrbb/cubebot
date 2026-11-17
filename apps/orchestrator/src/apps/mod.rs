@@ -50,10 +50,16 @@ pub struct App {
     pub icon: String,
     pub agent_id: Uuid,
     pub agent_name: String,
-    pub connections: Vec<String>,
+    pub connections: Vec<AppConnection>,
     pub state: AppState,
     pub memory: Option<u64>,
     pub updated_at: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, utoipa::ToSchema)]
+pub struct AppConnection {
+    pub slug: String,
+    pub connector: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -98,6 +104,7 @@ struct Row {
     agent_id: Uuid,
     agent_name: String,
     tools: Vec<String>,
+    connectors: Option<serde_json::Value>,
     desired: String,
     updating: bool,
     reported: String,
@@ -110,7 +117,7 @@ impl From<Row> for App {
         let state = state(&row.desired, row.updating, &row.reported);
         Self {
             id: row.id,
-            connections: connections(&row.tools),
+            connections: connections(&row.tools, row.connectors.as_ref()),
             slug: row.slug,
             name: row.name,
             description: row.description,
@@ -135,14 +142,20 @@ fn state(desired: &str, updating: bool, reported: &str) -> AppState {
     }
 }
 
-fn connections(tools: &[String]) -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
+fn connections(tools: &[String], connectors: Option<&serde_json::Value>) -> Vec<AppConnection> {
+    let mut names: Vec<AppConnection> = Vec::new();
     for tool in tools {
         let name = tool
             .split_once("__")
             .map_or(tool.as_str(), |(name, _)| name);
-        if !names.iter().any(|known| known == name) {
-            names.push(name.to_owned());
+        if !names.iter().any(|known| known.slug == name) {
+            names.push(AppConnection {
+                slug: name.to_owned(),
+                connector: connectors
+                    .and_then(|known| known.get(name))
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+            });
         }
     }
     names
@@ -274,6 +287,9 @@ impl Apps {
             r#"
             SELECT p.id, p.slug, p.name, p.description, p.icon, p.agent_id, g.name AS agent_name,
                 p.tools, p.desired, p.updating, p.reported, p.memory,
+                (SELECT jsonb_object_agg(c.slug, c.connector) FROM connections c
+                    WHERE c.slug = ANY(ARRAY(SELECT split_part(t, '__', 1) FROM unnest(p.tools) t)))
+                    AS connectors,
                 (to_jsonb(p.updated_at) #>> '{}') AS "updated_at!"
             FROM apps p
             JOIN agents g ON g.id = p.agent_id AND g.desired_state <> 'retired'
@@ -576,6 +592,9 @@ impl Apps {
             r#"
             SELECT p.id, p.slug, p.name, p.description, p.icon, p.agent_id, g.name AS agent_name,
                 p.tools, p.desired, p.updating, p.reported, p.memory,
+                (SELECT jsonb_object_agg(c.slug, c.connector) FROM connections c
+                    WHERE c.slug = ANY(ARRAY(SELECT split_part(t, '__', 1) FROM unnest(p.tools) t)))
+                    AS connectors,
                 (to_jsonb(p.updated_at) #>> '{}') AS "updated_at!"
             FROM apps p
             JOIN agents g ON g.id = p.agent_id
@@ -630,9 +649,22 @@ mod tests {
         assert_eq!(state("stopped", false, "running"), AppState::Stopped);
         assert_eq!(state("running", false, "failed"), AppState::Failed);
         assert_eq!(state("running", false, "starting"), AppState::Starting);
+        let known = serde_json::json!({"whoop": "whoop"});
         assert_eq!(
-            connections(&["whoop__a".into(), "mail__b".into(), "whoop__c".into()]),
-            ["whoop", "mail"]
+            connections(
+                &["whoop__a".into(), "mail__b".into(), "whoop__c".into()],
+                Some(&known)
+            ),
+            [
+                AppConnection {
+                    slug: "whoop".into(),
+                    connector: Some("whoop".into())
+                },
+                AppConnection {
+                    slug: "mail".into(),
+                    connector: None
+                }
+            ]
         );
     }
 }
