@@ -193,8 +193,12 @@ impl Floor {
     }
 
     pub(super) fn admits(&self, agent: Uuid, asker: Option<u16>) -> bool {
+        let silent = self
+            .agents
+            .iter()
+            .any(|seated| seated.id == agent && seated.listening);
         let mut pending = self.queue.iter().filter(|queued| queued.agent == agent);
-        pending.clone().count() < PENDING && pending.all(|queued| queued.asker != asker)
+        !silent && pending.clone().count() < PENDING && pending.all(|queued| queued.asker != asker)
     }
 
     pub(super) fn queue(&mut self, agent: Uuid, turn: Uuid, asker: Option<u16>) {
@@ -211,6 +215,14 @@ impl Floor {
 
     pub(super) fn waits(&self, agent: Uuid) -> bool {
         self.queue.iter().any(|queued| queued.agent == agent)
+    }
+
+    pub(super) fn hush(&mut self, agent: Uuid, speaking: bool) {
+        if speaking {
+            self.interrupt(agent);
+        } else {
+            self.queue.retain(|queued| queued.agent != agent);
+        }
     }
 
     pub(super) fn interrupt(&mut self, agent: Uuid) {
@@ -425,6 +437,34 @@ mod tests {
             floor.decide(AgentMode::Relevant, "What now?"),
             Decision::Nobody
         );
+    }
+
+    #[test]
+    fn a_reply_queued_for_an_agent_that_starts_listening_is_dropped_and_none_is_admitted() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(40 + n);
+        floor.queue(CARA, turn(0), Some(4));
+        floor.queue(DEX, turn(1), Some(4));
+        floor.queue(CARA, turn(2), Some(5));
+        floor.set_listening(CARA, true);
+        floor.hush(CARA, false);
+        assert_eq!(floor.front(), Some((DEX, turn(1))));
+        floor.pop();
+        assert_eq!(floor.front(), None);
+        assert!(!floor.admits(CARA, Some(6)));
+        assert!(floor.admits(DEX, Some(6)));
+    }
+
+    #[test]
+    fn an_agent_already_speaking_keeps_its_answering_turn_and_loses_the_rest() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(50 + n);
+        floor.queue(CARA, turn(0), Some(4));
+        floor.queue(CARA, turn(1), Some(5));
+        floor.hush(CARA, true);
+        assert_eq!(floor.front(), Some((CARA, turn(0))));
+        floor.pop();
+        assert_eq!(floor.front(), None);
     }
 
     #[test]

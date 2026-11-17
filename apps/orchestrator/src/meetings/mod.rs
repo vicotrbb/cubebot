@@ -421,6 +421,9 @@ impl Meetings {
         if change.open_join.is_some() || change.locked.is_some() {
             self.live.flags(id, updated.open_join, updated.locked).await;
         }
+        if change.agent_mode.is_some() {
+            self.live.invitations_changed(id);
+        }
         Ok(updated.title)
     }
 

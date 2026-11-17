@@ -425,12 +425,13 @@ impl Attendants {
         for agent in gone {
             self.dismiss(agent, true).await;
         }
+        let quiet = self.mode().await == AgentMode::Listen;
         for agent in invited {
-            self.seat(agent).await;
+            self.seat(agent, quiet).await;
         }
     }
 
-    async fn seat(&mut self, agent: Invited) {
+    async fn seat(&mut self, agent: Invited, quiet: bool) {
         let (id, listening) = (agent.id, agent.listening);
         if !self.agents.contains_key(&id) && !self.dismissed.contains(&id) {
             self.join(agent).await;
@@ -438,6 +439,21 @@ impl Attendants {
         if self.agents.contains_key(&id) {
             self.floor.set_listening(id, listening);
             self.room.agent_listening(id, listening).await;
+            if listening || quiet {
+                self.hush(id).await;
+            }
+        }
+    }
+
+    async fn hush(&mut self, agent: Uuid) {
+        let speaking = self.speaking(agent);
+        let queued = self.floor.waits(agent);
+        self.floor.hush(agent, speaking);
+        if !speaking && queued {
+            self.following = None;
+            if let Some(present) = self.agents.get(&agent) {
+                self.state(present.slot, AgentState::Listening).await;
+            }
         }
     }
 

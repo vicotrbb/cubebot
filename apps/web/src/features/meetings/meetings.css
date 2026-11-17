@@ -642,10 +642,11 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .meeting-person__listen {
-  white-space: nowrap;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -653,6 +654,11 @@
   color: var(--ink-soft);
   font-size: var(--t-xs);
   cursor: pointer;
+}
+.meeting-person__listen span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .meeting-person__mark {
   width: 16px;
