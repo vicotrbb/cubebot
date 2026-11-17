@@ -24,6 +24,8 @@ import { Route as AppYouRouteImport } from './routes/_app.you'
 import { Route as MTokenRouteImport } from './routes/m.$token'
 import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agentId'
 import { Route as AppAgentsNewRouteImport } from './routes/_app.agents.new'
+import { Route as AppAppsIndexRouteImport } from './routes/_app.apps.index'
+import { Route as AppAppsSlugRouteImport } from './routes/_app.apps_.$slug'
 import { Route as AppKbIndexRouteImport } from './routes/_app.kb.index'
 import { Route as AppKbPageIdRouteImport } from './routes/_app.kb.$pageId'
 import { Route as AppMeetingsIndexRouteImport } from './routes/_app.meetings.index'
@@ -52,6 +54,7 @@ import { Route as AppTeamsTeamIdRouteImport } from './routes/_app.teams.$teamId'
 import { Route as AppTeamsNewRouteImport } from './routes/_app.teams.new'
 import { Route as AppAgentsAgentIdAboutRouteImport } from './routes/_app.agents.$agentId.about'
 import { Route as AppAgentsAgentIdAccessRouteImport } from './routes/_app.agents.$agentId.access'
+import { Route as AppAgentsAgentIdAppsRouteImport } from './routes/_app.agents.$agentId.apps'
 import { Route as AppAgentsAgentIdConnectionsRouteImport } from './routes/_app.agents.$agentId.connections'
 import { Route as AppAgentsAgentIdDreamsRouteImport } from './routes/_app.agents.$agentId.dreams'
 import { Route as AppAgentsAgentIdFilesRouteImport } from './routes/_app.agents.$agentId.files'
@@ -139,6 +142,16 @@ const AppAgentsAgentIdRoute = AppAgentsAgentIdRouteImport.update({
 const AppAgentsNewRoute = AppAgentsNewRouteImport.update({
   id: '/agents/new',
   path: '/agents/new',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAppsIndexRoute = AppAppsIndexRouteImport.update({
+  id: '/apps/',
+  path: '/apps/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAppsSlugRoute = AppAppsSlugRouteImport.update({
+  id: '/apps_/$slug',
+  path: '/apps/$slug',
   getParentRoute: () => AppRoute,
 } as any)
 const AppKbIndexRoute = AppKbIndexRouteImport.update({
@@ -281,6 +294,11 @@ const AppAgentsAgentIdAccessRoute = AppAgentsAgentIdAccessRouteImport.update({
   path: '/access',
   getParentRoute: () => AppAgentsAgentIdRoute,
 } as any)
+const AppAgentsAgentIdAppsRoute = AppAgentsAgentIdAppsRouteImport.update({
+  id: '/apps',
+  path: '/apps',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
 const AppAgentsAgentIdConnectionsRoute =
   AppAgentsAgentIdConnectionsRouteImport.update({
     id: '/connections',
@@ -371,6 +389,7 @@ export interface FileRoutesByFullPath {
   '/m/$token': typeof MTokenRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
+  '/apps/$slug': typeof AppAppsSlugRoute
   '/kb/$pageId': typeof AppKbPageIdRoute
   '/meetings/$meetingId': typeof AppMeetingsMeetingIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
@@ -393,12 +412,14 @@ export interface FileRoutesByFullPath {
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/teams/$teamId': typeof AppTeamsTeamIdRoute
   '/teams/new': typeof AppTeamsNewRoute
+  '/apps/': typeof AppAppsIndexRoute
   '/kb/': typeof AppKbIndexRoute
   '/meetings/': typeof AppMeetingsIndexRoute
   '/skills/': typeof AppSkillsIndexRoute
   '/tasks/': typeof AppTasksIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/agents/$agentId/apps': typeof AppAgentsAgentIdAppsRoute
   '/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
   '/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
   '/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
@@ -428,6 +449,7 @@ export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/agents/new': typeof AppAgentsNewRoute
+  '/apps/$slug': typeof AppAppsSlugRoute
   '/kb/$pageId': typeof AppKbPageIdRoute
   '/meetings/$meetingId': typeof AppMeetingsMeetingIdRoute
   '/platform/audit': typeof AppPlatformAuditRoute
@@ -450,12 +472,14 @@ export interface FileRoutesByTo {
   '/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/teams/$teamId': typeof AppTeamsTeamIdRoute
   '/teams/new': typeof AppTeamsNewRoute
+  '/apps': typeof AppAppsIndexRoute
   '/kb': typeof AppKbIndexRoute
   '/meetings': typeof AppMeetingsIndexRoute
   '/skills': typeof AppSkillsIndexRoute
   '/tasks': typeof AppTasksIndexRoute
   '/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/agents/$agentId/apps': typeof AppAgentsAgentIdAppsRoute
   '/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
   '/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
   '/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
@@ -488,6 +512,7 @@ export interface FileRoutesById {
   '/_app/': typeof AppIndexRoute
   '/_app/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
   '/_app/agents/new': typeof AppAgentsNewRoute
+  '/_app/apps_/$slug': typeof AppAppsSlugRoute
   '/_app/kb/$pageId': typeof AppKbPageIdRoute
   '/_app/meetings/$meetingId': typeof AppMeetingsMeetingIdRoute
   '/_app/platform/audit': typeof AppPlatformAuditRoute
@@ -510,12 +535,14 @@ export interface FileRoutesById {
   '/_app/tasks/$taskId': typeof AppTasksTaskIdRoute
   '/_app/teams/$teamId': typeof AppTeamsTeamIdRoute
   '/_app/teams/new': typeof AppTeamsNewRoute
+  '/_app/apps/': typeof AppAppsIndexRoute
   '/_app/kb/': typeof AppKbIndexRoute
   '/_app/meetings/': typeof AppMeetingsIndexRoute
   '/_app/skills/': typeof AppSkillsIndexRoute
   '/_app/tasks/': typeof AppTasksIndexRoute
   '/_app/agents/$agentId/about': typeof AppAgentsAgentIdAboutRoute
   '/_app/agents/$agentId/access': typeof AppAgentsAgentIdAccessRoute
+  '/_app/agents/$agentId/apps': typeof AppAgentsAgentIdAppsRoute
   '/_app/agents/$agentId/connections': typeof AppAgentsAgentIdConnectionsRoute
   '/_app/agents/$agentId/dreams': typeof AppAgentsAgentIdDreamsRoute
   '/_app/agents/$agentId/files': typeof AppAgentsAgentIdFilesRoute
@@ -548,6 +575,7 @@ export interface FileRouteTypes {
     | '/m/$token'
     | '/agents/$agentId'
     | '/agents/new'
+    | '/apps/$slug'
     | '/kb/$pageId'
     | '/meetings/$meetingId'
     | '/platform/audit'
@@ -570,12 +598,14 @@ export interface FileRouteTypes {
     | '/tasks/$taskId'
     | '/teams/$teamId'
     | '/teams/new'
+    | '/apps/'
     | '/kb/'
     | '/meetings/'
     | '/skills/'
     | '/tasks/'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
+    | '/agents/$agentId/apps'
     | '/agents/$agentId/connections'
     | '/agents/$agentId/dreams'
     | '/agents/$agentId/files'
@@ -605,6 +635,7 @@ export interface FileRouteTypes {
     | '/'
     | '/agents/$agentId'
     | '/agents/new'
+    | '/apps/$slug'
     | '/kb/$pageId'
     | '/meetings/$meetingId'
     | '/platform/audit'
@@ -627,12 +658,14 @@ export interface FileRouteTypes {
     | '/tasks/$taskId'
     | '/teams/$teamId'
     | '/teams/new'
+    | '/apps'
     | '/kb'
     | '/meetings'
     | '/skills'
     | '/tasks'
     | '/agents/$agentId/about'
     | '/agents/$agentId/access'
+    | '/agents/$agentId/apps'
     | '/agents/$agentId/connections'
     | '/agents/$agentId/dreams'
     | '/agents/$agentId/files'
@@ -664,6 +697,7 @@ export interface FileRouteTypes {
     | '/_app/'
     | '/_app/agents/$agentId'
     | '/_app/agents/new'
+    | '/_app/apps_/$slug'
     | '/_app/kb/$pageId'
     | '/_app/meetings/$meetingId'
     | '/_app/platform/audit'
@@ -686,12 +720,14 @@ export interface FileRouteTypes {
     | '/_app/tasks/$taskId'
     | '/_app/teams/$teamId'
     | '/_app/teams/new'
+    | '/_app/apps/'
     | '/_app/kb/'
     | '/_app/meetings/'
     | '/_app/skills/'
     | '/_app/tasks/'
     | '/_app/agents/$agentId/about'
     | '/_app/agents/$agentId/access'
+    | '/_app/agents/$agentId/apps'
     | '/_app/agents/$agentId/connections'
     | '/_app/agents/$agentId/dreams'
     | '/_app/agents/$agentId/files'
@@ -819,6 +855,20 @@ declare module '@tanstack/react-router' {
       path: '/agents/new'
       fullPath: '/agents/new'
       preLoaderRoute: typeof AppAgentsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/apps/': {
+      id: '/_app/apps/'
+      path: '/apps'
+      fullPath: '/apps/'
+      preLoaderRoute: typeof AppAppsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/apps_/$slug': {
+      id: '/_app/apps_/$slug'
+      path: '/apps/$slug'
+      fullPath: '/apps/$slug'
+      preLoaderRoute: typeof AppAppsSlugRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/kb/': {
@@ -1017,6 +1067,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgentsAgentIdAccessRouteImport
       parentRoute: typeof AppAgentsAgentIdRoute
     }
+    '/_app/agents/$agentId/apps': {
+      id: '/_app/agents/$agentId/apps'
+      path: '/apps'
+      fullPath: '/agents/$agentId/apps'
+      preLoaderRoute: typeof AppAgentsAgentIdAppsRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
     '/_app/agents/$agentId/connections': {
       id: '/_app/agents/$agentId/connections'
       path: '/connections'
@@ -1171,6 +1228,7 @@ const AppPlatformRouteWithChildren = AppPlatformRoute._addFileChildren(
 interface AppAgentsAgentIdRouteChildren {
   AppAgentsAgentIdAboutRoute: typeof AppAgentsAgentIdAboutRoute
   AppAgentsAgentIdAccessRoute: typeof AppAgentsAgentIdAccessRoute
+  AppAgentsAgentIdAppsRoute: typeof AppAgentsAgentIdAppsRoute
   AppAgentsAgentIdConnectionsRoute: typeof AppAgentsAgentIdConnectionsRoute
   AppAgentsAgentIdDreamsRoute: typeof AppAgentsAgentIdDreamsRoute
   AppAgentsAgentIdFilesRoute: typeof AppAgentsAgentIdFilesRoute
@@ -1188,6 +1246,7 @@ interface AppAgentsAgentIdRouteChildren {
 const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
   AppAgentsAgentIdAboutRoute: AppAgentsAgentIdAboutRoute,
   AppAgentsAgentIdAccessRoute: AppAgentsAgentIdAccessRoute,
+  AppAgentsAgentIdAppsRoute: AppAgentsAgentIdAppsRoute,
   AppAgentsAgentIdConnectionsRoute: AppAgentsAgentIdConnectionsRoute,
   AppAgentsAgentIdDreamsRoute: AppAgentsAgentIdDreamsRoute,
   AppAgentsAgentIdFilesRoute: AppAgentsAgentIdFilesRoute,
@@ -1230,6 +1289,7 @@ interface AppRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppAgentsAgentIdRoute: typeof AppAgentsAgentIdRouteWithChildren
   AppAgentsNewRoute: typeof AppAgentsNewRoute
+  AppAppsSlugRoute: typeof AppAppsSlugRoute
   AppMeetingsMeetingIdRoute: typeof AppMeetingsMeetingIdRoute
   AppRoomsRoomIdRoute: typeof AppRoomsRoomIdRouteWithChildren
   AppRoomsNewRoute: typeof AppRoomsNewRoute
@@ -1237,6 +1297,7 @@ interface AppRouteChildren {
   AppTasksTaskIdRoute: typeof AppTasksTaskIdRoute
   AppTeamsTeamIdRoute: typeof AppTeamsTeamIdRoute
   AppTeamsNewRoute: typeof AppTeamsNewRoute
+  AppAppsIndexRoute: typeof AppAppsIndexRoute
   AppMeetingsIndexRoute: typeof AppMeetingsIndexRoute
   AppSkillsIndexRoute: typeof AppSkillsIndexRoute
   AppTasksIndexRoute: typeof AppTasksIndexRoute
@@ -1256,6 +1317,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppAgentsAgentIdRoute: AppAgentsAgentIdRouteWithChildren,
   AppAgentsNewRoute: AppAgentsNewRoute,
+  AppAppsSlugRoute: AppAppsSlugRoute,
   AppMeetingsMeetingIdRoute: AppMeetingsMeetingIdRoute,
   AppRoomsRoomIdRoute: AppRoomsRoomIdRouteWithChildren,
   AppRoomsNewRoute: AppRoomsNewRoute,
@@ -1263,6 +1325,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppTasksTaskIdRoute: AppTasksTaskIdRoute,
   AppTeamsTeamIdRoute: AppTeamsTeamIdRoute,
   AppTeamsNewRoute: AppTeamsNewRoute,
+  AppAppsIndexRoute: AppAppsIndexRoute,
   AppMeetingsIndexRoute: AppMeetingsIndexRoute,
   AppSkillsIndexRoute: AppSkillsIndexRoute,
   AppTasksIndexRoute: AppTasksIndexRoute,
