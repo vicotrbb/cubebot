@@ -92,7 +92,7 @@ export function CreationRequests({
   )
 }
 
-function Request({
+export function Request({
   agent,
   request,
   onSettled,

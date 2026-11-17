@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE chat_turns SET attention=$2, attention_settled_at=NULL WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "54226995f22e00e52ad7c9dee9e1fdbc467327bdc1e9816a41334b6c5d3fc1af"
+}

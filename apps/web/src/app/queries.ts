@@ -139,6 +139,15 @@ export function useActivity() {
   })
 }
 
+export function useUnreadReplies() {
+  return useQuery({
+    queryKey: ['activity-replies'],
+    queryFn: () => ok(api.GET('/api/activity/replies')),
+    refetchInterval: 30_000,
+    staleTime: 0,
+  })
+}
+
 export function useUnreadActivity() {
   const activity = useActivity()
   return activity.data?.filter((item) => item.unread).length ?? 0

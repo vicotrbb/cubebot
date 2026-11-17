@@ -196,36 +196,6 @@
   color: var(--ink);
 }
 
-.segmented {
-  padding: 2px;
-  border-radius: var(--r-md);
-  background: var(--inset);
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.segmented > button {
-  gap: 6px;
-  padding: 4px 12px 5px;
-  border-radius: 5px;
-}
-.segmented > [aria-pressed='true'] {
-  background: var(--raised);
-  box-shadow:
-    0 0 0 1px var(--line),
-    0 1px 2px rgb(var(--shadow) / 0.12);
-}
-.segmented svg {
-  width: 15px;
-  height: 15px;
-  stroke-width: 1.75;
-}
-.segmented--wide {
-  width: 100%;
-}
-.segmented--wide > button {
-  flex: 1;
-  justify-content: center;
-}
-
 .meeting-form {
   max-width: none;
 }

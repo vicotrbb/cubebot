@@ -625,10 +625,21 @@ async fn post(
     .fetch_one(&mut **tx)
     .await?;
     attach_message(tx, actor, id, &input.attachments).await?;
-    for agent in mentioned {
-        deliver(tx, id, agent).await?;
-    }
+    landed(tx, room, id, mentioned).await?;
     Ok(id)
+}
+
+async fn landed(
+    tx: &mut Transaction<'_, Postgres>,
+    room: Uuid,
+    message: Uuid,
+    mentioned: Vec<Uuid>,
+) -> Result<(), IdentityError> {
+    super::activity::settle_room(tx, room).await?;
+    for agent in mentioned {
+        deliver(tx, message, agent).await?;
+    }
+    Ok(())
 }
 
 async fn attach_message(

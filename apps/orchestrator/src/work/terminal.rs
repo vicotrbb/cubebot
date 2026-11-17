@@ -35,7 +35,7 @@ pub struct Progress {
 pub struct Origin {
     #[serde(skip)]
     pub turn_id: Uuid,
-    /// `approvals`, `broadcast`, `room`, `routine`, `delegation` or `message`.
+    /// `approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`.
     pub kind: String,
     /// The room's or routine's name, the sending agent's, or a broadcast's sender.
     pub name: String,
@@ -331,8 +331,8 @@ impl Work {
             Origin,
             r#"
             SELECT t.id AS turn_id,
-                CASE WHEN s.settles THEN 'approvals' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
-                COALESCE(s.person,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
+                CASE WHEN s.settles THEN 'approvals' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin='wake' THEN 'wake' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
+                COALESCE(s.person,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin='wake' THEN 'wake-up' WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
                 t.parent_turn_id
             FROM chat_turns t
             LEFT JOIN room_messages m ON m.id=t.room_message_id

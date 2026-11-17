@@ -406,13 +406,19 @@ async fn delivered(
 
 pub async fn schedule(pool: PgPool, mut stop: watch::Receiver<bool>) {
     loop {
-        if let Err(error) = tick(&pool).await {
-            tracing::warn!(?error, "routine schedule tick failed");
-        }
+        tick_all(&pool).await;
         tokio::select! {
             _ = stop.changed() => return,
             () = tokio::time::sleep(Duration::from_secs(30)) => (),
         }
+    }
+}
+
+async fn tick_all(pool: &PgPool) {
+    let routines = tick(pool).await.err();
+    let wakes = super::wakes::tick(pool).await.err();
+    for error in [routines, wakes].into_iter().flatten() {
+        tracing::warn!(?error, "schedule tick failed");
     }
 }
 
@@ -636,7 +642,7 @@ fn message(routine: &Locked, origin: &str, body: Option<&str>) -> Option<String>
     (message.len() <= 20480).then_some(message)
 }
 
-async fn authorize(
+pub(super) async fn authorize(
     tx: &mut Transaction<'_, Postgres>,
     actor: &Actor,
     agent: AgentId,
@@ -739,7 +745,7 @@ async fn trigger<'a>(
     Ok((Some(connection.id), Some(&trigger.event)))
 }
 
-async fn now(tx: &mut Transaction<'_, Postgres>) -> Result<i64, sqlx::Error> {
+pub(super) async fn now(tx: &mut Transaction<'_, Postgres>) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar!(r#"SELECT extract(epoch FROM clock_timestamp())::int8 AS "now!""#)
         .fetch_one(&mut **tx)
         .await

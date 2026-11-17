@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, origin, wake_id)\n        VALUES ($1, $2, gen_random_uuid(), $3, 'wake', $4)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "596c67571f79695134803a035fa0c06e46ea4589a8430fb467b47213f67f4853"
+}

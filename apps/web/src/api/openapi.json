@@ -31,6 +31,28 @@
         }
       }
     },
+    "/api/activity/attention/{turn}": {
+      "put": {
+        "tags": [],
+        "operationId": "settle_attention",
+        "parameters": [
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/activity/read": {
       "put": {
         "tags": [],
@@ -39,6 +61,27 @@
         "responses": {
           "204": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/activity/replies": {
+      "get": {
+        "tags": [],
+        "operationId": "unread_replies",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnreadReply"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -929,6 +972,152 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/wakes": {
+      "get": {
+        "tags": [],
+        "operationId": "list_wakes",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Wake"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [],
+        "operationId": "create_wake",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWake"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wake"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{agent}/wakes/{wake}": {
+      "put": {
+        "tags": [],
+        "operationId": "update_wake",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "wake",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveWake"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Wake"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "delete_wake",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "wake",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
           }
         }
       }
@@ -6677,7 +6866,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`login_pending`, `turn_waiting`, `turn_failed`, `invitation_pending`,\n`dream_published_skill` or `agent_published_skill`."
+            "description": "`approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,\n`invitation_pending`, `dream_published_skill` or `agent_published_skill`."
           },
           "room": {
             "type": ["string", "null"],
@@ -8315,6 +8504,20 @@
           },
           "team": {
             "$ref": "#/components/schemas/SaveTeam"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateWake": {
+        "type": "object",
+        "required": ["request_id", "wake"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "wake": {
+            "$ref": "#/components/schemas/SaveWake"
           }
         },
         "additionalProperties": false
@@ -10541,7 +10744,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`approvals`, `broadcast`, `room`, `routine`, `delegation` or `message`."
+            "description": "`approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`."
           },
           "name": {
             "type": "string",
@@ -11988,6 +12191,29 @@
             "type": ["string", "null"]
           },
           "username": {
+            "type": ["string", "null"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SaveWake": {
+        "type": "object",
+        "required": ["instructions"],
+        "properties": {
+          "at": {
+            "type": ["string", "null"]
+          },
+          "delay_minutes": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": ["string", "null"]
+          },
+          "time_zone": {
             "type": ["string", "null"]
           }
         },
@@ -13449,6 +13675,34 @@
           }
         ]
       },
+      "UnreadReply": {
+        "type": "object",
+        "required": ["agent", "turn", "sequence", "at", "excerpt", "unread"],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "turn": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "unread": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "UpdateAgent": {
         "type": "object",
         "required": [
@@ -13738,6 +13992,41 @@
       "Voice": {
         "type": "string",
         "enum": ["male", "female"]
+      },
+      "Wake": {
+        "type": "object",
+        "required": [
+          "id",
+          "instructions",
+          "time_zone",
+          "next_at",
+          "set_by",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "next_at": {
+            "type": "string"
+          },
+          "schedule": {
+            "type": ["string", "null"]
+          },
+          "set_by": {
+            "type": "string"
+          },
+          "time_zone": {
+            "type": "string"
+          }
+        }
       },
       "WebhookSecret": {
         "type": "object",

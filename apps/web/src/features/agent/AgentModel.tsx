@@ -22,16 +22,38 @@ type Choice = components['schemas']['ModelChoice']
 type Described = components['schemas']['AgentModel']
 type Chosen = components['schemas']['ModelRef']
 
-export function AgentModel({ agent }: { agent: AgentSummary }) {
-  const described = useQuery({
-    queryKey: ['agent-model', agent.id],
+export function useDescribedModel(agent: string) {
+  return useQuery({
+    queryKey: ['agent-model', agent],
     queryFn: () =>
       ok(
         api.GET('/api/agents/{agent}/model', {
-          params: { path: { agent: agent.id } },
+          params: { path: { agent } },
         }),
       ),
   })
+}
+
+export function useModelListing(agent: string, provider: Provider | null) {
+  return useQuery({
+    queryKey: ['agent-models', agent, provider],
+    retry: false,
+    enabled: provider !== null,
+    queryFn: async () => {
+      const { data, response } = await api
+        .POST('/api/agents/{agent}/models', {
+          params: { path: { agent } },
+          body: { provider: provider as Provider },
+        })
+        .catch(() => ({ data: undefined, response: null }))
+      if (!data) throw new Error(String(response?.status ?? 0))
+      return data
+    },
+  })
+}
+
+export function AgentModel({ agent }: { agent: AgentSummary }) {
+  const described = useDescribedModel(agent.id)
   return (
     <section className="panel__section agent-model">
       <h2>Model</h2>
@@ -226,20 +248,7 @@ function Models({
   value: string
   onPick: (model: string, reported: number | null) => void
 }) {
-  const listing = useQuery({
-    queryKey: ['agent-models', agent, provider],
-    retry: false,
-    queryFn: async () => {
-      const { data, response } = await api
-        .POST('/api/agents/{agent}/models', {
-          params: { path: { agent } },
-          body: { provider },
-        })
-        .catch(() => ({ data: undefined, response: null }))
-      if (!data) throw new Error(String(response?.status ?? 0))
-      return data
-    },
-  })
+  const listing = useModelListing(agent, provider)
   const status = listing.error ? Number(listing.error.message) : null
   const typed = status !== null
   const unreachable = status === 502 || status === 0

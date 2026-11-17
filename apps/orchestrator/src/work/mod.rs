@@ -19,11 +19,12 @@ pub mod tasks;
 mod teams;
 pub(crate) mod terminal;
 pub(crate) mod usage;
+pub mod wakes;
 use crate::{
     agents::AgentId,
     identity::{Actor, IdentityError},
 };
-pub use activity::ActivityItem;
+pub use activity::{ActivityItem, UnreadReply};
 pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use calls::{CallRecord, Reply, ReplyEvent};
 pub use collaboration::Steering;
@@ -222,6 +223,7 @@ impl Work {
         }
         wake(&mut tx, agent).await?;
         let turn = queue(&mut tx, actor, conversation, input, within).await?;
+        activity::settle_conversation(&mut tx, conversation).await?;
         let mut turn = Turn::from(turn);
         turn.message_attachments = attach_sent(&mut tx, actor, turn.id, &input.attachments).await?;
         tx.commit().await?;

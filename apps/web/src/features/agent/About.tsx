@@ -17,7 +17,7 @@ import {
   Status,
   Switch,
 } from '../../components/primitives'
-import { AgentSpeechSection } from '../call/SpeechSettings'
+import { useDescribedModel, useModelListing } from './AgentModel'
 import { AvatarBuilder } from './AvatarBuilder'
 import './about.css'
 
@@ -30,7 +30,6 @@ export function About({ agent }: { agent: AgentSummary }) {
       <Instructions agent={agent} onSaved={refresh} />
       <Behaviour agent={agent} onSaved={refresh} />
       <Capabilities agent={agent} onSaved={refresh} />
-      <AgentSpeechSection agent={agent} />
       <Lifecycle agent={agent} onChanged={refresh} />
       <Tools agentId={agent.id} />
     </>
@@ -328,40 +327,30 @@ function Behaviour({
           )
         }}
       >
-        <div className="row">
-          <Field
-            label="Idle minutes before sleeping"
-            hint="It dreams while it sleeps"
-          >
-            <input
-              name="idle_minutes"
-              type="number"
-              required
-              min={1}
-              max={1440}
-              defaultValue={Math.round(agent.idle_delay_seconds / 60)}
-            />
-          </Field>
-        </div>
-        <div className="row">
-          <Field label="Delegated tasks at once" hint="1 to 4 task lanes">
-            <input
-              name="task_lanes"
-              type="number"
-              required
-              min={1}
-              max={4}
-              defaultValue={agent.task_lanes}
-            />
-          </Field>
-          <Field label="Dreaming model" hint="Empty uses the provider model">
-            <input
-              name="dreaming_model"
-              maxLength={200}
-              defaultValue={agent.dreaming_model ?? ''}
-            />
-          </Field>
-        </div>
+        <Field
+          label="Idle minutes before sleeping"
+          hint="It dreams while it sleeps"
+        >
+          <input
+            name="idle_minutes"
+            type="number"
+            required
+            min={1}
+            max={1440}
+            defaultValue={Math.round(agent.idle_delay_seconds / 60)}
+          />
+        </Field>
+        <Field label="Delegated tasks at once" hint="1 to 4 task lanes">
+          <input
+            name="task_lanes"
+            type="number"
+            required
+            min={1}
+            max={4}
+            defaultValue={agent.task_lanes}
+          />
+        </Field>
+        <DreamingModel agent={agent} />
         <Alert>{error}</Alert>
         <Status>{notice}</Status>
         <div className="actions">
@@ -371,6 +360,56 @@ function Behaviour({
         </div>
       </form>
     </section>
+  )
+}
+
+function DreamingModel({ agent }: { agent: AgentSummary }) {
+  const described = useDescribedModel(agent.id)
+  const thinking = described.data?.chosen ?? described.data?.default ?? null
+  const listing = useModelListing(agent.id, thinking?.provider ?? null)
+  const saved = agent.dreaming_model ?? ''
+  const [value, setValue] = useState(saved)
+  if (described.isPending || listing.isLoading)
+    return (
+      <Field label="Dreaming model">
+        <select disabled aria-busy="true">
+          <option>Loading models…</option>
+        </select>
+      </Field>
+    )
+  if (!listing.data)
+    return (
+      <Field label="Dreaming model" hint="Empty uses its own model">
+        <input
+          name="dreaming_model"
+          maxLength={200}
+          value={value}
+          placeholder="A model ID its provider can use"
+          onChange={(event) => setValue(event.target.value)}
+        />
+      </Field>
+    )
+  const ids = listing.data.map((choice) => choice.id)
+  return (
+    <Field label="Dreaming model" hint="Runs while it sleeps">
+      <select
+        name="dreaming_model"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      >
+        <option value="">
+          Same as its own model{thinking ? ` (${thinking.model})` : ''}
+        </option>
+        {saved && !ids.includes(saved) && (
+          <option value={saved}>{saved}</option>
+        )}
+        {ids.map((id) => (
+          <option key={id} value={id}>
+            {id}
+          </option>
+        ))}
+      </select>
+    </Field>
   )
 }
 

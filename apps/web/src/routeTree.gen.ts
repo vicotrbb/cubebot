@@ -58,9 +58,11 @@ import { Route as AppAgentsAgentIdFilesRouteImport } from './routes/_app.agents.
 import { Route as AppAgentsAgentIdMemoriesRouteImport } from './routes/_app.agents.$agentId.memories'
 import { Route as AppAgentsAgentIdRoutinesRouteImport } from './routes/_app.agents.$agentId.routines'
 import { Route as AppAgentsAgentIdSkillsRouteImport } from './routes/_app.agents.$agentId.skills'
+import { Route as AppAgentsAgentIdSpeechRouteImport } from './routes/_app.agents.$agentId.speech'
 import { Route as AppAgentsAgentIdStatusRouteImport } from './routes/_app.agents.$agentId.status'
 import { Route as AppAgentsAgentIdUsageRouteImport } from './routes/_app.agents.$agentId.usage'
 import { Route as AppAgentsAgentIdVaultRouteImport } from './routes/_app.agents.$agentId.vault'
+import { Route as AppAgentsAgentIdWakesRouteImport } from './routes/_app.agents.$agentId.wakes'
 import { Route as AppAgentsAgentIdDesktopRouteImport } from './routes/_app.agents_.$agentId_.desktop'
 import { Route as AppRoomsRoomIdMembersRouteImport } from './routes/_app.rooms.$roomId.members'
 import { Route as AppAgentsAgentIdThreadTurnIdRouteImport } from './routes/_app.agents.$agentId.thread.$turnId'
@@ -312,6 +314,11 @@ const AppAgentsAgentIdSkillsRoute = AppAgentsAgentIdSkillsRouteImport.update({
   path: '/skills',
   getParentRoute: () => AppAgentsAgentIdRoute,
 } as any)
+const AppAgentsAgentIdSpeechRoute = AppAgentsAgentIdSpeechRouteImport.update({
+  id: '/speech',
+  path: '/speech',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
 const AppAgentsAgentIdStatusRoute = AppAgentsAgentIdStatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -325,6 +332,11 @@ const AppAgentsAgentIdUsageRoute = AppAgentsAgentIdUsageRouteImport.update({
 const AppAgentsAgentIdVaultRoute = AppAgentsAgentIdVaultRouteImport.update({
   id: '/vault',
   path: '/vault',
+  getParentRoute: () => AppAgentsAgentIdRoute,
+} as any)
+const AppAgentsAgentIdWakesRoute = AppAgentsAgentIdWakesRouteImport.update({
+  id: '/wakes',
+  path: '/wakes',
   getParentRoute: () => AppAgentsAgentIdRoute,
 } as any)
 const AppAgentsAgentIdDesktopRoute = AppAgentsAgentIdDesktopRouteImport.update({
@@ -393,9 +405,11 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
   '/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
   '/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
+  '/agents/$agentId/speech': typeof AppAgentsAgentIdSpeechRoute
   '/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
   '/agents/$agentId/usage': typeof AppAgentsAgentIdUsageRoute
   '/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
+  '/agents/$agentId/wakes': typeof AppAgentsAgentIdWakesRoute
   '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
   '/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
@@ -448,9 +462,11 @@ export interface FileRoutesByTo {
   '/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
   '/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
   '/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
+  '/agents/$agentId/speech': typeof AppAgentsAgentIdSpeechRoute
   '/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
   '/agents/$agentId/usage': typeof AppAgentsAgentIdUsageRoute
   '/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
+  '/agents/$agentId/wakes': typeof AppAgentsAgentIdWakesRoute
   '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
   '/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
@@ -506,9 +522,11 @@ export interface FileRoutesById {
   '/_app/agents/$agentId/memories': typeof AppAgentsAgentIdMemoriesRoute
   '/_app/agents/$agentId/routines': typeof AppAgentsAgentIdRoutinesRoute
   '/_app/agents/$agentId/skills': typeof AppAgentsAgentIdSkillsRoute
+  '/_app/agents/$agentId/speech': typeof AppAgentsAgentIdSpeechRoute
   '/_app/agents/$agentId/status': typeof AppAgentsAgentIdStatusRoute
   '/_app/agents/$agentId/usage': typeof AppAgentsAgentIdUsageRoute
   '/_app/agents/$agentId/vault': typeof AppAgentsAgentIdVaultRoute
+  '/_app/agents/$agentId/wakes': typeof AppAgentsAgentIdWakesRoute
   '/_app/agents_/$agentId_/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/_app/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
   '/_app/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
@@ -564,9 +582,11 @@ export interface FileRouteTypes {
     | '/agents/$agentId/memories'
     | '/agents/$agentId/routines'
     | '/agents/$agentId/skills'
+    | '/agents/$agentId/speech'
     | '/agents/$agentId/status'
     | '/agents/$agentId/usage'
     | '/agents/$agentId/vault'
+    | '/agents/$agentId/wakes'
     | '/agents/$agentId/desktop'
     | '/rooms/$roomId/members'
     | '/agents/$agentId/thread/$turnId'
@@ -619,9 +639,11 @@ export interface FileRouteTypes {
     | '/agents/$agentId/memories'
     | '/agents/$agentId/routines'
     | '/agents/$agentId/skills'
+    | '/agents/$agentId/speech'
     | '/agents/$agentId/status'
     | '/agents/$agentId/usage'
     | '/agents/$agentId/vault'
+    | '/agents/$agentId/wakes'
     | '/agents/$agentId/desktop'
     | '/rooms/$roomId/members'
     | '/agents/$agentId/thread/$turnId'
@@ -676,9 +698,11 @@ export interface FileRouteTypes {
     | '/_app/agents/$agentId/memories'
     | '/_app/agents/$agentId/routines'
     | '/_app/agents/$agentId/skills'
+    | '/_app/agents/$agentId/speech'
     | '/_app/agents/$agentId/status'
     | '/_app/agents/$agentId/usage'
     | '/_app/agents/$agentId/vault'
+    | '/_app/agents/$agentId/wakes'
     | '/_app/agents_/$agentId_/desktop'
     | '/_app/rooms/$roomId/members'
     | '/_app/agents/$agentId/thread/$turnId'
@@ -1035,6 +1059,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgentsAgentIdSkillsRouteImport
       parentRoute: typeof AppAgentsAgentIdRoute
     }
+    '/_app/agents/$agentId/speech': {
+      id: '/_app/agents/$agentId/speech'
+      path: '/speech'
+      fullPath: '/agents/$agentId/speech'
+      preLoaderRoute: typeof AppAgentsAgentIdSpeechRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
     '/_app/agents/$agentId/status': {
       id: '/_app/agents/$agentId/status'
       path: '/status'
@@ -1054,6 +1085,13 @@ declare module '@tanstack/react-router' {
       path: '/vault'
       fullPath: '/agents/$agentId/vault'
       preLoaderRoute: typeof AppAgentsAgentIdVaultRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
+    '/_app/agents/$agentId/wakes': {
+      id: '/_app/agents/$agentId/wakes'
+      path: '/wakes'
+      fullPath: '/agents/$agentId/wakes'
+      preLoaderRoute: typeof AppAgentsAgentIdWakesRouteImport
       parentRoute: typeof AppAgentsAgentIdRoute
     }
     '/_app/agents_/$agentId_/desktop': {
@@ -1139,9 +1177,11 @@ interface AppAgentsAgentIdRouteChildren {
   AppAgentsAgentIdMemoriesRoute: typeof AppAgentsAgentIdMemoriesRoute
   AppAgentsAgentIdRoutinesRoute: typeof AppAgentsAgentIdRoutinesRoute
   AppAgentsAgentIdSkillsRoute: typeof AppAgentsAgentIdSkillsRoute
+  AppAgentsAgentIdSpeechRoute: typeof AppAgentsAgentIdSpeechRoute
   AppAgentsAgentIdStatusRoute: typeof AppAgentsAgentIdStatusRoute
   AppAgentsAgentIdUsageRoute: typeof AppAgentsAgentIdUsageRoute
   AppAgentsAgentIdVaultRoute: typeof AppAgentsAgentIdVaultRoute
+  AppAgentsAgentIdWakesRoute: typeof AppAgentsAgentIdWakesRoute
   AppAgentsAgentIdThreadTurnIdRoute: typeof AppAgentsAgentIdThreadTurnIdRoute
 }
 
@@ -1154,9 +1194,11 @@ const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
   AppAgentsAgentIdMemoriesRoute: AppAgentsAgentIdMemoriesRoute,
   AppAgentsAgentIdRoutinesRoute: AppAgentsAgentIdRoutinesRoute,
   AppAgentsAgentIdSkillsRoute: AppAgentsAgentIdSkillsRoute,
+  AppAgentsAgentIdSpeechRoute: AppAgentsAgentIdSpeechRoute,
   AppAgentsAgentIdStatusRoute: AppAgentsAgentIdStatusRoute,
   AppAgentsAgentIdUsageRoute: AppAgentsAgentIdUsageRoute,
   AppAgentsAgentIdVaultRoute: AppAgentsAgentIdVaultRoute,
+  AppAgentsAgentIdWakesRoute: AppAgentsAgentIdWakesRoute,
   AppAgentsAgentIdThreadTurnIdRoute: AppAgentsAgentIdThreadTurnIdRoute,
 }
 

@@ -24,7 +24,7 @@ import { scheduleWords } from '../calendar/model'
 import { useProfile } from '../shell/AboutYou'
 import './routines.css'
 
-const SCHEDULES = [
+export const SCHEDULES = [
   ['Weekdays at 09:00', '0 9 * * 1-5'],
   ['Every day at 09:00', '0 9 * * *'],
   ['Every hour', '0 * * * *'],
@@ -245,7 +245,7 @@ export function Routines({
 }
 
 /** The zone the person reads times in: their profile's, else this device's. */
-function useViewerZone() {
+export function useViewerZone() {
   const profile = useProfile()
   return (
     profile.data?.time_zone || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -645,7 +645,11 @@ function Triggers({
 }
 
 /** Defaults to the zone the person reads times in. */
-function ZoneField({ existing }: { existing: Routine | undefined }) {
+export function ZoneField({
+  existing,
+}: {
+  existing: Pick<Routine, 'schedule' | 'time_zone'> | undefined
+}) {
   const viewer = useViewerZone()
   const zones = useMemo(() => Intl.supportedValuesOf('timeZone'), [])
   // An unscheduled routine holds the column default, UTC, which nobody chose.

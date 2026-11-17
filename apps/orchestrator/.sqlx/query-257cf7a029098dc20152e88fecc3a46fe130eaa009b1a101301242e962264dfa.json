@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, instructions, schedule, time_zone, set_by,\n            (to_jsonb(next_at) #>> '{}') AS \"next_at!\",\n            (to_jsonb(created_at) #>> '{}') AS \"created_at!\"\n        FROM wakes\n        WHERE agent_id=$1\n        ORDER BY next_at, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "schedule",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "time_zone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "set_by",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "next_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "257cf7a029098dc20152e88fecc3a46fe130eaa009b1a101301242e962264dfa"
+}

@@ -196,7 +196,7 @@ async fn an_agent_publishes_a_skill_itself_and_its_spend_is_priced_and_limited()
     assert!(
         activity
             .iter()
-            .any(|item| item.text.contains("spent its budget"))
+            .any(|item| item.text.contains("Spent its budget"))
     );
     let lifted = SetBudget {
         monthly_budget_usd: None,

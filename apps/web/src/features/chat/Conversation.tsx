@@ -1,5 +1,11 @@
 import { Link } from '@tanstack/react-router'
-import { ChevronRight, ListChecks, Megaphone, Repeat } from 'lucide-react'
+import {
+  AlarmClock,
+  ChevronRight,
+  ListChecks,
+  Megaphone,
+  Repeat,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok, type Turn } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
@@ -213,6 +219,7 @@ function origin(turn: Turn) {
   if (from.kind === 'approvals') return `${from.name} settled the requests`
   if (from.kind === 'broadcast') return `broadcast from ${from.name}`
   if (from.kind === 'routine') return `via routine ${from.name}`
+  if (from.kind === 'wake') return 'Wake-up'
   if (from.kind === 'delegation') return `delegated by ${from.name}`
   return `message from ${from.name}`
 }
@@ -310,6 +317,8 @@ function shownRequest(turn: Turn) {
     return turn.message.replace(/^Broadcast [^\n]*:\n\n/, '')
   if (turn.origin?.kind === 'routine')
     return turn.message.replace(/^Routine [^\n]*:\n\n/, '')
+  if (turn.origin?.kind === 'wake')
+    return turn.message.replace(/^Wake-up [^\n]*:\n\n/, '')
   if (turn.origin?.kind === 'approvals')
     return turn.message.replace(/^[^\n]*\n/, '')
   return turn.message
@@ -323,6 +332,7 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
       {from ? (
         <span className="avatar-initial msg__avatar" aria-hidden="true">
           {from.kind === 'routine' && <Repeat size={16} />}
+          {from.kind === 'wake' && <AlarmClock size={16} />}
           {from.kind === 'broadcast' && <Megaphone size={16} />}
           {from.kind === 'approvals' && <ListChecks size={16} />}
           {(from.kind === 'delegation' || from.kind === 'message') &&
