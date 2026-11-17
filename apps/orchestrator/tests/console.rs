@@ -562,15 +562,15 @@ async fn activity_lists_what_needs_the_caller_newest_first() {
             "login_pending",
         ]
     );
-    assert_eq!(items[0].text, "Ada published skill release-notes");
+    assert_eq!(items[0].text, "Published skill release-notes");
     assert_eq!(items[1].text, "Invitation for newcomer is pending");
-    assert_eq!(items[2].text, "Bob failed: provider refused");
+    assert_eq!(items[2].text, "Failed: provider refused");
     assert_eq!((items[2].turn, items[2].agent), (Some(failed), Some(f.bob)));
     assert_eq!(
         (items[3].turn, items[3].agent),
         (Some(waiting), Some(f.ada))
     );
-    assert_eq!(items[4].text, "Ada asks you to log in on github.com");
+    assert_eq!(items[4].text, "Asks you to log in on github.com");
     assert_eq!(items[4].turn, Some(running));
     assert!(items.iter().all(|item| item.at.starts_with("20")));
 
@@ -604,6 +604,22 @@ async fn activity_lists_what_needs_the_caller_newest_first() {
         (status, body.as_array().map(Vec::len)),
         (StatusCode::OK, Some(3))
     );
+
+    sqlx::query!(
+        "UPDATE chat_turns SET attention='Pick a date' WHERE id=$1",
+        running,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    work.read_activity(&f.admin).await.unwrap();
+    let items = work.activity(&f.admin).await.unwrap();
+    assert!(items.iter().all(|item| !item.kind.ends_with("published_skill")));
+    let asked = items.iter().find(|item| item.kind == "attention").unwrap();
+    assert_eq!((asked.text.as_str(), asked.turn), ("Pick a date", Some(running)));
+    work.settle_attention(&f.admin, running).await.unwrap();
+    let items = work.activity(&f.admin).await.unwrap();
+    assert!(items.iter().all(|item| item.kind != "attention"));
 }
 
 #[tokio::test]
