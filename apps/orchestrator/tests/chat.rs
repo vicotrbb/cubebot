@@ -39,6 +39,7 @@ async fn accepted_messages_survive_reconnect_and_concurrent_retries_are_unique()
         request_id: Uuid::new_v4(),
         message: "Remember this".into(),
         attachments: Vec::new(),
+        app: None,
     };
     let (first, second) = tokio::join!(
         work.send(&admin, conversation.id, &input),
@@ -111,6 +112,7 @@ async fn ordinary_members_cannot_read_or_send_to_another_conversation() {
         request_id: Uuid::new_v4(),
         message: "Intrude".into(),
         attachments: Vec::new(),
+        app: None,
     };
     assert!(matches!(
         work.send(&member, conversation.id, &message).await,
@@ -268,6 +270,7 @@ async fn legacy_histories_merge_without_broadening_private_grants() {
                     request_id: request,
                     message: "First history".into(),
                     attachments: Vec::new(),
+                    app: None,
                 }
             )
             .await
@@ -375,6 +378,7 @@ async fn assert_explicit_shared_access(
             request_id: Uuid::new_v4(),
             message: "Shared continuous context".into(),
             attachments: Vec::new(),
+            app: None,
         },
     )
     .await

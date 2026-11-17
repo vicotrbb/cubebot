@@ -1,0 +1,1 @@
+ALTER TABLE chat_turns ADD COLUMN app_id uuid REFERENCES apps(id) ON DELETE SET NULL;

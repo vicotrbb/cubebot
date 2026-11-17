@@ -1055,6 +1055,7 @@ pub(crate) async fn native_chat_setup(
             request_id: Uuid::new_v4(),
             message: message.into(),
             attachments: Vec::new(),
+            app: None,
         },
     )
     .await
@@ -1321,6 +1322,7 @@ async fn send(
             request_id: Uuid::new_v4(),
             message: message.into(),
             attachments: Vec::new(),
+            app: None,
         },
     )
     .await

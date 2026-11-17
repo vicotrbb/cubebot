@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id, meeting_id, talk_only)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)\n        RETURNING id, sequence, message, status, response, error\n        ",
+  "query": "\n        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id, meeting_id, talk_only, app_id)\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n        RETURNING id, sequence, message, status, response, error\n        ",
   "describe": {
     "columns": [
       {
@@ -42,7 +42,8 @@
         "Text",
         "Uuid",
         "Uuid",
-        "Bool"
+        "Bool",
+        "Uuid"
       ]
     },
     "nullable": [
@@ -54,5 +55,5 @@
       true
     ]
   },
-  "hash": "fbf42b97f32c942f61dd1349ebe4ee77cf5f6a7b4abd64680624df95e91db5d2"
+  "hash": "2f49f6252cb999656f3c26eb288efc013c2d10a0b0e5a30bb81cc884fa1ccc7d"
 }

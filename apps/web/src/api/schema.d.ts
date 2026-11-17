@@ -4370,7 +4370,7 @@ export interface components {
       turn: string
     }
     Origin: {
-      /** @description `approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`. */
+      /** @description `approvals`, `app`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`. */
       kind: string
       /** @description The room's or routine's name, the sending agent's, or a broadcast's sender. */
       name: string
@@ -4987,6 +4987,7 @@ export interface components {
       title: string
     }
     SendMessage: {
+      app?: string | null
       attachments?: string[]
       message: string
       /** Format: uuid */

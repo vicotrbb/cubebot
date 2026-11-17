@@ -77,6 +77,7 @@ impl Work {
             request_id: Uuid::new_v4(),
             message: text.to_owned(),
             attachments: Vec::new(),
+            app: None,
         };
         let within = Within {
             meeting: Some(meeting),

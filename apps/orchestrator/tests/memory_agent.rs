@@ -112,6 +112,7 @@ impl Session {
             request_id: Uuid::new_v4(),
             message: message.into(),
             attachments: Vec::new(),
+            app: None,
         };
         self.work
             .send(&self.admin, self.conversation, &input)

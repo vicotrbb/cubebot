@@ -130,6 +130,7 @@ fn typed(message: &str) -> SendMessage {
         request_id: Uuid::new_v4(),
         message: message.to_owned(),
         attachments: Vec::new(),
+        app: None,
     }
 }
 

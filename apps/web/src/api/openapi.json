@@ -11002,7 +11002,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`."
+            "description": "`approvals`, `app`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`."
           },
           "name": {
             "type": "string",
@@ -12577,6 +12577,9 @@
         "type": "object",
         "required": ["request_id", "message"],
         "properties": {
+          "app": {
+            "type": ["string", "null"]
+          },
           "attachments": {
             "type": "array",
             "items": {

@@ -247,6 +247,7 @@ async fn a_person_watches_takes_control_and_hands_back_with_each_change_recorded
         request_id: Uuid::new_v4(),
         message: "Use the desktop".into(),
         attachments: Vec::new(),
+        app: None,
     };
     let turn = work.send(&admin, agent, &message).await.unwrap().id;
     let before = tool_call(&pool, turn, 1).await;

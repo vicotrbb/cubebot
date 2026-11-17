@@ -1,4 +1,5 @@
 use crate::support;
+use cubebot_orchestrator::work::{SendMessage, Work};
 use cubebot_orchestrator::{
     agents::{AgentId, Agents, CreateAgent},
     apps::{AgentState, AppState, Apps, Change, Register},
@@ -539,4 +540,60 @@ async fn a_retired_agents_token_is_refused() {
         r.apps.view(&r.ana, "budget").await,
         Err(IdentityError::NotFound)
     ));
+}
+
+fn from_app(text: &str, app: &str) -> SendMessage {
+    SendMessage {
+        request_id: Uuid::new_v4(),
+        message: text.into(),
+        attachments: Vec::new(),
+        app: Some(app.into()),
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_message_from_an_app_carries_its_origin() {
+    let w = world().await;
+    let scout = agent(&w, "Scout").await;
+    grant(
+        &w,
+        scout,
+        &[Capability::ConversationSend, Capability::ConversationRead],
+    )
+    .await;
+    let _ = w.apps.register(scout, register(json!({}))).await.unwrap();
+    let work = Work::new(w.pool.clone());
+    work.send(&w.ana, scout.0, &from_app("How am I doing?", "budget"))
+        .await
+        .unwrap();
+    let plain = SendMessage {
+        app: None,
+        ..from_app("Hello", "")
+    };
+    work.send(&w.ana, scout.0, &plain).await.unwrap();
+    let turns = work.history(&w.ana, scout.0, 0).await.unwrap();
+    let origin = turns[0].origin.as_ref().unwrap();
+    assert_eq!(
+        (origin.kind.as_str(), origin.name.as_str()),
+        ("app", "Budget")
+    );
+    assert_eq!(turns[0].message, "How am I doing?");
+    assert!(turns[1].origin.is_none());
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_app_of_another_agent_is_refused() {
+    let w = world().await;
+    let scout = agent(&w, "Scout").await;
+    let other = agent(&w, "Other").await;
+    grant(&w, scout, &[Capability::ConversationSend]).await;
+    grant(&w, other, &[Capability::ConversationSend]).await;
+    let _ = w.apps.register(other, register(json!({}))).await.unwrap();
+    let work = Work::new(w.pool.clone());
+    let refused = work.send(&w.ana, scout.0, &from_app("Hi", "budget")).await;
+    assert!(matches!(refused, Err(IdentityError::NotFound)));
+    let missing = work.send(&w.ana, scout.0, &from_app("Hi", "nope")).await;
+    assert!(matches!(missing, Err(IdentityError::NotFound)));
 }
