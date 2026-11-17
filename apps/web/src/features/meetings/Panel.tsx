@@ -1,5 +1,8 @@
 import { Hand, MicOff, MonitorOff, MonitorUp, UserMinus, X } from 'lucide-react'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { api, ok } from '../../api/client'
+import { Switch } from '../../components/primitives'
+import type { Meeting } from './api'
 import type { Engine } from './media/engine'
 import { speakerName, type Participant, type Room } from './media/room'
 import { displayName, Face } from './Tile'
@@ -44,18 +47,70 @@ function Waiting({ room, engine }: { room: Room; engine: Engine }) {
   )
 }
 
+function ListenSwitch({
+  participant,
+  meeting,
+  invitation,
+}: {
+  participant: Participant
+  meeting: string
+  invitation: string
+}) {
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const change = async (listening: boolean) => {
+    setBusy(true)
+    setFailed(false)
+    try {
+      await ok(
+        api.PATCH('/api/meetings/{id}/invitations/{invitation}', {
+          params: { path: { id: meeting, invitation } },
+          body: { listening },
+        }),
+      )
+    } catch {
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <label className="meeting-person__listen">
+      <Switch
+        checked={Boolean(participant.listening)}
+        disabled={busy}
+        label={`Listen only, ${participant.name}`}
+        onChange={(listening) => void change(listening)}
+      />
+      <span aria-live="polite">{failed ? 'Not saved' : 'Listen only'}</span>
+    </label>
+  )
+}
+
 function PersonActions({
   participant,
   room,
   engine,
+  meeting,
 }: {
   participant: Participant
   room: Room
   engine: Engine
+  meeting?: Meeting | undefined
 }) {
   const you = participant.slot === room.you
+  const invitation = meeting?.invitations.find(
+    (seat) => seat.agent && seat.agent === participant.agent,
+  )
   return (
     <span className="meeting-person__actions">
+      {room.host && meeting && invitation && (
+        <ListenSwitch
+          participant={participant}
+          meeting={meeting.id}
+          invitation={invitation.id}
+        />
+      )}
       {participant.hand && (
         <Hand className="meeting-person__mark" aria-label="Hand raised" />
       )}
@@ -107,10 +162,12 @@ function People({
   room,
   engine,
   invite,
+  meeting,
 }: {
   room: Room
   engine: Engine
   invite?: ReactNode
+  meeting?: Meeting | undefined
 }) {
   const sorted = [...room.participants].sort(
     (a, b) => order(a) - order(b) || a.slot - b.slot,
@@ -136,6 +193,7 @@ function People({
                 participant={participant}
                 room={room}
                 engine={engine}
+                meeting={meeting}
               />
             </li>
           ))}
@@ -193,6 +251,7 @@ export function Panel({
   room,
   engine,
   invite,
+  meeting,
   onTab,
   onClose,
 }: {
@@ -200,6 +259,7 @@ export function Panel({
   room: Room
   engine: Engine
   invite?: ReactNode
+  meeting?: Meeting | undefined
   onTab: (tab: PanelTab) => void
   onClose: () => void
 }) {
@@ -239,7 +299,12 @@ export function Panel({
       </div>
       <div className="meeting-panel__body">
         {tab === 'people' ? (
-          <People room={room} engine={engine} invite={invite} />
+          <People
+            room={room}
+            engine={engine}
+            invite={invite}
+            meeting={meeting}
+          />
         ) : (
           <Transcript room={room} />
         )}

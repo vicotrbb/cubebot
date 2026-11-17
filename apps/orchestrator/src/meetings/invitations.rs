@@ -153,11 +153,12 @@ impl Meetings {
         let rows = sqlx::query!(
             r#"
             INSERT INTO meeting_invitations
-                (meeting_id, account_id, agent_id, email, invited_by, email_connection_id)
-            SELECT $1::uuid, account, NULL::uuid, NULL, $2::uuid, NULL::uuid
+                (meeting_id, account_id, agent_id, email, invited_by, email_connection_id, listening)
+            SELECT $1::uuid, account, NULL::uuid, NULL, $2::uuid, NULL::uuid, false
             FROM unnest($3::uuid[]) account
-            UNION ALL SELECT $1, NULL, agent, NULL, $2, NULL FROM unnest($4::uuid[]) agent
-            UNION ALL SELECT $1, NULL, NULL, email, $2, $6::uuid FROM unnest($5::text[]) email
+            UNION ALL SELECT $1, NULL, agent, NULL, $2, NULL, agent = ANY($7::uuid[])
+                FROM unnest($4::uuid[]) agent
+            UNION ALL SELECT $1, NULL, NULL, email, $2, $6::uuid, false FROM unnest($5::text[]) email
             ON CONFLICT DO NOTHING
             RETURNING id, account_id, agent_id, email
             "#,
@@ -167,6 +168,7 @@ impl Meetings {
             &agents,
             emails,
             sender.map(|sender| sender.connection),
+            &invite.listening,
         )
         .fetch_all(&mut **tx)
         .await?;

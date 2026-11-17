@@ -47,6 +47,17 @@
   color: var(--ink-faint);
   font-size: var(--t-xs);
 }
+.member__listen {
+  grid-row: 2;
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  color: var(--ink-soft);
+  font-size: var(--t-xs);
+  cursor: pointer;
+}
 .member__remove {
   color: var(--ink-faint);
   opacity: 0.7;

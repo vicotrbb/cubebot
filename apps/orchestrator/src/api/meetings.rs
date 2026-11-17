@@ -34,6 +34,7 @@ struct Api {
     cancel,
     invite,
     uninvite,
+    listening,
     link,
     email_connections,
     read_settings,
@@ -55,7 +56,7 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity, meetings: Meetings)
         .route("/api/meetings/{id}/invitations", post(invite))
         .route(
             "/api/meetings/{id}/invitations/{invitation}",
-            delete(uninvite),
+            delete(uninvite).patch(listening),
         )
         .route("/api/meetings/{id}/link", post(link))
         .route("/api/meetings/{id}/live", get(live))
@@ -164,6 +165,27 @@ async fn uninvite(
 ) -> Result<StatusCode, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     api.meetings.uninvite(&actor, id, invitation).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct Listening {
+    listening: bool,
+}
+
+#[utoipa::path(patch, path = "/api/meetings/{id}/invitations/{invitation}", operation_id = "set_meeting_invitation_listening", params(("id" = Uuid, Path), ("invitation" = Uuid, Path)), request_body = Listening, responses((status = 204), (status = 403), (status = 404)))]
+async fn listening(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((id, invitation)): Path<(Uuid, Uuid)>,
+    Json(input): Json<Listening>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let change = api
+        .meetings
+        .set_listening(&actor, id, invitation, input.listening);
+    change.await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

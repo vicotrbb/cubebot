@@ -16,6 +16,7 @@ export type Participant = {
   camera: boolean
   screen: boolean
   hand: boolean
+  listening?: boolean
   can_present?: boolean
 }
 

@@ -5281,6 +5281,51 @@
             "description": ""
           }
         }
+      },
+      "patch": {
+        "tags": [],
+        "operationId": "set_meeting_invitation_listening",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Listening"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/meetings/{id}/link": {
@@ -9777,6 +9822,16 @@
         },
         "additionalProperties": false
       },
+      "Listening": {
+        "type": "object",
+        "required": ["listening"],
+        "properties": {
+          "listening": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "Liveness": {
         "type": "object",
         "description": "Process liveness only; this does not attest to dependency or agent readiness.",
@@ -10069,7 +10124,7 @@
       },
       "MeetingInvitation": {
         "type": "object",
-        "required": ["id", "kind", "name"],
+        "required": ["id", "kind", "name", "listening"],
         "properties": {
           "account": {
             "type": ["string", "null"],
@@ -10105,6 +10160,9 @@
           "kind": {
             "type": "string"
           },
+          "listening": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           }
@@ -10133,6 +10191,14 @@
             "type": "array",
             "items": {
               "type": "string"
+            },
+            "default": []
+          },
+          "listening": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
             },
             "default": []
           }

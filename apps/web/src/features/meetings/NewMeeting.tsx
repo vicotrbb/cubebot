@@ -10,6 +10,7 @@ import {
   EmailInput,
   idsOf,
   Invitees,
+  listeningOf,
   MailerField,
   ModeField,
   OpenJoinField,
@@ -108,6 +109,7 @@ function StartNow({ onDone }: { onDone: () => void }) {
   const options = useInviteOptions()
   const [title, setTitle] = useState('')
   const [agents, setAgents] = useState<MemberOption[]>([])
+  const [listening, setListening] = useState<string[]>([])
   const { busy, error, create } = useCreate(onDone)
   return (
     <form
@@ -120,6 +122,7 @@ function StartNow({ onDone }: { onDone: () => void }) {
             invite: {
               accounts: [],
               agents: idsOf(agents, 'agent'),
+              listening: listeningOf(agents, listening),
               emails: [],
             },
           }),
@@ -146,6 +149,8 @@ function StartNow({ onDone }: { onDone: () => void }) {
           members={agents}
           options={options.agents}
           placeholder="Search agents"
+          listening={listening}
+          onListening={setListening}
           onChange={setAgents}
         />
       )}
@@ -178,6 +183,7 @@ export function ScheduleMeeting({
   const [times, setTimes] = useState(() => when ?? nextHalfHour(zone))
   const [description, setDescription] = useState('')
   const [members, setMembers] = useState<MemberOption[]>([])
+  const [listening, setListening] = useState<string[]>([])
   const [emails, setEmails] = useState<string[]>([])
   const [mailer, setMailer] = useMailer()
   const [openJoin, setOpenJoin] = useState(false)
@@ -193,6 +199,7 @@ export function ScheduleMeeting({
     invite: {
       accounts: idsOf(members, 'person'),
       agents: idsOf(members, 'agent'),
+      listening: listeningOf(members, listening),
       emails,
     },
     email_connection: emails.length && mailer ? mailer : null,
@@ -229,6 +236,8 @@ export function ScheduleMeeting({
         legend="People and agents"
         members={members}
         options={[...options.agents, ...options.people]}
+        listening={listening}
+        onListening={setListening}
         placeholder={
           options.people.length ? 'Search agents and people' : 'Search agents'
         }

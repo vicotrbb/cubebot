@@ -2106,7 +2106,7 @@ export interface paths {
     delete: operations['remove_meeting_invitation']
     options?: never
     head?: never
-    patch?: never
+    patch: operations['set_meeting_invitation_listening']
     trace?: never
   }
   '/api/meetings/{id}/link': {
@@ -3935,6 +3935,9 @@ export interface components {
       api_key?: string | null
       provider: components['schemas']['ProviderKind']
     }
+    Listening: {
+      listening: boolean
+    }
     /** @description Process liveness only; this does not attest to dependency or agent readiness. */
     Liveness: {
       status: components['schemas']['LivenessStatus']
@@ -4033,6 +4036,7 @@ export interface components {
       /** Format: uuid */
       id: string
       kind: string
+      listening: boolean
       name: string
     }
     MeetingInvite: {
@@ -4042,6 +4046,8 @@ export interface components {
       agents: string[]
       /** @default [] */
       emails: string[]
+      /** @default [] */
+      listening: string[]
     }
     MeetingLine: {
       /** Format: int64 */
@@ -9630,6 +9636,42 @@ export interface operations {
       cookie?: never
     }
     requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  set_meeting_invitation_listening: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        invitation: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Listening']
+      }
+    }
     responses: {
       204: {
         headers: {

@@ -132,6 +132,7 @@ struct Invited {
     name: String,
     avatar: Json<Avatar>,
     about: String,
+    listening: bool,
 }
 
 pub(super) struct Inbox {
@@ -425,9 +426,18 @@ impl Attendants {
             self.dismiss(agent, true).await;
         }
         for agent in invited {
-            if !self.agents.contains_key(&agent.id) && !self.dismissed.contains(&agent.id) {
-                self.join(agent).await;
-            }
+            self.seat(agent).await;
+        }
+    }
+
+    async fn seat(&mut self, agent: Invited) {
+        let (id, listening) = (agent.id, agent.listening);
+        if !self.agents.contains_key(&id) && !self.dismissed.contains(&id) {
+            self.join(agent).await;
+        }
+        if self.agents.contains_key(&id) {
+            self.floor.set_listening(id, listening);
+            self.room.agent_listening(id, listening).await;
         }
     }
 
@@ -912,7 +922,7 @@ async fn invited(pool: &PgPool, id: Uuid) -> Result<Vec<Invited>, sqlx::Error> {
     sqlx::query_as!(
         Invited,
         r#"
-        SELECT a.id, a.name, a.avatar AS "avatar: Json<Avatar>", left(a.instructions, 300) AS "about!"
+        SELECT a.id, a.name, a.avatar AS "avatar: Json<Avatar>", left(a.instructions, 300) AS "about!", i.listening
         FROM meeting_invitations i
         JOIN agents a ON a.id=i.agent_id
         JOIN meeting_settings s ON s.agents_join

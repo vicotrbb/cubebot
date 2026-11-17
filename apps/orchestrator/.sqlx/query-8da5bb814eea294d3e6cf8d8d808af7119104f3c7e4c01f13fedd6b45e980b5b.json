@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO meeting_invitations\n                (meeting_id, account_id, agent_id, email, invited_by, email_connection_id, listening)\n            SELECT $1::uuid, account, NULL::uuid, NULL, $2::uuid, NULL::uuid, false\n            FROM unnest($3::uuid[]) account\n            UNION ALL SELECT $1, NULL, agent, NULL, $2, NULL, agent = ANY($7::uuid[])\n                FROM unnest($4::uuid[]) agent\n            UNION ALL SELECT $1, NULL, NULL, email, $2, $6::uuid, false FROM unnest($5::text[]) email\n            ON CONFLICT DO NOTHING\n            RETURNING id, account_id, agent_id, email\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "email",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "UuidArray",
+        "UuidArray",
+        "TextArray",
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "8da5bb814eea294d3e6cf8d8d808af7119104f3c7e4c01f13fedd6b45e980b5b"
+}

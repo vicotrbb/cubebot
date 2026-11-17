@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT a.id, a.name, a.avatar AS \"avatar: Json<Avatar>\", left(a.instructions, 300) AS \"about!\"\n        FROM meeting_invitations i\n        JOIN agents a ON a.id=i.agent_id\n        JOIN meeting_settings s ON s.agents_join\n        WHERE i.meeting_id=$1 AND a.desired_state<>'retired'\n        ORDER BY i.created_at, i.id\n        ",
+  "query": "\n        SELECT a.id, a.name, a.avatar AS \"avatar: Json<Avatar>\", left(a.instructions, 300) AS \"about!\", i.listening\n        FROM meeting_invitations i\n        JOIN agents a ON a.id=i.agent_id\n        JOIN meeting_settings s ON s.agents_join\n        WHERE i.meeting_id=$1 AND a.desired_state<>'retired'\n        ORDER BY i.created_at, i.id\n        ",
   "describe": {
     "columns": [
       {
@@ -22,6 +22,11 @@
         "ordinal": 3,
         "name": "about!",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "listening",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -33,8 +38,9 @@
       false,
       false,
       false,
-      null
+      null,
+      false
     ]
   },
-  "hash": "6cd6c9f823bd51984ea32d7fd8d7bbbb64c598651fecc77f644a95b74096c818"
+  "hash": "89c00e1128638329c4d0600a4c479477d31de0bad4608efdc33dda57776e7aaf"
 }

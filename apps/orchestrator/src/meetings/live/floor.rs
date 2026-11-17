@@ -30,6 +30,7 @@ struct Seated {
     name: Vec<String>,
     about: String,
     called: String,
+    listening: bool,
 }
 
 struct Waiting {
@@ -59,7 +60,18 @@ impl Floor {
             name: words(name),
             about: about.to_owned(),
             called: name.to_owned(),
+            listening: false,
         });
+    }
+
+    pub(super) fn set_listening(&mut self, agent: Uuid, listening: bool) {
+        if let Some(seated) = self.agents.iter_mut().find(|seated| seated.id == agent) {
+            seated.listening = listening;
+        }
+    }
+
+    fn speaking(&self) -> impl Iterator<Item = &Seated> {
+        self.agents.iter().filter(|seated| !seated.listening)
     }
 
     pub(super) fn unseat(&mut self, agent: Uuid) {
@@ -110,7 +122,7 @@ impl Floor {
             Decision::Nobody
         } else if !named.is_empty() {
             Decision::Named(named)
-        } else if mode == AgentMode::Relevant && !self.agents.is_empty() {
+        } else if mode == AgentMode::Relevant && self.speaking().next().is_some() {
             Decision::Ask
         } else {
             Decision::Nobody
@@ -121,7 +133,7 @@ impl Floor {
         let said = words(text);
         let mut taken = HashSet::new();
         let mut found = Vec::new();
-        for seated in self.agents.iter().filter(|seated| seated.name.len() > 1) {
+        for seated in self.speaking().filter(|seated| seated.name.len() > 1) {
             if let Some(at) = said
                 .windows(seated.name.len())
                 .position(|window| window == seated.name.as_slice())
@@ -130,7 +142,7 @@ impl Floor {
                 found.push((at, seated.id));
             }
         }
-        for seated in &self.agents {
+        for seated in self.speaking() {
             let Some(first) = seated.name.first() else {
                 continue;
             };
@@ -165,13 +177,12 @@ impl Floor {
         let choice: Choice = serde_json::from_str(reply.get(start..=end)?).ok()?;
         choice
             .agent
-            .filter(|agent| self.agents.iter().any(|seated| seated.id == *agent))
+            .filter(|agent| self.speaking().any(|seated| seated.id == *agent))
     }
 
     pub(super) fn prompt(&self, lines: &[String]) -> String {
         let agents: Vec<String> = self
-            .agents
-            .iter()
+            .speaking()
             .map(|seated| format!("- id {}: {}. {}", seated.id, seated.called, seated.about))
             .collect();
         format!(
@@ -389,6 +400,31 @@ mod tests {
             Decision::Nobody
         );
         assert_eq!(floor.decide(AgentMode::Listen, "Anyone?"), Decision::Nobody);
+    }
+
+    #[test]
+    fn a_listening_agent_is_skipped_when_named_and_in_handoffs() {
+        let mut floor = floor();
+        floor.set_listening(CARA, true);
+        assert_eq!(
+            floor.decide(AgentMode::Named, "Cara and Dex, thoughts?"),
+            Decision::Named(vec![DEX])
+        );
+        assert_eq!(floor.decide(AgentMode::Named, "Cara?"), Decision::Nobody);
+        assert!(floor.handoff(DEX, "Over to you, Cara").is_empty());
+        assert_eq!(floor.chosen(&format!(r#"{{"agent":"{CARA}"}}"#)), None);
+        assert!(!floor.prompt(&[]).contains("Cara"));
+    }
+
+    #[test]
+    fn relevant_mode_with_only_listening_agents_asks_nobody() {
+        let mut floor = floor();
+        floor.set_listening(CARA, true);
+        floor.set_listening(DEX, true);
+        assert_eq!(
+            floor.decide(AgentMode::Relevant, "What now?"),
+            Decision::Nobody
+        );
     }
 
     #[test]

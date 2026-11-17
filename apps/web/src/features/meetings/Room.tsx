@@ -26,6 +26,7 @@ import {
   type Phase,
   type Room as RoomState,
 } from './media/room'
+import type { Meeting } from './api'
 import { Panel, type PanelTab } from './Panel'
 import { Tile } from './Tile'
 import { useMeeting, type Joining } from './useMeeting'
@@ -622,12 +623,14 @@ function Outcome({
 export function MeetingRoom({
   joining,
   invite,
+  meeting,
   ended,
   onLeave,
   onRejoin,
 }: {
   joining: Joining
   invite?: ReactNode
+  meeting?: Meeting | undefined
   ended?: ReactNode
   onLeave: () => void
   onRejoin?: () => void
@@ -707,6 +710,7 @@ export function MeetingRoom({
           room={room}
           engine={current}
           invite={invite}
+          meeting={meeting}
           onTab={setPanel}
           onClose={() => setPanel(null)}
         />

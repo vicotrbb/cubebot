@@ -64,6 +64,7 @@ pub struct Meetings {
 pub struct Invite {
     pub accounts: Vec<Uuid>,
     pub agents: Vec<Uuid>,
+    pub listening: Vec<Uuid>,
     pub emails: Vec<String>,
 }
 
@@ -164,6 +165,7 @@ pub struct Invitation {
     pub avatar: Option<Json<Avatar>>,
     pub emailed_at: Option<String>,
     pub email_error: Option<String>,
+    pub listening: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -353,6 +355,35 @@ impl Meetings {
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id, meeting = %id))]
+    pub async fn set_listening(
+        &self,
+        actor: &Actor,
+        id: Uuid,
+        invitation: Uuid,
+        listening: bool,
+    ) -> Result<(), IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        access(&mut tx, actor, id).await?.owned()?;
+        let changed = sqlx::query!(
+            "
+            UPDATE meeting_invitations SET listening=$3
+            WHERE id=$2 AND meeting_id=$1 AND agent_id IS NOT NULL
+            ",
+            id,
+            invitation,
+            listening,
+        )
+        .execute(&mut *tx)
+        .await?;
+        if changed.rows_affected() == 0 {
+            return Err(IdentityError::NotFound);
+        }
+        tx.commit().await?;
+        self.live.invitations_changed(id);
+        Ok(())
+    }
+
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, meeting = %id))]
     pub async fn update(
         &self,
         actor: &Actor,
@@ -527,7 +558,8 @@ impl Meetings {
                 i.account_id AS account, i.agent_id AS agent, i.email,
                 COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, i.email) AS "name!",
                 g.avatar AS "avatar?: Json<Avatar>",
-                (to_jsonb(i.emailed_at) #>> '{}') AS emailed_at, i.email_error
+                (to_jsonb(i.emailed_at) #>> '{}') AS emailed_at, i.email_error,
+                i.listening
             FROM meeting_invitations i
             LEFT JOIN human_accounts h ON h.id=i.account_id
             LEFT JOIN agents g ON g.id=i.agent_id

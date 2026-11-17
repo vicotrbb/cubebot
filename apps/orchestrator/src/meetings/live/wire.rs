@@ -191,6 +191,8 @@ pub struct Participant {
     pub camera: bool,
     pub screen: bool,
     pub hand: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub listening: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub can_present: Option<bool>,
 }
@@ -417,6 +419,7 @@ mod tests {
             camera: false,
             screen: false,
             hand: false,
+            listening: false,
             can_present: None,
         };
         assert_eq!(
