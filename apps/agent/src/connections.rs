@@ -166,6 +166,15 @@ impl Connections {
         })))
     }
 
+    pub fn offers(&self, name: &str) -> bool {
+        name.split_once("__").is_some_and(|(slug, tool)| {
+            self.offered.iter().any(|offered| {
+                offered.connection.slug == slug
+                    && offered.tools.iter().any(|spec| spec.name == tool)
+            })
+        })
+    }
+
     pub async fn call_tool(&self, name: &str, input: &Value) -> Result<String, String> {
         let client = self.client.as_ref().ok_or("no orchestrator to ask")?;
         let granted = client

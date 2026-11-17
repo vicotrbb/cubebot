@@ -1,4 +1,5 @@
 mod relay;
+mod tool;
 
 pub use relay::Links;
 
@@ -11,7 +12,9 @@ use crate::{
     },
     work::access,
 };
-use cubebot_protocol::apps::{AppNotice, AppReport, AppSpec, Desired, LOCAL_PORT, Reported};
+use cubebot_protocol::apps::{
+    AppNotice, AppReport, AppSpec, Desired, LOCAL_PORT, Reported, valid_folder,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
@@ -170,14 +173,6 @@ fn valid_slug(slug: &str) -> bool {
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
 }
 
-fn valid_folder(folder: &str) -> bool {
-    !folder.is_empty()
-        && folder.len() <= 200
-        && !folder.starts_with('/')
-        && !folder.contains('\0')
-        && folder.split('/').all(|part| part != "..")
-}
-
 fn valid_tool(tool: &str) -> bool {
     tool.len() <= 128
         && tool
@@ -203,7 +198,9 @@ fn invalid_text(input: &Register) -> Option<&'static str> {
 
 fn invalid_run(input: &Register) -> Option<&'static str> {
     if !valid_folder(&input.folder) {
-        return Some("folder is a relative path inside the workspace without ..");
+        return Some(
+            "folder is a relative path inside the workspace with no empty, . or .. part, no part starting with a dot and no backslash",
+        );
     }
     if input.command.is_some() != input.port.is_some() {
         return Some("command and port are given together, or neither for a static app");

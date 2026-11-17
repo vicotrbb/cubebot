@@ -376,6 +376,7 @@ fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) 
     if desktop && turn.meeting.is_some() {
         tools.extend(crate::collaboration::meeting_definitions());
     }
+    tools.extend(crate::collaboration::app_definitions());
     if turn.team_manager {
         tools.extend(crate::collaboration::team_definitions());
     }

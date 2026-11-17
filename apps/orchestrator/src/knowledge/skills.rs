@@ -19,11 +19,12 @@ pub type Files = BTreeMap<String, String>;
 /// agents install more.
 pub(super) const DREAM_SKILLS: i64 = 20;
 
-const SHIPPED: [&str; 4] = [
+const SHIPPED: [&str; 5] = [
     include_str!("../../skills/coding/SKILL.md"),
     include_str!("../../skills/design/SKILL.md"),
     include_str!("../../skills/create-agent/SKILL.md"),
     include_str!("../../skills/create-room-or-team/SKILL.md"),
+    include_str!("../../skills/build-app/SKILL.md"),
 ];
 
 /// A library entry at its current revision.
@@ -924,7 +925,13 @@ mod tests {
         for entry in SHIPPED {
             let package = package(&files(&[("SKILL.md", entry)]));
             let (name, description) = package.expect("a shipped skill must validate");
-            let shipped = ["coding", "design", "create-agent", "create-room-or-team"];
+            let shipped = [
+                "coding",
+                "design",
+                "create-agent",
+                "create-room-or-team",
+                "build-app",
+            ];
             assert!(shipped.contains(&name.as_str()), "{name}");
             assert!(description.len() > 80, "{description}");
         }

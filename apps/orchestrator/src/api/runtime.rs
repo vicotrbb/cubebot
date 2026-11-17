@@ -323,13 +323,17 @@ async fn routine(
     Json(input): Json<RoutineCall>,
 ) -> Result<Response, Failure> {
     let actor = active(&identity, &headers).await?;
-    let answer = crate::work::Work::new(identity.pool.clone())
-        .routine_tool(&actor, turn, &input)
-        .await
-        .map_err(|error| {
-            tracing::warn!(?error, "runtime routine request failed");
-            Failure(StatusCode::SERVICE_UNAVAILABLE)
-        })?;
+    let answer = if input.tool.starts_with("app_") {
+        identity.apps().tool(&actor, &input).await
+    } else {
+        crate::work::Work::new(identity.pool.clone())
+            .routine_tool(&actor, turn, &input)
+            .await
+    }
+    .map_err(|error| {
+        tracing::warn!(?error, "runtime routine request failed");
+        Failure(StatusCode::SERVICE_UNAVAILABLE)
+    })?;
     Ok(match answer {
         Ok(output) => Json(RoutineAnswer { output }).into_response(),
         Err(reason) => refused(&reason),

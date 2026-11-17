@@ -224,6 +224,10 @@ async fn slugs_are_unique_across_agents() {
         json!({"port": 7400}),
         json!({"port": null}),
         json!({"folder": "../etc"}),
+        json!({"folder": "."}),
+        json!({"folder": "a/.git"}),
+        json!({"folder": ".hidden"}),
+        json!({"folder": "a\\b"}),
         json!({"tools": ["recovery"]}),
         json!({"name": ""}),
     ] {
@@ -239,6 +243,8 @@ async fn slugs_are_unique_across_agents() {
     let rename: Change = serde_json::from_value(json!({"slug": "budget", "name": "Mine"})).unwrap();
     let foreign = w.apps.update(other, rename.clone()).await.unwrap();
     assert!(foreign.is_err());
+    let hidden: Change = serde_json::from_value(json!({"slug": "budget", "folder": ".x"})).unwrap();
+    assert!(w.apps.update(scout, hidden).await.unwrap().is_err());
     let renamed = w.apps.update(scout, rename).await.unwrap().unwrap();
     assert_eq!(
         (renamed.name.as_str(), renamed.connections.len()),

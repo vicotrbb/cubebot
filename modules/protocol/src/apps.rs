@@ -5,6 +5,16 @@ pub const LOCAL_PORT: u16 = 7400;
 pub const VIEWER_ID: &str = "x-cubebot-viewer-id";
 pub const VIEWER_NAME: &str = "x-cubebot-viewer-name";
 
+pub fn valid_folder(folder: &str) -> bool {
+    !folder.is_empty()
+        && folder.len() <= 200
+        && !folder.starts_with('/')
+        && !folder.contains(['\0', '\\'])
+        && folder
+            .split('/')
+            .all(|part| !part.is_empty() && !part.starts_with('.'))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Frame<'a> {
     Open(u32),
@@ -104,6 +114,19 @@ pub enum AppNotice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn folders_are_relative_visible_paths_inside_the_workspace() {
+        for good in ["notes", "apps/notes", "a.b/c"] {
+            assert!(valid_folder(good), "{good}");
+        }
+        for bad in [
+            "", ".", "..", "../x", "a/../b", "a/./b", "/abs", ".hidden", "a/.git", "a\\b", "a//b",
+            "a/",
+        ] {
+            assert!(!valid_folder(bad), "{bad}");
+        }
+    }
 
     #[test]
     fn frames_round_trip_and_reject_garbage() {
