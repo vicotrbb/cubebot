@@ -13,9 +13,8 @@ use tokio_tungstenite::tungstenite::{Error, Message};
 
 const RECONNECT: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(15);
-const STALL: Duration = Duration::from_secs(10);
 const CHUNK: usize = 16 * 1024;
-const QUEUED: usize = 8;
+const QUEUED: usize = 16;
 const OUTGOING: usize = 64;
 
 enum Out {
@@ -88,7 +87,7 @@ async fn incoming(
 ) -> bool {
     match message {
         Some(Ok(Message::Binary(bytes))) => {
-            deliver(streams, out, port, &bytes).await;
+            deliver(streams, out, port, &bytes);
             true
         }
         Some(Ok(Message::Text(text))) => {
@@ -102,7 +101,7 @@ async fn incoming(
     }
 }
 
-async fn deliver(
+fn deliver(
     streams: &mut HashMap<u32, mpsc::Sender<Vec<u8>>>,
     out: &mpsc::Sender<Out>,
     port: u16,
@@ -115,11 +114,10 @@ async fn deliver(
             tokio::spawn(pump(stream, port, received, out.clone()));
         }
         Some(Frame::Data(stream, data)) => {
-            let Some(sender) = streams.get(&stream) else {
-                return;
-            };
-            let sent = tokio::time::timeout(STALL, sender.send(data.to_vec())).await;
-            if !matches!(sent, Ok(Ok(()))) {
+            let refused = streams
+                .get(&stream)
+                .is_some_and(|sender| sender.try_send(data.to_vec()).is_err());
+            if refused {
                 streams.remove(&stream);
             }
         }

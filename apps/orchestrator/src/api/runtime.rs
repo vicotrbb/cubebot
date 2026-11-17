@@ -97,6 +97,7 @@ async fn app_channel(
         .map_err(Failure::from)?;
     Ok(upgrade
         .max_message_size(64 * 1024)
+        .max_frame_size(64 * 1024)
         .on_upgrade(move |socket| async move {
             tokio::select! {
                 () = identity.apps.link(actor.agent, socket) => {}

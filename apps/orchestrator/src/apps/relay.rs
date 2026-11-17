@@ -19,7 +19,7 @@ use std::{
     collections::HashMap,
     sync::{
         Arc, Mutex, MutexGuard, PoisonError,
-        atomic::{AtomicU32, Ordering},
+        atomic::{AtomicU32, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -33,9 +33,9 @@ use uuid::Uuid;
 const STREAM_BYTES: usize = 64 * 1024;
 const CHUNK: usize = 16 * 1024;
 const TEXT_BYTES: usize = 16 * 1024;
-const QUEUED: usize = 8;
+const QUEUED: usize = 16;
+const STREAMS: usize = 256;
 const OUTGOING: usize = 64;
-const STALL: Duration = Duration::from_secs(10);
 const PING: Duration = Duration::from_secs(5);
 const SILENCE: Duration = Duration::from_secs(15);
 const ANSWER: Duration = Duration::from_secs(60);
@@ -55,6 +55,7 @@ enum Out {
 struct Link {
     out: mpsc::Sender<Out>,
     next: Arc<AtomicU32>,
+    open: Arc<AtomicUsize>,
     _stop: oneshot::Sender<()>,
 }
 
@@ -77,15 +78,26 @@ impl Links {
     }
 
     pub async fn open(&self, agent: AgentId) -> Option<DuplexStream> {
-        let (out, stream) = {
+        let (out, stream, open) = {
             let links = self.lock();
             let link = links.get(&agent)?;
-            (link.out.clone(), link.next.fetch_add(1, Ordering::Relaxed))
+            let stream = link.next.fetch_add(1, Ordering::Relaxed);
+            (link.out.clone(), stream, link.open.clone())
         };
+        if open.fetch_add(1, Ordering::AcqRel) >= STREAMS {
+            open.fetch_sub(1, Ordering::AcqRel);
+            return None;
+        }
         let (mine, theirs) = tokio::io::duplex(STREAM_BYTES);
         let (inbound, received) = mpsc::channel(QUEUED);
-        out.send(Out::Open(stream, inbound)).await.ok()?;
-        tokio::spawn(pump(stream, theirs, received, out));
+        if out.send(Out::Open(stream, inbound)).await.is_err() {
+            open.fetch_sub(1, Ordering::AcqRel);
+            return None;
+        }
+        tokio::spawn(async move {
+            pump(stream, theirs, received, out).await;
+            open.fetch_sub(1, Ordering::AcqRel);
+        });
         Some(mine)
     }
 
@@ -100,6 +112,7 @@ impl Links {
         let link = Link {
             out: out.clone(),
             next: Arc::new(AtomicU32::new(1)),
+            open: Arc::default(),
             _stop: stop,
         };
         self.lock().insert(agent, link);
@@ -138,7 +151,7 @@ async fn inbound(
 ) -> bool {
     match message {
         Some(Ok(Message::Binary(bytes))) => {
-            deliver(streams, &bytes).await;
+            deliver(streams, &bytes);
             true
         }
         Some(Ok(Message::Text(text))) => {
@@ -155,14 +168,13 @@ async fn inbound(
     }
 }
 
-async fn deliver(streams: &mut HashMap<u32, mpsc::Sender<Vec<u8>>>, bytes: &[u8]) {
+fn deliver(streams: &mut HashMap<u32, mpsc::Sender<Vec<u8>>>, bytes: &[u8]) {
     match decode(bytes) {
         Some(Frame::Data(stream, data)) => {
-            let Some(sender) = streams.get(&stream) else {
-                return;
-            };
-            let sent = tokio::time::timeout(STALL, sender.send(data.to_vec())).await;
-            if !matches!(sent, Ok(Ok(()))) {
+            let refused = streams
+                .get(&stream)
+                .is_some_and(|sender| sender.try_send(data.to_vec()).is_err());
+            if refused {
                 streams.remove(&stream);
             }
         }
@@ -453,7 +465,13 @@ fn withheld(name: &HeaderName) -> bool {
     let name = name.as_str();
     matches!(
         name,
-        "cookie" | "authorization" | "proxy-authorization" | "host"
+        "cookie"
+            | "authorization"
+            | "proxy-authorization"
+            | "host"
+            | "forwarded"
+            | "x-forwarded-for"
+            | "x-real-ip"
     ) || name.starts_with("x-cubebot-")
 }
 
@@ -632,6 +650,7 @@ mod tests {
         );
         socket.send(Wire::Text(oversized.into())).await.unwrap();
         let mut heads: HashMap<u32, Vec<u8>> = HashMap::new();
+        let mut upgraded = std::collections::HashSet::new();
         while let Some(Ok(message)) = socket.next().await {
             let Wire::Binary(bytes) = message else {
                 continue;
@@ -639,6 +658,12 @@ mod tests {
             let Some(Frame::Data(stream, data)) = decode(&bytes) else {
                 continue;
             };
+            if upgraded.contains(&stream) {
+                let echo = [b"echo:".as_slice(), data].concat();
+                let frame = encode(&Frame::Data(stream, &echo));
+                socket.send(Wire::Binary(frame.into())).await.unwrap();
+                continue;
+            }
             let head = heads.entry(stream).or_default();
             head.extend_from_slice(data);
             if !head.windows(4).any(|window| window == b"\r\n\r\n") {
@@ -650,6 +675,10 @@ mod tests {
                     .send(Wire::Binary(encode(&Frame::Data(stream, chunk)).into()))
                     .await
                     .unwrap();
+            }
+            if response.starts_with(b"HTTP/1.1 101") {
+                upgraded.insert(stream);
+                continue;
             }
             socket
                 .send(Wire::Binary(encode(&Frame::Close(stream)).into()))
@@ -679,6 +708,25 @@ mod tests {
         Some(response)
     }
 
+    fn flood(head: &[u8]) -> Option<Vec<u8>> {
+        let body = if head.starts_with(b"GET /budget/flood ") {
+            "f".repeat(8 * 1024 * 1024)
+        } else {
+            "ok".to_owned()
+        };
+        Some(
+            format!(
+                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n{body}",
+                body.len()
+            )
+            .into_bytes(),
+        )
+    }
+
+    fn switch(_: &[u8]) -> Option<Vec<u8>> {
+        Some(b"HTTP/1.1 101 Switching Protocols\r\nconnection: upgrade\r\nupgrade: websocket\r\n\r\n".to_vec())
+    }
+
     fn vanish(_: &[u8]) -> Option<Vec<u8>> {
         None
     }
@@ -691,6 +739,9 @@ mod tests {
             .header(VIEWER_ID, "forged")
             .header(VIEWER_NAME, "Mallory")
             .header("x-cubebot-anything", "forged")
+            .header("x-forwarded-for", "10.9.9.9")
+            .header("x-real-ip", "10.9.9.9")
+            .header("forwarded", "for=10.9.9.9")
             .header("x-custom", "kept")
             .body(Body::empty())
             .unwrap()
@@ -791,9 +842,82 @@ mod tests {
             "cookie",
             "authorization",
             "x-cubebot-anything",
+            "10.9.9.9",
         ] {
             assert!(!head.contains(leaked), "{leaked} reached the app: {head}");
         }
+    }
+
+    #[tokio::test]
+    async fn a_stream_that_stops_reading_is_dropped_without_stalling_the_link() {
+        let (links, _reports) = linked(flood).await;
+        let request = |path: &str| {
+            Request::builder()
+                .uri(format!("{PREFIX}{path}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+        let stuck = forward(&links, &view(), PREFIX, "/flood", request("/flood")).await;
+        assert_eq!(stuck.status(), StatusCode::OK);
+        let other = tokio::time::timeout(
+            Duration::from_secs(5),
+            forward(&links, &view(), PREFIX, "/other", request("/other")),
+        )
+        .await
+        .unwrap();
+        assert_eq!(text(other).await, "ok");
+        assert!(stuck.into_body().collect().await.is_err());
+        assert!(links.connected(AGENT));
+    }
+
+    #[tokio::test]
+    async fn a_link_opens_at_most_256_streams() {
+        let (links, _reports) = linked(big).await;
+        let mut open = Vec::new();
+        for _ in 0..STREAMS {
+            open.push(links.open(AGENT).await.unwrap());
+        }
+        assert!(links.open(AGENT).await.is_none());
+        let response = forward(&links, &view(), PREFIX, "/page", get_page()).await;
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        drop(open.pop());
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while links.open(AGENT).await.is_none() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn websocket_upgrades_pass_through_the_relay() {
+        let (links, _reports) = linked(switch).await;
+        let router = axum::Router::new().fallback(move |request: Request| async move {
+            forward(&links, &view(), PREFIX, "/socket", request).await
+        });
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let mut browser = tokio::net::TcpStream::connect(address).await.unwrap();
+        let ask = format!(
+            "GET {PREFIX}/socket HTTP/1.1\r\nhost: a\r\nconnection: upgrade\r\nupgrade: websocket\r\n\r\n"
+        );
+        browser.write_all(ask.as_bytes()).await.unwrap();
+        let mut head = Vec::new();
+        while !head.ends_with(b"\r\n\r\n") {
+            head.push(browser.read_u8().await.unwrap());
+        }
+        let head = String::from_utf8(head).unwrap().to_lowercase();
+        assert!(head.starts_with("http/1.1 101"), "{head}");
+        assert!(head.contains("upgrade: websocket"));
+        browser.write_all(b"hello").await.unwrap();
+        let mut echo = [0; 10];
+        tokio::time::timeout(Duration::from_secs(5), browser.read_exact(&mut echo))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(&echo, b"echo:hello");
     }
 
     #[test]

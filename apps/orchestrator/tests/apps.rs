@@ -500,3 +500,37 @@ async fn a_token_for_one_app_cannot_open_another() {
             .contains("This app is unavailable right now")
     );
 }
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn minting_a_view_needs_send() {
+    let r = relay().await;
+    sqlx::query("UPDATE access_grants SET revoked_at = now() WHERE account_id = $1")
+        .bind(r.ana.id)
+        .execute(&r.pool)
+        .await
+        .unwrap();
+    assert!(matches!(
+        r.apps.view(&r.ana, "budget").await,
+        Err(IdentityError::NotFound)
+    ));
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_retired_agents_token_is_refused() {
+    let r = relay().await;
+    let token = r.apps.view(&r.ana, "budget").await.unwrap();
+    let page = format!("{}/api/apps/budget/v/{token}/", r.base);
+    assert_eq!(http().get(&page).send().await.unwrap().status(), 502);
+    sqlx::query("UPDATE agents SET desired_state = 'retired' WHERE id = $1")
+        .bind(r.agent.0)
+        .execute(&r.pool)
+        .await
+        .unwrap();
+    assert_eq!(http().get(&page).send().await.unwrap().status(), 404);
+    assert!(matches!(
+        r.apps.view(&r.ana, "budget").await,
+        Err(IdentityError::NotFound)
+    ));
+}
