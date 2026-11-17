@@ -35,7 +35,6 @@ pub struct Progress {
 pub struct Origin {
     #[serde(skip)]
     pub turn_id: Uuid,
-    /// `approvals`, `app`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`.
     pub kind: String,
     /// The room's or routine's name, the sending agent's, or a broadcast's sender.
     pub name: String,

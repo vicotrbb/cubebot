@@ -56,7 +56,6 @@
   width: max-content;
   color: var(--ink-soft);
   font-size: var(--t-xs);
-  cursor: pointer;
 }
 .member__remove {
   color: var(--ink-faint);

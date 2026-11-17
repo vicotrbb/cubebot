@@ -146,8 +146,6 @@ cubebot.call('status-page__get', { path: '/echo', query: {} }).then(
 </html>'''
 
 
-# An app as a model would build one: write the page with bash, then register it, and a
-# second app on the same folder that declares no tools.
 def built(outputs):
     app = {"description": "The status page, live.", "icon": "\U0001F4DF",
            "folder": "apps/status", "command": None, "port": None}
@@ -440,7 +438,6 @@ POLICY = (
 
 
 def relayed(api, path, method="GET", body=None, headers=None):
-    """A request as the app's frame makes it: no session, only the path's token."""
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
         api.base + path, data=data, headers=headers or {}, method=method
@@ -462,7 +459,6 @@ def app_state(api, slug, state):
 
 
 def apps_turn(api, postgres, identity, marker, console):
-    """An app the agent built is served through the relay with the platform's rules."""
     path = f"/api/conversations/{identity}/messages"
     message = command(message=f"Build me a status page app, apps-{marker}")
     turn = api(path, message, expected=202)["id"]

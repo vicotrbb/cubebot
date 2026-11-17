@@ -11013,8 +11013,7 @@
         "required": ["kind", "name"],
         "properties": {
           "kind": {
-            "type": "string",
-            "description": "`approvals`, `app`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`."
+            "type": "string"
           },
           "name": {
             "type": "string",

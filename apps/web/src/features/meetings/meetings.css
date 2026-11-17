@@ -653,7 +653,6 @@
   margin-right: 4px;
   color: var(--ink-soft);
   font-size: var(--t-xs);
-  cursor: pointer;
 }
 .meeting-person__listen span {
   overflow: hidden;

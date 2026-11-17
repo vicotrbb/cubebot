@@ -37,7 +37,6 @@ lint: complexity
     uv run --project tooling/quality --locked ruff check --config tooling/quality/pyproject.toml tooling tests
     shellcheck deploy/install.sh deploy/cubebot
 
-# Regenerates modules/kit/kit.css from the console styles.
 kit:
     bun run apps/web/scripts/kit.ts
 

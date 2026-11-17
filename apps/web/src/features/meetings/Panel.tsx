@@ -75,7 +75,7 @@ function ListenSwitch({
     }
   }
   return (
-    <label className="meeting-person__listen">
+    <span className="meeting-person__listen">
       <Switch
         checked={Boolean(participant.listening)}
         disabled={busy}
@@ -83,7 +83,7 @@ function ListenSwitch({
         onChange={(listening) => void change(listening)}
       />
       <span aria-live="polite">{failed ? 'Not saved' : 'Listen only'}</span>
-    </label>
+    </span>
   )
 }
 

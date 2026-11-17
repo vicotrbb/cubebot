@@ -84,7 +84,7 @@ export function Invitees({
           empty=""
           extra={(member) =>
             member.kind === 'agent' && (
-              <label className="member__listen">
+              <span className="member__listen">
                 <Switch
                   checked={listening.includes(member.id)}
                   label={`Listen only, ${member.name}`}
@@ -97,7 +97,7 @@ export function Invitees({
                   }
                 />
                 Listen only
-              </label>
+              </span>
             )
           }
         />

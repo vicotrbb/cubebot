@@ -1,4 +1,3 @@
-// The Apps catalog and an app the agent built, framed by the console in real Chromium.
 import assert from 'node:assert/strict'
 import console from 'node:console'
 import process from 'node:process'
