@@ -35,7 +35,6 @@ pub struct Progress {
 pub struct Origin {
     #[serde(skip)]
     pub turn_id: Uuid,
-    /// `approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`.
     pub kind: String,
     /// The room's or routine's name, the sending agent's, or a broadcast's sender.
     pub name: String,
@@ -331,8 +330,8 @@ impl Work {
             Origin,
             r#"
             SELECT t.id AS turn_id,
-                CASE WHEN s.settles THEN 'approvals' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin='wake' THEN 'wake' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
-                COALESCE(s.person,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin='wake' THEN 'wake-up' WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
+                CASE WHEN s.settles THEN 'approvals' WHEN t.app_id IS NOT NULL THEN 'app' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin='wake' THEN 'wake' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
+                COALESCE(s.person,ap.name,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin='wake' THEN 'wake-up' WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
                 t.parent_turn_id
             FROM chat_turns t
             LEFT JOIN room_messages m ON m.id=t.room_message_id
@@ -340,11 +339,12 @@ impl Work {
             LEFT JOIN routines u ON u.id=t.routine_id
             LEFT JOIN chat_turns p ON p.id=t.parent_turn_id
             LEFT JOIN agents a ON a.id=p.conversation_id
+            LEFT JOIN apps ap ON ap.id=t.app_id
             LEFT JOIN broadcasts b ON b.id=t.broadcast_id
             LEFT JOIN agents ba ON ba.id=b.agent_id
             LEFT JOIN human_accounts bh ON bh.id=b.actor_id AND b.agent_id IS NULL
             LEFT JOIN LATERAL (SELECT true AS settles, h.login AS person FROM creation_requests q JOIN human_accounts h ON h.id=q.settled_by WHERE q.reported_in=t.id ORDER BY q.settled_at DESC LIMIT 1) s ON true
-            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL OR s.settles)
+            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL OR t.app_id IS NOT NULL OR s.settles)
             "#,
             ids,
         )

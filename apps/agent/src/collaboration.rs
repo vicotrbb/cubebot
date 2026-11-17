@@ -1,9 +1,11 @@
+mod apps;
 mod creations;
 mod routines;
 mod tasks;
 mod teams;
 mod vault;
 mod wakes;
+pub use apps::definitions as app_definitions;
 pub use creations::definitions as creation_definitions;
 pub use teams::definitions as team_definitions;
 pub use vault::redacted;
@@ -135,7 +137,8 @@ impl Collaboration {
                     .or_else(|| self.wake(name, id, input))
                     .or_else(|| self.task(name, id, input))
                     .or_else(|| self.team(name, id, input))
-                    .or_else(|| self.creation(name, id, input));
+                    .or_else(|| self.creation(name, id, input))
+                    .or_else(|| self.app(name, id, input));
             }
         };
         let parsed = Send::deserialize(input)

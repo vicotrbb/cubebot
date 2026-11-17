@@ -66,6 +66,8 @@ pub struct SendMessage {
     pub message: String,
     #[serde(default)]
     pub attachments: Vec<Uuid>,
+    #[serde(default)]
+    pub app: Option<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -221,8 +223,9 @@ impl Work {
         if let Some(previous) = replayed(&mut tx, actor, conversation, input).await? {
             return Ok(previous);
         }
+        let app = sending_app(&mut tx, conversation, input).await?;
         wake(&mut tx, agent).await?;
-        let turn = queue(&mut tx, actor, conversation, input, within).await?;
+        let turn = queue(&mut tx, actor, conversation, input, within, app).await?;
         activity::settle_conversation(&mut tx, conversation).await?;
         let mut turn = Turn::from(turn);
         turn.message_attachments = attach_sent(&mut tx, actor, turn.id, &input.attachments).await?;
@@ -237,12 +240,13 @@ async fn queue(
     conversation: Uuid,
     input: &SendMessage,
     within: Within,
+    app: Option<Uuid>,
 ) -> Result<TurnRow, sqlx::Error> {
     sqlx::query_as!(
         TurnRow,
         "
-        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id, meeting_id, talk_only)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, call_id, meeting_id, talk_only, app_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, sequence, message, status, response, error
         ",
         conversation,
@@ -252,9 +256,29 @@ async fn queue(
         within.call,
         within.meeting,
         within.talk_only,
+        app,
     )
     .fetch_one(&mut **tx)
     .await
+}
+
+async fn sending_app(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    conversation: Uuid,
+    input: &SendMessage,
+) -> Result<Option<Uuid>, IdentityError> {
+    let Some(slug) = &input.app else {
+        return Ok(None);
+    };
+    sqlx::query_scalar!(
+        "SELECT id FROM apps WHERE slug=$1 AND agent_id=$2",
+        slug,
+        conversation,
+    )
+    .fetch_optional(&mut **tx)
+    .await?
+    .map(Some)
+    .ok_or(IdentityError::NotFound)
 }
 
 async fn lock_agent(

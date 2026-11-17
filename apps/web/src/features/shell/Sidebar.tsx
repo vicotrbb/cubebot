@@ -6,6 +6,7 @@ import {
   Folder,
   Hash,
   Inbox,
+  LayoutGrid,
   Library,
   ListChecks,
   LogOut,
@@ -154,6 +155,14 @@ export function Sidebar({
           <span className="row__label">Meetings</span>
         </Link>
         {administrator && <BroadcastRow />}
+        <Link
+          to="/apps"
+          className="row row--page"
+          activeProps={{ 'aria-current': 'page' }}
+        >
+          <LayoutGrid className="row__icon" />
+          <span className="row__label">Apps</span>
+        </Link>
         <Favorites />
         <AgentsSection administrator={administrator} />
         <TeamsSection administrator={administrator} />

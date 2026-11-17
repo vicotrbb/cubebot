@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT p.id, p.agent_id\n        FROM apps p\n        JOIN agents g ON g.id = p.agent_id AND g.desired_state <> 'retired'\n        WHERE p.slug = $1\n        FOR UPDATE OF p\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "f9ae20c104cd82952fe096c1579c4b77a4d84add413a542049b12128a66da661"
+}

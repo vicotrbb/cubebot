@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE apps\n            SET name = $3, description = $4, icon = $5, folder = $6, command = $7, port = $8,\n                tools = $9, updated_at = now()\n            WHERE agent_id = $1 AND slug = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int4",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "46417a1e5039ffcb1aa3be9be4e595ef9403b62a32b49b80312797e1319cacee"
+}

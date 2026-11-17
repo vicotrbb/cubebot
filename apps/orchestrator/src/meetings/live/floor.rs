@@ -30,6 +30,7 @@ struct Seated {
     name: Vec<String>,
     about: String,
     called: String,
+    listening: bool,
 }
 
 struct Waiting {
@@ -59,7 +60,18 @@ impl Floor {
             name: words(name),
             about: about.to_owned(),
             called: name.to_owned(),
+            listening: false,
         });
+    }
+
+    pub(super) fn set_listening(&mut self, agent: Uuid, listening: bool) {
+        if let Some(seated) = self.agents.iter_mut().find(|seated| seated.id == agent) {
+            seated.listening = listening;
+        }
+    }
+
+    fn speaking(&self) -> impl Iterator<Item = &Seated> {
+        self.agents.iter().filter(|seated| !seated.listening)
     }
 
     pub(super) fn unseat(&mut self, agent: Uuid) {
@@ -106,9 +118,11 @@ impl Floor {
 
     pub(super) fn decide(&self, mode: AgentMode, text: &str) -> Decision {
         let named = self.named(text);
-        if !named.is_empty() {
+        if mode == AgentMode::Listen {
+            Decision::Nobody
+        } else if !named.is_empty() {
             Decision::Named(named)
-        } else if mode == AgentMode::Relevant && !self.agents.is_empty() {
+        } else if mode == AgentMode::Relevant && self.speaking().next().is_some() {
             Decision::Ask
         } else {
             Decision::Nobody
@@ -119,7 +133,7 @@ impl Floor {
         let said = words(text);
         let mut taken = HashSet::new();
         let mut found = Vec::new();
-        for seated in self.agents.iter().filter(|seated| seated.name.len() > 1) {
+        for seated in self.speaking().filter(|seated| seated.name.len() > 1) {
             if let Some(at) = said
                 .windows(seated.name.len())
                 .position(|window| window == seated.name.as_slice())
@@ -128,7 +142,7 @@ impl Floor {
                 found.push((at, seated.id));
             }
         }
-        for seated in &self.agents {
+        for seated in self.speaking() {
             let Some(first) = seated.name.first() else {
                 continue;
             };
@@ -163,13 +177,12 @@ impl Floor {
         let choice: Choice = serde_json::from_str(reply.get(start..=end)?).ok()?;
         choice
             .agent
-            .filter(|agent| self.agents.iter().any(|seated| seated.id == *agent))
+            .filter(|agent| self.speaking().any(|seated| seated.id == *agent))
     }
 
     pub(super) fn prompt(&self, lines: &[String]) -> String {
         let agents: Vec<String> = self
-            .agents
-            .iter()
+            .speaking()
             .map(|seated| format!("- id {}: {}. {}", seated.id, seated.called, seated.about))
             .collect();
         format!(
@@ -180,8 +193,12 @@ impl Floor {
     }
 
     pub(super) fn admits(&self, agent: Uuid, asker: Option<u16>) -> bool {
+        let silent = self
+            .agents
+            .iter()
+            .any(|seated| seated.id == agent && seated.listening);
         let mut pending = self.queue.iter().filter(|queued| queued.agent == agent);
-        pending.clone().count() < PENDING && pending.all(|queued| queued.asker != asker)
+        !silent && pending.clone().count() < PENDING && pending.all(|queued| queued.asker != asker)
     }
 
     pub(super) fn queue(&mut self, agent: Uuid, turn: Uuid, asker: Option<u16>) {
@@ -198,6 +215,16 @@ impl Floor {
 
     pub(super) fn waits(&self, agent: Uuid) -> bool {
         self.queue.iter().any(|queued| queued.agent == agent)
+    }
+
+    pub(super) fn hush(&mut self, agent: Uuid, speaking: bool) -> bool {
+        let fronted = self.front().is_some_and(|(front, _)| front == agent);
+        if speaking {
+            self.interrupt(agent);
+        } else {
+            self.queue.retain(|queued| queued.agent != agent);
+        }
+        fronted && !speaking
     }
 
     pub(super) fn interrupt(&mut self, agent: Uuid) {
@@ -377,6 +404,80 @@ mod tests {
             Floor::default().decide(AgentMode::Relevant, "Anyone?"),
             Decision::Nobody
         );
+    }
+
+    #[test]
+    fn listen_only_never_answers_even_when_named() {
+        let floor = floor();
+        assert_eq!(
+            floor.decide(AgentMode::Listen, "Cara, what should we do?"),
+            Decision::Nobody
+        );
+        assert_eq!(floor.decide(AgentMode::Listen, "Anyone?"), Decision::Nobody);
+    }
+
+    #[test]
+    fn a_listening_agent_is_skipped_when_named_and_in_handoffs() {
+        let mut floor = floor();
+        floor.set_listening(CARA, true);
+        assert_eq!(
+            floor.decide(AgentMode::Named, "Cara and Dex, thoughts?"),
+            Decision::Named(vec![DEX])
+        );
+        assert_eq!(floor.decide(AgentMode::Named, "Cara?"), Decision::Nobody);
+        assert!(floor.handoff(DEX, "Over to you, Cara").is_empty());
+        assert_eq!(floor.chosen(&format!(r#"{{"agent":"{CARA}"}}"#)), None);
+        assert!(!floor.prompt(&[]).contains("Cara"));
+    }
+
+    #[test]
+    fn relevant_mode_with_only_listening_agents_asks_nobody() {
+        let mut floor = floor();
+        floor.set_listening(CARA, true);
+        floor.set_listening(DEX, true);
+        assert_eq!(
+            floor.decide(AgentMode::Relevant, "What now?"),
+            Decision::Nobody
+        );
+    }
+
+    #[test]
+    fn a_reply_queued_for_an_agent_that_starts_listening_is_dropped_and_none_is_admitted() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(40 + n);
+        floor.queue(CARA, turn(0), Some(4));
+        floor.queue(DEX, turn(1), Some(4));
+        floor.queue(CARA, turn(2), Some(5));
+        floor.set_listening(CARA, true);
+        assert!(floor.hush(CARA, false));
+        assert_eq!(floor.front(), Some((DEX, turn(1))));
+        floor.pop();
+        assert_eq!(floor.front(), None);
+        assert!(!floor.admits(CARA, Some(6)));
+        assert!(floor.admits(DEX, Some(6)));
+    }
+
+    #[test]
+    fn an_agent_already_speaking_keeps_its_answering_turn_and_loses_the_rest() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(50 + n);
+        floor.queue(CARA, turn(0), Some(4));
+        floor.queue(CARA, turn(1), Some(5));
+        assert!(!floor.hush(CARA, true));
+        assert_eq!(floor.front(), Some((CARA, turn(0))));
+        floor.pop();
+        assert_eq!(floor.front(), None);
+    }
+
+    #[test]
+    fn hushing_an_agent_queued_behind_the_front_one_leaves_the_front_alone() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(60 + n);
+        floor.queue(DEX, turn(0), Some(4));
+        floor.queue(CARA, turn(1), Some(4));
+        assert!(!floor.hush(CARA, false));
+        assert_eq!(floor.front(), Some((DEX, turn(0))));
+        assert!(!floor.waits(CARA));
     }
 
     #[test]

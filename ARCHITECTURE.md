@@ -172,6 +172,8 @@ A person can also call an agent ([Voice calls over the chat pipeline](docs/adr/c
 
 People can also meet ([Meetings Cubebot owns](docs/adr/console.md#meetings-cubebot-owns)): each participant's browser sends audio and WebCodecs video over one WebSocket that the orchestrator relays to the others, transcribes per speaker, and answers through agents' ordinary chat turns spoken with the call pipeline. Guests reach only `/m/<token>` and `/api/public/meetings/`, which the chart can publish on a separate host.
 
+Agents can build apps ([Apps agents build](docs/adr/console.md#apps-agents-build)): web pages, with a backend if they need one, that the agent writes in its workspace and its runtime serves inside the sandbox. The orchestrator relays each request under `/api/apps/{slug}/v/{token}/` through a second WebSocket the agent opens beside its control channel, with per-stream credit. Every response carries a sandbox Content-Security-Policy, so the framed page has an opaque origin, and the short-lived token in the path is its only authorization. Apps reach connection tools through the agent process, within each connection's own access, level and switched-off tools, and look native through a kit generated from the console's styles.
+
 ## Operations and simplicity choices
 
 Use PostgreSQL-backed scheduling and inbox/outbox records instead of adding Redis, Kafka, or a workflow server. Keep application history in relational state instead of reconstructing everything from an event log. The workload does not yet justify a service mesh, separate vector database, S3 compatibility layer, custom agent CRDs, or multiple orchestration services.

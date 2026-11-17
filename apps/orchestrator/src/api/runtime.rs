@@ -32,7 +32,10 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/skills/{name}", get(skill))
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/people", get(people))
+        .route("/api/runtime/apps", get(apps))
+        .route("/api/runtime/apps/channel", get(app_channel))
         .route("/api/runtime/provider", get(provider))
+        .route("/api/runtime/connections", get(granted_connections))
         .route(
             "/api/runtime/connections/{id}/credential",
             get(connection_credential),
@@ -66,6 +69,55 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .layer(DefaultBodyLimit::max(20 * 1024))
         .layer(axum::middleware::map_response(no_store))
         .with_state(identity)
+}
+async fn apps(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<cubebot_protocol::apps::AppSpec>>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    identity
+        .apps
+        .specs(actor.agent)
+        .await
+        .map(Json)
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime apps request failed");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })
+}
+async fn app_channel(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Result<Response, Failure> {
+    let token = bearer(&headers)?.to_owned();
+    let actor = identity
+        .authenticate(&token, RuntimeAccess::Active)
+        .await
+        .map_err(Failure::from)?;
+    Ok(upgrade
+        .max_message_size(64 * 1024)
+        .max_frame_size(64 * 1024)
+        .on_upgrade(move |socket| async move {
+            tokio::select! {
+                () = identity.apps.link(actor.agent, socket) => {}
+                () = still_active(&identity, &token) => {}
+            }
+        }))
+}
+async fn still_active(identity: &RuntimeIdentity, token: &str) {
+    let mut every = tokio::time::interval(std::time::Duration::from_secs(30));
+    every.tick().await;
+    loop {
+        every.tick().await;
+        if identity
+            .authenticate(token, RuntimeAccess::Active)
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
 }
 async fn bootstrap(
     State(identity): State<RuntimeIdentity>,
@@ -271,13 +323,17 @@ async fn routine(
     Json(input): Json<RoutineCall>,
 ) -> Result<Response, Failure> {
     let actor = active(&identity, &headers).await?;
-    let answer = crate::work::Work::new(identity.pool.clone())
-        .routine_tool(&actor, turn, &input)
-        .await
-        .map_err(|error| {
-            tracing::warn!(?error, "runtime routine request failed");
-            Failure(StatusCode::SERVICE_UNAVAILABLE)
-        })?;
+    let answer = if input.tool.starts_with("app_") {
+        identity.apps().tool(&actor, &input).await
+    } else {
+        crate::work::Work::new(identity.pool.clone())
+            .routine_tool(&actor, turn, &input)
+            .await
+    }
+    .map_err(|error| {
+        tracing::warn!(?error, "runtime routine request failed");
+        Failure(StatusCode::SERVICE_UNAVAILABLE)
+    })?;
     Ok(match answer {
         Ok(output) => Json(RoutineAnswer { output }).into_response(),
         Err(reason) => refused(&reason),
@@ -352,6 +408,22 @@ async fn provider(
         api_key: inference.api_key,
         api_key_expires_at: inference.api_key_expires_at,
     }))
+}
+async fn granted_connections(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<cubebot_protocol::runtime::Connection>>, Failure> {
+    let actor = active(&identity, &headers).await?;
+    if identity.connections.is_none() {
+        return Err(Failure(StatusCode::SERVICE_UNAVAILABLE));
+    }
+    crate::connections::granted(&identity.pool, actor.agent)
+        .await
+        .map(Json)
+        .map_err(|error| {
+            tracing::warn!(?error, "runtime connections unavailable");
+            Failure(StatusCode::SERVICE_UNAVAILABLE)
+        })
 }
 /// 404 when the agent may no longer use the connection, 409 when it needs signing in again.
 async fn connection_credential(

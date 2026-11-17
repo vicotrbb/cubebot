@@ -98,6 +98,7 @@ impl Work {
         let (summary, history, message) =
             context(tx, actor, isolated, room, in_task, message).await?;
         let message = dated(tx, turn, talk_only, message).await?;
+        let message = through_app(tx, turn, message).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let connections = connections.filter(|_| !talk_only);
         let mcp_servers = mcp_servers(tx, connections, actor).await;
@@ -245,6 +246,26 @@ async fn dated(
     Ok(message + stamp.as_deref().unwrap_or_default())
 }
 
+async fn through_app(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    message: String,
+) -> Result<String, Error> {
+    let app = sqlx::query!(
+        "SELECT p.name, p.slug FROM chat_turns t JOIN apps p ON p.id=t.app_id WHERE t.id=$1",
+        turn,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(match app {
+        Some(app) => format!(
+            "{message}\n\n(Sent through your app {} ({}) by the person using it.)",
+            app.name, app.slug
+        ),
+        None => message,
+    })
+}
+
 fn spoken_effort(
     provider: ProviderKind,
     effort: Option<Effort>,
@@ -376,11 +397,10 @@ async fn native_connections(
     connections: Option<&Connections>,
     actor: &RuntimeActor,
 ) -> Vec<cubebot_protocol::runtime::Connection> {
-    let Some(connections) = connections else {
+    if connections.is_none() {
         return Vec::new();
-    };
-    connections
-        .runtime_connections(tx, actor.agent)
+    }
+    crate::connections::granted(&mut **tx, actor.agent)
         .await
         .unwrap_or_else(|error| {
             tracing::warn!(?error, "connections unavailable for the turn");

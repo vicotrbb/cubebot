@@ -1885,6 +1885,126 @@
         }
       }
     },
+    "/api/apps": {
+      "get": {
+        "tags": [],
+        "operationId": "list_apps",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/App"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/apps/{slug}": {
+      "delete": {
+        "tags": [],
+        "operationId": "remove_app",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/apps/{slug}/state": {
+      "post": {
+        "tags": [],
+        "operationId": "set_app_state",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetState"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/App"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/apps/{slug}/views": {
+      "post": {
+        "tags": [],
+        "operationId": "view_app",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewPath"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/attachments/{turn}/{file}/content": {
       "get": {
         "tags": [],
@@ -5281,6 +5401,51 @@
             "description": ""
           }
         }
+      },
+      "patch": {
+        "tags": [],
+        "operationId": "set_meeting_invitation_listening",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "invitation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Listening"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
       }
     },
     "/api/meetings/{id}/link": {
@@ -7133,7 +7298,7 @@
       },
       "AgentMode": {
         "type": "string",
-        "enum": ["relevant", "named"]
+        "enum": ["relevant", "named", "listen"]
       },
       "AgentModel": {
         "type": "object",
@@ -7407,6 +7572,86 @@
             "$ref": "#/components/schemas/Spend"
           }
         }
+      },
+      "App": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "name",
+          "description",
+          "icon",
+          "agent_id",
+          "agent_name",
+          "connections",
+          "state",
+          "updated_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agent_name": {
+            "type": "string"
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppConnection"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "memory": {
+            "type": ["integer", "null"],
+            "format": "int64",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/AppState"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "AppConnection": {
+        "type": "object",
+        "required": ["slug"],
+        "properties": {
+          "connector": {
+            "type": ["string", "null"]
+          },
+          "slug": {
+            "type": "string"
+          }
+        }
+      },
+      "AppState": {
+        "type": "string",
+        "enum": [
+          "starting",
+          "running",
+          "stopped",
+          "updating",
+          "failed",
+          "unavailable"
+        ]
       },
       "Attachment": {
         "type": "object",
@@ -8767,6 +9012,10 @@
           }
         }
       },
+      "Desired": {
+        "type": "string",
+        "enum": ["running", "stopped"]
+      },
       "DreamRevision": {
         "type": "object",
         "description": "A revision the run committed, with the content it replaced.",
@@ -9777,6 +10026,16 @@
         },
         "additionalProperties": false
       },
+      "Listening": {
+        "type": "object",
+        "required": ["listening"],
+        "properties": {
+          "listening": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "Liveness": {
         "type": "object",
         "description": "Process liveness only; this does not attest to dependency or agent readiness.",
@@ -10069,7 +10328,7 @@
       },
       "MeetingInvitation": {
         "type": "object",
-        "required": ["id", "kind", "name"],
+        "required": ["id", "kind", "name", "listening"],
         "properties": {
           "account": {
             "type": ["string", "null"],
@@ -10105,6 +10364,9 @@
           "kind": {
             "type": "string"
           },
+          "listening": {
+            "type": "boolean"
+          },
           "name": {
             "type": "string"
           }
@@ -10133,6 +10395,14 @@
             "type": "array",
             "items": {
               "type": "string"
+            },
+            "default": []
+          },
+          "listening": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
             },
             "default": []
           }
@@ -10743,8 +11013,7 @@
         "required": ["kind", "name"],
         "properties": {
           "kind": {
-            "type": "string",
-            "description": "`approvals`, `broadcast`, `room`, `wake`, `routine`, `delegation` or `message`."
+            "type": "string"
           },
           "name": {
             "type": "string",
@@ -12319,6 +12588,9 @@
         "type": "object",
         "required": ["request_id", "message"],
         "properties": {
+          "app": {
+            "type": ["string", "null"]
+          },
           "attachments": {
             "type": "array",
             "items": {
@@ -12384,6 +12656,16 @@
         "properties": {
           "enabled": {
             "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SetState": {
+        "type": "object",
+        "required": ["desired"],
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/Desired"
           }
         },
         "additionalProperties": false
@@ -13940,6 +14222,15 @@
           },
           "username": {
             "type": ["string", "null"]
+          }
+        }
+      },
+      "ViewPath": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string"
           }
         }
       },

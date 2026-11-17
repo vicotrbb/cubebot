@@ -125,6 +125,31 @@ function Picture({
   )
 }
 
+function AgentCaption({
+  participant,
+  state,
+}: {
+  participant: Participant
+  state: AgentState | undefined
+}) {
+  if (participant.screen) return <span className="tile__state">Presenting</span>
+  if (participant.listening)
+    return (
+      <span className="tile__state">
+        <MicOff className="tile__listen" aria-hidden="true" />
+        Listening only
+      </span>
+    )
+  return (
+    <span className="tile__state">
+      {AGENT_SAYS[state ?? 'listening']}
+      {state === 'speaking' && (
+        <span className="tile__hint"> · talk to interrupt</span>
+      )}
+    </span>
+  )
+}
+
 export function Tile({
   participant,
   room,
@@ -159,14 +184,7 @@ export function Tile({
         )}
         <span>{displayName(participant, you)}</span>
         {participant.kind === 'agent' && !compact && (
-          <span className="tile__state">
-            {participant.screen
-              ? 'Presenting'
-              : AGENT_SAYS[agentState ?? 'listening']}
-            {agentState === 'speaking' && !participant.screen && (
-              <span className="tile__hint"> · talk to interrupt</span>
-            )}
-          </span>
+          <AgentCaption participant={participant} state={agentState} />
         )}
       </figcaption>
       {participant.hand && (

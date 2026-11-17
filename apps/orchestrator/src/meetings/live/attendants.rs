@@ -132,6 +132,7 @@ struct Invited {
     name: String,
     avatar: Json<Avatar>,
     about: String,
+    listening: bool,
 }
 
 pub(super) struct Inbox {
@@ -424,10 +425,35 @@ impl Attendants {
         for agent in gone {
             self.dismiss(agent, true).await;
         }
+        let quiet = self.mode().await == AgentMode::Listen;
         for agent in invited {
-            if !self.agents.contains_key(&agent.id) && !self.dismissed.contains(&agent.id) {
-                self.join(agent).await;
+            self.seat(agent, quiet).await;
+        }
+    }
+
+    async fn seat(&mut self, agent: Invited, quiet: bool) {
+        let (id, listening) = (agent.id, agent.listening);
+        if !self.agents.contains_key(&id) && !self.dismissed.contains(&id) {
+            self.join(agent).await;
+        }
+        if self.agents.contains_key(&id) {
+            self.floor.set_listening(id, listening);
+            self.room.agent_listening(id, listening).await;
+            if listening || quiet {
+                self.hush(id).await;
             }
+        }
+    }
+
+    async fn hush(&mut self, agent: Uuid) {
+        let speaking = self.speaking(agent);
+        let queued = self.floor.waits(agent);
+        if self.floor.hush(agent, speaking) {
+            self.following = None;
+        }
+        let present = self.agents.get(&agent).filter(|_| !speaking && queued);
+        if let Some(present) = present {
+            self.state(present.slot, AgentState::Listening).await;
         }
     }
 
@@ -844,6 +870,9 @@ impl Attendants {
             r#final: true,
         };
         self.room.announce(caption, None).await;
+        if self.mode().await == AgentMode::Listen {
+            return;
+        }
         for other in self.floor.handoff(agent, &text) {
             self.answer(other, Asker::Agent, at).await;
         }
@@ -909,7 +938,7 @@ async fn invited(pool: &PgPool, id: Uuid) -> Result<Vec<Invited>, sqlx::Error> {
     sqlx::query_as!(
         Invited,
         r#"
-        SELECT a.id, a.name, a.avatar AS "avatar: Json<Avatar>", left(a.instructions, 300) AS "about!"
+        SELECT a.id, a.name, a.avatar AS "avatar: Json<Avatar>", left(a.instructions, 300) AS "about!", i.listening
         FROM meeting_invitations i
         JOIN agents a ON a.id=i.agent_id
         JOIN meeting_settings s ON s.agents_join

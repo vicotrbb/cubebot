@@ -30,6 +30,7 @@ async fn turn(pool: &sqlx::PgPool, admin: &Actor, agent: AgentId) -> Uuid {
         request_id: Uuid::new_v4(),
         message: "The deadline moved".into(),
         attachments: Vec::new(),
+        app: None,
     };
     Work::new(pool.clone())
         .send(admin, agent.0, &input)

@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT slug, name, description, icon, folder, command, port, tools\n            FROM apps\n            WHERE agent_id = $1 AND slug = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "slug",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "icon",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "folder",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "command",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "port",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "tools",
+        "type_info": "TextArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "35867ccbddac7c717bdf88634e1c1d5e493e6677d63b441251cb2780c0123fb6"
+}

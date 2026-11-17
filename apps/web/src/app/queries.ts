@@ -33,6 +33,7 @@ export const keys = {
   tasks: ['tasks'] as const,
   teams: ['teams'] as const,
   meetings: ['meetings'] as const,
+  apps: ['apps'] as const,
 }
 
 export function useSession() {

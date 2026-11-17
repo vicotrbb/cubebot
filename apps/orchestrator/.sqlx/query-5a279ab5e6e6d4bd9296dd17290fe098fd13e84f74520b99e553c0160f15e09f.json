@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT p.id\n            FROM apps p\n            JOIN agents g ON g.id = p.agent_id AND g.desired_state <> 'retired'\n            WHERE p.id = $1 AND p.agent_id = $2 AND p.slug = $3\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5a279ab5e6e6d4bd9296dd17290fe098fd13e84f74520b99e553c0160f15e09f"
+}

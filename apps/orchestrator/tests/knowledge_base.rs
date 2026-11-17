@@ -89,10 +89,11 @@ async fn people_and_agents_share_one_wiki_within_the_agents_capability() {
     let storage = Storage::start(f.pool.clone(), directory.clone(), quota(1 << 30))
         .await
         .unwrap();
-    let console = cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None, None)
-        .await
-        .unwrap()
-        .layer(Extension(storage.clone()));
+    let console =
+        cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None, None, None)
+            .await
+            .unwrap()
+            .layer(Extension(storage.clone()));
     let token = f
         .auth
         .bootstrap("projected-token", Uuid::new_v4())

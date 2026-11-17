@@ -10,6 +10,7 @@ mod tls;
 mod access;
 mod agent_lifecycle;
 mod agents;
+mod apps;
 mod audit;
 mod authentication_limits;
 mod calendar;

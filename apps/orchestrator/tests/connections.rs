@@ -137,6 +137,14 @@ async fn credential(runtime: &str, token: &str, connection: &str) -> (u16, Value
     (status, response.json().await.unwrap_or(Value::Null))
 }
 
+async fn listed(runtime: &str, token: &str) -> Value {
+    let url = format!("{runtime}/api/runtime/connections");
+    let client = openidconnect::reqwest::Client::new();
+    let response = client.get(url).bearer_auth(token).send().await.unwrap();
+    assert_eq!(response.status().as_u16(), 200);
+    response.json().await.unwrap()
+}
+
 fn sealed_free_of(stored: &[u8], secrets: &[&str]) -> bool {
     secrets.iter().all(|secret| {
         !stored
@@ -313,6 +321,7 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
     assert_eq!((status, saved["level"].as_str()), (200, Some("read")));
     assert_eq!(saved["disabled_tools"], json!(["get"]));
     assert_eq!(credential(&runtime, &session.token, &id).await.0, 404);
+    assert_eq!(listed(&runtime, &session.token).await, json!([]));
     let grants = format!("/api/agents/{agent}/connections");
     assert_eq!(api.json("GET", &grants, None).await.1[0]["enabled"], false);
     let grant = format!("{grants}/{id}");
@@ -323,6 +332,9 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
         204
     );
     assert_eq!(credential(&runtime, &session.token, &id).await.0, 200);
+    let regranted = listed(&runtime, &session.token).await;
+    assert_eq!(regranted[0]["slug"], "crm");
+    assert_eq!(regranted[0]["level"], "read");
     let unknown = json!({"disabled_tools": ["drop_tables"]});
     assert_eq!(api.json("PUT", &path, Some(unknown)).await.0, 400);
 

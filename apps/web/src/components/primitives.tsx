@@ -1,5 +1,5 @@
 import { Check, Copy, X } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 
 /** Plain-HTTP installs have no Clipboard API, so a hidden selection does the copying there. */
 async function copyText(text: string) {
@@ -179,12 +179,14 @@ export function Menu({
   trigger,
   triggerClassName,
   label,
+  triggerRef,
   children,
 }: {
   className?: string
   trigger: ReactNode
   triggerClassName: string
   label?: string
+  triggerRef?: Ref<HTMLElement>
   children: ReactNode
 }) {
   const ref = useRef<HTMLDetailsElement>(null)
@@ -223,6 +225,7 @@ export function Menu({
       }}
     >
       <summary
+        ref={triggerRef}
         className={triggerClassName}
         aria-label={label}
         onClick={() => {

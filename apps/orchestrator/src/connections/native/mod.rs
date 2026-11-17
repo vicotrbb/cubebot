@@ -787,38 +787,6 @@ impl Connections {
         Ok(())
     }
 
-    /// The connections `agent` may use, for one turn; no credentials.
-    pub(crate) async fn runtime_connections(
-        &self,
-        tx: &mut Transaction<'_, Postgres>,
-        agent: AgentId,
-    ) -> Result<Vec<Connection>, IdentityError> {
-        let rows = sqlx::query!(
-            r#"
-            SELECT id, connector, slug, account, config, level, disabled_tools AS "disabled_tools!: sqlx::types::Json<Vec<String>>"
-            FROM connections
-            WHERE access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)
-            ORDER BY slug
-            "#,
-            agent.0,
-        )
-        .fetch_all(&mut **tx)
-        .await?;
-        Ok(rows
-            .into_iter()
-            .filter(|row| cubebot_connectors::find(&row.connector).is_some())
-            .map(|row| Connection {
-                id: row.id,
-                connector: row.connector,
-                slug: row.slug,
-                account: row.account,
-                config: row.config,
-                level: row.level,
-                disabled_tools: row.disabled_tools.0,
-            })
-            .collect())
-    }
-
     /// The credential an agent's runtime asks for. Access is checked again here, so a revoked
     /// grant takes effect at the next call. Never log it.
     #[tracing::instrument(skip_all, fields(agent = %agent.0, connection = %id))]
@@ -881,6 +849,36 @@ impl Connections {
         .await?;
         Ok(ConnectionActivity { events, routines })
     }
+}
+
+pub(crate) async fn granted(
+    executor: impl sqlx::PgExecutor<'_>,
+    agent: AgentId,
+) -> Result<Vec<Connection>, IdentityError> {
+    let rows = sqlx::query!(
+            r#"
+            SELECT id, connector, slug, account, config, level, disabled_tools AS "disabled_tools!: sqlx::types::Json<Vec<String>>"
+            FROM connections
+            WHERE access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)
+            ORDER BY slug
+            "#,
+            agent.0,
+        )
+        .fetch_all(executor)
+        .await?;
+    Ok(rows
+        .into_iter()
+        .filter(|row| cubebot_connectors::find(&row.connector).is_some())
+        .map(|row| Connection {
+            id: row.id,
+            connector: row.connector,
+            slug: row.slug,
+            account: row.account,
+            config: row.config,
+            level: row.level,
+            disabled_tools: row.disabled_tools.0,
+        })
+        .collect())
 }
 
 /// What a sign-in will save once the vendor proves it.

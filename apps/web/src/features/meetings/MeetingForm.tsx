@@ -48,17 +48,24 @@ export function useInviteOptions() {
 export const idsOf = (members: MemberOption[], kind: MemberOption['kind']) =>
   members.filter((member) => member.kind === kind).map((member) => member.id)
 
+export const listeningOf = (members: MemberOption[], listening: string[]) =>
+  idsOf(members, 'agent').filter((id) => listening.includes(id))
+
 export function Invitees({
   legend,
   members,
   options,
   placeholder,
+  listening,
+  onListening,
   onChange,
 }: {
   legend: string
   members: MemberOption[]
   options: MemberOption[]
   placeholder: string
+  listening: string[]
+  onListening: (listening: string[]) => void
   onChange: (members: MemberOption[]) => void
 }) {
   return (
@@ -75,6 +82,24 @@ export function Invitees({
             )
           }
           empty=""
+          extra={(member) =>
+            member.kind === 'agent' && (
+              <span className="member__listen">
+                <Switch
+                  checked={listening.includes(member.id)}
+                  label={`Listen only, ${member.name}`}
+                  onChange={(on) =>
+                    onListening(
+                      on
+                        ? [...listening, member.id]
+                        : listening.filter((id) => id !== member.id),
+                    )
+                  }
+                />
+                Listen only
+              </span>
+            )
+          }
         />
       )}
       <AddMember
@@ -246,6 +271,7 @@ export function WhenFields({
 const MODES: [AgentMode, string][] = [
   ['relevant', 'When relevant'],
   ['named', 'Only when named'],
+  ['listen', 'Listen only'],
 ]
 
 export function ModeField({
@@ -258,7 +284,7 @@ export function ModeField({
   const label = useId()
   return (
     <div className="field">
-      <span id={label}>Agents speak</span>
+      <span id={label}>Agents</span>
       <div className="tabs segmented" role="group" aria-labelledby={label}>
         {MODES.map(([mode, name]) => (
           <button

@@ -77,6 +77,7 @@ export function MeetingPage({ id, join }: { id: string; join: boolean }) {
       <MeetingRoom
         joining={stage}
         invite={<InvitePanel meeting={meeting} />}
+        meeting={meeting}
         ended={
           <button type="button" className="link-btn" onClick={toDetail}>
             Open the meeting

@@ -188,6 +188,10 @@ pub(super) enum Seating {
     Remove {
         slot: u16,
     },
+    Listening {
+        agent: Uuid,
+        listening: bool,
+    },
     Audio {
         slot: u16,
         frame: Bytes,
@@ -235,6 +239,7 @@ struct Seat {
     camera: bool,
     screen: bool,
     hand: bool,
+    listening: bool,
     tracks: HashMap<Stream, Message>,
     out: Option<Outbound>,
     blocked: HashSet<(u16, Stream)>,
@@ -254,6 +259,7 @@ impl Seat {
             camera: false,
             screen: false,
             hand: false,
+            listening: false,
             tracks: HashMap::new(),
             out,
             blocked: HashSet::new(),
@@ -305,6 +311,7 @@ impl Seat {
             camera: self.camera,
             screen: self.screen,
             hand: self.hand,
+            listening: self.listening,
             can_present: agent
                 .zip(viewer)
                 .map(|(agent, presents)| presents.contains(&agent)),
@@ -444,6 +451,7 @@ impl Room {
                 let _ = reply.send(self.add_agent(agent, name, avatar));
             }
             Seating::Remove { slot } => self.remove_agent(slot),
+            Seating::Listening { agent, listening } => self.agent_listening(agent, listening),
             Seating::Audio { slot, frame } => self.agent_audio(slot, frame),
             Seating::Present {
                 agent,
@@ -1000,6 +1008,17 @@ impl Room {
         self.seats.insert(slot, seat);
         self.roster();
         Some(slot)
+    }
+
+    fn agent_listening(&mut self, agent: Uuid, listening: bool) {
+        let seat = self
+            .seats
+            .values_mut()
+            .find(|seat| seat.agent_id() == Some(agent));
+        if let Some(seat) = seat.filter(|seat| seat.listening != listening) {
+            seat.listening = listening;
+            self.roster();
+        }
     }
 
     fn remove_agent(&mut self, slot: u16) {

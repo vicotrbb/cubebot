@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod api;
+pub mod apps;
 pub mod backup;
 pub mod calendar;
 pub mod connections;

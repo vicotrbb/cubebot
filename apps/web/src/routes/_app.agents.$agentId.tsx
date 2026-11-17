@@ -43,6 +43,7 @@ const TABS: { to: string; label: string; needs: Capability }[] = [
     needs: 'conversation_read',
   },
   { to: '/agents/$agentId/wakes', label: 'Wakes', needs: 'conversation_read' },
+  { to: '/agents/$agentId/apps', label: 'Apps', needs: 'conversation_send' },
   { to: '/agents/$agentId/speech', label: 'Speech', needs: 'agent_manage' },
   { to: '/agents/$agentId/vault', label: 'Vault', needs: 'browser_view' },
   {

@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Clone)]
 pub struct Config {
     pub(super) origin: reqwest::Url,
     pub(super) token_file: PathBuf,

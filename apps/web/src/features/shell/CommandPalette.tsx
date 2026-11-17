@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Hash, UsersRound } from 'lucide-react'
+import { Hash, LayoutGrid, UsersRound } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   notRetired,
@@ -9,6 +9,7 @@ import {
   useTeams,
 } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
+import { useApps } from '../apps/api'
 import { PLATFORM } from './Sidebar'
 
 type Hit = {
@@ -31,6 +32,7 @@ export function CommandPalette({
   const rooms = useRooms()
   const teams = useTeams()
   const session = useSession()
+  const apps = useApps(open)
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
   const input = useRef<HTMLInputElement>(null)
@@ -75,6 +77,14 @@ export function CommandPalette({
           icon: room.team ? <UsersRound size={16} /> : <Hash size={16} />,
           go: go(`/rooms/${room.id}`),
         })),
+      ...(apps.data ?? []).map((app) => ({
+        key: `app:${app.id}`,
+        label: app.name,
+        hint: 'App',
+        icon: app.icon || <LayoutGrid size={16} />,
+        go: go(`/apps/${app.slug}`),
+      })),
+      { key: 'p:apps', label: 'Apps', hint: 'Page', go: go('/apps') },
       {
         key: 'p:activity',
         label: 'Activity',
@@ -121,6 +131,7 @@ export function CommandPalette({
     ).slice(0, 12)
   }, [
     agents.data,
+    apps.data,
     rooms.data,
     teams.data,
     session.data,

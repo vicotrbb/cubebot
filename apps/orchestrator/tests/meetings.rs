@@ -287,6 +287,25 @@ async fn inviting_an_agent_needs_conversation_send_and_agents_allowed_in_meeting
     );
     assert!(scout_invited.avatar.is_some());
 
+    assert!(!scout_invited.listening);
+
+    let quiet = json!({"title": "Quiet", "invite": {"agents": [scout], "listening": [scout]}});
+    let (quiet, _) = w.meetings.create(&w.ana, &new(quiet)).await.unwrap();
+    let seat = quiet.invitations[0].id;
+    assert!(quiet.invitations[0].listening);
+    let forbidden = w.meetings.set_listening(&w.bo, quiet.id, seat, false).await;
+    assert!(matches!(forbidden, Err(IdentityError::NotFound)));
+    w.meetings
+        .set_listening(&w.ana, quiet.id, seat, false)
+        .await
+        .unwrap();
+    let read = w.meetings.meeting(&w.ana, quiet.id).await.unwrap();
+    assert!(!read.invitations[0].listening);
+    let unknown = w
+        .meetings
+        .set_listening(&w.ana, quiet.id, Uuid::new_v4(), true);
+    assert!(matches!(unknown.await, Err(IdentityError::NotFound)));
+
     let settings = w.meetings.settings().await.unwrap();
     let off = SaveMeetingSettings {
         agents_join: false,

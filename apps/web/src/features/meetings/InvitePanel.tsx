@@ -7,6 +7,7 @@ import {
   EmailInput,
   idsOf,
   Invitees,
+  listeningOf,
   MailerField,
   OpenJoinField,
   useInviteOptions,
@@ -33,6 +34,7 @@ export function InvitePanel({ meeting }: { meeting: Meeting }) {
   const options = useInviteOptions()
   const refresh = useRefresh()
   const [members, setMembers] = useState<MemberOption[]>([])
+  const [listening, setListening] = useState<string[]>([])
   const [emails, setEmails] = useState<string[]>([])
   const [mailer, setMailer] = useMailer()
   const [busy, setBusy] = useState(false)
@@ -55,6 +57,7 @@ export function InvitePanel({ meeting }: { meeting: Meeting }) {
             invite: {
               accounts: idsOf(members, 'person'),
               agents: idsOf(members, 'agent'),
+              listening: listeningOf(members, listening),
               emails,
             },
             email_connection: emails.length && mailer ? mailer : null,
@@ -63,6 +66,7 @@ export function InvitePanel({ meeting }: { meeting: Meeting }) {
       )
       setNotice(sentWords(count, idsOf(members, 'agent').length))
       setMembers([])
+      setListening([])
       setEmails([])
       await refresh()
     } catch (caught) {
@@ -87,6 +91,8 @@ export function InvitePanel({ meeting }: { meeting: Meeting }) {
         legend="People and agents"
         members={members}
         options={choices}
+        listening={listening}
+        onListening={setListening}
         placeholder={
           options.people.length ? 'Search agents and people' : 'Search agents'
         }

@@ -16,11 +16,15 @@ test = false
 cubebot-providers = { path = "../../modules/providers" }
 base64 = "0.22.1"
 sha2 = "0.10"
-cubebot-protocol.workspace = true
+cubebot-protocol = { workspace = true, features = ["lanes"] }
 cubebot-connectors.workspace = true
 serde.workspace = true
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }
+hyper = { version = "1", features = ["server", "client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+percent-encoding = "2"
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls", "stream"] }
 tokio = { workspace = true, features = ["process", "io-util"] }
 nix = { version = "0.31", features = ["fs", "mount", "net", "process", "reboot", "signal", "socket"] }

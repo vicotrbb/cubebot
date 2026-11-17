@@ -108,6 +108,7 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
         request_id: Uuid::new_v4(),
         message: "Only count EU rows".into(),
         attachments: Vec::new(),
+        app: None,
     };
     let steering = work.steer(&admin, lead, parent, &steer).await.unwrap();
     assert_eq!(
@@ -149,6 +150,7 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
         request_id: Uuid::new_v4(),
         message: "Exclude test rows".into(),
         attachments: Vec::new(),
+        app: None,
     };
     work.steer(&admin, lead, parent, &more).await.unwrap();
     let copied = turn(&work, &admin, bee, awaited.id).await.steering;
@@ -212,6 +214,7 @@ async fn a_parent_yields_to_delegated_work_and_resumes_with_its_outcome() {
                 request_id: Uuid::new_v4(),
                 message: "Another count".into(),
                 attachments: Vec::new(),
+                app: None,
             },
         )
         .await
@@ -379,6 +382,7 @@ async fn tasks_run_in_bounded_lanes_rooms_give_context_and_replies_are_relayed()
         request_id: Uuid::new_v4(),
         message: text.into(),
         attachments: Vec::new(),
+        app: None,
     };
     work.post_room_message(&admin, room.id, &post("@Bee look at the nginx logs"))
         .await

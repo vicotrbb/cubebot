@@ -76,12 +76,14 @@ export function MemberList({
   onRemove,
   busy,
   empty,
+  extra,
 }: {
   members: MemberOption[]
   removable: (member: MemberOption) => boolean
   onRemove: (member: MemberOption) => void
   busy: boolean
   empty: string
+  extra?: (member: MemberOption) => ReactNode
 }) {
   if (members.length === 0) return <p className="members__empty">{empty}</p>
   return (
@@ -92,7 +94,9 @@ export function MemberList({
           member={member}
           busy={busy}
           onRemove={removable(member) ? () => onRemove(member) : undefined}
-        />
+        >
+          {extra?.(member)}
+        </MemberRow>
       ))}
     </ul>
   )

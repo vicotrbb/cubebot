@@ -70,6 +70,7 @@ pub struct Job {
     pub stdin: Option<Vec<u8>>,
 }
 
+#[derive(Clone)]
 pub struct Sandbox {
     workspace: PathBuf,
     uid: u32,
@@ -112,6 +113,14 @@ impl Sandbox {
             command.env("DISPLAY", ":1");
         }
         command
+    }
+
+    pub(crate) fn workspace(&self) -> &std::path::Path {
+        &self.workspace
+    }
+
+    pub(crate) fn uid(&self) -> u32 {
+        self.uid
     }
 
     fn output(&self, id: Uuid) -> PathBuf {
@@ -241,7 +250,7 @@ impl Sandbox {
 }
 
 /// shortcut: a descendant that calls setsid survives until the sandbox stops; kill the tool user's processes once the kvm guest owns the session.
-struct Group(Option<u32>);
+pub(crate) struct Group(pub(crate) Option<u32>);
 impl Drop for Group {
     fn drop(&mut self) {
         if let Some(id) = self.0 {
@@ -300,6 +309,10 @@ impl Registry {
             connecting: tokio::sync::Mutex::new(()),
             desktop: std::sync::Arc::default(),
         }
+    }
+
+    pub(crate) fn sandbox(&self) -> &Sandbox {
+        &self.sandbox
     }
 
     fn mcp(&self) -> std::sync::RwLockReadGuard<'_, Mcp> {
@@ -448,10 +461,10 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    pub(super) fn sandbox() -> Sandbox {
+    pub(crate) fn sandbox() -> Sandbox {
         let workspace = std::env::temp_dir().join(format!("cubebot-tools-{}", Uuid::new_v4()));
         std::fs::create_dir(&workspace).unwrap();
         let owner = std::fs::metadata(&workspace).unwrap();

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT i.id,\n                CASE WHEN i.account_id IS NOT NULL THEN 'account'\n                    WHEN i.agent_id IS NOT NULL THEN 'agent' ELSE 'email' END AS \"kind!\",\n                i.account_id AS account, i.agent_id AS agent, i.email,\n                COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, i.email) AS \"name!\",\n                g.avatar AS \"avatar?: Json<Avatar>\",\n                (to_jsonb(i.emailed_at) #>> '{}') AS emailed_at, i.email_error\n            FROM meeting_invitations i\n            LEFT JOIN human_accounts h ON h.id=i.account_id\n            LEFT JOIN agents g ON g.id=i.agent_id\n            WHERE i.meeting_id=$1\n            ORDER BY i.created_at, i.id\n            ",
+  "query": "\n            SELECT i.id,\n                CASE WHEN i.account_id IS NOT NULL THEN 'account'\n                    WHEN i.agent_id IS NOT NULL THEN 'agent' ELSE 'email' END AS \"kind!\",\n                i.account_id AS account, i.agent_id AS agent, i.email,\n                COALESCE(NULLIF(h.profile->>'name', ''), h.login, g.name, i.email) AS \"name!\",\n                g.avatar AS \"avatar?: Json<Avatar>\",\n                (to_jsonb(i.emailed_at) #>> '{}') AS emailed_at, i.email_error,\n                i.listening\n            FROM meeting_invitations i\n            LEFT JOIN human_accounts h ON h.id=i.account_id\n            LEFT JOIN agents g ON g.id=i.agent_id\n            WHERE i.meeting_id=$1\n            ORDER BY i.created_at, i.id\n            ",
   "describe": {
     "columns": [
       {
@@ -47,6 +47,11 @@
         "ordinal": 8,
         "name": "email_error",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "listening",
+        "type_info": "Bool"
       }
     ],
     "parameters": {
@@ -63,8 +68,9 @@
       null,
       false,
       null,
-      true
+      true,
+      false
     ]
   },
-  "hash": "b87a24c78f030b2d35d8d6bcd94bd8980fed67d2a64e0995fa22490be3be888e"
+  "hash": "b0850784e114f3428d76d2cac8763255173b145da5ec8f1665f2ed5d853a5e5d"
 }

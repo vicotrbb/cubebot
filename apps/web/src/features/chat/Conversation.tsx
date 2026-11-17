@@ -220,6 +220,7 @@ function origin(turn: Turn) {
   if (from.kind === 'broadcast') return `broadcast from ${from.name}`
   if (from.kind === 'routine') return `via routine ${from.name}`
   if (from.kind === 'wake') return 'Wake-up'
+  if (from.kind === 'app') return `via ${from.name}`
   if (from.kind === 'delegation') return `delegated by ${from.name}`
   return `message from ${from.name}`
 }
@@ -324,9 +325,18 @@ function shownRequest(turn: Turn) {
   return turn.message
 }
 
+function personOrigin(turn: Turn) {
+  return turn.origin?.kind === 'app' ? null : turn.origin
+}
+
+function AppVia({ turn }: { turn: Turn }) {
+  if (turn.origin?.kind !== 'app') return null
+  return <span className="faint small">{origin(turn)}</span>
+}
+
 function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
-  const via = origin(turn)
-  const from = turn.origin
+  const from = personOrigin(turn)
+  const via = from ? origin(turn) : null
   return (
     <div className="msg msg--person">
       {from ? (
@@ -348,6 +358,7 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
           <>
             <div className="msg__head">
               <span className="msg__author">{via ? capital(via) : you}</span>
+              <AppVia turn={turn} />
             </div>
             <Markdown text={shownRequest(turn)} />
             <Attachments turn={turn.id} items={turn.message_attachments} />

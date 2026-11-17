@@ -827,7 +827,11 @@ dependencies = [
  "cubebot-protocol",
  "cubebot-providers",
  "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "nix",
+ "percent-encoding",
  "reqwest",
  "rustls",
  "serde",
@@ -889,6 +893,8 @@ dependencies = [
  "cubebot-providers",
  "futures-util",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "k8s-openapi",
  "kube",
  "nix",
@@ -917,6 +923,7 @@ version = "0.3.7"
 dependencies = [
  "serde",
  "serde_json",
+ "tokio",
  "utoipa",
  "uuid",
 ]

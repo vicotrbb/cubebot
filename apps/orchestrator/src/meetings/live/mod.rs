@@ -194,6 +194,11 @@ impl Handle {
         self.command(Command::Agent(Seating::Remove { slot })).await
     }
 
+    pub async fn agent_listening(&self, agent: Uuid, listening: bool) -> bool {
+        let seating = Seating::Listening { agent, listening };
+        self.command(Command::Agent(seating)).await
+    }
+
     pub async fn agent_audio(&self, slot: u16, rate: u32, pcm: &[u8]) -> bool {
         let frame = wire::audio(slot, rate, pcm);
         self.command(Command::Agent(Seating::Audio { slot, frame }))

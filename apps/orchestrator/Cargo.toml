@@ -25,12 +25,14 @@ path = "tests/main.rs"
 [dependencies]
 argon2 = "0.5"
 axum = { workspace = true, features = ["ws"] }
-cubebot-protocol = { workspace = true, features = ["openapi"] }
+cubebot-protocol = { workspace = true, features = ["openapi", "lanes"] }
 cubebot-connectors = { workspace = true, features = ["openapi"] }
 cubebot-providers = { path = "../../modules/providers" }
 chrono = { version = "0.4", default-features = false }
 chrono-tz.workspace = true
 futures-util = "0.3"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { workspace = true, features = ["derive"] }
 sha2 = "0.10"

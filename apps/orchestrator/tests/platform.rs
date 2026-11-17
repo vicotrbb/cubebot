@@ -48,6 +48,7 @@ fn send(message: &str) -> SendMessage {
         request_id: Uuid::new_v4(),
         message: message.into(),
         attachments: Vec::new(),
+        app: None,
     }
 }
 
@@ -279,7 +280,13 @@ async fn a_budget_spent_mid_turn_pauses_the_work_and_raising_it_resumes_with_its
     assert_eq!(usage.paused_turns, 1);
 }
 
-const SHIPPED: [&str; 4] = ["coding", "create-agent", "create-room-or-team", "design"];
+const SHIPPED: [&str; 5] = [
+    "build-app",
+    "coding",
+    "create-agent",
+    "create-room-or-team",
+    "design",
+];
 
 async fn names(knowledge: &Knowledge, admin: &Actor, agent: Uuid) -> Vec<String> {
     let installed = knowledge.installed_skills(admin, AgentId(agent)).await;
@@ -323,7 +330,7 @@ async fn shipped_skills_reach_every_agent_once_and_uninstalling_one_sticks() {
     Knowledge::seed_shipped_skills(&f.pool).await.unwrap();
     assert_eq!(
         names(&knowledge, &admin, existing).await,
-        ["coding", "create-agent", "create-room-or-team"]
+        ["build-app", "coding", "create-agent", "create-room-or-team"]
     );
     assert_eq!(knowledge.skills(&admin).await.unwrap().len(), SHIPPED.len());
 
@@ -524,10 +531,11 @@ async fn an_attachment_is_read_through_the_reply_and_only_by_who_may_read_it() {
         ("chart.png", Some("image/png"), 9)
     );
 
-    let console = cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None, None)
-        .await
-        .unwrap()
-        .layer(Extension(storage));
+    let console =
+        cubebot_orchestrator::api::configured_router(f.pool.clone(), None, None, None, None)
+            .await
+            .unwrap()
+            .layer(Extension(storage));
     let read = |session: String| {
         Request::builder()
             .uri(format!("/api/attachments/{turn}/{file}/content"))
