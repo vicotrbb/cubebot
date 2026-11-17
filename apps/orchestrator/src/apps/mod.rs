@@ -268,12 +268,16 @@ impl Apps {
 
     fn shown(&self, row: Row) -> App {
         let mut app = App::from(row);
-        if !matches!(app.state, AppState::Updating | AppState::Stopped)
-            && !self.links.connected(AgentId(app.agent_id))
-        {
-            app.state = AppState::Unavailable;
-        }
+        app.state = self.seen(app.state, AgentId(app.agent_id));
         app
+    }
+
+    fn seen(&self, state: AppState, agent: AgentId) -> AppState {
+        if matches!(state, AppState::Updating | AppState::Stopped) || self.links.connected(agent) {
+            state
+        } else {
+            AppState::Unavailable
+        }
     }
 
     fn changed(&self, agent: AgentId) {
@@ -498,11 +502,16 @@ impl Apps {
         Ok(Ok(()))
     }
 
-    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn specs(&self, agent: AgentId) -> Result<Vec<AppSpec>, IdentityError> {
+        let listed = self.listed(agent).await?;
+        Ok(listed.into_iter().map(|(spec, _)| spec).collect())
+    }
+
+    #[tracing::instrument(skip_all, fields(agent = %agent.0))]
+    pub async fn listed(&self, agent: AgentId) -> Result<Vec<(AppSpec, AppState)>, IdentityError> {
         let rows = sqlx::query!(
             "
-            SELECT slug, name, folder, command, port, tools, desired
+            SELECT slug, name, folder, command, port, tools, desired, updating, reported
             FROM apps
             WHERE agent_id = $1
             ORDER BY slug
@@ -513,18 +522,22 @@ impl Apps {
         .await?;
         Ok(rows
             .into_iter()
-            .map(|row| AppSpec {
-                slug: row.slug,
-                name: row.name,
-                folder: row.folder,
-                command: row.command,
-                port: row.port.and_then(|port| u16::try_from(port).ok()),
-                tools: row.tools,
-                desired: if row.desired == "stopped" {
-                    Desired::Stopped
-                } else {
-                    Desired::Running
-                },
+            .map(|row| {
+                let shown = self.seen(state(&row.desired, row.updating, &row.reported), agent);
+                let spec = AppSpec {
+                    slug: row.slug,
+                    name: row.name,
+                    folder: row.folder,
+                    command: row.command,
+                    port: row.port.and_then(|port| u16::try_from(port).ok()),
+                    tools: row.tools,
+                    desired: if row.desired == "stopped" {
+                        Desired::Stopped
+                    } else {
+                        Desired::Running
+                    },
+                };
+                (spec, shown)
             })
             .collect())
     }

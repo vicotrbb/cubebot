@@ -73,7 +73,7 @@ pub fn definitions() -> Vec<cubebot_providers::Tool> {
         ),
         tool(
             "app_list",
-            "List your apps with their folder, command, port, tools and whether each should run.",
+            "List your apps with their folder, command, port, tools, whether each should run, and the state people see: running, starting, stopped, updating, failed or unavailable. A failed app keeps exiting; read its log at .cubebot-apps/{slug}.log in your workspace.",
             json!({}),
         ),
     ]

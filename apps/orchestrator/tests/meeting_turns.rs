@@ -398,7 +398,7 @@ async fn a_member_who_may_not_send_cannot_speak_to_an_agent_as_themselves() {
     assert_eq!(turns, 0);
 }
 
-async fn next_turn(channel: &mut crate::runtime_identity::Socket) -> Value {
+pub(crate) async fn next_turn(channel: &mut crate::runtime_identity::Socket) -> Value {
     loop {
         let next = delivery(channel).await;
         if next["type"] == "turn" {

@@ -1,4 +1,9 @@
-use crate::support;
+use crate::{
+    meeting_turns::next_turn,
+    runtime_identity::{native_chat_setup, open_channel, report, runtime_server},
+    runtime_support::fixture,
+    support,
+};
 use cubebot_orchestrator::work::{SendMessage, Work};
 use cubebot_orchestrator::{
     agents::{AgentId, Agents, CreateAgent},
@@ -164,12 +169,17 @@ async fn stop_and_start_need_send_and_remove_needs_manage() {
         w.apps.specs(scout).await.unwrap()[0].desired,
         Desired::Stopped
     );
+    assert_eq!(w.apps.listed(scout).await.unwrap()[0].1, AppState::Stopped);
     let started = w
         .apps
         .set_desired(&w.ana, "budget", Desired::Running)
         .await
         .unwrap();
     assert_eq!(started.state, AppState::Unavailable);
+    assert_eq!(
+        w.apps.listed(scout).await.unwrap()[0].1,
+        AppState::Unavailable
+    );
     let running = AppReport::State {
         slug: "budget".into(),
         state: Reported::Running,
@@ -187,6 +197,8 @@ async fn stop_and_start_need_send_and_remove_needs_manage() {
         .unwrap()
         .unwrap();
     assert_eq!((app.state, app.memory), (AppState::Updating, Some(4096)));
+    let (spec, shown) = &w.apps.listed(scout).await.unwrap()[0];
+    assert_eq!((spec.slug.as_str(), *shown), ("budget", AppState::Updating));
     let state = audits(&w, "app.state").await;
     assert_eq!(state.len(), 2);
     assert_eq!(state[0].0, Some(w.ana.id));
@@ -596,6 +608,44 @@ async fn a_message_from_an_app_carries_its_origin() {
     );
     assert_eq!(turns[0].message, "How am I doing?");
     assert!(turns[1].origin.is_none());
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn the_agents_turn_names_the_app_a_message_came_through() {
+    let f = fixture().await;
+    let (auth, work, admin, agent) = native_chat_setup(&f, "Before the app").await;
+    sqlx::query!(
+        "UPDATE chat_turns SET status='complete', response='ok', completed_at=clock_timestamp() WHERE conversation_id=$1",
+        agent,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    Apps::new(f.pool.clone(), Identity::new(f.pool.clone()))
+        .register(AgentId(agent), register(json!({})))
+        .await
+        .unwrap()
+        .unwrap();
+    work.send(&admin, agent, &from_app("Plan my week", "budget"))
+        .await
+        .unwrap();
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (origin, _server) = runtime_server(auth).await;
+    let mut channel = open_channel(&origin, &session.token).await;
+    report(&mut channel, json!({"type":"pull"})).await;
+    let claimed = next_turn(&mut channel).await;
+    let sent = claimed["message"].as_str().unwrap();
+    assert!(sent.starts_with("Plan my week\n\n"), "{sent}");
+    assert!(
+        sent.ends_with("(Sent through your app Budget (budget) by the person using it.)"),
+        "{sent}"
+    );
+    let history = work.history(&admin, agent, 0).await.unwrap();
+    assert_eq!(history.last().unwrap().message, "Plan my week");
 }
 
 #[tokio::test]

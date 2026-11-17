@@ -1,9 +1,12 @@
-use super::{AgentState, Apps, Change, Register};
+use super::{AgentState, AppState, Apps, Change, Register};
 use crate::{
     agents::{AgentId, runtime::RuntimeActor},
     identity::IdentityError,
 };
-use cubebot_protocol::{apps::Desired, runtime::RoutineCall};
+use cubebot_protocol::{
+    apps::{AppSpec, Desired},
+    runtime::RoutineCall,
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -45,6 +48,25 @@ fn moved(input: Move) -> Result<(String, AgentState), String> {
     Ok((input.slug, AgentState { desired, updating }))
 }
 
+fn listing(apps: Vec<(AppSpec, AppState)>) -> String {
+    let apps: Vec<Value> = apps
+        .into_iter()
+        .map(|(spec, state)| {
+            let mut app = serde_json::to_value(&spec).unwrap_or_default();
+            app["state"] = serde_json::to_value(state).unwrap_or_default();
+            if state == AppState::Failed {
+                app["log"] = format!(
+                    "It keeps exiting. Read .cubebot-apps/{}.log in your workspace to see why.",
+                    spec.slug
+                )
+                .into();
+            }
+            app
+        })
+        .collect();
+    serde_json::to_string(&apps).unwrap_or_default()
+}
+
 impl Apps {
     pub(crate) async fn tool(
         &self,
@@ -53,9 +75,7 @@ impl Apps {
     ) -> Result<Answer, IdentityError> {
         let (agent, input) = (actor.agent, &call.input);
         match call.tool.as_str() {
-            "app_list" => Ok(Ok(
-                serde_json::to_string(&self.specs(agent).await?).unwrap_or_default()
-            )),
+            "app_list" => Ok(Ok(listing(self.listed(agent).await?))),
             "app_register" => self.registered(agent, input).await,
             "app_update" => self.app_updated(agent, input).await,
             "app_state" => self.moved(agent, input).await,
@@ -128,6 +148,34 @@ mod tests {
         let (_, updating) = to("updating").unwrap();
         assert_eq!((updating.desired, updating.updating), (None, Some(true)));
         assert!(to("paused").is_err());
+    }
+
+    #[test]
+    fn a_listing_shows_each_state_and_points_a_failed_app_at_its_log() {
+        let spec = |slug: &str| AppSpec {
+            slug: slug.into(),
+            name: slug.into(),
+            folder: slug.into(),
+            command: None,
+            port: None,
+            tools: Vec::new(),
+            desired: Desired::Running,
+        };
+        let listed: Value = serde_json::from_str(&listing(vec![
+            (spec("notes"), AppState::Running),
+            (spec("budget"), AppState::Failed),
+        ]))
+        .unwrap();
+        assert_eq!(listed[0]["state"], "running");
+        assert_eq!(listed[0]["folder"], "notes");
+        assert!(listed[0].get("log").is_none());
+        assert_eq!(listed[1]["state"], "failed");
+        assert!(
+            listed[1]["log"]
+                .as_str()
+                .unwrap()
+                .contains(".cubebot-apps/budget.log")
+        );
     }
 
     #[test]

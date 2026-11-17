@@ -39,8 +39,8 @@ Declare every tool you call in `tools`, or the call is refused. Call a tool by h
 
 Other kit functions:
 
-- `cubebot.ask(text)` sends a message to you in the conversation as the person who is looking. It resolves `{ sent: true }`, rejects with the reason, and rejects after 30 seconds without an answer. Outside a frame, for example in your own browser at 127.0.0.1:7400, it resolves `{ sent: false }`.
-- `cubebot.theme()` returns `"light"`, `"dark"` or null; `cubebot.onTheme(fn)` calls `fn` now and on every change and returns an unsubscribe function. The kit already sets `data-theme` on the document, so the kit classes follow it.
+- `cubebot.ask(text)` sends a message to you in the conversation as the person who is looking. It resolves `{ sent: true }`, rejects with the reason, and rejects after 30 seconds without an answer. Outside a frame, for example in your own browser at 127.0.0.1:7400, it resolves `{ sent: false }`. Call `ask` only after the person does something, such as pressing a button, never on its own when the page loads.
+- `cubebot.theme()` returns `"light"`, `"dark"` or null; `cubebot.onTheme(fn)` calls `fn` at once when a theme is already known, then on every change, and returns an unsubscribe function. The kit already sets `data-theme` on the document, so the kit classes follow it.
 
 ## 5. Look native with the kit classes
 
