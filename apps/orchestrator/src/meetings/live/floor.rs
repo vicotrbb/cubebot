@@ -106,7 +106,9 @@ impl Floor {
 
     pub(super) fn decide(&self, mode: AgentMode, text: &str) -> Decision {
         let named = self.named(text);
-        if !named.is_empty() {
+        if mode == AgentMode::Listen {
+            Decision::Nobody
+        } else if !named.is_empty() {
             Decision::Named(named)
         } else if mode == AgentMode::Relevant && !self.agents.is_empty() {
             Decision::Ask
@@ -377,6 +379,16 @@ mod tests {
             Floor::default().decide(AgentMode::Relevant, "Anyone?"),
             Decision::Nobody
         );
+    }
+
+    #[test]
+    fn listen_only_never_answers_even_when_named() {
+        let floor = floor();
+        assert_eq!(
+            floor.decide(AgentMode::Listen, "Cara, what should we do?"),
+            Decision::Nobody
+        );
+        assert_eq!(floor.decide(AgentMode::Listen, "Anyone?"), Decision::Nobody);
     }
 
     #[test]

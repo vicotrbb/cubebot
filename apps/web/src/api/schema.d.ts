@@ -2915,7 +2915,7 @@ export interface components {
       transport: components['schemas']['McpTransport']
     }
     /** @enum {string} */
-    AgentMode: 'relevant' | 'named'
+    AgentMode: 'relevant' | 'named' | 'listen'
     AgentModel: {
       chosen?: null | components['schemas']['ModelRef']
       default?: null | components['schemas']['ModelRef']

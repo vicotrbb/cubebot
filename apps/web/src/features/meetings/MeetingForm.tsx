@@ -246,6 +246,7 @@ export function WhenFields({
 const MODES: [AgentMode, string][] = [
   ['relevant', 'When relevant'],
   ['named', 'Only when named'],
+  ['listen', 'Listen only'],
 ]
 
 export function ModeField({
@@ -258,7 +259,7 @@ export function ModeField({
   const label = useId()
   return (
     <div className="field">
-      <span id={label}>Agents speak</span>
+      <span id={label}>Agents</span>
       <div className="tabs segmented" role="group" aria-labelledby={label}>
         {MODES.map(([mode, name]) => (
           <button

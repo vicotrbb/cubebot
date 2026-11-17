@@ -7133,7 +7133,7 @@
       },
       "AgentMode": {
         "type": "string",
-        "enum": ["relevant", "named"]
+        "enum": ["relevant", "named", "listen"]
       },
       "AgentModel": {
         "type": "object",

@@ -844,6 +844,9 @@ impl Attendants {
             r#final: true,
         };
         self.room.announce(caption, None).await;
+        if self.mode().await == AgentMode::Listen {
+            return;
+        }
         for other in self.floor.handoff(agent, &text) {
             self.answer(other, Asker::Agent, at).await;
         }

@@ -35,6 +35,7 @@ const DESCRIPTION_CHARS: usize = 4000;
 pub enum AgentMode {
     Relevant,
     Named,
+    Listen,
 }
 
 impl AgentMode {
@@ -42,6 +43,7 @@ impl AgentMode {
         match self {
             Self::Relevant => "relevant",
             Self::Named => "named",
+            Self::Listen => "listen",
         }
     }
 }
