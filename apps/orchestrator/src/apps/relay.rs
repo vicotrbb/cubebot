@@ -46,6 +46,8 @@ const REUSE: Duration = Duration::from_secs(6 * 60 * 60);
 const POLICY: &str = "sandbox allow-scripts allow-forms allow-popups allow-downloads; default-src 'self'; base-uri 'none'; frame-ancestors 'self'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'";
 const UNAVAILABLE: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Unavailable</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px system-ui,sans-serif;color:#555;background:#fafafa}@media (prefers-color-scheme:dark){body{color:#aaa;background:#161616}}</style></head><body><p>This app is unavailable right now</p></body></html>";
 
+const EXPIRED: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Expired</title></head><body><script>parent.postMessage({type:'cubebot:expired'},'*')</script></body></html>";
+
 enum Out {
     Open(u32, Lane),
     Lane(Piece),
@@ -96,7 +98,8 @@ impl Links {
         }
         let (mine, theirs) = tokio::io::duplex(STREAM_BYTES);
         let (lane, pipe) = lanes::lane();
-        if out.send(Out::Open(stream, lane)).await.is_err() {
+        let opened = tokio::time::timeout(SILENCE, out.send(Out::Open(stream, lane))).await;
+        if !opened.is_ok_and(|sent| sent.is_ok()) {
             open.fetch_sub(1, Ordering::AcqRel);
             return None;
         }
@@ -133,7 +136,7 @@ impl Links {
                     inbound(&mut streams, &reports, message).await
                 }
                 Some(item) = outgoing.recv() => outbound(&mut socket, &mut streams, item).await,
-                _ = ping.tick() => socket.send(Message::Ping(Default::default())).await.is_ok(),
+                _ = ping.tick() => sent(&mut socket, Message::Ping(Default::default())).await,
                 () = tokio::time::sleep_until(heard + SILENCE) => false,
             };
             if !going {
@@ -185,10 +188,16 @@ async fn outbound(socket: &mut WebSocket, streams: &mut Lanes, item: Out) -> boo
         Out::Lane(piece) => streams.outgoing(&piece),
         Out::Notice(notice) => {
             let text = serde_json::to_string(&notice).unwrap_or_default();
-            return socket.send(Message::Text(text.into())).await.is_ok();
+            return sent(socket, Message::Text(text.into())).await;
         }
     };
-    socket.send(Message::Binary(frame.into())).await.is_ok()
+    sent(socket, Message::Binary(frame.into())).await
+}
+
+async fn sent(socket: &mut WebSocket, message: Message) -> bool {
+    tokio::time::timeout(SILENCE, socket.send(message))
+        .await
+        .is_ok_and(|sent| sent.is_ok())
 }
 
 #[derive(Clone)]
@@ -282,11 +291,7 @@ impl Apps {
         Ok(self.views.mint(actor.id, name, app, AgentId(agent), slug))
     }
 
-    async fn admit(&self, slug: &str, token: &str) -> Result<View, IdentityError> {
-        let view = self
-            .views
-            .find(slug, token)
-            .ok_or(IdentityError::NotFound)?;
+    async fn admit(&self, view: View, slug: &str) -> Result<View, IdentityError> {
         let mut tx = self.pool.begin().await?;
         sqlx::query_scalar!(
             "
@@ -342,7 +347,10 @@ impl Apps {
             )
                 .into_response();
         };
-        let view = match self.admit(target.slug, target.token).await {
+        let Some(view) = self.views.find(target.slug, target.token) else {
+            return refused(request.headers());
+        };
+        let view = match self.admit(view, target.slug).await {
             Ok(view) => view,
             Err(error) => return error.into_response(),
         };
@@ -475,12 +483,11 @@ fn answered(
     prefix: &str,
 ) -> Response {
     let (mut parts, body) = response.into_parts();
-    for name in [
-        header::SET_COOKIE,
-        header::CONTENT_SECURITY_POLICY,
-        header::X_FRAME_OPTIONS,
-    ] {
-        parts.headers.remove(name);
+    let switching = parts.status == StatusCode::SWITCHING_PROTOCOLS;
+    for (name, value) in &std::mem::take(&mut parts.headers) {
+        if kept(name) || (switching && upgrading(name)) {
+            parts.headers.append(name.clone(), value.clone());
+        }
     }
     let location = parts
         .headers
@@ -493,6 +500,37 @@ fn answered(
     }
     guarded(&mut parts.headers);
     Response::from_parts(parts, Body::new(body))
+}
+
+fn kept(name: &HeaderName) -> bool {
+    matches!(
+        name.as_str(),
+        "content-type"
+            | "content-length"
+            | "content-encoding"
+            | "content-language"
+            | "content-disposition"
+            | "cache-control"
+            | "etag"
+            | "last-modified"
+            | "expires"
+            | "vary"
+            | "location"
+            | "accept-ranges"
+            | "content-range"
+            | "retry-after"
+    )
+}
+
+fn upgrading(name: &HeaderName) -> bool {
+    matches!(
+        name.as_str(),
+        "upgrade"
+            | "connection"
+            | "sec-websocket-accept"
+            | "sec-websocket-protocol"
+            | "sec-websocket-extensions"
+    )
 }
 
 fn guarded(headers: &mut HeaderMap) {
@@ -524,8 +562,23 @@ fn preflight(request: &HeaderMap) -> Response {
     response
 }
 
+fn refused(request: &HeaderMap) -> Response {
+    let navigating = request
+        .get("sec-fetch-dest")
+        .is_some_and(|dest| dest == "document" || dest == "iframe");
+    if navigating {
+        page(StatusCode::NOT_FOUND, EXPIRED)
+    } else {
+        IdentityError::NotFound.into_response()
+    }
+}
+
 fn unavailable() -> Response {
-    let mut response = (StatusCode::BAD_GATEWAY, UNAVAILABLE).into_response();
+    page(StatusCode::BAD_GATEWAY, UNAVAILABLE)
+}
+
+fn page(status: StatusCode, html: &'static str) -> Response {
+    let mut response = (status, html).into_response();
     let headers = response.headers_mut();
     guarded(headers);
     headers.insert(
@@ -568,6 +621,18 @@ mod tests {
     async fn linked(answer: Answer) -> (Links, mpsc::Receiver<AppReport>) {
         let links = Links::default();
         let (reports, received) = mpsc::channel(8);
+        let address = listen(&links, reports).await;
+        let (socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}/"))
+            .await
+            .unwrap();
+        tokio::spawn(agent(socket, answer));
+        while !links.connected(AGENT) {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        (links, received)
+    }
+
+    async fn listen(links: &Links, reports: mpsc::Sender<AppReport>) -> std::net::SocketAddr {
         let serving = links.clone();
         let router = axum::Router::new().route(
             "/",
@@ -580,14 +645,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        let (socket, _) = tokio_tungstenite::connect_async(format!("ws://{address}/"))
-            .await
-            .unwrap();
-        tokio::spawn(agent(socket, answer));
-        while !links.connected(AGENT) {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-        (links, received)
+        address
     }
 
     async fn agent<S>(socket: tokio_tungstenite::WebSocketStream<S>, answer: Answer)
@@ -680,7 +738,7 @@ mod tests {
 
     fn echo(head: &[u8]) -> Option<Vec<u8>> {
         let mut response = format!(
-            "HTTP/1.1 302 Found\r\ncontent-length: {}\r\nset-cookie: s=1\r\ncontent-security-policy: default-src *\r\nx-frame-options: DENY\r\nlocation: /budget/next?x=1\r\n\r\n",
+            "HTTP/1.1 302 Found\r\ncontent-length: {}\r\nset-cookie: s=1\r\ncontent-security-policy: default-src *\r\nx-frame-options: DENY\r\nclear-site-data: \"*\"\r\nstrict-transport-security: max-age=31536000\r\nalt-svc: h3=\":443\"\r\nnel: {{}}\r\nreport-to: {{}}\r\nreporting-endpoints: a=\"/r\"\r\ncontent-type: text/plain\r\nlocation: /budget/next?x=1\r\n\r\n",
             head.len()
         )
         .into_bytes();
@@ -782,6 +840,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_peer_that_stops_reading_loses_the_link_within_silence() {
+        let links = Links::default();
+        let (reports, _received) = mpsc::channel(8);
+        let address = listen(&links, reports).await;
+        let (_deaf, _) = tokio_tungstenite::connect_async(format!("ws://{address}/"))
+            .await
+            .unwrap();
+        while !links.connected(AGENT) {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let started = Instant::now();
+        let mut streams = Vec::new();
+        for _ in 0..128 {
+            streams.push(links.open(AGENT).await.unwrap());
+        }
+        for mut stream in streams {
+            tokio::spawn(async move {
+                let _ = stream.write_all(&vec![b'w'; WINDOW]).await;
+                std::future::pending::<()>().await;
+            });
+        }
+        let stalled = tokio::time::timeout(
+            2 * SILENCE + Duration::from_secs(5),
+            forward(&links, &view(), PREFIX, "/page", get_page()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(stalled.status(), StatusCode::BAD_GATEWAY);
+        assert!(!links.connected(AGENT));
+        assert!(started.elapsed() < 2 * SILENCE + Duration::from_secs(5));
+        let fresh = tokio::time::timeout(
+            Duration::from_secs(1),
+            forward(&links, &view(), PREFIX, "/page", get_page()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(fresh.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
     async fn security_headers_replace_the_apps_own() {
         let (links, _reports) = linked(echo).await;
         let response = forward(&links, &view(), PREFIX, "/page", get_page()).await;
@@ -801,6 +899,17 @@ mod tests {
         assert!(!headers.contains_key(header::SET_COOKIE));
         assert!(!headers.contains_key(header::X_FRAME_OPTIONS));
         assert!(!headers.contains_key("cross-origin-resource-policy"));
+        assert_eq!(headers[header::CONTENT_TYPE], "text/plain");
+        for dropped in [
+            "clear-site-data",
+            "strict-transport-security",
+            "alt-svc",
+            "nel",
+            "report-to",
+            "reporting-endpoints",
+        ] {
+            assert!(!headers.contains_key(dropped), "{dropped} was forwarded");
+        }
     }
 
     #[tokio::test]
@@ -933,6 +1042,30 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(&echo, b"echo:hello");
+    }
+
+    #[tokio::test]
+    async fn an_unknown_view_tells_a_loading_frame_to_reopen() {
+        for dest in ["iframe", "document"] {
+            let mut asked = HeaderMap::new();
+            asked.insert("sec-fetch-dest", HeaderValue::from_static(dest));
+            let response = refused(&asked);
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(response.headers()[header::CONTENT_SECURITY_POLICY], POLICY);
+            assert_eq!(
+                response.headers()[header::CONTENT_TYPE],
+                "text/html; charset=utf-8"
+            );
+            assert!(text(response).await.contains("cubebot:expired"));
+        }
+        let mut fetched = HeaderMap::new();
+        fetched.insert("sec-fetch-dest", HeaderValue::from_static("empty"));
+        for asked in [fetched, HeaderMap::new()] {
+            let response = refused(&asked);
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(response.headers()[header::CONTENT_TYPE], "application/json");
+            assert_eq!(text(response).await, r#"{"error":"not_found"}"#);
+        }
     }
 
     #[test]

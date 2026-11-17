@@ -20,7 +20,7 @@ function reason(error: unknown) {
 
 export function bridge(
   frame: HTMLIFrameElement,
-  handlers: { ask(text: string): Promise<void> },
+  handlers: { ask(text: string): Promise<void>; expired(): void },
 ): () => void {
   const answered = new Set<unknown>()
   let sending = false
@@ -50,9 +50,13 @@ export function bridge(
   const receive = (event: MessageEvent) => {
     if (!frame.contentWindow || event.source !== frame.contentWindow) return
     const data: unknown = event.data
-    if ((data as { type?: unknown } | null)?.type === 'cubebot:ready')
+    if ((data as { type?: unknown } | null)?.type === 'cubebot:ready') {
+      answered.clear()
       post({ type: 'cubebot:theme', theme })
+    }
     if (isAsk(data)) void ask(data)
+    if ((data as { type?: unknown } | null)?.type === 'cubebot:expired')
+      handlers.expired()
   }
 
   const sync = () => {

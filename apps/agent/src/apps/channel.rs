@@ -49,11 +49,11 @@ async fn link(
             }
             Some(report) = reports.recv() => {
                 let text = serde_json::to_string(&report).unwrap_or_default();
-                channel.send(Message::Text(text.into())).await.is_ok()
+                sent(&mut channel, Message::Text(text.into())).await
             }
             Some(piece) = outgoing.recv() => {
                 let frame = streams.outgoing(&piece);
-                channel.send(Message::Binary(frame.into())).await.is_ok()
+                sent(&mut channel, Message::Binary(frame.into())).await
             }
             () = tokio::time::sleep_until(heard + SILENCE) => false,
         };
@@ -61,6 +61,12 @@ async fn link(
             return;
         }
     }
+}
+
+async fn sent(channel: &mut Channel, message: Message) -> bool {
+    tokio::time::timeout(SILENCE, channel.send(message))
+        .await
+        .is_ok_and(|sent| sent.is_ok())
 }
 
 fn incoming(

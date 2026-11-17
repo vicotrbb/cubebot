@@ -47,13 +47,27 @@ export async function mintView(slug: string) {
   return view.path
 }
 
+const REFUSALS = ['unauthorized', 'forbidden', 'not_found']
+
+async function refused(response: Response) {
+  if (![401, 403, 404].includes(response.status)) return false
+  if (!response.headers.get('content-type')?.includes('application/json'))
+    return false
+  const body = (await response.json().catch(() => null)) as {
+    error?: unknown
+  } | null
+  return REFUSALS.includes(String(body?.error))
+}
+
 export async function probe(path: string) {
   const response = await fetch(path, {
     cache: 'no-store',
     credentials: 'omit',
   }).catch(() => null)
-  void response?.body?.cancel()
-  return response?.status ?? 502
+  if (!response) return 'unavailable'
+  if (await refused(response)) return 'refused'
+  void response.body?.cancel()
+  return response.status === 502 ? 'unavailable' : 'open'
 }
 
 export async function sendToAgent(
@@ -71,15 +85,13 @@ export async function sendToAgent(
 
 export type Opened = { src: string } | { problem: 'unavailable' | 'gone' }
 
-const REMINT = [401, 403, 404]
-
 export async function openView(slug: string, theme: string): Promise<Opened> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const path = await mintView(slug).catch(() => null)
     if (!path) return { problem: 'gone' }
-    const status = await probe(path)
-    if (status === 502) return { problem: 'unavailable' }
-    if (!REMINT.includes(status)) return { src: `${path}?theme=${theme}` }
+    const probed = await probe(path)
+    if (probed === 'unavailable') return { problem: 'unavailable' }
+    if (probed === 'open') return { src: `${path}?theme=${theme}` }
   }
   return { problem: 'gone' }
 }

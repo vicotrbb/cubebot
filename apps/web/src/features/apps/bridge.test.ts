@@ -55,6 +55,7 @@ const deliver = (source: unknown, data: unknown) =>
 function mount(ask: (text: string) => Promise<void> = async () => {}) {
   const frame = fakeWindow()
   const asked: string[] = []
+  const expiries: number[] = []
   const stop = bridge(
     { contentWindow: frame.window } as never as HTMLIFrameElement,
     {
@@ -62,9 +63,10 @@ function mount(ask: (text: string) => Promise<void> = async () => {}) {
         asked.push(text)
         return ask(text)
       },
+      expired: () => expiries.push(1),
     },
   )
-  return { frame, asked, stop }
+  return { frame, asked, expiries, stop }
 }
 
 describe('bridge', () => {
@@ -86,6 +88,31 @@ describe('bridge', () => {
     await settle()
     expect(asked).toEqual(['Plan my week'])
     expect(frame.sent).toEqual([{ type: 'cubebot:asked', id: 7, ok: true }])
+  })
+
+  test('a page load restarts the ask ids', async () => {
+    const { frame, asked } = mount()
+    deliver(frame.window, { type: 'cubebot:ready' })
+    deliver(frame.window, { type: 'cubebot:ask', id: 1, text: 'First' })
+    await settle()
+    deliver(frame.window, { type: 'cubebot:ready' })
+    deliver(frame.window, { type: 'cubebot:ask', id: 1, text: 'Second' })
+    await settle()
+    expect(asked).toEqual(['First', 'Second'])
+    expect(frame.sent.filter((item) => item.type === 'cubebot:asked')).toEqual([
+      { type: 'cubebot:asked', id: 1, ok: true },
+      { type: 'cubebot:asked', id: 1, ok: true },
+    ])
+  })
+
+  test('an expired view is reported only from its own frame', () => {
+    const { frame, expiries } = mount()
+    deliver(fakeWindow().window, { type: 'cubebot:expired' })
+    deliver(null, { type: 'cubebot:expired' })
+    expect(expiries).toEqual([])
+    deliver(frame.window, { type: 'cubebot:expired' })
+    expect(expiries).toEqual([1])
+    expect(frame.sent).toEqual([])
   })
 
   test('a failed ask is answered with its reason', async () => {

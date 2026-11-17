@@ -441,10 +441,17 @@ function Stage({
   ask: (text: string) => Promise<void>
 }) {
   const [attempt, setAttempt] = useState(0)
+  const recovered = useRef(false)
+  const expired = useCallback(() => {
+    if (recovered.current) return
+    recovered.current = true
+    setAttempt((at) => at + 1)
+  }, [])
   useEffect(() => {
     let minted = Date.now()
     const renew = () => {
       minted = Date.now()
+      recovered.current = false
       setAttempt((at) => at + 1)
     }
     const timer = window.setInterval(renew, RENEW)
@@ -463,6 +470,7 @@ function Stage({
       key={attempt}
       app={app}
       ask={ask}
+      expired={expired}
       retry={() => setAttempt((at) => at + 1)}
     />
   )
@@ -471,10 +479,12 @@ function Stage({
 function Framed({
   app,
   ask,
+  expired,
   retry,
 }: {
   app: App
   ask: (text: string) => Promise<void>
+  expired: () => void
   retry: () => void
 }) {
   const [opened, setOpened] = useState<Opened | null>(null)
@@ -493,8 +503,8 @@ function Framed({
   useEffect(() => {
     const element = frame.current
     if (!element || !src) return
-    return bridge(element, { ask })
-  }, [src, ask])
+    return bridge(element, { ask, expired })
+  }, [src, ask, expired])
   if (opened && 'problem' in opened)
     return opened.problem === 'unavailable' ? (
       <Unavailable app={app} retry={retry} />
