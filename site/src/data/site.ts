@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.3.6'
+export const version = 'v0.3.7'
 export const released = '2026-11-16'
 
 export const docs = {
@@ -160,6 +160,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.3.7',
+    date: '2026-11-17',
+    title: 'See what needs you across every agent',
+    items: [
+      'Activity leads with what needs you: questions agents flag for you, approvals you can settle in place, logins and stalled work',
+      'One line per agent with unread replies, so you can catch up on many agents at a glance',
+      'Agents can set wakes, once or on a schedule, to pick work back up at the right time; you manage them on the new Wakes tab',
+      'Speech has its own agent tab, the dreaming model is picked from a list, and new skill notices clear once seen',
+    ],
+  },
   {
     tag: 'v0.3.6',
     date: '2026-11-16',
