@@ -396,7 +396,7 @@ impl Meetings {
         let mut tx = self.pool.begin().await?;
         access(&mut tx, actor, id).await?.owned()?;
         let updated = sqlx::query!(
-            "
+            r#"
             UPDATE meetings
             SET title=COALESCE($2, title), description=COALESCE($3, description),
                 starts_at=COALESCE(to_timestamp($4::bigint), starts_at),
@@ -404,8 +404,10 @@ impl Meetings {
                 open_join=COALESCE($6, open_join), locked=COALESCE($7, locked),
                 agent_mode=COALESCE($8, agent_mode)
             WHERE id=$1
-            RETURNING title, open_join, locked
-            ",
+            RETURNING title, open_join, locked,
+                agent_mode AS "agent_mode: AgentMode",
+                (SELECT agent_mode FROM meetings WHERE id=$1) AS "was: AgentMode"
+            "#,
             id,
             new_title,
             change.description,
@@ -421,7 +423,7 @@ impl Meetings {
         if change.open_join.is_some() || change.locked.is_some() {
             self.live.flags(id, updated.open_join, updated.locked).await;
         }
-        if change.agent_mode.is_some() {
+        if updated.was != Some(updated.agent_mode) {
             self.live.invitations_changed(id);
         }
         Ok(updated.title)

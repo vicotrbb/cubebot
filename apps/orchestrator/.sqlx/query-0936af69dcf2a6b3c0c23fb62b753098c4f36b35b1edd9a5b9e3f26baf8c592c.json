@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE meetings\n            SET title=COALESCE($2, title), description=COALESCE($3, description),\n                starts_at=COALESCE(to_timestamp($4::bigint), starts_at),\n                ends_at=COALESCE(to_timestamp($5::bigint), ends_at),\n                open_join=COALESCE($6, open_join), locked=COALESCE($7, locked),\n                agent_mode=COALESCE($8, agent_mode)\n            WHERE id=$1\n            RETURNING title, open_join, locked,\n                agent_mode AS \"agent_mode: AgentMode\",\n                (SELECT agent_mode FROM meetings WHERE id=$1) AS \"was: AgentMode\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "open_join",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "locked",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent_mode: AgentMode",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "was: AgentMode",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Bool",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "0936af69dcf2a6b3c0c23fb62b753098c4f36b35b1edd9a5b9e3f26baf8c592c"
+}

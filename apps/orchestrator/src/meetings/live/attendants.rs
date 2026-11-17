@@ -448,12 +448,12 @@ impl Attendants {
     async fn hush(&mut self, agent: Uuid) {
         let speaking = self.speaking(agent);
         let queued = self.floor.waits(agent);
-        self.floor.hush(agent, speaking);
-        if !speaking && queued {
+        if self.floor.hush(agent, speaking) {
             self.following = None;
-            if let Some(present) = self.agents.get(&agent) {
-                self.state(present.slot, AgentState::Listening).await;
-            }
+        }
+        let present = self.agents.get(&agent).filter(|_| !speaking && queued);
+        if let Some(present) = present {
+            self.state(present.slot, AgentState::Listening).await;
         }
     }
 

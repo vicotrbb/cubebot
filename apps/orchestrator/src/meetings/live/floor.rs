@@ -217,12 +217,14 @@ impl Floor {
         self.queue.iter().any(|queued| queued.agent == agent)
     }
 
-    pub(super) fn hush(&mut self, agent: Uuid, speaking: bool) {
+    pub(super) fn hush(&mut self, agent: Uuid, speaking: bool) -> bool {
+        let fronted = self.front().is_some_and(|(front, _)| front == agent);
         if speaking {
             self.interrupt(agent);
         } else {
             self.queue.retain(|queued| queued.agent != agent);
         }
+        fronted && !speaking
     }
 
     pub(super) fn interrupt(&mut self, agent: Uuid) {
@@ -447,7 +449,7 @@ mod tests {
         floor.queue(DEX, turn(1), Some(4));
         floor.queue(CARA, turn(2), Some(5));
         floor.set_listening(CARA, true);
-        floor.hush(CARA, false);
+        assert!(floor.hush(CARA, false));
         assert_eq!(floor.front(), Some((DEX, turn(1))));
         floor.pop();
         assert_eq!(floor.front(), None);
@@ -461,10 +463,21 @@ mod tests {
         let turn = |n: u128| Uuid::from_u128(50 + n);
         floor.queue(CARA, turn(0), Some(4));
         floor.queue(CARA, turn(1), Some(5));
-        floor.hush(CARA, true);
+        assert!(!floor.hush(CARA, true));
         assert_eq!(floor.front(), Some((CARA, turn(0))));
         floor.pop();
         assert_eq!(floor.front(), None);
+    }
+
+    #[test]
+    fn hushing_an_agent_queued_behind_the_front_one_leaves_the_front_alone() {
+        let mut floor = floor();
+        let turn = |n: u128| Uuid::from_u128(60 + n);
+        floor.queue(DEX, turn(0), Some(4));
+        floor.queue(CARA, turn(1), Some(4));
+        assert!(!floor.hush(CARA, false));
+        assert_eq!(floor.front(), Some((DEX, turn(0))));
+        assert!(!floor.waits(CARA));
     }
 
     #[test]
