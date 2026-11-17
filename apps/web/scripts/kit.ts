@@ -57,7 +57,12 @@ const extras = `.kit-grid {
 
 function page(): string {
   const css = readFileSync(shell, 'utf8')
-  return css.slice(css.indexOf('.page {'), css.indexOf('.palette {'))
+  const start = css.indexOf('.page {')
+  const end = css.indexOf('.palette {')
+  if (start < 0 || end < start) {
+    throw new Error('shell.css no longer has the .page block before .palette')
+  }
+  return css.slice(start, end)
 }
 
 export function buildKit(): string {
@@ -65,6 +70,8 @@ export function buildKit(): string {
     readFileSync(join(styles, name), 'utf8'),
   )
   return `${[...parts, page(), extras].join('\n')}`
+    .replace(/#root,\s*body > div \{[^}]*\}\n*/g, '')
+    .replace(/^[ \t]*overscroll-behavior: none;\n/gm, '')
     .replace(/@font-face\s*\{[^}]*\}\n*/g, '')
     .replace(/^[ \t]*\/\*[\s\S]*?\*\/[ \t]*\n/gm, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')

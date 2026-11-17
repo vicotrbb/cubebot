@@ -14,4 +14,6 @@ test('the kit carries no font files, comments or card-less console chrome', () =
   assert.ok(css.includes('.btn'))
   assert.ok(css.includes(":root[data-theme='dark']"))
   assert.ok(css.includes('.kit-card'))
+  assert.ok(!css.includes('body > div'))
+  assert.ok(!css.includes('overscroll-behavior: none'))
 })
