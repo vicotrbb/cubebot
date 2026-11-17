@@ -266,9 +266,14 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             let backups = backups(&pool, &url, storage.clone())?;
             let desktop = controller.desktop();
             let console = origin.clone();
-            let Ok(router) =
-                cubebot_orchestrator::api::configured_router(pool, origin, config, desktop.clone())
-                    .await
+            let Ok(router) = cubebot_orchestrator::api::configured_router(
+                pool,
+                origin,
+                config,
+                desktop.clone(),
+                controller.apps(),
+            )
+            .await
             else {
                 controller
                     .release()

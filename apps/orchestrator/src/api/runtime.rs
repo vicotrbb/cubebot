@@ -33,6 +33,7 @@ pub(super) fn router(identity: RuntimeIdentity) -> Router {
         .route("/api/runtime/wallpaper", get(wallpaper))
         .route("/api/runtime/people", get(people))
         .route("/api/runtime/apps", get(apps))
+        .route("/api/runtime/apps/channel", get(app_channel))
         .route("/api/runtime/provider", get(provider))
         .route("/api/runtime/connections", get(granted_connections))
         .route(
@@ -74,8 +75,8 @@ async fn apps(
     headers: HeaderMap,
 ) -> Result<Json<Vec<cubebot_protocol::apps::AppSpec>>, Failure> {
     let actor = active(&identity, &headers).await?;
-    let pool = identity.pool.clone();
-    crate::apps::Apps::new(pool.clone(), crate::identity::Identity::new(pool))
+    identity
+        .apps
         .specs(actor.agent)
         .await
         .map(Json)
@@ -83,6 +84,39 @@ async fn apps(
             tracing::warn!(?error, "runtime apps request failed");
             Failure(StatusCode::SERVICE_UNAVAILABLE)
         })
+}
+async fn app_channel(
+    State(identity): State<RuntimeIdentity>,
+    headers: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Result<Response, Failure> {
+    let token = bearer(&headers)?.to_owned();
+    let actor = identity
+        .authenticate(&token, RuntimeAccess::Active)
+        .await
+        .map_err(Failure::from)?;
+    Ok(upgrade
+        .max_message_size(64 * 1024)
+        .on_upgrade(move |socket| async move {
+            tokio::select! {
+                () = identity.apps.link(actor.agent, socket) => {}
+                () = still_active(&identity, &token) => {}
+            }
+        }))
+}
+async fn still_active(identity: &RuntimeIdentity, token: &str) {
+    let mut every = tokio::time::interval(std::time::Duration::from_secs(30));
+    every.tick().await;
+    loop {
+        every.tick().await;
+        if identity
+            .authenticate(token, RuntimeAccess::Active)
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
 }
 async fn bootstrap(
     State(identity): State<RuntimeIdentity>,

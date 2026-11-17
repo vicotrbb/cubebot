@@ -1,9 +1,14 @@
+mod channel;
 mod server;
 mod supervisor;
 
 pub use server::serve;
 
-use crate::{connections::Connections, control::MemoryClient, tools::Sandbox};
+use crate::{
+    connections::Connections,
+    control::{MemoryClient, RuntimeClient},
+    tools::Sandbox,
+};
 use cubebot_protocol::apps::{AppReport, AppSpec};
 use std::{
     collections::HashMap,
@@ -87,8 +92,9 @@ fn report(reports: &mpsc::Sender<AppReport>, report: AppReport) {
     let _ = reports.try_send(report);
 }
 
-pub async fn run(apps: Arc<Apps>) {
+pub async fn run(apps: Arc<Apps>, client: RuntimeClient) {
     tokio::spawn(serve(apps.clone()));
+    tokio::spawn(channel::run(apps.clone(), client));
     let mut every = tokio::time::interval(REFRESH);
     loop {
         every.tick().await;

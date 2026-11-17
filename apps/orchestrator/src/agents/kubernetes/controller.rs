@@ -92,6 +92,13 @@ impl Controller {
             Mode::DatabaseOnly => axum::Router::new(),
         }
     }
+    pub fn apps(&self) -> Option<crate::apps::Apps> {
+        match &self.mode {
+            Mode::Kubernetes(lifecycle) => Some(lifecycle.runtime.apps()),
+            Mode::Docker(lifecycle) => Some(lifecycle.runtime.apps()),
+            Mode::DatabaseOnly => None,
+        }
+    }
     pub fn desktop(&self) -> Option<Desktop> {
         match &self.mode {
             Mode::Kubernetes(lifecycle) => Some(Desktop::new(

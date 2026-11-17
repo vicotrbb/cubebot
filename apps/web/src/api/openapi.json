@@ -1974,6 +1974,37 @@
         }
       }
     },
+    "/api/apps/{slug}/views": {
+      "post": {
+        "tags": [],
+        "operationId": "view_app",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewPath"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/attachments/{turn}/{file}/content": {
       "get": {
         "tags": [],
@@ -7601,7 +7632,14 @@
       },
       "AppState": {
         "type": "string",
-        "enum": ["starting", "running", "stopped", "updating", "failed"]
+        "enum": [
+          "starting",
+          "running",
+          "stopped",
+          "updating",
+          "failed",
+          "unavailable"
+        ]
       },
       "Attachment": {
         "type": "object",
@@ -14170,6 +14208,15 @@
           },
           "username": {
             "type": ["string", "null"]
+          }
+        }
+      },
+      "ViewPath": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string"
           }
         }
       },

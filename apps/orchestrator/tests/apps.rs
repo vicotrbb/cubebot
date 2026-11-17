@@ -7,7 +7,7 @@ use cubebot_orchestrator::{
         access::{Capability, GrantRequest, Recipient, Scope},
     },
 };
-use cubebot_protocol::apps::{AppReport, Desired, Reported};
+use cubebot_protocol::apps::{AppReport, Desired, Frame, Reported, decode, encode};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -105,7 +105,7 @@ async fn a_person_without_send_sees_no_apps() {
     assert_eq!(app.connections, ["whoop", "mail"]);
     assert_eq!(
         (app.agent_name.as_str(), app.state),
-        ("Scout", AppState::Starting)
+        ("Scout", AppState::Unavailable)
     );
 
     assert!(w.apps.list(&w.ana).await.unwrap().is_empty());
@@ -152,7 +152,7 @@ async fn stop_and_start_need_send_and_remove_needs_manage() {
         .set_desired(&w.ana, "budget", Desired::Running)
         .await
         .unwrap();
-    assert_eq!(started.state, AppState::Starting);
+    assert_eq!(started.state, AppState::Unavailable);
     let running = AppReport::State {
         slug: "budget".into(),
         state: Reported::Running,
@@ -279,5 +279,224 @@ async fn called_reports_are_audited() {
     assert_eq!(
         calls[0].2,
         json!({"slug": "budget", "tool": "whoop__recovery", "viewer": w.ana.id, "ok": true})
+    );
+}
+
+const ORIGIN: &str = "https://cubebot.test";
+
+struct Relay {
+    pool: sqlx::PgPool,
+    apps: Apps,
+    ana: Actor,
+    agent: AgentId,
+    base: String,
+    runtime_token: String,
+}
+
+async fn relay() -> Relay {
+    let f = crate::runtime_support::fixture().await;
+    let identity = Identity::new(f.pool.clone());
+    let admin = login(&identity, "admin", "administrator password").await;
+    identity
+        .create_account(&admin, "ana", "ana member password", false, Uuid::new_v4())
+        .await
+        .unwrap();
+    let ana = login(&identity, "ana", "ana member password").await;
+    let grant = GrantRequest {
+        request_id: Uuid::new_v4(),
+        recipient: Recipient::User { id: ana.id },
+        capability: Capability::ConversationSend,
+        scope: Scope::Conversation { id: f.agent.0 },
+    };
+    identity.grant(&admin, &grant).await.unwrap();
+    let runtime_token = f
+        .auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap()
+        .token;
+    let apps = f.auth.apps();
+    for slug in ["budget", "notes"] {
+        apps.register(f.agent, register(json!({"slug": slug})))
+            .await
+            .unwrap()
+            .unwrap();
+    }
+    let console = cubebot_orchestrator::api::configured_router(
+        f.pool.clone(),
+        Some(ORIGIN.into()),
+        None,
+        None,
+        Some(apps.clone()),
+    )
+    .await
+    .unwrap();
+    let router = console.merge(cubebot_orchestrator::api::runtime_router(f.auth.clone()));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    Relay {
+        pool: f.pool,
+        apps,
+        ana,
+        agent: f.agent,
+        base,
+        runtime_token,
+    }
+}
+
+fn http() -> reqwest::Client {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap()
+}
+
+async fn fake_agent(r: &Relay, token: &str) -> Result<(), u16> {
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::tungstenite::{Message, client::IntoClientRequest};
+    let url = format!("{}/api/runtime/apps/channel", r.base.replace("http", "ws"));
+    let mut request = url.into_client_request().unwrap();
+    request
+        .headers_mut()
+        .insert("authorization", format!("Bearer {token}").parse().unwrap());
+    let (mut socket, _) = tokio_tungstenite::connect_async(request)
+        .await
+        .map_err(|error| match error {
+            tokio_tungstenite::tungstenite::Error::Http(response) => response.status().as_u16(),
+            _ => 0,
+        })?;
+    tokio::spawn(async move {
+        let answer = b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok";
+        while let Some(Ok(message)) = socket.next().await {
+            let Message::Binary(bytes) = message else {
+                continue;
+            };
+            if let Some(Frame::Data(stream, _)) = decode(&bytes) {
+                let frames = [Frame::Data(stream, answer), Frame::Close(stream)];
+                for frame in frames {
+                    socket
+                        .send(Message::Binary(encode(&frame).into()))
+                        .await
+                        .unwrap();
+                }
+            }
+        }
+    });
+    while !r.apps.links().connected(r.agent) {
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_viewer_who_loses_send_is_refused_on_the_next_request() {
+    let r = relay().await;
+    assert_eq!(
+        r.apps.list(&r.ana).await.unwrap()[0].state,
+        AppState::Unavailable
+    );
+    assert_eq!(fake_agent(&r, "not-a-session").await, Err(401));
+    fake_agent(&r, &r.runtime_token).await.unwrap();
+    assert_eq!(
+        r.apps.list(&r.ana).await.unwrap()[0].state,
+        AppState::Starting
+    );
+
+    let cookie = "__Host-cubebot_session=ignored";
+    let token = r.apps.view(&r.ana, "budget").await.unwrap();
+    let page = format!("{}/api/apps/budget/v/{token}/", r.base);
+    let got = http()
+        .get(&page)
+        .header("cookie", cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(got.status(), 200);
+    assert_eq!(got.headers()["access-control-allow-origin"], "*");
+    assert_eq!(got.text().await.unwrap(), "ok");
+    let posted = http()
+        .post(format!("{page}save"))
+        .header("origin", "null")
+        .header("cookie", cookie)
+        .body("{}")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(posted.status(), 200);
+    let preflight = http()
+        .request(reqwest::Method::OPTIONS, format!("{page}save"))
+        .header("origin", "null")
+        .header("access-control-request-method", "POST")
+        .header("access-control-request-headers", "content-type")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(preflight.status(), 204);
+    assert_eq!(
+        preflight.headers()["access-control-allow-headers"],
+        "content-type"
+    );
+    let bare = http()
+        .get(format!("{}/api/apps/budget/v/{token}?q=1", r.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(bare.status(), 308);
+    assert_eq!(
+        bare.headers()["location"],
+        format!("/api/apps/budget/v/{token}/?q=1").as_str()
+    );
+
+    sqlx::query("UPDATE access_grants SET revoked_at = now() WHERE account_id = $1")
+        .bind(r.ana.id)
+        .execute(&r.pool)
+        .await
+        .unwrap();
+    let refused = http().get(&page).send().await.unwrap();
+    assert_eq!(refused.status(), 404);
+    let preflight = http()
+        .request(reqwest::Method::OPTIONS, &page)
+        .header("access-control-request-method", "POST")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(preflight.status(), 404);
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_token_for_one_app_cannot_open_another() {
+    let r = relay().await;
+    let token = r.apps.view(&r.ana, "budget").await.unwrap();
+    assert_eq!(r.apps.view(&r.ana, "budget").await.unwrap(), token);
+    let base = r.base.as_str();
+    let status = |path: String| async move {
+        http()
+            .get(format!("{base}{path}"))
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .as_u16()
+    };
+    assert_eq!(status(format!("/api/apps/notes/v/{token}/")).await, 404);
+    assert_eq!(
+        status(format!("/api/apps/budget/v/{}/", "0".repeat(64))).await,
+        404
+    );
+    let unavailable = http()
+        .get(format!("{}/api/apps/budget/v/{token}/", r.base))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(unavailable.status(), 502);
+    assert!(
+        unavailable
+            .text()
+            .await
+            .unwrap()
+            .contains("This app is unavailable right now")
     );
 }

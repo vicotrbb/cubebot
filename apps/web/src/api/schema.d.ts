@@ -733,6 +733,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/apps/{slug}/views': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['view_app']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/attachments/{turn}/{file}/content': {
     parameters: {
       query?: never
@@ -3052,7 +3068,8 @@ export interface components {
       updated_at: string
     }
     /** @enum {string} */
-    AppState: 'starting' | 'running' | 'stopped' | 'updating' | 'failed'
+    AppState:
+      'starting' | 'running' | 'stopped' | 'updating' | 'failed' | 'unavailable'
     Attachment: {
       content_type?: string | null
       created_at: string
@@ -5581,6 +5598,9 @@ export interface components {
       site?: string | null
       username?: string | null
     }
+    ViewPath: {
+      path: string
+    }
     Vitals: {
       /** Format: double */
       cpu_percent?: number | null
@@ -6950,6 +6970,33 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['App']
+        }
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  view_app: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        slug: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ViewPath']
         }
       }
       404: {

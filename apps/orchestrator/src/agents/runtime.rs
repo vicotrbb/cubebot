@@ -17,6 +17,10 @@ pub struct RuntimeIdentity {
     pub(crate) pool: PgPool,
     api: Option<Kubernetes>,
     pub(crate) connections: Option<crate::connections::Connections>,
+    pub(crate) apps: crate::apps::Apps,
+}
+fn apps(pool: &PgPool) -> crate::apps::Apps {
+    crate::apps::Apps::new(pool.clone(), crate::identity::Identity::new(pool.clone()))
 }
 #[derive(Serialize)]
 pub struct RuntimeSession {
@@ -40,6 +44,7 @@ pub enum RuntimeAccess {
 impl RuntimeIdentity {
     pub fn new(pool: PgPool, config: kube::Config, namespace: &str) -> Result<Self, Error> {
         Ok(Self {
+            apps: apps(&pool),
             pool,
             api: Some(Kubernetes::new(config, namespace)?),
             connections: None,
@@ -47,10 +52,14 @@ impl RuntimeIdentity {
     }
     pub fn docker(pool: PgPool) -> Self {
         Self {
+            apps: apps(&pool),
             pool,
             api: None,
             connections: None,
         }
+    }
+    pub fn apps(&self) -> crate::apps::Apps {
+        self.apps.clone()
     }
     pub fn with_connections(mut self, connections: crate::connections::Connections) -> Self {
         self.connections = Some(connections);

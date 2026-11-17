@@ -71,6 +71,7 @@ fn request_failed(error: reqwest::Error) -> Error {
     Error::unavailable(error.without_url())
 }
 
+#[derive(Clone)]
 pub struct RuntimeClient {
     config: Config,
     http: reqwest::Client,
@@ -122,11 +123,14 @@ impl RuntimeClient {
     }
     #[tracing::instrument(skip_all, fields(instance = %self.instance))]
     pub async fn connect(&self) -> Result<Channel, Error> {
+        self.open("api/runtime/channel").await
+    }
+    pub async fn open(&self, path: &str) -> Result<Channel, Error> {
         let token = self.token.as_deref().ok_or(Error::Credential(None))?;
         let mut url = self
             .config
             .origin
-            .join("api/runtime/channel")
+            .join(path)
             .map_err(Error::configuration)?;
         let tls = url.scheme() == "https";
         url.set_scheme(if tls { "wss" } else { "ws" })

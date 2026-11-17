@@ -7,10 +7,10 @@ use axum::{
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{any, delete, get, post},
 };
 use cubebot_protocol::apps::Desired;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone)]
 struct Api {
@@ -19,19 +19,49 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(list_apps, set_app_state, remove_app))]
+#[openapi(paths(list_apps, set_app_state, remove_app, view_app))]
 pub(super) struct Doc;
 
-pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
+pub(super) fn router(apps: Apps, identity: Identity) -> Router {
     Router::new()
         .route("/api/apps", get(list_apps))
         .route("/api/apps/{slug}/state", post(set_app_state))
+        .route("/api/apps/{slug}/views", post(view_app))
         .route("/api/apps/{slug}", delete(remove_app))
         .layer(DefaultBodyLimit::max(1024))
-        .with_state(Api {
-            apps: Apps::new(pool, identity.clone()),
-            identity,
-        })
+        .with_state(Api { apps, identity })
+}
+
+pub(super) fn relay(apps: Apps) -> Router {
+    Router::new()
+        .route("/api/apps/{slug}/v/{token}", any(relay_app))
+        .route("/api/apps/{slug}/v/{token}/", any(relay_app))
+        .route("/api/apps/{slug}/v/{token}/{*rest}", any(relay_app))
+        .with_state(apps)
+}
+
+async fn relay_app(
+    State(apps): State<Apps>,
+    request: axum::extract::Request,
+) -> axum::response::Response {
+    apps.relay(request).await
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+struct ViewPath {
+    path: String,
+}
+
+#[utoipa::path(post, path = "/api/apps/{slug}/views", params(("slug" = String, Path)), responses((status = 200, body = ViewPath), (status = 404)))]
+async fn view_app(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let token = api.apps.view(&actor, &slug).await?;
+    let path = format!("/api/apps/{slug}/v/{token}/");
+    Ok(([("cache-control", "no-store")], Json(ViewPath { path })))
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]

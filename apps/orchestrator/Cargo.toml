@@ -31,6 +31,8 @@ cubebot-providers = { path = "../../modules/providers" }
 chrono = { version = "0.4", default-features = false }
 chrono-tz.workspace = true
 futures-util = "0.3"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 serde = { workspace = true, features = ["derive"] }
 sha2 = "0.10"

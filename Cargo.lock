@@ -893,6 +893,8 @@ dependencies = [
  "cubebot-providers",
  "futures-util",
  "http-body-util",
+ "hyper",
+ "hyper-util",
  "k8s-openapi",
  "kube",
  "nix",

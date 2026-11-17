@@ -1,3 +1,7 @@
+mod relay;
+
+pub use relay::Links;
+
 use crate::{
     agents::AgentId,
     identity::{
@@ -7,7 +11,7 @@ use crate::{
     },
     work::access,
 };
-use cubebot_protocol::apps::{AppReport, AppSpec, Desired, LOCAL_PORT, Reported};
+use cubebot_protocol::apps::{AppNotice, AppReport, AppSpec, Desired, LOCAL_PORT, Reported};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
@@ -19,6 +23,8 @@ type Answer<T> = Result<T, String>;
 pub struct Apps {
     pool: PgPool,
     identity: Identity,
+    links: Links,
+    views: relay::Views,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, utoipa::ToSchema)]
@@ -29,6 +35,7 @@ pub enum AppState {
     Stopped,
     Updating,
     Failed,
+    Unavailable,
 }
 
 #[derive(Debug, Serialize, utoipa::ToSchema)]
@@ -237,7 +244,30 @@ fn changed(current: Register, change: Change) -> Register {
 
 impl Apps {
     pub fn new(pool: PgPool, identity: Identity) -> Self {
-        Self { pool, identity }
+        Self {
+            pool,
+            identity,
+            links: Links::default(),
+            views: relay::Views::default(),
+        }
+    }
+
+    pub fn links(&self) -> &Links {
+        &self.links
+    }
+
+    fn shown(&self, row: Row) -> App {
+        let mut app = App::from(row);
+        if !matches!(app.state, AppState::Updating | AppState::Stopped)
+            && !self.links.connected(AgentId(app.agent_id))
+        {
+            app.state = AppState::Unavailable;
+        }
+        app
+    }
+
+    fn changed(&self, agent: AgentId) {
+        self.links.notify(agent, AppNotice::Changed);
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
@@ -262,7 +292,7 @@ impl Apps {
         )
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows.into_iter().map(App::from).collect())
+        Ok(rows.into_iter().map(|row| self.shown(row)).collect())
     }
 
     #[tracing::instrument(skip_all, fields(actor = %actor.id, slug))]
@@ -287,6 +317,7 @@ impl Apps {
             .detail(json!({"slug": slug, "agent": agent, "desired": desired}));
         audit::record(&mut *tx, &event).await?;
         tx.commit().await?;
+        self.changed(AgentId(agent));
         self.one(slug).await?.ok_or(IdentityError::NotFound)
     }
 
@@ -306,6 +337,7 @@ impl Apps {
             .detail(json!({"slug": slug, "agent": agent}));
         audit::record(&mut *tx, &event).await?;
         tx.commit().await?;
+        self.changed(AgentId(agent));
         Ok(())
     }
 
@@ -342,7 +374,10 @@ impl Apps {
                 input.slug
             ))),
             Err(error) => Err(error.into()),
-            Ok(_) => self.owned(agent, &input.slug).await,
+            Ok(_) => {
+                self.changed(agent);
+                self.owned(agent, &input.slug).await
+            }
         }
     }
 
@@ -399,6 +434,7 @@ impl Apps {
         )
         .execute(&self.pool)
         .await?;
+        self.changed(agent);
         self.owned(agent, &input.slug).await
     }
 
@@ -425,6 +461,7 @@ impl Apps {
         if changed.rows_affected() == 0 {
             return Ok(Err(unknown(slug)));
         }
+        self.changed(agent);
         self.owned(agent, slug).await
     }
 
@@ -441,11 +478,11 @@ impl Apps {
         )
         .execute(&self.pool)
         .await?;
-        Ok(if removed.rows_affected() == 0 {
-            Err(unknown(slug))
-        } else {
-            Ok(())
-        })
+        if removed.rows_affected() == 0 {
+            return Ok(Err(unknown(slug)));
+        }
+        self.changed(agent);
+        Ok(Ok(()))
     }
 
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
@@ -481,6 +518,9 @@ impl Apps {
 
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn report(&self, agent: AgentId, report: AppReport) -> Result<(), IdentityError> {
+        if !reasonable(&report) {
+            return Ok(());
+        }
         match report {
             AppReport::State {
                 slug,
@@ -548,7 +588,14 @@ impl Apps {
         )
         .fetch_optional(&self.pool)
         .await?;
-        Ok(row.map(App::from))
+        Ok(row.map(|row| self.shown(row)))
+    }
+}
+
+fn reasonable(report: &AppReport) -> bool {
+    match report {
+        AppReport::State { slug, .. } => slug.len() <= 40,
+        AppReport::Called { slug, tool, .. } => slug.len() <= 40 && tool.chars().count() <= 200,
     }
 }
 

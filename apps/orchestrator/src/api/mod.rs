@@ -142,7 +142,6 @@ pub fn meetings_router(
 pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) -> Router {
     router()
         .merge(agents::router(pool.clone(), identity.clone()))
-        .merge(apps::router(pool.clone(), identity.clone()))
         .merge(installation::router(pool.clone(), identity.clone()))
         .merge(backup::router(pool.clone(), identity.clone()))
         .merge(activity::router(pool.clone(), identity.clone()))
@@ -170,6 +169,7 @@ pub async fn configured_router(
     origin: Option<String>,
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     desktop: Option<crate::agents::sandbox::Desktop>,
+    apps: Option<crate::apps::Apps>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
         .map(|path| crate::connections::Credentials::from_file(std::path::Path::new(&path)))
@@ -177,7 +177,7 @@ pub async fn configured_router(
         .map_err(|error| {
             crate::identity::IdentityError::CredentialUnavailable(Some(error.into()))
         })?;
-    assembled(pool, origin, config, credentials, desktop).await
+    assembled(pool, origin, config, credentials, desktop, apps).await
 }
 
 pub async fn configured_router_with_credentials(
@@ -186,7 +186,7 @@ pub async fn configured_router_with_credentials(
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     credentials: Option<crate::connections::Credentials>,
 ) -> Result<Router, crate::identity::IdentityError> {
-    assembled(pool, origin, config, credentials, None).await
+    assembled(pool, origin, config, credentials, None, None).await
 }
 
 async fn assembled(
@@ -195,6 +195,7 @@ async fn assembled(
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     credentials: Option<crate::connections::Credentials>,
     desktop: Option<crate::agents::sandbox::Desktop>,
+    apps: Option<crate::apps::Apps>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let mut identity = crate::identity::Identity::new(pool.clone());
     if let Some(origin) = origin {
@@ -209,7 +210,10 @@ async fn assembled(
     let sso =
         crate::identity::oidc::SingleSignOn::start(identity, config, credentials.clone()).await?;
     let identity = sso.identity();
-    let mut routes = identity_router(pool.clone(), identity.clone()).merge(self::oidc::router(sso));
+    let apps = apps.unwrap_or_else(|| crate::apps::Apps::new(pool.clone(), identity.clone()));
+    let mut routes = identity_router(pool.clone(), identity.clone())
+        .merge(apps::router(apps.clone(), identity.clone()))
+        .merge(self::oidc::router(sso));
     let connections = credentials
         .map(|credentials| crate::connections::Connections::new(pool.clone(), credentials));
     let speech = crate::speech::Speech::environment(connections.clone());
@@ -242,10 +246,12 @@ async fn assembled(
             .merge(mcp::router(identity.clone(), connections.clone()))
             .merge(connectors::router(identity.clone(), connections));
     }
-    Ok(routes.layer(axum::middleware::from_fn_with_state(
-        identity,
-        browser::csrf,
-    )))
+    Ok(routes
+        .layer(axum::middleware::from_fn_with_state(
+            identity,
+            browser::csrf,
+        ))
+        .merge(apps::relay(apps)))
 }
 
 /// Proxies that buffer responses, such as nginx, would hold event streams back.
