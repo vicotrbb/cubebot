@@ -614,9 +614,16 @@ async fn activity_lists_what_needs_the_caller_newest_first() {
     .unwrap();
     work.read_activity(&f.admin).await.unwrap();
     let items = work.activity(&f.admin).await.unwrap();
-    assert!(items.iter().all(|item| !item.kind.ends_with("published_skill")));
+    assert!(
+        items
+            .iter()
+            .all(|item| !item.kind.ends_with("published_skill"))
+    );
     let asked = items.iter().find(|item| item.kind == "attention").unwrap();
-    assert_eq!((asked.text.as_str(), asked.turn), ("Pick a date", Some(running)));
+    assert_eq!(
+        (asked.text.as_str(), asked.turn),
+        ("Pick a date", Some(running))
+    );
     work.settle_attention(&f.admin, running).await.unwrap();
     let items = work.activity(&f.admin).await.unwrap();
     assert!(items.iter().all(|item| item.kind != "attention"));
