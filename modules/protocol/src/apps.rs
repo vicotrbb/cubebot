@@ -10,13 +10,19 @@ pub enum Frame<'a> {
     Open(u32),
     Data(u32, &'a [u8]),
     Close(u32),
+    Credit(u32, u32),
 }
 
 pub fn encode(frame: &Frame) -> Vec<u8> {
+    let credit;
     let (stream, kind, payload): (u32, u8, &[u8]) = match frame {
         Frame::Open(stream) => (*stream, 0, &[]),
         Frame::Data(stream, data) => (*stream, 1, data),
         Frame::Close(stream) => (*stream, 2, &[]),
+        Frame::Credit(stream, bytes) => {
+            credit = bytes.to_be_bytes();
+            (*stream, 3, &credit)
+        }
     };
     let mut bytes = Vec::with_capacity(5 + payload.len());
     bytes.extend_from_slice(&stream.to_be_bytes());
@@ -32,6 +38,10 @@ pub fn decode(bytes: &[u8]) -> Option<Frame<'_>> {
         0 => Some(Frame::Open(stream)),
         1 => Some(Frame::Data(stream, payload)),
         2 => Some(Frame::Close(stream)),
+        3 => Some(Frame::Credit(
+            stream,
+            u32::from_be_bytes(payload.try_into().ok()?),
+        )),
         _ => None,
     }
 }
@@ -97,9 +107,20 @@ mod tests {
 
     #[test]
     fn frames_round_trip_and_reject_garbage() {
-        for frame in [Frame::Open(1), Frame::Data(2, b"hi"), Frame::Close(3)] {
+        for frame in [
+            Frame::Open(1),
+            Frame::Data(2, b"hi"),
+            Frame::Close(3),
+            Frame::Credit(4, 65_536),
+        ] {
             assert_eq!(decode(&encode(&frame)), Some(frame));
         }
+        assert_eq!(
+            decode(&[0, 0, 0, 4, 3, 0, 1, 0, 0]),
+            Some(Frame::Credit(4, 65_536))
+        );
+        assert_eq!(decode(&[0, 0, 0, 4, 3, 0, 1, 0]), None);
+        assert_eq!(decode(&[0, 0, 0, 4, 3, 0, 1, 0, 0, 0]), None);
         assert_eq!(decode(&[0, 0, 0, 1]), None);
         assert_eq!(decode(&[0, 0, 0, 1, 9]), None);
     }

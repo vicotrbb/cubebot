@@ -24,8 +24,8 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, DuplexStream},
-    sync::{mpsc, oneshot},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream},
+    sync::{Semaphore, mpsc, oneshot},
     time::Instant,
 };
 use uuid::Uuid;
@@ -33,7 +33,10 @@ use uuid::Uuid;
 const STREAM_BYTES: usize = 64 * 1024;
 const CHUNK: usize = 16 * 1024;
 const TEXT_BYTES: usize = 16 * 1024;
-const QUEUED: usize = 16;
+const WINDOW: usize = 256 * 1024;
+const GRANT: usize = 64 * 1024;
+const FRAME_COST: usize = 64;
+const CHUNK_CREDIT: u32 = 16 * 1024 + 64;
 const STREAMS: usize = 256;
 const OUTGOING: usize = 64;
 const PING: Duration = Duration::from_secs(5);
@@ -46,10 +49,27 @@ const POLICY: &str = "sandbox allow-scripts allow-forms allow-popups allow-downl
 const UNAVAILABLE: &str = "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Unavailable</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px system-ui,sans-serif;color:#555;background:#fafafa}@media (prefers-color-scheme:dark){body{color:#aaa;background:#161616}}</style></head><body><p>This app is unavailable right now</p></body></html>";
 
 enum Out {
-    Open(u32, mpsc::Sender<Vec<u8>>),
+    Open(u32, Lane),
     Data(u32, Vec<u8>),
+    Credit(u32, u32),
     Close(u32),
     Notice(AppNotice),
+}
+
+struct Lane {
+    sender: mpsc::Sender<Vec<u8>>,
+    credit: Arc<Semaphore>,
+    owed: usize,
+}
+
+fn lane() -> (Lane, mpsc::Receiver<Vec<u8>>) {
+    let (sender, received) = mpsc::channel(WINDOW / FRAME_COST);
+    let lane = Lane {
+        sender,
+        credit: Arc::new(Semaphore::new(WINDOW)),
+        owed: 0,
+    };
+    (lane, received)
 }
 
 struct Link {
@@ -89,13 +109,14 @@ impl Links {
             return None;
         }
         let (mine, theirs) = tokio::io::duplex(STREAM_BYTES);
-        let (inbound, received) = mpsc::channel(QUEUED);
-        if out.send(Out::Open(stream, inbound)).await.is_err() {
+        let (lane, received) = lane();
+        let credit = lane.credit.clone();
+        if out.send(Out::Open(stream, lane)).await.is_err() {
             open.fetch_sub(1, Ordering::AcqRel);
             return None;
         }
         tokio::spawn(async move {
-            pump(stream, theirs, received, out).await;
+            pump(stream, theirs, received, credit, out).await;
             open.fetch_sub(1, Ordering::AcqRel);
         });
         Some(mine)
@@ -145,7 +166,7 @@ impl Links {
 }
 
 async fn inbound(
-    streams: &mut HashMap<u32, mpsc::Sender<Vec<u8>>>,
+    streams: &mut HashMap<u32, Lane>,
     reports: &mpsc::Sender<AppReport>,
     message: Option<Result<Message, axum::Error>>,
 ) -> bool {
@@ -168,34 +189,53 @@ async fn inbound(
     }
 }
 
-fn deliver(streams: &mut HashMap<u32, mpsc::Sender<Vec<u8>>>, bytes: &[u8]) {
-    match decode(bytes) {
-        Some(Frame::Data(stream, data)) => {
-            let refused = streams
-                .get(&stream)
-                .is_some_and(|sender| sender.try_send(data.to_vec()).is_err());
-            if refused {
-                streams.remove(&stream);
-            }
-        }
-        Some(Frame::Close(stream)) => {
-            streams.remove(&stream);
-        }
-        _ => {}
+fn deliver(streams: &mut HashMap<u32, Lane>, bytes: &[u8]) {
+    let (stream, kept) = match decode(bytes) {
+        Some(Frame::Data(stream, data)) => (stream, accepted(streams.get_mut(&stream), data)),
+        Some(Frame::Credit(stream, bytes)) => (stream, credited(streams.get(&stream), bytes)),
+        Some(Frame::Close(stream)) => (stream, false),
+        _ => return,
+    };
+    if !kept {
+        streams.remove(&stream);
     }
 }
 
-async fn outbound(
-    socket: &mut WebSocket,
-    streams: &mut HashMap<u32, mpsc::Sender<Vec<u8>>>,
-    item: Out,
-) -> bool {
+fn accepted(lane: Option<&mut Lane>, data: &[u8]) -> bool {
+    let Some(lane) = lane else {
+        return true;
+    };
+    lane.owed += data.len() + FRAME_COST;
+    lane.owed <= WINDOW && lane.sender.try_send(data.to_vec()).is_ok()
+}
+
+fn credited(lane: Option<&Lane>, bytes: u32) -> bool {
+    let Some(lane) = lane else {
+        return true;
+    };
+    let bytes = usize::try_from(bytes).unwrap_or(usize::MAX);
+    if lane.credit.available_permits().saturating_add(bytes) > WINDOW {
+        return false;
+    }
+    lane.credit.add_permits(bytes);
+    true
+}
+
+async fn outbound(socket: &mut WebSocket, streams: &mut HashMap<u32, Lane>, item: Out) -> bool {
     let frame = match item {
-        Out::Open(stream, sender) => {
-            streams.insert(stream, sender);
+        Out::Open(stream, lane) => {
+            streams.insert(stream, lane);
             encode(&Frame::Open(stream))
         }
         Out::Data(stream, data) => encode(&Frame::Data(stream, &data)),
+        Out::Credit(stream, bytes) => {
+            if let Some(lane) = streams.get_mut(&stream) {
+                lane.owed = lane
+                    .owed
+                    .saturating_sub(usize::try_from(bytes).unwrap_or(usize::MAX));
+            }
+            encode(&Frame::Credit(stream, bytes))
+        }
         Out::Close(stream) => {
             streams.remove(&stream);
             encode(&Frame::Close(stream))
@@ -211,38 +251,65 @@ async fn outbound(
 async fn pump(
     stream: u32,
     io: DuplexStream,
-    mut inbound: mpsc::Receiver<Vec<u8>>,
+    inbound: mpsc::Receiver<Vec<u8>>,
+    credit: Arc<Semaphore>,
     out: mpsc::Sender<Out>,
 ) {
-    let (mut reader, mut writer) = tokio::io::split(io);
-    let up = async {
-        let mut buffer = vec![0; CHUNK];
-        loop {
-            let read = match reader.read(&mut buffer).await {
-                Ok(0) | Err(_) => break,
-                Ok(read) => read,
-            };
-            if out
-                .send(Out::Data(stream, buffer[..read].to_vec()))
-                .await
-                .is_err()
-            {
-                break;
-            }
-        }
-    };
-    let down = async {
-        while let Some(data) = inbound.recv().await {
-            if writer.write_all(&data).await.is_err() {
-                break;
-            }
-        }
-    };
+    let (reader, writer) = tokio::io::split(io);
     tokio::select! {
-        () = up => {}
-        () = down => {}
+        () = send(stream, reader, &credit, &out) => {}
+        () = receive(stream, writer, inbound, &out) => {}
     }
     let _ = out.send(Out::Close(stream)).await;
+}
+
+async fn send(
+    stream: u32,
+    mut reader: impl AsyncRead + Unpin,
+    credit: &Semaphore,
+    out: &mpsc::Sender<Out>,
+) {
+    let mut buffer = vec![0; CHUNK];
+    loop {
+        let Ok(permit) = credit.acquire_many(CHUNK_CREDIT).await else {
+            return;
+        };
+        permit.forget();
+        let read = match reader.read(&mut buffer).await {
+            Ok(0) | Err(_) => return,
+            Ok(read) => read,
+        };
+        credit.add_permits(CHUNK - read);
+        if out
+            .send(Out::Data(stream, buffer[..read].to_vec()))
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
+}
+
+async fn receive(
+    stream: u32,
+    mut writer: impl AsyncWrite + Unpin,
+    mut inbound: mpsc::Receiver<Vec<u8>>,
+    out: &mpsc::Sender<Out>,
+) {
+    let mut written = 0;
+    while let Some(data) = inbound.recv().await {
+        if writer.write_all(&data).await.is_err() {
+            return;
+        }
+        written += data.len() + FRAME_COST;
+        if written >= GRANT {
+            let bytes = u32::try_from(written).unwrap_or(u32::MAX);
+            if out.send(Out::Credit(stream, bytes)).await.is_err() {
+                return;
+            }
+            written = 0;
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -600,6 +667,7 @@ mod tests {
 
     const AGENT: AgentId = AgentId(Uuid::nil());
     const PREFIX: &str = "/api/apps/budget/v/token";
+    const FLOOD: usize = 4 * 1024 * 1024;
     type Answer = fn(&[u8]) -> Option<Vec<u8>>;
 
     fn view() -> View {
@@ -638,30 +706,47 @@ mod tests {
         (links, received)
     }
 
-    async fn agent<S>(mut socket: tokio_tungstenite::WebSocketStream<S>, answer: Answer)
+    async fn agent<S>(socket: tokio_tungstenite::WebSocketStream<S>, answer: Answer)
     where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
     {
+        let (mut sink, mut socket) = socket.split();
+        let (wire, mut queued) = mpsc::unbounded_channel::<Wire>();
+        tokio::spawn(async move {
+            while let Some(message) = queued.recv().await {
+                if sink.send(message).await.is_err() {
+                    return;
+                }
+            }
+        });
         let report = r#"{"type":"state","slug":"budget","state":"running","memory":null}"#;
-        socket.send(Wire::Text(report.into())).await.unwrap();
+        wire.send(Wire::Text(report.into())).unwrap();
         let oversized = format!(
             r#"{{"type":"state","slug":"{}","state":"running","memory":null}}"#,
             "a".repeat(TEXT_BYTES)
         );
-        socket.send(Wire::Text(oversized.into())).await.unwrap();
+        wire.send(Wire::Text(oversized.into())).unwrap();
         let mut heads: HashMap<u32, Vec<u8>> = HashMap::new();
+        let mut credits: HashMap<u32, Arc<Semaphore>> = HashMap::new();
         let mut upgraded = std::collections::HashSet::new();
         while let Some(Ok(message)) = socket.next().await {
             let Wire::Binary(bytes) = message else {
                 continue;
             };
-            let Some(Frame::Data(stream, data)) = decode(&bytes) else {
-                continue;
+            let (stream, data) = match decode(&bytes) {
+                Some(Frame::Credit(stream, bytes)) => {
+                    if let Some(credit) = credits.get(&stream) {
+                        credit.add_permits(bytes as usize);
+                    }
+                    continue;
+                }
+                Some(Frame::Data(stream, data)) => (stream, data),
+                _ => continue,
             };
             if upgraded.contains(&stream) {
                 let echo = [b"echo:".as_slice(), data].concat();
-                let frame = encode(&Frame::Data(stream, &echo));
-                socket.send(Wire::Binary(frame.into())).await.unwrap();
+                wire.send(Wire::Binary(encode(&Frame::Data(stream, &echo)).into()))
+                    .unwrap();
                 continue;
             }
             let head = heads.entry(stream).or_default();
@@ -670,20 +755,31 @@ mod tests {
                 continue;
             }
             let Some(response) = answer(head) else { return };
-            for chunk in response.chunks(CHUNK) {
-                socket
-                    .send(Wire::Binary(encode(&Frame::Data(stream, chunk)).into()))
-                    .await
-                    .unwrap();
-            }
-            if response.starts_with(b"HTTP/1.1 101") {
+            let honest = !head.starts_with(b"GET /budget/blind ");
+            let switching = response.starts_with(b"HTTP/1.1 101");
+            if switching {
                 upgraded.insert(stream);
-                continue;
             }
-            socket
-                .send(Wire::Binary(encode(&Frame::Close(stream)).into()))
-                .await
-                .unwrap();
+            let credit = credits
+                .entry(stream)
+                .or_insert_with(|| Arc::new(Semaphore::new(WINDOW)))
+                .clone();
+            let wire = wire.clone();
+            tokio::spawn(async move {
+                for chunk in response.chunks(CHUNK) {
+                    if honest {
+                        let cost = u32::try_from(chunk.len() + FRAME_COST).unwrap();
+                        credit.acquire_many(cost).await.unwrap().forget();
+                    }
+                    let frame = encode(&Frame::Data(stream, chunk));
+                    if wire.send(Wire::Binary(frame.into())).is_err() {
+                        return;
+                    }
+                }
+                if !switching {
+                    let _ = wire.send(Wire::Binary(encode(&Frame::Close(stream)).into()));
+                }
+            });
         }
     }
 
@@ -709,11 +805,12 @@ mod tests {
     }
 
     fn flood(head: &[u8]) -> Option<Vec<u8>> {
-        let body = if head.starts_with(b"GET /budget/flood ") {
-            "f".repeat(8 * 1024 * 1024)
-        } else {
-            "ok".to_owned()
-        };
+        let body =
+            if head.starts_with(b"GET /budget/flood ") || head.starts_with(b"GET /budget/blind ") {
+                "f".repeat(FLOOD)
+            } else {
+                "ok".to_owned()
+            };
         Some(
             format!(
                 "HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n{body}",
@@ -849,7 +946,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_stream_that_stops_reading_is_dropped_without_stalling_the_link() {
+    async fn a_slow_reader_gets_every_byte_while_the_link_keeps_working() {
         let (links, _reports) = linked(flood).await;
         let request = |path: &str| {
             Request::builder()
@@ -857,16 +954,50 @@ mod tests {
                 .body(Body::empty())
                 .unwrap()
         };
-        let stuck = forward(&links, &view(), PREFIX, "/flood", request("/flood")).await;
-        assert_eq!(stuck.status(), StatusCode::OK);
-        let other = tokio::time::timeout(
-            Duration::from_secs(5),
-            forward(&links, &view(), PREFIX, "/other", request("/other")),
-        )
-        .await
-        .unwrap();
+        let slow = forward(&links, &view(), PREFIX, "/flood", request("/flood")).await;
+        assert_eq!(slow.status(), StatusCode::OK);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        for _ in 0..3 {
+            let other = tokio::time::timeout(
+                Duration::from_secs(5),
+                forward(&links, &view(), PREFIX, "/other", request("/other")),
+            )
+            .await
+            .unwrap();
+            assert_eq!(text(other).await, "ok");
+        }
+        let reading = async {
+            let mut body = slow.into_body().into_data_stream();
+            let mut received = 0;
+            while let Some(chunk) = body.next().await {
+                let chunk = chunk.unwrap();
+                assert!(chunk.iter().all(|byte| *byte == b'f'));
+                received += chunk.len();
+                tokio::time::sleep(Duration::from_micros(200)).await;
+            }
+            received
+        };
+        let received = tokio::time::timeout(Duration::from_secs(20), reading)
+            .await
+            .unwrap();
+        assert_eq!(received, FLOOD);
+        assert!(links.connected(AGENT));
+    }
+
+    #[tokio::test]
+    async fn a_peer_that_ignores_credit_loses_only_that_stream() {
+        let (links, _reports) = linked(flood).await;
+        let request = |path: &str| {
+            Request::builder()
+                .uri(format!("{PREFIX}{path}"))
+                .body(Body::empty())
+                .unwrap()
+        };
+        let blind = forward(&links, &view(), PREFIX, "/blind", request("/blind")).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(blind.into_body().collect().await.is_err());
+        let other = forward(&links, &view(), PREFIX, "/other", request("/other")).await;
         assert_eq!(text(other).await, "ok");
-        assert!(stuck.into_body().collect().await.is_err());
         assert!(links.connected(AGENT));
     }
 
