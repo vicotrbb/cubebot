@@ -58,13 +58,7 @@ async fn write(
         BUDGET,
     )
     .await;
-    let summary = match answer.as_deref().map(str::trim) {
-        Ok(summary) if !summary.is_empty() => summary.to_owned(),
-        failed => {
-            tracing::warn!(?failed, "meeting summary not written");
-            UNAVAILABLE.to_owned()
-        }
-    };
+    let summary = written(answer);
     sqlx::query!(
         "UPDATE meetings SET summary=$2 WHERE id=$1",
         meeting,
@@ -75,4 +69,14 @@ async fn write(
     Work::new(pool.clone())
         .meeting_ended(meeting, &summary)
         .await
+}
+
+fn written(answer: Result<String, &str>) -> String {
+    match answer.as_deref().map(str::trim) {
+        Ok(summary) if !summary.is_empty() => summary.to_owned(),
+        failed => {
+            tracing::warn!(?failed, "meeting summary not written");
+            UNAVAILABLE.to_owned()
+        }
+    }
 }
