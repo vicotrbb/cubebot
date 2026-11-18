@@ -27,6 +27,12 @@
         return {}
       })
       .then(function (body) {
+        if (response.status === 404 && body.error === 'not_found') {
+          if (window.parent !== window) {
+            window.parent.postMessage({ type: 'cubebot:expired' }, '*')
+          }
+          throw new Error('This view expired. It reopens with a fresh link.')
+        }
         throw new Error(
           body.error || 'The call failed (' + response.status + ')',
         )
