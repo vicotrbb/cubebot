@@ -3,6 +3,7 @@ import {
   AudioLinesOff,
   Captions,
   Check,
+  Ear,
   Ellipsis,
   Hand,
   Lock,
@@ -169,14 +170,49 @@ function Screen({
   return <canvas ref={canvas} className="meeting-screen__video" />
 }
 
+const listensOnly = (participant: Participant) =>
+  participant.kind === 'agent' &&
+  Boolean(participant.listening) &&
+  !participant.screen
+
+function Listeners({ listeners }: { listeners: Participant[] }) {
+  if (listeners.length === 0) return null
+  return (
+    <section className="meeting-listeners" aria-label="Agents listening only">
+      <span className="meeting-listeners__label">
+        <Ear aria-hidden="true" />
+        Listening only
+      </span>
+      <ul>
+        {listeners.map((participant) => (
+          <li
+            key={participant.slot}
+            className="meeting-listener"
+            title={`${participant.name} listens and will not speak`}
+          >
+            <Cube
+              avatar={participant.avatar ?? null}
+              size={22}
+              agentId={participant.agent}
+            />
+            <span>{participant.name}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function Stage({
   room,
   engine,
   presenter,
+  people,
 }: {
   room: RoomState
   engine: Engine
   presenter: Participant
+  people: Participant[]
 }) {
   const you = presenter.slot === room.you
   return (
@@ -196,7 +232,7 @@ function Stage({
         )}
       </figure>
       <div className="meeting-strip" aria-label="Participants">
-        {room.participants.map((participant) => (
+        {people.map((participant) => (
           <Tile
             key={participant.slot}
             participant={participant}
@@ -733,6 +769,9 @@ export function MeetingRoom({
   const presenter = room.participants.find(
     (participant) => participant.slot === presenterSlot,
   )
+  const people = room.participants.filter(
+    (participant) => !listensOnly(participant),
+  )
   const controls = {
     room,
     engine: current,
@@ -771,10 +810,16 @@ export function MeetingRoom({
         )}
       </header>
       <main ref={main} className="meeting-main">
+        <Listeners listeners={room.participants.filter(listensOnly)} />
         {presenter ? (
-          <Stage room={room} engine={current} presenter={presenter} />
+          <Stage
+            room={room}
+            engine={current}
+            presenter={presenter}
+            people={people}
+          />
         ) : (
-          <Grid room={room} engine={current} people={room.participants} />
+          <Grid room={room} engine={current} people={people} />
         )}
         {captions && <CaptionBand room={room} />}
         <Knock room={room} engine={current} onOpen={() => setPanel('people')} />

@@ -74,11 +74,67 @@
   grid-area: main;
   position: relative;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding: 4px 16px 0;
+}
+.meeting-main > .meeting-grid,
+.meeting-main > .meeting-stage {
+  flex: 1;
+  min-height: 0;
+}
+
+.meeting-listeners {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.meeting-listeners__label {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+}
+.meeting-listeners__label svg {
+  width: 13px;
+  height: 13px;
+}
+.meeting-listeners ul {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+.meeting-listener {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 200px;
+  padding: 4px 11px 4px 5px;
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--line);
+  font-size: var(--t-sm);
+  font-weight: var(--w-label);
+}
+.meeting-listener > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meeting-grid {
-  height: 100%;
   display: grid;
   place-items: center;
 }
@@ -259,7 +315,6 @@
 }
 
 .meeting-stage {
-  height: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 200px;
   gap: 10px;
