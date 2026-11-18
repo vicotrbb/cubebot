@@ -1,5 +1,8 @@
 import {
+  AudioLines,
+  AudioLinesOff,
   Captions,
+  Check,
   Ellipsis,
   Hand,
   Lock,
@@ -19,6 +22,7 @@ import { Cube, type Mood } from '../../components/Cube'
 import { Menu } from '../../components/primitives'
 import { bestGrid } from './grid'
 import { screenSupported, type Engine } from './media/engine'
+import { NOISE_LEVELS, saveNoise, type Noise } from './media/noise'
 import {
   stage,
   speakerName,
@@ -275,17 +279,49 @@ type Controls = {
   engine: Engine
   self: ReturnType<typeof useMeeting>['self']
   captions: boolean
+  noise: Noise
   panel: PanelTab | null
   setCaptions: (on: boolean) => void
+  setNoise: (noise: Noise) => void
+  toggleNoise: () => void
   setPanel: (tab: PanelTab | null) => void
   onLeave: () => void
+}
+
+function NoiseItems({ noise, setNoise }: Pick<Controls, 'noise' | 'setNoise'>) {
+  return (
+    <div
+      className="meeting-more__group"
+      role="group"
+      aria-label="Noise cancellation"
+    >
+      <span className="meeting-more__heading" aria-hidden="true">
+        Noise cancellation
+      </span>
+      {[...NOISE_LEVELS].reverse().map(([level, name]) => (
+        <button
+          key={level}
+          type="button"
+          role="menuitemradio"
+          aria-checked={noise === level}
+          className="menu__item"
+          onClick={() => setNoise(level)}
+        >
+          <Check className="meeting-more__check" aria-hidden="true" />
+          {name}
+        </button>
+      ))}
+    </div>
+  )
 }
 
 function More({
   room,
   engine,
   captions,
+  noise,
   setCaptions,
+  setNoise,
   setPanel,
   self,
 }: Controls) {
@@ -317,6 +353,9 @@ function More({
       >
         <ScrollText /> Transcript
       </button>
+      <div className="menu__sep meeting-more__phone" role="separator" />
+      <NoiseItems noise={noise} setNoise={setNoise} />
+      {room.host && <div className="menu__sep" role="separator" />}
       {room.host && (
         <button
           type="button"
@@ -346,8 +385,10 @@ function Bar(controls: Controls) {
     engine,
     self,
     captions,
+    noise,
     panel,
     setCaptions,
+    toggleNoise,
     setPanel,
     onLeave,
   } = controls
@@ -398,6 +439,15 @@ function Bar(controls: Controls) {
           {self.screen ? <MonitorX /> : <MonitorUp />}
         </Toggle>
         <span className="meeting-bar__wide">
+          <Toggle
+            on={noise !== 'off'}
+            label="Turn off noise cancellation"
+            offLabel="Turn on noise cancellation"
+            shortcut="N"
+            onClick={toggleNoise}
+          >
+            {noise === 'off' ? <AudioLinesOff /> : <AudioLines />}
+          </Toggle>
           <Toggle
             on={captions}
             label="Hide captions"
@@ -524,6 +574,7 @@ function useShortcuts(
   self: Controls['self'],
   captions: boolean,
   setCaptions: (on: boolean) => void,
+  toggleNoise: () => void,
 ) {
   useEffect(() => {
     if (!engine) return
@@ -532,6 +583,7 @@ function useShortcuts(
       v: () => void engine.setCamera(!self.camera).catch(() => undefined),
       c: () => setCaptions(!captions),
       h: () => engine.setHand(!self.hand),
+      n: toggleNoise,
     }
     const press = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement
@@ -546,7 +598,26 @@ function useShortcuts(
     }
     document.addEventListener('keydown', press)
     return () => document.removeEventListener('keydown', press)
-  }, [engine, self, captions, setCaptions])
+  }, [engine, self, captions, setCaptions, toggleNoise])
+}
+
+function useNoise(engine: React.RefObject<Engine | null>, initial: Noise) {
+  const [noise, setState] = useState(initial)
+  const on = useRef<Noise>(initial === 'off' ? 'strong' : initial)
+  const setNoise = useCallback(
+    (next: Noise) => {
+      if (next !== 'off') on.current = next
+      setState(next)
+      saveNoise(next)
+      engine.current?.setNoise(next)
+    },
+    [engine],
+  )
+  const toggleNoise = useCallback(
+    () => setNoise(noise === 'off' ? on.current : 'off'),
+    [noise, setNoise],
+  )
+  return { noise, setNoise, toggleNoise }
 }
 
 const OUTCOMES: Partial<
@@ -637,6 +708,7 @@ export function MeetingRoom({
 }) {
   const { room, self, engine } = useMeeting(joining)
   const [captions, setCaptions] = useState(true)
+  const { noise, setNoise, toggleNoise } = useNoise(engine, joining.noise)
   const [panel, setPanel] = useState<PanelTab | null>(null)
   const main = useRef<HTMLDivElement>(null)
   useLevels(main, engine, room.you)
@@ -645,6 +717,7 @@ export function MeetingRoom({
     self,
     captions,
     setCaptions,
+    toggleNoise,
   )
   const current = engine.current
   if (room.phase !== 'live' || !current)
@@ -665,8 +738,11 @@ export function MeetingRoom({
     engine: current,
     self,
     captions,
+    noise,
     panel,
     setCaptions,
+    setNoise,
+    toggleNoise,
     setPanel,
     onLeave,
   }

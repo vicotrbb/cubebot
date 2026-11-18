@@ -559,6 +559,26 @@
 .meeting-more__phone {
   display: none;
 }
+.meeting-more__group {
+  display: grid;
+  gap: 1px;
+}
+.meeting-more__heading {
+  padding: 4px 9px 2px;
+  color: var(--ink-faint);
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+}
+.menu__item .meeting-more__check {
+  visibility: hidden;
+  color: var(--orange-text);
+}
+.menu__item[aria-checked='true'] {
+  font-weight: var(--w-label);
+}
+.menu__item[aria-checked='true'] .meeting-more__check {
+  visibility: visible;
+}
 .menu__item--danger {
   color: var(--danger);
 }
@@ -796,6 +816,23 @@
 }
 .green-room__detail {
   color: var(--ink-soft);
+}
+.noise-choice {
+  display: grid;
+  gap: 6px;
+}
+.noise-choice__label {
+  font-size: var(--t-sm);
+  font-weight: var(--w-label);
+}
+.noise-choice .tabs {
+  justify-self: start;
+}
+.noise-choice__meaning {
+  min-height: 2.9em;
+  margin: 0;
+  color: var(--ink-faint);
+  font-size: var(--t-sm);
 }
 .green-room__notice {
   margin: 0;
