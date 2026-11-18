@@ -66,6 +66,9 @@ const vitalsOf = (reading: Reading) => [
   capacity('Memory', reading.memory),
   capacity('Storage', reading.disk),
   traffic(reading),
+  ...(reading.apps_running == null
+    ? []
+    : [{ label: 'Apps', value: `${reading.apps_running} running` }]),
 ]
 
 function Meter({ load }: { load: number }) {

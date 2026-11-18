@@ -360,6 +360,7 @@ async fn a_running_agent_reports_its_computer_vitals_to_the_console() {
         reading["seconds_ago"].as_u64().is_some_and(|age| age < 5),
         "{reading}"
     );
+    assert_eq!(reading["apps_running"], 0, "{reading}");
     let disk = &reading["disk"];
     assert!(disk["total"].as_u64() >= disk["used"].as_u64() && disk["total"].as_u64() > Some(0));
 
