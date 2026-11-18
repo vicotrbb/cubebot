@@ -100,7 +100,12 @@ export function Conversation({
         )}
         {visible.map((turn) =>
           turn.call ? (
-            <CallMessage key={turn.id} call={turn.call}>
+            <CallMessage
+              key={turn.id}
+              call={turn.call}
+              agent={agent.name}
+              you={you}
+            >
               {turn.call.turns.map((said) => (
                 <Exchange
                   key={said.id}

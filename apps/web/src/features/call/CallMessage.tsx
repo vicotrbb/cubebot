@@ -1,6 +1,8 @@
 import { ChevronRight, Phone } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import type { Turn } from '../../api/client'
+import { ExportMenu } from '../../components/ExportMenu'
+import type { Line, Sheet } from '../../components/transcript'
 import { isUnsettled } from '../chat/useConversation'
 import { clock, providers } from './call'
 import './call.css'
@@ -26,11 +28,51 @@ function summary(call: Record) {
   ].join(' · ')
 }
 
+function sheetOf(call: Record, agent: string, you: string): Sheet {
+  const started = call.started_at * 1000
+  const length = call.duration_seconds
+  const details: [string, string][] = [
+    ['When', TIME.format(started)],
+    ['Voice', providers(call.stt_provider, call.tts_provider)],
+  ]
+  if (length !== null && length !== undefined)
+    details.splice(1, 0, ['Length', clock(length)])
+  return {
+    kind: 'call',
+    title: `Call with ${agent}`,
+    started_at: new Date(started).toISOString(),
+    ended_at:
+      length === null || length === undefined
+        ? null
+        : new Date(started + length * 1000).toISOString(),
+    details,
+    summary: null,
+    lines: call.turns.flatMap((turn): Line[] => {
+      const said = {
+        speaker: you,
+        kind: 'person',
+        at: null,
+        text: turn.message,
+      }
+      return turn.response
+        ? [
+            said,
+            { speaker: agent, kind: 'agent', at: null, text: turn.response },
+          ]
+        : [said]
+    }),
+  }
+}
+
 export function CallMessage({
   call,
+  agent,
+  you,
   children,
 }: {
   call: Record
+  agent: string
+  you: string
   children: ReactNode
 }) {
   const unsettled = call.turns.some(isUnsettled)
@@ -38,32 +80,41 @@ export function CallMessage({
   const open = opened ?? unsettled
   return (
     <article className="call-message" data-open={open}>
-      <button
-        type="button"
-        className="call-message__row"
-        aria-expanded={open}
-        onClick={() => setOpened(!open)}
-      >
-        <span className="call-message__icon" aria-hidden="true">
-          <Phone />
-        </span>
-        <span className="call-message__text">
-          <span className="call-message__title">
-            Call
-            <time
-              className="call-message__time"
-              dateTime={new Date(call.started_at * 1000).toISOString()}
-            >
-              {TIME.format(call.started_at * 1000)}
-            </time>
+      <div className="call-message__head">
+        <button
+          type="button"
+          className="call-message__row"
+          aria-expanded={open}
+          onClick={() => setOpened(!open)}
+        >
+          <span className="call-message__icon" aria-hidden="true">
+            <Phone />
           </span>
-          <span className="call-message__summary">
-            {summary(call)}
-            {unsettled && ' · still working'}
+          <span className="call-message__text">
+            <span className="call-message__title">
+              Call
+              <time
+                className="call-message__time"
+                dateTime={new Date(call.started_at * 1000).toISOString()}
+              >
+                {TIME.format(call.started_at * 1000)}
+              </time>
+            </span>
+            <span className="call-message__summary">
+              {summary(call)}
+              {unsettled && ' · still working'}
+            </span>
           </span>
-        </span>
-        <ChevronRight className="call-message__chevron" aria-hidden="true" />
-      </button>
+          <ChevronRight className="call-message__chevron" aria-hidden="true" />
+        </button>
+        {call.turns.length > 0 && (
+          <ExportMenu
+            label="Export call transcript"
+            sheet={() => sheetOf(call, agent, you)}
+            time={(at) => at}
+          />
+        )}
+      </div>
       {open &&
         (call.turns.length > 0 ? (
           <div className="call-message__transcript">{children}</div>

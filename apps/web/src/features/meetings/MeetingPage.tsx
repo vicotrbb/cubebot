@@ -16,6 +16,8 @@ import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { Schemas } from '../../api/types'
 import { Cube } from '../../components/Cube'
+import { ExportMenu } from '../../components/ExportMenu'
+import type { Sheet } from '../../components/transcript'
 import {
   Alert,
   confirmAction,
@@ -145,6 +147,31 @@ function whenWords(meeting: Meeting, zone: string) {
   return { day: meeting.starts_at ? day : `Instant · ${day}`, time }
 }
 
+function sheetOf(meeting: Meeting, zone: string): Sheet {
+  const when = whenWords(meeting, zone)
+  const people = [...new Set(meeting.attendance.map((one) => one.name))]
+  const details: [string, string][] = [
+    ['When', `${when.day}, ${when.time}`],
+    ['Host', meeting.owner_name],
+  ]
+  if (people.length) details.push(['Attended', people.join(', ')])
+  if (meeting.description) details.push(['About', meeting.description])
+  return {
+    kind: 'meeting',
+    title: meeting.title,
+    started_at: meeting.started_at ?? meeting.starts_at ?? null,
+    ended_at: meeting.ended_at ?? null,
+    details,
+    summary: meeting.state === 'ended' ? (meeting.summary ?? null) : null,
+    lines: meeting.utterances.map((line) => ({
+      speaker: line.speaker,
+      kind: line.kind,
+      at: line.at,
+      text: line.text,
+    })),
+  }
+}
+
 function Detail({
   meeting,
   zone,
@@ -171,6 +198,15 @@ function Detail({
         <h1>{meeting.title}</h1>
         <StateChip state={meeting.state} />
         <div className="meeting-head__actions">
+          {(meeting.utterances.length > 0 || meeting.summary) && (
+            <ExportMenu
+              label="Export transcript"
+              text="Export"
+              className="btn btn--ghost btn--sm"
+              sheet={() => sheetOf(meeting, zone)}
+              time={(at) => formatTime(at, zone)}
+            />
+          )}
           {meeting.link && (
             <CopyButton text={meeting.link} label="Copy meeting link" />
           )}
