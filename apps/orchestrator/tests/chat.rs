@@ -2,7 +2,7 @@ use crate::support;
 use cubebot_orchestrator::{
     agents::{AgentId, Agents, CreateAgent},
     identity::{Identity, IdentityError},
-    work::{SendMessage, Work},
+    work::{MessagePart, SendMessage, Work},
 };
 use uuid::Uuid;
 
@@ -494,4 +494,70 @@ async fn cancelling_an_unknown_turn_is_a_conflict_not_a_fault() {
         work.cancel(&admin, agent.id, Uuid::new_v4()).await,
         Err(IdentityError::Conflict)
     ));
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn deleting_a_message_erases_it_only_once_the_turn_settles() {
+    let pool = support::database().await;
+    let identity = Identity::new(pool.clone());
+    identity
+        .bootstrap("admin", "administrator password")
+        .await
+        .unwrap();
+    let session = identity
+        .login("admin", "administrator password")
+        .await
+        .unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let agent = Agents::new(pool.clone())
+        .create(
+            &admin,
+            &CreateAgent {
+                request_id: Uuid::new_v4(),
+                name: "Writer".into(),
+                instructions: "Be brief".into(),
+                avatar: None,
+                voice: None,
+            },
+        )
+        .await
+        .unwrap();
+    let work = Work::new(pool.clone());
+    let turn = work
+        .send(
+            &admin,
+            agent.id,
+            &SendMessage {
+                request_id: Uuid::new_v4(),
+                message: "A secret".into(),
+                attachments: Vec::new(),
+                app: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        work.delete_message(&admin, agent.id, turn.id, MessagePart::Message)
+            .await,
+        Err(IdentityError::Conflict)
+    ));
+    sqlx::query("UPDATE chat_turns SET status='complete', response='The answer', completed_at=now() WHERE id=$1")
+        .bind(turn.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    work.delete_message(&admin, agent.id, turn.id, MessagePart::Response)
+        .await
+        .unwrap();
+    let shown = &work.history(&admin, agent.id, 0).await.unwrap()[0];
+    assert_eq!(shown.message, "A secret");
+    assert_eq!(shown.response.as_deref(), Some(""));
+    assert!(shown.response_deleted && !shown.message_deleted);
+    work.delete_message(&admin, agent.id, turn.id, MessagePart::Message)
+        .await
+        .unwrap();
+    let shown = &work.history(&admin, agent.id, 0).await.unwrap()[0];
+    assert_eq!(shown.message, "");
+    assert!(shown.response_deleted && shown.message_deleted);
 }

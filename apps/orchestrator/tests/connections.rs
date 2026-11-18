@@ -209,6 +209,7 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
             "discord",
             "readwise",
             "whoop",
+            "giphy",
             "rss",
             "calendly",
             "home-assistant",

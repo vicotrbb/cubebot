@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE chat_turns\n                        SET status='complete', response=CASE WHEN $3 THEN '' ELSE $2 END, quiet=$3, error=NULL, completed_at=clock_timestamp()\n                        WHERE id=$1\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a8c874352b50c61baf0690eb083f272c49825c785ecee326cf2ebb8916dfa9fb"
+}

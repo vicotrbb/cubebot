@@ -1,7 +1,7 @@
 use crate::{
     agents::AgentId,
     identity::{Identity, IdentityError},
-    knowledge::{CreateMemory, Knowledge, ReviseMemory},
+    knowledge::{CreateMemory, Knowledge, ReviseMemory, SavePersonality},
 };
 use axum::{
     Json, Router,
@@ -25,7 +25,9 @@ struct Api {
     create_memory,
     revise_memory,
     delete_memory,
-    list_dreams
+    list_dreams,
+    personality,
+    save_personality
 ))]
 pub(super) struct Doc;
 
@@ -36,6 +38,10 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
             get(search_memories).post(create_memory),
         )
         .route("/api/agents/{agent}/dreams", get(list_dreams))
+        .route(
+            "/api/agents/{agent}/personality",
+            get(personality).put(save_personality),
+        )
         .route(
             "/api/agents/{agent}/memories/{memory}",
             put(revise_memory).delete(delete_memory),
@@ -101,6 +107,37 @@ async fn revise_memory(
     Ok((
         [("cache-control", "no-store")],
         Json(api.knowledge.revise(&actor, agent, memory, &input).await?),
+    ))
+}
+
+#[utoipa::path(get, path = "/api/agents/{agent}/personality", params(("agent" = Uuid, Path)), responses((status = 200, body = crate::knowledge::Personality)))]
+async fn personality(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.knowledge.personality(&actor, agent).await?),
+    ))
+}
+
+#[utoipa::path(put, path = "/api/agents/{agent}/personality", params(("agent" = Uuid, Path)), request_body = SavePersonality, responses((status = 200, body = crate::knowledge::Personality)))]
+async fn save_personality(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(agent): Path<AgentId>,
+    Json(input): Json<SavePersonality>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(
+            api.knowledge
+                .save_personality(&actor, agent, &input)
+                .await?,
+        ),
     ))
 }
 

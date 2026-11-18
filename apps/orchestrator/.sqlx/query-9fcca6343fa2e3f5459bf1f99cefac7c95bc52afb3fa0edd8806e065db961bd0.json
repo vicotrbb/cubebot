@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,\n                a.broadcast AND t.broadcast_id IS NULL AS \"broadcast!\", a.knowledge_base, a.creates, t.in_task,\n                t.call_id IS NOT NULL AS \"on_call!\", t.meeting_id, t.talk_only\n            FROM chat_turns t\n            JOIN agents a ON a.id=t.conversation_id\n            WHERE t.conversation_id=$1 AND t.status='queued'\n                AND CASE WHEN t.awaited OR t.in_task\n                    THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND (o.awaited OR o.in_task) AND o.status IN ('running','waiting'))<a.task_lanes\n                        AND NOT (t.in_task AND EXISTS(\n                            SELECT 1 FROM chat_turns o\n                            JOIN room_messages om ON om.id=o.room_message_id\n                            JOIN room_messages tm ON tm.id=t.room_message_id AND tm.room_id=om.room_id\n                            WHERE o.conversation_id=$1 AND o.status IN ('running','waiting')\n                        ))\n                    ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND NOT o.in_task AND o.status IN ('running','waiting'))\n                END\n            ORDER BY t.sequence\n            LIMIT 1\n            FOR UPDATE OF t\n            ",
+  "query": "\n            SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,\n                a.broadcast AND t.broadcast_id IS NULL AS \"broadcast!\", a.knowledge_base, a.creates, t.in_task,\n                t.call_id IS NOT NULL AS \"on_call!\", CASE WHEN t.meeting_summary THEN NULL ELSE t.meeting_id END AS meeting_id, t.talk_only\n            FROM chat_turns t\n            JOIN agents a ON a.id=t.conversation_id\n            WHERE t.conversation_id=$1 AND t.status='queued'\n                AND CASE WHEN t.awaited OR t.in_task\n                    THEN (SELECT count(*) FROM chat_turns o WHERE o.conversation_id=$1 AND (o.awaited OR o.in_task) AND o.status IN ('running','waiting'))<a.task_lanes\n                        AND NOT (t.in_task AND EXISTS(\n                            SELECT 1 FROM chat_turns o\n                            JOIN room_messages om ON om.id=o.room_message_id\n                            JOIN room_messages tm ON tm.id=t.room_message_id AND tm.room_id=om.room_id\n                            WHERE o.conversation_id=$1 AND o.status IN ('running','waiting')\n                        ))\n                    ELSE NOT EXISTS(SELECT 1 FROM chat_turns o WHERE o.conversation_id=$1 AND NOT o.awaited AND NOT o.in_task AND o.status IN ('running','waiting'))\n                END\n            ORDER BY t.sequence\n            LIMIT 1\n            FOR UPDATE OF t\n            ",
   "describe": {
     "columns": [
       {
@@ -86,9 +86,9 @@
       false,
       false,
       null,
-      true,
+      null,
       false
     ]
   },
-  "hash": "724539ac70a02886531ff3891d9eedb2034069dc476837dc5a9d000ba63b588f"
+  "hash": "9fcca6343fa2e3f5459bf1f99cefac7c95bc52afb3fa0edd8806e065db961bd0"
 }

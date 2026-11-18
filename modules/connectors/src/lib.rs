@@ -21,6 +21,7 @@ pub mod dav;
 pub mod discord;
 pub mod dropbox;
 pub mod email;
+pub mod giphy;
 pub mod github;
 pub mod google;
 pub mod gotify;

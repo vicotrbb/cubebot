@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM turn_attachments WHERE turn_id=$1 AND inbound<>$2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45e2fa51e4689d556b559f5140b504838170c3ea1c6d3affad2f7ef21585fdb5"
+}

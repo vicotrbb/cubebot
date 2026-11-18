@@ -331,7 +331,7 @@ impl Agents {
                    AS "pending_creations!",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.name END AS "current_tool?",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.target END AS "current_target?",
-               COALESCE((SELECT max(t.sequence) FROM chat_turns t WHERE t.conversation_id = g.id AND t.room_message_id IS NULL), 0)
+               COALESCE((SELECT max(t.sequence) FROM chat_turns t WHERE t.conversation_id = g.id AND t.room_message_id IS NULL AND NOT t.quiet AND NOT (t.meeting_summary AND COALESCE(t.response, '') = '')), 0)
                    AS "last_sequence!",
                COALESCE((
                    SELECT r.sequence

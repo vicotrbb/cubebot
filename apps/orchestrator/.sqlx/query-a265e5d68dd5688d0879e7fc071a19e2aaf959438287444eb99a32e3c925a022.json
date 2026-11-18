@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT instructions\n        FROM agents\n        WHERE id=$1\n        ",
+  "query": "SELECT instructions FROM wakes WHERE agent_id=$1 AND set_by='agent' ORDER BY next_at",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "3c3a714216c3918333baa217c1b7fd67a6a8b57f8d46b157ae77de9903473a25"
+  "hash": "a265e5d68dd5688d0879e7fc071a19e2aaf959438287444eb99a32e3c925a022"
 }

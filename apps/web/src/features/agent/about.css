@@ -167,3 +167,71 @@
 .capability .switch {
   margin-top: 2px;
 }
+
+.personality__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.personality__letter {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 2px 0 0;
+  padding: 14px 16px 12px 12px;
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 10px 24px -18px rgb(var(--shadow) / 0.45);
+}
+.personality__face {
+  margin-top: 2px;
+}
+.personality__text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  color: var(--ink);
+  max-width: 68ch;
+}
+.personality__meta {
+  grid-column: 2;
+}
+.personality__editor {
+  position: relative;
+  display: grid;
+}
+.personality__editor textarea {
+  width: 100%;
+  min-height: 12rem;
+  padding: 10px 12px 30px;
+  font-family: inherit;
+  font-size: var(--t-md);
+  line-height: 1.6;
+  resize: vertical;
+}
+.personality__count {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.personality__count[data-near] {
+  color: var(--danger);
+}
+.personality__empty {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--r-lg);
+  border: 1px dashed var(--line-strong);
+}
+.personality__empty p {
+  margin: 0;
+}

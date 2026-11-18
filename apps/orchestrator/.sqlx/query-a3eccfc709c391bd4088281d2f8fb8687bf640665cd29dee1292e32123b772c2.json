@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                UPDATE turn_events\n                SET payload=CASE WHEN payload->>'kind'='done' THEN jsonb_set(payload, '{response}', '\"\"') ELSE jsonb_set(payload, '{text}', '\"\"') END\n                WHERE turn_id=$1 AND payload->>'kind' IN ('done','text_delta')\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a3eccfc709c391bd4088281d2f8fb8687bf640665cd29dee1292e32123b772c2"
+}

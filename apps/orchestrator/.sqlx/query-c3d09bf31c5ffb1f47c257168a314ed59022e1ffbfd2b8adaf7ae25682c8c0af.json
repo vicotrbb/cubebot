@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE dream_runs\n        SET status='finished',\n            ended_at=clock_timestamp(),\n            report=$5,\n            outcome=CASE WHEN $4='completed' AND NOT $6 AND NOT EXISTS(SELECT 1 FROM memory_revisions WHERE dream_run_id=$1) AND NOT EXISTS(SELECT 1 FROM skill_revisions WHERE dream_run_id=$1) THEN 'no_op' ELSE $4 END\n        WHERE id=$1 AND agent_id=$2 AND attempt_id=$3 AND status='running'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c3d09bf31c5ffb1f47c257168a314ed59022e1ffbfd2b8adaf7ae25682c8c0af"
+}

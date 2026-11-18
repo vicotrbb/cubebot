@@ -137,6 +137,7 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
               loaded={conversation.loaded}
               readError={conversation.readError}
               add={conversation.add}
+              edit={conversation.edit}
               onOpenThread={(turn) =>
                 void navigate({
                   to: '/agents/$agentId/thread/$turnId',

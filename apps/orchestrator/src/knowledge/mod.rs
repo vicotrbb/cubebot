@@ -1,6 +1,7 @@
 //! Every write names the revision it read, so a stale write never overwrites a newer one.
 mod base;
 mod dreams;
+mod personality;
 mod skills;
 use crate::{
     agents::AgentId,
@@ -15,6 +16,8 @@ pub use dreams::{DreamRevision, DreamRun, DreamSkill};
 pub(crate) use dreams::{
     commit_dream, commit_dream_skill, finish_dream, recover_dreams, start_dream,
 };
+pub(crate) use personality::persona;
+pub use personality::{Personality, SavePersonality};
 use serde::{Deserialize, Serialize};
 pub use skills::{
     Files, InstallSkill, InstalledSkill, PublishSkill, ReviseSkill, Skill, SkillRevision, package,

@@ -12,7 +12,7 @@ use axum::{
         IntoResponse, Response,
         sse::{self, KeepAlive, Sse},
     },
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use futures_util::{StreamExt, stream};
 use serde::Deserialize;
@@ -26,7 +26,17 @@ struct Api {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(history, send, retry, cancel, steer, events, read, attachment))]
+#[openapi(paths(
+    history,
+    send,
+    retry,
+    cancel,
+    steer,
+    events,
+    read,
+    attachment,
+    delete_message
+))]
 pub(super) struct Doc;
 
 pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
@@ -50,6 +60,10 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         .route(
             "/api/conversations/{conversation}/messages/{turn}/steer",
             post(steer),
+        )
+        .route(
+            "/api/conversations/{conversation}/messages/{turn}/{part}",
+            delete(delete_message),
         )
         .layer(DefaultBodyLimit::max(72 * 1024))
         .with_state(Api {
@@ -143,6 +157,19 @@ async fn cancel(
 ) -> Result<StatusCode, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     api.work.cancel(&actor, conversation, turn).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(delete, path = "/api/conversations/{conversation}/messages/{turn}/{part}", params(("conversation" = Uuid, Path), ("turn" = Uuid, Path), ("part" = inline(crate::work::MessagePart), Path)), responses((status = 204)))]
+async fn delete_message(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((conversation, turn, part)): Path<(Uuid, Uuid, crate::work::MessagePart)>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.work
+        .delete_message(&actor, conversation, turn, part)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

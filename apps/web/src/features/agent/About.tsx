@@ -19,6 +19,7 @@ import {
 } from '../../components/primitives'
 import { useDescribedModel, useModelListing } from './AgentModel'
 import { AvatarBuilder } from './AvatarBuilder'
+import { Personality } from './Personality'
 import './about.css'
 
 export function About({ agent }: { agent: AgentSummary }) {
@@ -27,6 +28,7 @@ export function About({ agent }: { agent: AgentSummary }) {
   return (
     <>
       <Identity agent={agent} onSaved={refresh} />
+      <Personality agent={agent} />
       <Instructions agent={agent} onSaved={refresh} />
       <Behaviour agent={agent} onSaved={refresh} />
       <Capabilities agent={agent} onSaved={refresh} />

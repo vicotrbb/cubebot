@@ -34,7 +34,7 @@ impl Work {
             r#"
             SELECT t.id, t.message, t.awaited, t.room_message_id, t.command, t.command_only,
                 a.broadcast AND t.broadcast_id IS NULL AS "broadcast!", a.knowledge_base, a.creates, t.in_task,
-                t.call_id IS NOT NULL AS "on_call!", t.meeting_id, t.talk_only
+                t.call_id IS NOT NULL AS "on_call!", CASE WHEN t.meeting_summary THEN NULL ELSE t.meeting_id END AS meeting_id, t.talk_only
             FROM chat_turns t
             JOIN agents a ON a.id=t.conversation_id
             WHERE t.conversation_id=$1 AND t.status='queued'
@@ -288,10 +288,7 @@ async fn instructed(
     (meeting, talk_only): (Option<Uuid>, bool),
 ) -> Result<(String, bool), Error> {
     if talk_only {
-        let persona =
-            sqlx::query_scalar!("SELECT instructions FROM agents WHERE id=$1", actor.agent.0)
-                .fetch_one(&mut **tx)
-                .await?;
+        let persona = crate::knowledge::persona(tx, actor.agent).await?;
         let instructions =
             super::meetings::briefed(tx, actor.agent, meeting, true, persona).await?;
         return Ok((instructions, false));
@@ -578,14 +575,16 @@ async fn settle(
         TurnEvent::Done { response, memories } => {
             match super::collaboration::after_run(tx, turn).await? {
                 "complete" => {
+                    let quiet = silent(tx, turn, response).await?;
                     sqlx::query!(
                         "
                         UPDATE chat_turns
-                        SET status='complete', response=$2, error=NULL, completed_at=clock_timestamp()
+                        SET status='complete', response=CASE WHEN $3 THEN '' ELSE $2 END, quiet=$3, error=NULL, completed_at=clock_timestamp()
                         WHERE id=$1
                         ",
                         turn,
                         response,
+                        quiet,
                     )
                     .execute(&mut **tx)
                     .await?;
@@ -612,6 +611,22 @@ async fn settle(
     }
     super::collaboration::resume_parent(tx, turn).await?;
     Ok(())
+}
+
+async fn silent(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    turn: Uuid,
+    response: &str,
+) -> Result<bool, Error> {
+    if response.trim() != super::SILENT {
+        return Ok(false);
+    }
+    Ok(sqlx::query_scalar!(
+        r#"SELECT meeting_summary OR origin='wake' AS "allowed!" FROM chat_turns WHERE id=$1"#,
+        turn,
+    )
+    .fetch_one(&mut **tx)
+    .await?)
 }
 
 async fn fail(
@@ -748,7 +763,7 @@ async fn history(
     let history = sqlx::query_as!(
         Exchange,
         r#"
-        SELECT t.message || CASE WHEN t.talk_only THEN '' ELSE COALESCE(
+        SELECT CASE WHEN t.message_deleted THEN '(The person deleted this message.)' ELSE t.message END || CASE WHEN t.talk_only OR t.message_deleted THEN '' ELSE COALESCE(
                 E'\n\n(Sent ' || to_char(t.created_at AT TIME ZONE z.name, 'Dy YYYY-MM-DD HH24:MI') || ', their local time.)',
                 '') END AS "message!",
             t.response AS "response!"
@@ -756,6 +771,7 @@ async fn history(
         LEFT JOIN human_accounts a ON a.id=t.actor_id
         LEFT JOIN pg_timezone_names z ON z.name=a.profile->>'time_zone'
         WHERE t.conversation_id=$1 AND t.room_message_id IS NULL AND t.status='complete' AND t.sequence>=$2
+            AND NOT (t.message_deleted AND t.response_deleted)
         ORDER BY t.sequence
         "#,
         actor.agent.0,

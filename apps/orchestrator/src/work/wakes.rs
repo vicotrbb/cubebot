@@ -184,6 +184,40 @@ async fn set(
     )))
 }
 
+pub(crate) async fn reach_out(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+    delay_minutes: i64,
+    intent: &str,
+) -> Result<bool, IdentityError> {
+    let human = sqlx::query_scalar!(
+        "
+        SELECT actor_id
+        FROM chat_turns
+        WHERE conversation_id=$1
+        ORDER BY sequence DESC
+        LIMIT 1
+        ",
+        agent.0,
+    )
+    .fetch_optional(&mut **tx)
+    .await?;
+    let Some(human) = human else {
+        return Ok(false);
+    };
+    let input = SaveWake {
+        instructions: format!("Reach out on your own: {intent}"),
+        at: None,
+        delay_minutes: Some(delay_minutes.clamp(5, 1440)),
+        schedule: None,
+        time_zone: None,
+    };
+    Ok(matches!(
+        insert(tx, agent, (human, "agent", Uuid::new_v4()), &input).await,
+        Ok(Ok(_))
+    ))
+}
+
 async fn cancel(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
@@ -291,7 +325,10 @@ fn message(set_by: &str, login: &str, instructions: &str) -> String {
         "agent" => "you set".to_string(),
         _ => format!("{login} set for you"),
     };
-    format!("Wake-up {by}:\n\n{instructions}")
+    format!(
+        "Wake-up {by} (when it turns out nothing is worth doing or saying, reply with exactly {} and nobody sees this turn):\n\n{instructions}",
+        super::SILENT
+    )
 }
 
 fn zone_name(input: &SaveWake) -> &str {
