@@ -119,6 +119,6 @@ function option(agent: AgentSummary) {
     value: agent.id,
     title: agent.name,
     detail: agent.title || doingOf(agent),
-    mark: <Cube avatar={agent.avatar} mood={moodOf(agent)} size={22} />,
+    mark: <Cube avatar={agent.avatar} mood={moodOf(agent)} size={30} />,
   }
 }

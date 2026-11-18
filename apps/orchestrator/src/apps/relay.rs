@@ -350,9 +350,25 @@ impl Apps {
         let Some(view) = self.views.find(target.slug, target.token) else {
             return refused(request.headers());
         };
-        let view = match self.admit(view, target.slug).await {
+        let reach = reach(&request, &prefix);
+        let mut response = self.admitted(view, &prefix, rest, request).await;
+        if let Some(policy) = reach {
+            response
+                .headers_mut()
+                .insert(header::CONTENT_SECURITY_POLICY, policy);
+        }
+        response
+    }
+
+    async fn admitted(&self, view: View, prefix: &str, rest: &str, request: Request) -> Response {
+        let slug = view.slug.clone();
+        let view = match self.admit(view, &slug).await {
             Ok(view) => view,
-            Err(error) => return error.into_response(),
+            Err(error) => {
+                let mut response = error.into_response();
+                guarded(response.headers_mut());
+                return response;
+            }
         };
         if request.method() == Method::OPTIONS
             && request
@@ -361,8 +377,30 @@ impl Apps {
         {
             return preflight(request.headers());
         }
-        forward(&self.links, &view, &prefix, rest, request).await
+        forward(&self.links, &view, prefix, rest, request).await
     }
+}
+
+fn reach(request: &Request, prefix: &str) -> Option<HeaderValue> {
+    let host = match request.uri().authority() {
+        Some(authority) => authority.as_str(),
+        None => request.headers().get(header::HOST)?.to_str().ok()?,
+    };
+    let plain = host
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || b".-:[]".contains(&byte));
+    if host.is_empty() || !plain {
+        return None;
+    }
+    let sources = ["http", "https", "ws", "wss"]
+        .map(|scheme| format!("{scheme}://{host}{prefix}/"))
+        .join(" ");
+    let policy = POLICY.replacen(
+        "connect-src 'self'",
+        &format!("connect-src 'self' {sources}"),
+        1,
+    );
+    HeaderValue::from_str(&policy).ok()
 }
 
 pub(super) async fn forward(
@@ -567,10 +605,11 @@ fn refused(request: &HeaderMap) -> Response {
         .get("sec-fetch-dest")
         .is_some_and(|dest| dest == "document" || dest == "iframe");
     if navigating {
-        page(StatusCode::NOT_FOUND, EXPIRED)
-    } else {
-        IdentityError::NotFound.into_response()
+        return page(StatusCode::NOT_FOUND, EXPIRED);
     }
+    let mut response = IdentityError::NotFound.into_response();
+    guarded(response.headers_mut());
+    response
 }
 
 fn unavailable() -> Response {
@@ -877,6 +916,39 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(fresh.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    fn hosted(host: &str) -> Request {
+        Request::builder()
+            .uri(format!("{PREFIX}/_cubebot/call"))
+            .header(header::HOST, host)
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    #[test]
+    fn the_view_names_its_own_address_for_connections() {
+        let policy = reach(&hosted("cubebot.lan:8443"), PREFIX).unwrap();
+        let policy = policy.to_str().unwrap();
+        for scheme in ["http", "https", "ws", "wss"] {
+            assert!(policy.contains(&format!("{scheme}://cubebot.lan:8443{PREFIX}/")));
+        }
+        assert!(policy.starts_with("sandbox "));
+        assert_eq!(policy.matches("connect-src").count(), 1);
+    }
+
+    #[test]
+    fn a_hostile_host_keeps_the_plain_policy() {
+        for host in ["evil; script-src *", "a b", "user@cubebot.lan", ""] {
+            assert!(reach(&hosted(host), PREFIX).is_none(), "{host}");
+        }
+    }
+
+    #[test]
+    fn refusals_are_readable_by_the_app() {
+        let response = refused(&HeaderMap::new());
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
     }
 
     #[tokio::test]

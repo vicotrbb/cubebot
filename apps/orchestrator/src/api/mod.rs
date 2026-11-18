@@ -247,6 +247,7 @@ async fn assembled(
             .merge(connectors::router(identity.clone(), connections));
     }
     Ok(routes
+        .layer(axum::Extension(apps.clone()))
         .layer(axum::middleware::from_fn_with_state(
             identity,
             browser::csrf,

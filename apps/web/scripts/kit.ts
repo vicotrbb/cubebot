@@ -7,7 +7,56 @@ const styles = join(root, 'apps/web/src/styles')
 const shell = join(root, 'apps/web/src/features/shell/shell.css')
 export const kitPath = join(root, 'modules/kit/kit.css')
 
-const extras = `.kit-grid {
+const extras = `button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+img,
+svg,
+video,
+canvas,
+iframe {
+  max-width: 100%;
+}
+body {
+  overflow-wrap: break-word;
+}
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.segmented > button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  font-weight: var(--w-label);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.segmented > [aria-pressed='true'] {
+  color: var(--ink);
+}
+@media (pointer: coarse) {
+  .segmented > button {
+    min-height: 44px;
+  }
+}
+@media (max-width: 640px) {
+  .page__head,
+  .page__body {
+    padding-inline: 16px;
+  }
+}
+.kit-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
   gap: 12px;
@@ -16,6 +65,8 @@ const extras = `.kit-grid {
   display: grid;
   align-content: start;
   gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
   padding: 14px 16px;
   border-radius: var(--r-lg);
   background: var(--raised);

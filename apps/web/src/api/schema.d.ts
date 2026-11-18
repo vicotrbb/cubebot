@@ -4600,6 +4600,7 @@ export interface components {
       sequence: number
     }
     Reading: components['schemas']['Vitals'] & {
+      apps_running?: number | null
       /** Format: int64 */
       seconds_ago: number
     }

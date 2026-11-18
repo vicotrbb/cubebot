@@ -25,7 +25,8 @@ Call `app_register` with a slug (lowercase letters, digits and hyphens, 2 to 40)
 - For a static app, the entry page is `index.html` in the folder. `/{slug}` redirects to `/{slug}/`. Only `{slug}/_cubebot/*` is routed to the kit, so a page in a subfolder must link it with the right relative path, for example `../_cubebot/kit.css` one level down. Only files the tool user owns are served. A backend app serves its own routes, except `_cubebot/*`.
 - The frame has an opaque origin, so there are no cookies, `localStorage`, `sessionStorage` or IndexedDB. Keep data in the app's folder; SQLite is fine. Static files over 8 MiB are not served.
 - A backend learns who is looking from the `x-cubebot-viewer-id` and `x-cubebot-viewer-name` request headers. Never ask the person to sign in.
-- Design for a 390 px wide phone first, then widen. Everything must work by touch and keyboard.
+- Design for a 390 px wide phone first, then widen. Everything must work by touch and keyboard. Start every page with `<meta name="viewport" content="width=device-width, initial-scale=1">`.
+- The page must never scroll sideways on a phone. Put wide tables and charts inside a `.kit-card`, which scrolls them sideways inside itself; draw charts as SVG with a `viewBox` and no fixed width; let header rows wrap (`flex-wrap: wrap`); never set a fixed width over 360 px.
 
 ## 4. Connections
 
@@ -47,7 +48,7 @@ Other kit functions:
 Use these instead of writing your own styles, and use the CSS variables (`--ground`, `--surface`, `--raised`, `--ink`, `--orange`, `--line`, `--r-*`, `--t-*`) for anything custom, so light and dark both work.
 
 - Layout: `.page`, `.page__head`, `.page__body` (`--narrow`, `--list`), `.kit-grid` (responsive columns), `.kit-card`, `.kit-stat` with `.kit-stat__label`, `.kit-stat__value`, `.kit-stat__note`.
-- Controls: `.btn` (`--primary`, `--ghost`, `--danger`, `--sm`, `--icon`), `.field` and `.input`, `.switch`, `.segmented`, `.tabs`, `.chip` (`--sage`, `--paint`, `--danger`).
+- Controls: `.btn` (`--primary`, `--ghost`, `--danger`, `--sm`, `--icon`), `.field` and `.input`, `.switch`, `.segmented` (a group of `<button aria-pressed>`), `.tabs`, `.chip` (`--sage`, `--paint`, `--danger`).
 - Content: `.table`, `.list`, `.kv`, `.notice` (`--danger`, `--paint`), `.empty`, `.skeleton`, `.muted`, `.small`, `.tabular`.
 
 Show an `.empty` state when there is no data, a `.skeleton` while loading, and a `.notice--danger` with a plain reason when a call fails.

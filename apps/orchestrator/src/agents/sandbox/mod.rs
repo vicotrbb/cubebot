@@ -111,6 +111,7 @@ pub struct Desktop {
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct Reading {
     pub seconds_ago: u64,
+    pub apps_running: Option<usize>,
     #[serde(flatten)]
     pub vitals: Vitals,
 }
@@ -144,6 +145,7 @@ impl Desktop {
         let (at, vitals) = readings.get(&agent)?.clone();
         Some(Reading {
             seconds_ago: at.elapsed().as_secs(),
+            apps_running: None,
             vitals,
         })
     }

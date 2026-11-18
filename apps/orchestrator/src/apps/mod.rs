@@ -507,6 +507,14 @@ impl Apps {
         Ok(listed.into_iter().map(|(spec, _)| spec).collect())
     }
 
+    pub async fn running(&self, agent: AgentId) -> Result<usize, IdentityError> {
+        let listed = self.listed(agent).await?;
+        Ok(listed
+            .iter()
+            .filter(|(_, state)| matches!(state, AppState::Running))
+            .count())
+    }
+
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
     pub async fn listed(&self, agent: AgentId) -> Result<Vec<(AppSpec, AppState)>, IdentityError> {
         let rows = sqlx::query!(

@@ -180,6 +180,7 @@ async fn stop_and_start_need_send_and_remove_needs_manage() {
         w.apps.listed(scout).await.unwrap()[0].1,
         AppState::Unavailable
     );
+    assert_eq!(w.apps.running(scout).await.unwrap(), 0);
     let running = AppReport::State {
         slug: "budget".into(),
         state: Reported::Running,

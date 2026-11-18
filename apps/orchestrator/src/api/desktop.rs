@@ -142,6 +142,7 @@ async fn vitals(
     headers: HeaderMap,
     Path(agent): Path<AgentId>,
     desktop: Option<Extension<Desktop>>,
+    apps: Option<Extension<crate::apps::Apps>>,
 ) -> Result<Response, IdentityError> {
     let actor = super::identity::actor(&api.identity, &headers).await?;
     if allowed(&api.identity, &actor, agent, Capability::BrowserView)
@@ -152,7 +153,12 @@ async fn vitals(
     }
     let reading = desktop.and_then(|Extension(desktop)| desktop.reading(agent));
     Ok(match reading {
-        Some(reading) => ([("cache-control", "no-store")], Json(reading)).into_response(),
+        Some(mut reading) => {
+            if let Some(Extension(apps)) = apps {
+                reading.apps_running = Some(apps.running(agent).await?);
+            }
+            ([("cache-control", "no-store")], Json(reading)).into_response()
+        }
         None => StatusCode::NO_CONTENT.into_response(),
     })
 }
