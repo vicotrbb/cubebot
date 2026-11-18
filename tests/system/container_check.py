@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
@@ -437,6 +438,15 @@ POLICY = (
 )
 
 
+def view_policy(api, prefix):
+    host = urllib.parse.urlsplit(api.base).netloc
+    view = prefix.rstrip("/") + "/"
+    sources = " ".join(
+        f"{scheme}://{host}{view}" for scheme in ("http", "https", "ws", "wss")
+    )
+    return POLICY.replace("connect-src 'self'", f"connect-src 'self' {sources}")
+
+
 def relayed(api, path, method="GET", body=None, headers=None):
     data = json.dumps(body).encode() if body is not None else None
     request = urllib.request.Request(
@@ -475,7 +485,9 @@ def apps_turn(api, postgres, identity, marker, console):
     assert prefix.startswith("/api/apps/status/v/"), prefix
     status, headers, body = relayed(api, prefix)
     assert status == 200 and b"_cubebot/kit.js" in body, (status, body[:200])
-    assert headers.get_all("Content-Security-Policy") == [POLICY], headers
+    assert headers.get_all("Content-Security-Policy") == [view_policy(api, prefix)], (
+        headers
+    )
     assert headers["Access-Control-Allow-Origin"] == "*", headers
     assert headers.get("Set-Cookie") is None, headers
     status, headers, body = relayed(api, prefix + "_cubebot/kit.css")
