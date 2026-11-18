@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.3.7'
-export const released = '2026-11-16'
+export const version = 'v0.4.0'
+export const released = '2026-11-18'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -152,6 +152,12 @@ export const timeline = [
     title: 'Meetings',
     body: 'Video, voice and screens, with your agents.',
   },
+  {
+    date: 'Nov 17',
+    datetime: '2026-11-17',
+    title: 'Apps',
+    body: 'Agents build the tools you open.',
+  },
 ] as const
 
 export const next = [
@@ -160,6 +166,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.4.0',
+    date: '2026-11-18',
+    title: 'Agents build apps you open in the console',
+    items: [
+      'Ask an agent for an app and it builds a real web page, or a page with its own backend, that opens in the console, on your phone and in the installed app',
+      'Apps show live data from your connections within the access you set, look native through a design kit, and run until someone stops them',
+      'Meetings can be listen only, and each agent has a Listening switch to follow along without speaking',
+      'The agent picker opens above dialogs and finds an agent as you type, and the Status tab shows how many apps are running',
+    ],
+  },
   {
     tag: 'v0.3.7',
     date: '2026-11-17',
