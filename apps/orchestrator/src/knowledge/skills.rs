@@ -810,16 +810,7 @@ pub(crate) async fn instructions(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
 ) -> Result<String, sqlx::Error> {
-    let instructions = sqlx::query_scalar!(
-        "
-        SELECT instructions
-        FROM agents
-        WHERE id=$1
-        ",
-        agent.0,
-    )
-    .fetch_one(&mut **tx)
-    .await?;
+    let instructions = super::personality::persona(tx, agent).await?;
     let installed = sqlx::query!(
         "
         SELECT s.name, r.description

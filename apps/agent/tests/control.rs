@@ -409,6 +409,10 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
             json!({"input_tokens":20,"output_tokens":1}),
         ),
         responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"DONE"}]}]),
+            json!({"input_tokens":22,"output_tokens":1}),
+        ),
+        responses(
             json!([{"type":"message","content":[{"type":"output_text","text":"[]"}]}]),
             json!({"input_tokens":25,"output_tokens":1}),
         ),
@@ -451,11 +455,25 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
     assert_eq!(fake.event(8).await["kind"], "text_delta");
     assert_eq!(fake.event(9).await["kind"], "usage");
     assert_eq!(fake.event(10).await["kind"], "usage");
+    assert_eq!(fake.event(11).await["kind"], "usage");
     assert_eq!(
-        fake.event(11).await,
-        json!({"kind":"done","response":"Fixed"})
+        fake.event(12).await,
+        json!({"kind":"done","response":"Fixed"}),
+        "a review that finds nothing missing keeps the answer"
     );
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let review = fake.provider.lock().unwrap()[2]["input"]
+        .as_array()
+        .unwrap()
+        .last()
+        .unwrap()["content"]
+        .clone();
+    assert!(
+        review
+            .as_str()
+            .unwrap()
+            .starts_with("Before you finish, review")
+    );
     let request = fake.provider.lock().unwrap()[1].clone();
     let outputs: Vec<&Value> = request["input"]
         .as_array()
@@ -471,7 +489,7 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
             .unwrap()
             .contains("no tool has this name")
     );
-    fake.ack(id, 1..=11);
+    fake.ack(id, 1..=12);
     fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -719,6 +737,56 @@ async fn a_chatgpt_turn_takes_the_renewed_token_before_its_own_lapses() {
     );
     fake.ack(id, [1, 2, 3, 4]);
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.drain(&mut child).await;
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn a_review_that_finds_work_left_keeps_working_and_its_reply_stands_alone() {
+    let mut fake = fake(vec![
+        responses(
+            json!([{"type":"function_call","name":"bash","call_id":"c1","arguments":"{\"command\":\"printf draft\"}"}]),
+            json!({"input_tokens":9,"output_tokens":2}),
+        ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"Drafted. Want me to save it?"}]}]),
+            json!({"input_tokens":20,"output_tokens":3}),
+        ),
+        responses(
+            json!([{"type":"function_call","name":"bash","call_id":"c2","arguments":"{\"command\":\"printf draft > notes.txt\"}"}]),
+            json!({"input_tokens":30,"output_tokens":2}),
+        ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"Drafted and saved it to notes.txt."}]}]),
+            json!({"input_tokens":40,"output_tokens":4}),
+        ),
+        responses(
+            json!([{"type":"message","content":[{"type":"output_text","text":"[]"}]}]),
+            json!({"input_tokens":45,"output_tokens":1}),
+        ),
+    ])
+    .await;
+    let root = root();
+    let mut child = spawn(&fake.origin, &root);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    let id = Uuid::new_v4();
+    fake.deliver(turn(id, 1, "Draft the notes"));
+    let mut sequence = 1;
+    let done = loop {
+        let event = fake.event(sequence).await;
+        if event["kind"] == "done" {
+            break event;
+        }
+        sequence += 1;
+    };
+    assert_eq!(done["response"], "Drafted and saved it to notes.txt.");
+    assert_eq!(
+        std::fs::read_to_string(root.join("workspace/notes.txt")).unwrap(),
+        "draft"
+    );
+    assert_eq!(fake.provider.lock().unwrap().len(), 5);
+    assert_eq!(fake.expect().await, json!({"type":"pull"}));
+    fake.ack(id, 1..=sequence);
     fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();
 }

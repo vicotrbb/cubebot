@@ -67,7 +67,7 @@ async fn write(
     .execute(pool)
     .await?;
     Work::new(pool.clone())
-        .meeting_ended(meeting, &summary)
+        .meeting_ended(meeting, &summary, &held.lines)
         .await
 }
 

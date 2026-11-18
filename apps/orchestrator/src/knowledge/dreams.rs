@@ -155,7 +155,7 @@ pub(crate) async fn start_dream(
                 AND (EXISTS(SELECT 1 FROM memory_revisions r JOIN memories m ON m.id=r.memory_id WHERE m.agent_id=g.id AND r.dream_run_id IS NULL AND r.created_at > COALESCE((SELECT max(started_at) FROM dream_runs WHERE agent_id=g.id AND outcome IN ('completed','no_op')),'-infinity'))
                     OR (SELECT count(*) FROM chat_turns t WHERE t.conversation_id=g.id AND t.status='complete' AND t.completed_at > COALESCE((SELECT max(started_at) FROM dream_runs WHERE agent_id=g.id AND outcome IN ('completed','no_op')),'-infinity')) >= $3)
                 AS "eligible!",
-            g.dreaming_model
+            g.dreaming_model, g.name, g.instructions, g.personality
         FROM agents g
         WHERE g.id=$1
         FOR UPDATE
@@ -212,6 +212,9 @@ pub(crate) async fn start_dream(
         turns,
         skills,
         library,
+        name: agent.name,
+        instructions: agent.instructions,
+        personality: agent.personality,
     }))
 }
 
@@ -312,13 +315,27 @@ pub(crate) async fn finish_dream(
         DreamOutcome::Yielded => "yielded",
         DreamOutcome::Failed => "failed",
     };
+    let mut tx = pool.begin().await?;
+    let grew = outcome == "completed"
+        && open(&mut tx, actor, run).await?
+        && super::personality::grow(
+            &mut tx,
+            actor.agent,
+            end.personality.as_deref(),
+            end.outreach.as_ref(),
+        )
+        .await
+        .map_err(|error| match error {
+            IdentityError::Database(error) => error,
+            other => sqlx::Error::Protocol(other.to_string()),
+        })?;
     let ended = sqlx::query!(
         "
         UPDATE dream_runs
         SET status='finished',
             ended_at=clock_timestamp(),
             report=$5,
-            outcome=CASE WHEN $4='completed' AND NOT EXISTS(SELECT 1 FROM memory_revisions WHERE dream_run_id=$1) AND NOT EXISTS(SELECT 1 FROM skill_revisions WHERE dream_run_id=$1) THEN 'no_op' ELSE $4 END
+            outcome=CASE WHEN $4='completed' AND NOT $6 AND NOT EXISTS(SELECT 1 FROM memory_revisions WHERE dream_run_id=$1) AND NOT EXISTS(SELECT 1 FROM skill_revisions WHERE dream_run_id=$1) THEN 'no_op' ELSE $4 END
         WHERE id=$1 AND agent_id=$2 AND attempt_id=$3 AND status='running'
         ",
         run,
@@ -326,9 +343,11 @@ pub(crate) async fn finish_dream(
         actor.attempt.0,
         outcome,
         &end.report,
+        grew,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
     let finished = ended.rows_affected() == 1;
     if let (true, Some(usage)) = (finished, &end.usage) {
         let priced = sqlx::query!(

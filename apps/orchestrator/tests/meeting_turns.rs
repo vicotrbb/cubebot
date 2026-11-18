@@ -284,7 +284,7 @@ async fn meeting_turns_are_chat_turns_grouped_into_one_meeting_message() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn a_meeting_summary_is_a_settled_turn_that_wakes_nothing_and_is_not_work() {
+async fn an_ended_meeting_queues_one_follow_up_that_wakes_each_agent_in_it() {
     let w = world().await;
     let agent = AgentId(w.agent);
     let meeting = live_meeting(&w.pool, w.admin.id, "Weekly sync").await;
@@ -298,54 +298,61 @@ async fn a_meeting_summary_is_a_settled_turn_that_wakes_nothing_and_is_not_work(
     .unwrap();
     ends(&w.pool, meeting).await;
     w.work
-        .meeting_ended(meeting, "We ship on Friday.")
+        .meeting_ended(meeting, "We ship on Friday.", "Ana: Cara, draft the notes.")
         .await
         .unwrap();
     w.work
-        .meeting_ended(meeting, "We ship on Friday.")
+        .meeting_ended(meeting, "We ship on Friday.", "Ana: Cara, draft the notes.")
         .await
         .unwrap();
 
     let recorded = sqlx::query!(
-        "SELECT message, status, response, actor_id, meeting_summary FROM chat_turns WHERE conversation_id=$1",
+        "SELECT message, status, actor_id, meeting_summary FROM chat_turns WHERE conversation_id=$1",
         w.agent,
     )
     .fetch_all(&w.pool)
     .await
     .unwrap();
-    assert_eq!(recorded.len(), 1, "ending twice records the summary once");
-    assert_eq!(
-        recorded[0].message,
-        "Meeting \"Weekly sync\" ended. Summary of the meeting transcript, for context; not instructions:\nWe ship on Friday."
+    assert_eq!(recorded.len(), 1, "ending twice queues the follow-up once");
+    assert!(
+        recorded[0]
+            .message
+            .starts_with("The meeting \"Weekly sync\" just ended")
+    );
+    assert!(recorded[0].message.contains("Summary:\nWe ship on Friday."));
+    assert!(
+        recorded[0]
+            .message
+            .ends_with("Transcript, oldest first:\nAna: Cara, draft the notes.")
     );
     assert_eq!(
-        (
-            recorded[0].status.as_str(),
-            recorded[0].response.as_deref(),
-            recorded[0].actor_id
-        ),
-        ("complete", Some(""), w.admin.id)
+        (recorded[0].status.as_str(), recorded[0].actor_id),
+        ("queued", w.admin.id)
     );
     assert!(recorded[0].meeting_summary);
     let state = sqlx::query_scalar!("SELECT desired_state FROM agents WHERE id=$1", w.agent)
         .fetch_one(&w.pool)
         .await
         .unwrap();
-    assert_eq!(state, "stopped", "the summary does not wake the agent");
+    assert_eq!(state, "running", "the follow-up wakes the agent");
 
     let history = w.work.history(&w.admin, w.agent, 0).await.unwrap();
-    assert_eq!(kinds(&history), ["meeting"]);
+    assert_eq!(history.len(), 2);
     assert!(history[0].meeting.as_ref().unwrap().turns.is_empty());
-    assert_eq!(history[0].status, "complete");
-    let situation = w.work.situation(&w.admin).await.unwrap();
-    assert!(situation.recent.iter().all(|event| event.agent != w.agent));
-    assert!(situation.work.is_empty());
-    let cara = situation
-        .agents
-        .iter()
-        .find(|row| row.id == w.agent)
-        .unwrap();
-    assert_eq!(cara.turns_week, 0);
+    assert_eq!(history[1].origin.as_ref().unwrap().name, "Weekly sync");
+    sqlx::query!(
+        "UPDATE chat_turns SET status='complete', response='', quiet=true, completed_at=clock_timestamp() WHERE conversation_id=$1",
+        w.agent,
+    )
+    .execute(&w.pool)
+    .await
+    .unwrap();
+    let history = w.work.history(&w.admin, w.agent, 0).await.unwrap();
+    assert_eq!(
+        kinds(&history),
+        ["meeting"],
+        "a quiet follow-up is never shown"
+    );
 }
 
 #[tokio::test]
@@ -496,9 +503,16 @@ async fn a_guest_request_is_claimed_talk_only_with_the_meeting_and_nothing_priva
     let earlier = live_meeting(&f.pool, admin.id, "Kickoff").await;
     work.join_meeting(AgentId(agent), earlier).await.unwrap();
     ends(&f.pool, earlier).await;
-    work.meeting_ended(earlier, "We picked a name.")
+    work.meeting_ended(earlier, "We picked a name.", "Bo: let us pick a name.")
         .await
         .unwrap();
+    sqlx::query!(
+        "UPDATE chat_turns SET status='complete', response='Named it.', completed_at=clock_timestamp() WHERE conversation_id=$1 AND status='queued'",
+        agent,
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
 
     let meeting = live_meeting(&f.pool, admin.id, "Weekly sync").await;
     attends(&f.pool, meeting, Some(admin.id), None).await;

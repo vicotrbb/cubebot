@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.personality, (to_jsonb(g.personality_updated_at) #>> '{}') AS updated_at, h.login AS \"edited_by?\"\n        FROM agents g\n        LEFT JOIN human_accounts h ON h.id=g.personality_edited_by\n        WHERE g.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "personality",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "updated_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "edited_by?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "d36c234f707a90a19098a3ab97c55c9eb4cc363c84a50de35f74f1bbb5e04b2a"
+}

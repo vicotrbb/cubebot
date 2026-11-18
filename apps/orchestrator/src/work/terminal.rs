@@ -313,8 +313,21 @@ impl Work {
         let mut grouped = tool_progress(tx, &ids).await?;
         let mut attachments = attachments(tx, &ids).await?;
         let mut sent = sent(tx, &ids).await?;
+        let deleted: HashMap<Uuid, (bool, bool)> = sqlx::query!(
+            "SELECT id, message_deleted, response_deleted FROM chat_turns WHERE id=ANY($1) AND (message_deleted OR response_deleted)",
+            &ids,
+        )
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(|row| (row.id, (row.message_deleted, row.response_deleted)))
+        .collect();
         for turn in turns.iter_mut() {
-            turn.terminal = grouped.remove(&turn.id).unwrap_or_default();
+            (turn.message_deleted, turn.response_deleted) =
+                deleted.get(&turn.id).copied().unwrap_or_default();
+            if !turn.response_deleted {
+                turn.terminal = grouped.remove(&turn.id).unwrap_or_default();
+            }
             turn.attachments = attachments.remove(&turn.id).unwrap_or_default();
             turn.message_attachments = sent.remove(&turn.id).unwrap_or_default();
         }
@@ -330,8 +343,8 @@ impl Work {
             Origin,
             r#"
             SELECT t.id AS turn_id,
-                CASE WHEN s.settles THEN 'approvals' WHEN t.app_id IS NOT NULL THEN 'app' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin='wake' THEN 'wake' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
-                COALESCE(s.person,ap.name,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin='wake' THEN 'wake-up' WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
+                CASE WHEN s.settles THEN 'approvals' WHEN t.meeting_summary THEN 'meeting' WHEN t.app_id IS NOT NULL THEN 'app' WHEN b.id IS NOT NULL THEN 'broadcast' WHEN r.id IS NOT NULL THEN 'room' WHEN t.origin='wake' THEN 'wake' WHEN t.origin IS NOT NULL THEN 'routine' WHEN t.awaited THEN 'delegation' ELSE 'message' END AS "kind!",
+                COALESCE(s.person,CASE WHEN t.meeting_summary THEN mt.title END,ap.name,ba.name,bh.login,r.name,u.name,CASE WHEN t.origin='wake' THEN 'wake-up' WHEN t.origin IS NOT NULL THEN 'a deleted routine' END,a.name) AS "name!",
                 t.parent_turn_id
             FROM chat_turns t
             LEFT JOIN room_messages m ON m.id=t.room_message_id
@@ -340,11 +353,12 @@ impl Work {
             LEFT JOIN chat_turns p ON p.id=t.parent_turn_id
             LEFT JOIN agents a ON a.id=p.conversation_id
             LEFT JOIN apps ap ON ap.id=t.app_id
+            LEFT JOIN meetings mt ON mt.id=t.meeting_id
             LEFT JOIN broadcasts b ON b.id=t.broadcast_id
             LEFT JOIN agents ba ON ba.id=b.agent_id
             LEFT JOIN human_accounts bh ON bh.id=b.actor_id AND b.agent_id IS NULL
             LEFT JOIN LATERAL (SELECT true AS settles, h.login AS person FROM creation_requests q JOIN human_accounts h ON h.id=q.settled_by WHERE q.reported_in=t.id ORDER BY q.settled_at DESC LIMIT 1) s ON true
-            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL OR t.app_id IS NOT NULL OR s.settles)
+            WHERE t.id=ANY($1) AND (r.id IS NOT NULL OR p.id IS NOT NULL OR t.origin IS NOT NULL OR b.id IS NOT NULL OR t.app_id IS NOT NULL OR t.meeting_summary OR s.settles)
             "#,
             ids,
         )

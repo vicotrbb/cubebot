@@ -26,6 +26,15 @@ const LONGEST_WAIT: Duration = Duration::from_secs(60);
 /// A subscription's token is renewed this close to expiry; the orchestrator may renew it from then.
 const RENEW_WITHIN: i64 = 5 * 60;
 
+const REVIEWED: &str = "DONE";
+const REVIEW: &str = "Before you finish, review your work against the request the way a demanding reviewer would. Is every part of what was asked actually done and done well, not only started, planned or described? Did you verify the result wherever you could? Did you offer next steps that are safe, reversible and clearly useful, such as a draft, a file, a knowledge base page, more research or a check, instead of doing them? If anything is missing, do it now with your tools, then write your complete final reply; it replaces your previous one, so it must stand on its own. Stop to ask only when the next step would send or publish something on the person's behalf, spend money, delete things, or needs a decision only they can make. If the work is complete, reply with exactly DONE and nothing else.";
+
+enum Review {
+    Pending,
+    Asked(String),
+    Done,
+}
+
 pub(super) type Event = (Entry, Option<u64>);
 type Knowledge<'a> = (&'a Memories, &'a Skills, &'a Collaboration, &'a Connections);
 
@@ -413,10 +422,13 @@ struct Session<'a, P> {
 
 impl<P: Provider> Session<'_, P> {
     async fn converse(&mut self, context: &mut Context) -> TurnEvent {
+        let mut review = Review::Pending;
+        let mut worked = false;
         loop {
             self.steer(context);
             let request = context.request(self.turn, self.max_output_tokens);
-            let (reply, usage) = match self.step(&request, true).await {
+            let asked = matches!(review, Review::Asked(_));
+            let (reply, usage) = match self.step(&request, !asked).await {
                 Ok(step) => step,
                 Err(code) => return failed(code),
             };
@@ -424,9 +436,17 @@ impl<P: Provider> Session<'_, P> {
             // Compaction waits for a safe point: after the tool result, or before the reply.
             let full = context.full(usage);
             let calls = reply.calls.clone();
-            let response = reply.text.clone();
+            let mut response = reply.text.clone();
             context.messages.push(Message::Assistant(reply));
+            if asked && let Review::Asked(earlier) = std::mem::replace(&mut review, Review::Done) {
+                response = self.reviewed(earlier, response, calls.is_empty());
+            }
             if calls.is_empty() {
+                if self.reviews(worked && !full, &review) {
+                    context.messages.push(Message::User(REVIEW.into()));
+                    review = Review::Asked(response);
+                    continue;
+                }
                 if let Err(code) = self.extract(context).await {
                     return failed(code);
                 }
@@ -435,6 +455,7 @@ impl<P: Provider> Session<'_, P> {
                 }
                 return done(response, self.memories.take());
             }
+            worked = true;
             let outputs = match self.call(&calls).await {
                 Ok(outputs) => outputs,
                 Err(code) => return failed(code),
@@ -451,6 +472,28 @@ impl<P: Provider> Session<'_, P> {
                 self.compact(context).await;
             }
         }
+    }
+
+    fn reviews(&self, eligible: bool, review: &Review) -> bool {
+        eligible
+            && matches!(review, Review::Pending)
+            && !self.turn.talk_only
+            && self.turn.meeting.is_none()
+    }
+
+    fn reviewed(&mut self, earlier: String, response: String, finished: bool) -> String {
+        if finished && response.trim().trim_end_matches('.') == REVIEWED {
+            return earlier;
+        }
+        if !response.is_empty() {
+            self.run.emit(
+                TurnEvent::TextDelta {
+                    text: format!("\n\n{response}"),
+                },
+                None,
+            );
+        }
+        response
     }
 
     async fn step(

@@ -616,6 +616,12 @@ pub struct Dream {
     pub skills: Vec<SkillPackage>,
     #[serde(default)]
     pub library: Vec<LibrarySkill>,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub instructions: String,
+    #[serde(default)]
+    pub personality: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -660,6 +666,17 @@ pub struct DreamEnd {
     pub report: String,
     #[serde(default)]
     pub usage: Option<TokenUsage>,
+    #[serde(default)]
+    pub personality: Option<String>,
+    #[serde(default)]
+    pub outreach: Option<Outreach>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Outreach {
+    pub after_minutes: u32,
+    pub intent: String,
 }
 
 /// Provider-reported tokens for work outside a turn; a turn reports them as `TurnEvent::Usage`.

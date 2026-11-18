@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT instructions FROM agents WHERE id=$1",
+  "query": "SELECT outcome FROM dream_runs WHERE id=$1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "instructions",
+        "name": "outcome",
         "type_info": "Text"
       }
     ],
@@ -15,8 +15,8 @@
       ]
     },
     "nullable": [
-      false
+      true
     ]
   },
-  "hash": "8e72a441f9fe58759a84f6fe41272f510fe411abe0c62d88ad09f01f0c2f773f"
+  "hash": "a98556a43141e9218159f875fe05cbae1b2f59cd83169d425066b6ae2239f923"
 }

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE agents SET personality=$2, personality_updated_at=clock_timestamp(), personality_edited_by=$3 WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "70bf92e445ada095f1322def33ebd81dc94fdb7d7632770f92ff9265803b8713"
+}

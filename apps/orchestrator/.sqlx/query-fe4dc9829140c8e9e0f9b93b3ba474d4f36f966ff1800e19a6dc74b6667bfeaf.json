@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND meeting_id IS NULL AND sequence>$2\n            ORDER BY sequence\n            LIMIT 100\n            ",
+  "query": "\n            SELECT id, sequence, message, status, response, error\n            FROM chat_turns\n            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND (meeting_id IS NULL OR meeting_summary) AND NOT quiet AND sequence>$2\n            ORDER BY sequence\n            LIMIT 100\n            ",
   "describe": {
     "columns": [
       {
@@ -49,5 +49,5 @@
       true
     ]
   },
-  "hash": "87d104eb7f433585dbfd253ec12a66107c3025d1029202a6c9c683151c855683"
+  "hash": "fe4dc9829140c8e9e0f9b93b3ba474d4f36f966ff1800e19a6dc74b6667bfeaf"
 }

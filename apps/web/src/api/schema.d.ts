@@ -186,6 +186,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{agent}/personality': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['personality']
+    put: operations['save_personality']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{agent}/routines': {
     parameters: {
       query?: never
@@ -1076,6 +1092,22 @@ export interface paths {
      */
     post: operations['steer']
     delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/conversations/{conversation}/messages/{turn}/{part}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['delete_message']
     options?: never
     head?: never
     patch?: never
@@ -4470,6 +4502,11 @@ export interface components {
       | 'mint'
       | 'ocean'
       | 'charcoal'
+    Personality: {
+      edited_by?: string | null
+      personality: string
+      updated_at?: string | null
+    }
     /** @enum {string} */
     Phase: 'planned' | 'creating' | 'bound' | 'stopped'
     /** @description A new folder, or where a file goes: `parent` null or absent is the owner's top level. */
@@ -4887,6 +4924,9 @@ export interface components {
       reports_to?: string | null
       role: string
       title: string
+    }
+    SavePersonality: {
+      personality: string
     }
     /** @description What a routine does and when. At least one of `prompt` and `command`. */
     SaveRoutine: {
@@ -5443,8 +5483,10 @@ export interface components {
       meeting?: null | components['schemas']['MeetingRecord']
       message: string
       message_attachments: components['schemas']['ReplyAttachment'][]
+      message_deleted: boolean
       origin?: null | components['schemas']['Origin']
       response?: string | null
+      response_deleted: boolean
       /** Format: int64 */
       sequence: number
       status: string
@@ -5989,6 +6031,52 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  personality: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Personality']
+        }
+      }
+    }
+  }
+  save_personality: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        agent: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavePersonality']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Personality']
+        }
       }
     }
   }
@@ -7693,6 +7781,27 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Steering']
         }
+      }
+    }
+  }
+  delete_message: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        conversation: string
+        turn: string
+        part: 'message' | 'response'
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }

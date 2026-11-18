@@ -1192,7 +1192,7 @@ async fn a_named_agent_hears_a_member_and_answers_aloud_and_the_end_is_summarize
         &w,
         room.meeting,
         "SELECT EXISTS(SELECT 1 FROM chat_turns WHERE meeting_id = $1 AND meeting_summary
-            AND message LIKE 'Meeting \"Sync\" ended. Summary of the meeting transcript%lunch at noon.')",
+            AND message LIKE 'The meeting \"Sync\" just ended%Decisions: lunch at noon.%')",
     )
     .await;
 }

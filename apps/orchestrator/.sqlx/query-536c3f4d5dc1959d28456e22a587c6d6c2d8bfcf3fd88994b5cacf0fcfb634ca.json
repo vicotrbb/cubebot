@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, message_deleted, response_deleted FROM chat_turns WHERE id=ANY($1) AND (message_deleted OR response_deleted)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "message_deleted",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "response_deleted",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "536c3f4d5dc1959d28456e22a587c6d6c2d8bfcf3fd88994b5cacf0fcfb634ca"
+}

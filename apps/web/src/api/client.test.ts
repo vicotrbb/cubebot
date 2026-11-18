@@ -72,6 +72,8 @@ test('turn snapshots keep sequence order and never undo a finished turn', () => 
     steering: [],
     attachments: [],
     message_attachments: [],
+    message_deleted: false,
+    response_deleted: false,
   })
   const finished = merge(
     [turn('b', 2, 'queued')],

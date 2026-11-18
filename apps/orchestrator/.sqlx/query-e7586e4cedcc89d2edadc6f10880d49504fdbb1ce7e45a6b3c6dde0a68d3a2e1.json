@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE chat_turns\n            SET message=CASE WHEN $3 THEN message ELSE '' END,\n                message_deleted=message_deleted OR NOT $3,\n                response=CASE WHEN $3 AND response IS NOT NULL THEN '' ELSE response END,\n                response_deleted=response_deleted OR $3\n            WHERE id=$1 AND conversation_id=$2 AND status IN ('complete','failed','cancelled')\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e7586e4cedcc89d2edadc6f10880d49504fdbb1ce7e45a6b3c6dde0a68d3a2e1"
+}

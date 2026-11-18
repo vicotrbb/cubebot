@@ -656,6 +656,36 @@ Accepted 2026-11-17, at the user's direction.
 
 **Validation scenarios.** A wake needs exactly one time and a future one within a year; a due one-time wake makes one turn and is deleted; an agent cannot cancel a person's wake.
 
+## Quiet turns
+
+Accepted 2026-11-18, at the user's direction.
+
+**Decision.** A turn that no person sent, a wake or a meeting follow-up, may end with exactly `[silent]` when it turns out nothing is worth doing or saying. The turn then completes with an empty reply, marked quiet: it stays in the agent's own context, and no conversation, unread marker or Activity row shows it. A person's message cannot end quietly.
+
+**Rationale.** Proactive work only helps if an agent can decide there is nothing to do without telling anyone so.
+
+## Agent character
+
+Accepted 2026-11-18, at the user's request that agents grow their own personality and writing voice, send GIFs, and stay proactive.
+
+**Decision.** Each agent keeps a personality of up to 4000 characters, in the first person, that it writes and grows itself. Every dream that completes reads the agent's name, instructions, current personality, memories and recent turns, and may return a revised personality: temperament, humor, interests, opinions, writing voice and how it takes initiative, grown gradually from what happened, never reset. The personality follows the instructions in every turn, spoken ones included, and the instructions and the person's requests come first. People with `memory.read` see it on the agent's About tab; people with `memory.edit` edit it, and the next dream grows from their edit. The same dream may plan one outreach, a wake at most a day ahead with what the agent means to do; there is no daily limit, since the agent reaches out whenever it has something meaningful to do or say, and the wake may end quietly. Agents send animated GIFs with `send_gif`, which fetches an https GIF, WebP or MP4 of at most 8 MB and attaches it to the reply, so the console never loads a remote image; the GIPHY connection searches for them.
+
+**Rationale.** Character grown from an agent's own history makes agents distinct without anyone writing it for them, and dreaming already reviews that history while idle. Alternatives considered: a personality picked from presets at creation, which makes every agent with the same preset alike; letting agents rewrite their own instructions, which people set and must stay theirs.
+
+**Open details.** A history of personality revisions; whether a person's edit should pin parts the dream may not change.
+
+**Validation scenarios.** A completed dream with a personality stores it and counts as a change; each dream that plans an outreach schedules its wake; a personality over 4000 characters is refused.
+
+## Finishing the work
+
+Accepted 2026-11-18, at the user's report that agents stop short of finishing.
+
+**Decision.** The agent's standing instructions say that a request is done when its outcome exists, that safe and reversible next steps (a draft, a file, a page, research, a check) are taken rather than offered, and that it asks first only before acting for the person outside its workspace irreversibly or when the decision is theirs. A turn that used tools gets one review before it ends: the model checks the request against what it did and either replies `DONE`, which keeps its answer, or keeps working and writes a final reply that replaces the earlier one. Spoken meeting turns and talk-only turns skip the review.
+
+**Rationale.** Agents reliably did the analysis and then ended with a menu of next steps. One review per turn costs one model call on turns that already did tool work. Alternatives considered: reviewing every turn, which doubles the cost of conversation; reviewing until the model says done, which can loop.
+
+**Validation scenarios.** A review that finds nothing keeps the answer; a review that finds work left runs tools and its reply stands alone.
+
 ## Needs you
 
 Accepted 2026-11-17, at the user's direction.

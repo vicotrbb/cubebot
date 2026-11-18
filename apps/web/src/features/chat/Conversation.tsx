@@ -5,6 +5,7 @@ import {
   ListChecks,
   Megaphone,
   Repeat,
+  Video,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { api, failure, ok, type Turn } from '../../api/client'
@@ -18,6 +19,7 @@ import { MeetingMessage } from '../meetings/MeetingMessage'
 import { Attachments } from './Attachments'
 import { Composer } from './Composer'
 import { Markdown } from './Markdown'
+import { Message, type Part } from './MessageTools'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
 import { WorkCard, WorkLog } from './WorkCard'
 import { ApprovalBar, AskRow, isAsk, useApprovals } from './Approvals'
@@ -35,6 +37,7 @@ export function Conversation({
   loaded,
   readError,
   add,
+  edit,
   onOpenThread,
 }: {
   agent: AgentSummary
@@ -115,6 +118,7 @@ export function Conversation({
                   you={you}
                   canSend={canSend}
                   onOpenThread={() => onOpenThread(said)}
+                  onDeleted={(part) => edit(said.id, part)}
                 />
               ))}
             </CallMessage>
@@ -129,6 +133,7 @@ export function Conversation({
                   you={you}
                   canSend={canSend}
                   onOpenThread={() => onOpenThread(said)}
+                  onDeleted={(part) => edit(said.id, part)}
                 />
               ))}
             </MeetingMessage>
@@ -141,6 +146,7 @@ export function Conversation({
               you={you}
               canSend={canSend}
               onOpenThread={() => onOpenThread(turn)}
+              onDeleted={(part) => edit(turn.id, part)}
             />
           ),
         )}
@@ -225,6 +231,7 @@ function origin(turn: Turn) {
   if (from.kind === 'broadcast') return `broadcast from ${from.name}`
   if (from.kind === 'routine') return `via routine ${from.name}`
   if (from.kind === 'wake') return 'Wake-up'
+  if (from.kind === 'meeting') return `after “${from.name}”`
   if (from.kind === 'app') return `via ${from.name}`
   if (from.kind === 'delegation') return `delegated by ${from.name}`
   return `message from ${from.name}`
@@ -237,6 +244,7 @@ function Exchange({
   you,
   canSend,
   onOpenThread,
+  onDeleted,
 }: {
   agent: AgentSummary
   turn: Turn
@@ -244,76 +252,102 @@ function Exchange({
   you: string
   canSend: boolean
   onOpenThread: () => void
+  onDeleted: (part: Part) => void
 }) {
   const approvals = useApprovals(agent)
   const asking = turn.terminal.some(
     (tool) => isAsk(tool) && approvals.statusOf(tool).status === 'pending',
   )
+  if (hidden(turn)) return null
+  const deletable = canSend && SETTLED.includes(turn.status)
   return (
     <article className="exchange" data-status={turn.status}>
-      <PersonMessage turn={turn} you={you} />
-      <div className="msg msg--agent agent-message">
-        <Cube
-          agentId={agent.id}
-          avatar={agent.avatar}
-          mood={turn.status === 'running' ? 'working' : 'idle'}
-          size={32}
-          className="msg__avatar"
+      {!turn.message_deleted && (
+        <PersonMessage
+          turn={turn}
+          you={you}
+          agent={agent}
+          deletable={deletable}
+          onDeleted={onDeleted}
         />
-        <div className="msg__body">
-          <div className="msg__head">
-            <span className="msg__author">{agent.name}</span>
-            <span className="msg__state faint small">
-              {stateLabel(turn, agent.activity)}
-            </span>
-          </div>
-          {canSend && (
-            <ApprovalBar
+      )}
+      {!turn.response_deleted && (
+        <Message
+          className="msg msg--agent agent-message"
+          text={turn.response || streaming || ''}
+          part="response"
+          conversation={agent.id}
+          turn={turn.id}
+          deletable={deletable}
+          who={agent.name}
+          onDeleted={onDeleted}
+        >
+          <Cube
+            agentId={agent.id}
+            avatar={agent.avatar}
+            mood={turn.status === 'running' ? 'working' : 'idle'}
+            size={32}
+            className="msg__avatar"
+          />
+          <div className="msg__body">
+            <div className="msg__head">
+              <span className="msg__author">{agent.name}</span>
+              <span className="msg__state faint small">
+                {stateLabel(turn, agent.activity)}
+              </span>
+            </div>
+            {canSend && (
+              <ApprovalBar
+                agent={agent}
+                tools={turn.terminal}
+                approvals={approvals}
+              />
+            )}
+            {turn.terminal.length > 0 && (
+              <WorkLog
+                tools={turn.terminal}
+                running={turn.status === 'running'}
+                open={turn.status === 'running' || asking}
+              >
+                {turn.terminal.map((tool) => (
+                  <div key={tool.id}>
+                    {tool.reobserved && (
+                      <p className="desktop-marker small faint">
+                        Control returned · agent re-observed the screen
+                      </p>
+                    )}
+                    {isAsk(tool) ? (
+                      <AskRow
+                        agent={agent}
+                        tool={tool}
+                        approvals={approvals}
+                        canSettle={canSend}
+                      />
+                    ) : (
+                      <WorkCard tool={tool} />
+                    )}
+                  </div>
+                ))}
+              </WorkLog>
+            )}
+            {turn.response ? (
+              <Markdown text={turn.response} />
+            ) : (
+              streaming && <Markdown text={streaming} />
+            )}
+            <Attachments turn={turn.id} items={turn.attachments} />
+            {turn.children.length > 0 && (
+              <ThreadLine turn={turn} onOpen={onOpenThread} />
+            )}
+            <Steering turn={turn} />
+            <TurnActions
               agent={agent}
-              tools={turn.terminal}
-              approvals={approvals}
+              turn={turn}
+              onOpenThread={onOpenThread}
             />
-          )}
-          {turn.terminal.length > 0 && (
-            <WorkLog
-              tools={turn.terminal}
-              running={turn.status === 'running'}
-              open={turn.status === 'running' || asking}
-            >
-              {turn.terminal.map((tool) => (
-                <div key={tool.id}>
-                  {tool.reobserved && (
-                    <p className="desktop-marker small faint">
-                      Control returned · agent re-observed the screen
-                    </p>
-                  )}
-                  {isAsk(tool) ? (
-                    <AskRow
-                      agent={agent}
-                      tool={tool}
-                      approvals={approvals}
-                      canSettle={canSend}
-                    />
-                  ) : (
-                    <WorkCard tool={tool} />
-                  )}
-                </div>
-              ))}
-            </WorkLog>
-          )}
-          {turn.response ? (
-            <Markdown text={turn.response} />
-          ) : (
-            streaming && <Markdown text={streaming} />
-          )}
-          <Attachments turn={turn.id} items={turn.attachments} />
-          {turn.children.length > 0 && (
-            <ThreadLine turn={turn} onOpen={onOpenThread} />
-          )}
-          <Steering turn={turn} />
-          <TurnActions agent={agent} turn={turn} onOpenThread={onOpenThread} />
-        </div>
-      </div>
+          </div>
+        </Message>
+      )}
     </article>
   )
 }
@@ -327,6 +361,12 @@ function shownRequest(turn: Turn) {
     return turn.message.replace(/^Wake-up [^\n]*:\n\n/, '')
   if (turn.origin?.kind === 'approvals')
     return turn.message.replace(/^[^\n]*\n/, '')
+  if (turn.origin?.kind === 'meeting')
+    return (
+      /\n\nSummary:\n([\s\S]*?)\n\nTranscript, oldest first/.exec(
+        turn.message,
+      )?.[1] ?? ''
+    )
   return turn.message
 }
 
@@ -339,26 +379,60 @@ function AppVia({ turn }: { turn: Turn }) {
   return <span className="faint small">{origin(turn)}</span>
 }
 
-function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
+const SETTLED = ['complete', 'failed', 'cancelled']
+
+function OriginAvatar({ turn, you }: { turn: Turn; you: string }) {
+  const from = personOrigin(turn)
+  if (!from) return <PersonAvatar login={you} className="msg__avatar" />
+  return (
+    <span className="avatar-initial msg__avatar" aria-hidden="true">
+      {from.kind === 'routine' && <Repeat size={16} />}
+      {from.kind === 'wake' && <AlarmClock size={16} />}
+      {from.kind === 'broadcast' && <Megaphone size={16} />}
+      {from.kind === 'approvals' && <ListChecks size={16} />}
+      {from.kind === 'meeting' && <Video size={16} />}
+      {(from.kind === 'delegation' || from.kind === 'message') &&
+        from.name.slice(0, 1).toUpperCase()}
+    </span>
+  )
+}
+
+function PersonMessage({
+  turn,
+  you,
+  agent,
+  deletable,
+  onDeleted,
+}: {
+  turn: Turn
+  you: string
+  agent: AgentSummary
+  deletable: boolean
+  onDeleted: (part: Part) => void
+}) {
   const from = personOrigin(turn)
   const via = from ? origin(turn) : null
   return (
-    <div className="msg msg--person">
-      {from ? (
-        <span className="avatar-initial msg__avatar" aria-hidden="true">
-          {from.kind === 'routine' && <Repeat size={16} />}
-          {from.kind === 'wake' && <AlarmClock size={16} />}
-          {from.kind === 'broadcast' && <Megaphone size={16} />}
-          {from.kind === 'approvals' && <ListChecks size={16} />}
-          {(from.kind === 'delegation' || from.kind === 'message') &&
-            from.name.slice(0, 1).toUpperCase()}
-        </span>
-      ) : (
-        <PersonAvatar login={you} className="msg__avatar" />
-      )}
+    <Message
+      className="msg msg--person"
+      text={shownRequest(turn)}
+      part="message"
+      conversation={agent.id}
+      turn={turn.id}
+      deletable={deletable}
+      who={agent.name}
+      onDeleted={onDeleted}
+    >
+      <OriginAvatar turn={turn} you={you} />
       <div className="msg__body">
         {from?.kind === 'approvals' ? (
           <Settled who={capital(via ?? '')} text={shownRequest(turn)} />
+        ) : from?.kind === 'meeting' ? (
+          <Folded
+            who={capital(via ?? '')}
+            note="Meeting summary"
+            text={shownRequest(turn)}
+          />
         ) : (
           <>
             <div className="msg__head">
@@ -370,7 +444,41 @@ function PersonMessage({ turn, you }: { turn: Turn; you: string }) {
           </>
         )}
       </div>
-    </div>
+    </Message>
+  )
+}
+
+function hidden(turn: Turn) {
+  return (turn.message_deleted && turn.response_deleted) || unseenFollowUp(turn)
+}
+
+function unseenFollowUp(turn: Turn) {
+  return (
+    turn.origin?.kind === 'meeting' &&
+    !turn.response &&
+    turn.terminal.length === 0 &&
+    ['queued', 'running', 'complete'].includes(turn.status)
+  )
+}
+
+function Folded({
+  who,
+  note,
+  text,
+}: {
+  who: string
+  note: string
+  text: string
+}) {
+  return (
+    <details className="settled">
+      <summary className="settled__summary">
+        <span className="msg__author">{who}</span>
+        <span className="faint small">{note}</span>
+        <ChevronRight className="settled__chevron" aria-hidden="true" />
+      </summary>
+      <Markdown text={text} />
+    </details>
   )
 }
 
@@ -387,16 +495,7 @@ function Settled({ who, text }: { who: string; text: string }) {
     .filter(([n]) => n > 0)
     .map(([n, word]) => `${n} ${word}`)
     .join(', ')
-  return (
-    <details className="settled">
-      <summary className="settled__summary">
-        <span className="msg__author">{who}</span>
-        <span className="faint small">{outcome}</span>
-        <ChevronRight className="settled__chevron" aria-hidden="true" />
-      </summary>
-      <Markdown text={text} />
-    </details>
-  )
+  return <Folded who={who} note={outcome} text={text} />
 }
 
 function ThreadLine({ turn, onOpen }: { turn: Turn; onOpen: () => void }) {

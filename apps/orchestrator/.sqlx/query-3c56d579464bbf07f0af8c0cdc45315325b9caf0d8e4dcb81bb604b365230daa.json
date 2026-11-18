@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT instructions, personality FROM agents WHERE id=$1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instructions",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "personality",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3c56d579464bbf07f0af8c0cdc45315325b9caf0d8e4dcb81bb604b365230daa"
+}

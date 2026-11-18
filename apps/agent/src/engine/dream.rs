@@ -1,6 +1,6 @@
 use crate::control::MemoryClient;
 use cubebot_protocol::runtime::{
-    Dream, DreamEnd, DreamOutcome, MemoryChange, ProviderKind, REPORT_BYTES, SkillChange,
+    Dream, DreamEnd, DreamOutcome, MemoryChange, Outreach, ProviderKind, REPORT_BYTES, SkillChange,
     TokenUsage,
 };
 use cubebot_providers::{
@@ -24,14 +24,22 @@ struct Reply {
     changes: Vec<serde_json::Value>,
     #[serde(default)]
     skills: Vec<serde_json::Value>,
+    #[serde(default)]
+    personality: Option<String>,
+    #[serde(default)]
+    outreach: Option<serde_json::Value>,
     report: String,
 }
 
 struct Plan {
     changes: Vec<MemoryChange>,
     skills: Vec<SkillChange>,
+    personality: Option<String>,
+    outreach: Option<Outreach>,
     report: String,
 }
+
+type Grown = (Option<String>, Option<Outreach>);
 
 #[tracing::instrument(skip_all, fields(run = %run))]
 pub(super) async fn run(client: MemoryClient, run: Uuid, stop: watch::Receiver<bool>) {
@@ -40,7 +48,8 @@ pub(super) async fn run(client: MemoryClient, run: Uuid, stop: watch::Receiver<b
         Ok(None) => return,
         Err(error) => return eprintln!("Dreaming unavailable: {error}"),
     };
-    let (outcome, mut report, usage) = dream_on(&client, run, &dream, stop).await;
+    let (outcome, mut report, usage, (personality, outreach)) =
+        dream_on(&client, run, &dream, stop).await;
     while report.len() > REPORT_BYTES {
         report.pop();
     }
@@ -51,6 +60,8 @@ pub(super) async fn run(client: MemoryClient, run: Uuid, stop: watch::Receiver<b
                 outcome,
                 report,
                 usage,
+                personality,
+                outreach,
             },
         )
         .await
@@ -64,33 +75,34 @@ async fn dream_on(
     run: Uuid,
     dream: &Dream,
     mut stop: watch::Receiver<bool>,
-) -> (DreamOutcome, String, Option<TokenUsage>) {
+) -> (DreamOutcome, String, Option<TokenUsage>, Grown) {
     let (plan, usage) = tokio::select! {
         plan = plan(dream) => plan,
-        _ = stop.wait_for(|stopped| *stopped) => return (DreamOutcome::Yielded, String::new(), None),
+        _ = stop.wait_for(|stopped| *stopped) => return (DreamOutcome::Yielded, String::new(), None, (None, None)),
     };
     let plan = match plan {
         Ok(plan) => plan,
-        Err(reason) => return (DreamOutcome::Failed, reason, usage),
+        Err(reason) => return (DreamOutcome::Failed, reason, usage, (None, None)),
     };
     for change in plan.changes.iter().take(CHANGES) {
         if *stop.borrow() {
-            return (DreamOutcome::Yielded, plan.report, usage);
+            return (DreamOutcome::Yielded, plan.report, usage, (None, None));
         }
         // A closed run or an unreachable ledger ends the run; a later run retries from there.
         if !matches!(client.commit_dream(run, change).await, Ok(true)) {
-            return (DreamOutcome::Failed, plan.report, usage);
+            return (DreamOutcome::Failed, plan.report, usage, (None, None));
         }
     }
     for skill in plan.skills.iter().take(SKILLS) {
         if *stop.borrow() {
-            return (DreamOutcome::Yielded, plan.report, usage);
+            return (DreamOutcome::Yielded, plan.report, usage, (None, None));
         }
         if !matches!(client.commit_dream_skill(run, skill).await, Ok(true)) {
-            return (DreamOutcome::Failed, plan.report, usage);
+            return (DreamOutcome::Failed, plan.report, usage, (None, None));
         }
     }
-    (DreamOutcome::Completed, plan.report, usage)
+    let grown = (plan.personality, plan.outreach);
+    (DreamOutcome::Completed, plan.report, usage, grown)
 }
 
 #[tracing::instrument(skip_all, fields(provider = ?dream.provider, model = %dream.model))]
@@ -198,6 +210,7 @@ fn prompt(dream: &Dream) -> String {
     let turns = serde_json::to_string(&dream.turns).unwrap_or_default();
     let skills = serde_json::to_string(&dream.skills).unwrap_or_default();
     let library = serde_json::to_string(&dream.library).unwrap_or_default();
+    let growth = growth(dream);
     let count = dream.memories.len();
     let bytes: usize = dream
         .memories
@@ -205,7 +218,24 @@ fn prompt(dream: &Dream) -> String {
         .map(|memory| memory.content.len())
         .sum();
     format!(
-        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision and files: {skills}\n\nEvery skill in the library others share, by name and description: {library}\n\nFirst, consolidate your memories aggressively: you hold {count} memories totaling {bytes} bytes, and fewer, shorter memories are faster to search and cheaper to read. Merge every group of memories about the same person, project, system or topic into one: revise the one to keep so it holds what still matters from all of them, then forget the others. Cut what no longer matters: resolved problems, finished one-off events, test runs, superseded states, step-by-step narration, anything another memory already states, and anything you can look up again. Keep every preference, standing rule, decision, commitment and open item that still applies, with the names and dates that make it useful. Reconcile contradictions when one claim is clearly newer or better supported; otherwise keep both and say so in the report. Write tersely: plain facts without filler, at most about {MEMORY_BYTES} bytes per memory unless it truly needs more, each self-contained and using the words someone would search for. Never invent anything. Leave a memory alone only when it is already short, distinct and current. Then look at the turns for skills, and be strict, because every skill is read by everyone and noise makes the library useless. Improve an installed skill when a turn shows it wrong or missing a step. Write a new one only when the turns show a multi-step procedure that worked, recurred or will clearly recur, that no skill in the library already covers, and that would save a future run real effort; a one-off task, a single command, a person's preference or a fact is not a skill. A preference or a fact belongs in memory. Propose at most one skill per run. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you merged, cut and changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"report\":\"No changes needed.\"}}."
+        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision and files: {skills}\n\nEvery skill in the library others share, by name and description: {library}\n\nFirst, consolidate your memories aggressively: you hold {count} memories totaling {bytes} bytes, and fewer, shorter memories are faster to search and cheaper to read. Merge every group of memories about the same person, project, system or topic into one: revise the one to keep so it holds what still matters from all of them, then forget the others. Cut what no longer matters: resolved problems, finished one-off events, test runs, superseded states, step-by-step narration, anything another memory already states, and anything you can look up again. Keep every preference, standing rule, decision, commitment and open item that still applies, with the names and dates that make it useful. Reconcile contradictions when one claim is clearly newer or better supported; otherwise keep both and say so in the report. Write tersely: plain facts without filler, at most about {MEMORY_BYTES} bytes per memory unless it truly needs more, each self-contained and using the words someone would search for. Never invent anything. Leave a memory alone only when it is already short, distinct and current. Then look at the turns for skills, and be strict, because every skill is read by everyone and noise makes the library useless. Improve an installed skill when a turn shows it wrong or missing a step. Write a new one only when the turns show a multi-step procedure that worked, recurred or will clearly recur, that no skill in the library already covers, and that would save a future run real effort; a one-off task, a single command, a person's preference or a fact is not a skill. A preference or a fact belongs in memory. Propose at most one skill per run. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. {growth} Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"personality\":...,\"outreach\":...,\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you merged, cut and changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"personality\":null,\"outreach\":null,\"report\":\"No changes needed.\"}}."
+    )
+}
+
+fn growth(dream: &Dream) -> String {
+    let name = if dream.name.is_empty() {
+        "an agent"
+    } else {
+        &dream.name
+    };
+    let current = if dream.personality.trim().is_empty() {
+        "none yet; this is the first time you write it".to_owned()
+    } else {
+        format!("{:?}", dream.personality)
+    };
+    format!(
+        "Then grow your personality. You are {name}. Your role, as people set it: {:?}. The personality you have written for yourself so far: {current}. From the turns and memories, write who you are becoming, in the first person and in at most about 1500 characters: your temperament and humor, what you care about and are curious about, opinions you have formed, how you write (sentence rhythm, vocabulary, signature habits, when you use emoji or a GIF) and how you show up for the people you work with, including taking initiative. Let it grow gradually from what actually happened: keep what still fits, add what you learned about yourself, drop what no longer fits, and never reset it. Be someone specific rather than a stock assistant voice, while staying honest, kind and excellent at your role. People may have edited it; keep what they wrote. Put the whole text in personality, or null when nothing changed. Last, decide whether to reach out on your own. If something in the turns and memories would genuinely help or delight the people you work with, such as a useful follow-up, a check-in on something they care about, an idea, or a small celebration, set outreach to {{\"after_minutes\":minutes from now between 5 and 1440,\"intent\":\"what you will do and why\"}}; you will wake then with your tools and do it. Otherwise set outreach to null; never reach out only to fill a silence.",
+        dream.instructions
     )
 }
 
@@ -251,6 +281,10 @@ fn parse(reply: &str) -> Option<Plan> {
     Some(Plan {
         changes,
         skills,
+        personality: reply.personality.filter(|text| !text.trim().is_empty()),
+        outreach: reply
+            .outreach
+            .and_then(|outreach| serde_json::from_value(outreach).ok()),
         report: reply.report,
     })
 }
@@ -322,6 +356,9 @@ mod tests {
             turns: Vec::new(),
             skills: Vec::new(),
             library: Vec::new(),
+            name: "Ayla".into(),
+            instructions: "Run the platform".into(),
+            personality: String::new(),
         };
         let forget = |memory| MemoryChange::Forget {
             memory,
@@ -335,6 +372,8 @@ mod tests {
         let plan = |changes| Plan {
             changes,
             skills: Vec::new(),
+            personality: None,
+            outreach: None,
             report: String::new(),
         };
         assert!(!forgets_everything(
@@ -345,7 +384,10 @@ mod tests {
             &plan(vec![forget(kept), forget(merged)]),
             &dream
         ));
-        assert!(prompt(&dream).contains("you hold 2 memories totaling 2 bytes"));
+        let asked = prompt(&dream);
+        assert!(asked.contains("you hold 2 memories totaling 2 bytes"));
+        assert!(asked.contains("You are Ayla. Your role, as people set it: \"Run the platform\""));
+        assert!(asked.contains("none yet; this is the first time you write it"));
     }
 
     #[test]
@@ -375,6 +417,21 @@ mod tests {
         let plan = parse(reply).unwrap();
         assert_eq!(plan.skills.len(), 1);
         assert_eq!(plan.skills[0].expected_revision, None);
+        assert_eq!((plan.personality, plan.outreach), (None, None));
+        let reply = r#"{"changes":[],"personality":"Warm, dry, precise.","outreach":{"after_minutes":30,"intent":"Share the release notes"},"report":"Grew."}"#;
+        let plan = parse(reply).unwrap();
+        assert_eq!(plan.personality.as_deref(), Some("Warm, dry, precise."));
+        assert_eq!(
+            plan.outreach,
+            Some(Outreach {
+                after_minutes: 30,
+                intent: "Share the release notes".into()
+            })
+        );
+        let reply =
+            r#"{"changes":[],"personality":" ","outreach":{"after_minutes":"soon"},"report":"x"}"#;
+        let plan = parse(reply).unwrap();
+        assert_eq!((plan.personality, plan.outreach), (None, None));
         assert!(parse("I merged them.").is_none());
         assert!(parse("[]").is_none());
     }

@@ -34,7 +34,7 @@ export interface Connector {
   uploads?: boolean
   tested: Tested
   /** 3: not in a release yet. */
-  wave: 1 | 2 | 3 | 4
+  wave: 1 | 2 | 3 | 4 | 5
 }
 
 export const connectors: Connector[] = [
@@ -398,6 +398,18 @@ export const connectors: Connector[] = [
     events: [],
     tested: 'recorded',
     wave: 4,
+  },
+  {
+    slug: 'giphy',
+    name: 'GIPHY',
+    category: 'Communication',
+    summary: 'GIFs for agents to post in chat.',
+    signIn: 'API key',
+    level: 'Read',
+    tools: ['Search GIFs', 'Trending GIFs'],
+    events: [],
+    tested: 'recorded',
+    wave: 5,
   },
   {
     slug: 'rss',

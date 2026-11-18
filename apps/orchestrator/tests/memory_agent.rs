@@ -19,6 +19,7 @@ use tokio::sync::Notify;
 use uuid::Uuid;
 
 const EXTRACTION: &str = "Before this turn ends";
+const REVIEW: &str = "Before you finish, review your work";
 
 pub(crate) enum Step {
     Reply(Value),
@@ -58,6 +59,8 @@ pub(crate) async fn respond(
         if last.starts_with(EXTRACTION) {
             let facts = script.1.pop_front().unwrap_or(json!([]));
             Step::Reply(json!([text(&facts.to_string())]))
+        } else if last.starts_with(REVIEW) {
+            Step::Reply(json!([text("DONE")]))
         } else {
             script
                 .0
@@ -385,8 +388,8 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
     assert_eq!(s.settled(turn5).await.status, "complete");
     assert_eq!(
         model.requests().len(),
-        asked + 2,
-        "a forgetting turn skips extraction"
+        asked + 3,
+        "a forgetting turn is reviewed once and skips extraction"
     );
     model.script.lock().unwrap().1.clear();
     assert!(
@@ -519,6 +522,58 @@ async fn a_native_agent_saves_recalls_revises_and_forgets_across_turns() {
         "a human session is not an agent credential"
     );
 
+    drop(child);
+    server.abort();
+    provider_task.abort();
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_wake_up_with_nothing_to_say_settles_quietly_and_out_of_sight() {
+    let f = fixture().await;
+    let (auth, work, admin, conversation) =
+        native_chat_setup(&f, "Wake-up you set:\n\nCheck on the launch.").await;
+    let turn = work.history(&admin, conversation, 0).await.unwrap()[0].id;
+    sqlx::query!("UPDATE chat_turns SET origin='wake' WHERE id=$1", turn)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let model = Arc::new(Model::default());
+    model.turn(vec![Step::Reply(json!([text(" [silent]\n")]))], json!([]));
+    let (provider, provider_task) = http_server(
+        Router::new()
+            .route("/responses", axum::routing::post(respond))
+            .with_state(model.clone()),
+    )
+    .await;
+    let (origin, server) = runtime_server(auth).await;
+    let child = spawn_native_text(&origin, &provider);
+    let mut settled = None;
+    for _ in 0..200 {
+        let row = sqlx::query!(
+            "SELECT status, response, quiet FROM chat_turns WHERE id=$1",
+            turn
+        )
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+        if row.status == "complete" {
+            settled = Some(row);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let settled = settled.expect("the wake-up settles");
+    assert!(settled.quiet);
+    assert_eq!(settled.response.as_deref(), Some(""));
+    assert!(
+        work.history(&admin, conversation, 0)
+            .await
+            .unwrap()
+            .is_empty(),
+        "a quiet turn never reaches the conversation"
+    );
     drop(child);
     server.abort();
     provider_task.abort();

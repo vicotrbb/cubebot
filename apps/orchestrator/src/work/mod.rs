@@ -7,6 +7,7 @@ mod collaboration;
 mod coordinator;
 mod creations;
 mod cursors;
+mod deletion;
 mod events;
 mod handoffs;
 mod meetings;
@@ -33,6 +34,7 @@ pub(crate) use coordinator::ask_as;
 pub use coordinator::{coordinate, route};
 pub use creations::{CreationRequest, DeclineCreation};
 pub use cursors::ReadCursor;
+pub use deletion::MessagePart;
 pub use events::{Event, Page};
 pub use handoffs::{DeclineLogin, LoginHandoff};
 pub use meetings::{MeetingLine, MeetingPresence, MeetingRecord};
@@ -46,6 +48,8 @@ pub use usage::{
     AgentUsage, DaySpend, ModelSpend, SetBudget, Spend, keep_prices, prices_due, store_prices,
 };
 use uuid::Uuid;
+
+pub(crate) const SILENT: &str = "[silent]";
 
 #[derive(Clone)]
 pub struct Work {
@@ -90,6 +94,8 @@ pub struct Turn {
     /// Set when this message is a whole voice call, whose turns it holds.
     pub call: Option<CallRecord>,
     pub meeting: Option<MeetingRecord>,
+    pub message_deleted: bool,
+    pub response_deleted: bool,
 }
 
 pub(super) struct TurnRow {
@@ -118,6 +124,8 @@ impl From<TurnRow> for Turn {
             message_attachments: Vec::new(),
             call: None,
             meeting: None,
+            message_deleted: false,
+            response_deleted: false,
         }
     }
 }
@@ -175,7 +183,7 @@ impl Work {
             "
             SELECT id, sequence, message, status, response, error
             FROM chat_turns
-            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND meeting_id IS NULL AND sequence>$2
+            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND (meeting_id IS NULL OR meeting_summary) AND NOT quiet AND sequence>$2
             ORDER BY sequence
             LIMIT 100
             ",

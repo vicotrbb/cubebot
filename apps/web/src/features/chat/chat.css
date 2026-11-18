@@ -42,6 +42,110 @@
 .msg:hover {
   background: rgb(var(--shadow) / 0.03);
 }
+.msg {
+  position: relative;
+}
+.msg__tools {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 6px 16px -8px rgb(var(--shadow) / 0.45);
+  opacity: 0;
+  transform: translateY(3px);
+  pointer-events: none;
+  transition:
+    opacity var(--quick) ease-out,
+    transform var(--quick) var(--settle);
+}
+.msg:hover > .msg__tools,
+.msg:focus-within > .msg__tools,
+.msg[data-tools='open'] > .msg__tools {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+.msg__tool {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition:
+    background var(--quick) ease-out,
+    color var(--quick) ease-out;
+}
+.msg__tool svg {
+  width: 16px;
+  height: 16px;
+}
+.msg__tool:hover {
+  background: rgb(var(--shadow) / 0.07);
+  color: var(--ink);
+}
+.msg__tool:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 0;
+}
+.msg__tool[data-done] {
+  color: var(--success);
+}
+.msg__tool--danger:hover {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.msg__tool:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+.msg__error {
+  grid-column: 2;
+}
+.msg[data-tools='open'] {
+  background: rgb(var(--shadow) / 0.04);
+}
+@media (hover: none) {
+  .msg:hover:not([data-tools='open']) > .msg__tools,
+  .msg:focus-within:not([data-tools='open']) > .msg__tools {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .msg:hover {
+    background: none;
+  }
+  .msg__tools {
+    top: var(--tools-y, 0);
+    right: 4px;
+    gap: 4px;
+    padding: 3px;
+  }
+  .msg__tool {
+    width: 44px;
+    height: 40px;
+  }
+  .msg__tool svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .msg__tools {
+    transform: none;
+    transition: opacity var(--quick) linear;
+  }
+}
 .msg__avatar {
   margin-top: 2px;
 }

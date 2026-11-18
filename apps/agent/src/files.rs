@@ -48,6 +48,19 @@ struct Attach {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct Gif {
+    url: String,
+}
+
+const LARGEST_GIF: usize = 8 * 1024 * 1024;
+const MOVING: [(&str, &str); 3] = [
+    ("image/gif", "gif"),
+    ("image/webp", "webp"),
+    ("video/mp4", "mp4"),
+];
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Share {
     file: String,
     kind: ShareKind,
@@ -76,6 +89,11 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
             }),
         ),
     ];
+    tools.push(tool(
+        "send_gif",
+        "Send an animated GIF with your reply; it plays under your message in this conversation or room. Use one when it says something better than words: a reaction, a celebration, a joke that fits the moment and your personality. Pass a direct https link to the GIF, WebP or MP4 file, such as a gif link from a GIPHY search or one you found on the web; never put GIF links in your text, they do not load.",
+        json!({"url":text("A direct https link to the GIF, WebP or MP4 file, at most 8 MB.")}),
+    ));
     if workspace {
         tools.push(tool(
             "send_attachment",
@@ -141,7 +159,7 @@ pub fn call<'a>(
 ) -> Option<Result<Running<'a>, &'static str>> {
     if !matches!(
         name,
-        "files_list" | "files_get" | "files_put" | "files_share" | "send_attachment"
+        "files_list" | "files_get" | "files_put" | "files_share" | "send_attachment" | "send_gif"
     ) {
         return None;
     }
@@ -152,6 +170,7 @@ pub fn call<'a>(
     Some(match name {
         "files_list" => list(client, input),
         "files_share" => share(client, input),
+        "send_gif" => gif(client, turn, id, input),
         "files_put" => workspace().and_then(|tools| put(client, id, input, tools)),
         "send_attachment" => workspace().and_then(|tools| attach(client, turn, id, input, tools)),
         _ => workspace().and_then(|tools| get(client, input, tools)),
@@ -241,6 +260,81 @@ async fn sent(
             attach.name
         )
     }))
+}
+
+fn gif<'a>(
+    client: &'a MemoryClient,
+    turn: Uuid,
+    id: Uuid,
+    input: &Value,
+) -> Result<Running<'a>, &'static str> {
+    let Gif { url } = parse(input)?;
+    let url = reqwest::Url::parse(&url)
+        .ok()
+        .filter(|url| url.scheme() == "https")
+        .ok_or("url must be a direct https link to the GIF")?;
+    Ok(Box::pin(async move {
+        reported(sent_gif(client, turn, id, url).await)
+    }))
+}
+
+async fn sent_gif(
+    client: &MemoryClient,
+    turn: Uuid,
+    id: Uuid,
+    url: reqwest::Url,
+) -> Result<Result<String, String>, Error> {
+    let (body, extension) = match fetched(url).await {
+        Ok(fetched) => fetched,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    let name = unique_name(&format!("gif.{extension}"), id);
+    let entry = match client.put_file(None, &name, id, body.into()).await? {
+        Ok(entry) => entry,
+        Err(reason) => return Ok(Err(reason)),
+    };
+    let attached = client.attach_file(turn, entry.id).await?;
+    Ok(attached.map(|()| {
+        "Sent the GIF with your reply. People see it under your message; do not link it.".into()
+    }))
+}
+
+async fn fetched(url: reqwest::Url) -> Result<(Vec<u8>, &'static str), String> {
+    use futures_util::StreamExt;
+    let failed = |error: reqwest::Error| format!("the GIF could not be fetched: {error}");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(failed)?;
+    let response = client.get(url).send().await.map_err(failed)?;
+    if !response.status().is_success() {
+        return Err(format!("the GIF link answered {}", response.status()));
+    }
+    let extension = moving(response.headers())?;
+    let mut body = Vec::new();
+    let mut chunks = response.bytes_stream();
+    while let Some(chunk) = chunks.next().await {
+        body.extend_from_slice(&chunk.map_err(failed)?);
+        if body.len() > LARGEST_GIF {
+            return Err("the GIF is larger than 8 MB; pick a smaller rendition".into());
+        }
+    }
+    Ok((body, extension))
+}
+
+fn moving(headers: &reqwest::header::HeaderMap) -> Result<&'static str, String> {
+    let kind = headers
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.split(';').next())
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    MOVING
+        .iter()
+        .find(|(media, _)| *media == kind)
+        .map(|(_, extension)| *extension)
+        .ok_or_else(|| format!("the link is {kind:?}, not a GIF, WebP or MP4 file"))
 }
 
 fn unique_name(name: &str, id: Uuid) -> String {
@@ -392,5 +486,26 @@ pub(crate) async fn written(
     match writer.wait().await {
         Ok(status) if status.success() => Ok(Ok(format!("Wrote {size} bytes to {path}."))),
         _ => unwritable(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::moving;
+    use reqwest::header::{CONTENT_TYPE, HeaderMap, HeaderValue};
+
+    fn typed(kind: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(CONTENT_TYPE, HeaderValue::from_str(kind).unwrap());
+        headers
+    }
+
+    #[test]
+    fn only_moving_pictures_are_sent_as_gifs() {
+        assert_eq!(moving(&typed("image/gif")), Ok("gif"));
+        assert_eq!(moving(&typed("Image/WebP; charset=binary")), Ok("webp"));
+        assert_eq!(moving(&typed("video/mp4")), Ok("mp4"));
+        assert!(moving(&typed("text/html")).is_err());
+        assert!(moving(&HeaderMap::new()).is_err());
     }
 }

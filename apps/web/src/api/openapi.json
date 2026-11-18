@@ -496,6 +496,72 @@
         }
       }
     },
+    "/api/agents/{agent}/personality": {
+      "get": {
+        "tags": [],
+        "operationId": "personality",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Personality"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "operationId": "save_personality",
+        "parameters": [
+          {
+            "name": "agent",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePersonality"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Personality"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{agent}/routines": {
       "get": {
         "tags": [],
@@ -2868,6 +2934,46 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/messages/{turn}/{part}": {
+      "delete": {
+        "tags": [],
+        "operationId": "delete_message",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "part",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["message", "response"]
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
           }
         }
       }
@@ -11254,6 +11360,21 @@
           "charcoal"
         ]
       },
+      "Personality": {
+        "type": "object",
+        "required": ["personality"],
+        "properties": {
+          "edited_by": {
+            "type": ["string", "null"]
+          },
+          "personality": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": ["string", "null"]
+          }
+        }
+      },
       "Phase": {
         "type": "string",
         "enum": ["planned", "creating", "bound", "stopped"]
@@ -12295,6 +12416,16 @@
             "type": "string"
           },
           "title": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavePersonality": {
+        "type": "object",
+        "required": ["personality"],
+        "properties": {
+          "personality": {
             "type": "string"
           }
         },
@@ -13726,7 +13857,9 @@
           "children",
           "steering",
           "attachments",
-          "message_attachments"
+          "message_attachments",
+          "message_deleted",
+          "response_deleted"
         ],
         "properties": {
           "attachments": {
@@ -13780,6 +13913,9 @@
               "$ref": "#/components/schemas/ReplyAttachment"
             }
           },
+          "message_deleted": {
+            "type": "boolean"
+          },
           "origin": {
             "oneOf": [
               {
@@ -13793,6 +13929,9 @@
           },
           "response": {
             "type": ["string", "null"]
+          },
+          "response_deleted": {
+            "type": "boolean"
           },
           "sequence": {
             "type": "integer",

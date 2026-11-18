@@ -180,6 +180,8 @@ Amended 2026-11-17: a Listen only mode for the whole meeting and a Listening swi
 
 Amended 2026-11-18, at the user's request: listen-only agents show as small chips instead of tiles, every participant has noise cancellation they can change during the meeting, and meeting and call transcripts export as Markdown, JSON or PDF.
 
+Amended 2026-11-18, at the user's request that agents act on what a meeting left them: when a meeting ends, each agent that attended reads it and does any follow-up that falls to it.
+
 **Decision.** A person starts an instant meeting or schedules one, invites members, agents and email addresses (also while it runs), and shares a link anyone can open. Everyone has voice, video and screen sharing. Agents take part by voice through the speech pipeline of [Voice calls over the chat pipeline](#voice-calls-over-the-chat-pipeline), with the installation's and each agent's STT, TTS and voice; they can share their own desktop. Each agent that attends finds the meeting in its conversation as one Meeting message with the transcript and a summary. Meetings appear on the [calendar](#a-calendar-of-the-persons-events-and-their-agents-schedules) of their owner and invited members, and in the New menu, which every member now sees with the items they may use.
 
 - **Transport.** One WebSocket per participant through the orchestrator, which relays everyone's media to everyone else: 16 kHz PCM16 audio, as calls send, and video the browser encodes with WebCodecs (VP8, H.264 or VP9, whichever it supports). There is no WebRTC, TURN or UDP, so a meeting works through any HTTP ingress, and every frame passes the orchestrator's checks. Each receiver has a bounded queue; a slow one loses video until the next key frame, never slowing anyone else.
@@ -191,7 +193,7 @@ Amended 2026-11-18, at the user's request: listen-only agents show as small chip
 - **Export.** A meeting's page and a call's message export the transcript, with the summary when there is one, as Markdown or JSON files, or as PDF through the browser's print dialog. *Chosen here:* the export is built in the browser from the data the page already holds, and a phone with a share sheet gets it instead of a download.
 - **Settings.** Platform › Meetings: agents may join, agents may share their screen, guests may join by link, the largest meeting (12, agents included) and the default agent mode (When relevant, Only when named or Listen only).
 
-*Chosen here:* a meeting ends when its host ends it or five minutes after the last admitted person leaves, and an ended meeting is final: nobody can join it again; the summary is one tool-free model call through the owner's coordinator provider, with up to 4000 output tokens, and reaches each attending agent as a completed turn, so its later context holds it without special handling; invitation emails are plain text, sent through the inviter's own Gmail, Outlook or IMAP/SMTP connection, and only to invited addresses, since accounts hold no email; the lobby holds 20; a link is 32 random bytes the owner can turn off or replace.
+*Chosen here:* a meeting ends when its host ends it or five minutes after the last admitted person leaves, and an ended meeting is final: nobody can join it again; the summary is one tool-free model call through the owner's coordinator provider, with up to 4000 output tokens, and reaches each attending agent as a queued follow-up turn, as the owner, holding the summary and the transcript (its latest lines when the whole does not fit) and waking the agent; the agent does whatever follow-up is its to do, as if the owner had asked, or ends the turn quietly ([Quiet turns](agents.md#quiet-turns)), so nobody sees it; the conversation shows a follow-up, labelled after its meeting with the summary folded, once it has work or a reply; invitation emails are plain text, sent through the inviter's own Gmail, Outlook or IMAP/SMTP connection, and only to invited addresses, since accounts hold no email; the lobby holds 20; a link is 32 random bytes the owner can turn off or replace.
 
 **Rationale.** WebRTC gives better media under packet loss but needs UDP or a TURN server reachable by every guest, which a self-hosted cluster behind one ingress rarely has; a relay through the process that already carries calls and desktops keeps one entry point and one set of checks. Running agents' meeting turns through the chat path keeps the sandbox boundary, memory and permissions unchanged, as calls do.
 
@@ -199,9 +201,21 @@ Amended 2026-11-18, at the user's request: listen-only agents show as small chip
 
 **Open details.** Recording; in-meeting chat; agents joining meetings in other applications; a TURN-backed WebRTC path for larger or lossier meetings; telling an agent how much of its reply was heard.
 
-**What changed.** On 2026-11-17 the agent modes gained Listen only, and invited agents gained the per-agent Listening switch.
+**What changed.** On 2026-11-17 the agent modes gained Listen only, and invited agents gained the per-agent Listening switch. On 2026-11-18 the summary stopped being a completed, context-only turn: it is now a queued follow-up turn that wakes each attending agent.
 
 **Validation scenarios.** Two browsers see and hear each other through the relay; a named agent answers aloud and its turn sits in one Meeting message in its conversation; a guest's request makes a `talk_only` turn as the owner with no tools; a guest waits until admitted and is refused when the link is off, the meeting is locked, ended or full; the public lookup reveals only title, host, state, lock and lobby; a slow receiver does not stall others; in Listen only, or for a listening agent, naming the agent gets no answer and its queued reply is dropped.
+
+## Copy and delete a message
+
+Accepted 2026-11-18, at the user's direction.
+
+**Decision.** Every person and agent message in a conversation, a call or a meeting card has Copy and Delete. Copy puts both rendered HTML and the Markdown source on the clipboard, so pasting keeps formatting where the target understands it. Delete removes one side of a settled exchange (`complete`, `failed` or `cancelled`) for anyone with `conversation.send`: the person's message, or the agent's reply with its attachments, text events and work log. The text is erased, not hidden, and the agent's later context drops it; a deleted message whose reply remains reaches the agent as a note that the person deleted it. On a pointer that hovers, the actions float on the message; on touch, tapping a message raises them above the finger.
+
+**Rationale.** People need to take back what they sent and remove a reply that misleads the agent's later turns. Alternatives considered: hiding the message but keeping its text, which leaves what the person asked to remove in the database and in the agent's context; deleting the turn row, which breaks usage, audit and delegation records that reference it.
+
+**Consequences.** Memories the agent already formed from a deleted message, and a context summary written before the deletion, remain; the person edits or forgets those separately. Other open tabs see the deletion on their next reload.
+
+**Validation scenarios.** A queued turn refuses deletion; deleting the reply then the message leaves an empty, flagged turn that the conversation and the agent's context skip.
 
 ## Apps agents build
 

@@ -97,7 +97,33 @@ export function useConversation(id: string) {
         ? current
         : merge(current, [turn]),
     )
-  return { turns, streaming, loaded, readError, add }
+  const edit = (turn: string, part: 'message' | 'response') =>
+    setTurns((current) => current.map((known) => erased(known, turn, part)))
+  return { turns, streaming, loaded, readError, add, edit }
+}
+
+function erased(known: Turn, id: string, part: 'message' | 'response'): Turn {
+  if (known.id === id)
+    return part === 'message'
+      ? {
+          ...known,
+          message: '',
+          message_deleted: true,
+          message_attachments: [],
+        }
+      : {
+          ...known,
+          response: '',
+          response_deleted: true,
+          attachments: [],
+          terminal: [],
+        }
+  const held = known.call ?? known.meeting
+  if (!held?.turns.some((turn) => turn.id === id)) return known
+  const turns = held.turns.map((turn) => erased(turn, id, part))
+  if (known.call) return { ...known, call: { ...known.call, turns } }
+  if (known.meeting) return { ...known, meeting: { ...known.meeting, turns } }
+  return known
 }
 
 const OPEN = ['queued', 'running', 'delegated'] as const

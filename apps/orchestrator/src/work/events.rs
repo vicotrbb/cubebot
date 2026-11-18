@@ -80,7 +80,7 @@ impl Work {
             "
             SELECT id, sequence, message, status, response, error
             FROM chat_turns
-            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND meeting_id IS NULL AND (status IN ('queued','running','waiting','delegated') OR id=ANY($2))
+            WHERE conversation_id=$1 AND room_message_id IS NULL AND call_id IS NULL AND (meeting_id IS NULL OR meeting_summary) AND (status IN ('queued','running','waiting','delegated') OR id=ANY($2))
             ORDER BY sequence
             ",
             canonical.0,

@@ -1,0 +1,15 @@
+{
+  "config": {},
+  "credential": {
+    "kind": "fields",
+    "fields": { "api_key": "giphy-test-key-1234" }
+  },
+  "account": "GIPHY",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.giphy.com/v1/gifs/trending?api_key=giphy-test-key-1234&limit=1",
+      "body": { "data": [], "meta": { "status": 200, "msg": "OK" } }
+    }
+  ]
+}

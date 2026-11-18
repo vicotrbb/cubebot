@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE chat_turns SET origin='wake' WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "513e3de4cba3fc6e2d993210d6ed2796f4f914b0f1b7f328ed7348dbb89c4a9f"
+}
