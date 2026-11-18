@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.4.1'
+export const version = 'v0.4.2'
 export const released = '2026-11-18'
 
 export const docs = {
@@ -166,6 +166,18 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.4.2',
+    date: '2026-11-18',
+    title: 'Agents with character that finish the job',
+    items: [
+      'Each agent writes and grows its own personality while it rests, with its own voice and humor, and you can read and edit it on its About tab',
+      'Agents reach out on their own when they have something worth doing or saying, and send GIFs, with a new GIPHY connection to find them',
+      'When a meeting ends, every agent in it reads it and does its follow-up work, and stays quiet when nothing is theirs',
+      'Agents review their work before they finish and take the obvious next step instead of offering it',
+      "Copy any message with its formatting, or delete it from the conversation and the agent's memory of it",
+    ],
+  },
   {
     tag: 'v0.4.1',
     date: '2026-11-18',
