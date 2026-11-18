@@ -1,7 +1,15 @@
 import { AudioLines, Mic, MicOff, Video, VideoOff } from 'lucide-react'
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Cube } from '../../components/Cube'
 import { Alert, Field } from '../../components/primitives'
+import {
+  browserFilter,
+  captureContext,
+  NOISE_LEVELS,
+  saveNoise,
+  savedNoise,
+  type Noise,
+} from './media/noise'
 import { guestNameProblem } from './schedule'
 import type { Joining } from './useMeeting'
 import { usePreview, type Preview } from './usePreview'
@@ -163,6 +171,41 @@ function DevicePicker({
   )
 }
 
+export function NoiseChoice({
+  value,
+  onChange,
+}: {
+  value: Noise
+  onChange: (noise: Noise) => void
+}) {
+  const id = useId()
+  const meaning = NOISE_LEVELS.find(([level]) => level === value)?.[2]
+  return (
+    <div className="noise-choice">
+      <span className="noise-choice__label" id={id}>
+        Noise cancellation
+      </span>
+      <div className="tabs" role="radiogroup" aria-labelledby={id}>
+        {NOISE_LEVELS.map(([level, name]) => (
+          <button
+            key={level}
+            type="button"
+            role="radio"
+            aria-checked={value === level}
+            aria-describedby={value === level ? `${id}-meaning` : undefined}
+            onClick={() => onChange(level)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+      <p className="noise-choice__meaning" id={`${id}-meaning`}>
+        {meaning}
+      </p>
+    </div>
+  )
+}
+
 export function GreenRoom({
   title,
   detail,
@@ -184,15 +227,22 @@ export function GreenRoom({
 }) {
   const preview = usePreview()
   const [name, setName] = useState(remembered)
+  const [noise, setNoise] = useState(savedNoise)
   const meter = useRef<HTMLSpanElement>(null)
   useLevel(preview, meter)
   const trimmed = name.normalize('NFC').trim()
   const nameProblem = guest && trimmed ? guestNameProblem(trimmed) : ''
   const ready =
     !preview.starting && (!guest || (trimmed.length > 0 && !nameProblem))
+  const chooseNoise = (next: Noise) => {
+    setNoise(next)
+    saveNoise(next)
+    for (const track of preview.stream.getAudioTracks())
+      void browserFilter(track, next)
+  }
   const join = () => {
     if (!ready) return
-    const context = new AudioContext()
+    const context = captureContext()
     void context.resume()
     if (guest) remember(trimmed)
     preview.hand()
@@ -208,6 +258,7 @@ export function GreenRoom({
         screen: false,
         hand: false,
       },
+      noise,
     })
   }
   return (
@@ -264,6 +315,7 @@ export function GreenRoom({
             value={preview.chosen.camera}
             onChange={(device) => void preview.choose('video', device)}
           />
+          <NoiseChoice value={noise} onChange={chooseNoise} />
           <Alert>{preview.problems.audio}</Alert>
           {preview.problems.video && (
             <p className="notice">{preview.problems.video}</p>

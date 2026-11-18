@@ -3,7 +3,8 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 const LINES: i64 = 1500;
-const UNAVAILABLE: &str = "A summary was not available: no model provider could be reached.";
+const BUDGET: u64 = 4000;
+const UNAVAILABLE: &str = "A summary could not be written: the model provider did not return one.";
 const SUMMARIZER: &str = "You write the summary of a meeting from its transcript. You have no tools. Write plain markdown under 250 words with short sections for decisions, action items with their owners, and open questions; leave out a section with nothing in it. Use only what the transcript says, and never use em dashes.";
 
 #[tracing::instrument(skip_all, fields(meeting = %meeting))]
@@ -49,12 +50,15 @@ async fn write(
         "Meeting: {}\n\nTranscript, oldest first:\n{}",
         held.title, held.lines
     );
-    let answer =
-        crate::work::ask_as(pool, connections, held.owner_id, (SUMMARIZER, &prompt), 600).await;
-    let summary = match answer.as_deref().map(str::trim) {
-        Ok(summary) if !summary.is_empty() => summary.to_owned(),
-        _ => UNAVAILABLE.to_owned(),
-    };
+    let answer = crate::work::ask_as(
+        pool,
+        connections,
+        held.owner_id,
+        (SUMMARIZER, &prompt),
+        BUDGET,
+    )
+    .await;
+    let summary = written(answer);
     sqlx::query!(
         "UPDATE meetings SET summary=$2 WHERE id=$1",
         meeting,
@@ -65,4 +69,14 @@ async fn write(
     Work::new(pool.clone())
         .meeting_ended(meeting, &summary)
         .await
+}
+
+fn written(answer: Result<String, &str>) -> String {
+    match answer.as_deref().map(str::trim) {
+        Ok(summary) if !summary.is_empty() => summary.to_owned(),
+        failed => {
+            tracing::warn!(?failed, "meeting summary not written");
+            UNAVAILABLE.to_owned()
+        }
+    }
 }

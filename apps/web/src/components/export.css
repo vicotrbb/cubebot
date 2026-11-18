@@ -1,0 +1,134 @@
+.print-sheet {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .export-text {
+    display: none;
+  }
+}
+
+@media print {
+  @page {
+    margin: 18mm 16mm 20mm;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body > :not(.print-sheet) {
+    display: none !important;
+  }
+  .print-sheet {
+    display: block;
+    color: #2b2420;
+    font-family: var(--font);
+    font-size: 10.5pt;
+    line-height: 1.5;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .print-sheet h1 {
+    margin: 0;
+    font-size: 22pt;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .print-sheet h2 {
+    margin: 22pt 0 8pt;
+    font-size: 12.5pt;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    break-after: avoid;
+  }
+  .print-sheet__head {
+    padding-bottom: 12pt;
+    border-bottom: 2pt solid #f26a1b;
+  }
+  .print-sheet__details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6pt 22pt;
+    margin: 10pt 0 0;
+  }
+  .print-sheet__details div {
+    display: grid;
+    gap: 1pt;
+  }
+  .print-sheet__details dt {
+    color: #6e6157;
+    font-size: 8.5pt;
+    font-weight: 600;
+  }
+  .print-sheet__details dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .print-sheet__summary {
+    margin-top: 16pt;
+    padding: 2pt 14pt 10pt;
+    border-radius: 8pt;
+    background: #f6efe4;
+    break-inside: avoid-page;
+  }
+  .print-sheet__summary h2 {
+    margin-top: 10pt;
+  }
+  .print-sheet__summary .md h1,
+  .print-sheet__summary .md h2,
+  .print-sheet__summary .md h3 {
+    margin: 10pt 0 3pt;
+    font-size: 10.5pt;
+    font-weight: 700;
+  }
+  .print-sheet__summary .md p,
+  .print-sheet__summary .md ul,
+  .print-sheet__summary .md ol {
+    margin: 0 0 5pt;
+  }
+  .print-sheet__lines {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .print-sheet__lines li {
+    display: grid;
+    grid-template-columns: 26% minmax(0, 1fr);
+    gap: 12pt;
+    padding: 5pt 0;
+    border-top: 0.5pt solid rgb(43 36 32 / 0.14);
+    break-inside: avoid;
+  }
+  .print-sheet__who {
+    display: grid;
+    margin: 0;
+  }
+  .print-sheet__who b {
+    font-weight: 700;
+    overflow-wrap: anywhere;
+  }
+  .print-sheet__lines [data-kind='agent'] b {
+    color: #a6420a;
+  }
+  .print-sheet__who time {
+    color: #6e6157;
+    font-size: 8.5pt;
+    font-variant-numeric: tabular-nums;
+  }
+  .print-sheet__text {
+    margin: 0;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .print-sheet__foot {
+    margin-top: 20pt;
+    padding-top: 8pt;
+    border-top: 0.5pt solid rgb(43 36 32 / 0.14);
+    color: #6e6157;
+    font-size: 8.5pt;
+  }
+}

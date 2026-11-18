@@ -1,3 +1,4 @@
+import { browserFilter, suppressor, type Noise } from './noise'
 import { microphoneFrame } from './wire'
 
 const LEAD = 0.08
@@ -81,14 +82,25 @@ export function speakers(context: AudioContext) {
 
 export type Speakers = ReturnType<typeof speakers>
 
+function tap(context: AudioContext, stream: MediaStream) {
+  try {
+    return { context, source: context.createMediaStreamSource(stream) }
+  } catch {
+    const own = new AudioContext()
+    void own.resume()
+    return { context: own, source: own.createMediaStreamSource(stream), own }
+  }
+}
+
 export async function microphone(
-  context: AudioContext,
+  shared: AudioContext,
   stream: MediaStream,
   send: (frame: ArrayBuffer) => void,
   open: () => boolean,
+  noise: Noise,
 ) {
+  const { context, source, own } = tap(shared, stream)
   await context.audioWorklet.addModule('/call-capture.js')
-  const source = context.createMediaStreamSource(stream)
   const level = context.createAnalyser()
   level.fftSize = 512
   const worklet = new AudioWorkletNode(context, 'call-capture')
@@ -97,9 +109,25 @@ export async function microphone(
   }
   const silent = context.createGain()
   silent.gain.value = 0
-  source.connect(level)
-  source.connect(worklet)
   worklet.connect(silent).connect(context.destination)
+  let strong: ReturnType<typeof suppressor> | null = null
+  let wanted = noise
+  const route = (into: AudioNode, from: AudioNode | null) => {
+    source.disconnect()
+    from?.disconnect()
+    if (into !== source) source.connect(into)
+    into.connect(level)
+    into.connect(worklet)
+  }
+  const filter = async (next: Noise) => {
+    wanted = next
+    for (const track of stream.getAudioTracks()) void browserFilter(track, next)
+    if (next === 'strong') strong ??= suppressor(context).catch(() => null)
+    const node = await strong
+    if (wanted === next) route(next === 'strong' && node ? node : source, node)
+  }
+  route(source, null)
+  void filter(noise)
   const samples = new Uint8Array(256)
   return {
     level() {
@@ -111,11 +139,14 @@ export async function microphone(
         ) / 128
       )
     },
+    filter,
     close() {
       worklet.port.onmessage = null
       source.disconnect()
+      void strong?.then((node) => node?.destroy())
       worklet.disconnect()
       silent.disconnect()
+      void own?.close()
     },
   }
 }

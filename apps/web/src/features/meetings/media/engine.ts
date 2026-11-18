@@ -1,5 +1,6 @@
 import { HEIGHT, WIDTH, paint } from '../../desktop/useDesktopSocket'
 import { microphone, speakers, type Microphone } from './audio'
+import type { Noise } from './noise'
 import type { Server } from './room'
 import { encode, pictures, videoSupported, type Encoding } from './video'
 import { incoming, type Stream } from './wire'
@@ -23,6 +24,7 @@ export type Setup = {
   local: MediaStream
   devices: Devices
   self: Self
+  noise: Noise
   onServer: (message: Server) => void
   onSelf: (self: Self) => void
   onClosed: (reason: string) => void
@@ -55,6 +57,7 @@ export function connect(setup: Setup) {
   let self = { ...setup.self }
   let mic: Microphone | null = null
   let screen: MediaStream | null = null
+  let noise = setup.noise
   let live = false
   let closed = false
 
@@ -101,14 +104,17 @@ export function connect(setup: Setup) {
     live = true
     changed({})
     if (self.camera) startEncoder('camera', setup.local.getVideoTracks()[0])
+    const asked = noise
     const started = await microphone(
       setup.context,
       setup.local,
       binary,
       () => self.mic,
+      asked,
     ).catch(() => null)
     if (closed) started?.close()
     else mic = started
+    if (started && noise !== asked) void started.filter(noise)
   }
 
   const effects = (message: Server) => {
@@ -221,6 +227,10 @@ export function connect(setup: Setup) {
       changed({ screen: true })
     },
     stopScreen,
+    setNoise(next: Noise) {
+      noise = next
+      void mic?.filter(next)
+    },
     setHand(on: boolean) {
       changed({ hand: on })
     },

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Devices } from './media/engine'
+import { savedNoise } from './media/noise'
 
 const VOICE = {
   channelCount: 1,
   echoCancellation: true,
-  noiseSuppression: true,
   autoGainControl: true,
 }
 const PICTURE = {
@@ -13,8 +13,11 @@ const PICTURE = {
   frameRate: { ideal: 24 },
 }
 
-const audioWith = (device?: string) =>
-  device ? { ...VOICE, deviceId: { exact: device } } : VOICE
+const audioWith = (device?: string) => ({
+  ...VOICE,
+  noiseSuppression: savedNoise() !== 'off',
+  ...(device ? { deviceId: { exact: device } } : {}),
+})
 const videoWith = (device?: string) =>
   device ? { ...PICTURE, deviceId: { exact: device } } : PICTURE
 

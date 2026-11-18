@@ -173,6 +173,15 @@
   margin: 6px 0;
   padding: 0 8px;
 }
+.call-message__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 560px;
+}
+.call-message__head > .menu {
+  flex: none;
+}
 .call-message__row {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) 16px;

@@ -6,6 +6,7 @@ import {
   type Engine,
   type Self,
 } from './media/engine'
+import type { Noise } from './media/noise'
 import {
   dropped,
   EMPTY_ROOM,
@@ -21,6 +22,7 @@ export type Joining = {
   local: MediaStream
   devices: Devices
   self: Self
+  noise: Noise
 }
 
 type Action = { server: Server } | { lost: string }
