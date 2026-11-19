@@ -6,7 +6,7 @@
     "license": {
       "name": ""
     },
-    "version": "0.5.1"
+    "version": "0.5.2-rc"
   },
   "paths": {
     "/api/activity": {
