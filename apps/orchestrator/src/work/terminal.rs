@@ -29,6 +29,18 @@ pub struct Progress {
     pub request: Option<Uuid>,
     pub approval: Option<String>,
     pub approval_note: Option<String>,
+    #[schema(value_type = Option<CardRequest>)]
+    pub card: Option<Value>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct CardRequest {
+    pub name: String,
+    pub brand: Option<String>,
+    pub last4: Option<String>,
+    pub domain: String,
+    pub amount: String,
+    pub approved_until: Option<String>,
 }
 
 #[derive(Clone, Serialize, utoipa::ToSchema)]
@@ -148,12 +160,15 @@ pub(super) async fn tool_progress(
             CASE WHEN r.outcome IS NOT NULL THEN r.outcome->>'status' WHEN t.status='running' THEN 'running' ELSE 'uncertain' END AS "status!",
             r.outcome - 'image' AS "outcome?",
             EXISTS(SELECT 1 FROM desktop_reobservations o WHERE o.agent_id=t.conversation_id AND o.turn_id=c.turn_id AND o.call_id=c.payload->>'id') AS "reobserved!",
-            q.id AS "request?",
-            CASE WHEN q.status='approved' AND q.created_id IS NULL THEN 'approving' ELSE q.status END AS "approval?",
-            q.outcome AS "approval_note?"
+            COALESCE(q.id, f.id) AS "request?",
+            CASE WHEN q.status='approved' AND q.created_id IS NULL THEN 'approving' ELSE COALESCE(q.status, f.status) END AS "approval?",
+            COALESCE(q.outcome, f.reason) AS "approval_note?",
+            CASE WHEN f.id IS NOT NULL THEN jsonb_build_object('name', f.card_name, 'brand', v.card_brand, 'last4', v.card_last4, 'domain', f.domain, 'amount', f.amount, 'approved_until', f.approved_until) END AS "card?"
         FROM turn_events c
         JOIN chat_turns t ON t.id=c.turn_id
         LEFT JOIN creation_requests q ON q.call_id=(c.payload->>'id')::uuid AND q.agent_id=t.conversation_id AND q.turn_id=c.turn_id
+        LEFT JOIN card_fills f ON f.call_id=(c.payload->>'id')::uuid AND f.agent_id=t.conversation_id AND f.turn_id=c.turn_id
+        LEFT JOIN vault_items v ON v.id=f.item_id
         LEFT JOIN LATERAL (SELECT e.payload->'outcome' AS outcome FROM turn_events e WHERE e.turn_id=c.turn_id AND e.payload->>'kind'='tool_result' AND e.payload->>'id'=c.payload->>'id' ORDER BY e.sequence LIMIT 1) r ON true
         WHERE c.turn_id=ANY($1) AND c.payload->>'kind'='tool_call'
         ORDER BY c.turn_id, c.sequence

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE vault_items\n            SET kind=$2, name=$3, site=$4, username=$5,\n                ciphertext=COALESCE($6, ciphertext),\n                access=CASE WHEN agent_id IS NULL THEN COALESCE($7, access) ELSE access END,\n                updated_at=clock_timestamp()\n            WHERE id=$1 AND ($7::jsonb IS NULL OR agent_id IS NULL)\n            RETURNING id, agent_id, kind, name, site, username, access AS \"access!: Access\",\n                (to_jsonb(last_used_at) #>> '{}') AS last_used_at\n            ",
+  "query": "\n            INSERT INTO vault_items (id, agent_id, kind, name, site, username, ciphertext, access, created_by, card_brand, card_last4, card_expires)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)\n            RETURNING id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,\n                access AS \"access!: Access\", NULL::text AS last_used_at\n            ",
   "describe": {
     "columns": [
       {
@@ -35,11 +35,26 @@
       },
       {
         "ordinal": 6,
+        "name": "card_brand",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "card_last4",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "card_expires",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
         "name": "access!: Access",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 7,
+        "ordinal": 10,
         "name": "last_used_at",
         "type_info": "Text"
       }
@@ -47,12 +62,17 @@
     "parameters": {
       "Left": [
         "Uuid",
+        "Uuid",
         "Text",
         "Text",
         "Text",
         "Text",
         "Bytea",
-        "Jsonb"
+        "Jsonb",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text"
       ]
     },
     "nullable": [
@@ -62,9 +82,12 @@
       false,
       true,
       true,
+      true,
+      true,
+      true,
       false,
       null
     ]
   },
-  "hash": "daf7840e4b0494ea7bb01395fb375adeb38ca13437af90511edaf9ad1d856625"
+  "hash": "cd19932796c82f8873d6d27f9088d626cd6e60a020f31ad5a0a6e3b2cee0520b"
 }

@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
+import { ArrowUpRight } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
-import { api, ok } from '../../api/client'
 import type { components } from '../../api/schema'
 import { useInstallation } from '../../app/queries'
 import { CopyButton, Skeleton } from '../../components/primitives'
 import { fileSize } from '../files/viewer'
+import { useInstallationAbout } from '../shell/UpdateHint'
 import { DEPLOYMENTS, plural, uptime } from './facts'
 import { PROVIDER_NAMES } from './models'
 import { sandboxLabel } from './sandbox'
@@ -13,11 +13,7 @@ import { Section } from './Section'
 type Facts = components['schemas']['About']
 
 export function About() {
-  const about = useQuery({
-    queryKey: ['installation-about'],
-    queryFn: () => ok(api.GET('/api/installation/about')),
-    refetchInterval: 60_000,
-  })
+  const about = useInstallationAbout()
   return (
     <Section
       title="About"
@@ -49,9 +45,7 @@ function Facts({ facts }: { facts: Facts }) {
     <dl className="about">
       <div>
         <dt>Version</dt>
-        <dd className="about__version">
-          <strong className="tabular">{facts.version}</strong>
-        </dd>
+        <Version facts={facts} />
       </div>
       <div>
         <dt>Deployment</dt>
@@ -123,5 +117,24 @@ function Facts({ facts }: { facts: Facts }) {
         </dd>
       </div>
     </dl>
+  )
+}
+
+function Version({ facts }: { facts: Facts }) {
+  return (
+    <dd className="about__version">
+      <strong className="tabular">{facts.version}</strong>
+      {facts.newer_release && (
+        <a
+          className="about__newer"
+          href={facts.newer_release.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {facts.newer_release.version} is available
+          <ArrowUpRight aria-hidden="true" />
+        </a>
+      )}
+    </dd>
   )
 }

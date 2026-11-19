@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT name\n            FROM vault_items\n            WHERE id=$2 AND kind='card' AND (agent_id=$1\n                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'\n                    OR access->'agents' @> jsonb_build_array($1::uuid))))\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "52c44b17f28cc38a62b889cf06fb396635eff52a21a715930ff940c9c2792722"
+}

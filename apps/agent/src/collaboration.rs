@@ -59,7 +59,7 @@ pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot
     };
     let login = cubebot_providers::Tool::strict(
         "request_login",
-        "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you. First call vault_list: when a login item's site is the page's domain or a parent of it (amazon.com.br serves www.amazon.com.br), fill its username and password with vault_fill and submit, and ask a person only if the site still blocks you, such as for a one-time code. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.",
+        "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you, or to complete a bank's 3-D Secure check during a card payment. First call vault_list: when a login item's site is the page's domain or a parent of it (amazon.com.br serves www.amazon.com.br), fill its username and password with vault_fill and submit, and ask a person only if the site still blocks you, such as for a one-time code. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.",
         json!({"site":{"type":"string","description":"The website's domain, such as github.com."},"reason":{"type":"string","description":"What you need the login for, shown to the person."}}),
     );
     let mut tools = vec![
@@ -132,7 +132,7 @@ impl Collaboration {
             "meeting_screen" => return Some(self.meeting_screen(input)),
             _ => {
                 return self
-                    .vault(name, input)
+                    .vault(name, id, input)
                     .or_else(|| self.routine(name, id, input))
                     .or_else(|| self.wake(name, id, input))
                     .or_else(|| self.task(name, id, input))

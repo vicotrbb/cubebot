@@ -418,6 +418,7 @@ async fn account(
         output_tokens,
         cached_input_tokens,
         cost_usd,
+        ..
     } = event
     else {
         return Ok(());
@@ -675,7 +676,7 @@ fn valid(event: &TurnEvent) -> bool {
         ),
         TurnEvent::ToolResult { outcome, .. } => outcome.validate().is_ok(),
         TurnEvent::ToolCall { name, .. } => !name.is_empty() && name.len() <= 128,
-        TurnEvent::Usage { .. } => true,
+        TurnEvent::Usage { .. } | TurnEvent::Review { .. } => true,
     }
 }
 

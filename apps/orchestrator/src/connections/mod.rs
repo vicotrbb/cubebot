@@ -22,10 +22,11 @@ pub use native::{
 pub(crate) use subscriptions::For;
 pub use subscriptions::{PlanKey, SignInError, SubscriptionSummary, keep_fresh};
 pub use supergrok::SupergrokSignIn;
-pub(crate) use vault::same_site;
 pub use vault::{
-    ImportVault, ImportedLogin, MOST_IMPORTED, SaveVaultItem, VaultImported, VaultSummary,
+    CardDetails, ImportVault, ImportedLogin, MOST_IMPORTED, SaveVaultItem, VaultImported,
+    VaultSummary,
 };
+pub(crate) use vault::{host, same_site};
 
 use crate::identity::{Actor, IdentityError};
 use cubebot_protocol::runtime::{Effort, ProviderKind};

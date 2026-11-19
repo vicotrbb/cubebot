@@ -26,6 +26,7 @@ import { Alert, Empty, Skeleton, when } from '../../components/primitives'
 import { doingOf } from '../agent/doing'
 import { fileSize } from '../files/viewer'
 import { sandboxLabel } from '../platform/sandbox'
+import { UpdateHint } from '../shell/UpdateHint'
 import { useIsPhone } from '../shell/viewport'
 import { OrgChart } from '../teams/OrgChart'
 import { DayBars } from './DayBars'
@@ -69,6 +70,7 @@ export function Home({
         )}
       </header>
       <div className="page__body home__body">
+        {phone && <UpdateHint />}
         {situation.isError && (
           <Alert>Home could not be loaded. Retrying shortly.</Alert>
         )}

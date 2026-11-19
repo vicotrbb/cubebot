@@ -14,6 +14,8 @@ use uuid::Uuid;
 struct Fill {
     item: String,
     field: cubebot_protocol::runtime::VaultField,
+    #[serde(default)]
+    amount: Option<String>,
 }
 
 pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
@@ -23,7 +25,7 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     let mut tools = vec![
         tool(
             "vault_list",
-            "List the logins and secrets in your vault: id, kind, name, site and username, never the secret. Fill one with vault_fill instead of asking a person for it.",
+            "List the logins, secrets and payment cards in your vault: id, kind, name, site and username, and a card's last four digits, never a secret or card number. Fill one with vault_fill instead of asking a person for it.",
             json!({}),
         ),
         tool(
@@ -40,10 +42,11 @@ pub fn definitions(desktop: bool) -> Vec<cubebot_providers::Tool> {
     ];
     tools.extend(desktop.then(|| tool(
         "vault_fill",
-        "Type a username or secret from your vault at the desktop's keyboard focus without seeing it. Click the field first, then take a screenshot to check. A login types only while the focused browser page is on its own site.",
+        "Type one field of a vault item at the desktop's keyboard focus without seeing it. Click the field first, then take a screenshot to check. A login types only while the focused browser page is on its own site. A card first needs a person to approve the payment: the first card fill on a checkout page asks them and types nothing, then end your turn with a short note; a new message tells you when they approve or decline, and the approval covers that card on that site for 15 minutes. The card number shows on the page once typed, so never copy, repeat or save it anywhere. If the bank then asks for a 3-D Secure check, call request_login for the site so a person completes it.",
         json!({
             "item":text("The item's id from vault_list."),
-            "field":{"type":"string","enum":["username","secret"],"description":"secret is a login's password or a secret's value."},
+            "field":{"type":"string","enum":["username","secret","holder","number","expiry","expiry_month","expiry_year","cvc"],"description":"A login or secret fills username or secret, the password or value. A card fills holder, number, expiry as MM/YY, expiry_month as MM, expiry_year as YYYY, or cvc."},
+            "amount":nullable("For a card: the total you are about to pay with its currency exactly as the page shows it, such as 49.90 BRL; null otherwise."),
         }),
     )));
     tools
@@ -67,22 +70,25 @@ impl Collaboration {
     pub(super) fn vault(
         &self,
         name: &str,
+        id: Uuid,
         input: &Value,
     ) -> Option<Result<Running<'_>, &'static str>> {
         let running: Running<'_> = match name {
             "vault_list" => Box::pin(self.list()),
             "vault_fill" => {
-                let fill = Fill::deserialize(input)
-                    .ok()
-                    .and_then(|fill| Some((Uuid::parse_str(&fill.item).ok()?, fill.field)))
-                    .map(|(item, field)| VaultFill {
-                        item,
-                        field,
+                let fill = Fill::deserialize(input).ok().and_then(|fill| {
+                    Some(VaultFill {
+                        item: Uuid::parse_str(&fill.item).ok()?,
+                        field: fill.field,
                         page: None,
-                    });
+                        amount: fill.amount,
+                        turn: Some(self.turn),
+                        call: Some(id),
+                    })
+                });
                 let Some(mut fill) = fill else {
                     return Some(Err(
-                        "item is an id from vault_list and field is username or secret",
+                        "item is an id from vault_list and field is one of the fields the tool lists",
                     ));
                 };
                 Box::pin(async move {
@@ -92,10 +98,7 @@ impl Collaboration {
                         Some(client) => client.vault_fill(&fill).await,
                         None => Err(crate::control::Error::Unavailable(None)),
                     };
-                    reported(
-                        sent,
-                        "Typed at the keyboard focus; take a screenshot to check.",
-                    )
+                    filled(sent)
                 })
             }
             "vault_put" => {
@@ -130,6 +133,21 @@ impl Collaboration {
                 output: "The orchestrator did not answer; try again.".into(),
             },
         }
+    }
+}
+
+fn filled(sent: Result<Result<bool, String>, crate::control::Error>) -> Outcome {
+    match sent {
+        Ok(Ok(false)) => Outcome::Exited {
+            code: Some(0),
+            output: "A person was asked to approve this card payment; nothing was typed. End this turn now with a short note and leave the checkout page open; a new message tells you when they approve or decline.".into(),
+        },
+        Ok(Ok(true)) => reported(
+            Ok(Ok(())),
+            "Typed at the keyboard focus; take a screenshot to check.",
+        ),
+        Ok(Err(reason)) => reported(Ok(Err(reason)), ""),
+        Err(error) => reported(Err(error), ""),
     }
 }
 

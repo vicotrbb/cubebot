@@ -1218,6 +1218,84 @@
         }
       }
     },
+    "/api/agents/{id}/card-fills/{request}/approve": {
+      "post": {
+        "tags": [],
+        "operationId": "approve_card_fill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "request",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/agents/{id}/card-fills/{request}/decline": {
+      "post": {
+        "tags": [],
+        "operationId": "decline_card_fill",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "request",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeclineCardFill"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/agents/{id}/connections": {
       "get": {
         "tags": [],
@@ -2931,6 +3009,44 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Steering"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/conversations/{conversation}/messages/{turn}/trace": {
+      "get": {
+        "tags": [],
+        "operationId": "message_trace",
+        "parameters": [
+          {
+            "name": "conversation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "turn",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Trace"
                 }
               }
             }
@@ -6983,6 +7099,16 @@
           "namespace": {
             "type": ["string", "null"]
           },
+          "newer_release": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Release"
+              }
+            ]
+          },
           "people": {
             "type": "integer",
             "format": "int64"
@@ -8324,6 +8450,49 @@
           "room_manage"
         ]
       },
+      "CardDetails": {
+        "type": "object",
+        "required": ["holder", "number", "expiry", "cvc"],
+        "properties": {
+          "cvc": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": "string"
+          },
+          "holder": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "CardRequest": {
+        "type": "object",
+        "required": ["name", "domain", "amount"],
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "approved_until": {
+            "type": ["string", "null"]
+          },
+          "brand": {
+            "type": ["string", "null"]
+          },
+          "domain": {
+            "type": "string"
+          },
+          "last4": {
+            "type": ["string", "null"]
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
       "Catalog": {
         "type": "object",
         "description": "Every connector, and the addresses an OAuth client must allow.",
@@ -8941,6 +9110,16 @@
             "format": "int64"
           }
         }
+      },
+      "DeclineCardFill": {
+        "type": "object",
+        "required": ["reason"],
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "DeclineCreation": {
         "type": "object",
@@ -10876,6 +11055,10 @@
           }
         }
       },
+      "ModelStage": {
+        "type": "string",
+        "enum": ["reply", "review", "memory", "summary"]
+      },
       "MovePage": {
         "type": "object",
         "properties": {
@@ -11496,6 +11679,16 @@
           "approval_note": {
             "type": ["string", "null"]
           },
+          "card": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardRequest"
+              }
+            ]
+          },
           "command": {
             "type": "string"
           },
@@ -11784,6 +11977,21 @@
           }
         ]
       },
+      "Release": {
+        "type": "object",
+        "required": ["version", "url", "published_at"],
+        "properties": {
+          "published_at": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
       "RemoveEvent": {
         "type": "object",
         "required": ["connection", "calendar", "event", "scope"],
@@ -11901,6 +12109,10 @@
           }
         },
         "additionalProperties": false
+      },
+      "ReviewOutcome": {
+        "type": "string",
+        "enum": ["asked", "complete", "revised"]
       },
       "ReviseMemory": {
         "type": "object",
@@ -12580,6 +12792,16 @@
             "type": ["string", "null"],
             "format": "uuid",
             "description": "On create, the agent whose own item this is; an installation item when absent. An update\nkeeps the item's scope."
+          },
+          "card": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CardDetails"
+              }
+            ]
           },
           "kind": {
             "$ref": "#/components/schemas/VaultKind"
@@ -13830,6 +14052,83 @@
           }
         }
       },
+      "Trace": {
+        "type": "object",
+        "required": ["turn", "status", "created_at", "events", "memories"],
+        "properties": {
+          "completed_at": {
+            "type": ["string", "null"]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceEvent"
+            }
+          },
+          "memories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceMemory"
+            }
+          },
+          "model": {
+            "type": ["string", "null"]
+          },
+          "provider": {
+            "type": ["string", "null"]
+          },
+          "status": {
+            "type": "string"
+          },
+          "turn": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "TraceEvent": {
+        "type": "object",
+        "required": ["sequence", "at", "payload"],
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "cost_usd": {
+            "type": ["number", "null"],
+            "format": "double"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/TurnEvent"
+          },
+          "sequence": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TraceMemory": {
+        "type": "object",
+        "required": ["id", "revision", "content", "deleted"],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Trigger": {
         "type": "object",
         "description": "A connection event that runs a routine (docs/adr/agents.md#scheduled-and-event-triggered-work).",
@@ -14030,6 +14329,22 @@
                 "type": "integer",
                 "format": "int64",
                 "minimum": 0
+              },
+              "stage": {
+                "$ref": "#/components/schemas/ModelStage"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["outcome", "kind"],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["review"]
+              },
+              "outcome": {
+                "$ref": "#/components/schemas/ReviewOutcome"
               }
             }
           },
@@ -14315,7 +14630,16 @@
       },
       "VaultField": {
         "type": "string",
-        "enum": ["username", "secret"]
+        "enum": [
+          "username",
+          "secret",
+          "holder",
+          "number",
+          "expiry",
+          "expiry_month",
+          "expiry_year",
+          "cvc"
+        ]
       },
       "VaultImported": {
         "type": "object",
@@ -14333,7 +14657,7 @@
       },
       "VaultKind": {
         "type": "string",
-        "enum": ["login", "secret"]
+        "enum": ["login", "secret", "card"]
       },
       "VaultSummary": {
         "type": "object",
@@ -14347,12 +14671,21 @@
             "format": "uuid",
             "description": "The agent whose own item this is; an installation item when absent."
           },
+          "brand": {
+            "type": ["string", "null"]
+          },
+          "expires": {
+            "type": ["string", "null"]
+          },
           "id": {
             "type": "string",
             "format": "uuid"
           },
           "kind": {
             "$ref": "#/components/schemas/VaultKind"
+          },
+          "last4": {
+            "type": ["string", "null"]
           },
           "last_used_at": {
             "type": ["string", "null"]

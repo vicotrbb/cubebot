@@ -31,60 +31,52 @@ function Health() {
     (agent) => agent.desired_state === 'retired',
   )
   return (
-    <div className="platform">
-      <div>
-        <p className="platform__lead">
-          Readiness checks the database only; it says nothing about agents,
-          Kubernetes or providers. Each agent's Status tab shows its sandbox.
-        </p>
-        <dl className="kv">
-          <dt>Orchestrator</dt>
-          <dd>
-            {ready.data === undefined
-              ? 'checking…'
-              : ready.data
-                ? 'ready'
-                : 'not ready'}
-          </dd>
-          <dt>Controller</dt>
-          <dd>{installation.data?.controller.replaceAll('_', ' ')}</dd>
-          <dt>Sandbox</dt>
-          <dd>{installation.data && sandboxLabel(installation.data)}</dd>
-          <dt>Terminal tools</dt>
-          <dd>{installation.data?.terminal_enabled ? 'on' : 'off'}</dd>
-          <dt>Computer use</dt>
-          <dd>{installation.data?.computer_use_enabled ? 'on' : 'off'}</dd>
-          <dt>Agents</dt>
-          <dd>
-            {agents.data?.length ?? 0} registered
-            {Object.entries(byState).map(([state, count]) => (
-              <span key={state} className="chip" style={{ marginLeft: 6 }}>
-                {count} {state}
-              </span>
-            ))}
-          </dd>
-        </dl>
-        <h2 className="platform__h2">Agents</h2>
-        <AgentTable agents={notRetired(agents.data)} />
-        {retired.length > 0 && (
-          <details className="disclosure health__retired">
-            <summary>
-              Retired agents <span className="chip">{retired.length}</span>
-            </summary>
-            <p className="small muted">
-              Retired agents keep their history but no longer run or appear in
-              the sidebar.
-            </p>
-            <AgentTable agents={retired} />
-          </details>
-        )}
-      </div>
-      <aside className="platform__editor">
-        <h2>Not covered here</h2>
-        <p className="small muted">
-          Backups, upgrades and capacity limits have no console view yet.
-        </p>
-      </aside>
+    <div>
+      <p className="platform__lead">
+        Readiness checks the database only; it says nothing about agents,
+        Kubernetes or providers. Each agent's Status tab shows its sandbox.
+      </p>
+      <dl className="kv">
+        <dt>Orchestrator</dt>
+        <dd>
+          {ready.data === undefined
+            ? 'checking…'
+            : ready.data
+              ? 'ready'
+              : 'not ready'}
+        </dd>
+        <dt>Controller</dt>
+        <dd>{installation.data?.controller.replaceAll('_', ' ')}</dd>
+        <dt>Sandbox</dt>
+        <dd>{installation.data && sandboxLabel(installation.data)}</dd>
+        <dt>Terminal tools</dt>
+        <dd>{installation.data?.terminal_enabled ? 'on' : 'off'}</dd>
+        <dt>Computer use</dt>
+        <dd>{installation.data?.computer_use_enabled ? 'on' : 'off'}</dd>
+        <dt>Agents</dt>
+        <dd>
+          {agents.data?.length ?? 0} registered
+          {Object.entries(byState).map(([state, count]) => (
+            <span key={state} className="chip" style={{ marginLeft: 6 }}>
+              {count} {state}
+            </span>
+          ))}
+        </dd>
+      </dl>
+      <h2 className="platform__h2">Agents</h2>
+      <AgentTable agents={notRetired(agents.data)} />
+      {retired.length > 0 && (
+        <details className="disclosure health__retired">
+          <summary>
+            Retired agents <span className="chip">{retired.length}</span>
+          </summary>
+          <p className="small muted">
+            Retired agents keep their history but no longer run or appear in the
+            sidebar.
+          </p>
+          <AgentTable agents={retired} />
+        </details>
+      )}
     </div>
   )
 }

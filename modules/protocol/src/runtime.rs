@@ -384,6 +384,8 @@ pub struct VaultItem {
     pub site: Option<String>,
     #[serde(default)]
     pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last4: Option<String>,
     /// The agent's own item; otherwise the installation's.
     pub own: bool,
 }
@@ -394,6 +396,7 @@ pub enum VaultKind {
     /// A site, a username and its password as the secret.
     Login,
     Secret,
+    Card,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -402,6 +405,18 @@ pub enum VaultField {
     Username,
     /// A login's password or a secret's value.
     Secret,
+    Holder,
+    Number,
+    Expiry,
+    ExpiryMonth,
+    ExpiryYear,
+    Cvc,
+}
+
+impl VaultField {
+    pub fn card(self) -> bool {
+        !matches!(self, Self::Username | Self::Secret)
+    }
 }
 /// `POST /api/runtime/vault/fills`. A refusal is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
@@ -411,6 +426,12 @@ pub struct VaultFill {
     pub field: VaultField,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub page: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amount: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<Uuid>,
 }
 /// `POST /api/runtime/vault`. A refusal is 409 with the reason the model reads.
 #[derive(Serialize, Deserialize)]
@@ -561,6 +582,11 @@ pub enum TurnEvent {
         cached_input_tokens: u64,
         #[serde(default)]
         cost_usd: Option<f64>,
+        #[serde(default)]
+        stage: ModelStage,
+    },
+    Review {
+        outcome: ReviewOutcome,
     },
     /// Replaces the earlier context for later model requests; the source history remains.
     Summary {
@@ -580,6 +606,26 @@ pub enum TurnEvent {
     Error {
         code: String,
     },
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ModelStage {
+    #[default]
+    Reply,
+    Review,
+    Memory,
+    Summary,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewOutcome {
+    Asked,
+    Complete,
+    Revised,
 }
 
 /// A memory write staged by the agent. A revision or removal names the revision it read; a

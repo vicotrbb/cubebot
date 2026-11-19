@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT domain\n            FROM card_fills\n            WHERE agent_id=$1 AND item_id=$2 AND status='approved' AND approved_until > clock_timestamp()\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "domain",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4fead9949c15a08fb3688ffa3963e74251fdb5171a33e9b7229c7f7674833f99"
+}

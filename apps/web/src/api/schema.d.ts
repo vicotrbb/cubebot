@@ -387,6 +387,38 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/agents/{id}/card-fills/{request}/approve': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['approve_card_fill']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/agents/{id}/card-fills/{request}/decline': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['decline_card_fill']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/agents/{id}/connections': {
     parameters: {
       query?: never
@@ -1091,6 +1123,22 @@ export interface paths {
      *     the same `request_id` returns the same instruction.
      */
     post: operations['steer']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/conversations/{conversation}/messages/{turn}/trace': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['message_trace']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -2824,6 +2872,7 @@ export interface components {
       installed_at: string
       model?: string | null
       namespace?: string | null
+      newer_release?: null | components['schemas']['Release']
       /** Format: int64 */
       people: number
       postgres_version: string
@@ -3321,6 +3370,20 @@ export interface components {
       | 'browser_view'
       | 'browser_control'
       | 'room_manage'
+    CardDetails: {
+      cvc: string
+      expiry: string
+      holder: string
+      number: string
+    }
+    CardRequest: {
+      amount: string
+      approved_until?: string | null
+      brand?: string | null
+      domain: string
+      last4?: string | null
+      name: string
+    }
     /** @description Every connector, and the addresses an OAuth client must allow. */
     Catalog: {
       /** @description This installation's own callback, when it has a public address. */
@@ -3554,6 +3617,9 @@ export interface components {
       day: string
       /** Format: int64 */
       tokens: number
+    }
+    DeclineCardFill: {
+      reason: string
     }
     DeclineCreation: {
       /** @description Returned to the agent; empty when the person gave none. */
@@ -4314,6 +4380,8 @@ export interface components {
       /** Format: int64 */
       tokens: number
     }
+    /** @enum {string} */
+    ModelStage: 'reply' | 'review' | 'memory' | 'summary'
     MovePage: {
       /**
        * Format: uuid
@@ -4564,6 +4632,7 @@ export interface components {
     Progress: {
       approval?: string | null
       approval_note?: string | null
+      card?: null | components['schemas']['CardRequest']
       command: string
       /** Format: uuid */
       id: string
@@ -4671,6 +4740,11 @@ export interface components {
           /** @enum {string} */
           kind: 'group'
         }
+    Release: {
+      published_at: string
+      url: string
+      version: string
+    }
     RemoveEvent: {
       calendar: string
       /** Format: uuid */
@@ -4722,6 +4796,8 @@ export interface components {
       /** Format: uuid */
       request_id: string
     }
+    /** @enum {string} */
+    ReviewOutcome: 'asked' | 'complete' | 'revised'
     ReviseMemory: {
       content: string
       /** Format: int64 */
@@ -4979,6 +5055,7 @@ export interface components {
        *     keeps the item's scope.
        */
       agent?: string | null
+      card?: null | components['schemas']['CardDetails']
       kind: components['schemas']['VaultKind']
       name: string
       /** @description Required on create; an update without it keeps the current secret. */
@@ -5464,6 +5541,33 @@ export interface components {
       product?: string | null
       risk: components['schemas']['Risk']
     }
+    Trace: {
+      completed_at?: string | null
+      created_at: string
+      events: components['schemas']['TraceEvent'][]
+      memories: components['schemas']['TraceMemory'][]
+      model?: string | null
+      provider?: string | null
+      status: string
+      /** Format: uuid */
+      turn: string
+    }
+    TraceEvent: {
+      at: string
+      /** Format: double */
+      cost_usd?: number | null
+      payload: components['schemas']['TurnEvent']
+      /** Format: int64 */
+      sequence: number
+    }
+    TraceMemory: {
+      content: string
+      deleted: boolean
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      revision: number
+    }
     /** @description A connection event that runs a routine (docs/adr/agents.md#scheduled-and-event-triggered-work). */
     Trigger: {
       /** @description The connection's slug. */
@@ -5525,6 +5629,12 @@ export interface components {
           kind: 'usage'
           /** Format: int64 */
           output_tokens: number
+          stage?: components['schemas']['ModelStage']
+        }
+      | {
+          /** @enum {string} */
+          kind: 'review'
+          outcome: components['schemas']['ReviewOutcome']
         }
       | {
           /** @enum {string} */
@@ -5623,13 +5733,21 @@ export interface components {
       text: string
     }
     /** @enum {string} */
-    VaultField: 'username' | 'secret'
+    VaultField:
+      | 'username'
+      | 'secret'
+      | 'holder'
+      | 'number'
+      | 'expiry'
+      | 'expiry_month'
+      | 'expiry_year'
+      | 'cvc'
     VaultImported: {
       imported: number
       skipped: number
     }
     /** @enum {string} */
-    VaultKind: 'login' | 'secret'
+    VaultKind: 'login' | 'secret' | 'card'
     VaultSummary: {
       access: components['schemas']['ProviderAccess']
       /**
@@ -5637,9 +5755,12 @@ export interface components {
        * @description The agent whose own item this is; an installation item when absent.
        */
       agent?: string | null
+      brand?: string | null
+      expires?: string | null
       /** Format: uuid */
       id: string
       kind: components['schemas']['VaultKind']
+      last4?: string | null
       last_used_at?: string | null
       name: string
       site?: string | null
@@ -6480,6 +6601,62 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Agent']
         }
+      }
+    }
+  }
+  approve_card_fill: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        request: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  decline_card_fill: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        request: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DeclineCardFill']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }
@@ -7780,6 +7957,28 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Steering']
+        }
+      }
+    }
+  }
+  message_trace: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        conversation: string
+        turn: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Trace']
         }
       }
     }

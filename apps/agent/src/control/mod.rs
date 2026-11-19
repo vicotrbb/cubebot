@@ -467,8 +467,13 @@ impl MemoryClient {
     pub async fn vault_fill(
         &self,
         request: &runtime::VaultFill,
-    ) -> Result<Result<(), String>, Error> {
-        accepted(self.post("vault/fills", request).await?)
+    ) -> Result<Result<bool, String>, Error> {
+        match self.post("vault/fills", request).await? {
+            Ok(response) if response.status() == reqwest::StatusCode::ACCEPTED => Ok(Ok(false)),
+            Ok(response) if response.status().is_success() => Ok(Ok(true)),
+            Ok(_) => Err(Error::Unavailable(None)),
+            Err(reason) => Ok(Err(reason)),
+        }
     }
 
     /// Never log `request`.

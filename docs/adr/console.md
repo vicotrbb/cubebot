@@ -217,6 +217,18 @@ Accepted 2026-11-18, at the user's direction.
 
 **Validation scenarios.** A queued turn refuses deletion; deleting the reply then the message leaves an empty, flagged turn that the conversation and the agent's context skip.
 
+## A trace for every reply
+
+Accepted 2026-11-18, at the user's request.
+
+**Decision.** Every agent reply has a Trace action beside Copy and Delete. It opens the agent's side panel on `/agents/{agent}/trace/{turn}`, wider than the other panel tabs, with one read of `GET /api/conversations/{conversation}/messages/{turn}/trace` behind `conversation.read`. The trace shows the model and provider, when the reply started and how long it took; totals for model calls, tool calls, tokens in, cached and out, and cost (unpriced calls are named, never counted as free); what was pulled into context, meaning memory searches with the memories they found, knowledge base searches and the pages read, and skills loaded; the memories the turn saved, only for someone who also holds `memory.read`; and every step in order with its time into the reply: each model call with its stage, tokens and cost, each tool call with its input, output and duration, the finishing review's outcome, steering, context summaries and errors. Tool calls render with the same cards as the conversation. A running reply's trace refreshes every two seconds. The whole trace can be copied as JSON.
+
+**Rationale.** Most of this was already stored per turn, in `turn_events` and `usage_events`, but spread across the conversation, the Usage tab and memory pages. One view per reply answers "why did it do that" and makes every other agent problem quicker to debug. Alternatives considered: a separate trace table, which would duplicate the ledger; recording the model's full prompt per call, which would store every memory and page again and grow without bound.
+
+**Open details.** Tool durations are the orchestrator's receive times for the call and its result, so a reconnecting agent that resends events skews them; model calls carry no duration; the standing instructions and briefings that every turn starts with are not listed; replies in rooms have no trace action yet.
+
+**Validation scenarios.** Automated: calls pair with their results and are timed, a call without a result is running only while the turn runs, totals flag unpriced calls, retrieved memories and pages are listed even from a cut page. Not yet validated: a trace of a real model's turn in the browser.
+
 ## Apps agents build
 
 Accepted 2026-11-17, from the user's request that agents build what Cubebot does not do natively, as real web apps people open in the console; the anchoring example is a WHOOP dashboard with live recovery, sleep and strain. The user set the points under **What the user decided**; the points marked *chosen here* were not specified and are open to overrule.

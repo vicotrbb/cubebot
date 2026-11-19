@@ -36,6 +36,94 @@ pub struct SaveVaultItem {
     /// Installation items only: all agents when absent on create, unchanged on update.
     #[serde(default)]
     pub access: Option<ProviderAccess>,
+    #[serde(default)]
+    pub card: Option<CardDetails>,
+}
+
+#[derive(Clone, Deserialize, Serialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CardDetails {
+    pub holder: String,
+    pub number: String,
+    pub expiry: String,
+    pub cvc: String,
+}
+
+impl CardDetails {
+    fn normalized(&self) -> Option<Self> {
+        let number: String = self
+            .number
+            .chars()
+            .filter(|c| !matches!(c, ' ' | '-'))
+            .collect();
+        let expiry: String = self.expiry.chars().filter(|c| !c.is_whitespace()).collect();
+        let card = Self {
+            holder: self.holder.trim().to_owned(),
+            number,
+            expiry,
+            cvc: self.cvc.trim().to_owned(),
+        };
+        card.valid().then_some(card)
+    }
+
+    fn valid(&self) -> bool {
+        let digits = |text: &str, sizes: std::ops::RangeInclusive<usize>| {
+            sizes.contains(&text.len()) && text.bytes().all(|b| b.is_ascii_digit())
+        };
+        let month = self.expiry.get(..2).and_then(|m| m.parse::<u8>().ok());
+        (1..=255).contains(&self.holder.len())
+            && typable(&self.holder)
+            && digits(&self.number, 12..=19)
+            && luhn(&self.number)
+            && self.expiry.len() == 5
+            && self.expiry.as_bytes()[2] == b'/'
+            && month.is_some_and(|m| (1..=12).contains(&m))
+            && digits(&self.expiry[3..], 2..=2)
+            && digits(&self.cvc, 3..=4)
+    }
+
+    fn field(&self, field: VaultField) -> Option<String> {
+        let (month, year) = self.expiry.split_once('/')?;
+        Some(match field {
+            VaultField::Holder => self.holder.clone(),
+            VaultField::Number => self.number.clone(),
+            VaultField::Expiry => self.expiry.clone(),
+            VaultField::ExpiryMonth => month.to_owned(),
+            VaultField::ExpiryYear => format!("20{year}"),
+            VaultField::Cvc => self.cvc.clone(),
+            VaultField::Username | VaultField::Secret => return None,
+        })
+    }
+}
+
+fn luhn(number: &str) -> bool {
+    let sum: u32 = number
+        .bytes()
+        .rev()
+        .enumerate()
+        .map(|(at, b)| {
+            let digit = u32::from(b - b'0');
+            match (at % 2, digit * 2) {
+                (0, _) => digit,
+                (_, doubled) if doubled > 9 => doubled - 9,
+                (_, doubled) => doubled,
+            }
+        })
+        .sum();
+    sum.is_multiple_of(10)
+}
+
+fn brand(number: &str) -> &'static str {
+    let prefix = |len: usize| number.get(..len).and_then(|p| p.parse::<u32>().ok());
+    match (prefix(1), prefix(2), prefix(4)) {
+        (Some(4), ..) => "Visa",
+        (_, Some(34 | 37), _) => "American Express",
+        (_, Some(51..=55), _) | (.., Some(2221..=2720)) => "Mastercard",
+        (.., Some(6011)) | (_, Some(65), _) => "Discover",
+        (_, Some(36 | 38 | 39), _) | (.., Some(3000..=3059)) => "Diners Club",
+        (.., Some(3528..=3589)) => "JCB",
+        _ => "Card",
+    }
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -72,6 +160,9 @@ pub struct VaultSummary {
     pub name: String,
     pub site: Option<String>,
     pub username: Option<String>,
+    pub brand: Option<String>,
+    pub last4: Option<String>,
+    pub expires: Option<String>,
     #[schema(value_type = ProviderAccess)]
     pub access: Access,
     pub last_used_at: Option<String>,
@@ -84,6 +175,9 @@ struct Row {
     name: String,
     site: Option<String>,
     username: Option<String>,
+    card_brand: Option<String>,
+    card_last4: Option<String>,
+    card_expires: Option<String>,
     access: Access,
     last_used_at: Option<String>,
 }
@@ -97,6 +191,9 @@ impl From<Row> for VaultSummary {
             name: row.name,
             site: row.site,
             username: row.username,
+            brand: row.card_brand,
+            last4: row.card_last4,
+            expires: row.card_expires,
             access: row.access,
             last_used_at: row.last_used_at,
         }
@@ -106,6 +203,7 @@ impl From<Row> for VaultSummary {
 fn kind(stored: &str) -> VaultKind {
     match stored {
         "login" => VaultKind::Login,
+        "card" => VaultKind::Card,
         _ => VaultKind::Secret,
     }
 }
@@ -114,6 +212,7 @@ fn stored(kind: VaultKind) -> &'static str {
     match kind {
         VaultKind::Login => "login",
         VaultKind::Secret => "secret",
+        VaultKind::Card => "card",
     }
 }
 
@@ -136,7 +235,7 @@ fn clip(text: &str, most: usize) -> &str {
     &text[..end]
 }
 
-fn host(site: &str) -> String {
+pub(crate) fn host(site: &str) -> String {
     let site = site.trim().to_ascii_lowercase();
     let site = site
         .split_once("://")
@@ -187,9 +286,38 @@ pub fn problem(
 
 fn invalid(input: &SaveVaultItem) -> bool {
     let (site, username) = (input.site.as_deref(), input.username.as_deref());
+    let card = matches!(input.kind, VaultKind::Card);
     let secret = input.secret.as_deref();
+    let details = input.card.as_ref().map(CardDetails::normalized);
     problem(input.kind, &input.name, site, username, secret).is_some()
         || (input.agent.is_some() && input.access.is_some())
+        || (card && secret.is_some())
+        || (!card && details.is_some())
+        || details.is_some_and(|card| card.is_none())
+}
+
+struct Sealing {
+    secret: Option<String>,
+    brand: Option<&'static str>,
+    last4: Option<String>,
+    expires: Option<String>,
+}
+
+fn sealing(input: &SaveVaultItem) -> Sealing {
+    match input.card.as_ref().and_then(CardDetails::normalized) {
+        Some(card) => Sealing {
+            secret: serde_json::to_string(&card).ok(),
+            brand: Some(brand(&card.number)),
+            last4: Some(card.number[card.number.len() - 4..].to_owned()),
+            expires: Some(card.expiry),
+        },
+        None => Sealing {
+            secret: input.secret.clone(),
+            brand: None,
+            last4: None,
+            expires: None,
+        },
+    }
 }
 
 /// Binds a sealed record to this installation, kind and row, so a copy on another row does not open.
@@ -243,8 +371,8 @@ impl Connections {
         Ok(sqlx::query_as!(
             Row,
             r#"
-            SELECT id, agent_id, kind, name, site, username, access AS "access!: Access",
-                (to_jsonb(last_used_at) #>> '{}') AS last_used_at
+            SELECT id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,
+                access AS "access!: Access", (to_jsonb(last_used_at) #>> '{}') AS last_used_at
             FROM vault_items
             WHERE agent_id IS NULL
             ORDER BY name
@@ -262,8 +390,8 @@ impl Connections {
         Ok(sqlx::query_as!(
             Row,
             r#"
-            SELECT id, agent_id, kind, name, site, username, access AS "access!: Access",
-                (to_jsonb(last_used_at) #>> '{}') AS last_used_at
+            SELECT id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,
+                access AS "access!: Access", (to_jsonb(last_used_at) #>> '{}') AS last_used_at
             FROM vault_items
             WHERE agent_id=$1
                 OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'
@@ -289,6 +417,7 @@ impl Connections {
                 name: item.name,
                 site: item.site,
                 username: item.username,
+                last4: item.last4,
                 own: item.agent.is_some(),
             })
             .collect())
@@ -300,7 +429,8 @@ impl Connections {
         actor: Uuid,
         input: &SaveVaultItem,
     ) -> Result<VaultSummary, IdentityError> {
-        let Some(secret) = input.secret.as_deref().filter(|_| !invalid(input)) else {
+        let sealed = sealing(input);
+        let Some(secret) = sealed.secret.as_deref().filter(|_| !invalid(input)) else {
             return Err(IdentityError::InvalidInput);
         };
         let access = input.access.clone().unwrap_or_default();
@@ -311,10 +441,10 @@ impl Connections {
         let row = sqlx::query_as!(
             Row,
             r#"
-            INSERT INTO vault_items (id, agent_id, kind, name, site, username, ciphertext, access, created_by)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            RETURNING id, agent_id, kind, name, site, username, access AS "access!: Access",
-                NULL::text AS last_used_at
+            INSERT INTO vault_items (id, agent_id, kind, name, site, username, ciphertext, access, created_by, card_brand, card_last4, card_expires)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,
+                access AS "access!: Access", NULL::text AS last_used_at
             "#,
             id,
             input.agent,
@@ -325,6 +455,9 @@ impl Connections {
             ciphertext,
             sqlx::types::Json(&access) as _,
             actor,
+            sealed.brand,
+            sealed.last4,
+            sealed.expires,
         )
         .fetch_one(&mut *tx)
         .await?;
@@ -416,7 +549,8 @@ impl Connections {
         if let Some(access) = &input.access {
             validate_access(&mut tx, access).await?;
         }
-        let ciphertext = match &input.secret {
+        let sealed = sealing(input);
+        let ciphertext = match &sealed.secret {
             Some(secret) => Some(self.seal(&mut *tx, item, secret).await?),
             None => None,
         };
@@ -427,10 +561,13 @@ impl Connections {
             SET kind=$2, name=$3, site=$4, username=$5,
                 ciphertext=COALESCE($6, ciphertext),
                 access=CASE WHEN agent_id IS NULL THEN COALESCE($7, access) ELSE access END,
+                card_brand=CASE WHEN $2='card' THEN COALESCE($8, card_brand) END,
+                card_last4=CASE WHEN $2='card' THEN COALESCE($9, card_last4) END,
+                card_expires=CASE WHEN $2='card' THEN COALESCE($10, card_expires) END,
                 updated_at=clock_timestamp()
-            WHERE id=$1 AND ($7::jsonb IS NULL OR agent_id IS NULL)
-            RETURNING id, agent_id, kind, name, site, username, access AS "access!: Access",
-                (to_jsonb(last_used_at) #>> '{}') AS last_used_at
+            WHERE id=$1 AND ($7::jsonb IS NULL OR agent_id IS NULL) AND (kind=$2 OR $6::bytea IS NOT NULL)
+            RETURNING id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,
+                access AS "access!: Access", (to_jsonb(last_used_at) #>> '{}') AS last_used_at
             "#,
             item,
             stored(input.kind),
@@ -439,6 +576,9 @@ impl Connections {
             input.username,
             ciphertext,
             input.access.as_ref().map(sqlx::types::Json) as _,
+            sealed.brand,
+            sealed.last4,
+            sealed.expires,
         )
         .fetch_optional(&mut *tx)
         .await?
@@ -460,6 +600,26 @@ impl Connections {
         .fetch_optional(&self.pool)
         .await?;
         deleted.ok_or(IdentityError::NotFound)
+    }
+
+    pub(crate) async fn card_name(
+        &self,
+        agent: AgentId,
+        item: Uuid,
+    ) -> Result<Option<String>, IdentityError> {
+        Ok(sqlx::query_scalar!(
+            "
+            SELECT name
+            FROM vault_items
+            WHERE id=$2 AND kind='card' AND (agent_id=$1
+                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'
+                    OR access->'agents' @> jsonb_build_array($1::uuid))))
+            ",
+            agent.0,
+            item,
+        )
+        .fetch_optional(&self.pool)
+        .await?)
     }
 
     pub(crate) async fn tried_login_site(
@@ -486,24 +646,25 @@ impl Connections {
 
     /// Never log the returned text.
     #[tracing::instrument(skip_all, fields(agent = %agent.0, item = %item))]
-    pub(crate) async fn vault_fill_text(
+    pub async fn vault_fill_text(
         &self,
         agent: AgentId,
         person: Option<Uuid>,
         item: Uuid,
-        field: VaultField,
+        (field, page, amount): (VaultField, Option<&str>, Option<&str>),
     ) -> Result<Option<String>, IdentityError> {
         let row = sqlx::query!(
             "
             UPDATE vault_items
             SET last_used_at=clock_timestamp()
-            WHERE id=$2 AND (agent_id=$1
+            WHERE id=$2 AND (kind='card')=$3 AND (agent_id=$1
                 OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'
                     OR access->'agents' @> jsonb_build_array($1::uuid))))
-            RETURNING username, ciphertext, name, site
+            RETURNING username, ciphertext, name, site, kind
             ",
             agent.0,
             item,
+            field.card(),
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -514,7 +675,7 @@ impl Connections {
             Some(person) => Event::by(person, "vault.fill"),
             None => Event::by_agent(agent.0, "vault.fill"),
         };
-        let detail = json!({"agent": agent.0, "field": field, "name": row.name, "site": row.site});
+        let detail = json!({"agent": agent.0, "field": field, "name": row.name, "site": row.site, "page": page.map(host), "amount": amount});
         if let Err(error) = record(&self.pool, &event.on(item).detail(detail)).await {
             tracing::error!(%error, "vault fill not recorded in the audit log");
         }
@@ -527,9 +688,15 @@ impl Connections {
             .decrypt(&row.ciphertext, &context)
             .map_err(|error| IdentityError::CredentialUnavailable(Some(error.into())))?;
         // Only the UTF-8 position survives; FromUtf8Error would keep the decrypted bytes.
-        String::from_utf8(secret)
-            .map(Some)
-            .map_err(|error| IdentityError::CredentialUnavailable(Some(error.utf8_error().into())))
+        let secret = String::from_utf8(secret).map_err(|error| {
+            IdentityError::CredentialUnavailable(Some(error.utf8_error().into()))
+        })?;
+        if row.kind != "card" {
+            return Ok(Some(secret));
+        }
+        let card: CardDetails = serde_json::from_str(&secret)
+            .map_err(|_| IdentityError::CredentialUnavailable(None))?;
+        Ok(card.field(field))
     }
 
     #[tracing::instrument(skip_all, fields(agent = %agent.0))]
@@ -539,6 +706,9 @@ impl Connections {
         input: &VaultPut,
     ) -> Result<Result<Uuid, &'static str>, IdentityError> {
         let (site, username) = (input.site.as_deref(), input.username.as_deref());
+        if matches!(input.kind, VaultKind::Card) {
+            return Ok(Err("only a person saves a card, in the console"));
+        }
         if let Some(problem) = problem(input.kind, &input.name, site, username, Some(&input.secret))
         {
             return Ok(Err(problem));
@@ -603,6 +773,42 @@ impl Connections {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn card(number: &str, expiry: &str, cvc: &str) -> CardDetails {
+        CardDetails {
+            holder: "Ada Lovelace".into(),
+            number: number.into(),
+            expiry: expiry.into(),
+            cvc: cvc.into(),
+        }
+    }
+
+    #[test]
+    fn a_card_is_checked_normalized_and_filled_one_field_at_a_time() {
+        let saved = card("4242 4242-4242 4242", " 07/29", "123")
+            .normalized()
+            .unwrap();
+        assert_eq!(saved.number, "4242424242424242");
+        assert_eq!(saved.field(VaultField::Expiry).unwrap(), "07/29");
+        assert_eq!(saved.field(VaultField::ExpiryMonth).unwrap(), "07");
+        assert_eq!(saved.field(VaultField::ExpiryYear).unwrap(), "2029");
+        assert_eq!(saved.field(VaultField::Cvc).unwrap(), "123");
+        assert_eq!(saved.field(VaultField::Secret), None);
+        assert_eq!(brand(&saved.number), "Visa");
+        assert_eq!(brand("5555555555554444"), "Mastercard");
+        assert_eq!(brand("2223003122003222"), "Mastercard");
+        assert_eq!(brand("378282246310005"), "American Express");
+        assert_eq!(brand("6011111111111117"), "Discover");
+        for refused in [
+            card("4242424242424241", "07/29", "123"),
+            card("4242424242424242", "13/29", "123"),
+            card("4242424242424242", "7/29", "123"),
+            card("4242424242424242", "07/29", "12"),
+            card("42424242", "07/29", "123"),
+        ] {
+            assert!(refused.normalized().is_none(), "{}", refused.number);
+        }
+    }
 
     #[test]
     fn an_imported_name_already_taken_gains_its_username_then_a_counter() {

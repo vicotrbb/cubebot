@@ -1329,3 +1329,16 @@ p.backup__key {
     0 0 0 1px var(--line),
     0 1px 2px rgb(var(--shadow) / 0.12);
 }
+.about__newer {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--orange-text);
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  text-underline-offset: 3px;
+}
+.about__newer svg {
+  width: 13px;
+  height: 13px;
+}

@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE vault_items\n            SET last_used_at=clock_timestamp()\n            WHERE id=$2 AND (kind='card')=$3 AND (agent_id=$1\n                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'\n                    OR access->'agents' @> jsonb_build_array($1::uuid))))\n            RETURNING username, ciphertext, name, site, kind\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "ciphertext",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "site",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "kind",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "2dcee3b711a90f0eb44aeb692192c3ed192b28a48c8789389458a09952dd5257"
+}

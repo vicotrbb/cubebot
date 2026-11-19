@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT id, agent_id, kind, name, site, username, access AS \"access!: Access\",\n                (to_jsonb(last_used_at) #>> '{}') AS last_used_at\n            FROM vault_items\n            WHERE agent_id IS NULL\n            ORDER BY name\n            ",
+  "query": "\n            SELECT id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,\n                access AS \"access!: Access\", (to_jsonb(last_used_at) #>> '{}') AS last_used_at\n            FROM vault_items\n            WHERE agent_id=$1\n                OR (agent_id IS NULL AND (access->>'mode' = 'all_agents'\n                    OR access->'agents' @> jsonb_build_array($1::uuid)))\n            ORDER BY agent_id IS NULL, name\n            ",
   "describe": {
     "columns": [
       {
@@ -35,17 +35,34 @@
       },
       {
         "ordinal": 6,
+        "name": "card_brand",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "card_last4",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "card_expires",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
         "name": "access!: Access",
         "type_info": "Jsonb"
       },
       {
-        "ordinal": 7,
+        "ordinal": 10,
         "name": "last_used_at",
         "type_info": "Text"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Uuid"
+      ]
     },
     "nullable": [
       false,
@@ -54,9 +71,12 @@
       false,
       true,
       true,
+      true,
+      true,
+      true,
       false,
       null
     ]
   },
-  "hash": "b816b101b7b87b92500ff8f53828683f1770abef4f88e73adf336c92729de785"
+  "hash": "15af370361de43626ef6d12da519485d0604237a3ea5bd2db782c4e10f873dd6"
 }

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT message FROM chat_turns WHERE conversation_id=$1 ORDER BY sequence DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "82b9ba12634811a8c8b648b7dbf3e026fc8ce821e74ea47c4a67812c57cdf2c3"
+}

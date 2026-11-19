@@ -308,6 +308,7 @@ async fn a_login_the_vault_holds_is_filled_before_a_person_is_asked() {
             username: Some("octocat".into()),
             secret: Some(PASSWORD.into()),
             access: None,
+            card: None,
         },
     )
     .await
@@ -444,5 +445,177 @@ async fn an_import_names_two_accounts_on_one_site_apart() {
         .map(|item| item.name)
         .collect();
     assert_eq!(names, ["google.com", "google.com (home)"]);
+    f.task.abort();
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_card_is_typed_only_after_a_person_approves_that_payment() {
+    use cubebot_orchestrator::{
+        agents::runtime::RuntimeActor,
+        connections::{CardDetails, Connections, SaveVaultItem},
+        work::{CardAsk, CardGate},
+    };
+    use cubebot_protocol::runtime::{VaultField, VaultKind};
+    let f = fixture().await;
+    let (_, work, admin, agent) = native_chat_setup(&f, "Buy the domain").await;
+    let turn = sqlx::query_scalar!(
+        "UPDATE chat_turns SET status='running', attempt_id=$2 WHERE conversation_id=$1 RETURNING id",
+        agent,
+        f.attempt.0,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    let vault = Connections::new(f.pool.clone(), Credentials::new([7; 32]));
+    let save = |number: &str| SaveVaultItem {
+        agent: None,
+        kind: VaultKind::Card,
+        name: "Team card".into(),
+        site: None,
+        username: None,
+        secret: None,
+        access: None,
+        card: Some(CardDetails {
+            holder: "Ada Lovelace".into(),
+            number: number.into(),
+            expiry: "07/29".into(),
+            cvc: "123".into(),
+        }),
+    };
+    assert!(
+        vault
+            .create_vault_item(admin.id, &save("4242424242424241"))
+            .await
+            .is_err()
+    );
+    let card = vault
+        .create_vault_item(admin.id, &save("4242 4242 4242 4242"))
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            card.brand.as_deref(),
+            card.last4.as_deref(),
+            card.expires.as_deref()
+        ),
+        (Some("Visa"), Some("4242"), Some("07/29"))
+    );
+    let listed = vault.runtime_vault(AgentId(agent)).await.unwrap();
+    assert_eq!(listed[0].last4.as_deref(), Some("4242"));
+    assert!(
+        !serde_json::to_string(&listed)
+            .unwrap()
+            .contains("4242424242424242")
+    );
+
+    let actor = RuntimeActor {
+        agent: AgentId(agent),
+        attempt: f.attempt,
+        epoch: 0,
+        version: 0,
+    };
+    let ask = |call: Uuid, page: &'static str| CardAsk {
+        item: card.id,
+        name: "Team card",
+        turn,
+        call,
+        page,
+        amount: "12.00 USD",
+    };
+    let first = Uuid::new_v4();
+    let gate = |call, page| {
+        let (work, actor) = (work.clone(), &actor);
+        async move { work.card_gate(actor, &ask(call, page)).await.unwrap() }
+    };
+    assert_eq!(
+        gate(first, "https://shop.example.com/pay").await,
+        Ok(CardGate::Asked)
+    );
+    assert_eq!(
+        gate(first, "https://shop.example.com/pay").await,
+        Ok(CardGate::Asked)
+    );
+    assert!(
+        gate(Uuid::new_v4(), "https://shop.example.com/pay")
+            .await
+            .unwrap_err()
+            .contains("already waits")
+    );
+
+    let request = sqlx::query_scalar!("SELECT id FROM card_fills WHERE call_id=$1", first)
+        .fetch_one(&f.pool)
+        .await
+        .unwrap();
+    work.settle_card_fill(admin.id, AgentId(agent), request, None)
+        .await
+        .unwrap();
+    assert!(
+        work.settle_card_fill(admin.id, AgentId(agent), request, None)
+            .await
+            .is_err()
+    );
+    let woke: String = sqlx::query_scalar!(
+        "SELECT message FROM chat_turns WHERE conversation_id=$1 ORDER BY sequence DESC LIMIT 1",
+        agent,
+    )
+    .fetch_one(&f.pool)
+    .await
+    .unwrap();
+    assert!(
+        woke.contains(
+            "approved paying 12.00 USD with the card Team card ending 4242 on shop.example.com"
+        ),
+        "{woke}"
+    );
+
+    assert_eq!(
+        gate(Uuid::new_v4(), "https://pay.shop.example.com/").await,
+        Ok(CardGate::Approved)
+    );
+    assert_eq!(
+        gate(Uuid::new_v4(), "https://elsewhere.example.net/").await,
+        Ok(CardGate::Asked)
+    );
+    let number = vault
+        .vault_fill_text(
+            AgentId(agent),
+            None,
+            card.id,
+            (
+                VaultField::Number,
+                Some("https://shop.example.com/pay"),
+                Some("12.00 USD"),
+            ),
+        )
+        .await
+        .unwrap();
+    assert_eq!(number.as_deref(), Some("4242424242424242"));
+    let wrong = vault
+        .vault_fill_text(
+            AgentId(agent),
+            None,
+            card.id,
+            (VaultField::Secret, None, None),
+        )
+        .await
+        .unwrap();
+    assert_eq!(wrong, None);
+    let audited: Vec<String> = sqlx::query_scalar!(
+        r#"SELECT kind AS "kind!" FROM audit_log WHERE resource_id=$1 ORDER BY sequence"#,
+        card.id,
+    )
+    .fetch_all(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        audited,
+        [
+            "vault.card_request",
+            "vault.card_approve",
+            "vault.card_request",
+            "vault.fill"
+        ]
+    );
     f.task.abort();
 }

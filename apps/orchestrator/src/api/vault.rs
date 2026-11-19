@@ -9,6 +9,7 @@ use crate::{
         access::{Capability, Scope},
         audit::Event,
     },
+    work::{DeclineCardFill, Work},
 };
 use axum::{
     Extension, Json, Router,
@@ -26,6 +27,7 @@ use uuid::Uuid;
 struct Api {
     identity: Identity,
     connections: Connections,
+    work: Work,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -35,10 +37,20 @@ pub(super) struct FillVaultItem {
 }
 
 #[derive(utoipa::OpenApi)]
-#[openapi(paths(list, create, import, update, delete, agent_items, fill))]
+#[openapi(paths(
+    list,
+    create,
+    import,
+    update,
+    delete,
+    agent_items,
+    fill,
+    approve_card,
+    decline_card
+))]
 pub(super) struct Doc;
 
-pub(super) fn router(identity: Identity, connections: Connections) -> Router {
+pub(super) fn router(identity: Identity, connections: Connections, pool: sqlx::PgPool) -> Router {
     Router::new()
         .route("/api/vault", get(list).post(create))
         .route(
@@ -48,10 +60,19 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
         .route("/api/vault/{item}", put(update).delete(delete))
         .route("/api/agents/{id}/vault", get(agent_items))
         .route("/api/agents/{id}/vault/{item}/fill", post(fill))
+        .route(
+            "/api/agents/{id}/card-fills/{request}/approve",
+            post(approve_card),
+        )
+        .route(
+            "/api/agents/{id}/card-fills/{request}/decline",
+            post(decline_card),
+        )
         .layer(DefaultBodyLimit::max(16 * 1024))
         .with_state(Api {
             identity,
             connections,
+            work: Work::new(pool),
         })
 }
 
@@ -190,7 +211,7 @@ async fn fill(
     };
     let text = api
         .connections
-        .vault_fill_text(agent, Some(actor.id), item, input.field)
+        .vault_fill_text(agent, Some(actor.id), item, (input.field, None, None))
         .await?;
     let text = text.ok_or(IdentityError::NotFound)?;
     match super::desktop::fill(&desktop, agent, item, text, Some(actor.id)).await {
@@ -201,4 +222,50 @@ async fn fill(
             Ok(super::refused("the desktop is unavailable"))
         }
     }
+}
+
+async fn card_settler(
+    api: &Api,
+    headers: &HeaderMap,
+    agent: AgentId,
+    request: Uuid,
+) -> Result<Actor, IdentityError> {
+    let actor = super::identity::actor(&api.identity, headers).await?;
+    allowed(api, &actor, Some(agent), Capability::BrowserView).await?;
+    let item = api.work.card_fill_item(agent, request).await?;
+    item_scope(api, &actor, item).await?;
+    Ok(actor)
+}
+
+#[utoipa::path(post, path = "/api/agents/{id}/card-fills/{request}/approve", operation_id = "approve_card_fill", params(("id" = Uuid, Path), ("request" = Uuid, Path)), responses((status = 204), (status = 404)))]
+async fn approve_card(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((agent, request)): Path<(AgentId, Uuid)>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = card_settler(&api, &headers, agent, request).await?;
+    api.work
+        .settle_card_fill(actor.id, agent, request, None)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/agents/{id}/card-fills/{request}/decline", operation_id = "decline_card_fill", params(("id" = Uuid, Path), ("request" = Uuid, Path)), request_body = DeclineCardFill, responses((status = 204), (status = 404)))]
+async fn decline_card(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((agent, request)): Path<(AgentId, Uuid)>,
+    Json(input): Json<DeclineCardFill>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = card_settler(&api, &headers, agent, request).await?;
+    let reason = input.reason.trim();
+    let reason = if reason.is_empty() {
+        "no reason given"
+    } else {
+        reason
+    };
+    api.work
+        .settle_card_fill(actor.id, agent, request, Some(reason))
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
 }

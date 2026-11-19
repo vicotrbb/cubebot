@@ -15,11 +15,27 @@ export type WorkView = {
         path: string
         code: string
         language?: string | undefined
+        start?: number
+        note?: string
       }
     | { kind: 'diff'; path: string; before: string; after: string }
+    | { kind: 'patch'; path: string; lines: PatchLine[]; after: string }
+    | { kind: 'plan'; todos: Todo[] }
     | { kind: 'shell'; command: string }
     | { kind: 'output' }
     | { kind: 'fields'; fields: [string, string][] }
+}
+
+export type PatchLine = {
+  sign: ' ' | '+' | '-'
+  was?: number
+  now?: number
+  line: string
+}
+
+export type Todo = {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
 }
 
 /** Arguments arrive as `name {json}`; a command that was cut or is not JSON has none. */
@@ -115,6 +131,67 @@ const filed =
     }
   }
 
+const NUMBERED = /^ *(\d+)\t(.*)$/
+
+export function numbered(printed: string) {
+  const lines = printed.replace(/\n$/, '').split('\n')
+  const first = NUMBERED.exec(lines[0] ?? '')
+  if (!first) return { code: printed, start: 1, note: '' }
+  const code: string[] = []
+  const notes: string[] = []
+  for (const line of lines) {
+    const match = NUMBERED.exec(line)
+    if (match) code.push(match[2] ?? '')
+    else notes.push(line)
+  }
+  return {
+    code: code.join('\n'),
+    start: Number(first[1]),
+    note: notes.join(' ').trim(),
+  }
+}
+
+const HUNK = /^@@ -(\d+),\d+ \+(\d+),\d+ @@$/
+
+export function patchOf(printed: string): PatchLine[] | null {
+  const lines = printed.replace(/\n$/, '').split('\n')
+  const at = lines.findIndex((line) => HUNK.test(line))
+  if (at < 0) return null
+  const head = HUNK.exec(lines[at] ?? '')
+  let old = Number(head?.[1])
+  let next = Number(head?.[2])
+  return lines.slice(at + 1).flatMap((line): PatchLine[] => {
+    const sign = line[0]
+    if (sign === '-') return [{ sign, was: old++, line: line.slice(1) }]
+    if (sign === '+') return [{ sign, now: next++, line: line.slice(1) }]
+    if (sign === ' ')
+      return [{ sign, was: old++, now: next++, line: line.slice(1) }]
+    return []
+  })
+}
+
+function todosOf(value: unknown): Todo[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item: unknown): Todo[] => {
+    if (typeof item !== 'object' || item === null) return []
+    const { content, status } = item as Record<string, unknown>
+    const known = ['pending', 'in_progress', 'completed'].includes(text(status))
+    return known && text(content)
+      ? [{ content: text(content), status: status as Todo['status'] }]
+      : []
+  })
+}
+
+export function planSummary(todos: Todo[]) {
+  const done = todos.filter((todo) => todo.status === 'completed').length
+  return `${done} of ${todos.length} done`
+}
+
+function where(args: Record<string, unknown>) {
+  const place = [text(args.path), text(args.glob)].filter(Boolean).join(', ')
+  return place ? { where: place } : {}
+}
+
 const BUILDERS: Record<string, Build> = {
   write_file: (args) => {
     const path = text(args.path)
@@ -128,38 +205,66 @@ const BUILDERS: Record<string, Build> = {
   },
   read_file: (args, tool) => {
     const path = text(args.path)
-    const code = output(tool)
-    return fileView(
-      'Read',
+    const failed = tool.outcome?.status === 'exited' && tool.outcome.code !== 0
+    const { code, start, note } = numbered(failed ? '' : output(tool))
+    const count = lineCount(code)
+    const stat =
+      start > 1 || note
+        ? `lines ${start}–${start + Math.max(count, 1) - 1}`
+        : plural(count, 'line')
+    return fileView('Read', path, code ? stat : undefined, {
+      kind: 'file',
       path,
-      code ? plural(lineCount(code), 'line') : undefined,
-      { kind: 'file', path, code, language: grammarOf(path) },
-    )
+      code,
+      language: grammarOf(path),
+      start,
+      note,
+    })
   },
-  edit_file: (args) => {
+  edit_file: (args, tool) => {
     const path = text(args.path)
     const before = text(args.old_string)
     const after = text(args.new_string)
-    return fileView(
-      'Edited',
+    const lines = patchOf(output(tool))
+    if (!lines)
+      return fileView(
+        'Edited',
+        path,
+        `+${lineCount(after)} −${lineCount(before)}`,
+        { kind: 'diff', path, before, after },
+      )
+    const added = lines.filter((line) => line.sign === '+').length
+    const removed = lines.filter((line) => line.sign === '-').length
+    return fileView('Edited', path, `+${added} −${removed}`, {
+      kind: 'patch',
       path,
-      `+${lineCount(after)} −${lineCount(before)}`,
-      { kind: 'diff', path, before, after },
-    )
+      lines,
+      after,
+    })
   },
   glob: (args) => ({
     verb: 'Looked for',
     object: text(args.pattern),
+    ...where({ path: args.path }),
     family: 'file',
     body: { kind: 'output' },
   }),
   grep: (args) => ({
     verb: 'Searched for',
     object: text(args.pattern),
-    ...(text(args.path) ? { where: text(args.path) } : {}),
+    ...where(args),
     family: 'file',
     body: { kind: 'output' },
   }),
+  todo_write: (args) => {
+    const todos = todosOf(args.todos)
+    return {
+      verb: 'Updated the plan',
+      object: planSummary(todos),
+      family: 'other',
+      body: { kind: 'plan', todos },
+    }
+  },
   browser_navigate: browser('Opened', (args) => page(text(args.url))),
   browser_read: browser('Read', () => 'the page'),
   browser_click: browser('Clicked', (args) =>
@@ -261,7 +366,7 @@ export function workDigest(tools: Progress[]) {
   const views = tools.map(workView)
   const changed = new Set(
     views
-      .filter((view) => view.body.kind === 'file' || view.body.kind === 'diff')
+      .filter((view) => ['file', 'diff', 'patch'].includes(view.body.kind))
       .filter((view) => view.verb !== 'Read')
       .map((view) =>
         view.where ? `${view.where}/${view.object}` : view.object,
@@ -274,4 +379,10 @@ export function workDigest(tools: Progress[]) {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+export function latestPlan(tools: Progress[]) {
+  const last = tools.filter((tool) => tool.name === 'todo_write').at(-1)
+  const args = last && argumentsOf(last)
+  return args ? todosOf(args.todos) : null
 }

@@ -8,8 +8,11 @@ import {
   FilePlus2,
   FileText,
   Globe,
+  Circle,
+  CircleDot,
   KeyRound,
   Library,
+  ListChecks,
   Loader,
   Monitor,
   Terminal,
@@ -18,7 +21,16 @@ import {
 import type { Turn } from '../../api/client'
 import { CodeBlock } from '../../components/CodeBlock'
 import { CopyButton } from '../../components/primitives'
-import { diffLines, workDigest, workView, type WorkView } from './work'
+import {
+  diffLines,
+  latestPlan,
+  planSummary,
+  workDigest,
+  workView,
+  type PatchLine,
+  type Todo,
+  type WorkView,
+} from './work'
 
 type Progress = Turn['terminal'][number]
 type Outcome = NonNullable<Progress['outcome']>
@@ -28,6 +40,7 @@ function Icon({ family, name }: { family: WorkView['family']; name: string }) {
   if (name === 'screenshot') return <Camera />
   if (name === 'write_file') return <FilePlus2 />
   if (name === 'edit_file') return <FilePen />
+  if (name === 'todo_write') return <ListChecks />
   if (family === 'file') return <FileText />
   if (family === 'shell') return <Terminal />
   if (family === 'browser') return <Globe />
@@ -105,21 +118,10 @@ function WorkBody({ tool, view }: { tool: Progress; view: WorkView }) {
   const body = view.body
   if (body.kind === 'shell')
     return <TerminalView tool={tool} command={body.command} />
-  if (body.kind === 'file')
-    return (
-      <>
-        {body.code && (
-          <CodeBlock
-            code={body.code}
-            language={body.language}
-            name={body.path}
-            numbers
-            maxHeight={420}
-          />
-        )}
-        {tool.outcome && !body.code && <OutcomeView outcome={tool.outcome} />}
-      </>
-    )
+  if (body.kind === 'file') return <FileBody tool={tool} body={body} />
+  if (body.kind === 'patch')
+    return <PatchView path={body.path} lines={body.lines} after={body.after} />
+  if (body.kind === 'plan') return <PlanView todos={body.todos} />
   if (body.kind === 'diff')
     return (
       <>
@@ -142,6 +144,31 @@ function WorkBody({ tool, view }: { tool: Progress; view: WorkView }) {
         </dl>
       )}
       {tool.outcome && <OutcomeView outcome={tool.outcome} />}
+    </>
+  )
+}
+
+function FileBody({
+  tool,
+  body,
+}: {
+  tool: Progress
+  body: Extract<WorkView['body'], { kind: 'file' }>
+}) {
+  return (
+    <>
+      {body.code && (
+        <CodeBlock
+          code={body.code}
+          language={body.language}
+          name={body.path}
+          numbers
+          start={body.start ?? 1}
+          maxHeight={420}
+        />
+      )}
+      {body.note && <p className="work__note">{body.note}</p>}
+      {tool.outcome && !body.code && <OutcomeView outcome={tool.outcome} />}
     </>
   )
 }
@@ -203,6 +230,66 @@ function DiffView({
   )
 }
 
+function PatchView({
+  path,
+  lines,
+  after,
+}: {
+  path: string
+  lines: PatchLine[]
+  after: string
+}) {
+  return (
+    <div className="codeblock">
+      <div className="codeblock__head">
+        <span className="codeblock__name">{path}</span>
+        <CopyButton text={after} label="Copy new text" />
+      </div>
+      <div className="diff diff--numbered" tabIndex={0}>
+        {lines.map((line, index) => (
+          <div key={index} className="diff__line" data-sign={line.sign}>
+            <span className="diff__number">{line.was ?? ''}</span>
+            <span className="diff__number">{line.now ?? ''}</span>
+            <span aria-hidden="true">
+              {line.sign === '-' ? '−' : line.sign}
+            </span>
+            <code>{line.line || ' '}</code>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const TODO_LABELS: Record<Todo['status'], string> = {
+  pending: 'To do',
+  in_progress: 'In progress',
+  completed: 'Done',
+}
+
+export function PlanView({ todos }: { todos: Todo[] }) {
+  if (todos.length === 0) return <p className="small faint">Plan cleared.</p>
+  return (
+    <ol className="plan" aria-label={`Plan, ${planSummary(todos)}`}>
+      {todos.map((todo, index) => (
+        <li key={index} className="plan__item" data-status={todo.status}>
+          {todo.status === 'completed' ? (
+            <CircleCheck aria-hidden="true" />
+          ) : todo.status === 'in_progress' ? (
+            <CircleDot aria-hidden="true" />
+          ) : (
+            <Circle aria-hidden="true" />
+          )}
+          <span>
+            <span className="sr-only">{TODO_LABELS[todo.status]}: </span>
+            {todo.content}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function OutcomeView({ outcome }: { outcome: Outcome }) {
   return (
     <>
@@ -246,8 +333,9 @@ export function WorkLog({
   const uncertain = count(['uncertain'])
   const actions = `${tools.length} ${tools.length === 1 ? 'action' : 'actions'}`
   const digest = workDigest(tools)
-  const last = tools.at(-1)
+  const last = tools.filter((tool) => tool.name !== 'todo_write').at(-1)
   const now = last && workView(last)
+  const plan = latestPlan(tools)
   return (
     <details className="worklog" open={open}>
       <summary className="worklog__summary">
@@ -262,13 +350,23 @@ export function WorkLog({
         ) : (
           <span className="worklog__label">Worked through {actions}</span>
         )}
+        {plan && plan.length > 0 && (
+          <span className="worklog__digest">Plan {planSummary(plan)}</span>
+        )}
         {digest && <span className="worklog__digest">{digest}</span>}
         {failed > 0 && <span className="worklog__failed">{failed} failed</span>}
         {uncertain > 0 && (
           <span className="worklog__uncertain">{uncertain} uncertain</span>
         )}
       </summary>
-      <div className="worklog__list">{children}</div>
+      <div className="worklog__list">
+        {plan && plan.length > 0 && (
+          <div className="worklog__plan">
+            <PlanView todos={plan} />
+          </div>
+        )}
+        {children}
+      </div>
     </details>
   )
 }

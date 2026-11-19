@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE card_fills f\n            SET status=CASE WHEN $4::text IS NULL THEN 'approved' ELSE 'declined' END,\n                settled_by=$3, settled_at=clock_timestamp(), reason=$4,\n                approved_until=CASE WHEN $4::text IS NULL THEN clock_timestamp() + make_interval(mins => $5) END\n            FROM chat_turns t, vault_items v\n            WHERE f.id=$1 AND f.agent_id=$2 AND f.status='pending' AND t.id=f.turn_id AND v.id=f.item_id\n            RETURNING f.item_id, f.card_name, f.domain, f.amount, t.actor_id, v.card_last4\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "card_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "domain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "card_last4",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1baa9bf70c5e903c3e4d29c299ef1c7160d99f0058b80c8a4e8bad2aa168af1d"
+}
