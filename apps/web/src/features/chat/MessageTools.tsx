@@ -1,4 +1,5 @@
-import { Check, Copy, Trash2 } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { Check, Copy, ScanSearch, Trash2 } from 'lucide-react'
 import { marked } from 'marked'
 import {
   useEffect,
@@ -133,27 +134,25 @@ export function Message({
       }}
     >
       {children}
-      {text.trim() !== '' || deletable ? (
+      {text.trim() !== '' || deletable || part === 'response' ? (
         <div
           className="msg__tools"
           role="group"
           aria-label={part === 'message' ? 'Message actions' : 'Reply actions'}
         >
           {text.trim() !== '' && (
-            <button
-              type="button"
+            <CopyTool copied={copied} onCopy={() => void copy()} />
+          )}
+          {part === 'response' && (
+            <Link
+              to="/agents/$agentId/trace/$turnId"
+              params={{ agentId: conversation, turnId: turn }}
               className="msg__tool"
-              aria-label={copied ? 'Copied' : 'Copy'}
-              title={copied ? 'Copied' : 'Copy'}
-              data-done={copied || undefined}
-              onClick={() => void copy()}
+              aria-label="Trace: how this reply was made"
+              title="Trace"
             >
-              {copied ? (
-                <Check aria-hidden="true" />
-              ) : (
-                <Copy aria-hidden="true" />
-              )}
-            </button>
+              <ScanSearch aria-hidden="true" />
+            </Link>
           )}
           {deletable && (
             <button
@@ -178,5 +177,21 @@ export function Message({
         </div>
       )}
     </div>
+  )
+}
+
+function CopyTool({ copied, onCopy }: { copied: boolean; onCopy: () => void }) {
+  const label = copied ? 'Copied' : 'Copy'
+  return (
+    <button
+      type="button"
+      className="msg__tool"
+      aria-label={label}
+      title={label}
+      data-done={copied || undefined}
+      onClick={onCopy}
+    >
+      {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+    </button>
   )
 }

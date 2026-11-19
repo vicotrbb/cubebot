@@ -4,7 +4,7 @@ use crate::{
     skills::Skills, tools::Registry,
 };
 use cubebot_protocol::{
-    runtime::{EVENT_BYTES, ProviderKind, Turn, TurnEvent},
+    runtime::{EVENT_BYTES, ModelStage, ProviderKind, ReviewOutcome, Turn, TurnEvent},
     terminal::Outcome,
 };
 use cubebot_providers::{
@@ -432,7 +432,7 @@ impl<P: Provider> Session<'_, P> {
                 Ok(step) => step,
                 Err(code) => return failed(code),
             };
-            self.usage(usage);
+            self.usage(usage, stage_of(asked));
             // Compaction waits for a safe point: after the tool result, or before the reply.
             let full = context.full(usage);
             let calls = reply.calls.clone();
@@ -443,6 +443,12 @@ impl<P: Provider> Session<'_, P> {
             }
             if calls.is_empty() {
                 if self.reviews(worked && !full, &review) {
+                    self.run.emit(
+                        TurnEvent::Review {
+                            outcome: ReviewOutcome::Asked,
+                        },
+                        None,
+                    );
                     context.messages.push(Message::User(REVIEW.into()));
                     review = Review::Asked(response);
                     continue;
@@ -482,7 +488,18 @@ impl<P: Provider> Session<'_, P> {
     }
 
     fn reviewed(&mut self, earlier: String, response: String, finished: bool) -> String {
-        if finished && response.trim().trim_end_matches('.') == REVIEWED {
+        let complete = finished && response.trim().trim_end_matches('.') == REVIEWED;
+        self.run.emit(
+            TurnEvent::Review {
+                outcome: if complete {
+                    ReviewOutcome::Complete
+                } else {
+                    ReviewOutcome::Revised
+                },
+            },
+            None,
+        );
+        if complete {
             return earlier;
         }
         if !response.is_empty() {
@@ -605,7 +622,7 @@ impl<P: Provider> Session<'_, P> {
         }
     }
 
-    fn usage(&mut self, usage: Option<Usage>) {
+    fn usage(&mut self, usage: Option<Usage>, stage: ModelStage) {
         if let Some(usage) = usage {
             self.run.emit(
                 TurnEvent::Usage {
@@ -613,6 +630,7 @@ impl<P: Provider> Session<'_, P> {
                     output_tokens: usage.output_tokens,
                     cached_input_tokens: usage.cached_input_tokens,
                     cost_usd: usage.cost_usd,
+                    stage,
                 },
                 None,
             );
@@ -712,7 +730,7 @@ impl<P: Provider> Session<'_, P> {
         };
         match self.step(&request, false).await {
             Ok((reply, usage)) => {
-                self.usage(usage);
+                self.usage(usage, ModelStage::Memory);
                 self.memories.extracted(&reply.text);
                 Ok(())
             }
@@ -734,7 +752,7 @@ impl<P: Provider> Session<'_, P> {
         let Ok((reply, usage)) = self.step(&request, false).await else {
             return keep_context();
         };
-        self.usage(usage);
+        self.usage(usage, ModelStage::Summary);
         let summary = TurnEvent::Summary {
             text: reply.text.clone(),
         };
@@ -743,6 +761,14 @@ impl<P: Provider> Session<'_, P> {
         }
         self.run.emit(summary, None);
         context.compacted(&reply.text, &crate::context::asked(self.turn));
+    }
+}
+
+fn stage_of(asked: bool) -> ModelStage {
+    if asked {
+        ModelStage::Review
+    } else {
+        ModelStage::Reply
     }
 }
 

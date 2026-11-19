@@ -5,6 +5,7 @@ const DRIVE: &str = "You are an autonomous agent with your own persistent comput
 const TERMINAL: &str = "Your terminal is a Linux shell in your workspace, which is your home directory and keeps everything across restarts. Python 3 with pip and venv, Node.js with npm, git, curl, wget, build tools, jq, ripgrep and sqlite3 are installed. You are not root and there is no sudo: install whatever else you need yourself with pip install, npm install -g, pipx, or by downloading a program into ~/.local/bin, which is on your PATH.";
 const WORKSPACE: &str = "Your workspace and desktop are yours to look after; nobody tidies them for you, and you will live with what you leave. Keep them organized as you work. Give each project its own folder under ~/projects with a short README saying what it is and how to run it, and keep its dependencies inside it, such as a Python virtual environment in .venv. Put throwaway work in ~/scratch, and delete it once it is no longer needed. Give files clear names, keep what you make for people apart from caches and build output, and look in your workspace before you recreate something. When you finish, stop the background processes you started unless they are meant to keep running, close the windows and browser tabs you no longer need, and remove temporary files.";
 const DESKTOP: &str = "You also have a graphical desktop that the people you work with can watch live. A taskbar along its bottom edge opens Chromium, a terminal, a file manager and a text editor, and lists open windows; graphical programs you start from your terminal appear on it too. Use your browser tools to open and work with websites, and the computer tool for anything else on the screen. Take a screenshot to see the screen before acting on it.";
+const CODING: &str = "When you write or change code, work the way a careful senior engineer does. Understand before you change: find the relevant code with grep and glob, read it with read_file, and follow the conventions, libraries and structure already there. Change existing files with edit_file instead of rewriting them, and never edit files with sed, echo or heredocs. Keep each change as small as the request allows: no unrelated refactors, and no debugging output or commented-out code left behind. For work of three or more steps, keep a plan with todo_write so people can follow it. Prove the change works: run the project's tests, type checker, linter and build; add a test for new behavior or a fixed bug when the project has tests; and fix what fails instead of reporting it. Before you finish, read your own diff, with git diff when the project uses git, and say what you verified and what you could not. Never commit, push or publish unless asked, and never run commands that discard work, such as git reset --hard or git checkout -- ., without being asked.";
 const KNOWLEDGE_BASE: &str = "This installation has a knowledge base: one wiki that every person and agent here reads and writes. Search it before answering questions about how things work here, and write down what others will need later: decisions, how-tos and findings. Your memory is yours alone; the knowledge base is everyone's.";
 
 /// Without this models treat "create a skill" as a request for a document.
@@ -114,6 +115,9 @@ fn system(tools: &[Tool], instructions: &str) -> String {
     let mut system = DRIVE.to_owned();
     if has(|name| name == "bash") {
         system = format!("{system}\n\n{TERMINAL}\n\n{WORKSPACE}");
+    }
+    if has(|name| name == "edit_file") {
+        system = format!("{system}\n\n{CODING}");
     }
     if has(|name| name == "computer" || name.starts_with("browser_")) {
         system = format!("{system}\n\n{DESKTOP}");
@@ -228,6 +232,8 @@ mod tests {
         assert!(terminal.contains(TERMINAL) && !terminal.contains(DESKTOP));
         let desktop = system(&[tool("bash"), tool("browser_read")], "x");
         assert!(desktop.contains(TERMINAL) && desktop.contains(DESKTOP));
+        assert!(!desktop.contains(CODING));
+        assert!(system(&[tool("bash"), tool("edit_file")], "x").contains(CODING));
     }
 
     #[test]

@@ -19,6 +19,7 @@ import { MeetingMessage } from '../meetings/MeetingMessage'
 import { Attachments } from './Attachments'
 import { Composer } from './Composer'
 import { Markdown } from './Markdown'
+import { CardApproval, isCardAsk } from './CardApproval'
 import { Message, type Part } from './MessageTools'
 import { isOpen, isUnsettled, useConversation } from './useConversation'
 import { WorkCard, WorkLog } from './WorkCard'
@@ -256,7 +257,9 @@ function Exchange({
 }) {
   const approvals = useApprovals(agent)
   const asking = turn.terminal.some(
-    (tool) => isAsk(tool) && approvals.statusOf(tool).status === 'pending',
+    (tool) =>
+      (isAsk(tool) && approvals.statusOf(tool).status === 'pending') ||
+      (isCardAsk(tool) && tool.approval === 'pending'),
   )
   if (hidden(turn)) return null
   const deletable = canSend && SETTLED.includes(turn.status)
@@ -309,14 +312,20 @@ function Exchange({
                 running={turn.status === 'running'}
                 open={turn.status === 'running' || asking}
               >
-                {turn.terminal.map((tool) => (
+                {turn.terminal.filter(listed).map((tool) => (
                   <div key={tool.id}>
                     {tool.reobserved && (
                       <p className="desktop-marker small faint">
                         Control returned · agent re-observed the screen
                       </p>
                     )}
-                    {isAsk(tool) ? (
+                    {isCardAsk(tool) ? (
+                      <CardApproval
+                        agent={agent}
+                        tool={tool}
+                        canSettle={canSend}
+                      />
+                    ) : isAsk(tool) ? (
                       <AskRow
                         agent={agent}
                         tool={tool}
@@ -378,6 +387,8 @@ function AppVia({ turn }: { turn: Turn }) {
   if (turn.origin?.kind !== 'app') return null
   return <span className="faint small">{origin(turn)}</span>
 }
+
+const listed = (tool: Turn['terminal'][number]) => tool.name !== 'todo_write'
 
 const SETTLED = ['complete', 'failed', 'cancelled']
 

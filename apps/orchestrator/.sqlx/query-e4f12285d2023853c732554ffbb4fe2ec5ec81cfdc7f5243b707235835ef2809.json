@@ -1,0 +1,91 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE vault_items\n            SET kind=$2, name=$3, site=$4, username=$5,\n                ciphertext=COALESCE($6, ciphertext),\n                access=CASE WHEN agent_id IS NULL THEN COALESCE($7, access) ELSE access END,\n                card_brand=CASE WHEN $2='card' THEN COALESCE($8, card_brand) END,\n                card_last4=CASE WHEN $2='card' THEN COALESCE($9, card_last4) END,\n                card_expires=CASE WHEN $2='card' THEN COALESCE($10, card_expires) END,\n                updated_at=clock_timestamp()\n            WHERE id=$1 AND ($7::jsonb IS NULL OR agent_id IS NULL) AND (kind=$2 OR $6::bytea IS NOT NULL)\n            RETURNING id, agent_id, kind, name, site, username, card_brand, card_last4, card_expires,\n                access AS \"access!: Access\", (to_jsonb(last_used_at) #>> '{}') AS last_used_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "site",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "username",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "card_brand",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "card_last4",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "card_expires",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "access!: Access",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "last_used_at",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "e4f12285d2023853c732554ffbb4fe2ec5ec81cfdc7f5243b707235835ef2809"
+}

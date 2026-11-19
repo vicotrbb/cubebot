@@ -3,6 +3,7 @@ pub(crate) mod access;
 mod activity;
 mod broadcasts;
 mod calls;
+mod card_fills;
 mod collaboration;
 mod coordinator;
 mod creations;
@@ -19,6 +20,7 @@ mod situation;
 pub mod tasks;
 mod teams;
 pub(crate) mod terminal;
+mod trace;
 pub(crate) mod usage;
 pub mod wakes;
 use crate::{
@@ -28,6 +30,7 @@ use crate::{
 pub use activity::{ActivityItem, UnreadReply};
 pub use broadcasts::{BroadcastFeed, BroadcastMessage};
 pub use calls::{CallRecord, Reply, ReplyEvent};
+pub use card_fills::{CardAsk, CardGate, DeclineCardFill};
 pub use collaboration::Steering;
 pub(crate) use collaboration::cancel_open;
 pub(crate) use coordinator::ask_as;
@@ -44,6 +47,7 @@ use serde::{Deserialize, Serialize};
 pub use situation::{OpenWork, RecentEvent, Situation, SituationAgent};
 use sqlx::PgPool;
 pub use teams::{CreateTeam, SaveMember, SaveTeam, Team, TeamMember, UpdateTeam};
+pub use trace::{Trace, TraceEvent, TraceMemory};
 pub use usage::{
     AgentUsage, DaySpend, ModelSpend, SetBudget, Spend, keep_prices, prices_due, store_prices,
 };

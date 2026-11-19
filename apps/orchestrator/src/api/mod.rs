@@ -234,7 +234,7 @@ async fn assembled(
         .merge(public::router(&identity, meetings.clone()))
         .merge(meetings::router(pool.clone(), identity.clone(), meetings));
     routes = routes.merge(calls::router(
-        pool,
+        pool.clone(),
         identity.clone(),
         speech,
         connections.clone(),
@@ -242,7 +242,7 @@ async fn assembled(
     if let Some(connections) = connections {
         routes = routes
             .merge(connections::router(identity.clone(), connections.clone()))
-            .merge(vault::router(identity.clone(), connections.clone()))
+            .merge(vault::router(identity.clone(), connections.clone(), pool))
             .merge(mcp::router(identity.clone(), connections.clone()))
             .merge(connectors::router(identity.clone(), connections));
     }

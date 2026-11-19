@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  CreditCard,
   FileUp,
   KeyRound,
   LockKeyhole,
@@ -23,7 +24,14 @@ import {
   when,
 } from '../../components/primitives'
 import { ImportLogins } from './ImportLogins'
-import { LoginFields, TYPABLE } from './ItemForm'
+import { expired } from './cards'
+import {
+  CardFields,
+  cardOf,
+  LoginFields,
+  SecretField,
+  TYPABLE,
+} from './ItemForm'
 import './vault.css'
 
 type Kind = VaultItem['kind']
@@ -76,8 +84,9 @@ export function InstallationVault() {
     <div className="vault-page">
       <div className="vault-page__head">
         <p className="platform__lead">
-          Logins and secrets agents type into their desktops without ever seeing
-          them. Each agent's own items live on its Vault tab.
+          Logins, secrets and payment cards agents type into their desktops
+          without seeing them. A card is typed only after a person approves each
+          payment. Each agent's own items live on its Vault tab.
         </p>
         {Boolean(items.data?.length) && newItem}
       </div>
@@ -144,7 +153,7 @@ function Row({
   onEdit: () => void
   onDelete: () => void
 }) {
-  const Icon = item.kind === 'login' ? KeyRound : LockKeyhole
+  const Icon = ICONS[item.kind]
   return (
     <li className="entry">
       <span className="entry__icon" aria-hidden="true">
@@ -152,11 +161,7 @@ function Row({
       </span>
       <div className="entry__main">
         <span className="entry__name">{item.name}</span>
-        <span className="entry__detail">
-          {item.kind === 'login'
-            ? `${item.username} on ${item.site}`
-            : 'Secret'}
-        </span>
+        <ItemDetail item={item} />
       </div>
       <div className="entry__meta">
         <span className="chip">{accessLabel(item.access)}</span>
@@ -187,6 +192,35 @@ function Row({
   )
 }
 
+const ICONS = { login: KeyRound, secret: LockKeyhole, card: CreditCard }
+
+export function ItemDetail({ item }: { item: VaultItem }) {
+  if (item.kind === 'login')
+    return (
+      <span className="entry__detail">
+        {item.username} on {item.site}
+      </span>
+    )
+  if (item.kind === 'secret')
+    return <span className="entry__detail">Secret</span>
+  const lapsed = expired(item.expires ?? '')
+  return (
+    <span className="entry__detail card-detail">
+      <span>{item.brand}</span>
+      <span className="tabular" aria-label={`ending ${item.last4}`}>
+        •••• {item.last4}
+      </span>
+      <span className="tabular">
+        {lapsed ? (
+          <span className="chip chip--danger">Expired {item.expires}</span>
+        ) : (
+          `Expires ${item.expires}`
+        )}
+      </span>
+    </span>
+  )
+}
+
 function accessLabel(access: Access) {
   if (access.mode === 'all_agents') return 'All agents'
   const count = access.agents.length
@@ -209,6 +243,8 @@ function InstallationItemForm({
   const [busy, setBusy] = useState(false)
   async function save(form: HTMLFormElement) {
     const data = new FormData(form)
+    const card = cardOf(data, kind, existing)
+    if (typeof card === 'string') return setError(card)
     const text = (name: string) => String(data.get(name) ?? '')
     const [secret, username] = [text('secret'), text('username')]
     if (!TYPABLE.test(secret) || !TYPABLE.test(username))
@@ -226,6 +262,7 @@ function InstallationItemForm({
       username: login ? username : null,
       secret: secret || null,
       access,
+      card,
     }
     setBusy(true)
     setError('')
@@ -259,23 +296,16 @@ function InstallationItemForm({
           name="name"
           required
           maxLength={255}
-          placeholder={kind === 'login' ? 'GitHub' : 'Deploy token'}
+          placeholder={PLACEHOLDERS[kind]}
           defaultValue={existing?.name ?? ''}
         />
       </Field>
       {kind === 'login' && <LoginFields existing={existing} site={undefined} />}
-      <Field
-        label={kind === 'login' ? 'Password' : 'Secret'}
-        hint={existing ? 'Empty keeps the current one' : 'Never shown again'}
-      >
-        <input
-          name="secret"
-          type="password"
-          required={!existing}
-          maxLength={4096}
-          autoComplete="new-password"
-        />
-      </Field>
+      {kind === 'card' ? (
+        <CardFields existing={existing} />
+      ) : (
+        <SecretField kind={kind} existing={existing} />
+      )}
       <AccessChoice
         access={access}
         agents={notRetired(agents.data)}
@@ -294,6 +324,12 @@ function InstallationItemForm({
   )
 }
 
+const PLACEHOLDERS: Record<Kind, string> = {
+  login: 'GitHub',
+  secret: 'Deploy token',
+  card: 'Team virtual card',
+}
+
 function KindChoice({
   value,
   locked,
@@ -306,7 +342,13 @@ function KindChoice({
   if (locked) return null
   return (
     <div className="tabs" role="radiogroup" aria-label="Kind">
-      {(['login', 'secret'] as const).map((kind) => (
+      {(
+        [
+          ['login', 'Login'],
+          ['secret', 'Secret'],
+          ['card', 'Payment card'],
+        ] as const
+      ).map(([kind, label]) => (
         <button
           key={kind}
           type="button"
@@ -314,7 +356,7 @@ function KindChoice({
           aria-checked={value === kind}
           onClick={() => onPick(kind)}
         >
-          {kind === 'login' ? 'Login' : 'Secret'}
+          {label}
         </button>
       ))}
     </div>

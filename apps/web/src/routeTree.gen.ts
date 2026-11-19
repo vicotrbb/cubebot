@@ -69,6 +69,7 @@ import { Route as AppAgentsAgentIdWakesRouteImport } from './routes/_app.agents.
 import { Route as AppAgentsAgentIdDesktopRouteImport } from './routes/_app.agents_.$agentId_.desktop'
 import { Route as AppRoomsRoomIdMembersRouteImport } from './routes/_app.rooms.$roomId.members'
 import { Route as AppAgentsAgentIdThreadTurnIdRouteImport } from './routes/_app.agents.$agentId.thread.$turnId'
+import { Route as AppAgentsAgentIdTraceTurnIdRouteImport } from './routes/_app.agents.$agentId.trace.$turnId'
 
 const AppRoute = AppRouteImport.update({
   id: '/_app',
@@ -373,6 +374,12 @@ const AppAgentsAgentIdThreadTurnIdRoute =
     path: '/thread/$turnId',
     getParentRoute: () => AppAgentsAgentIdRoute,
   } as any)
+const AppAgentsAgentIdTraceTurnIdRoute =
+  AppAgentsAgentIdTraceTurnIdRouteImport.update({
+    id: '/trace/$turnId',
+    path: '/trace/$turnId',
+    getParentRoute: () => AppAgentsAgentIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
@@ -434,6 +441,7 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
   '/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
+  '/agents/$agentId/trace/$turnId': typeof AppAgentsAgentIdTraceTurnIdRoute
 }
 export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
@@ -494,6 +502,7 @@ export interface FileRoutesByTo {
   '/agents/$agentId/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
   '/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
+  '/agents/$agentId/trace/$turnId': typeof AppAgentsAgentIdTraceTurnIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -557,6 +566,7 @@ export interface FileRoutesById {
   '/_app/agents_/$agentId_/desktop': typeof AppAgentsAgentIdDesktopRoute
   '/_app/rooms/$roomId/members': typeof AppRoomsRoomIdMembersRoute
   '/_app/agents/$agentId/thread/$turnId': typeof AppAgentsAgentIdThreadTurnIdRoute
+  '/_app/agents/$agentId/trace/$turnId': typeof AppAgentsAgentIdTraceTurnIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -620,6 +630,7 @@ export interface FileRouteTypes {
     | '/agents/$agentId/desktop'
     | '/rooms/$roomId/members'
     | '/agents/$agentId/thread/$turnId'
+    | '/agents/$agentId/trace/$turnId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/sign-in'
@@ -680,6 +691,7 @@ export interface FileRouteTypes {
     | '/agents/$agentId/desktop'
     | '/rooms/$roomId/members'
     | '/agents/$agentId/thread/$turnId'
+    | '/agents/$agentId/trace/$turnId'
   id:
     | '__root__'
     | '/_app'
@@ -742,6 +754,7 @@ export interface FileRouteTypes {
     | '/_app/agents_/$agentId_/desktop'
     | '/_app/rooms/$roomId/members'
     | '/_app/agents/$agentId/thread/$turnId'
+    | '/_app/agents/$agentId/trace/$turnId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1172,6 +1185,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAgentsAgentIdThreadTurnIdRouteImport
       parentRoute: typeof AppAgentsAgentIdRoute
     }
+    '/_app/agents/$agentId/trace/$turnId': {
+      id: '/_app/agents/$agentId/trace/$turnId'
+      path: '/trace/$turnId'
+      fullPath: '/agents/$agentId/trace/$turnId'
+      preLoaderRoute: typeof AppAgentsAgentIdTraceTurnIdRouteImport
+      parentRoute: typeof AppAgentsAgentIdRoute
+    }
   }
 }
 
@@ -1241,6 +1261,7 @@ interface AppAgentsAgentIdRouteChildren {
   AppAgentsAgentIdVaultRoute: typeof AppAgentsAgentIdVaultRoute
   AppAgentsAgentIdWakesRoute: typeof AppAgentsAgentIdWakesRoute
   AppAgentsAgentIdThreadTurnIdRoute: typeof AppAgentsAgentIdThreadTurnIdRoute
+  AppAgentsAgentIdTraceTurnIdRoute: typeof AppAgentsAgentIdTraceTurnIdRoute
 }
 
 const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
@@ -1259,6 +1280,7 @@ const AppAgentsAgentIdRouteChildren: AppAgentsAgentIdRouteChildren = {
   AppAgentsAgentIdVaultRoute: AppAgentsAgentIdVaultRoute,
   AppAgentsAgentIdWakesRoute: AppAgentsAgentIdWakesRoute,
   AppAgentsAgentIdThreadTurnIdRoute: AppAgentsAgentIdThreadTurnIdRoute,
+  AppAgentsAgentIdTraceTurnIdRoute: AppAgentsAgentIdTraceTurnIdRoute,
 }
 
 const AppAgentsAgentIdRouteWithChildren =

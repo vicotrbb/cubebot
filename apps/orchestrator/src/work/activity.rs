@@ -74,6 +74,14 @@ impl Work {
                 WHERE q.status='pending'
                   AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.send'))
                 UNION ALL
+                SELECT 'approval_pending', g.id, NULL, f.turn_id, f.created_at,
+                       format('Asks to pay %s with the card %s on %s', f.amount, f.card_name, f.domain)
+                FROM card_fills f
+                JOIN agents g ON g.id=f.agent_id
+                JOIN vault_items v ON v.id=f.item_id
+                WHERE f.status='pending'
+                  AND (a.role='administrator' OR (v.agent_id IS NOT NULL AND EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability='browser.control')))
+                UNION ALL
                 SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login)
                 FROM invitations v
                 WHERE a.role='administrator' AND v.accepted_by IS NULL AND v.revoked_by IS NULL AND v.expires_at > clock_timestamp()

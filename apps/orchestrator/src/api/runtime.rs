@@ -478,6 +478,9 @@ async fn vault_fill(
 ) -> Result<Response, Failure> {
     let actor = active(&identity, &headers).await?;
     let vault = vault_of(&identity)?;
+    if let Some(answer) = card_answer(&identity, &actor, &input).await? {
+        return Ok(answer);
+    }
     let site = vault.tried_login_site(actor.agent, input.item).await;
     if let Some(site) = site.map_err(vault_unavailable)?
         && !input
@@ -489,12 +492,15 @@ async fn vault_fill(
             "a login is typed only into its own site: open it in the browser and focus the field first",
         ));
     }
+    let stated = (input.field, input.page.as_deref(), input.amount.as_deref());
     let text = vault
-        .vault_fill_text(actor.agent, None, input.item, input.field)
+        .vault_fill_text(actor.agent, None, input.item, stated)
         .await
         .map_err(vault_unavailable)?;
     let Some(text) = text else {
-        return Ok(refused("no vault item with this id is available to you"));
+        return Ok(refused(
+            "no vault item with this id and field is available to you; a login fills username or secret, a card holder, number, expiry, expiry_month, expiry_year or cvc",
+        ));
     };
     let Some(axum::Extension(desktop)) = desktop else {
         return Ok(refused("the desktop is unavailable"));
@@ -507,6 +513,63 @@ async fn vault_fill(
             Ok(refused("the desktop is unavailable"))
         }
     }
+}
+async fn card_answer(
+    identity: &RuntimeIdentity,
+    actor: &crate::agents::runtime::RuntimeActor,
+    input: &VaultFill,
+) -> Result<Option<Response>, Failure> {
+    let card = vault_of(identity)?.card_name(actor.agent, input.item).await;
+    let Some(name) = card.map_err(vault_unavailable)? else {
+        return Ok(None);
+    };
+    Ok(match card_gate(identity, actor, input, &name).await? {
+        Ok(crate::work::CardGate::Approved) => None,
+        Ok(crate::work::CardGate::Asked) => Some(StatusCode::ACCEPTED.into_response()),
+        Err(reason) => Some(refused(&reason)),
+    })
+}
+async fn card_gate(
+    identity: &RuntimeIdentity,
+    actor: &crate::agents::runtime::RuntimeActor,
+    input: &VaultFill,
+    name: &str,
+) -> Result<Result<crate::work::CardGate, String>, Failure> {
+    let page = input
+        .page
+        .as_deref()
+        .filter(|page| !crate::connections::host(page).is_empty());
+    let Some(page) = page else {
+        return Ok(Err(
+            "open the checkout page in the browser and click the card field first".into(),
+        ));
+    };
+    let amount = input
+        .amount
+        .as_deref()
+        .map(str::trim)
+        .filter(|amount| (1..=100).contains(&amount.len()));
+    let Some(amount) = amount else {
+        return Ok(Err(
+            "state the amount you are about to pay with its currency, such as 49.90 BRL, in amount"
+                .into(),
+        ));
+    };
+    let (Some(turn), Some(call)) = (input.turn, input.call) else {
+        return Ok(Err("this agent version cannot ask to use a card".into()));
+    };
+    let ask = crate::work::CardAsk {
+        item: input.item,
+        name,
+        turn,
+        call,
+        page,
+        amount,
+    };
+    crate::work::Work::new(identity.pool.clone())
+        .card_gate(actor, &ask)
+        .await
+        .map_err(vault_unavailable)
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]

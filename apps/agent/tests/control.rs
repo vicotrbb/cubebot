@@ -268,11 +268,11 @@ async fn native_turn_streams_events_and_resends_unacknowledged_ones_after_reconn
     );
     assert_eq!(
         fake.event(4).await,
-        json!({"kind":"usage","input_tokens":9,"output_tokens":2,"cached_input_tokens":0,"cost_usd":null})
+        json!({"kind":"usage","input_tokens":9,"output_tokens":2,"cached_input_tokens":0,"cost_usd":null,"stage":"reply"})
     );
     assert_eq!(
         fake.event(5).await,
-        json!({"kind":"usage","input_tokens":12,"output_tokens":3,"cached_input_tokens":0,"cost_usd":null})
+        json!({"kind":"usage","input_tokens":12,"output_tokens":3,"cached_input_tokens":0,"cost_usd":null,"stage":"memory"})
     );
     let done = json!({"kind":"done","response":"Hello back",
         "memories":[{"op":"remember","content":"Likes short greetings"}]});
@@ -453,11 +453,19 @@ async fn a_malformed_call_answers_the_model_while_the_other_calls_run() {
         "The call was not run: arguments are not valid JSON."
     );
     assert_eq!(fake.event(8).await["kind"], "text_delta");
-    assert_eq!(fake.event(9).await["kind"], "usage");
-    assert_eq!(fake.event(10).await["kind"], "usage");
-    assert_eq!(fake.event(11).await["kind"], "usage");
+    assert_eq!(fake.event(9).await["stage"], "reply");
+    assert_eq!(
+        fake.event(10).await,
+        json!({"kind":"review","outcome":"asked"})
+    );
+    assert_eq!(fake.event(11).await["stage"], "review");
     assert_eq!(
         fake.event(12).await,
+        json!({"kind":"review","outcome":"complete"})
+    );
+    assert_eq!(fake.event(13).await["stage"], "memory");
+    assert_eq!(
+        fake.event(14).await,
         json!({"kind":"done","response":"Fixed"}),
         "a review that finds nothing missing keeps the answer"
     );
@@ -594,10 +602,10 @@ async fn anthropic_turn_discovers_limits_retries_a_rate_limit_and_compacts_at_ei
     );
     assert_eq!(
         fake.event(2).await,
-        json!({"kind":"usage","input_tokens":790,"output_tokens":20,"cached_input_tokens":0,"cost_usd":null})
+        json!({"kind":"usage","input_tokens":790,"output_tokens":20,"cached_input_tokens":0,"cost_usd":null,"stage":"reply"})
     );
-    assert_eq!(fake.event(3).await["kind"], "usage");
-    assert_eq!(fake.event(4).await["kind"], "usage");
+    assert_eq!(fake.event(3).await["stage"], "memory");
+    assert_eq!(fake.event(4).await["stage"], "summary");
     assert_eq!(
         fake.event(5).await,
         json!({"kind":"summary","text":"The gist"})

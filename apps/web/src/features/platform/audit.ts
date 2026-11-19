@@ -12,6 +12,17 @@ export const FILTERS = [
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
 
+const FILLED: Record<string, string> = {
+  username: 'username',
+  secret: 'password',
+  holder: 'cardholder name',
+  number: 'number',
+  expiry: 'expiry',
+  expiry_month: 'expiry month',
+  expiry_year: 'expiry year',
+  cvc: 'security code',
+}
+
 const planName = (provider: unknown) => {
   const name = text(provider)
   if (name === 'supergrok') return 'Grok'
@@ -67,7 +78,15 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
   'vault.import': (detail) =>
     `imported ${Number(detail.imported) || 0} browser logins into the vault`,
   'vault.fill': (detail) =>
-    `filled the ${detail.field === 'username' ? 'username' : 'password'} of`,
+    detail.amount
+      ? `filled the card ${FILLED[text(detail.field)] ?? 'field'} for ${text(detail.amount)} on ${text(detail.page)}, from`
+      : `filled the ${FILLED[text(detail.field)] ?? 'password'} of`,
+  'vault.card_request': (detail) =>
+    `asked to pay ${text(detail.amount)} on ${text(detail.domain)} with`,
+  'vault.card_approve': (detail) =>
+    `approved paying ${text(detail.amount)} on ${text(detail.domain)} with`,
+  'vault.card_decline': (detail) =>
+    `declined paying ${text(detail.amount)} on ${text(detail.domain)} with`,
   'mcp.create': () => 'added the MCP server',
   'mcp.update': () => 'changed the MCP server',
   'mcp.delete': () => 'removed the MCP server',

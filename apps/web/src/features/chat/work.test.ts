@@ -1,6 +1,14 @@
 // @ts-expect-error bun provides this at test time
 import { describe, expect, test } from 'bun:test'
-import { argumentsOf, diffLines, workDigest, workView } from './work'
+import {
+  argumentsOf,
+  diffLines,
+  latestPlan,
+  numbered,
+  patchOf,
+  workDigest,
+  workView,
+} from './work'
 
 const tool = (name: string, input: unknown, output?: string) =>
   ({
@@ -88,4 +96,63 @@ test('workDigest counts changed files once and commands', () => {
       tool('bash', 'ls'),
     ]),
   ).toBe('1 file changed · 1 command')
+})
+
+describe('the coding harness views', () => {
+  test('a numbered read starts at its first line and keeps the paging note', () => {
+    const printed =
+      '    40\tfn main() {\n    41\t\tprintln!("hi");\n[lines 40-41 of 90; continue with offset 42]\n'
+    expect(numbered(printed)).toEqual({
+      code: 'fn main() {\n\tprintln!("hi");',
+      start: 40,
+      note: '[lines 40-41 of 90; continue with offset 42]',
+    })
+    expect(numbered('plain\ntext')).toEqual({
+      code: 'plain\ntext',
+      start: 1,
+      note: '',
+    })
+    const view = workView(tool('read_file', { path: 'src/main.rs' }, printed))
+    expect(view.stat).toBe('lines 40–41')
+    expect(view.body).toMatchObject({ kind: 'file', start: 40 })
+  })
+
+  test('an edit shows the diff the tool printed, with both line numbers', () => {
+    const printed =
+      'Replaced 1 occurrence in a.ts\n@@ -2,3 +2,4 @@\n keep\n-old\n+new\n+more\n tail'
+    expect(patchOf(printed)).toEqual([
+      { sign: ' ', was: 2, now: 2, line: 'keep' },
+      { sign: '-', was: 3, line: 'old' },
+      { sign: '+', now: 3, line: 'new' },
+      { sign: '+', now: 4, line: 'more' },
+      { sign: ' ', was: 4, now: 5, line: 'tail' },
+    ])
+    const view = workView(
+      tool(
+        'edit_file',
+        { path: 'a.ts', old_string: 'old', new_string: 'new\nmore' },
+        printed,
+      ),
+    )
+    expect(view.stat).toBe('+2 −1')
+    expect(view.body.kind).toBe('patch')
+    expect(patchOf('old_string not found in a.ts')).toBe(null)
+  })
+
+  test('the latest plan wins and unknown steps are dropped', () => {
+    const plan = (todos: unknown) => tool('todo_write', { todos })
+    const latest = plan([
+      { content: 'Read', status: 'completed' },
+      { content: 'Fix', status: 'in_progress' },
+      { content: 'Odd', status: 'maybe' },
+    ])
+    expect(
+      latestPlan([plan([{ content: 'Read', status: 'in_progress' }]), latest]),
+    ).toEqual([
+      { content: 'Read', status: 'completed' },
+      { content: 'Fix', status: 'in_progress' },
+    ])
+    expect(workView(latest).object).toBe('1 of 2 done')
+    expect(latestPlan([tool('bash', 'ls')])).toBe(null)
+  })
 })

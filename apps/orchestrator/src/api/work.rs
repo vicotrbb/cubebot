@@ -35,7 +35,8 @@ struct Api {
     events,
     read,
     attachment,
-    delete_message
+    delete_message,
+    trace
 ))]
 pub(super) struct Doc;
 
@@ -60,6 +61,10 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity) -> Router {
         .route(
             "/api/conversations/{conversation}/messages/{turn}/steer",
             post(steer),
+        )
+        .route(
+            "/api/conversations/{conversation}/messages/{turn}/trace",
+            get(trace),
         )
         .route(
             "/api/conversations/{conversation}/messages/{turn}/{part}",
@@ -105,6 +110,19 @@ async fn conversation(
         Json(api.work.conversation(&actor, agent).await?),
     ))
 }
+#[utoipa::path(get, path = "/api/conversations/{conversation}/messages/{turn}/trace", operation_id = "message_trace", params(("conversation" = Uuid, Path), ("turn" = Uuid, Path)), responses((status = 200, body = crate::work::Trace)))]
+async fn trace(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((conversation, turn)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    Ok((
+        [("cache-control", "no-store")],
+        Json(api.work.trace(&actor, conversation, turn).await?),
+    ))
+}
+
 #[utoipa::path(get, path = "/api/conversations/{conversation}/messages", params(("conversation" = Uuid, Path), ("after" = Option<i64>, Query)), responses((status = 200, body = Vec<crate::work::Turn>)))]
 async fn history(
     State(api): State<Api>,

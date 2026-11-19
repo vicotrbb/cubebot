@@ -28,6 +28,7 @@ export function CodeBlock({
   language,
   name,
   numbers = false,
+  start = 1,
   bare = false,
   maxHeight,
   actions,
@@ -36,6 +37,7 @@ export function CodeBlock({
   language?: string | undefined
   name?: string | undefined
   numbers?: boolean
+  start?: number
   bare?: boolean
   maxHeight?: number
   actions?: ReactNode
@@ -59,7 +61,9 @@ export function CodeBlock({
       >
         {numbers && (
           <span className="codeblock__gutter" aria-hidden="true">
-            {Array.from({ length: lines }, (_, index) => index + 1).join('\n')}
+            {Array.from({ length: lines }, (_, index) => index + start).join(
+              '\n',
+            )}
           </span>
         )}
         <pre>

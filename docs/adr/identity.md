@@ -1,6 +1,6 @@
 # Identity, access and credentials
 
-This document covers who an installation belongs to, who owns its agents, how people sign in, are admitted, grouped into teams and granted access, and how the installation's provider, integration and external account connections are owned, shared, refreshed and stored. It ends with the vault an agent fills logins from and the encrypted credential store every secret lives in. Agent execution, the sandbox boundary and memory are covered in their own documents and linked where they constrain these decisions.
+This document covers who an installation belongs to, who owns its agents, how people sign in, are admitted, grouped into teams and granted access, and how the installation's provider, integration and external account connections are owned, shared, refreshed and stored. It ends with the vault an agent fills logins and payment cards from and the encrypted credential store every secret lives in. Agent execution, the sandbox boundary and memory are covered in their own documents and linked where they constrain these decisions.
 
 ## Installation and tenancy
 
@@ -342,9 +342,30 @@ This amends [Installation-managed external account connections](#installation-ma
 
 **Rationale.** Website login secret storage was open, and the login handoff in [Live browser viewing and explicit human takeover](sandbox.md#live-browser-viewing-and-explicit-human-takeover) needs a person at the desktop every time. An agent that can read a password can leak it into its context, tool output or files; one that can only ask for it to be typed cannot. Alternatives considered: giving the agent the secret as tool output, which puts it in the ledger and model context; a password manager inside the guest, which agent-run code can read; typing through the browser tools' DevTools pipe, which bypasses the arbiter's mode and its record of who typed.
 
-**Open details.** Key rotation for vault records; per-agent exclusions from all-agents items; filling more than one field per call; items for non-US layouts.
+**Open details.** Key rotation for vault records; per-agent exclusions from all-agents items; filling more than one field per call; items for non-US layouts. Payment cards are settled in [Payment cards in the vault, typed only after a person approves the payment](#payment-cards-in-the-vault-typed-only-after-a-person-approves-the-payment).
 
 **Validation scenarios.** A fill types the secret and neither the turn ledger, the model's requests nor the desktop records hold it; a `vault_put` secret is redacted in the ledger; an item with an untypable character is refused; the agent's fill is refused while a person holds control; a person's fill is refused unless they hold control; an agent without access to an installation item can neither list nor fill it.
+
+## Payment cards in the vault, typed only after a person approves the payment
+
+Accepted 2026-11-18, as the user specified it that day.
+
+**Decision.** The vault ([A vault the desktop arbiter fills](#a-vault-the-desktop-arbiter-fills)) gains a `card` kind, in installation and agent scope, so an agent can pay on a checkout page without a person typing the card.
+
+- **Items.** A card holds the cardholder name, number, expiry (MM/YY) and security code, sealed together as one Credentials record bound to the item, like a login's password. The brand, the last four digits and the expiry are kept in plain columns for the console's rows. A card is saved only by a person in the console: `vault_put` refuses it. The number must pass its Luhn check and every field must be typable.
+- **Listing.** `vault_list` returns a card's name and last four digits, never more.
+- **Filling.** `vault_fill` types one card field per call: `holder`, `number`, `expiry`, `expiry_month`, `expiry_year` (four digits) or `cvc`, at the desktop's focus like any vault field. A card fill names the amount the agent read on the page and needs the focused browser page.
+- **Approval.** The first card fill on a page types nothing: it records a `card_fills` request with the agent, the card's name, the page's domain and the stated amount, and the agent ends its turn. The console shows the request inline on that tool call with Approve payment and Decline, and in Activity. Approving or declining always wakes the agent with a new message saying so, so a card approval is never quiet. An approval lets that agent fill that card on that domain or its subdomains for 15 minutes; a different domain asks again. An installation card is approved by an administrator, an agent's own card by someone with `browser.control` on the agent. An agent has at most one pending request per card. This is a second exception to [Autonomous tool use within granted permissions](agents.md#autonomous-tool-use-within-granted-permissions), after [Agents ask to create agents, rooms and teams](agents.md#agents-ask-to-create-agents-rooms-and-teams): spending money needs a person each time.
+- **Audit.** The request (`vault.card_request`), the approval or decline (`vault.card_approve`, `vault.card_decline`) and every typed field (`vault.fill` with the domain and amount) are audited.
+- **3-D Secure.** A bank's 3-D Secure challenge goes through the existing login handoff ([Live browser viewing and explicit human takeover](sandbox.md#live-browser-viewing-and-explicit-human-takeover)): the agent calls `request_login` for the site and a person completes it on the desktop.
+
+**Known limit.** Once typed, the number and code are in the page, where the agent can read them through a screenshot or the browser tools. The vault keeps a card out of the agent's tool output and the ledger, not out of its sight on the page. The console tells people to store only virtual cards with a spending cap or locked to one merchant.
+
+**Rationale.** Payment is the one desktop action whose cost a person cannot undo, so each checkout gets an explicit approval naming the amount and the site, while one approval covers the several fields a checkout needs. Alternatives considered: an approval per field, which asks four times for one payment; holding the tool call open until a person answers, which keeps a lane busy for as long as the person is away; letting the agent fill cards freely under a spending cap, which Cubebot cannot enforce because the merchant charges the card.
+
+**Open details.** The stated amount is not checked against what the merchant charges; card brands beyond the common networks show as "Card"; non-US keyboard layouts.
+
+**Validation scenarios.** Automated against PostgreSQL: a card with a bad check digit is refused; the runtime list carries the last four and never the number; the first fill asks, a resent call asks once, a second request for the same card waits; approval wakes the agent with the amount, card and domain, and cannot be given twice; a subdomain of the approved domain fills while another domain asks again; a card field on a login, or a login field on a card, is refused; the request, approval and fill are audited in order. Not yet validated: a real model completing a checkout with a virtual card, or a 3-D Secure handoff.
 
 ## Encrypted credentials with a separate installation key
 

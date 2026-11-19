@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { VaultItem } from '../../api/client'
+import type { components } from '../../api/schema'
 import type { AgentSummary } from '../../api/types'
 import { agentVault, fillItem } from './ItemForm'
 
@@ -20,7 +21,7 @@ export function FillPicker({
   }, [agent.id])
   if (!holding || items.length === 0) return null
   async function fill() {
-    const [item, field] = choice.split(':') as [string, 'username' | 'secret']
+    const [item, field] = choice.split(':') as [string, FillField]
     setStatus('Filling…')
     const problem = await fillItem(agent.id, item, field)
     setStatus(problem ?? 'Filled.')
@@ -35,18 +36,13 @@ export function FillPicker({
         onChange={(event) => setChoice(event.target.value)}
       >
         <option value="">Fill from vault…</option>
-        {items.flatMap((item) => [
-          ...(item.kind === 'login'
-            ? [
-                <option key={`${item.id}:u`} value={`${item.id}:username`}>
-                  {item.name}: username
-                </option>,
-              ]
-            : []),
-          <option key={`${item.id}:s`} value={`${item.id}:secret`}>
-            {item.name}: {item.kind === 'login' ? 'password' : 'secret'}
-          </option>,
-        ])}
+        {items.flatMap((item) =>
+          FIELDS[item.kind].map(([field, label]) => (
+            <option key={`${item.id}:${field}`} value={`${item.id}:${field}`}>
+              {item.name}: {label}
+            </option>
+          )),
+        )}
       </select>
       <button
         type="button"
@@ -63,4 +59,22 @@ export function FillPicker({
       )}
     </div>
   )
+}
+
+type FillField = components['schemas']['VaultField']
+
+const FIELDS: Record<VaultItem['kind'], [FillField, string][]> = {
+  login: [
+    ['username', 'username'],
+    ['secret', 'password'],
+  ],
+  secret: [['secret', 'secret']],
+  card: [
+    ['holder', 'cardholder name'],
+    ['number', 'card number'],
+    ['expiry', 'expiry MM/YY'],
+    ['expiry_month', 'expiry month'],
+    ['expiry_year', 'expiry year'],
+    ['cvc', 'security code'],
+  ],
 }

@@ -50,6 +50,7 @@ import { NewMeeting } from '../meetings/NewMeeting'
 import { isRunning, pileOf, titleOf } from '../tasks/status'
 import { TaskMark } from '../tasks/TaskMark'
 import '../tasks/tasks.css'
+import { UpdateHint } from './UpdateHint'
 
 const TASK_TREE = 'task-tree'
 
@@ -194,6 +195,7 @@ export function Sidebar({
           </Link>
         </Section>
       </nav>
+      <UpdateHint />
       <footer className="sidebar__foot">
         <AccountMenu />
         {administrator && <PlatformGear />}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, failure, ok, type VaultItem } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { Alert, Empty, when } from '../../components/primitives'
+import { ItemDetail } from './InstallationVault'
 import { agentVault, ItemForm } from './ItemForm'
 
 export function Vault({
@@ -48,9 +49,9 @@ export function Vault({
             {item.name}
             <span className="chip">{item.kind}</span>
           </div>
-          {item.kind === 'login' && (
+          {item.kind !== 'secret' && (
             <p className="small muted">
-              {item.username} on {item.site}
+              <ItemDetail item={item} />
             </p>
           )}
           <p className="small faint">
@@ -85,7 +86,8 @@ export function Vault({
         <h2>Vault</h2>
         <p className="panel__lead">
           The agent types these into its desktop without seeing them. Secrets
-          are never shown again after saving.
+          are never shown again after saving, and a card is typed only after a
+          person approves each payment.
         </p>
         {!editing && (
           <div className="actions">

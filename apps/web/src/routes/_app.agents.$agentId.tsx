@@ -152,7 +152,13 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
             </Empty>
           )}
           {panelOpen && (
-            <aside className="panel" aria-label="Details">
+            <aside
+              className="panel"
+              aria-label="Details"
+              data-wide={
+                children[0]?.routeId.endsWith('/trace/$turnId') || undefined
+              }
+            >
               <div className="panel__head">
                 <PanelTabs
                   agentId={agent.id}

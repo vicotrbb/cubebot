@@ -328,6 +328,7 @@ impl Agents {
                      AND h.status = 'pending'
                ) AS "pending_login!",
                (SELECT count(*) FROM creation_requests q WHERE q.agent_id = g.id AND q.status = 'pending')
+                   + (SELECT count(*) FROM card_fills f WHERE f.agent_id = g.id AND f.status = 'pending')
                    AS "pending_creations!",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.name END AS "current_tool?",
                CASE WHEN 'conversation_read' = ANY(c.names) THEN tool.target END AS "current_target?",

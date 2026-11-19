@@ -24,6 +24,7 @@ pub struct About {
     pub teams: i64,
     pub provider: Option<String>,
     pub model: Option<String>,
+    pub newer_release: Option<super::release::Release>,
 }
 
 pub async fn about(pool: &PgPool) -> Result<About, sqlx::Error> {
@@ -59,5 +60,6 @@ pub async fn about(pool: &PgPool) -> Result<About, sqlx::Error> {
         teams: row.teams,
         provider: row.provider,
         model: row.model,
+        newer_release: super::release::newer_release().await,
     })
 }
