@@ -44,14 +44,33 @@ struct Login {
     reason: String,
 }
 
+const DIRECT: (&str, &str) = (
+    "Give part of this request to another agent that shares a room with you, with the result you expect back. After delegating, end your turn with a short note: you resume each time one delegated task settles, with every outcome so far, failures and their evidence included, and remain responsible for the final answer. Outcomes come back on their own: never delegate a request for the status or output of work already delegated. Mentioning an agent in text does nothing; only this tool assigns work.",
+    "Send a request or information to another agent that shares a room with you, without waiting for it. With expects_reply its answer arrives later as a new message to you; otherwise it stays in its own conversation.",
+);
+
+const ROOM: (&str, &str) = (
+    "Give one part of this room request to another agent in this room, with the result you expect back. The hand-off is posted in the room and the agent works on it there. Each agent takes at most one part of a request, so give it everything for its part at once. After delegating, end your turn with a short note: you resume each time a part settles, with every outcome so far, failures and their evidence included, and you stay responsible for the final answer. Outcomes come back on their own: never delegate to ask for the status of work already given out. Mentioning an agent in text does nothing; only this tool assigns work.",
+    "Post a message to another agent in this room without waiting for it. When that agent is already working on this request, the message goes straight into its running work. Otherwise it answers once in the room, and with expects_reply its answer comes back to you while this turn is still working. A request allows only a few such messages; for work you need back, use delegate.",
+);
+
 pub fn drives_desktop(name: &str) -> bool {
     matches!(name, "request_login" | "vault_fill")
 }
 
-/// A task's turn omits `delegate` and `send_message`: their work would land in the other agent's own conversation.
-pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot_providers::Tool> {
+pub fn definitions(
+    desktop: bool,
+    broadcast: bool,
+    (in_task, in_room): (bool, bool),
+) -> Vec<cubebot_providers::Tool> {
+    let in_room = in_room || in_task;
+    let message = if in_room {
+        "Self-contained instructions or information; the recipient sees this room, but not your own work."
+    } else {
+        "Self-contained instructions or information; the recipient sees nothing else of this conversation."
+    };
     let tool = |name: &str, description: &str, reply: bool| {
-        let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":"Self-contained instructions or information; the recipient sees nothing else of this conversation."}});
+        let mut properties = json!({"agent":{"type":"string","description":"The other agent's exact name."},"message":{"type":"string","description":message}});
         if reply {
             properties["expects_reply"] = json!({"type":"boolean","description":"True to receive the recipient's answer back here as a new message once it is done; false for information only."});
         }
@@ -62,20 +81,13 @@ pub fn definitions(desktop: bool, broadcast: bool, in_task: bool) -> Vec<cubebot
         "Ask a person to log in to a website for you on your desktop, when a login page or challenge blocks you, or to complete a bank's 3-D Secure check during a card payment. First call vault_list: when a login item's site is the page's domain or a parent of it (amazon.com.br serves www.amazon.com.br), fill its username and password with vault_fill and submit, and ask a person only if the site still blocks you, such as for a one-time code. Leave the login page open in the browser, then end your turn with a short note: the person takes control of the desktop, and a new message tells you when they finish or decline. Never ask for passwords in text.",
         json!({"site":{"type":"string","description":"The website's domain, such as github.com."},"reason":{"type":"string","description":"What you need the login for, shown to the person."}}),
     );
+    let (delegate, send) = if in_room { ROOM } else { DIRECT };
     let mut tools = vec![
-        tool(
-            "delegate",
-            "Give part of this request to another agent that shares a room with you, with the result you expect back. After delegating, end your turn with a short note: you resume each time one delegated task settles, with every outcome so far, failures and their evidence included, and remain responsible for the final answer. Outcomes come back on their own: never delegate a request for the status or output of work already delegated. Mentioning an agent in text does nothing; only this tool assigns work.",
-            false,
-        ),
-        tool(
-            "send_message",
-            "Send a request or information to another agent that shares a room with you, without waiting for it. With expects_reply its answer arrives later as a new message to you; otherwise it stays in its own conversation.",
-            true,
-        ),
+        tool("delegate", delegate, false),
+        tool("send_message", send, true),
     ];
     if in_task {
-        tools = tasks::definitions();
+        tools.extend(tasks::definitions());
     }
     tools.extend(desktop.then_some(login));
     tools.extend(broadcast.then(|| {
@@ -250,14 +262,14 @@ mod tests {
     #[test]
     fn broadcast_is_offered_only_to_a_turn_that_may_broadcast() {
         let names = |broadcast| -> Vec<String> {
-            super::definitions(false, broadcast, false)
+            super::definitions(false, broadcast, (false, false))
                 .into_iter()
                 .map(|tool| tool.name)
                 .collect()
         };
         assert!(names(true).contains(&"broadcast".to_owned()));
         assert!(!names(false).contains(&"broadcast".to_owned()));
-        let login = super::definitions(true, false, false)
+        let login = super::definitions(true, false, (false, false))
             .into_iter()
             .find(|tool| tool.name == "request_login")
             .unwrap();
@@ -265,14 +277,29 @@ mod tests {
     }
 
     #[test]
-    fn a_task_turn_talks_in_its_room_instead_of_other_agents_conversations() {
-        let names: Vec<String> = super::definitions(false, false, true)
-            .into_iter()
-            .map(|tool| tool.name)
-            .collect();
-        assert!(names.contains(&"task_message".to_owned()));
-        assert!(names.contains(&"task_item".to_owned()));
-        assert!(!names.contains(&"delegate".to_owned()));
-        assert!(!names.contains(&"send_message".to_owned()));
+    fn a_task_turn_uses_the_room_tools_and_marks_its_items() {
+        let tools = super::definitions(false, false, (true, false));
+        let names: Vec<&str> = tools.iter().map(|tool| tool.name.as_str()).collect();
+        assert!(names.contains(&"task_item"));
+        assert!(names.contains(&"delegate") && names.contains(&"send_message"));
+        assert!(!names.contains(&"task_message"));
+        let delegate = tools.iter().find(|tool| tool.name == "delegate").unwrap();
+        assert!(delegate.description.contains("posted in the room"));
+    }
+
+    #[test]
+    fn a_room_turn_is_told_its_hand_offs_stay_in_the_room() {
+        let described = |in_room| -> String {
+            super::definitions(false, false, (false, in_room))
+                .into_iter()
+                .filter(|tool| ["delegate", "send_message"].contains(&tool.name.as_str()))
+                .map(|tool| format!("{} {}", tool.description, tool.parameters))
+                .collect()
+        };
+        let room = described(true);
+        assert!(room.contains("posted in the room") && room.contains("at most one part"));
+        assert!(room.contains("goes straight into its running work"));
+        assert!(room.contains("the recipient sees this room"));
+        assert!(!described(false).contains("posted in the room"));
     }
 }

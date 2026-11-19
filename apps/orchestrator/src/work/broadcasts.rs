@@ -412,6 +412,7 @@ async fn attach(
             attachments: attachments.remove(&delivery.turn).unwrap_or_default(),
             terminal: Vec::new(),
             partial: None,
+            parent_turn: None,
             turn: delivery.turn,
             room_message_id: delivery.room_message_id,
             agent_id: delivery.agent_id,

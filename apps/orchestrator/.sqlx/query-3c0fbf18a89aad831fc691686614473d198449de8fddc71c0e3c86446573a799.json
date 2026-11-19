@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO turn_steering (turn_id, actor_id, request_id, message)\n        SELECT $2, m.actor_id, m.id, CASE WHEN a.id IS NULL THEN m.message ELSE format('%s, who works on this request with you, wrote: %s',a.name,left(m.message,16000)) END\n        FROM room_messages m\n        LEFT JOIN agents a ON a.id=m.author_agent_id\n        WHERE m.id=$1\n        ON CONFLICT DO NOTHING\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3c0fbf18a89aad831fc691686614473d198449de8fddc71c0e3c86446573a799"
+}

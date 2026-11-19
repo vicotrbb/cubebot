@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO turn_steering (turn_id, actor_id, request_id, message)\n        SELECT p.id, c.actor_id, c.id, format('%s answered your message: %s',a.name,left(c.response,16000))\n        FROM chat_turns c\n        JOIN chat_turns p ON p.id=c.parent_turn_id\n        JOIN agents a ON a.id=c.conversation_id\n        WHERE c.id=$1 AND c.room_message_id IS NOT NULL AND c.status='complete' AND c.expects_reply AND NOT c.awaited\n            AND p.status IN ('queued','running','delegated')\n        ON CONFLICT DO NOTHING\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d514796a750526862241a45c3235f7039fab69560b4eb7e17196375fc90b6da3"
+}

@@ -1068,6 +1068,9 @@ pub(crate) async fn native_chat_setup(
     )
 }
 pub(crate) fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeChild {
+    spawn_native(origin, provider_origin, "projected-native-token")
+}
+pub(crate) fn spawn_native(origin: &str, provider_origin: &str, bootstrap: &str) -> NativeChild {
     use std::os::unix::fs::DirBuilderExt;
     let root = std::env::temp_dir().join(format!("cubebot-native-text-{}", Uuid::new_v4()));
     std::fs::DirBuilder::new()
@@ -1075,7 +1078,7 @@ pub(crate) fn spawn_native_text(origin: &str, provider_origin: &str) -> NativeCh
         .create(&root)
         .unwrap();
     let token = root.join("token");
-    std::fs::write(&token, "projected-native-token").unwrap();
+    std::fs::write(&token, bootstrap).unwrap();
     let binary = std::env::current_exe()
         .unwrap()
         .parent()

@@ -1,0 +1,79 @@
+.run__line {
+  margin-top: 4px;
+}
+.run__line[aria-expanded='true'] {
+  border-color: var(--line-strong);
+}
+.run__faces {
+  display: flex;
+  padding-left: 2px;
+}
+.run__faces .cube {
+  margin-right: -5px;
+}
+.run__faces .cube:last-child {
+  margin-right: 2px;
+}
+.run__parts {
+  display: grid;
+  gap: 2px;
+  margin: 4px 0 2px;
+  padding: 0 0 0 12px;
+  list-style: none;
+  border-left: 1px solid var(--line-strong);
+}
+.run__part {
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: var(--t-md);
+}
+.run__state {
+  font-size: var(--t-xs);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+.run__part[data-status='queued'] > .msg__body > .msg__head .run__state,
+.run__part[data-status='running'] > .msg__body > .msg__head .run__state,
+.run__part[data-status='delegated'] > .msg__body > .msg__head .run__state {
+  color: var(--orange-text);
+}
+.run__part[data-status='failed'] > .msg__body > .msg__head .run__state,
+.run__part[data-status='waiting'] > .msg__body > .msg__head .run__state {
+  color: var(--danger);
+}
+.run__ask {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.run__asked {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.run__asked--clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.run__error {
+  color: var(--danger);
+}
+@media (max-width: 820px) {
+  .run__parts {
+    padding-left: 8px;
+  }
+  .run__part {
+    padding: 6px 4px;
+  }
+}
+@media (pointer: coarse) {
+  .run__line {
+    min-height: 44px;
+  }
+}

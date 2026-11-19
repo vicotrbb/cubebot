@@ -18,6 +18,8 @@ pub struct CreateRoom {
 #[serde(deny_unknown_fields)]
 pub struct RoomMembers {
     pub agents: Vec<Uuid>,
+    #[serde(default)]
+    pub lead: Option<Uuid>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -36,6 +38,7 @@ pub struct Room {
     pub team: Option<Uuid>,
     /// A deleted team's room: history only, no new messages.
     pub archived: bool,
+    pub lead: Option<Uuid>,
 }
 
 /// A room's newest message, for the installation stream.
@@ -69,6 +72,7 @@ pub struct RoomMessage {
     pub note: Option<String>,
     pub attachments: Vec<super::terminal::ReplyAttachment>,
     pub deliveries: Vec<Delivery>,
+    pub steered: Option<Uuid>,
 }
 
 struct MessageRow {
@@ -80,6 +84,7 @@ struct MessageRow {
     message: String,
     routing: String,
     note: Option<String>,
+    steered: Option<Uuid>,
 }
 
 impl From<MessageRow> for RoomMessage {
@@ -95,6 +100,7 @@ impl From<MessageRow> for RoomMessage {
             note: row.note,
             attachments: Vec::new(),
             deliveries: Vec::new(),
+            steered: row.steered,
         }
     }
 }
@@ -102,6 +108,7 @@ impl From<MessageRow> for RoomMessage {
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct Delivery {
     pub turn: Uuid,
+    pub parent_turn: Option<Uuid>,
     #[serde(skip)]
     pub room_message_id: Uuid,
     pub agent_id: Uuid,
@@ -244,7 +251,7 @@ impl Work {
         room: Uuid,
         input: &RoomMembers,
     ) -> Result<Room, IdentityError> {
-        if !sized(&input.agents) {
+        if !led(input) {
             return Err(IdentityError::InvalidInput);
         }
         let mut tx = self.pool.begin().await?;
@@ -274,6 +281,13 @@ impl Work {
         .execute(&mut *tx)
         .await?;
         add_members(&mut tx, room, &input.agents).await?;
+        sqlx::query!(
+            "UPDATE rooms SET lead_agent_id=$2 WHERE id=$1",
+            room,
+            input.lead,
+        )
+        .execute(&mut *tx)
+        .await?;
         let room = self::room(&mut tx, actor, room).await?;
         tx.commit().await?;
         Ok(room)
@@ -301,10 +315,10 @@ impl Work {
         let mut messages: Vec<RoomMessage> = sqlx::query_as!(
             MessageRow,
             r#"
-            SELECT id AS "id!", sequence AS "sequence!", author AS "author!", orchestrator AS "orchestrator!", author_agent_id, message AS "message!", routing AS "routing!", note
+            SELECT id AS "id!", sequence AS "sequence!", author AS "author!", orchestrator AS "orchestrator!", author_agent_id, message AS "message!", routing AS "routing!", note, steered
             FROM (
                 (
-                    SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS author, m.orchestrator, m.author_agent_id, m.message, m.routing, m.note
+                    SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS author, m.orchestrator, m.author_agent_id, m.message, m.routing, m.note, (SELECT s.turn_id FROM turn_steering s WHERE m.author_agent_id IS NOT NULL AND s.actor_id=m.actor_id AND s.request_id=m.id) AS steered
                     FROM room_messages m
                     WHERE m.room_id=$1 AND m.sequence>$2
                     ORDER BY m.sequence
@@ -312,7 +326,7 @@ impl Work {
                 )
                 UNION
                 (
-                    SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS author, m.orchestrator, m.author_agent_id, m.message, m.routing, m.note
+                    SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS author, m.orchestrator, m.author_agent_id, m.message, m.routing, m.note, (SELECT s.turn_id FROM turn_steering s WHERE m.author_agent_id IS NOT NULL AND s.actor_id=m.actor_id AND s.request_id=m.id) AS steered
                     FROM room_messages m
                     WHERE m.room_id=$1 AND m.id=ANY($3)
                 )
@@ -359,7 +373,7 @@ impl Work {
         let mut messages: Vec<RoomMessage> = sqlx::query_as!(
             MessageRow,
             r#"
-            SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS "author!", m.orchestrator, m.author_agent_id, m.message, m.routing, m.note
+            SELECT m.id, m.sequence, room_message_author(m.orchestrator,m.author_agent_id,m.actor_id) AS "author!", m.orchestrator, m.author_agent_id, m.message, m.routing, m.note, (SELECT s.turn_id FROM turn_steering s WHERE m.author_agent_id IS NOT NULL AND s.actor_id=m.actor_id AND s.request_id=m.id) AS steered
             FROM room_messages m
             WHERE m.id=$1
             "#,
@@ -439,6 +453,10 @@ async fn insert_room(
     Ok(id)
 }
 
+fn led(input: &RoomMembers) -> bool {
+    sized(&input.agents) && input.lead.is_none_or(|lead| input.agents.contains(&lead))
+}
+
 fn sized(agents: &[Uuid]) -> bool {
     agents.len() <= 32
 }
@@ -487,6 +505,10 @@ async fn room(
         r#"
         SELECT r.id, r.name, r.archived,
             (SELECT t.id FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS team,
+            COALESCE(
+                (SELECT m.agent_id FROM teams t JOIN team_members m ON m.team_id=t.id AND m.reports_to IS NULL WHERE t.room_id=r.id AND t.deleted_at IS NULL),
+                (SELECT r.lead_agent_id FROM room_members m WHERE m.room_id=r.id AND m.agent_id=r.lead_agent_id)
+            ) AS lead,
             COALESCE((SELECT max(m.sequence) FROM room_messages m WHERE m.room_id=r.id),0) AS "last_sequence!",
             COALESCE((SELECT c.sequence FROM read_cursors c WHERE c.account_id=$2 AND c.scope_kind='room' AND c.scope_id=r.id),0) AS "read_sequence!"
         FROM rooms r
@@ -507,6 +529,7 @@ async fn room(
         read_sequence: row.read_sequence,
         team: row.team,
         archived: row.archived,
+        lead: row.lead,
     })
 }
 
@@ -636,8 +659,11 @@ async fn landed(
     mentioned: Vec<Uuid>,
 ) -> Result<(), IdentityError> {
     super::activity::settle_room(tx, room).await?;
+    if let Some((lead, brief)) = super::runs::led(tx, room, &mentioned).await? {
+        return deliver(tx, message, lead, &brief).await;
+    }
     for agent in mentioned {
-        deliver(tx, message, agent).await?;
+        deliver(tx, message, agent, "").await?;
     }
     Ok(())
 }
@@ -667,12 +693,13 @@ pub(super) async fn deliver(
     tx: &mut Transaction<'_, Postgres>,
     message: Uuid,
     agent: Uuid,
+    brief: &str,
 ) -> Result<(), IdentityError> {
     super::wake(tx, crate::agents::AgentId(agent)).await?;
     sqlx::query!(
         r#"
         INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, room_message_id, in_task)
-        SELECT $2, COALESCE((SELECT k.created_by FROM tasks k WHERE k.room_id=m.room_id), m.actor_id), gen_random_uuid(), format('In room %s, %s wrote:%s%s',r.name,a.login,E'\n\n',m.message), m.id, r.task
+        SELECT $2, COALESCE((SELECT k.created_by FROM tasks k WHERE k.room_id=m.room_id), m.actor_id), gen_random_uuid(), format('In room %s, %s wrote:%s%s%s',r.name,a.login,E'\n\n',m.message,$3::text), m.id, r.task
         FROM room_messages m
         JOIN rooms r ON r.id=m.room_id
         JOIN human_accounts a ON a.id=m.actor_id
@@ -681,6 +708,7 @@ pub(super) async fn deliver(
         "#,
         message,
         agent,
+        brief,
     )
     .execute(&mut **tx)
     .await?;
@@ -705,16 +733,19 @@ pub(super) async fn deliver(
 pub(super) fn mentioned(message: &str, members: &[Member]) -> Vec<Uuid> {
     let text = message.to_lowercase();
     let word = |c: char| c.is_alphanumeric() || c == '_' || c == '-';
-    members
+    let mut found: Vec<(usize, Uuid)> = members
         .iter()
-        .filter(|member| {
+        .filter_map(|member| {
             let tag = format!("@{}", member.name.to_lowercase());
-            text.match_indices(&tag).any(|(at, _)| {
-                !text[..at].ends_with(word) && !text[at + tag.len()..].starts_with(word)
-            })
+            text.match_indices(&tag)
+                .find(|(at, _)| {
+                    !text[..*at].ends_with(word) && !text[at + tag.len()..].starts_with(word)
+                })
+                .map(|(at, _)| (at, member.id))
         })
-        .map(|member| member.id)
-        .collect()
+        .collect();
+    found.sort_by_key(|(at, _)| *at);
+    found.into_iter().map(|(_, id)| id).collect()
 }
 
 pub(super) async fn authorize(
@@ -767,7 +798,7 @@ async fn attach(
     }
     let deliveries = sqlx::query!(
         r#"
-        SELECT t.id AS turn, t.room_message_id AS "room_message_id!", t.conversation_id AS agent_id, a.name AS agent, t.status, t.response, t.error
+        SELECT t.id AS turn, t.parent_turn_id, t.room_message_id AS "room_message_id!", t.conversation_id AS agent_id, a.name AS agent, t.status, t.response, t.error
         FROM chat_turns t
         JOIN agents a ON a.id=t.conversation_id
         WHERE t.room_message_id=ANY($1)
@@ -787,6 +818,7 @@ async fn attach(
             terminal: terminal.remove(&delivery.turn).unwrap_or_default(),
             partial: partial.remove(&delivery.turn),
             turn: delivery.turn,
+            parent_turn: delivery.parent_turn_id,
             room_message_id: delivery.room_message_id,
             agent_id: delivery.agent_id,
             agent: delivery.agent,
@@ -813,7 +845,7 @@ async fn partial_replies(
         SELECT e.turn_id, string_agg(e.payload->>'text','' ORDER BY e.sequence) AS "text!"
         FROM turn_events e
         JOIN chat_turns t ON t.id=e.turn_id
-        WHERE e.turn_id=ANY($1) AND t.status='running' AND e.payload->>'kind'='text_delta'
+        WHERE e.turn_id=ANY($1) AND t.status IN ('queued','running','delegated') AND e.payload->>'kind'='text_delta'
         GROUP BY e.turn_id
         "#,
         turns,
@@ -845,5 +877,10 @@ mod tests {
         );
         assert!(ids("mail bob@ada.example or @adam or @bobby").is_empty());
         assert!(ids("no mentions at all").is_empty());
+        assert_eq!(
+            ids("@bob first, then @ada"),
+            vec![members[2].id, members[0].id],
+            "the first agent mentioned comes first"
+        );
     }
 }

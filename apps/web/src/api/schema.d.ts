@@ -3718,6 +3718,8 @@ export interface components {
       /** @description Files the agent sent with this reply. */
       attachments: components['schemas']['ReplyAttachment'][]
       error?: string | null
+      /** Format: uuid */
+      parent_turn?: string | null
       /** @description The reply as far as it has been written, while there is no `response`. */
       partial?: string | null
       response?: string | null
@@ -4908,6 +4910,8 @@ export interface components {
        * @description The newest message's sequence, 0 without messages.
        */
       last_sequence: number
+      /** Format: uuid */
+      lead?: string | null
       /** @description The viewer may change the members. */
       manage: boolean
       members: components['schemas']['Member'][]
@@ -4927,6 +4931,8 @@ export interface components {
     /** @description The room's whole new member set; putting the same set again changes nothing. */
     RoomMembers: {
       agents: string[]
+      /** Format: uuid */
+      lead?: string | null
     }
     RoomMessage: {
       attachments: components['schemas']['ReplyAttachment'][]
@@ -4952,6 +4958,8 @@ export interface components {
       routing: string
       /** Format: int64 */
       sequence: number
+      /** Format: uuid */
+      steered?: string | null
     }
     Routine: {
       coalesce: boolean

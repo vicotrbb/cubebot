@@ -10,20 +10,20 @@ import {
 import type { AgentSummary, RoomSummary, Session } from '../../api/types'
 import { markRead, useAgents } from '../../app/queries'
 import { followWhileVisible } from '../../app/stream'
-import { Cube, moodOf } from '../../components/Cube'
+import { Cube } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert, Empty, Skeleton } from '../../components/primitives'
 import { useFollowEnd } from '../chat/useFollowEnd'
-import { can } from '../../api/types'
 import { Attachments } from '../chat/Attachments'
 import { Composer } from '../chat/Composer'
-import { Retry, Stop } from '../chat/Conversation'
 import { Markdown, MentionNames } from '../chat/Markdown'
 import type { Mentionable } from '../chat/MentionMenu'
-import { WorkCard, WorkLog } from '../chat/WorkCard'
 import '../chat/chat.css'
 import { ORCHESTRATOR_AVATAR } from '../tasks/orchestrator'
 import { rounds } from './rounds'
+import { AgentReply, DeliveryAvatar } from './Run'
+import { runs } from './runs'
+import './run.css'
 
 const PAGE = 60
 const FINISHED = ['complete', 'failed', 'cancelled']
@@ -63,16 +63,6 @@ function routingNote(message: RoomMessage, task: boolean) {
   return (task ? TASK_ROUTING : ROUTING)[message.routing]
 }
 
-const DELIVERY: Record<string, string> = {
-  queued: 'queued',
-  running: 'working…',
-  waiting: 'waiting for a retry',
-  delegated: 'waiting on delegated work',
-  complete: 'replied',
-  failed: 'failed',
-  cancelled: 'cancelled',
-}
-
 export function Room({
   room,
   session,
@@ -87,8 +77,8 @@ export function Room({
       label="Room"
       draftKey={`cubebot:${session.id}:room:${room.id}`}
       placeholder={`Message #${room.name}`}
-      note="Each mentioned agent gets its own copy; without a mention the best-placed member answers."
-      empty="Mention members with @name to ask each of them, or write without a mention and the coordinator picks one owner."
+      note="Mention several agents and one leads them as a team; without a mention the best-placed member answers."
+      empty="Mention one agent with @name to ask it, several to have one lead them as a team, or write without a mention and the coordinator picks one owner."
       mentionable={room.members}
       people={room.people}
       closed={room.archived}
@@ -196,9 +186,10 @@ export function RoomView({
     const element = scroller.current
     if (element && pinned.current) element.scrollTop = element.scrollHeight
   }, [loaded, messages])
+  const run = runs(messages)
   const rows = task
-    ? rounds(messages)
-    : messages.map((message) => ({
+    ? rounds(run.top)
+    : run.top.map((message) => ({
         message,
         deliveries: message.deliveries,
       }))
@@ -284,42 +275,13 @@ export function RoomView({
                   </div>
                 )}
                 {deliveries.map((item) => (
-                  <div className="msg msg--agent agent-message" key={item.turn}>
-                    <DeliveryAvatar
-                      agent={agentOf(item.agent_id)}
-                      name={item.agent}
-                    />
-                    <div className="msg__body">
-                      <div className="msg__head">
-                        <span className="msg__author">{item.agent}</span>
-                        <span className="faint small">
-                          · {DELIVERY[item.status] ?? item.status}
-                        </span>
-                      </div>
-                      {item.terminal.length > 0 && (
-                        <WorkLog
-                          tools={item.terminal}
-                          running={item.status === 'running'}
-                        >
-                          {item.terminal.map((tool) => (
-                            <WorkCard key={tool.id} tool={tool} />
-                          ))}
-                        </WorkLog>
-                      )}
-                      <Markdown text={item.response ?? item.partial ?? ''} />
-                      <Attachments turn={item.turn} items={item.attachments} />
-                      {item.status === 'failed' && item.error && (
-                        <p className="small" style={{ color: 'var(--danger)' }}>
-                          {item.error.replaceAll('_', ' ')}
-                        </p>
-                      )}
-                      <DeliveryActions
-                        item={item}
-                        agent={agentOf(item.agent_id)}
-                        session={session}
-                      />
-                    </div>
-                  </div>
+                  <AgentReply
+                    key={item.turn}
+                    item={item}
+                    run={run}
+                    session={session}
+                    agents={agents.data ?? []}
+                  />
                 ))}
               </article>
             ))}
@@ -358,34 +320,6 @@ export function RoomView({
   )
 }
 
-function DeliveryActions({
-  item,
-  agent,
-  session,
-}: {
-  item: RoomMessage['deliveries'][number]
-  agent: AgentSummary | undefined
-  session: Session
-}) {
-  const open = ['queued', 'running', 'delegated', 'waiting'].includes(
-    item.status,
-  )
-  if (!agent || !open || !can(agent, 'conversation_send', session)) return null
-  const turn = { id: item.turn, status: item.status }
-  return (
-    <div className="msg__actions">
-      {item.status === 'waiting' && item.error !== 'budget_exhausted' && (
-        <Retry conversation={item.agent_id} turn={turn} />
-      )}
-      <Stop
-        conversation={item.agent_id}
-        turn={turn}
-        label={item.status === 'queued' ? 'Cancel' : 'Stop'}
-      />
-    </div>
-  )
-}
-
 function AuthorAvatar({
   message,
   agents,
@@ -405,30 +339,4 @@ function AuthorAvatar({
       />
     )
   return <PersonAvatar login={message.author} className="msg__avatar" />
-}
-
-function DeliveryAvatar({
-  agent,
-  name,
-}: {
-  agent: ReturnType<typeof useAgents>['data'] extends (infer A)[] | undefined
-    ? A | undefined
-    : never
-  name: string
-}) {
-  if (agent)
-    return (
-      <Cube
-        agentId={agent.id}
-        avatar={agent.avatar}
-        mood={moodOf(agent)}
-        size={32}
-        className="msg__avatar"
-      />
-    )
-  return (
-    <span className="avatar-initial msg__avatar" aria-hidden="true">
-      {name.slice(0, 1).toUpperCase()}
-    </span>
-  )
 }

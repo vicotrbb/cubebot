@@ -380,7 +380,7 @@ fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) 
     tools.extend(crate::collaboration::definitions(
         desktop,
         turn.broadcast,
-        turn.in_task,
+        (turn.in_task, turn.in_room),
     ));
     if desktop && turn.meeting.is_some() {
         tools.extend(crate::collaboration::meeting_definitions());
@@ -616,7 +616,7 @@ impl<P: Provider> Session<'_, P> {
     fn steer(&mut self, context: &mut Context) {
         for (id, message) in self.collaboration.take_steering() {
             context.messages.push(Message::User(format!(
-                "Steering from a person about this request; apply it to everything you do next: {message}"
+                "Steering about this request, from a person unless it names an agent; apply it to everything you do next: {message}"
             )));
             self.run.emit(TurnEvent::Steered { id, message }, None);
         }

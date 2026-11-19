@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH RECURSIVE run(id) AS (\n            SELECT id FROM chat_turns WHERE room_message_id=$1 AND parent_turn_id IS NULL\n            UNION ALL\n            SELECT t.id FROM chat_turns t JOIN run r ON t.parent_turn_id=r.id\n        )\n        SELECT g.name AS agent, b.name AS \"by?\", t.awaited, t.status, left(m.message,200) AS asked, left(t.response,300) AS result\n        FROM run\n        JOIN chat_turns t ON t.id=run.id\n        JOIN agents g ON g.id=t.conversation_id\n        LEFT JOIN chat_turns p ON p.id=t.parent_turn_id\n        LEFT JOIN agents b ON b.id=p.conversation_id\n        LEFT JOIN room_messages m ON m.id=t.room_message_id AND t.parent_turn_id IS NOT NULL\n        ORDER BY t.sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "by?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "awaited",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "asked",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "result",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "7d32bd6568e226a7a0089d80b1b33a3a44932414ff26c0ded5f168453373f5b4"
+}

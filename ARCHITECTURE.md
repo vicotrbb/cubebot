@@ -96,7 +96,7 @@ Retain durable data until explicit deletion. Retiring or sleeping releases execu
 
 Each agent schedules one serial main lane and a configurable one-to-four concurrent task lanes, default two, inside its own loop. A lane is an execution queue, not a transcript. Main-lane work uses the agent's permanent conversation; context assembly manages that conversation and the current assignment without creating another chat session. All lanes share the agent's memory and workspace.
 
-Human room mentions create independent assignments for each eligible target. An unmentioned human request invokes the tool-free coordinator, which returns a validated owner, continuation, clarification, or no-action result. Agent-authored progress does not retrigger routing. Delegation and transfer are structured operations with explicit identities and ancestry.
+A human room message that mentions one agent goes to it; one that mentions several goes to a single lead, who plans, delegates parts in the room and writes the one answer, within per-run limits on turns and agent-to-agent messages. A run is that message and the tree of turns under it. An unmentioned human request invokes the tool-free coordinator, which returns a validated owner, continuation, clarification, or no-action result. Agent-authored progress does not retrigger routing. Delegation and transfer are structured operations with explicit identities and ancestry.
 
 A parent waiting for children yields its execution slot. Child outcomes update dependencies and make a continuation eligible. Failed children return evidence for parent adaptation while healthy siblings continue. A stop propagates through the selected task subtree. User cancellation cannot be bypassed by reassigning the same work under a fresh identity.
 

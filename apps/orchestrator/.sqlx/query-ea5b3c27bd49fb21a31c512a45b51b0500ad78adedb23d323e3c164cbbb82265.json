@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT m.id AS message, m.room_id AS room, r.task\n        FROM chat_turns t\n        JOIN room_messages m ON m.id=t.room_message_id\n        JOIN rooms r ON r.id=m.room_id\n        WHERE t.id=$1 AND t.parent_turn_id IS NULL\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "message",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "room",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "task",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ea5b3c27bd49fb21a31c512a45b51b0500ad78adedb23d323e3c164cbbb82265"
+}

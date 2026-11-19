@@ -64,10 +64,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
                     json!({"item":1,"status":"done","note":"two found"})
                 ),
                 call("task_item", json!({"item":99,"status":"done","note":null})),
-                call(
-                    "task_message",
-                    json!({"message":"Found two venues.","to":[]})
-                ),
             ])),
             Step::Reply(json!([text("Task answer")])),
         ],
@@ -136,12 +132,7 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
     );
     let delivery = &messages[1].deliveries[0];
     assert_eq!(delivery.response.as_deref(), Some("Task answer"));
-    assert_eq!(delivery.terminal.len(), 3, "its work shows in the room");
-    let spoken = messages
-        .iter()
-        .find(|message| message.author_agent_id == Some(agent))
-        .expect("the agent spoke in the room");
-    assert_eq!(spoken.message, "Found two venues.");
+    assert_eq!(delivery.terminal.len(), 2, "its work shows in the room");
     let refused = delivery.terminal[1].outcome.as_ref().unwrap()["output"].to_string();
     assert!(refused.contains("not one of yours"), "{refused}");
     let progressed = work.task(&admin, task.id).await.unwrap();
@@ -156,7 +147,8 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
         .unwrap();
     assert!(task_request["input"].to_string().contains("Main answer"));
     let tools = task_request["tools"].to_string();
-    assert!(tools.contains("task_message") && !tools.contains("\"send_message\""));
+    assert!(tools.contains("\"send_message\"") && tools.contains("\"delegate\""));
+    assert!(tools.contains("task_item") && !tools.contains("task_message"));
 
     let main_turns = work.history(&admin, agent, 0).await.unwrap();
     assert_eq!(main_turns.len(), 1);
@@ -177,7 +169,6 @@ async fn a_task_runs_from_a_fork_of_the_agent_and_leaves_its_conversation_alone(
         .find(|request| request["input"].to_string().contains("Main again"))
         .unwrap();
     assert!(!later["input"].to_string().contains("Task answer"));
-    assert!(!later["input"].to_string().contains("Found two venues"));
 
     let finish = json!({"say":"Done: two venues compared.","action":"finish"}).to_string();
     let before = work.room_messages(&admin, task.room_id, 0).await.unwrap();

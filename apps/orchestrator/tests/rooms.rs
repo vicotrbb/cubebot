@@ -38,7 +38,7 @@ fn message(text: &str) -> SendMessage {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
-async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordinator() {
+async fn several_mentions_go_to_one_lead_and_other_messages_wait_for_the_coordinator() {
     let pool = support::database().await;
     let identity = Identity::new(pool.clone());
     identity
@@ -94,11 +94,8 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     let (first, second) = (first.unwrap(), second.unwrap());
     assert_eq!(first.id, second.id);
     assert_eq!(first.routing, "routed");
-    let mut recipients: Vec<Uuid> = first.deliveries.iter().map(|d| d.agent_id).collect();
-    recipients.sort();
-    let mut expected = vec![ada, bob];
-    expected.sort();
-    assert_eq!(recipients, expected);
+    let recipients: Vec<Uuid> = first.deliveries.iter().map(|d| d.agent_id).collect();
+    assert_eq!(recipients, [ada], "the first agent mentioned leads");
     assert!(work.history(&admin, ada, 0).await.unwrap().is_empty());
     let delivered: String = sqlx::query_scalar(
         "SELECT message FROM chat_turns WHERE conversation_id=$1 AND room_message_id IS NOT NULL",
@@ -108,6 +105,60 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     .await
     .unwrap();
     assert!(delivered.starts_with("In room Launch, admin wrote:"));
+    assert!(
+        delivered.contains("you lead it. Your co-workers on it: Bob."),
+        "{delivered}"
+    );
+    assert!(
+        work.set_room_members(
+            &admin,
+            room.id,
+            &RoomMembers {
+                agents: vec![ada, bob],
+                lead: Some(outsider)
+            }
+        )
+        .await
+        .is_err(),
+        "the lead must be a member"
+    );
+    let led = work
+        .set_room_members(
+            &admin,
+            room.id,
+            &RoomMembers {
+                agents: vec![ada, bob],
+                lead: Some(bob),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(led.lead, Some(bob));
+    let chosen = work
+        .post_room_message(&admin, room.id, &message("@Ada @Bob plan the launch"))
+        .await
+        .unwrap();
+    let recipients: Vec<Uuid> = chosen.deliveries.iter().map(|d| d.agent_id).collect();
+    assert_eq!(
+        recipients,
+        [bob],
+        "the room's lead goes before the first mention"
+    );
+    let single = work
+        .post_room_message(&admin, room.id, &message("@Ada alone"))
+        .await
+        .unwrap();
+    assert_eq!(
+        single.deliveries[0].agent_id, ada,
+        "one mention needs no lead"
+    );
+    for turn in [chosen.deliveries[0].turn, single.deliveries[0].turn] {
+        sqlx::query("UPDATE chat_turns SET status='cancelled' WHERE id=$1")
+            .bind(turn)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
     let unread = cubebot_orchestrator::agents::Agents::new(pool.clone())
         .list(&admin, None)
         .await
@@ -204,7 +255,10 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
         Err(IdentityError::NotFound)
     ));
 
-    let only_ada = RoomMembers { agents: vec![ada] };
+    let only_ada = RoomMembers {
+        agents: vec![ada],
+        lead: None,
+    };
     assert!(!work.rooms(&member).await.unwrap()[0].manage);
     assert!(matches!(
         work.set_room_members(&member, room.id, &only_ada).await,
@@ -244,7 +298,8 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
             &admin,
             room.id,
             &RoomMembers {
-                agents: vec![Uuid::new_v4()]
+                agents: vec![Uuid::new_v4()],
+                lead: None,
             }
         )
         .await,
@@ -261,6 +316,7 @@ async fn mentions_deliver_once_per_member_and_other_messages_wait_for_the_coordi
     assert!(work.history(&admin, bob, 0).await.unwrap().is_empty());
     let with_outsider = RoomMembers {
         agents: vec![ada, outsider],
+        lead: None,
     };
     let grown = work
         .set_room_members(&admin, room.id, &with_outsider)

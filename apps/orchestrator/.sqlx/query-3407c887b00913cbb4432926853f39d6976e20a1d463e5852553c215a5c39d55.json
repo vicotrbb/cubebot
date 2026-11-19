@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH new AS (\n            INSERT INTO room_messages (room_id, actor_id, request_id, message, routing, author_agent_id)\n            VALUES ($1, $2, $3, $4, 'routed', $5)\n            ON CONFLICT (actor_id, request_id) DO NOTHING\n            RETURNING id\n        )\n        SELECT id AS \"id!\" FROM new\n        UNION ALL\n        SELECT id FROM room_messages WHERE actor_id=$2 AND request_id=$3\n        LIMIT 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3407c887b00913cbb4432926853f39d6976e20a1d463e5852553c215a5c39d55"
+}

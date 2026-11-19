@@ -194,6 +194,8 @@ pub struct Turn {
     #[serde(default)]
     pub in_task: bool,
     #[serde(default)]
+    pub in_room: bool,
+    #[serde(default)]
     pub delegations: Vec<Delegation>,
     #[serde(default)]
     pub task: bool,
@@ -828,6 +830,7 @@ mod tests {
             attachments: Vec::new(),
             connections: Vec::new(),
             in_task: false,
+            in_room: false,
             talk_only: false,
             meeting: None,
         }));
