@@ -6,6 +6,7 @@ import {
   Ear,
   Ellipsis,
   Hand,
+  Link2,
   Lock,
   LockOpen,
   Mic,
@@ -20,7 +21,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Cube, type Mood } from '../../components/Cube'
-import { Menu } from '../../components/primitives'
+import { copyText, Menu } from '../../components/primitives'
 import { bestGrid } from './grid'
 import { screenSupported, type Engine } from './media/engine'
 import { NOISE_LEVELS, saveNoise, type Noise } from './media/noise'
@@ -321,6 +322,8 @@ type Controls = {
   setNoise: (noise: Noise) => void
   toggleNoise: () => void
   setPanel: (tab: PanelTab | null) => void
+  link: string | null
+  onCopied: () => void
   onLeave: () => void
 }
 
@@ -360,6 +363,8 @@ function More({
   setNoise,
   setPanel,
   self,
+  link,
+  onCopied,
 }: Controls) {
   return (
     <Menu
@@ -368,6 +373,16 @@ function More({
       label="More options"
       trigger={<Ellipsis />}
     >
+      {link && (
+        <button
+          type="button"
+          className="menu__item"
+          onClick={() => void copyText(link).then(onCopied)}
+        >
+          <Link2 /> Copy meeting link
+        </button>
+      )}
+      {link && <div className="menu__sep" role="separator" />}
       <button
         type="button"
         className="menu__item meeting-more__phone"
@@ -746,6 +761,7 @@ export function MeetingRoom({
   const [captions, setCaptions] = useState(true)
   const { noise, setNoise, toggleNoise } = useNoise(engine, joining.noise)
   const [panel, setPanel] = useState<PanelTab | null>(null)
+  const [copied, setCopied] = useState({ count: 0, over: '' })
   const main = useRef<HTMLDivElement>(null)
   useLevels(main, engine, room.you)
   useShortcuts(
@@ -783,6 +799,9 @@ export function MeetingRoom({
     setNoise,
     toggleNoise,
     setPanel,
+    link: meeting ? (meeting.link ?? null) : window.location.href,
+    onCopied: () =>
+      setCopied(({ count }) => ({ count: count + 1, over: room.notice })),
     onLeave,
   }
   return (
@@ -823,7 +842,14 @@ export function MeetingRoom({
         )}
         {captions && <CaptionBand room={room} />}
         <Knock room={room} engine={current} onOpen={() => setPanel('people')} />
-        <RoomNotice key={room.notice} text={room.notice} />
+        {copied.count > 0 && copied.over === room.notice ? (
+          <RoomNotice
+            key={`copied-${copied.count}`}
+            text="Meeting link copied"
+          />
+        ) : (
+          <RoomNotice key={room.notice} text={room.notice} />
+        )}
       </main>
       {panel && (
         <Panel

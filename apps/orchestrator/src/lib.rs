@@ -8,6 +8,7 @@ pub mod identity;
 pub mod knowledge;
 pub mod meetings;
 pub mod operations;
+pub mod push;
 pub mod speech;
 pub mod storage;
 pub mod work;

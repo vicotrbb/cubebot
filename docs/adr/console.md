@@ -112,6 +112,8 @@ Device subscriptions are associated with the correct installation and user. Logo
 
 **Open details.** Event taxonomy and categories; recipient rules; inbox retention and read state; preference defaults; aggregation, rate limits and quiet times; payload privacy; device lifecycle; push infrastructure and browser qualification; and delivery retry policy.
 
+**Implemented 2026-11-19.** The Activity inbox is the durable record; push is a delivery path beside it in the orchestrator's `push` module. Every 10 seconds it reads each subscribed person's Activity through the same authorized query the console uses and sends Web Push (RFC 8291 payloads, RFC 8292 VAPID with an installation key kept in PostgreSQL) for new items that need the person: questions, approvals, logins, and stopped or failed work. A per-person cursor gives at-most-once sends, so a failed push never touches the inbox. The payload carries the agent's name, the item's one-line text and a link to Activity, never transcripts or secrets. Endpoints must belong to a known push service, a person keeps at most 20 devices, signing out removes that device, and a service's 404 or 410 deletes the subscription. Per-category preferences, quiet times and completion notifications stay open.
+
 **Validation scenarios.** Create an authorized inbox notification; deliver optional push; respect opt-out; keep the inbox entry after push failure; suppress unauthorized content; enforce access when a link opens; handle duplicate delivery attempts; and prevent subscriptions from crossing user accounts.
 
 ## Drawn content runs in a sandbox with no network

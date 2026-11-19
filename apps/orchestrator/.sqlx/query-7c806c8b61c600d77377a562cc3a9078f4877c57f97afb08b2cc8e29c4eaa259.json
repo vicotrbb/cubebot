@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO push_subscriptions (endpoint, account_id, p256dh, auth) VALUES ($1, $2, $3, $4)\n            ON CONFLICT (endpoint) DO UPDATE\n            SET account_id=EXCLUDED.account_id, p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c806c8b61c600d77377a562cc3a9078f4877c57f97afb08b2cc8e29c4eaa259"
+}

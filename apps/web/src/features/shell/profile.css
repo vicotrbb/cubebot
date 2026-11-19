@@ -41,6 +41,22 @@
   padding: 18px 0;
   border-top: 1px solid var(--line);
 }
+.profile__text {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  max-width: 52ch;
+}
+.profile__text .btn {
+  margin-top: 6px;
+}
+.profile__result {
+  margin: 0;
+}
+.profile__section > .switch {
+  flex: none;
+  align-self: flex-start;
+}
 .profile__section h3 {
   font-size: var(--t-md);
   font-weight: var(--w-strong);
@@ -89,6 +105,10 @@
   .profile__section {
     flex-direction: column;
     align-items: stretch;
+  }
+  .profile__section:has(> .switch) {
+    flex-direction: row;
+    align-items: flex-start;
   }
   .profile__section .tabs {
     width: 100%;

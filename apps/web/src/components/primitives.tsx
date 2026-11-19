@@ -2,7 +2,7 @@ import { Check, Copy, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react'
 
 /** Plain-HTTP installs have no Clipboard API, so a hidden selection does the copying there. */
-async function copyText(text: string) {
+export async function copyText(text: string) {
   if (navigator.clipboard) return navigator.clipboard.writeText(text)
   const area = document.createElement('textarea')
   area.value = text

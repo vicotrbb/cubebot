@@ -84,10 +84,11 @@ export function addressesIn(text: string) {
 }
 
 export function lengthOf(starts: string, ends: string) {
-  const minutes = Math.max(
-    1,
-    Math.round((Date.parse(ends) - Date.parse(starts)) / 60_000),
-  )
+  return minutesWords((Date.parse(ends) - Date.parse(starts)) / 60_000)
+}
+
+export function minutesWords(span: number) {
+  const minutes = Math.max(1, Math.round(span))
   if (minutes < 60) return `${minutes} min`
   const rest = minutes % 60
   return rest

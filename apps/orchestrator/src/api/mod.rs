@@ -20,6 +20,7 @@ mod meetings;
 mod memories;
 mod oidc;
 mod public;
+mod push;
 mod rooms;
 mod routines;
 mod runtime;
@@ -79,6 +80,7 @@ pub fn openapi() -> String {
     doc.merge(installation::Doc::openapi());
     doc.merge(backup::Doc::openapi());
     doc.merge(activity::Doc::openapi());
+    doc.merge(push::Doc::openapi());
     doc.merge(agents::Doc::openapi());
     doc.merge(apps::Doc::openapi());
     doc.merge(connections::Doc::openapi());
@@ -145,6 +147,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(installation::router(pool.clone(), identity.clone()))
         .merge(backup::router(pool.clone(), identity.clone()))
         .merge(activity::router(pool.clone(), identity.clone()))
+        .merge(push::router(pool.clone(), identity.clone()))
         .merge(desktop::router(pool.clone(), identity.clone()))
         .merge(creations::router(pool.clone(), identity.clone()))
         .merge(work::router(pool.clone(), identity.clone()))

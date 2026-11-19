@@ -4,12 +4,14 @@ import { api, failure, ok } from '../../api/client'
 import { Cube } from '../../components/Cube'
 import { PersonAvatar } from '../../components/PersonAvatar'
 import { Alert } from '../../components/primitives'
+import '../../components/member-picker.css'
 import { formatTime } from '../calendar/model'
 import { Markdown } from '../chat/Markdown'
 import '../chat/markdown.css'
 import { useRefresh, type Meeting } from './api'
+import { peopleOf, type Person } from './people'
+import { minutesWords } from './schedule'
 
-type Invitation = Meeting['invitations'][number]
 type Utterance = Meeting['utterances'][number]
 
 export function StateChip({ state }: { state: string }) {
@@ -24,10 +26,11 @@ export function StateChip({ state }: { state: string }) {
   )
 }
 
-function InviteeFace({ invitation }: { invitation: Invitation }) {
-  if (invitation.kind === 'agent')
-    return <Cube avatar={invitation.avatar ?? null} size={22} />
-  if (invitation.kind === 'email')
+function Face({ person }: { person: Person }) {
+  const invitation = person.invitation
+  if (person.kind === 'agent')
+    return <Cube avatar={invitation?.avatar ?? null} size={22} />
+  if (person.kind === 'email')
     return (
       <span className="invitee__mail" aria-hidden="true">
         <Mail />
@@ -35,49 +38,65 @@ function InviteeFace({ invitation }: { invitation: Invitation }) {
     )
   return (
     <PersonAvatar
-      account={invitation.account ?? undefined}
-      name={invitation.name}
+      account={person.account}
+      name={person.name}
       className="member__photo"
     />
   )
 }
 
-function InviteeDetail({
-  invitation,
+const KINDS: Record<string, string> = {
+  agent: 'Agent',
+  account: 'Person',
+  guest: 'Guest',
+  email: 'Email',
+}
+
+function presence(person: Person, meeting: Meeting, zone: string) {
+  if (person.joined && person.here)
+    return `In the meeting · joined ${formatTime(person.joined, zone)}`
+  if (person.joined)
+    return `Joined ${formatTime(person.joined, zone)} · ${minutesWords(person.minutes)}`
+  if (meeting.state === 'ended') return 'Invited, did not join'
+  const invitation = person.invitation
+  if (invitation?.kind !== 'email') return 'Invited'
+  return invitation.emailed_at
+    ? `Emailed at ${formatTime(invitation.emailed_at, zone)}`
+    : 'Not emailed. They need the link.'
+}
+
+function PersonDetail({
+  person,
+  meeting,
   zone,
 }: {
-  invitation: Invitation
+  person: Person
+  meeting: Meeting
   zone: string
 }) {
-  if (invitation.email_error)
+  const error = person.invitation?.email_error
+  if (error && !person.joined)
     return (
-      <span
-        className="member__kind invitee__error"
-        title={invitation.email_error}
-      >
-        <AlertCircle aria-hidden="true" /> Not sent: {invitation.email_error}
-      </span>
-    )
-  if (invitation.kind === 'email')
-    return (
-      <span className="member__kind">
-        {invitation.emailed_at
-          ? `Emailed at ${formatTime(invitation.emailed_at, zone)}`
-          : 'Not emailed. They need the link.'}
+      <span className="member__kind invitee__error" title={error}>
+        <AlertCircle aria-hidden="true" /> Not sent: {error}
       </span>
     )
   return (
     <span className="member__kind">
-      {invitation.kind === 'agent' ? 'Agent' : 'Person'}
+      {person.kind !== 'email' && `${KINDS[person.kind] ?? 'Person'} · `}
+      {presence(person, meeting, zone)}
     </span>
   )
 }
 
-export function Invited({ meeting, zone }: { meeting: Meeting; zone: string }) {
+export function People({ meeting, zone }: { meeting: Meeting; zone: string }) {
   const refresh = useRefresh()
   const [busy, setBusy] = useState('')
   const [error, setError] = useState('')
-  const remove = async (invitation: Invitation) => {
+  const people = peopleOf(meeting)
+  const removable = meeting.owner && meeting.state !== 'ended'
+  const remove = async ({ invitation }: Person) => {
+    if (!invitation) return
     setBusy(invitation.id)
     setError('')
     try {
@@ -93,26 +112,37 @@ export function Invited({ meeting, zone }: { meeting: Meeting; zone: string }) {
       setBusy('')
     }
   }
-  if (!meeting.invitations.length)
+  if (!people.length)
     return <p className="members__empty">Nobody invited yet.</p>
   return (
     <>
       <ul className="members">
-        {meeting.invitations.map((invitation) => (
-          <li key={invitation.id} className="member">
-            <InviteeFace invitation={invitation} />
+        {people.map((person) => (
+          <li
+            key={person.key}
+            className="member meeting-attendee"
+            data-absent={
+              (meeting.state === 'ended' && !person.joined) || undefined
+            }
+            data-here={person.here || undefined}
+          >
+            <Face person={person} />
             <span className="member__who">
-              <span className="member__name">{invitation.name}</span>
-              <InviteeDetail invitation={invitation} zone={zone} />
+              <span className="member__name">
+                {person.kind === 'guest'
+                  ? person.name.replace(/ \(guest\)$/, '')
+                  : person.name}
+              </span>
+              <PersonDetail person={person} meeting={meeting} zone={zone} />
             </span>
-            {meeting.owner && meeting.state !== 'ended' && (
+            {removable && person.invitation && (
               <button
                 type="button"
                 className="btn btn--ghost btn--icon btn--sm member__remove"
-                aria-label={`Remove ${invitation.name}`}
+                aria-label={`Remove ${person.name}`}
                 title="Remove"
-                disabled={busy === invitation.id}
-                onClick={() => void remove(invitation)}
+                disabled={busy === person.invitation.id}
+                onClick={() => void remove(person)}
               >
                 <X />
               </button>

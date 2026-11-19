@@ -7,6 +7,7 @@ import {
 import type { components } from '../api/schema'
 import type { Client } from 'openapi-fetch'
 import { agents as listAgents, api, ApiError, ok } from '../api/client'
+import { forgetPush } from './push'
 import type { paths } from '../api/schema'
 import type {
   AgentSummary,
@@ -219,6 +220,7 @@ export async function markRead(
 }
 
 export async function signOut() {
+  await forgetPush()
   try {
     const { response } = await api.POST('/api/identity/logout')
     // 401: the session had already ended, which is what signing out wants.

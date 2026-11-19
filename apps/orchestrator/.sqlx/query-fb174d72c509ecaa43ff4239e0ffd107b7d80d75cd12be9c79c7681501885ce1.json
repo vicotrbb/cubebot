@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.id, a.role='administrator' AS \"administrator!\", (to_jsonb(a.pushed_through) #>> '{}') AS through\n            FROM human_accounts a\n            WHERE a.active AND EXISTS(SELECT 1 FROM push_subscriptions s WHERE s.account_id=a.id)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "administrator!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "through",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "fb174d72c509ecaa43ff4239e0ffd107b7d80d75cd12be9c79c7681501885ce1"
+}
