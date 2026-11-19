@@ -16,6 +16,7 @@ import { applyTheme, type Theme } from '../app/theme'
 import { PersonAvatar } from '../components/PersonAvatar'
 import { Alert } from '../components/primitives'
 import { AboutYou, useDisplayName } from '../features/shell/AboutYou'
+import { Notifications } from '../features/shell/Notifications'
 import '../features/shell/profile.css'
 
 export const Route = createFileRoute('/_app/you')({ component: You })
@@ -83,6 +84,8 @@ function You() {
             ))}
           </div>
         </section>
+
+        <Notifications />
 
         <section className="profile__section" aria-labelledby="session">
           <div>

@@ -6148,6 +6148,82 @@
         }
       }
     },
+    "/api/push": {
+      "get": {
+        "tags": [],
+        "operationId": "push_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushSettings"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/push/subscriptions": {
+      "put": {
+        "tags": [],
+        "operationId": "push_subscribe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushSubscription"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "push_unsubscribe",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PushEndpoint"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/push/test": {
+      "post": {
+        "tags": [],
+        "operationId": "push_test",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushTest"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/restore": {
       "get": {
         "tags": [],
@@ -11860,6 +11936,49 @@
           }
         },
         "additionalProperties": false
+      },
+      "PushEndpoint": {
+        "type": "object",
+        "required": ["endpoint"],
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          }
+        }
+      },
+      "PushSettings": {
+        "type": "object",
+        "required": ["public_key"],
+        "properties": {
+          "public_key": {
+            "type": "string"
+          }
+        }
+      },
+      "PushSubscription": {
+        "type": "object",
+        "required": ["endpoint", "p256dh", "auth"],
+        "properties": {
+          "auth": {
+            "type": "string"
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "p256dh": {
+            "type": "string"
+          }
+        }
+      },
+      "PushTest": {
+        "type": "object",
+        "required": ["delivered"],
+        "properties": {
+          "delivered": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
       },
       "Ran": {
         "type": "object",

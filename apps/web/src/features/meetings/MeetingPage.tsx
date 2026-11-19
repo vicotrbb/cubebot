@@ -35,7 +35,8 @@ import { GreenRoom } from './GreenRoom'
 import { InvitePanel, OpenJoin } from './InvitePanel'
 import { ModeField, useZone, WhenFields } from './MeetingForm'
 import { liveUrl } from './PublicMeeting'
-import { Invited, StateChip, Summary, Transcript } from './Record'
+import { People, StateChip, Summary, Transcript } from './Record'
+import { peopleOf } from './people'
 import { MeetingRoom } from './Room'
 import { instantsOf, lengthOf, whenOf } from './schedule'
 import type { Joining } from './useMeeting'
@@ -261,14 +262,14 @@ function Detail({
             )}
           </div>
           <aside className="meeting-detail__side">
-            <section aria-labelledby="meeting-invited">
-              <h2 id="meeting-invited">
-                Invited{' '}
+            <section aria-labelledby="meeting-people">
+              <h2 id="meeting-people">
+                People{' '}
                 <span className="faint tabular">
-                  {meeting.invitations.length}
+                  {peopleOf(meeting).length}
                 </span>
               </h2>
-              <Invited meeting={meeting} zone={zone} />
+              <People meeting={meeting} zone={zone} />
             </section>
             {meeting.owner && meeting.state !== 'ended' && (
               <section aria-labelledby="meeting-access">

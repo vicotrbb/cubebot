@@ -8,6 +8,7 @@ import { useEffect } from 'react'
 import { useInstallationStream } from '../app/events'
 import { useAgents, usePreferences, useRooms, useSession } from '../app/queries'
 import { applyTheme } from '../app/theme'
+import { syncPush } from '../app/push'
 import { pageTitle } from '../app/title'
 import { Shell } from '../features/shell/Shell'
 
@@ -39,6 +40,10 @@ function App() {
   useEffect(() => {
     if (preferences.data) applyTheme(preferences.data.theme)
   }, [preferences.data])
+  const account = session.data?.id
+  useEffect(() => {
+    if (account) void syncPush().catch(() => undefined)
+  }, [account])
   if (session.isPending) return <Opening />
   if (session.isError)
     return (

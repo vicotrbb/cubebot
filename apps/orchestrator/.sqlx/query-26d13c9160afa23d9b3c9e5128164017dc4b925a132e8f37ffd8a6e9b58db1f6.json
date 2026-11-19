@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_accounts SET pushed_through=GREATEST(pushed_through, $2::text::timestamptz) WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "26d13c9160afa23d9b3c9e5128164017dc4b925a132e8f37ffd8a6e9b58db1f6"
+}

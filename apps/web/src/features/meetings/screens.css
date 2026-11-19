@@ -450,6 +450,16 @@
   height: 14px;
   stroke-width: 1.75;
 }
+.meeting-attendee[data-absent]
+  :is(.member__name, .cube, .member__photo, .invitee__mail) {
+  opacity: 0.55;
+}
+.meeting-attendee > :first-child {
+  justify-self: center;
+}
+.meeting-attendee[data-here] .member__kind {
+  color: var(--ink-soft);
+}
 .invitee__error {
   color: var(--danger);
   white-space: normal;

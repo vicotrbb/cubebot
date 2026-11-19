@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
+  BellRing,
   BookOpen,
   CircleAlert,
   KeyRound,
@@ -23,6 +24,7 @@ import {
   useAgents,
   useUnreadReplies,
 } from '../../app/queries'
+import { usePush } from '../../app/push'
 import { Cube } from '../../components/Cube'
 import { Alert, Empty, Skeleton, when } from '../../components/primitives'
 import { Request } from '../agent/CreationRequests'
@@ -101,7 +103,7 @@ export function Activity() {
         {loading && <Skeleton lines={6} />}
         {activity.isError && <Alert>{failure(activity.error)}</Alert>}
         {quiet && (
-          <Empty title="You’re all caught up.">
+          <Empty title="You’re all caught up." action={<NotifyOffer />}>
             Questions, approvals and messages from your agents land here, the
             most pressing first.
           </Empty>
@@ -131,6 +133,25 @@ function summary(needs: number, wrote: Reply[]) {
       `${wrote.length} ${wrote.length === 1 ? 'agent' : 'agents'} wrote`,
     )
   return parts.join(' · ')
+}
+
+function NotifyOffer() {
+  const push = usePush()
+  if (push.state !== 'off') return null
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--sm"
+      disabled={push.busy}
+      title={
+        push.error ||
+        'Get a notification on this device when something lands here'
+      }
+      onClick={() => void push.enable()}
+    >
+      <BellRing /> {push.busy ? 'Turning on…' : 'Notify me'}
+    </button>
+  )
 }
 
 function Section({
@@ -178,7 +199,12 @@ function NeedsYou({
   ]
   const rest = items.filter((item) => item.kind !== 'approval_pending')
   return (
-    <Section id="needs-you" title="Needs you" count={items.length}>
+    <Section
+      id="needs-you"
+      title="Needs you"
+      count={items.length}
+      action={<NotifyOffer />}
+    >
       {items.length === 0 ? (
         <p className="inbox__quiet">
           Nothing is waiting on you. Questions and approvals show up here first.

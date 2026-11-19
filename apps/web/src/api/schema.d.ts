@@ -2487,6 +2487,54 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/push': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['push_settings']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/push/subscriptions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['push_subscribe']
+    post?: never
+    delete: operations['push_unsubscribe']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/push/test': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['push_test']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/restore': {
     parameters: {
       query?: never
@@ -4695,6 +4743,20 @@ export interface components {
     }
     PublishSkill: {
       files: components['schemas']['BTreeMap']
+    }
+    PushEndpoint: {
+      endpoint: string
+    }
+    PushSettings: {
+      public_key: string
+    }
+    PushSubscription: {
+      auth: string
+      endpoint: string
+      p256dh: string
+    }
+    PushTest: {
+      delivered: number
     }
     /** @description A run's turn, or `None` when it coalesced into a pending one. */
     Ran: {
@@ -10662,6 +10724,86 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  push_settings: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PushSettings']
+        }
+      }
+    }
+  }
+  push_subscribe: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PushSubscription']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  push_unsubscribe: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PushEndpoint']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  push_test: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PushTest']
+        }
       }
     }
   }
