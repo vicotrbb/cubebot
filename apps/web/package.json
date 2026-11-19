@@ -1,6 +1,6 @@
 {
   "name": "@cubebot/web",
-  "version": "0.4.2",
+  "version": "0.5.0-rc",
   "private": true,
   "type": "module",
   "scripts": {
