@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.4.2'
-export const released = '2026-11-18'
+export const version = 'v0.5.1'
+export const released = '2026-11-19'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -166,6 +166,18 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.5.1',
+    date: '2026-11-19',
+    title: 'Notifications, meeting people and a trace for every reply',
+    items: [
+      'Turn on notifications on your phone or browser and hear about questions, approvals, logins and stopped work as soon as an agent needs you',
+      'A meeting shows everyone who joined, guests and agents included, next to who was invited, and its link is one tap away from inside the call',
+      'Open the trace of any reply to see the steps, tools, reviews and cost behind it',
+      'Agents pay with cards kept in the vault, one approval per card and site',
+      'The console tells you when a newer Cubebot is out',
+    ],
+  },
   {
     tag: 'v0.4.2',
     date: '2026-11-18',
