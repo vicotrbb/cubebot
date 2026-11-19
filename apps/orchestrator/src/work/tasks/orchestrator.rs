@@ -626,7 +626,7 @@ fn frame(due: &Due, brief: &str, items: &[String], others: &[&str]) -> String {
         "You are the only agent on this round.".to_owned()
     } else {
         format!(
-            "Also on this round: {}. Reach them with task_message. They have their own computers and files, so send what they need in the message.",
+            "Also on this round: {}. Tell one something or ask it a question with send_message, or give it a part you need back with delegate; both post in this room. They have their own computers and files, so send what they need in the message.",
             others.join(", ")
         )
     };
@@ -640,7 +640,7 @@ fn frame(due: &Due, brief: &str, items: &[String], others: &[&str]) -> String {
 
 fn led(team: &Team) -> String {
     format!(
-        "This task was given to your team, {}, and you lead it as its manager. Split the work among your team by their roles with task_message, naming each member and what you need back, then bring their results together. Your items are the team's.",
+        "This task was given to your team, {}, and you lead it as its manager. Split the work among your team by their roles with delegate, giving each member its part and what you need back, then bring their results together. Your items are the team's.",
         team.name
     )
 }

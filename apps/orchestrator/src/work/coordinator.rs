@@ -411,7 +411,7 @@ async fn assign(
     if !current.iter().any(|member| member.id == agent) {
         return attempt(tx, id, room, "coordinator_chose_no_member").await;
     }
-    rooms::deliver(tx, id, agent)
+    rooms::deliver(tx, id, agent, "")
         .await
         .map_err(|_| Error::Conflict)?;
     Ok(("routed", None))
@@ -444,7 +444,7 @@ async fn attempt(
         code,
         "room coordinator gave no valid owner; the first member answers"
     );
-    rooms::deliver(tx, id, first.id)
+    rooms::deliver(tx, id, first.id, "")
         .await
         .map_err(|_| Error::Conflict)?;
     Ok(("routed", None))

@@ -50,25 +50,6 @@ impl Work {
         .fetch_optional(&mut *tx)
         .await?;
         let human = human.ok_or(Error::Conflict)?;
-        // Offered no such tool, a model may still name it; the work would land outside the room.
-        let in_task = sqlx::query_scalar!(
-            r#"
-            SELECT EXISTS(
-                SELECT 1 FROM chat_turns c
-                JOIN room_messages m ON m.id=c.room_message_id
-                JOIN rooms r ON r.id=m.room_id
-                WHERE c.id=$1 AND r.task
-            ) AS "in_task!"
-            "#,
-            turn,
-        )
-        .fetch_one(&mut *tx)
-        .await?;
-        if in_task {
-            return Ok(Err(
-                "in a task, use task_message to reach other agents".into()
-            ));
-        }
         let previous = sqlx::query!(
             "
             SELECT id, parent_turn_id
@@ -264,9 +245,10 @@ pub(super) async fn continue_task(
     let id = sqlx::query_scalar!(
         "
         INSERT INTO turn_steering (turn_id, actor_id, request_id, message)
-        SELECT $2, actor_id, id, message
-        FROM room_messages
-        WHERE id=$1
+        SELECT $2, m.actor_id, m.id, CASE WHEN a.id IS NULL THEN m.message ELSE format('%s, who works on this request with you, wrote: %s',a.name,left(m.message,16000)) END
+        FROM room_messages m
+        LEFT JOIN agents a ON a.id=m.author_agent_id
+        WHERE m.id=$1
         ON CONFLICT DO NOTHING
         RETURNING id
         ",
@@ -285,6 +267,7 @@ pub(super) async fn relay(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
 ) -> Result<(), sqlx::Error> {
+    super::runs::relay(tx, turn).await?;
     let sender = sqlx::query_scalar!(
         r#"
         INSERT INTO chat_turns (conversation_id, actor_id, request_id, message, parent_turn_id)
@@ -292,7 +275,7 @@ pub(super) async fn relay(
         FROM chat_turns c
         JOIN chat_turns p ON p.id=c.parent_turn_id
         JOIN agents a ON a.id=c.conversation_id
-        WHERE c.id=$1 AND c.status='complete' AND c.expects_reply AND NOT c.awaited
+        WHERE c.id=$1 AND c.room_message_id IS NULL AND c.status='complete' AND c.expects_reply AND NOT c.awaited
             AND NOT EXISTS(SELECT 1 FROM chat_turns r WHERE r.parent_turn_id=c.id AND r.conversation_id=p.conversation_id)
         RETURNING conversation_id AS "conversation_id: AgentId"
         "#,
@@ -313,7 +296,7 @@ async fn create(
     human: Uuid,
     input: &Collaborate,
 ) -> Result<Result<Uuid, String>, Error> {
-    let (_, depth, cancelled) = lineage(tx, turn).await?.ok_or(Error::Conflict)?;
+    let (root, depth, cancelled) = lineage(tx, turn).await?.ok_or(Error::Conflict)?;
     if cancelled {
         return Ok(Err("this work was cancelled; nothing was sent".into()));
     }
@@ -321,6 +304,9 @@ async fn create(
         return Ok(Err(
             "work is already delegated as deeply as allowed; do it yourself".into(),
         ));
+    }
+    if let Some(run) = super::runs::of(tx, root).await? {
+        return super::runs::hand_off(tx, actor, (turn, human), &run, input).await;
     }
     let targets = sqlx::query_scalar!(
         "
@@ -418,7 +404,7 @@ async fn repeated(
     })
 }
 
-async fn lineage(
+pub(super) async fn lineage(
     tx: &mut Transaction<'_, Postgres>,
     turn: Uuid,
 ) -> Result<Option<(Uuid, i32, bool)>, sqlx::Error> {
@@ -561,6 +547,18 @@ pub(super) async fn resume_parent(
     tx: &mut Transaction<'_, Postgres>,
     child: Uuid,
 ) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "
+        SELECT 1 AS locked
+        FROM chat_turns p
+        JOIN chat_turns c ON c.parent_turn_id=p.id
+        WHERE c.id=$1
+        FOR UPDATE OF p
+        ",
+        child,
+    )
+    .fetch_all(&mut **tx)
+    .await?;
     let parent = sqlx::query_scalar!(
         r#"
         UPDATE chat_turns p

@@ -9350,6 +9350,10 @@
           "error": {
             "type": ["string", "null"]
           },
+          "parent_turn": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
           "partial": {
             "type": ["string", "null"],
             "description": "The reply as far as it has been written, while there is no `response`."
@@ -12348,6 +12352,10 @@
             "format": "int64",
             "description": "The newest message's sequence, 0 without messages."
           },
+          "lead": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
           "manage": {
             "type": "boolean",
             "description": "The viewer may change the members."
@@ -12390,6 +12398,10 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          "lead": {
+            "type": ["string", "null"],
+            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -12449,6 +12461,10 @@
           "sequence": {
             "type": "integer",
             "format": "int64"
+          },
+          "steered": {
+            "type": ["string", "null"],
+            "format": "uuid"
           }
         }
       },

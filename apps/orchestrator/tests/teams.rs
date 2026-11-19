@@ -98,8 +98,15 @@ async fn team_rooms_follow_rosters_and_nesting_and_a_deleted_team_archives_its_r
         sorted(vec![lead, dev])
     );
     assert!(matches!(
-        work.set_room_members(&admin, top.room, &RoomMembers { agents: vec![cto] })
-            .await,
+        work.set_room_members(
+            &admin,
+            top.room,
+            &RoomMembers {
+                agents: vec![cto],
+                lead: None
+            }
+        )
+        .await,
         Err(IdentityError::Forbidden)
     ));
 

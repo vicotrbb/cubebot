@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
+import { AtSign } from 'lucide-react'
 import { useState } from 'react'
 import { admin } from '../../api/admin'
 import { api, failure, ok, type Room } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
 import { keys } from '../../app/queries'
+import { CardSelect, type CardOption } from '../../components/CardSelect'
+import { Cube } from '../../components/Cube'
 import { AddMember, MemberList } from '../../components/MemberPicker'
 import {
   agentOptions,
@@ -103,13 +106,16 @@ export function Members({
       setBusy(false)
     }
   }
-  const setAgents = (ids: string[]) =>
+  const setAgents = (ids: string[], lead = room.lead ?? null) =>
     run(async () =>
       onSaved(
         await ok(
           api.PUT('/api/rooms/{room}/members', {
             params: { path: { room: room.id } },
-            body: { agents: ids },
+            body: {
+              agents: ids,
+              lead: lead && ids.includes(lead) ? lead : null,
+            },
           }),
         ),
       ),
@@ -171,11 +177,81 @@ export function Members({
           onAdd={(member) => void add(member)}
         />
       )}
+      <Lead
+        room={room}
+        agents={agents}
+        editable={agentsEditable}
+        onPick={(lead) => {
+          if (!busy) void setAgents(agentIds, lead)
+        }}
+      />
       <Alert>{error}</Alert>
       <p className="small faint">
         Agents in a room can delegate to and message each other. People here can
         read and write in it; administrators reach every room.
       </p>
+    </div>
+  )
+}
+
+const FIRST = 'first'
+
+function Lead({
+  room,
+  agents,
+  editable,
+  onPick,
+}: {
+  room: Room
+  agents: AgentSummary[]
+  editable: boolean
+  onPick: (lead: string | null) => void
+}) {
+  const known = new Map(agents.map((agent) => [agent.id, agent]))
+  const lead = room.members.find((member) => member.id === room.lead)
+  if (room.members.length < 2) return null
+  if (room.team || !editable)
+    return (
+      <p className="small faint">
+        {lead
+          ? `${lead.name} leads requests that mention several agents${room.team ? ', as the team’s manager' : ''}.`
+          : 'The first agent mentioned leads requests that mention several agents.'}
+      </p>
+    )
+  const options: CardOption<string>[] = [
+    {
+      value: FIRST,
+      title: 'The first agent mentioned',
+      detail: 'Whoever is named first plans the work and gives out the parts.',
+      mark: <AtSign size={18} aria-hidden="true" />,
+    },
+    ...room.members.map((member) => ({
+      value: member.id,
+      title: member.name,
+      detail: `Leads every request that mentions several agents here.`,
+      mark: (
+        <Cube
+          agentId={member.id}
+          avatar={known.get(member.id)?.avatar ?? null}
+          mood="idle"
+          size={24}
+        />
+      ),
+    })),
+  ]
+  return (
+    <div className="room-members__lead">
+      <h3>Lead</h3>
+      <p className="small faint">
+        When a message mentions several agents, the lead plans the work, gives
+        out the parts and writes the one answer.
+      </p>
+      <CardSelect
+        label="Lead when several agents are mentioned"
+        value={lead?.id ?? FIRST}
+        onChange={(value) => onPick(value === FIRST ? null : value)}
+        options={options}
+      />
     </div>
   )
 }

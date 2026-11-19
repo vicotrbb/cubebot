@@ -8,7 +8,7 @@ use cubebot_orchestrator::agents::{
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 use uuid::Uuid;
 
-const FAKE: &str = r#"#!/bin/sh
+pub(crate) const FAKE: &str = r#"#!/bin/sh
 state="$(dirname "$0")/state"; mkdir -p "$state"; echo "$1 $2" >> "$state/calls"
 name() { while [ "$#" -gt 1 ]; do [ "$1" = --name ] && { echo "$2"; return; }; shift; done; }
 case "$1 $2" in

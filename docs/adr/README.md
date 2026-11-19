@@ -38,7 +38,7 @@ Until 2026-11-03 each decision was a numbered ADR file. Migration comments and o
 | 0012 Bounded continuation during disconnection | [Agents and runtime: Bounded continuation during disconnection](agents.md#bounded-continuation-during-disconnection) | Partially superseded by 0083 |
 | 0013 Autonomous tool use within granted permissions | [Agents and runtime: Autonomous tool use within granted permissions](agents.md#autonomous-tool-use-within-granted-permissions) | Accepted |
 | 0014 Direct mentions and a tool-free room coordinator | [Rooms and delegation: Direct mentions and a tool-free room coordinator](rooms.md#direct-mentions-and-a-tool-free-room-coordinator) | Accepted |
-| 0015 Independent assignments for multiple room mentions | [Rooms and delegation: Independent assignments for multiple room mentions](rooms.md#independent-assignments-for-multiple-room-mentions) | Accepted |
+| 0015 One run per request, led by one agent | [Rooms and delegation: One run per request, led by one agent](rooms.md#one-run-per-request-led-by-one-agent) | Accepted; replaced independent assignments 2026-11-19 |
 | 0016 Explicit agent messaging and delegation | [Rooms and delegation: Explicit agent messaging and delegation](rooms.md#explicit-agent-messaging-and-delegation) | Accepted |
 | 0017 Agent creation as a granted capability | [Agents and runtime: Agent creation as a granted capability](agents.md#agent-creation-as-a-granted-capability) | Accepted |
 | 0018 Persistent and task-bound created agents | [Agents and runtime: Persistent and task-bound created agents](agents.md#persistent-and-task-bound-created-agents) | Accepted |

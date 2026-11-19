@@ -183,3 +183,17 @@
   display: grid;
   gap: 12px;
 }
+.room-members__lead {
+  display: grid;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.room-members__lead h3 {
+  margin: 0;
+  font-size: var(--t-md);
+  font-weight: var(--w-head);
+}
+.room-members__lead p {
+  margin: 0;
+}

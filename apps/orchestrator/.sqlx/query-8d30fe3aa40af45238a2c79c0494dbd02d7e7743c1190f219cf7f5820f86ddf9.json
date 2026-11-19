@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.task, r.lead_agent_id,\n            (SELECT m.agent_id FROM teams t JOIN team_members m ON m.team_id=t.id AND m.reports_to IS NULL WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS manager\n        FROM rooms r\n        WHERE r.id=$1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "lead_agent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "manager",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "8d30fe3aa40af45238a2c79c0494dbd02d7e7743c1190f219cf7f5820f86ddf9"
+}
