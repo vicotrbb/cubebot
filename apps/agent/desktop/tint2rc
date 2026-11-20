@@ -1,4 +1,4 @@
-# The desktop's taskbar: launchers for the browser, a terminal, files and a text editor, the
+# The desktop's taskbar: launchers for the browser, a terminal, files, a text editor and Doom, the
 # open windows, and a clock. Colours are the console's desk palette.
 #-------------------------------------
 # Backgrounds
@@ -50,6 +50,7 @@ launcher_item_app = /usr/share/applications/chromium.desktop
 launcher_item_app = /usr/share/applications/lxterminal.desktop
 launcher_item_app = /usr/share/applications/pcmanfm.desktop
 launcher_item_app = /usr/share/applications/l3afpad.desktop
+launcher_item_app = /usr/share/applications/cubebot-doom.desktop
 
 #-------------------------------------
 # Taskbar

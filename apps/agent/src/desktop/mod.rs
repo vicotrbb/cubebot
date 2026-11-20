@@ -152,6 +152,8 @@ pub struct Arbiter<S, I> {
     pointer_by: Option<Uuid>,
     stale: bool,
     handoff: bool,
+    /// Keys a `key_down` left pressed; any change of control releases them.
+    down: Vec<u16>,
 }
 
 impl<S: Screen, I: Input> Arbiter<S, I> {
@@ -165,6 +167,7 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
             pointer_by: None,
             stale: false,
             handoff: false,
+            down: Vec::new(),
         }
     }
 
@@ -284,6 +287,9 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         if self.mode == Mode::Human && self.holder != account {
             return self.response(Some(OTHER_HAS_CONTROL.into()), None);
         }
+        if let Err(error) = self.lift_all() {
+            eprintln!("Desktop could not release held keys: {error}");
+        }
         self.stale |= self.mode == Mode::Human && mode != Mode::Human;
         self.mode = mode;
         self.holder = account.filter(|_| mode == Mode::Human);
@@ -309,7 +315,12 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         if result.is_ok()
             && !matches!(
                 action,
-                Action::Screenshot | Action::Mode | Action::Type { .. } | Action::Key { .. }
+                Action::Screenshot
+                    | Action::Mode
+                    | Action::Type { .. }
+                    | Action::Key { .. }
+                    | Action::KeyDown { .. }
+                    | Action::KeyUp { .. }
             )
         {
             self.pointer_by = by;
@@ -329,8 +340,12 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         let pointer = match action {
             Action::Screenshot => return self.screenshot().map(Some),
             Action::Mode => return Ok(None),
-            Action::Type { text } => return self.keys(typed(text)?),
-            Action::Key { keys } => return self.keys(combination(keys)?),
+            Action::Type { .. }
+            | Action::Key { .. }
+            | Action::KeyDown { .. }
+            | Action::KeyUp { .. } => {
+                return self.keyboard(action).map(|()| None);
+            }
             Action::Move { x, y } => (&Vec::new(), self.moved([*x, *y])?),
             Action::Click {
                 at,
@@ -357,9 +372,46 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
         Ok(STANDARD.encode(png::encode(WIDTH, HEIGHT, &screen)))
     }
 
-    fn keys(&mut self, events: Vec<Event>) -> Result<Option<String>, String> {
-        self.send(&events)?;
-        Ok(None)
+    fn keyboard(&mut self, action: &Action) -> Result<(), String> {
+        match action {
+            Action::Type { text } => self.send(&typed(text)?),
+            Action::Key { keys } => self.send(&combination(keys)?),
+            Action::KeyDown { keys } => self.press(keys),
+            Action::KeyUp { keys } => self.lift(keys),
+            _ => Err("not a keyboard action".into()),
+        }
+    }
+
+    /// A key already down is not pressed again, so one `key_up` always releases it.
+    fn press(&mut self, keys: &[String]) -> Result<(), String> {
+        let mut fresh = Vec::new();
+        for code in codes(keys)? {
+            if !self.down.contains(&code) && !fresh.contains(&code) {
+                fresh.push(code);
+            }
+        }
+        self.send(&held(&fresh).0)?;
+        self.down.extend(fresh);
+        Ok(())
+    }
+
+    /// Releasing a key that is not down does nothing, as a browser sends key-ups for keys pressed before control.
+    fn lift(&mut self, keys: &[String]) -> Result<(), String> {
+        let codes = codes(keys)?;
+        let lifted: Vec<u16> = self
+            .down
+            .iter()
+            .copied()
+            .filter(|code| codes.contains(code))
+            .collect();
+        self.send(&held(&lifted).1)?;
+        self.down.retain(|code| !lifted.contains(code));
+        Ok(())
+    }
+
+    fn lift_all(&mut self) -> Result<(), String> {
+        let down = std::mem::take(&mut self.down);
+        self.send(&held(&down).1)
     }
 
     fn pointer(&mut self, hold: &[String], events: Vec<Event>) -> Result<Option<String>, String> {
@@ -375,6 +427,9 @@ impl<S: Screen, I: Input> Arbiter<S, I> {
     }
 
     fn send(&mut self, events: &[Event]) -> Result<(), String> {
+        if events.is_empty() {
+            return Ok(());
+        }
         self.input
             .send(events)
             .map_err(|error| format!("input: {error}"))
@@ -484,14 +539,15 @@ fn key(name: &str) -> Result<u16, String> {
         .ok_or_else(|| format!("unknown key {name:?}"))
 }
 
-fn combination(keys: &[String]) -> Result<Vec<Event>, String> {
+fn codes(keys: &[String]) -> Result<Vec<u16>, String> {
     if keys.is_empty() || keys.len() > MAX_KEYS {
         return Err(format!("a key combination has 1 to {MAX_KEYS} keys"));
     }
-    let codes = keys
-        .iter()
-        .map(|name| key(name))
-        .collect::<Result<Vec<_>, _>>()?;
+    keys.iter().map(|name| key(name)).collect()
+}
+
+fn combination(keys: &[String]) -> Result<Vec<Event>, String> {
+    let codes = codes(keys)?;
     let (mut press, release) = held(&codes);
     press.extend(release);
     Ok(press)
@@ -961,6 +1017,36 @@ mod tests {
             [(128, 768)]
         );
         assert!(changed[0].png.starts_with("iVBORw0KGgo"), "a base64 PNG");
+    }
+
+    #[test]
+    fn held_keys_stay_down_until_released_or_control_changes() {
+        let mut arbiter = arbiter();
+        let account = Uuid::from_u128(7);
+        let down = json!({"call":Uuid::from_u128(1),"action":{"action":"key_down","keys":["up","ctrl","up"]}});
+        assert_eq!(arbiter.agent(&line(down)).error, None);
+        assert_eq!(
+            arbiter.input.sent,
+            [(1, 103, 1), (0, 0, 0), (1, 29, 1), (0, 0, 0)]
+        );
+        let up =
+            json!({"call":Uuid::from_u128(1),"action":{"action":"key_up","keys":["up","left"]}});
+        assert_eq!(arbiter.agent(&line(up)).error, None);
+        assert_eq!(arbiter.input.sent[4..], [(1, 103, 0), (0, 0, 0)]);
+        assert_eq!(arbiter.down, [29]);
+        let take = json!({"mode":{"mode":"human","account":account}});
+        assert_eq!(arbiter.host(&line(take)).error, None);
+        assert_eq!(arbiter.input.sent[6..], [(1, 29, 0), (0, 0, 0)]);
+        assert!(arbiter.down.is_empty());
+        let person =
+            json!({"input":{"account":account,"action":{"action":"key_down","keys":["space"]}}});
+        assert_eq!(arbiter.host(&line(person)).error, None);
+        let back = json!({"mode":{"mode":"watch","account":account}});
+        assert_eq!(arbiter.host(&line(back)).error, None);
+        assert_eq!(
+            arbiter.input.sent[8..],
+            [(1, 57, 1), (0, 0, 0), (1, 57, 0), (0, 0, 0)]
+        );
     }
 
     #[test]

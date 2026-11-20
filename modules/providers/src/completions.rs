@@ -67,13 +67,13 @@ pub(crate) fn function(tool: &Tool) -> Value {
         "name":tool.name,
         "description":"See and control the desktop, 1280 by 800 pixels. Take a screenshot before acting and after to see the result.",
         "parameters":{"type":"object","required":["action"],"properties":{
-            "action":{"type":"string","enum":["screenshot","left_click","right_click","middle_click","double_click","triple_click","mouse_move","left_click_drag","scroll","type","key","wait"]},
+            "action":{"type":"string","enum":["screenshot","left_click","right_click","middle_click","double_click","triple_click","mouse_move","left_click_drag","scroll","type","key","hold_key","wait"]},
             "coordinate":{"type":"array","items":{"type":"integer"},"description":"[x, y]"},
             "start_coordinate":{"type":"array","items":{"type":"integer"},"description":"Where a drag starts: [x, y]"},
-            "text":{"type":"string","description":"What to type, or the key such as Return or ctrl+a"},
+            "text":{"type":"string","description":"What to type, or the key such as Return or ctrl+a; hold_key holds every +-joined key down together"},
             "scroll_direction":{"type":"string","enum":["up","down","left","right"]},
             "scroll_amount":{"type":"integer"},
-            "duration":{"type":"number","description":"Seconds to wait"},
+            "duration":{"type":"number","description":"Seconds to wait, or to hold the keys"},
         }},
     }})
 }

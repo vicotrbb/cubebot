@@ -69,6 +69,13 @@ pub enum Action {
     Key {
         keys: Vec<String>,
     },
+    /// Keys stay down until `key_up` or any change of control, for games and other held input.
+    KeyDown {
+        keys: Vec<String>,
+    },
+    KeyUp {
+        keys: Vec<String>,
+    },
 }
 
 impl Action {

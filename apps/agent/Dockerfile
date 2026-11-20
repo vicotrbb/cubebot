@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
         nodejs npm build-essential ripgrep jq openssh-client \
         unzip zip xz-utils file less nano procps sqlite3 xdg-utils \
         xvfb xserver-xephyr openbox xwallpaper chromium \
-        tint2 lxterminal pcmanfm l3afpad \
+        tint2 lxterminal pcmanfm l3afpad chocolate-doom freedoom \
         xfonts-base fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/* \
     && install -d -m 0755 /var/lib/cubebot \
@@ -34,6 +34,8 @@ COPY apps/agent/wallpaper.jpg /usr/share/cubebot/wallpaper.jpg
 COPY apps/agent/chromium-policy.json /etc/chromium/policies/managed/cubebot.json
 COPY apps/agent/desktop/chromium-flags /etc/chromium.d/cubebot
 COPY apps/agent/desktop/tint2rc /etc/xdg/tint2/tint2rc
+COPY apps/agent/desktop/doom /usr/local/bin/doom
+COPY apps/agent/desktop/doom.desktop /usr/share/applications/cubebot-doom.desktop
 COPY apps/agent/desktop/pip.conf /etc/pip.conf
 COPY apps/agent/desktop/npmrc /etc/npmrc
 COPY --from=build /out/cubebot-agent /usr/local/bin/

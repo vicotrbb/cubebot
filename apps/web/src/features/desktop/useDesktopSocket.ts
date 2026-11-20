@@ -19,6 +19,7 @@ export function useDesktopSocket(
   watching: boolean,
   canvas: React.RefObject<HTMLCanvasElement | null>,
   take = false,
+  game = false,
 ) {
   const [status, setStatus] = useState('')
   const [mode, setMode] = useState<Mode | null>(null)
@@ -115,7 +116,8 @@ export function useDesktopSocket(
     (action: Action) => send({ kind: 'input', action }),
     [send],
   )
-  useCapture(canvas, holding, input)
+  useCapture(canvas, holding, input, game)
+  useGameKeys(canvas, holding && game, input)
   const takeControl = useCallback(() => {
     if (socket.current?.readyState === WebSocket.OPEN) {
       taking.current = send({ kind: 'take' })
@@ -177,6 +179,7 @@ function useCapture(
   canvas: React.RefObject<HTMLCanvasElement | null>,
   active: boolean,
   input: (action: Action) => void,
+  game: boolean,
 ) {
   useEffect(() => {
     const element = canvas.current
@@ -243,6 +246,7 @@ function useCapture(
       })
     }
     const key = (event: KeyboardEvent) => {
+      if (game) return
       const action = keyAction(event)
       if (!action) return
       event.preventDefault()
@@ -263,7 +267,86 @@ function useCapture(
       element.removeEventListener('keydown', key)
       element.removeEventListener('contextmenu', menu)
     }
+  }, [canvas, active, input, game])
+}
+
+/** Each physical key goes down and up on its own, which games need; typing keeps to `useCapture`. */
+function useGameKeys(
+  canvas: React.RefObject<HTMLCanvasElement | null>,
+  active: boolean,
+  input: (action: Action) => void,
+) {
+  useEffect(() => {
+    const element = canvas.current
+    if (!element || !active) return
+    const down = new Set<string>()
+    const press = (event: KeyboardEvent) => {
+      const name = gameKey(event.code)
+      if (!name) return
+      event.preventDefault()
+      if (down.has(name)) return
+      down.add(name)
+      input({ action: 'key_down', keys: [name] })
+    }
+    const lift = (event: KeyboardEvent) => {
+      const name = gameKey(event.code)
+      if (!name) return
+      event.preventDefault()
+      down.delete(name)
+      input({ action: 'key_up', keys: [name] })
+    }
+    // A key let go outside the page never sends its key-up here.
+    const letGo = () => {
+      if (down.size) input({ action: 'key_up', keys: [...down].slice(0, 8) })
+      down.clear()
+    }
+    element.addEventListener('keydown', press)
+    element.addEventListener('keyup', lift)
+    element.addEventListener('blur', letGo)
+    return () => {
+      letGo()
+      element.removeEventListener('keydown', press)
+      element.removeEventListener('keyup', lift)
+      element.removeEventListener('blur', letGo)
+    }
   }, [canvas, active, input])
+}
+
+const GAME_KEYS: Record<string, string> = {
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  ControlLeft: 'ctrl',
+  ControlRight: 'ctrl_r',
+  ShiftLeft: 'shift',
+  ShiftRight: 'shift_r',
+  AltLeft: 'alt',
+  AltRight: 'alt_r',
+  Space: 'space',
+  Enter: 'enter',
+  Escape: 'escape',
+  Tab: 'tab',
+  Backspace: 'backspace',
+  Minus: 'minus',
+  Equal: 'equal',
+  Comma: 'comma',
+  Period: 'period',
+  Slash: 'slash',
+  Semicolon: 'semicolon',
+  Quote: 'apostrophe',
+  Backquote: 'grave',
+  BracketLeft: 'bracketleft',
+  BracketRight: 'bracketright',
+  Backslash: 'backslash',
+}
+
+/** The arbiter's name for a physical key, whatever the keyboard layout; Meta is left to the browser, which drops key-ups while it is held. */
+export function gameKey(code: string): string | null {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase()
+  if (/^Digit\d$/.test(code)) return code.slice(5)
+  if (/^F([1-9]|1[0-2])$/.test(code)) return code.toLowerCase()
+  return GAME_KEYS[code] ?? null
 }
 
 export function keyAction(

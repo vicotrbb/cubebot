@@ -1,0 +1,8 @@
+#!/bin/sh
+# Plays a DOOM.WAD or DOOM2.WAD a person put in the workspace, else Freedoom. Keyboard only: the desktop's pointer is absolute, which Doom's mouse look cannot use, and the desktop has no sound.
+home=${HOME:-/var/lib/cubebot/workspace}
+wad=/usr/share/games/doom/freedoom1.wad
+for own in "$home/DOOM.WAD" "$home/doom.wad" "$home/DOOM2.WAD" "$home/doom2.wad"; do
+    if [ -f "$own" ]; then wad=$own; break; fi
+done
+SDL_RENDER_DRIVER=software exec /usr/games/chocolate-doom -iwad "$wad" -window -geometry 640x400 -nosound -nomouse "$@"
