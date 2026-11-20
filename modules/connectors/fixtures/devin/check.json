@@ -1,0 +1,22 @@
+{
+  "config": { "org_id": "org-abc123def456" },
+  "credential": { "kind": "fields", "fields": { "token": "cog_secret" } },
+  "account": "Cubebot in org-abc123def456",
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/api.devin.ai/v3/self",
+      "body": {
+        "principal_type": "service_user",
+        "service_user_id": "su-7f3a",
+        "service_user_name": "Cubebot",
+        "org_id": "org-abc123def456"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api.devin.ai/v3/organizations/org-abc123def456/sessions",
+      "body": { "items": [], "has_next_page": false, "end_cursor": null }
+    }
+  ]
+}

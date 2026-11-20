@@ -18,6 +18,7 @@ pub mod atlassian;
 pub mod cal_com;
 pub mod calendly;
 pub mod dav;
+pub mod devin;
 pub mod discord;
 pub mod dropbox;
 pub mod email;

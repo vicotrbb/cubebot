@@ -31,7 +31,14 @@ export type Caption = {
 }
 
 export type Phase =
-  'connecting' | 'waiting' | 'live' | 'denied' | 'removed' | 'ended' | 'dropped'
+  | 'connecting'
+  | 'waiting'
+  | 'live'
+  | 'reconnecting'
+  | 'denied'
+  | 'removed'
+  | 'ended'
+  | 'dropped'
 
 export type Server =
   | { kind: 'waiting' }
@@ -43,6 +50,7 @@ export type Server =
       member: boolean
       open_join: boolean
       locked: boolean
+      rejoin?: string
     }
   | { kind: 'roster'; participants: Participant[] }
   | {
@@ -93,6 +101,7 @@ export type Room = {
   waiting: { id: string; name: string }[]
   preparing: { model: string; share: number } | null
   notice: string
+  retries: number
 }
 
 export const EMPTY_ROOM: Room = {
@@ -111,7 +120,10 @@ export const EMPTY_ROOM: Room = {
   waiting: [],
   preparing: null,
   notice: '',
+  retries: 0,
 }
+
+export const RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 15000, 15000]
 
 const CAPTIONS_KEPT = 200
 
@@ -149,6 +161,8 @@ function ending(room: Room, message: Server): Room | null {
       return {
         ...room,
         phase: 'live',
+        retries: 0,
+        tracks: {},
         you: message.you,
         title: message.title,
         host: message.host,
@@ -207,9 +221,22 @@ export function reduce(room: Room, message: Server): Room {
 export function dropped(room: Room): Room {
   return room.phase === 'connecting' ||
     room.phase === 'live' ||
+    room.phase === 'reconnecting' ||
     room.phase === 'waiting'
     ? { ...room, phase: 'dropped' }
     : room
+}
+
+export function lost(room: Room, reason: string): Room {
+  const inside = room.phase === 'live' || room.phase === 'reconnecting'
+  if (!reason && inside && room.retries < RETRY_DELAYS.length)
+    return {
+      ...room,
+      phase: 'reconnecting',
+      retries: room.retries + 1,
+      notice: '',
+    }
+  return { ...dropped(room), notice: reason || room.notice }
 }
 
 export function stage(room: Room) {

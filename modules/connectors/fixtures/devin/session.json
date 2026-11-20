@@ -1,0 +1,25 @@
+{
+  "session_id": "devin-abc123def456",
+  "url": "https://app.devin.ai/sessions/abc123def456",
+  "status": "running",
+  "status_detail": "finished",
+  "title": "Fix the flaky login test",
+  "tags": ["cubebot"],
+  "org_id": "org-abc123def456",
+  "user_id": null,
+  "service_user_id": "su-7f3a",
+  "origin": "api",
+  "devin_mode": "normal",
+  "created_at": 1763650000,
+  "updated_at": 1763652400,
+  "acus_consumed": 3.5,
+  "pull_requests": [
+    { "pr_url": "https://github.com/acme/web/pull/42", "pr_state": "open" }
+  ],
+  "structured_output": {
+    "fixed": true,
+    "cause": "a race in the session cookie"
+  },
+  "category": "bug_fixing",
+  "is_archived": false
+}

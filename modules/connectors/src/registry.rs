@@ -13,6 +13,7 @@ static ALL: &[&dyn Connector] = &[
     &crate::telegram::Telegram,
     &crate::http_api::HttpApi,
     &crate::linear::Linear,
+    &crate::devin::Devin,
     &crate::atlassian::Atlassian,
     &crate::asana::Asana,
     &crate::todoist::Todoist,

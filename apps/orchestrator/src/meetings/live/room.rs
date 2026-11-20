@@ -18,6 +18,7 @@ const CONTROL_QUEUE: usize = 64;
 const LOBBY_LIMIT: usize = 20;
 const CODEC_CHARS: usize = 64;
 const EMPTY_GRACE: Duration = Duration::from_secs(300);
+const REJOIN_GRACE: Duration = Duration::from_secs(90);
 const KEYFRAME_SPACING: Duration = Duration::from_secs(1);
 const ENDED: &str = "The meeting has ended.";
 const FULL_NOTICE: &str = "The meeting is full.";
@@ -78,6 +79,7 @@ pub(super) enum Who {
 pub(super) struct Joiner {
     pub who: Who,
     pub name: String,
+    pub rejoin: Option<String>,
 }
 
 pub(super) struct Joined {
@@ -247,6 +249,13 @@ struct Seat {
     attendance: Option<Uuid>,
     presents: HashSet<Uuid>,
     refresh: Option<mpsc::Sender<()>>,
+    pass: Option<String>,
+}
+
+struct Pass {
+    name: String,
+    seat: Option<u16>,
+    until: Option<Instant>,
 }
 
 impl Seat {
@@ -267,6 +276,7 @@ impl Seat {
             attendance: None,
             presents: HashSet::new(),
             refresh: None,
+            pass: None,
         }
     }
 
@@ -377,6 +387,7 @@ pub(super) struct Room {
     capacity: usize,
     next: u16,
     seats: BTreeMap<u16, Seat>,
+    passes: HashMap<String, Pass>,
     started: bool,
     ended: bool,
     deadline: Option<Instant>,
@@ -397,6 +408,7 @@ impl Room {
             capacity: loaded.capacity,
             next: 1,
             seats: BTreeMap::new(),
+            passes: HashMap::new(),
             started: false,
             ended: false,
             deadline: Some(Instant::now() + EMPTY_GRACE),
@@ -611,7 +623,7 @@ impl Room {
         }
     }
 
-    fn join(&mut self, joiner: Joiner) -> Result<Joined, Refusal> {
+    fn join(&mut self, mut joiner: Joiner) -> Result<Joined, Refusal> {
         if let Who::Guest { token } = &joiner.who {
             if self.token.as_ref() != Some(token) {
                 return Err(Refusal::Link);
@@ -620,7 +632,15 @@ impl Room {
                 return Err(Refusal::Locked);
             }
         }
-        let waits = matches!(joiner.who, Who::Guest { .. }) && !self.open_join;
+        let returning = self.returning(&joiner);
+        if let Some(pass) = &returning {
+            joiner.name.clone_from(&pass.name);
+            if let Some(stale) = pass.seat {
+                self.leave(stale, None);
+            }
+        }
+        let waits =
+            matches!(joiner.who, Who::Guest { .. }) && !self.open_join && returning.is_none();
         if waits && self.waiting() >= LOBBY_LIMIT {
             return Err(Refusal::LobbyFull);
         }
@@ -638,6 +658,42 @@ impl Room {
             self.seat(slot);
         }
         Ok(Joined { slot, inbound })
+    }
+
+    fn returning(&mut self, joiner: &Joiner) -> Option<Pass> {
+        if !matches!(joiner.who, Who::Guest { .. }) {
+            return None;
+        }
+        let pass = self.passes.remove(joiner.rejoin.as_ref()?)?;
+        pass.until
+            .is_none_or(|until| until > Instant::now())
+            .then_some(pass)
+    }
+
+    fn issue(&mut self, slot: u16, name: String) -> String {
+        let token = crate::meetings::token();
+        let pass = Pass {
+            name,
+            seat: Some(slot),
+            until: None,
+        };
+        self.passes.insert(token.clone(), pass);
+        if let Some(seat) = self.seats.get_mut(&slot) {
+            seat.pass = Some(token.clone());
+        }
+        token
+    }
+
+    fn release(&mut self, token: &str, dropped: bool) {
+        let now = Instant::now();
+        if dropped && let Some(pass) = self.passes.get_mut(token) {
+            pass.seat = None;
+            pass.until = Some(now + REJOIN_GRACE);
+        } else {
+            self.passes.remove(token);
+        }
+        self.passes
+            .retain(|_, pass| pass.until.is_none_or(|until| until > now));
     }
 
     fn seat(&mut self, slot: u16) {
@@ -662,6 +718,7 @@ impl Room {
             let event = Audit::anonymous("meeting.guest_join").on(self.id);
             self.record(Record::Audit(event.detail(detail)));
         }
+        let rejoin = guest.then(|| self.issue(slot, name.clone()));
         let welcome = Server::Welcome {
             you: slot,
             title: self.title.clone(),
@@ -670,6 +727,7 @@ impl Room {
             open_join: self.open_join,
             locked: self.locked,
             captions: true,
+            rejoin,
         };
         self.send(slot, &welcome);
         self.roster();
@@ -726,6 +784,9 @@ impl Room {
         };
         if let (Some(reason), Some(out)) = (reason, &seat.out) {
             let _ = out.control.try_send(Out::Frame(close(1000, reason)));
+        }
+        if let Some(token) = &seat.pass {
+            self.release(token, reason.is_none());
         }
         for other in self.seats.values_mut() {
             other.blocked.retain(|(from, _)| *from != slot);
@@ -1091,18 +1152,31 @@ mod tests {
         let joiner = Joiner {
             who: Who::Member(Uuid::from_u128(account)),
             name: format!("Member {account}"),
+            rejoin: None,
         };
         room.join(joiner).ok().unwrap()
     }
 
     fn guest(room: &mut Room, name: &str) -> Result<Joined, Refusal> {
+        returning(room, name, None)
+    }
+
+    fn returning(room: &mut Room, name: &str, pass: Option<&str>) -> Result<Joined, Refusal> {
         let joiner = Joiner {
             who: Who::Guest {
                 token: TOKEN.into(),
             },
             name: name.into(),
+            rejoin: pass.map(Into::into),
         };
         room.join(joiner)
+    }
+
+    fn pass(inbound: &mut Inbound) -> Option<String> {
+        texts(inbound)
+            .into_iter()
+            .find(|value| value["kind"] == "welcome")
+            .and_then(|welcome| welcome["rejoin"].as_str().map(Into::into))
     }
 
     fn texts(inbound: &mut Inbound) -> Vec<serde_json::Value> {
@@ -1354,6 +1428,121 @@ mod tests {
             panic!("tiles travel with the media");
         };
         assert!(first.contains("desktop"));
+    }
+
+    fn admitted(room: &mut Room, host: &mut Joined, name: &str) -> Joined {
+        let mut waiting = guest(room, name).ok().unwrap();
+        texts(&mut host.inbound);
+        room.said(
+            host.slot,
+            Client::Admit {
+                id: waiting.slot.to_string(),
+            },
+        );
+        assert!(room.seats[&waiting.slot].admitted);
+        texts(&mut waiting.inbound);
+        waiting
+    }
+
+    fn welcomed(room: &mut Room, name: &str, pass: &str) -> (Joined, Vec<String>) {
+        let mut back = returning(room, name, Some(pass)).ok().unwrap();
+        let seen = kinds(&mut back.inbound);
+        (back, seen)
+    }
+
+    #[test]
+    fn a_guest_who_drops_comes_back_past_the_lobby_once_under_the_name_it_had() {
+        let (mut room, _stored) = opened(false, 12);
+        let mut host = member(&mut room, 1);
+        assert_eq!(pass(&mut host.inbound), None, "members need no pass");
+        let mut dee = guest(&mut room, "Dee").ok().unwrap();
+        texts(&mut dee.inbound);
+        texts(&mut host.inbound);
+        room.said(
+            host.slot,
+            Client::Admit {
+                id: dee.slot.to_string(),
+            },
+        );
+        let token = pass(&mut dee.inbound).unwrap();
+        assert_eq!(token.len(), 43);
+        room.leave(dee.slot, None);
+        let (back, seen) = welcomed(&mut room, "Mallory", &token);
+        assert_eq!(seen[0], "welcome", "no lobby on the way back");
+        let seat = &room.seats[&back.slot];
+        assert_eq!(seat.name, "Dee");
+        let next = seat.pass.as_ref();
+        assert!(
+            next.is_some_and(|next| *next != token),
+            "each seat has a new pass"
+        );
+        let (_, seen) = welcomed(&mut room, "Dee", &token);
+        assert_eq!(seen, vec!["waiting"], "a pass works once");
+    }
+
+    #[test]
+    fn a_pass_takes_over_a_seat_whose_connection_the_room_has_not_seen_die() {
+        let (mut room, _stored) = opened(false, 3);
+        let mut host = member(&mut room, 1);
+        let mut dee = admitted(&mut room, &mut host, "Dee");
+        guest(&mut room, "Eve").ok();
+        let token = room.seats[&dee.slot].pass.clone().unwrap();
+        texts(&mut dee.inbound);
+        let (back, seen) = welcomed(&mut room, "Dee", &token);
+        assert_eq!(seen[0], "welcome");
+        assert!(
+            !room.seats.contains_key(&dee.slot),
+            "the stale seat is gone"
+        );
+        assert!(room.seats[&back.slot].admitted);
+        assert_eq!(room.seated(), 2, "the old seat frees its place");
+        assert!(dee.inbound.control.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_pass_ends_when_the_guest_is_removed_the_grace_runs_out_or_the_room_changes() {
+        let (mut room, _stored) = opened(false, 12);
+        let mut host = member(&mut room, 1);
+        let dee = admitted(&mut room, &mut host, "Dee");
+        let token = room.seats[&dee.slot].pass.clone().unwrap();
+        room.said(host.slot, Client::Remove { source: dee.slot });
+        assert!(room.passes.is_empty());
+        let (_, seen) = welcomed(&mut room, "Dee", &token);
+        assert_eq!(seen, vec!["waiting"], "removed means removed");
+
+        let eve = admitted(&mut room, &mut host, "Eve");
+        let token = room.seats[&eve.slot].pass.clone().unwrap();
+        room.leave(eve.slot, None);
+        room.passes.get_mut(&token).unwrap().until = Some(Instant::now());
+        let (_, seen) = welcomed(&mut room, "Eve", &token);
+        assert_eq!(seen, vec!["waiting"], "an expired pass is refused");
+
+        let fay = admitted(&mut room, &mut host, "Fay");
+        let token = room.seats[&fay.slot].pass.clone().unwrap();
+        room.leave(fay.slot, None);
+        room.locked = true;
+        assert_eq!(
+            returning(&mut room, "Fay", Some(&token)).err(),
+            Some(Refusal::Locked)
+        );
+        room.locked = false;
+        room.relink(Some("other".into()));
+        assert_eq!(
+            returning(&mut room, "Fay", Some(&token)).err(),
+            Some(Refusal::Link)
+        );
+    }
+
+    #[test]
+    fn spent_passes_do_not_pile_up() {
+        let (mut room, _stored) = opened(true, 12);
+        for index in 0..50 {
+            let dee = guest(&mut room, &format!("Dee {index}")).ok().unwrap();
+            let token = room.seats[&dee.slot].pass.clone().unwrap();
+            room.leave(dee.slot, None);
+            room.passes.get_mut(&token).unwrap().until = Some(Instant::now());
+        }
+        assert!(room.passes.len() <= 1);
     }
 
     #[test]

@@ -33,8 +33,8 @@ export interface Connector {
   selfHosted?: boolean
   uploads?: boolean
   tested: Tested
-  /** 3: not in a release yet. */
-  wave: 1 | 2 | 3 | 4 | 5
+  /** The release it shipped in; see the map in pages/integrations/[slug].astro. */
+  wave: 1 | 2 | 3 | 4 | 5 | 6
 }
 
 export const connectors: Connector[] = [
@@ -239,6 +239,24 @@ export const connectors: Connector[] = [
     events: ['issue.assigned', 'comment.mentioned'],
     tested: 'recorded',
     wave: 2,
+  },
+  {
+    slug: 'devin',
+    name: 'Devin',
+    category: 'Developer',
+    summary: 'Hand coding tasks to Devin and follow its pull requests.',
+    signIn: 'Service user API key and organization ID',
+    level: 'Full',
+    tools: [
+      'Start a session',
+      'List sessions',
+      'Read a session',
+      'Message a session',
+      'Terminate a session',
+    ],
+    events: ['session.finished', 'session.waiting', 'session.failed'],
+    tested: 'recorded',
+    wave: 6,
   },
   {
     slug: 'atlassian',

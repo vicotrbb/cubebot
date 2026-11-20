@@ -1,0 +1,19 @@
+{
+  "items": [
+    {
+      "event_id": "ev-1",
+      "source": "user",
+      "message": "Fix the flaky login test in acme/web.",
+      "created_at": 1763650000,
+      "origin": "api"
+    },
+    {
+      "event_id": "ev-2",
+      "source": "devin",
+      "message": "Found a race in the session cookie; PR #42 fixes it and the test passed 50 times in a row.",
+      "created_at": 1763652400
+    }
+  ],
+  "has_next_page": false,
+  "end_cursor": null
+}

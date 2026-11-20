@@ -20,6 +20,7 @@ export type Devices = {
 export type Setup = {
   url: string
   name?: string | undefined
+  rejoin?: string | undefined
   context: AudioContext
   local: MediaStream
   devices: Devices
@@ -156,7 +157,8 @@ export function connect(setup: Setup) {
     for (const slot of slots) known.add(slot)
   }
 
-  socket.onopen = () => json({ kind: 'hello', name: setup.name })
+  socket.onopen = () =>
+    json({ kind: 'hello', name: setup.name, rejoin: setup.rejoin })
   socket.onmessage = (event: MessageEvent<ArrayBuffer | string>) => {
     if (typeof event.data === 'string') {
       const message = JSON.parse(event.data) as Server
