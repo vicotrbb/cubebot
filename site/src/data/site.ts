@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.5.1'
-export const released = '2026-11-19'
+export const version = 'v0.5.2'
+export const released = '2026-11-20'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -166,6 +166,17 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.5.2',
+    date: '2026-11-20',
+    title: 'Room runs and Doom on every desktop',
+    items: [
+      'Several agents mentioned in a room work as one team: one leads, hands out parts in the room and finishes with one answer',
+      'Each room request has a limit on turns and member messages, so a run cannot loop',
+      'Every agent desktop has Doom: play it yourself with Game keys after taking control, or ask your agent to play',
+      'Agents can hold keys down, so games and other held input work on the desktop',
+    ],
+  },
   {
     tag: 'v0.5.1',
     date: '2026-11-19',
