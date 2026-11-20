@@ -14,7 +14,6 @@ use uuid::Uuid;
 const SILENCE: Duration = Duration::from_secs(45);
 const RECHECK: Duration = Duration::from_secs(30);
 const DRAIN: Duration = Duration::from_secs(5);
-const QUIET: &str = "The connection went quiet.";
 const ACCESS_ENDED: &str = "Your access to this meeting ended.";
 const HELLO: &str = "The meeting did not hear who you are.";
 const NAME: &str =
@@ -104,7 +103,7 @@ async fn introduced(
     socket: &mut WebSocket,
     entry: Entry,
 ) -> Result<(Joiner, Option<Recheck>), &'static str> {
-    let named = hello(socket).await.ok_or(HELLO)?;
+    let (named, rejoin) = hello(socket).await.ok_or(HELLO)?;
     match entry {
         Entry::Member {
             account,
@@ -112,23 +111,28 @@ async fn introduced(
             recheck,
         } => {
             let who = Who::Member(account);
-            Ok((Joiner { who, name }, Some(recheck)))
+            let joiner = Joiner {
+                who,
+                name,
+                rejoin: None,
+            };
+            Ok((joiner, Some(recheck)))
         }
         Entry::Guest { token } => {
             let name = named.as_deref().and_then(guest_name).ok_or(NAME)?;
             let who = Who::Guest { token };
-            Ok((Joiner { who, name }, None))
+            Ok((Joiner { who, name, rejoin }, None))
         }
     }
 }
 
-async fn hello(socket: &mut WebSocket) -> Option<Option<String>> {
+async fn hello(socket: &mut WebSocket) -> Option<(Option<String>, Option<String>)> {
     let first = tokio::time::timeout(SILENCE, socket.recv()).await.ok()??;
     let Ok(Message::Text(text)) = first else {
         return None;
     };
     match serde_json::from_str(&text).ok()? {
-        Client::Hello { name } => Some(name),
+        Client::Hello { name, rejoin } => Some((name, rejoin)),
         _ => None,
     }
 }
@@ -177,7 +181,7 @@ async fn read(
                     return None;
                 }
             }
-            () = tokio::time::sleep_until(heard + SILENCE) => return Some(QUIET),
+            () = tokio::time::sleep_until(heard + SILENCE) => return None,
             _ = checks.tick(), if watch.is_some() => {
                 if let Some(watch) = watch && !watch.allowed().await {
                     return Some(ACCESS_ENDED);

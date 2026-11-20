@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import {
   dropped,
   EMPTY_ROOM,
+  lost,
   reduce,
+  RETRY_DELAYS,
   speakerName,
   stage,
   type Participant,
@@ -95,4 +97,62 @@ test('speakers are named for the viewer', () => {
   assert.equal(speakerName(room, 1), 'You')
   assert.equal(speakerName(room, 4), 'Rita (guest)')
   assert.equal(speakerName(room, 9), 'Someone')
+})
+
+test('an unexplained close mid-meeting retries, then gives up', () => {
+  let room = reduce(welcomed, { kind: 'notice', text: 'Old news' })
+  for (let tries = 1; tries <= RETRY_DELAYS.length; tries += 1) {
+    room = lost(room, '')
+    assert.equal(room.phase, 'reconnecting')
+    assert.equal(room.retries, tries)
+    assert.equal(room.notice, '', 'a stale notice does not come back')
+  }
+  assert.equal(lost(room, '').phase, 'dropped')
+})
+
+test('a close the server explains is final and shows why', () => {
+  const removed = lost(welcomed, 'The host removed you from the meeting.')
+  assert.equal(removed.phase, 'dropped')
+  assert.equal(removed.notice, 'The host removed you from the meeting.')
+  assert.equal(
+    lost(lost(welcomed, ''), 'The meeting is full.').phase,
+    'dropped',
+  )
+  assert.equal(lost(reduce(welcomed, { kind: 'ended' }), '').phase, 'ended')
+})
+
+test('only a room already joined reconnects by itself', () => {
+  assert.equal(lost(EMPTY_ROOM, '').phase, 'dropped')
+  const waiting = reduce(EMPTY_ROOM, { kind: 'waiting' })
+  assert.equal(lost(waiting, '').phase, 'dropped')
+})
+
+test('a welcome back ends the retries and drops tracks of the old connection', () => {
+  const tracked = reduce(welcomed, {
+    kind: 'track',
+    source: 2,
+    stream: 'camera',
+    codec: 'vp8',
+    width: 640,
+    height: 360,
+  })
+  const back = reduce(lost(lost(tracked, ''), ''), {
+    kind: 'welcome',
+    you: 7,
+    title: 'Weekly',
+    host: false,
+    member: false,
+    open_join: false,
+    locked: false,
+    rejoin: 'next',
+  })
+  assert.equal(back.phase, 'live')
+  assert.equal(back.retries, 0)
+  assert.equal(back.you, 7)
+  assert.deepEqual(back.tracks, {})
+})
+
+test('the retries span the time the server keeps a seat to come back to', () => {
+  const total = RETRY_DELAYS.reduce((sum, delay) => sum + delay, 0)
+  assert.ok(total <= 60_000 && total >= 30_000)
 })

@@ -771,6 +771,52 @@ async fn a_guest_waits_in_the_lobby_until_a_member_admits_them() {
 
 #[tokio::test]
 #[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn an_admitted_guest_whose_connection_drops_rejoins_without_the_lobby() {
+    let w = world().await;
+    let served = served(&w).await;
+    let (id, link) = meeting_with(&w, json!({"title": "Sync"})).await;
+    let (mut ana, _) = member(&served, &token_of(&w, "ana").await, id).await;
+    let mut dee = guest(&served, &link, "Dee").await;
+    until(&mut dee, "waiting").await;
+    let waiting = loop {
+        let lobby = until(&mut ana, "lobby").await;
+        if let Some(first) = lobby["waiting"].get(0) {
+            break first["id"].clone();
+        }
+    };
+    say(&mut ana, json!({"kind": "admit", "id": waiting})).await;
+    let welcome = until(&mut dee, "welcome").await;
+    let pass = welcome["rejoin"].as_str().unwrap().to_owned();
+    drop(dee);
+    let token = link.rsplit('/').next().unwrap();
+    let path = format!("/api/public/meetings/{token}/live");
+    let mut back = connect(&served, &path, None).await.unwrap();
+    say(
+        &mut back,
+        json!({"kind": "hello", "name": "Dee", "rejoin": pass}),
+    )
+    .await;
+    let again = until(&mut back, "welcome").await;
+    assert_ne!(again["rejoin"], json!(pass), "the pass is spent");
+    let roster = until(&mut back, "roster").await;
+    let named: Vec<&Value> = roster["participants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|participant| &participant["name"])
+        .collect();
+    assert_eq!(named, vec!["ana", "Dee"], "one Dee, back in the room");
+    let mut copy = connect(&served, &path, None).await.unwrap();
+    say(
+        &mut copy,
+        json!({"kind": "hello", "name": "Dee", "rejoin": pass}),
+    )
+    .await;
+    until(&mut copy, "waiting").await;
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn guests_are_refused_when_the_link_is_off_the_meeting_locked_or_full() {
     let w = world().await;
     let served = served(&w).await;

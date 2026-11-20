@@ -122,6 +122,8 @@ pub enum Client {
     Hello {
         #[serde(default)]
         name: Option<String>,
+        #[serde(default)]
+        rejoin: Option<String>,
     },
     State {
         mic: bool,
@@ -215,6 +217,8 @@ pub enum Server {
         open_join: bool,
         locked: bool,
         captions: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rejoin: Option<String>,
     },
     Roster {
         participants: Vec<Participant>,
@@ -364,7 +368,10 @@ mod tests {
         let parse = |value: Value| serde_json::from_value::<Client>(value).unwrap();
         assert_eq!(
             parse(json!({"kind": "hello"})),
-            Client::Hello { name: None }
+            Client::Hello {
+                name: None,
+                rejoin: None
+            }
         );
         assert_eq!(
             parse(json!({"kind": "want_keyframe", "source": 3, "stream": "screen"})),

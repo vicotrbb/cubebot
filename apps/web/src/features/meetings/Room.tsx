@@ -574,6 +574,26 @@ function RoomNotice({ text }: { text: string }) {
   )
 }
 
+function Notices({
+  room,
+  copied,
+}: {
+  room: RoomState
+  copied: { count: number; over: string }
+}) {
+  if (room.phase === 'reconnecting')
+    return (
+      <p className="meeting-notice" role="status">
+        Your connection dropped. Reconnecting…
+      </p>
+    )
+  if (copied.count > 0 && copied.over === room.notice)
+    return (
+      <RoomNotice key={`copied-${copied.count}`} text="Meeting link copied" />
+    )
+  return <RoomNotice key={room.notice} text={room.notice} />
+}
+
 function Knock({
   room,
   engine,
@@ -764,15 +784,16 @@ export function MeetingRoom({
   const [copied, setCopied] = useState({ count: 0, over: '' })
   const main = useRef<HTMLDivElement>(null)
   useLevels(main, engine, room.you)
+  const reconnecting = room.phase === 'reconnecting'
   useShortcuts(
-    room.phase === 'live' ? engine.current : null,
+    room.phase === 'live' || reconnecting ? engine.current : null,
     self,
     captions,
     setCaptions,
     toggleNoise,
   )
   const current = engine.current
-  if (room.phase !== 'live' || !current)
+  if ((room.phase !== 'live' && !reconnecting) || !current)
     return (
       <Outcome
         room={room}
@@ -805,7 +826,11 @@ export function MeetingRoom({
     onLeave,
   }
   return (
-    <div className="meeting night" data-panel={panel ?? undefined}>
+    <div
+      className="meeting night"
+      data-panel={panel ?? undefined}
+      data-reconnecting={reconnecting || undefined}
+    >
       <header className="meeting-top">
         <h1>{room.title}</h1>
         <span className="meeting-top__live">
@@ -842,14 +867,7 @@ export function MeetingRoom({
         )}
         {captions && <CaptionBand room={room} />}
         <Knock room={room} engine={current} onOpen={() => setPanel('people')} />
-        {copied.count > 0 && copied.over === room.notice ? (
-          <RoomNotice
-            key={`copied-${copied.count}`}
-            text="Meeting link copied"
-          />
-        ) : (
-          <RoomNotice key={room.notice} text={room.notice} />
-        )}
+        <Notices room={room} copied={copied} />
       </main>
       {panel && (
         <Panel

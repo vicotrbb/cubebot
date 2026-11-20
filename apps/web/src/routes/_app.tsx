@@ -45,7 +45,7 @@ function App() {
     if (account) void syncPush().catch(() => undefined)
   }, [account])
   if (session.isPending) return <Opening />
-  if (session.isError)
+  if (session.isError && session.data === undefined)
     return (
       <main className="shell-loading" role="alert">
         Cubebot is unavailable. Retry shortly.

@@ -84,6 +84,10 @@
   flex: 1;
   min-height: 0;
 }
+.meeting[data-reconnecting] :is(.meeting-grid, .meeting-stage) {
+  opacity: 0.55;
+  transition: opacity 220ms var(--settle);
+}
 
 .meeting-listeners {
   flex: none;
