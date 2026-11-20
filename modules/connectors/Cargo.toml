@@ -10,7 +10,7 @@ workspace = true
 
 [dependencies]
 async-imap = { version = "0.12.0", default-features = false, features = ["runtime-tokio"] }
-base64 = "0.22.1"
+base64 = "0.23.1"
 chrono = { version = "0.4", default-features = false }
 chrono-tz = { workspace = true }
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
