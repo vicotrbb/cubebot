@@ -200,6 +200,7 @@ async fn pasted_secrets_are_checked_sealed_and_reach_only_agents_with_access() {
             "telegram",
             "http-api",
             "linear",
+            "devin",
             "atlassian",
             "asana",
             "todoist",
