@@ -38,6 +38,13 @@ lto = "thin"
 codegen-units = 1
 strip = "debuginfo"
 
+# Full debug info is most of target/ and of link time; backtraces keep file:line for our code.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 # Debug-built Argon2 makes every test login take seconds.
 [profile.dev.package.argon2]
 opt-level = 3
