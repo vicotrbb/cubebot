@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.5.2'
+export const version = 'v0.5.3'
 export const released = '2026-11-20'
 
 export const docs = {
@@ -166,6 +166,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.5.3',
+    date: '2026-11-20',
+    title: 'Meeting reconnects and a Devin connector',
+    items: [
+      'A meeting participant whose connection drops reconnects by themselves, and an admitted guest comes back without the lobby',
+      'A brief outage no longer hides the console for signed-in members',
+      'Devin connector: agents start, follow, message and stop Devin sessions, with a spending cap per session',
+    ],
+  },
   {
     tag: 'v0.5.2',
     date: '2026-11-20',
