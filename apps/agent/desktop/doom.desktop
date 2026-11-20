@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Doom
+Comment=Freedoom, or your own DOOM.WAD in the workspace
+Exec=/usr/local/bin/doom
+Icon=io.github.freedoom.Phase1
+Categories=Game;ActionGame;

@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import {
   Activity,
   ChevronLeft,
+  Gamepad2,
   Hand,
   Pause,
   Play,
@@ -45,6 +46,7 @@ export function DesktopView({
 }) {
   const [watching, setWatching] = useState(true)
   const [vitals, setVitals] = useState(remembered)
+  const [game, setGame] = useState(false)
   const phone = useIsPhone()
   const canvas = useRef<HTMLCanvasElement>(null)
   const running = agent.desired_state === 'running'
@@ -53,6 +55,7 @@ export function DesktopView({
     watching && running,
     canvas,
     Boolean(take),
+    game,
   )
   const takeable = canControl && !phone
   const takeControl = () => {
@@ -76,6 +79,8 @@ export function DesktopView({
           onWatch={() => setWatching(!watching)}
           onTake={takeControl}
           onHandBack={desk.handBack}
+          game={game}
+          onGame={() => setGame(!game)}
           vitals={vitals}
           onVitals={() => setVitals(remember(!vitals))}
         />
@@ -224,6 +229,8 @@ function Controls({
   onWatch,
   onTake,
   onHandBack,
+  game,
+  onGame,
   vitals,
   onVitals,
 }: {
@@ -234,6 +241,8 @@ function Controls({
   onWatch: () => void
   onTake: () => void
   onHandBack: () => void
+  game: boolean
+  onGame: () => void
   vitals: boolean
   onVitals: () => void
 }) {
@@ -278,6 +287,26 @@ function Controls({
         >
           <Hand />
           Take control
+        </button>
+      )}
+      {holding && (
+        <button
+          type="button"
+          className={
+            game
+              ? 'btn btn--sm desktop-game-toggle on'
+              : 'btn btn--sm btn--ghost desktop-game-toggle'
+          }
+          aria-pressed={game}
+          title={
+            game
+              ? 'Keys are held down as you hold them, for games'
+              : 'Hold keys down for games instead of typing'
+          }
+          onClick={onGame}
+        >
+          <Gamepad2 />
+          <span className="agent-head__word">Game keys</span>
         </button>
       )}
       {holding && (

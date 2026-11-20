@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { keyAction } from './useDesktopSocket'
+import { gameKey, keyAction } from './useDesktopSocket'
 
 const plain = { ctrlKey: false, altKey: false, metaKey: false, shiftKey: false }
 
@@ -22,4 +22,13 @@ test('characters are typed and other keys go with their modifiers', () => {
     keys: ['ctrl', 'space'],
   })
   assert.equal(keyAction({ ...plain, key: 'Shift', shiftKey: true }), null)
+})
+
+test('game keys name the physical key whatever the layout', () => {
+  assert.equal(gameKey('KeyW'), 'w')
+  assert.equal(gameKey('Digit3'), '3')
+  assert.equal(gameKey('ArrowLeft'), 'left')
+  assert.equal(gameKey('ControlLeft'), 'ctrl')
+  assert.equal(gameKey('F11'), 'f11')
+  assert.equal(gameKey('MetaLeft'), null)
 })

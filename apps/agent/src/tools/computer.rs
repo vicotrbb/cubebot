@@ -148,6 +148,7 @@ fn anthropic(action: &str, input: &Value) -> Result<Vec<Step>, &'static str> {
             text: input["text"].as_str().ok_or("type needs text")?.into(),
         },
         "key" => return repeated(input),
+        "hold_key" => return holding(input),
         "wait" => return Ok(vec![Step::Wait(seconds(&input["duration"]))]),
         _ => return Err("this computer action is not supported"),
     };
@@ -180,6 +181,19 @@ fn repeated(input: &Value) -> Result<Vec<Step>, &'static str> {
     Ok((0..repeat)
         .map(|_| Step::Act(Action::Key { keys: keys.clone() }))
         .collect())
+}
+
+/// Keys go down together for `duration` seconds, as a game needs to walk and turn at once.
+fn holding(input: &Value) -> Result<Vec<Step>, &'static str> {
+    let keys = keys(&input["text"], '+');
+    if keys.is_empty() {
+        return Err("hold_key needs a key");
+    }
+    Ok(vec![
+        Step::Act(Action::KeyDown { keys: keys.clone() }),
+        Step::Wait(seconds(&input["duration"])),
+        Step::Act(Action::KeyUp { keys }),
+    ])
 }
 
 fn openai(action: &Value) -> Result<Step, &'static str> {
@@ -289,6 +303,8 @@ fn run(
     let mut refusal = None;
     for step in plan.steps {
         let action = match step {
+            // A cancelled hold still lets go of its keys.
+            Step::Act(action @ Action::KeyUp { .. }) => action,
             _ if stopped.load(Ordering::Acquire) => return cancelled(),
             Step::Wait(duration) => {
                 pause(duration, stopped);
@@ -428,6 +444,16 @@ mod tests {
         let drag = json!({"action":"left_click_drag","start_coordinate":[1,2],"coordinate":[3,4]});
         assert!(
             matches!(&plan(&drag).unwrap().steps[0], Step::Act(Action::Drag { path, .. }) if path == &[[1, 2], [3, 4]])
+        );
+        let held = plan(&json!({"action":"hold_key","text":"up+left","duration":0.5})).unwrap();
+        let both = vec!["up".to_owned(), "left".to_owned()];
+        assert_eq!(
+            held.steps,
+            [
+                Step::Act(Action::KeyDown { keys: both.clone() }),
+                Step::Wait(Duration::from_millis(500)),
+                Step::Act(Action::KeyUp { keys: both }),
+            ]
         );
         assert!(plan(&json!({"action":"zoom","region":[0,0,1,1]})).is_err());
         assert!(plan(&json!({"action":"mouse_move"})).is_err());

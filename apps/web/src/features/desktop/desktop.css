@@ -410,6 +410,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.desktop-vitals-toggle.on svg {
+.desktop-vitals-toggle.on svg,
+.desktop-game-toggle.on svg {
   color: var(--success);
 }

@@ -342,7 +342,6 @@ fn tool_use(block: &Value) -> Result<crate::FunctionCall, Error> {
 fn unserved() -> Value {
     [
         "zoom",
-        "hold_key",
         "left_mouse_down",
         "left_mouse_up",
         "cursor_position",
