@@ -106,11 +106,13 @@ struct Inner {
 
 impl Recordings {
     pub fn new(pool: PgPool, storage: Option<Storage>) -> Self {
-        let inner = storage.zip(Tools::detect()).map(|(storage, tools)| Inner {
-            pool,
-            storage,
-            tools,
-            wake: Notify::new(),
+        let inner = storage.and_then(|storage| {
+            Tools::detect().map(|tools| Inner {
+                pool,
+                storage,
+                tools,
+                wake: Notify::new(),
+            })
         });
         Self(inner.map(Arc::new))
     }
