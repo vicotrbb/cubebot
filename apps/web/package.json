@@ -24,7 +24,7 @@
     "@tiptap/extension-table": "3.32.2",
     "@tiptap/markdown": "3.32.2",
     "@tiptap/pm": "3.32.2",
-    "@tiptap/react": "3.32.2",
+    "@tiptap/react": "3.35.0",
     "@tiptap/starter-kit": "3.32.2",
     "@tiptap/suggestion": "3.32.2",
     "highlight.js": "11.11.1",
