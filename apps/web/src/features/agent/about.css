@@ -224,6 +224,10 @@
 .personality__count[data-near] {
   color: var(--danger);
 }
+.personality__over {
+  margin: -4px 0 0;
+  color: var(--danger);
+}
 .personality__empty {
   display: flex;
   align-items: center;
