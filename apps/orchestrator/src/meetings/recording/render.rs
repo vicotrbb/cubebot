@@ -151,9 +151,8 @@ impl Job<'_> {
     }
 
     fn text(&self, name: &str, text: &str) -> io::Result<String> {
-        let path = self.directory.join(name);
-        std::fs::write(&path, text)?;
-        Ok(path.to_string_lossy().into_owned())
+        std::fs::write(self.directory.join(name), text)?;
+        Ok(name.to_owned())
     }
 
     fn label(&self, piece: usize, text: Option<String>) -> io::Result<String> {
