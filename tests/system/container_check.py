@@ -53,9 +53,8 @@ import http.server, json, re, sys
 MARKER, SCRIPT = sys.argv[2], sys.argv[3]
 
 
-# A model reads a tool's outcome as JSON, so the reply inside it is escaped.
 def id_in(output):
-    return re.search(r'id\\":\\"([0-9a-f-]{36})', output).group(1)
+    return re.search(r'id\\?":\\?"([0-9a-f-]{36})', output).group(1)
 
 
 # A person's whole request as one model would make it, one step per reply: write a
