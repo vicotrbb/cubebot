@@ -18,12 +18,14 @@ const PUSH_SERVICES: [&str; 4] = [
     "push.apple.com",
     "notify.windows.com",
 ];
-const NEEDS_YOU: [&str; 5] = [
+const PUSHED: [&str; 7] = [
     "attention",
     "approval_pending",
     "login_pending",
     "turn_waiting",
     "turn_failed",
+    "recording_ready",
+    "recording_failed",
 ];
 const DEVICES: i64 = 20;
 const PER_TICK: usize = 3;
@@ -326,15 +328,22 @@ impl Push {
         }
         for item in fresh.iter().take(PER_TICK) {
             let title = self.title(item.agent).await?;
+            let url = item.meeting.map_or_else(
+                || "/activity".to_owned(),
+                |meeting| format!("/meetings/{meeting}"),
+            );
             let note = Notification {
                 title: &title,
                 body: &item.text,
                 tag: format!(
                     "{}:{}",
                     item.kind,
-                    item.turn.or(item.agent).unwrap_or_default()
+                    item.turn
+                        .or(item.agent)
+                        .or(item.meeting)
+                        .unwrap_or_default()
                 ),
-                url: "/activity",
+                url: &url,
             };
             self.send_all(actor.id, &note).await?;
         }
@@ -360,7 +369,7 @@ fn fresh(items: Vec<ActivityItem>, through: Option<&str>) -> Vec<ActivityItem> {
     let through = through.and_then(instant);
     items
         .into_iter()
-        .filter(|item| NEEDS_YOU.contains(&item.kind.as_str()))
+        .filter(|item| PUSHED.contains(&item.kind.as_str()))
         .filter(|item| match (instant(&item.at), through) {
             (Some(at), Some(through)) => at > through,
             (Some(_), None) => true,
@@ -393,6 +402,7 @@ mod tests {
             room: None,
             task: None,
             turn: None,
+            meeting: None,
             at: at.into(),
             text: String::new(),
             unread: true,

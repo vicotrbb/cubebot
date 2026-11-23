@@ -36,8 +36,8 @@ jobs:
           curl -fsSLo "$RUNNER_TEMP/helm.tgz" https://get.helm.sh/helm-v4.2.2-linux-amd64.tar.gz
           echo "9adafecab4d406853bba163a70e9f104f47dbbf65ce24b7653bae7e36150bcb6  $RUNNER_TEMP/helm.tgz" | sha256sum --check
           sudo tar -xzf "$RUNNER_TEMP/helm.tgz" -C /usr/local/bin --strip-components=1 linux-amd64/helm
-      - name: Install ripgrep for the agent's search tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ripgrep
+      - name: Install ripgrep and ffmpeg for the agent's search tools and meeting recordings
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ripgrep ffmpeg
       - run: just bootstrap
       - run: just check
       - run: just smoke

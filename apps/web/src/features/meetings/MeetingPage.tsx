@@ -37,6 +37,7 @@ import { ModeField, useZone, WhenFields } from './MeetingForm'
 import { liveUrl } from './PublicMeeting'
 import { People, StateChip, Summary, Transcript } from './Record'
 import { peopleOf } from './people'
+import { Recordings } from './Recordings'
 import { MeetingRoom } from './Room'
 import { instantsOf, lengthOf, whenOf } from './schedule'
 import type { Joining } from './useMeeting'
@@ -280,6 +281,14 @@ function Detail({
             )}
           </aside>
           <div className="meeting-detail__record">
+            {meeting.recordings.length > 0 && (
+              <section aria-labelledby="meeting-recordings">
+                <h2 id="meeting-recordings">
+                  {meeting.recordings.length > 1 ? 'Recordings' : 'Recording'}
+                </h2>
+                <Recordings meeting={meeting} zone={zone} />
+              </section>
+            )}
             {meeting.state === 'ended' && (
               <section aria-labelledby="meeting-summary">
                 <h2 id="meeting-summary">Summary</h2>

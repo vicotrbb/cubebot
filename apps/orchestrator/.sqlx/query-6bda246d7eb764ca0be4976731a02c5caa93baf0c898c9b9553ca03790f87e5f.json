@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE meeting_recordings\n            SET state='processing', progress=0, error=NULL, finished_at=NULL\n            WHERE id=$1 AND meeting_id=$2 AND state='failed'\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6bda246d7eb764ca0be4976731a02c5caa93baf0c898c9b9553ca03790f87e5f"
+}

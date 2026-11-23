@@ -421,6 +421,91 @@
   color: var(--ink-soft);
   white-space: pre-wrap;
 }
+.recordings {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.recording {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.recording__video,
+.recording__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--r-lg);
+  background: var(--ground);
+  box-shadow:
+    inset 0 0 0 1px var(--line),
+    0 10px 24px -18px rgb(43 36 32 / 0.6);
+}
+.recording__frame {
+  aspect-ratio: auto;
+  min-height: 148px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px;
+  color: var(--ink);
+  text-align: center;
+}
+.recording__frame p {
+  margin: 0;
+  max-width: 42ch;
+  color: var(--ink-soft);
+  font-size: var(--t-sm);
+}
+.recording__frame strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--t-md);
+  font-weight: var(--w-strong);
+}
+.recording__frame strong svg {
+  width: 16px;
+  height: 16px;
+  color: var(--danger);
+}
+.recording__frame progress {
+  width: min(260px, 70%);
+  height: 6px;
+  accent-color: var(--orange);
+}
+.recording__frame .btn {
+  margin-top: 4px;
+}
+.recording__error {
+  color: var(--danger);
+  font-size: var(--t-sm);
+}
+.recording__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.recording__about {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--t-sm);
+}
+.recording__time {
+  font-weight: var(--w-strong);
+}
+.recording__actions {
+  display: flex;
+  gap: 8px;
+}
+
 .meeting-detail__quiet {
   margin: 0;
   color: var(--ink-faint);

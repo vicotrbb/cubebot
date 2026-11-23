@@ -272,6 +272,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                 config,
                 desktop.clone(),
                 controller.apps(),
+                storage.clone(),
             )
             .await
             else {

@@ -3,6 +3,8 @@ import {
   AudioLinesOff,
   Captions,
   Check,
+  CircleDot,
+  CircleStop,
   Ear,
   Ellipsis,
   Hand,
@@ -354,6 +356,65 @@ function NoiseItems({ noise, setNoise }: Pick<Controls, 'noise' | 'setNoise'>) {
   )
 }
 
+function RecordItem({ room, engine }: Pick<Controls, 'room' | 'engine'>) {
+  if (!room.canRecord) return null
+  const on = Boolean(room.recording)
+  return (
+    <>
+      <button
+        type="button"
+        className={on ? 'menu__item menu__item--danger' : 'menu__item'}
+        onClick={() => engine.send({ kind: 'record', on: !on })}
+      >
+        {on ? <CircleStop /> : <CircleDot />}
+        {on ? 'Stop recording' : 'Record meeting'}
+      </button>
+      <div className="menu__sep" role="separator" />
+    </>
+  )
+}
+
+function RecordingFlag({ room, engine }: Pick<Controls, 'room' | 'engine'>) {
+  if (!room.recording) return null
+  const by = room.recording.by
+  const flag = (
+    <>
+      <span className="meeting-rec__dot" aria-hidden="true" />
+      Recording
+    </>
+  )
+  if (!room.canRecord)
+    return (
+      <span
+        className="meeting-rec"
+        title="This meeting is being recorded"
+        role="status"
+      >
+        {flag}
+      </span>
+    )
+  return (
+    <Menu
+      className="meeting-rec-menu"
+      triggerClassName="meeting-rec"
+      label={by ? `Recording, started by ${by}` : 'Recording'}
+      trigger={flag}
+    >
+      <p className="meeting-rec-menu__note">
+        {by ? `${by} started recording.` : 'This meeting is being recorded.'} It
+        will be on the meeting page and in Files once it is processed.
+      </p>
+      <button
+        type="button"
+        className="menu__item menu__item--danger"
+        onClick={() => engine.send({ kind: 'record', on: false })}
+      >
+        <CircleStop /> Stop recording
+      </button>
+    </Menu>
+  )
+}
+
 function More({
   room,
   engine,
@@ -373,6 +434,7 @@ function More({
       label="More options"
       trigger={<Ellipsis />}
     >
+      <RecordItem room={room} engine={engine} />
       {link && (
         <button
           type="button"
@@ -833,6 +895,7 @@ export function MeetingRoom({
     >
       <header className="meeting-top">
         <h1>{room.title}</h1>
+        <RecordingFlag room={room} engine={current} />
         <span className="meeting-top__live">
           <span className="meeting-top__dot" aria-hidden="true" />
           Transcribing

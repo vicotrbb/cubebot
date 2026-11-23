@@ -364,6 +364,7 @@ async fn relay() -> Relay {
         None,
         None,
         Some(apps.clone()),
+        None,
     )
     .await
     .unwrap();

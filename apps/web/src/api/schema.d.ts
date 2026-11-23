@@ -2269,6 +2269,22 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/meetings/{id}/recordings/{recording}/retry': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['retry_meeting_recording']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/provider': {
     parameters: {
       query?: never
@@ -2984,9 +3000,12 @@ export interface components {
       at: string
       /**
        * @description `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
-       *     `invitation_pending`, `dream_published_skill` or `agent_published_skill`.
+       *     `invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or
+       *     `recording_failed`.
        */
       kind: string
+      /** Format: uuid */
+      meeting?: string | null
       /** Format: uuid */
       room?: string | null
       /**
@@ -4235,6 +4254,7 @@ export interface components {
     Meeting: {
       agent_mode: components['schemas']['AgentMode']
       attendance: components['schemas']['Attendance'][]
+      can_record: boolean
       created_at: string
       description: string
       ended_at?: string | null
@@ -4247,6 +4267,7 @@ export interface components {
       open_join: boolean
       owner: boolean
       owner_name: string
+      recordings: components['schemas']['MeetingRecording'][]
       started_at?: string | null
       starts_at?: string | null
       state: string
@@ -4317,6 +4338,23 @@ export interface components {
       title: string
       transcript: components['schemas']['MeetingLine'][]
       turns: components['schemas']['Turn'][]
+    }
+    MeetingRecording: {
+      /** Format: int64 */
+      duration_ms?: number | null
+      error?: string | null
+      /** Format: uuid */
+      file?: string | null
+      /** Format: uuid */
+      id: string
+      /** Format: int32 */
+      progress: number
+      /** Format: int64 */
+      size?: number | null
+      started_at: string
+      started_by: string
+      state: string
+      stopped_at?: string | null
     }
     MeetingSettings: {
       agent_mode: components['schemas']['AgentMode']
@@ -10305,6 +10343,38 @@ export interface operations {
         content?: never
       }
       404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  retry_meeting_recording: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+        recording: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
         headers: {
           [name: string]: unknown
         }

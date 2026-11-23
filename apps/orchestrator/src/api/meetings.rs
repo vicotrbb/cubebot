@@ -36,6 +36,7 @@ struct Api {
     uninvite,
     listening,
     link,
+    retry_recording,
     email_connections,
     read_settings,
     save_settings,
@@ -59,6 +60,10 @@ pub(super) fn router(pool: sqlx::PgPool, identity: Identity, meetings: Meetings)
             delete(uninvite).patch(listening),
         )
         .route("/api/meetings/{id}/link", post(link))
+        .route(
+            "/api/meetings/{id}/recordings/{recording}/retry",
+            post(retry_recording),
+        )
         .route("/api/meetings/{id}/live", get(live))
         .route("/api/meetings/link/{token}/join", post(join_link))
         .route(
@@ -140,6 +145,20 @@ async fn cancel(
     api.identity
         .audit(event.detail(json!({"name": title})))
         .await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(post, path = "/api/meetings/{id}/recordings/{recording}/retry", operation_id = "retry_meeting_recording", params(("id" = Uuid, Path), ("recording" = Uuid, Path)), responses((status = 204), (status = 404), (status = 409)))]
+async fn retry_recording(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path((id, recording)): Path<(Uuid, Uuid)>,
+) -> Result<StatusCode, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.meetings
+        .recordings()
+        .retry(&actor, id, recording)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

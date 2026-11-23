@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE meeting_recordings\n            SET state='failed', error=$2, finished_at=clock_timestamp()\n            WHERE id=$1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d1e187cc23f2dcc360d8f5150ec3e1407a05571f6777e10947cf7a2e36d4590b"
+}

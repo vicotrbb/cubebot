@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id\n            FROM meeting_recordings\n            WHERE state='processing'\n            ORDER BY stopped_at, id\n            LIMIT 1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "096e3078e1d49742a19ab040aba25c453b19166994079bcd0d77cee75e86854e"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id\n            FROM files\n            WHERE parent_id IS NULL AND owner_account_id=$1 AND name=$2 AND blob_id IS NULL\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6b1c34630c435202bd48378b0076de308a5cca1e99fa9203c566fcc77a2b1631"
+}

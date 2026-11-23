@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO file_shares (file_id, account_id, permission)\n            SELECT $1, reader, 'read' FROM unnest($2::uuid[]) AS reader WHERE reader <> $3\n            ON CONFLICT DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3cba7567fe8711e7f6abb13bbdb1f79e0b617ce46be05785c481ff1661a2a589"
+}

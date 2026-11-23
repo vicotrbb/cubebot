@@ -25,6 +25,7 @@ use volume::{Published, Volume};
 /// Downloads are not gated: a stalled reader would hold a slot and block everyone's files.
 const TRANSFERS: usize = 16;
 const DEFAULT_QUOTA: u64 = 10 << 30;
+const RECORDINGS: &str = "Meeting recordings";
 
 #[derive(Clone, Copy, Debug)]
 pub enum Principal {
@@ -711,6 +712,134 @@ impl Storage {
         }
     }
 
+    pub fn scratch(&self, name: &str) -> PathBuf {
+        self.0.volume.scratch(name)
+    }
+
+    async fn folder(&self, owner: Uuid, name: &str) -> Result<Option<Uuid>, StorageError> {
+        let found = sqlx::query_scalar!(
+            "
+            SELECT id
+            FROM files
+            WHERE parent_id IS NULL AND owner_account_id=$1 AND name=$2 AND blob_id IS NULL
+            ",
+            owner,
+            name,
+        )
+        .fetch_optional(&self.0.pool)
+        .await?;
+        if found.is_some() {
+            return Ok(found);
+        }
+        let id = Uuid::new_v4();
+        let created = sqlx::query!(
+            "
+            INSERT INTO files (id, owner_account_id, name)
+            VALUES ($1, $2, $3)
+            ",
+            id,
+            owner,
+            name,
+        )
+        .execute(&self.0.pool)
+        .await
+        .map_err(constrained);
+        match created {
+            Ok(_) => Ok(Some(id)),
+            Err(StorageError::Conflict) => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    #[tracing::instrument(skip_all, fields(request = %request))]
+    pub async fn keep_recording(
+        &self,
+        owner: Uuid,
+        readers: &[Uuid],
+        name: &str,
+        request: Uuid,
+        path: &std::path::Path,
+    ) -> Result<Uuid, StorageError> {
+        let existing = sqlx::query_scalar!("SELECT id FROM files WHERE request_id=$1", request)
+            .fetch_optional(&self.0.pool)
+            .await?;
+        if let Some(existing) = existing {
+            return Ok(existing);
+        }
+        let _transfer = self.transfer()?;
+        let parent = self.folder(owner, RECORDINGS).await?;
+        let file = tokio::fs::File::open(path).await?;
+        let body = Box::pin(futures_util::stream::unfold(file, read_chunk));
+        let id = Uuid::new_v4();
+        let mut reserved: u64 = 0;
+        let received = self
+            .0
+            .volume
+            .receive(id, body, |bytes| {
+                let admitted = self.reserve(bytes);
+                reserved += if admitted { bytes } else { 0 };
+                admitted
+            })
+            .await;
+        let recorded = match received {
+            Ok(published) => {
+                self.file_recording(id, owner, parent, name, request, &published)
+                    .await
+            }
+            Err(error) => Err(error),
+        };
+        if let Err(error) = recorded {
+            self.0.volume.remove(id).await;
+            self.release(reserved);
+            return Err(error);
+        }
+        sqlx::query!(
+            "
+            INSERT INTO file_shares (file_id, account_id, permission)
+            SELECT $1, reader, 'read' FROM unnest($2::uuid[]) AS reader WHERE reader <> $3
+            ON CONFLICT DO NOTHING
+            ",
+            id,
+            readers,
+            owner,
+        )
+        .execute(&self.0.pool)
+        .await?;
+        Ok(id)
+    }
+
+    async fn file_recording(
+        &self,
+        id: Uuid,
+        owner: Uuid,
+        parent: Option<Uuid>,
+        name: &str,
+        request: Uuid,
+        published: &Published,
+    ) -> Result<(), StorageError> {
+        let (stem, extension) = name.rsplit_once('.').unwrap_or((name, "mp4"));
+        let mut outcome = Err(StorageError::Conflict);
+        for copy in 1..=20 {
+            let name = match copy {
+                1 => format!("{stem}.{extension}"),
+                copy => format!("{stem} ({copy}).{extension}"),
+            };
+            let upload = Upload {
+                parent,
+                name,
+                content_type: Some("video/mp4".into()),
+                request,
+            };
+            outcome = self
+                .record(id, (Some(owner), None), &upload, published)
+                .await;
+            if !matches!(outcome, Err(StorageError::Conflict)) {
+                break;
+            }
+        }
+        outcome
+    }
+
     pub async fn read(&self, blob: Uuid, size: i64) -> Result<tokio::fs::File, StorageError> {
         self.0.volume.open(blob, size).await
     }
@@ -931,6 +1060,21 @@ where
         ));
     }
     Ok(())
+}
+
+async fn read_chunk(
+    mut file: tokio::fs::File,
+) -> Option<(Result<Bytes, io::Error>, tokio::fs::File)> {
+    use tokio::io::AsyncReadExt;
+    let mut chunk = vec![0; 1 << 20];
+    match file.read(&mut chunk).await {
+        Ok(0) => None,
+        Ok(read) => {
+            chunk.truncate(read);
+            Some((Ok(Bytes::from(chunk)), file))
+        }
+        Err(error) => Some((Err(error), file)),
+    }
 }
 
 pub(crate) fn named(name: &str) -> Result<(), StorageError> {

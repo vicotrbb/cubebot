@@ -70,6 +70,8 @@ describe('audit sentences', () => {
       phrase('meeting.deny', { guest: 'Dee' }),
       'turned away the guest Dee from',
     )
+    assert.equal(phrase('meeting.recording_start', {}), 'started recording')
+    assert.equal(phrase('meeting.recording_stop', {}), 'stopped recording')
     assert.equal(
       phrase('meeting.remove', { participant: 'Bob' }),
       'removed Bob from',

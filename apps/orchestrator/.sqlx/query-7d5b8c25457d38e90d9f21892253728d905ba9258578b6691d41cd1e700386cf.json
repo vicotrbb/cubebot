@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT r.id, r.state, r.progress,\n            COALESCE(NULLIF(h.profile->>'name', ''), h.login) AS \"started_by!\",\n            (to_jsonb(r.started_at) #>> '{}') AS \"started_at!\",\n            (to_jsonb(r.stopped_at) #>> '{}') AS stopped_at,\n            r.duration_ms, f.id AS \"file?\", b.size AS \"size?\", r.error\n        FROM meeting_recordings r\n        JOIN human_accounts h ON h.id=r.started_by\n        LEFT JOIN files f ON f.id=r.file_id\n        LEFT JOIN blobs b ON b.id=f.blob_id\n        WHERE r.meeting_id=$1\n        ORDER BY r.started_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "progress",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 3,
+        "name": "started_by!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "started_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "stopped_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "duration_ms",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "file?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "size?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "7d5b8c25457d38e90d9f21892253728d905ba9258578b6691d41cd1e700386cf"
+}

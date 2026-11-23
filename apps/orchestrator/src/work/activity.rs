@@ -7,13 +7,15 @@ use uuid::Uuid;
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ActivityItem {
     /// `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
-    /// `invitation_pending`, `dream_published_skill` or `agent_published_skill`.
+    /// `invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or
+    /// `recording_failed`.
     pub kind: String,
     pub agent: Option<Uuid>,
     pub room: Option<Uuid>,
     /// The task whose room this is; such work is answered on the Tasks page.
     pub task: Option<Uuid>,
     pub turn: Option<Uuid>,
+    pub meeting: Option<Uuid>,
     /// RFC 3339.
     pub at: String,
     pub text: String,
@@ -39,12 +41,12 @@ impl Work {
             r#"
             SELECT i.kind AS "kind!", i.agent AS "agent?", i.room AS "room?",
                    (SELECT k.id FROM tasks k WHERE k.room_id=i.room) AS "task?", i.turn AS "turn?",
-                   (to_jsonb(i.at) #>> '{}') AS "at!", i.text AS "text!",
+                   (to_jsonb(i.at) #>> '{}') AS "at!", i.text AS "text!", i.meeting AS "meeting?",
                    i.at > COALESCE(a.activity_read_at, '-infinity') AS "unread!"
             FROM human_accounts a
             CROSS JOIN LATERAL (
                 SELECT 'login_pending' AS kind, g.id AS agent, NULL::uuid AS room, h.turn_id AS turn,
-                       h.created_at AS at, format('Asks you to log in on %s', h.site) AS text
+                       h.created_at AS at, format('Asks you to log in on %s', h.site) AS text, NULL::uuid AS meeting
                 FROM login_handoffs h
                 JOIN agents g ON g.id=h.agent_id
                 WHERE h.status='pending'
@@ -57,7 +59,7 @@ impl Work {
                            WHEN t.error='budget_exhausted' THEN 'Spent its budget; work is paused'
                            WHEN t.status='waiting' THEN 'Stopped and waits for you to retry'
                            ELSE format('Failed: %s', left(COALESCE(t.error, ''), 200))
-                       END
+                       END, NULL
                 FROM chat_turns t
                 JOIN agents g ON g.id=t.conversation_id
                 LEFT JOIN room_messages m ON m.id=t.room_message_id
@@ -68,27 +70,27 @@ impl Work {
                 UNION ALL
                 SELECT 'approval_pending', g.id, NULL, q.turn_id, q.created_at,
                        CASE WHEN q.kind='change' THEN format('Asks to change the agent %s', q.input->>'agent')
-                            ELSE format('Asks to create the %s %s', q.kind, q.input->>'name') END
+                            ELSE format('Asks to create the %s %s', q.kind, q.input->>'name') END, NULL
                 FROM creation_requests q
                 JOIN agents g ON g.id=q.agent_id
                 WHERE q.status='pending'
                   AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.send'))
                 UNION ALL
                 SELECT 'approval_pending', g.id, NULL, f.turn_id, f.created_at,
-                       format('Asks to pay %s with the card %s on %s', f.amount, f.card_name, f.domain)
+                       format('Asks to pay %s with the card %s on %s', f.amount, f.card_name, f.domain), NULL
                 FROM card_fills f
                 JOIN agents g ON g.id=f.agent_id
                 JOIN vault_items v ON v.id=f.item_id
                 WHERE f.status='pending'
                   AND (a.role='administrator' OR (v.agent_id IS NOT NULL AND EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability='browser.control')))
                 UNION ALL
-                SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login)
+                SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login), NULL
                 FROM invitations v
                 WHERE a.role='administrator' AND v.accepted_by IS NULL AND v.revoked_by IS NULL AND v.expires_at > clock_timestamp()
                 UNION ALL
                 SELECT CASE WHEN r.turn_id IS NULL THEN 'dream_published_skill' ELSE 'agent_published_skill' END,
                        g.id, NULL, r.turn_id, r.created_at,
-                       format('%s skill %s', CASE WHEN r.revision=1 THEN 'Published' ELSE 'Improved' END, s.name)
+                       format('%s skill %s', CASE WHEN r.revision=1 THEN 'Published' ELSE 'Improved' END, s.name), NULL
                 FROM skill_revisions r
                 LEFT JOIN dream_runs d ON d.id=r.dream_run_id
                 LEFT JOIN chat_turns t ON t.id=r.turn_id
@@ -96,6 +98,15 @@ impl Work {
                 JOIN skills s ON s.id=r.skill_id
                 WHERE r.created_at > COALESCE(a.activity_read_at, '-infinity')
                   AND (a.role='administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability IN ('memory.read','agent.manage')))
+                UNION ALL
+                SELECT CASE r.state WHEN 'ready' THEN 'recording_ready' ELSE 'recording_failed' END,
+                       NULL, NULL, NULL, r.finished_at,
+                       format(CASE r.state WHEN 'ready' THEN 'The recording of %s is ready' ELSE 'The recording of %s could not be processed' END, m.title),
+                       m.id
+                FROM meeting_recordings r
+                JOIN meetings m ON m.id=r.meeting_id
+                WHERE r.finished_at > COALESCE(a.activity_read_at, '-infinity')
+                  AND (m.owner_id=a.id OR r.started_by=a.id OR (r.state='ready' AND EXISTS(SELECT 1 FROM file_shares s WHERE s.file_id=r.file_id AND s.account_id=a.id)))
             ) i
             WHERE a.id=$1 AND a.active
             ORDER BY i.at DESC
