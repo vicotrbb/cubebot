@@ -16,7 +16,7 @@
     },
     "apps/web": {
       "name": "@cubebot/web",
-      "version": "0.5.3",
+      "version": "0.5.4",
       "dependencies": {
         "@sapphi-red/web-noise-suppressor": "0.4.1",
         "@tanstack/react-query": "5.105.1",
