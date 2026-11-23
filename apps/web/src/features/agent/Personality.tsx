@@ -5,11 +5,10 @@ import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Skeleton, Status, when } from '../../components/primitives'
 
-const LIMIT = 800
-
 function Editor({
   agent,
   draft,
+  limit,
   busy,
   error,
   onDraft,
@@ -18,6 +17,7 @@ function Editor({
 }: {
   agent: AgentSummary
   draft: string
+  limit: number
   busy: boolean
   error: string
   onDraft: (draft: string) => void
@@ -25,7 +25,7 @@ function Editor({
   onCancel: () => void
 }) {
   const length = [...draft].length
-  const over = length > LIMIT
+  const over = length > limit
   return (
     <form
       className="form"
@@ -48,14 +48,14 @@ function Editor({
         <span
           id="personality-count"
           className="personality__count faint small"
-          data-near={length > LIMIT - 80 || undefined}
+          data-near={length > limit - 80 || undefined}
         >
-          {length} / {LIMIT}
+          {length} / {limit}
         </span>
       </label>
       {over && (
         <p className="personality__over small" role="status">
-          Keep it to {LIMIT} characters: temperament, voice and values. Facts,
+          Keep it to {limit} characters: temperament, voice and values. Facts,
           people and plans belong in memories.
         </p>
       )}
@@ -146,6 +146,7 @@ export function Personality({ agent }: { agent: AgentSummary }) {
         <Editor
           agent={agent}
           draft={draft}
+          limit={read.data.limit}
           busy={busy}
           error={error}
           onDraft={setDraft}
