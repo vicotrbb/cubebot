@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.5.3'
-export const released = '2026-11-20'
+export const version = 'v0.5.4'
+export const released = '2026-11-23'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -166,6 +166,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.5.4',
+    date: '2026-11-23',
+    title: 'Meeting recordings and leaner agents',
+    items: [
+      'Record a meeting: everyone is told, and the voices, cameras, screen shares and agent desktops become one video on the meeting page and in Files',
+      'Agents reuse their prompt cache across turns and load rarely used tools only when they need them, so turns cost fewer tokens',
+      'Agent personalities stay short: temperament, voice and values in at most 800 characters, with facts kept as memories',
+    ],
+  },
   {
     tag: 'v0.5.3',
     date: '2026-11-20',
