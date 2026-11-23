@@ -2,12 +2,14 @@ mod calendar;
 mod invitations;
 pub mod live;
 pub mod public;
+mod recording;
 mod settings;
 mod summary;
 
 pub(crate) use calendar::items as calendar_items;
 pub use invitations::{EmailConnection, Invited};
 pub use public::{JoinedMeeting, PublicMeeting};
+pub use recording::{Recording, Recordings};
 pub use settings::{MeetingSettings, SaveMeetingSettings};
 
 use crate::{
@@ -150,6 +152,8 @@ pub struct Meeting {
     pub invitations: Vec<Invitation>,
     pub attendance: Vec<Attendance>,
     pub utterances: Vec<Utterance>,
+    pub recordings: Vec<Recording>,
+    pub can_record: bool,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -243,6 +247,15 @@ impl Meetings {
         self
     }
 
+    pub fn with_recordings(mut self, recordings: Recordings) -> Self {
+        self.live.recordings = recordings;
+        self
+    }
+
+    pub fn recordings(&self) -> &Recordings {
+        &self.live.recordings
+    }
+
     pub fn live(&self) -> &live::Live {
         &self.live
     }
@@ -253,6 +266,7 @@ impl Meetings {
             let summary = summary::summarize(self.pool.clone(), self.connections.clone(), meeting);
             tokio::spawn(summary);
         }
+        self.live.recordings.resume().await?;
         Ok(())
     }
 
@@ -525,10 +539,11 @@ impl Meetings {
         .fetch_optional(&self.pool)
         .await?
         .ok_or(IdentityError::NotFound)?;
-        let (invitations, attendance, utterances) = tokio::try_join!(
+        let (invitations, attendance, utterances, recordings) = tokio::try_join!(
             self.invitations(id),
             self.attendance(id),
-            self.utterances(id)
+            self.utterances(id),
+            async { Ok(recording::listed(&self.pool, id).await?) },
         )?;
         Ok(Meeting {
             id: row.id,
@@ -550,6 +565,8 @@ impl Meetings {
             invitations,
             attendance,
             utterances,
+            recordings,
+            can_record: self.live.recordings.available(),
         })
     }
 

@@ -433,15 +433,15 @@ pub(super) async fn briefed(
     meeting: Option<Uuid>,
     talk_only: bool,
     instructions: String,
-) -> Result<String, sqlx::Error> {
+) -> Result<(String, Option<String>), sqlx::Error> {
     let Some(meeting) = meeting else {
-        return Ok(instructions);
+        return Ok((instructions, None));
     };
     let Some(title) = sqlx::query_scalar!("SELECT title FROM meetings WHERE id=$1", meeting)
         .fetch_optional(&mut **tx)
         .await?
     else {
-        return Ok(instructions);
+        return Ok((instructions, None));
     };
     let present = sqlx::query_as!(
         Present,
@@ -461,10 +461,13 @@ pub(super) async fn briefed(
     )
     .fetch_all(&mut **tx)
     .await?;
-    Ok(instructions + &in_meeting(&title, &present, talk_only))
+    Ok((
+        instructions + &in_meeting(&title, talk_only),
+        Some(present_now(&present)),
+    ))
 }
 
-fn in_meeting(title: &str, present: &[Present], talk_only: bool) -> String {
+fn present_now(present: &[Present]) -> String {
     let names: Vec<String> = present
         .iter()
         .map(|someone| match someone.kind.as_str() {
@@ -478,8 +481,12 @@ fn in_meeting(title: &str, present: &[Present], talk_only: bool) -> String {
     } else {
         names.join(", ")
     };
+    format!("Present with you in the meeting now: {present}.")
+}
+
+fn in_meeting(title: &str, talk_only: bool) -> String {
     let mut text = format!(
-        "\n\nYou are in a live meeting named \"{title}\". Present with you: {present}. You hear people through speech recognition, so words and names may be misheard. What you write is read aloud the moment you write it: answer in two or three short spoken sentences, without markdown, lists or code, and let people ask for more. Before you use a tool, first write one short sentence saying you are checking, so people are not left in silence. Others are talking too, so answer only what you were asked, and name another agent only when you need that agent to answer."
+        "\n\nYou are in a live meeting named \"{title}\". Who is present with you comes with each message. You hear people through speech recognition, so words and names may be misheard. What you write is read aloud the moment you write it: answer in two or three short spoken sentences, without markdown, lists or code, and let people ask for more. Before you use a tool, first write one short sentence saying you are checking, so people are not left in silence. Others are talking too, so answer only what you were asked, and name another agent only when you need that agent to answer."
     );
     if talk_only {
         text.push_str(" This request came from a guest who is not signed in or from someone who may not send you requests. You have no tools for it, and you must not share private information from your memory, files or other conversations.");
@@ -489,7 +496,7 @@ fn in_meeting(title: &str, present: &[Present], talk_only: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Present, in_meeting};
+    use super::{Present, in_meeting, present_now};
 
     fn present(kind: &str, name: &str) -> Present {
         Present {
@@ -505,21 +512,25 @@ mod tests {
             present("guest", "Bo"),
             present("agent", "Cara"),
         ];
-        let member = in_meeting("Weekly sync", &present, false);
+        let member = in_meeting("Weekly sync", false);
         assert!(member.contains("meeting named \"Weekly sync\""), "{member}");
-        assert!(
-            member.contains("Present with you: Ana, Bo (a guest), Cara (an agent)."),
-            "{member}"
+        assert!(!member.contains("Ana"), "{member}");
+        assert_eq!(
+            present_now(&present),
+            "Present with you in the meeting now: Ana, Bo (a guest), Cara (an agent)."
         );
         assert!(member.contains("misheard") && member.contains("without markdown"));
         assert!(
             member.contains("two or three short") && member.contains("saying you are checking")
         );
         assert!(!member.contains("guest who is not signed in"));
-        let guest = in_meeting("Weekly sync", &present, true);
+        let guest = in_meeting("Weekly sync", true);
         assert!(guest.starts_with(&member), "{guest}");
         assert!(guest.contains("no tools") && guest.contains("must not share private information"));
-        assert!(in_meeting("Solo", &[], false).contains("Present with you: no one else."));
+        assert_eq!(
+            present_now(&[]),
+            "Present with you in the meeting now: no one else."
+        );
     }
 
     #[test]

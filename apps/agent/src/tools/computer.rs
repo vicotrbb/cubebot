@@ -36,6 +36,7 @@ pub(super) fn tool() -> Box<dyn Tool> {
             parameters: serde_json::json!({}),
             strict: false,
             computer: true,
+            deferred: false,
         },
         desktop: Arc::default(),
     })

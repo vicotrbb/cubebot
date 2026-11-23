@@ -92,13 +92,13 @@ impl Work {
         )
         .execute(&mut **tx)
         .await?;
-        let (instructions, team_manager) =
+        let (instructions, team_manager, present) =
             instructed(tx, actor, turn, on_call, (meeting, talk_only)).await?;
         let isolated = task || talk_only;
         let (summary, history, message) =
             context(tx, actor, (turn, isolated), room, in_task, message).await?;
         let message = dated(tx, turn, talk_only, message).await?;
-        let message = through_app(tx, turn, message).await?;
+        let situation = through_app(tx, turn, present).await?;
         let (prior, last, delegations) = earlier(tx, turn).await?;
         let connections = connections.filter(|_| !talk_only);
         let mcp_servers = mcp_servers(tx, connections, actor).await;
@@ -137,6 +137,7 @@ impl Work {
             attachments,
             talk_only,
             meeting,
+            situation,
         }))
     }
 
@@ -250,21 +251,22 @@ async fn dated(
 async fn through_app(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     turn: Uuid,
-    message: String,
-) -> Result<String, Error> {
+    present: Option<String>,
+) -> Result<Option<String>, Error> {
     let app = sqlx::query!(
         "SELECT p.name, p.slug FROM chat_turns t JOIN apps p ON p.id=t.app_id WHERE t.id=$1",
         turn,
     )
     .fetch_optional(&mut **tx)
     .await?;
-    Ok(match app {
-        Some(app) => format!(
-            "{message}\n\n(Sent through your app {} ({}) by the person using it.)",
+    let app = app.map(|app| {
+        format!(
+            "(Sent through your app {} ({}) by the person using it.)",
             app.name, app.slug
-        ),
-        None => message,
-    })
+        )
+    });
+    let notes: Vec<String> = app.into_iter().chain(present).collect();
+    Ok((!notes.is_empty()).then(|| notes.join("\n\n")))
 }
 
 fn spoken_effort(
@@ -287,21 +289,21 @@ async fn instructed(
     turn: Uuid,
     on_call: bool,
     (meeting, talk_only): (Option<Uuid>, bool),
-) -> Result<(String, bool), Error> {
+) -> Result<(String, bool, Option<String>), Error> {
     if talk_only {
         let persona = crate::knowledge::persona(tx, actor.agent).await?;
-        let instructions =
+        let (instructions, present) =
             super::meetings::briefed(tx, actor.agent, meeting, true, persona).await?;
-        return Ok((instructions, false));
+        return Ok((instructions, false, present));
     }
     let instructions = crate::knowledge::instructions(tx, actor.agent).await?;
     let instructions = super::collaboration::briefed(tx, actor.agent, turn, instructions).await?;
     let (instructions, team_manager) = super::teams::briefed(tx, actor.agent, instructions).await?;
     let instructions = super::calls::spoken(instructions, on_call);
-    let instructions =
+    let (instructions, present) =
         super::meetings::briefed(tx, actor.agent, meeting, talk_only, instructions).await?;
     let instructions = crate::identity::profiles::introduced(tx, turn, instructions).await?;
-    Ok((instructions, team_manager))
+    Ok((instructions, team_manager, present))
 }
 
 async fn append(

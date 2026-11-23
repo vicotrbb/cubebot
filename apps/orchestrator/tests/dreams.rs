@@ -120,11 +120,22 @@ async fn dreams_wait_for_idle_work_commit_tagged_revisions_and_never_repeat_a_ch
     .execute(&f.pool)
     .await
     .unwrap();
+    sqlx::query!(
+        "INSERT INTO turn_events (turn_id, sequence, payload) SELECT id, 1, $1 FROM chat_turns",
+        json!({"kind":"tool_call","id":Uuid::nil(),"name":"load_skill","input":{"name":"disk-triage"}}),
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
 
     let run = Uuid::new_v4();
     let (status, dream) = runtime.start(run).await;
     assert_eq!(status, 200);
     assert_eq!(dream["model"], "controlled-model");
+    assert_eq!(
+        dream["turns"][0]["response"], "ok\n[tools used: load_skill disk-triage]",
+        "a dream sees which skill a turn loaded"
+    );
     assert_eq!(dream["memories"].as_array().unwrap().len(), 2);
     assert_eq!(runtime.start(run).await.0, 409, "a run id is admitted once");
     let agents = Agents::new(f.pool.clone());
@@ -335,7 +346,7 @@ async fn a_dream_grows_the_personality_and_reaches_out_whenever_it_has_a_reason(
         |text: String| cubebot_orchestrator::knowledge::SavePersonality { personality: text };
     assert!(matches!(
         knowledge
-            .save_personality(&admin, f.agent, &edit("x".repeat(4001)))
+            .save_personality(&admin, f.agent, &edit("x".repeat(801)))
             .await,
         Err(cubebot_orchestrator::identity::IdentityError::InvalidInput)
     ));
@@ -346,5 +357,20 @@ async fn a_dream_grows_the_personality_and_reaches_out_whenever_it_has_a_reason(
     assert_eq!(
         (saved.personality.as_str(), saved.edited_by.as_deref()),
         ("Calm.", Some("admin"))
+    );
+    assert_eq!(saved.limit, 800);
+    let earlier = "y".repeat(1500);
+    sqlx::query!(
+        "UPDATE agents SET personality=$2 WHERE id=$1",
+        f.agent.0,
+        earlier
+    )
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let kept = knowledge.personality(&admin, f.agent).await.unwrap();
+    assert_eq!(
+        kept.personality, earlier,
+        "a longer one written before stays readable"
     );
 }

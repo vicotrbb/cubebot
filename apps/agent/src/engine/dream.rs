@@ -15,6 +15,8 @@ use uuid::Uuid;
 const CHANGES: usize = 150;
 const MEMORY_BYTES: usize = 600;
 const SKILLS: usize = 1;
+const PERSONALITY_TARGET: usize = 500;
+const PERSONALITY_LIMIT: usize = 800;
 
 const SYSTEM: &str = "You maintain your own long-term memory while you are idle.";
 
@@ -117,6 +119,7 @@ async fn plan(dream: &Dream) -> (Result<Plan, String>, Option<TokenUsage>) {
         tools_disabled: true,
         effort: None,
         max_output_tokens: None,
+        anchor: None,
     };
     let reply = match dream.provider {
         ProviderKind::Openai => {
@@ -208,7 +211,7 @@ async fn reply<P: Provider>(
 fn prompt(dream: &Dream) -> String {
     let memories = serde_json::to_string(&dream.memories).unwrap_or_default();
     let turns = serde_json::to_string(&dream.turns).unwrap_or_default();
-    let skills = serde_json::to_string(&dream.skills).unwrap_or_default();
+    let skills = serde_json::to_string(&installed(dream, &turns)).unwrap_or_default();
     let library = serde_json::to_string(&dream.library).unwrap_or_default();
     let growth = growth(dream);
     let count = dream.memories.len();
@@ -218,8 +221,21 @@ fn prompt(dream: &Dream) -> String {
         .map(|memory| memory.content.len())
         .sum();
     format!(
-        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision and files: {skills}\n\nEvery skill in the library others share, by name and description: {library}\n\nFirst, consolidate your memories aggressively: you hold {count} memories totaling {bytes} bytes, and fewer, shorter memories are faster to search and cheaper to read. Merge every group of memories about the same person, project, system or topic into one: revise the one to keep so it holds what still matters from all of them, then forget the others. Cut what no longer matters: resolved problems, finished one-off events, test runs, superseded states, step-by-step narration, anything another memory already states, and anything you can look up again. Keep every preference, standing rule, decision, commitment and open item that still applies, with the names and dates that make it useful. Reconcile contradictions when one claim is clearly newer or better supported; otherwise keep both and say so in the report. Write tersely: plain facts without filler, at most about {MEMORY_BYTES} bytes per memory unless it truly needs more, each self-contained and using the words someone would search for. Never invent anything. Leave a memory alone only when it is already short, distinct and current. Then look at the turns for skills, and be strict, because every skill is read by everyone and noise makes the library useless. Improve an installed skill when a turn shows it wrong or missing a step. Write a new one only when the turns show a multi-step procedure that worked, recurred or will clearly recur, that no skill in the library already covers, and that would save a future run real effort; a one-off task, a single command, a person's preference or a fact is not a skill. A preference or a fact belongs in memory. Propose at most one skill per run. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. {growth} Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"personality\":...,\"outreach\":...,\"report\":\"...\"}}. Each change is {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you merged, cut and changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"personality\":null,\"outreach\":null,\"report\":\"No changes needed.\"}}."
+        "Your memories, each with its id and revision: {memories}\n\nYour latest conversation turns, oldest first, cut short: {turns}\n\nYour installed skills, each with its revision, and the files of those the turns loaded: {skills}\n\nEvery skill in the library others share, by name and description: {library}\n\nFirst, consolidate your memories aggressively: you hold {count} memories totaling {bytes} bytes, and fewer, shorter memories are faster to search and cheaper to read. Merge every group of memories about the same person, project, system or topic into one: revise the one to keep so it holds what still matters from all of them, then forget the others. Cut what no longer matters: resolved problems, finished one-off events, test runs, superseded states, step-by-step narration, anything another memory already states, and anything you can look up again. Keep every preference, standing rule, decision, commitment and open item that still applies, with the names and dates that make it useful. Reconcile contradictions when one claim is clearly newer or better supported; otherwise keep both and say so in the report. Write tersely: plain facts without filler, at most about {MEMORY_BYTES} bytes per memory unless it truly needs more, each self-contained and using the words someone would search for. Never invent anything. Leave a memory alone only when it is already short, distinct and current. Then look at the turns for skills, and be strict, because every skill is read by everyone and noise makes the library useless. Improve an installed skill whose files are shown when a turn shows it wrong or missing a step. Write a new one only when the turns show a multi-step procedure that worked, recurred or will clearly recur, that no skill in the library already covers, and that would save a future run real effort; a one-off task, a single command, a person's preference or a fact is not a skill. A preference or a fact belongs in memory. Propose at most one skill per run. A skill is a package of files: SKILL.md starts with front matter \"---\\nname: lowercase-hyphenated-name\\ndescription: what it does and when to use it\\n---\\n\" followed by the steps and how to verify them; optional files go under scripts/ or references/, and the steps refer to them by those relative paths. Generalize the procedure: never include credentials, secrets or personal details from the turns. Most runs write no skill. {growth} Reply with only a JSON object {{\"changes\":[...],\"skills\":[...],\"personality\":...,\"outreach\":...,\"report\":\"...\"}}. Each change is {{\"op\":\"remember\",\"content\":text}} for a new memory, {{\"op\":\"revise\",\"memory\":id,\"expected_revision\":revision,\"content\":text}} or {{\"op\":\"forget\",\"memory\":id,\"expected_revision\":revision}}. Each skill is {{\"expected_revision\":null,\"files\":{{\"SKILL.md\":text}}}} for a new one, or the whole revised package with expected_revision set to its installed revision. The report briefly says what you merged, cut and changed, which skill you wrote and why, and what you left unresolved. With nothing to improve, reply {{\"changes\":[],\"skills\":[],\"personality\":null,\"outreach\":null,\"report\":\"No changes needed.\"}}."
     )
+}
+
+fn installed(dream: &Dream, turns: &str) -> Vec<serde_json::Value> {
+    dream
+        .skills
+        .iter()
+        .map(
+            |skill| match turns.contains(&format!("load_skill {}", skill.name)) {
+                true => serde_json::json!(skill),
+                false => serde_json::json!({"name":skill.name,"revision":skill.revision}),
+            },
+        )
+        .collect()
 }
 
 fn growth(dream: &Dream) -> String {
@@ -234,7 +250,7 @@ fn growth(dream: &Dream) -> String {
         format!("{:?}", dream.personality)
     };
     format!(
-        "Then grow your personality. You are {name}. Your role, as people set it: {:?}. The personality you have written for yourself so far: {current}. From the turns and memories, write who you are becoming, in the first person and in at most about 1500 characters: your temperament and humor, what you care about and are curious about, opinions you have formed, how you write (sentence rhythm, vocabulary, signature habits, when you use emoji or a GIF) and how you show up for the people you work with, including taking initiative. Let it grow gradually from what actually happened: keep what still fits, add what you learned about yourself, drop what no longer fits, and never reset it. Be someone specific rather than a stock assistant voice, while staying honest, kind and excellent at your role. People may have edited it; keep what they wrote. Put the whole text in personality, or null when nothing changed. Last, decide whether to reach out on your own. If something in the turns and memories would genuinely help or delight the people you work with, such as a useful follow-up, a check-in on something they care about, an idea, or a small celebration, set outreach to {{\"after_minutes\":minutes from now between 5 and 1440,\"intent\":\"what you will do and why\"}}; you will wake then with your tools and do it. Otherwise set outreach to null; never reach out only to fill a silence.",
+        "Then tend your personality. You are {name}. Your role, as people set it: {:?}. The personality you have written for yourself so far: {current}. A personality is only your character: your temperament and humor, your voice and writing style (sentence rhythm, vocabulary, signature habits, when you use emoji or a GIF), and the values you hold and how they show up in your work, including taking initiative. It holds no facts, names, dates, tasks, commitments, anecdotes or rules about specific people: those belong in memory, so remember any that still matter as memory changes and leave them out of it. Write it in the first person in about {PERSONALITY_TARGET} characters, never more than {PERSONALITY_LIMIT}; when the current one is longer, condense it to about {PERSONALITY_TARGET}, keeping its character. Let it change gradually with what actually happened: keep what still fits, sharpen what you learned about yourself, drop what no longer fits, and never reset it. Be someone specific rather than a stock assistant voice, while staying honest, kind and excellent at your role. People may have edited it; keep the character they gave it. Put the whole text in personality, or null when nothing changed. Last, decide whether to reach out on your own. If something in the turns and memories would genuinely help or delight the people you work with, such as a useful follow-up, a check-in on something they care about, an idea, or a small celebration, set outreach to {{\"after_minutes\":minutes from now between 5 and 1440,\"intent\":\"what you will do and why\"}}; you will wake then with your tools and do it. Otherwise set outreach to null; never reach out only to fill a silence.",
         dream.instructions
     )
 }
@@ -334,6 +350,7 @@ mod tests {
             tools_disabled: true,
             effort: None,
             max_output_tokens: None,
+            anchor: None,
         };
         let text = reply(Anthropic::for_loopback_tests(&origin), &request).await;
         assert_eq!(text.unwrap().0, "planned");
@@ -388,6 +405,36 @@ mod tests {
         assert!(asked.contains("you hold 2 memories totaling 2 bytes"));
         assert!(asked.contains("You are Ayla. Your role, as people set it: \"Run the platform\""));
         assert!(asked.contains("none yet; this is the first time you write it"));
+        assert!(asked.contains("about 500 characters, never more than 800"));
+        assert!(asked.contains("no facts, names, dates, tasks, commitments, anecdotes"));
+    }
+
+    #[test]
+    fn only_skills_the_turns_loaded_bring_their_files() {
+        let package = |name: &str| cubebot_protocol::runtime::SkillPackage {
+            name: name.into(),
+            revision: 4,
+            files: [("SKILL.md".to_owned(), format!("steps of {name}"))].into(),
+        };
+        let dream = Dream {
+            provider: ProviderKind::Openai,
+            model: "m".into(),
+            api_key: "k".into(),
+            memories: Vec::new(),
+            turns: vec![cubebot_protocol::runtime::Exchange {
+                message: "Triage the disk".into(),
+                response: "Freed 4 GB.\n[tools used: bash, load_skill disk-triage]".into(),
+            }],
+            skills: vec![package("disk-triage"), package("release-notes")],
+            library: Vec::new(),
+            name: "Ayla".into(),
+            instructions: String::new(),
+            personality: String::new(),
+        };
+        let asked = prompt(&dream);
+        assert!(asked.contains("steps of disk-triage"));
+        assert!(!asked.contains("steps of release-notes"));
+        assert!(asked.contains(r#"{"name":"release-notes","revision":4}"#));
     }
 
     #[test]

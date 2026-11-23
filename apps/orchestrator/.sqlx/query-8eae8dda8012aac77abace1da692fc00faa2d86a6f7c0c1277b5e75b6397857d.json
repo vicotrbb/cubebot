@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE meeting_recordings\n        SET state='processing', stopped_at=clock_timestamp()\n        WHERE id=$1 AND state='recording'\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8eae8dda8012aac77abace1da692fc00faa2d86a6f7c0c1277b5e75b6397857d"
+}

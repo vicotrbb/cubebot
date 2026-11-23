@@ -101,6 +101,7 @@ fn tools() -> [Tool; 2] {
         parameters: json!({"type":"object"}),
         strict: true,
         computer,
+        deferred: false,
     };
     [tool("terminal", false), tool("computer", true)]
 }
@@ -147,6 +148,7 @@ async fn a_tool_call_round_trip_replays_the_thinking_unchanged() {
             tools_disabled: true,
             effort: None,
             max_output_tokens: Some(131_072),
+            anchor: None,
         }
     }
     let (reply, usage) = done(&provider, &request(&history, &tools)).await;
@@ -159,6 +161,7 @@ async fn a_tool_call_round_trip_replays_the_thinking_unchanged() {
         call_id: call,
         output: "Thu".into(),
         image: None,
+        loaded: Vec::new(),
     });
     let (reply, _) = done(&provider, &request(&history, &tools)).await;
     assert_eq!(reply.text, "Thursday.");
@@ -188,6 +191,7 @@ async fn a_rate_limit_waits_and_retries() {
         tools_disabled: false,
         effort: None,
         max_output_tokens: Some(1),
+        anchor: None,
     };
     let events: Vec<_> = provider.stream(&request).collect().await;
     let Some(Err(error @ Error::Transient(_))) = events.first() else {

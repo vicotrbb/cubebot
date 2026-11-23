@@ -157,6 +157,9 @@ pub enum Client {
         source: u16,
         share: bool,
     },
+    Record {
+        on: bool,
+    },
     End,
     Ping,
 }
@@ -217,6 +220,7 @@ pub enum Server {
         open_join: bool,
         locked: bool,
         captions: bool,
+        can_record: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         rejoin: Option<String>,
     },
@@ -267,6 +271,11 @@ pub enum Server {
     },
     Notice {
         text: String,
+    },
+    Recording {
+        on: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        by: Option<String>,
     },
     Denied,
     Removed,

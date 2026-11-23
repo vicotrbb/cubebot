@@ -5,7 +5,77 @@ import type { AgentSummary } from '../../api/types'
 import { Cube, moodOf } from '../../components/Cube'
 import { Alert, Skeleton, Status, when } from '../../components/primitives'
 
-const LIMIT = 4000
+function Editor({
+  agent,
+  draft,
+  limit,
+  busy,
+  error,
+  onDraft,
+  onSave,
+  onCancel,
+}: {
+  agent: AgentSummary
+  draft: string
+  limit: number
+  busy: boolean
+  error: string
+  onDraft: (draft: string) => void
+  onSave: () => void
+  onCancel: () => void
+}) {
+  const length = [...draft].length
+  const over = length > limit
+  return (
+    <form
+      className="form"
+      onSubmit={(event) => {
+        event.preventDefault()
+        onSave()
+      }}
+    >
+      <label className="personality__editor">
+        <span className="sr-only">Personality</span>
+        <textarea
+          value={draft}
+          onChange={(event) => onDraft(event.target.value)}
+          aria-invalid={over || undefined}
+          aria-describedby="personality-count"
+          rows={9}
+          autoFocus
+          placeholder={`In ${agent.name}'s words: temperament, humor, what it cares about, how it writes.`}
+        />
+        <span
+          id="personality-count"
+          className="personality__count faint small"
+          data-near={length > limit - 80 || undefined}
+        >
+          {length} / {limit}
+        </span>
+      </label>
+      {over && (
+        <p className="personality__over small" role="status">
+          Keep it to {limit} characters: temperament, voice and values. Facts,
+          people and plans belong in memories.
+        </p>
+      )}
+      <Alert>{error}</Alert>
+      <div className="actions">
+        <button className="btn btn--primary btn--sm" disabled={busy || over}>
+          {busy ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          className="btn btn--sm"
+          disabled={busy}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
 
 export function Personality({ agent }: { agent: AgentSummary }) {
   const key = ['agents', agent.id, 'personality']
@@ -67,54 +137,25 @@ export function Personality({ agent }: { agent: AgentSummary }) {
         )}
       </div>
       <p className="panel__lead">
-        {agent.name} writes this about itself and grows it while it dreams. It
-        shapes how {agent.name} thinks, writes and takes initiative.
+        {agent.name} writes this short sketch of itself and refines it while it
+        dreams. It shapes how {agent.name} thinks, writes and takes initiative.
       </p>
       {!read.data ? (
         <Skeleton lines={3} />
       ) : draft !== null ? (
-        <form
-          className="form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void save()
+        <Editor
+          agent={agent}
+          draft={draft}
+          limit={read.data.limit}
+          busy={busy}
+          error={error}
+          onDraft={setDraft}
+          onSave={() => void save()}
+          onCancel={() => {
+            setError('')
+            setDraft(null)
           }}
-        >
-          <label className="personality__editor">
-            <span className="sr-only">Personality</span>
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              maxLength={LIMIT}
-              rows={9}
-              autoFocus
-              placeholder={`In ${agent.name}'s words: temperament, humor, what it cares about, how it writes.`}
-            />
-            <span
-              className="personality__count faint small"
-              data-near={draft.length > LIMIT - 200 || undefined}
-            >
-              {draft.length} / {LIMIT}
-            </span>
-          </label>
-          <Alert>{error}</Alert>
-          <div className="actions">
-            <button className="btn btn--primary btn--sm" disabled={busy}>
-              {busy ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              type="button"
-              className="btn btn--sm"
-              disabled={busy}
-              onClick={() => {
-                setError('')
-                setDraft(null)
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        />
       ) : text ? (
         <figure className="personality__letter">
           <Cube

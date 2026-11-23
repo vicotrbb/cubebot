@@ -173,6 +173,7 @@ pub async fn configured_router(
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     desktop: Option<crate::agents::sandbox::Desktop>,
     apps: Option<crate::apps::Apps>,
+    storage: Option<crate::storage::Storage>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let credentials = std::env::var_os("CUBEBOT_CREDENTIAL_KEY_FILE")
         .map(|path| crate::connections::Credentials::from_file(std::path::Path::new(&path)))
@@ -180,7 +181,7 @@ pub async fn configured_router(
         .map_err(|error| {
             crate::identity::IdentityError::CredentialUnavailable(Some(error.into()))
         })?;
-    assembled(pool, origin, config, credentials, desktop, apps).await
+    assembled(pool, origin, config, credentials, desktop, apps, storage).await
 }
 
 pub async fn configured_router_with_credentials(
@@ -189,7 +190,7 @@ pub async fn configured_router_with_credentials(
     config: Option<(crate::identity::oidc::Config, Option<String>)>,
     credentials: Option<crate::connections::Credentials>,
 ) -> Result<Router, crate::identity::IdentityError> {
-    assembled(pool, origin, config, credentials, None, None).await
+    assembled(pool, origin, config, credentials, None, None, None).await
 }
 
 async fn assembled(
@@ -199,6 +200,7 @@ async fn assembled(
     credentials: Option<crate::connections::Credentials>,
     desktop: Option<crate::agents::sandbox::Desktop>,
     apps: Option<crate::apps::Apps>,
+    storage: Option<crate::storage::Storage>,
 ) -> Result<Router, crate::identity::IdentityError> {
     let mut identity = crate::identity::Identity::new(pool.clone());
     if let Some(origin) = origin {
@@ -228,7 +230,8 @@ async fn assembled(
         identity.browser_origin.clone(),
     )?
     .with_speech(speech.clone())
-    .with_desktop(desktop);
+    .with_desktop(desktop)
+    .with_recordings(crate::meetings::Recordings::new(pool.clone(), storage));
     meetings
         .close_open()
         .await

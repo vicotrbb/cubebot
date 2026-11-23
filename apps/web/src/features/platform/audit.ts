@@ -136,6 +136,8 @@ const PHRASES: Record<string, (detail: Detail) => string> = {
   'meeting.lock': (detail) =>
     detail.locked ? 'locked the meeting' : 'unlocked the meeting',
   'meeting.end': () => 'ended the meeting',
+  'meeting.recording_start': () => 'started recording',
+  'meeting.recording_stop': () => 'stopped recording',
 }
 
 function invitees(detail: Detail) {

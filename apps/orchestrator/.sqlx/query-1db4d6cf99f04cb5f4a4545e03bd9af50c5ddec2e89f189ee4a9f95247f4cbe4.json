@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meeting_recordings SET stopped_by=$2 WHERE id=$1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1db4d6cf99f04cb5f4a4545e03bd9af50c5ddec2e89f189ee4a9f95247f4cbe4"
+}

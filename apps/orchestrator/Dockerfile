@@ -15,10 +15,11 @@ RUN chmod 644 /usr/share/keyrings/postgresql.asc \
     && apt-get update && apt-get install -y --no-install-recommends ca-certificates \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.asc] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-18 ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 # Compose installations with agents start sandboxes through the host's Docker CLI; Kubernetes never runs it.
 COPY --from=docker:28.5.1-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY apps/web/public/fonts/rubik-latin.woff2 /usr/share/fonts/cubebot/rubik.woff2
 COPY --from=build /src/target/release/cubebot-orchestrator /src/target/release/cubebot-admin /usr/local/bin/
 # A fresh named volume mounted here takes this owner, so the orchestrator can write shared files.
 RUN install -d -o 65532 -g 65532 /var/lib/cubebot/files

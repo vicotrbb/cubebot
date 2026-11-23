@@ -50,6 +50,7 @@ export type Server =
       member: boolean
       open_join: boolean
       locked: boolean
+      can_record: boolean
       rejoin?: string
     }
   | { kind: 'roster'; participants: Participant[] }
@@ -81,6 +82,7 @@ export type Server =
   | { kind: 'meeting'; locked: boolean; open_join: boolean }
   | { kind: 'preparing'; model: string; received: number; total: number }
   | { kind: 'notice'; text: string }
+  | { kind: 'recording'; on: boolean; by?: string }
   | { kind: 'denied' }
   | { kind: 'removed' }
   | { kind: 'ended' }
@@ -93,6 +95,8 @@ export type Room = {
   member: boolean
   openJoin: boolean
   locked: boolean
+  canRecord: boolean
+  recording: { by: string } | null
   participants: Participant[]
   tracks: Record<string, Track>
   captions: Caption[]
@@ -112,6 +116,8 @@ export const EMPTY_ROOM: Room = {
   member: false,
   openJoin: false,
   locked: false,
+  canRecord: false,
+  recording: null,
   participants: [],
   tracks: {},
   captions: [],
@@ -169,9 +175,24 @@ function ending(room: Room, message: Server): Room | null {
         member: message.member,
         openJoin: message.open_join,
         locked: message.locked,
+        canRecord: message.can_record,
+        recording: null,
       }
     default:
       return null
+  }
+}
+
+function recorded(room: Room, on: boolean, by = ''): Room {
+  if (on === Boolean(room.recording)) return room
+  const who = by || 'Someone'
+  const notice = on
+    ? `${who} started recording. Everyone in the meeting is being recorded.`
+    : `${who} stopped recording. It will be on the meeting page once it is processed.`
+  return {
+    ...room,
+    recording: on ? { by } : null,
+    notice: by ? notice : room.notice,
   }
 }
 
@@ -213,6 +234,8 @@ export function reduce(room: Room, message: Server): Room {
       }
     case 'notice':
       return { ...room, notice: message.text }
+    case 'recording':
+      return recorded(room, message.on, message.by)
     default:
       return room
   }

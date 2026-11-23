@@ -28,6 +28,10 @@ impl Volume {
         Ok(Self { root })
     }
 
+    pub fn scratch(&self, name: &str) -> PathBuf {
+        self.root.join(name)
+    }
+
     fn staging(&self, id: Uuid) -> PathBuf {
         self.root.join("staging").join(id.to_string())
     }

@@ -45,6 +45,7 @@ impl Offered {
                 .unwrap_or_else(|_| json!({"type": "object"})),
             strict: false,
             computer: false,
+            deferred: false,
         }
     }
 }
@@ -55,6 +56,7 @@ pub struct Connections {
     offered: Vec<Offered>,
     /// Fetched credentials for this turn; a revoked grant takes effect at the next turn's fetch.
     held: Mutex<HashMap<Uuid, (Credential, Option<i64>)>>,
+    on_demand: Mutex<Vec<cubebot_providers::Tool>>,
 }
 
 impl Connections {
@@ -80,19 +82,43 @@ impl Connections {
             client,
             offered,
             held: Mutex::default(),
+            on_demand: Mutex::default(),
         }
     }
 
+    pub fn hold(&self, tools: Vec<cubebot_providers::Tool>) {
+        *self
+            .on_demand
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = tools;
+    }
+
+    fn on_demand(&self) -> Vec<cubebot_providers::Tool> {
+        self.on_demand
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     /// Only the search tool is offered up front; it loads the definitions a request needs.
-    pub fn definitions(&self) -> Vec<cubebot_providers::Tool> {
-        if self.offered.is_empty() {
+    pub fn definitions(&self, defer: bool) -> Vec<cubebot_providers::Tool> {
+        if self.offered.is_empty() && self.on_demand().is_empty() {
             return Vec::new();
         }
-        vec![cubebot_providers::Tool::strict(
+        let mut tools = vec![cubebot_providers::Tool::strict(
             FIND,
-            "Find and load tools of your connected accounts, listed under Connected accounts in your instructions. Describe what you want to do, such as \"send an email\" or \"calendar events this week\", and include the connection's name to search only its tools. The tools found can be called from then on.",
+            "Find and load tools that are not loaded yet: those of your connected accounts, listed under Connected accounts in your instructions, and those for less frequent work that your instructions say load on demand. Describe what you want to do, such as \"send an email\", \"calendar events this week\" or \"schedule a routine\", and include a connection's name to search only its tools. The tools found can be called from then on.",
             json!({"query": {"type": "string", "description": "What you want to do, optionally with a connection's name."}}),
-        )]
+        )];
+        let connected = self
+            .offered
+            .iter()
+            .flat_map(|offered| offered.tools.iter().map(|tool| offered.definition(tool)));
+        tools.extend(connected.filter(|_| defer).map(|mut tool| {
+            tool.deferred = true;
+            tool
+        }));
+        tools
     }
 
     /// The instructions' paragraph naming each connection, its account, level and events.
@@ -120,15 +146,18 @@ impl Connections {
             .iter()
             .filter(|offered| names.clone().any(|name| name == offered.connection.slug))
             .collect();
-        let pool = if named.is_empty() {
+        let unnamed = named.is_empty();
+        let pool = if unnamed {
             self.offered.iter().collect()
         } else {
             named
         };
+        let held = self.on_demand().into_iter().filter(|_| unnamed);
         let mut scored: Vec<(usize, cubebot_providers::Tool)> = pool
             .iter()
             .flat_map(|offered| offered.tools.iter().map(move |tool| (*offered, *tool)))
             .map(|(offered, tool)| (score(offered, tool, &words), offered.definition(tool)))
+            .chain(held.map(|tool| (matches(&tool, &words), tool)))
             .filter(|(score, _)| *score > 0 || words.is_empty())
             .collect();
         scored.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
@@ -209,8 +238,12 @@ impl Connections {
                 .map(|o| o.connection.slug.as_str())
                 .collect();
             format!(
-                "No connected tool matches. Connections: {}.",
-                names.join(", ")
+                "No tool matches; describe the work in other words. Connections: {}.",
+                if names.is_empty() {
+                    "none".to_owned()
+                } else {
+                    names.join(", ")
+                }
             )
         } else {
             let lines: Vec<String> = found
@@ -345,6 +378,14 @@ fn score(offered: &Offered, tool: &ToolSpec, words: &[&str]) -> usize {
         tool.description
     )
     .to_lowercase();
+    words
+        .iter()
+        .filter(|word| haystack.contains(**word))
+        .count()
+}
+
+fn matches(tool: &cubebot_providers::Tool, words: &[&str]) -> usize {
+    let haystack = format!("{} {}", tool.name.replace('_', " "), tool.description).to_lowercase();
     words
         .iter()
         .filter(|word| haystack.contains(**word))
@@ -520,7 +561,7 @@ mod tests {
         assert!(named.iter().all(|tool| tool.name.starts_with("notes__")));
         assert!(
             connections
-                .definitions()
+                .definitions(false)
                 .iter()
                 .any(|tool| tool.name == FIND)
         );
@@ -565,7 +606,7 @@ mod tests {
                 connection("b", "notion", "admin"),
             ],
         );
-        assert!(connections.definitions().is_empty());
+        assert!(connections.definitions(false).is_empty());
         assert!(connections.prompt().is_none());
     }
 

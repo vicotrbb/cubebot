@@ -48,6 +48,7 @@ fn request<'a>(messages: &'a [Message], tools: &'a [Tool]) -> Request<'a> {
         tools_disabled: false,
         effort: None,
         max_output_tokens: None,
+        anchor: None,
     }
 }
 
@@ -205,6 +206,7 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
             call_id: "call_0".into(),
             output: "done".into(),
             image: None,
+            loaded: Vec::new(),
         },
     ];
     let tools = [
@@ -214,6 +216,7 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
             parameters: json!({"type":"object"}),
             strict: true,
             computer: false,
+            deferred: false,
         },
         Tool {
             name: "external".into(),
@@ -221,6 +224,7 @@ async fn parallel_calls_arrive_together_and_replay_native_output_with_their_resu
             parameters: json!({"type":"object"}),
             strict: false,
             computer: false,
+            deferred: false,
         },
     ];
     let events = collect(&provider, &request(&messages, &tools)).await;
@@ -274,11 +278,13 @@ async fn computer_calls_arrive_as_action_batches_and_answer_with_screenshots() {
             call_id: "call_1".into(),
             output: "a person has control".into(),
             image: Some("iVBORw0KGgo=".into()),
+            loaded: Vec::new(),
         },
         Message::ToolResult {
             call_id: "call_9".into(),
             output: "OK".into(),
             image: Some("iVBORw0KGgo=".into()),
+            loaded: Vec::new(),
         },
     ];
     let tools = [Tool {
@@ -287,6 +293,7 @@ async fn computer_calls_arrive_as_action_batches_and_answer_with_screenshots() {
         parameters: json!({}),
         strict: false,
         computer: true,
+        deferred: false,
     }];
     let events = collect(&provider, &request(&messages, &tools)).await;
     let [Event::Done { reply, .. }] = &events[..] else {
@@ -442,6 +449,7 @@ fn desktop() -> Tool {
         parameters: json!({}),
         strict: false,
         computer: true,
+        deferred: false,
     }
 }
 

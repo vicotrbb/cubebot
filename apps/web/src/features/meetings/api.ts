@@ -20,11 +20,18 @@ export function useMeetings() {
   })
 }
 
+const working = (meeting: Meeting | undefined) =>
+  meeting?.recordings.some(
+    (recording) =>
+      recording.state === 'recording' || recording.state === 'processing',
+  ) ?? false
+
 export function useMeetingRecord(id: string) {
   return useQuery({
     queryKey: meetingKey(id),
     queryFn: () =>
       ok(api.GET('/api/meetings/{id}', { params: { path: { id } } })),
+    refetchInterval: (query) => (working(query.state.data) ? 4000 : false),
   })
 }
 

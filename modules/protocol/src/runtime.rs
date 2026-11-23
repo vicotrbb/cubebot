@@ -226,6 +226,8 @@ pub struct Turn {
     pub talk_only: bool,
     #[serde(default)]
     pub meeting: Option<Uuid>,
+    #[serde(default)]
+    pub situation: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -833,6 +835,7 @@ mod tests {
             in_room: false,
             talk_only: false,
             meeting: None,
+            situation: None,
         }));
         let text = serde_json::to_string(&turn).unwrap();
         assert!(text.contains(r#""provider":"anthropic""#));

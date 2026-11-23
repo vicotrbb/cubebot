@@ -5715,6 +5715,43 @@
         }
       }
     },
+    "/api/meetings/{id}/recordings/{recording}/retry": {
+      "post": {
+        "tags": [],
+        "operationId": "retry_meeting_recording",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "recording",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/provider": {
       "get": {
         "tags": [],
@@ -7339,7 +7376,11 @@
           },
           "kind": {
             "type": "string",
-            "description": "`approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,\n`invitation_pending`, `dream_published_skill` or `agent_published_skill`."
+            "description": "`approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,\n`invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or\n`recording_failed`."
+          },
+          "meeting": {
+            "type": ["string", "null"],
+            "format": "uuid"
           },
           "room": {
             "type": ["string", "null"],
@@ -10600,7 +10641,9 @@
           "created_at",
           "invitations",
           "attendance",
-          "utterances"
+          "utterances",
+          "recordings",
+          "can_record"
         ],
         "properties": {
           "agent_mode": {
@@ -10611,6 +10654,9 @@
             "items": {
               "$ref": "#/components/schemas/Attendance"
             }
+          },
+          "can_record": {
+            "type": "boolean"
           },
           "created_at": {
             "type": "string"
@@ -10648,6 +10694,12 @@
           },
           "owner_name": {
             "type": "string"
+          },
+          "recordings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MeetingRecording"
+            }
           },
           "started_at": {
             "type": ["string", "null"]
@@ -10863,6 +10915,47 @@
             "items": {
               "$ref": "#/components/schemas/Turn"
             }
+          }
+        }
+      },
+      "MeetingRecording": {
+        "type": "object",
+        "required": ["id", "state", "progress", "started_by", "started_at"],
+        "properties": {
+          "duration_ms": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "error": {
+            "type": ["string", "null"]
+          },
+          "file": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "progress": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "size": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "started_by": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "stopped_at": {
+            "type": ["string", "null"]
           }
         }
       },
@@ -11625,10 +11718,14 @@
       },
       "Personality": {
         "type": "object",
-        "required": ["personality"],
+        "required": ["personality", "limit"],
         "properties": {
           "edited_by": {
             "type": ["string", "null"]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
           },
           "personality": {
             "type": "string"

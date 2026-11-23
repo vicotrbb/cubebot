@@ -34,6 +34,7 @@ const welcomed = reduce(EMPTY_ROOM, {
   member: true,
   open_join: false,
   locked: false,
+  can_record: true,
 })
 
 test('a guest waits, then is welcomed live', () => {
@@ -144,6 +145,7 @@ test('a welcome back ends the retries and drops tracks of the old connection', (
     member: false,
     open_join: false,
     locked: false,
+    can_record: false,
     rejoin: 'next',
   })
   assert.equal(back.phase, 'live')
@@ -155,4 +157,30 @@ test('a welcome back ends the retries and drops tracks of the old connection', (
 test('the retries span the time the server keeps a seat to come back to', () => {
   const total = RETRY_DELAYS.reduce((sum, delay) => sum + delay, 0)
   assert.ok(total <= 60_000 && total >= 30_000)
+})
+
+test('everyone learns who started and stopped recording, and a rejoin starts from the server', () => {
+  assert.equal(welcomed.canRecord, true)
+  const on = reduce(welcomed, { kind: 'recording', on: true, by: 'Ana' })
+  assert.deepEqual(on.recording, { by: 'Ana' })
+  assert.match(on.notice, /^Ana started recording/)
+  assert.equal(reduce(on, { kind: 'recording', on: true, by: 'Ana' }), on)
+  const off = reduce(on, { kind: 'recording', on: false, by: 'Bo' })
+  assert.equal(off.recording, null)
+  assert.match(off.notice, /^Bo stopped recording/)
+  const lost = reduce(on, { kind: 'recording', on: false })
+  assert.equal(lost.recording, null)
+  assert.equal(lost.notice, on.notice)
+  const back = reduce(on, {
+    kind: 'welcome',
+    you: 4,
+    title: 'Weekly',
+    host: false,
+    member: false,
+    open_join: false,
+    locked: false,
+    can_record: false,
+  })
+  assert.equal(back.recording, null)
+  assert.equal(back.canRecord, false)
 })

@@ -11,6 +11,7 @@ pub use room::{Event, Refusal};
 pub use screens::{Answer, Presenter};
 pub use socket::{Entry, Recheck};
 
+use super::recording::Recordings;
 use super::summary::summarize;
 use crate::agents::{Avatar, sandbox::Desktop};
 use crate::connections::Connections;
@@ -33,6 +34,7 @@ pub struct Live {
     pub(super) speech: Speech,
     connections: Option<Connections>,
     pub(super) desktop: Option<Desktop>,
+    pub(super) recordings: Recordings,
 }
 
 #[derive(Clone)]
@@ -49,6 +51,7 @@ impl Live {
             speech,
             connections,
             desktop: None,
+            recordings: Recordings::default(),
         }
     }
 
@@ -126,7 +129,7 @@ impl Live {
         let (invited, invitations) = mpsc::channel(1);
         let subscriber = Subscriber { control, audio };
         let _ = commands.try_send(Command::Subscribe { events: subscriber });
-        let room = Room::new(id, loaded, records);
+        let room = Room::new(id, loaded, records, self.recordings.clone());
         let handle = Handle { commands, invited };
         let live = self.clone();
         let kept = handle.clone();

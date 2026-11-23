@@ -9,6 +9,7 @@ import {
   MessageCircleQuestion,
   PauseCircle,
   ShieldCheck,
+  Video,
   Wallet,
   type LucideIcon,
 } from 'lucide-react'
@@ -46,6 +47,7 @@ const KINDS: Record<string, [string, LucideIcon]> = {
 }
 
 function destination(item: Item) {
+  if (item.meeting) return `/meetings/${item.meeting}`
   if (item.task) return `/tasks/${item.task}`
   if (item.room) return `/rooms/${item.room}`
   if (!item.agent) return '/platform/people'
@@ -477,7 +479,7 @@ function Updates({
     <Section id="updates" title="Updates" count={0}>
       <ul className="updates">
         {items.map((item) => {
-          const Icon = item.kind === 'invitation_pending' ? Mail : BookOpen
+          const Icon = UPDATE_ICONS[item.kind] ?? BookOpen
           const agent = item.agent ? named.get(item.agent) : undefined
           return (
             <li key={keyOf(item)} data-new={fresh.has(keyOf(item))}>
@@ -502,6 +504,12 @@ function Updates({
       )}
     </Section>
   )
+}
+
+const UPDATE_ICONS: Record<string, LucideIcon> = {
+  invitation_pending: Mail,
+  recording_ready: Video,
+  recording_failed: CircleAlert,
 }
 
 const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1)

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE meeting_recordings SET progress=$2 WHERE id=$1 AND state='processing'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "77f58be7cf640c5901d5105b8c0371b811bbbf909c0697e55c6826a6d70396b1"
+}

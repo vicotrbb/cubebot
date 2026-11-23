@@ -78,6 +78,7 @@ impl Provider for Gemini {
         Capabilities {
             tool_calls: true,
             model_limits: false,
+            deferred_tools: false,
         }
     }
 

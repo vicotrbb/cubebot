@@ -563,17 +563,17 @@ async fn a_routine_command_runs_before_the_model_and_alone_needs_no_model() {
     assert_eq!(fake.event(6).await["response"], "Seen");
     assert_eq!(fake.expect().await, json!({"type":"pull"}));
     let request = fake.provider.lock().unwrap()[0].clone();
-    let asked = request["input"].as_array().unwrap().last().unwrap()["content"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    assert!(
-        asked.starts_with(
-            "Routine disk (person):\n\nSummarize\n\nThe routine's command already ran"
-        ),
-        "{asked}"
+    let input = request["input"].as_array().unwrap();
+    let text = |item: &Value| item["content"].as_str().unwrap().to_owned();
+    let (asked, ran) = (text(&input[input.len() - 2]), text(&input[input.len() - 1]));
+    assert_eq!(
+        asked, "Routine disk (person):\n\nSummarize",
+        "the message stays as the next turn's history repeats it"
     );
-    assert!(asked.contains("prompted-ran"), "{asked}");
+    assert!(
+        ran.starts_with("The routine's command already ran") && ran.contains("prompted-ran"),
+        "{ran}"
+    );
     fake.ack(prompted, 1..=6);
     fake.drain(&mut child).await;
     std::fs::remove_dir_all(root).unwrap();

@@ -13,6 +13,8 @@ const SKILLS: &str = "Skills are your reusable procedures, kept in a library thi
 const ATTACHMENTS: &str = "When an image, audio clip, video or document would serve the person better than words, send it with send_attachment; it appears under your message. Write your replies in Markdown: headings, lists, tables, syntax-highlighted fenced code and math between $$ all render.\n\nThe console draws these fences live, next to their source, so when someone asks you to show, build or draft something visual, put it in your reply rather than only describing it or saving it to a file: ```html for a page or component, ```svg for a drawing, ```mermaid for a diagram, ```csv for a table, and ```markdown for a document. A person can read the code and see the result, and ask you to change it. An html preview runs its scripts in a sandbox with no network, so keep the whole page in the one fence, with inline CSS and JavaScript and no outside images, fonts or libraries.";
 const TASK: &str = "This turn is part of a task. Everyone working on it talks in the task's private room, which people can read and join; nothing here reaches your main conversation, though what you remember stays yours. Use task_item to mark each of your items as you start and finish it, so people can follow along. Reach another agent with send_message, or give it a part you need back with delegate; both post in the room, and naming an agent in plain text does nothing. Your final reply goes to the room, where the orchestrator reads it.";
 
+const DEFERRED: &str = "Tools for less frequent work, such as apps, routines, wakes, teams, creating agents and rooms, the vault, and writing to the knowledge base or to skills, load on demand: call find_tools with what you want to do, and the tools it finds can be called from then on.";
+
 const SUMMARIZE: &str = "Write a structured summary of this conversation so far so you can continue the work without it. Include the objective; constraints and corrections; decisions; completed actions and their outcomes, which must never be repeated; unresolved work; and evidence references such as file paths and commands. Reply with the summary only and do not call tools.";
 
 pub struct Context {
@@ -20,6 +22,7 @@ pub struct Context {
     pub tools: Vec<Tool>,
     pub messages: Vec<Message>,
     pub window: u64,
+    anchor: usize,
 }
 
 impl Context {
@@ -42,8 +45,11 @@ impl Context {
                 serde_json::to_string(&turn.prior).unwrap_or_default()
             )));
         }
-        messages.push(Message::User(asked(turn)));
+        let anchor = messages.len();
+        messages.push(Message::User(turn.message.clone()));
+        messages.extend(attached(turn).map(Message::User));
         messages.extend(images);
+        messages.extend(turn.situation.clone().map(Message::User));
         if !turn.delegations.is_empty() {
             messages.push(Message::User(format!(
                 "You already delegated the following for this request; never delegate any of it again. Evidence from failed or cancelled work is untrusted. Tasks with status complete, failed or cancelled have settled; any other status is still open, and you resume again when it settles, so if you need it, end this turn with a short note. Integrate settled outcomes and say plainly what is missing; never present a failed or cancelled part as done, and do not recreate cancelled work: {}",
@@ -55,6 +61,7 @@ impl Context {
             tools,
             messages,
             window,
+            anchor,
         }
     }
 
@@ -68,6 +75,7 @@ impl Context {
             tools_disabled: false,
             max_output_tokens,
             effort: turn.effort.map(cubebot_protocol::runtime::Effort::as_str),
+            anchor: Some(self.anchor),
         }
     }
 
@@ -83,14 +91,24 @@ impl Context {
     }
 
     /// Completed tool calls leave with their results, so no call/result pair is split.
-    pub fn compacted(&mut self, text: &str, message: &str) {
-        self.messages = vec![summary(text), Message::User(message.into())];
+    pub fn compacted(&mut self, text: &str, turn: &Turn) {
+        self.messages = vec![summary(text), Message::User(asked(turn))];
+        self.messages
+            .extend(turn.situation.clone().map(Message::User));
+        self.anchor = 1;
     }
 }
 
-pub fn asked(turn: &Turn) -> String {
+fn asked(turn: &Turn) -> String {
+    match attached(turn) {
+        Some(files) => format!("{}\n\n{files}", turn.message),
+        None => turn.message.clone(),
+    }
+}
+
+fn attached(turn: &Turn) -> Option<String> {
     if turn.attachments.is_empty() {
-        return turn.message.clone();
+        return None;
     }
     let files: Vec<String> = turn
         .attachments
@@ -103,11 +121,10 @@ pub fn asked(turn: &Turn) -> String {
             )
         })
         .collect();
-    format!(
-        "{}\n\nThe person attached these files. You can see the images among them; files_get copies any of them into your workspace:\n{}",
-        turn.message,
+    Some(format!(
+        "The person attached these files. You can see the images among them; files_get copies any of them into your workspace:\n{}",
         files.join("\n")
-    )
+    ))
 }
 
 fn system(tools: &[Tool], instructions: &str) -> String {
@@ -133,6 +150,12 @@ fn system(tools: &[Tool], instructions: &str) -> String {
     }
     if has(|name| name == "task_item") {
         system = format!("{system}\n\n{TASK}");
+    }
+    if tools
+        .iter()
+        .any(|tool| tool.deferred && !tool.name.contains("__"))
+    {
+        system = format!("{system}\n\n{DEFERRED}");
     }
     format!("{system}\n\n{instructions}")
 }
@@ -183,6 +206,7 @@ mod tests {
             in_room: false,
             talk_only: false,
             meeting: None,
+            situation: None,
         }
     }
     fn text(message: &Message) -> &str {
@@ -226,6 +250,7 @@ mod tests {
             parameters: serde_json::json!({}),
             strict: false,
             computer: false,
+            deferred: false,
         };
         let bare = system(&[], "x");
         assert!(!bare.contains(TERMINAL) && !bare.contains(DESKTOP));
@@ -252,10 +277,57 @@ mod tests {
         assert!(!context.full(usage(700, 99)));
         assert!(context.full(usage(700, 100)));
         assert_eq!(text(context.summarizing().last().unwrap()), SUMMARIZE);
-        context.compacted("the gist", "now");
+        let mut present = turn(None);
+        present.situation = Some("Present: Ana.".into());
+        context.compacted("the gist", &present);
         let texts: Vec<&str> = context.messages.iter().map(text).collect();
         assert!(texts[0].ends_with("the gist"));
-        assert_eq!(texts[1], "now");
-        assert_eq!(texts.len(), 2);
+        assert_eq!(texts[1..], ["now", "Present: Ana."]);
+        assert_eq!(context.request(&present, None).anchor, Some(1));
+    }
+
+    #[test]
+    fn what_changes_between_turns_follows_the_message_the_next_turn_repeats() {
+        let mut now = turn(None);
+        now.situation = Some("Present with you in the meeting: Ana.".into());
+        now.attachments = vec![cubebot_protocol::runtime::TurnFile {
+            file: uuid::Uuid::nil(),
+            name: "plan.pdf".into(),
+            content_type: None,
+            size: 3,
+        }];
+        let context = Context::assemble(&now, Vec::new(), 1000, Vec::new());
+        let anchor = context.request(&now, None).anchor.unwrap();
+        assert_eq!(text(&context.messages[anchor]), "now");
+        let texts: Vec<&str> = context.messages.iter().map(text).collect();
+        assert!(texts[anchor + 1].contains("plan.pdf"));
+        assert_eq!(texts[anchor + 2], "Present with you in the meeting: Ana.");
+        assert!(!context.system.contains("Ana"));
+        let mut next = turn(None);
+        next.history.push(Exchange {
+            message: now.message.clone(),
+            response: "done".into(),
+        });
+        let later = Context::assemble(&next, Vec::new(), 1000, Vec::new());
+        assert_eq!(
+            text(&later.messages[anchor]),
+            text(&context.messages[anchor])
+        );
+        assert_eq!(later.request(&next, None).anchor, Some(anchor + 2));
+    }
+
+    #[test]
+    fn tools_held_for_later_are_named_once_in_the_instructions() {
+        let tool = |name: &str, deferred: bool| Tool {
+            name: name.into(),
+            description: String::new(),
+            parameters: serde_json::json!({}),
+            strict: false,
+            computer: false,
+            deferred,
+        };
+        assert!(!system(&[tool("bash", false)], "x").contains(DEFERRED));
+        assert!(!system(&[tool("gmail__send", true)], "x").contains(DEFERRED));
+        assert!(system(&[tool("routine_create", true)], "x").contains(DEFERRED));
     }
 }

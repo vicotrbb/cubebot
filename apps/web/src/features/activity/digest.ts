@@ -20,7 +20,7 @@ export function byUrgency(items: Item[]) {
 }
 
 export const keyOf = (item: Item) =>
-  `${item.kind}:${item.turn ?? ''}:${item.agent ?? ''}:${item.at}`
+  `${item.kind}:${item.turn ?? ''}:${item.agent ?? ''}:${item.meeting ?? ''}:${item.at}`
 
 function plain(line: string) {
   return line
