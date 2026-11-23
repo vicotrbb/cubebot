@@ -90,6 +90,7 @@ pub struct Tool {
     pub strict: bool,
     /// Anthropic's calls arrive as `{"action": member, ...input}`, OpenAI's as `{"actions": [...]}`; results go back in the provider's computer form.
     pub computer: bool,
+    pub deferred: bool,
 }
 
 impl Tool {
@@ -110,6 +111,7 @@ impl Tool {
             parameters: serde_json::json!({"type":"object","properties":properties,"required":required,"additionalProperties":false}),
             strict: true,
             computer: false,
+            deferred: false,
         }
     }
 }
@@ -153,6 +155,7 @@ pub enum Message {
         call_id: String,
         output: String,
         image: Option<String>,
+        loaded: Vec<String>,
     },
 }
 
@@ -183,12 +186,28 @@ pub struct Request<'a> {
     pub tools_disabled: bool,
     pub max_output_tokens: Option<u64>,
     pub effort: Option<&'a str>,
+    pub anchor: Option<usize>,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Capabilities {
     pub tool_calls: bool,
     pub model_limits: bool,
+    pub deferred_tools: bool,
+}
+
+impl Capabilities {
+    pub fn defers(&self, model: &str) -> bool {
+        const EARLIER: [&str; 6] = [
+            "claude-3",
+            "claude-opus-4-0",
+            "claude-opus-4-1",
+            "claude-opus-4-2",
+            "claude-sonnet-4-0",
+            "claude-sonnet-4-2",
+        ];
+        self.deferred_tools && !EARLIER.iter().any(|earlier| model.starts_with(earlier))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -423,6 +442,27 @@ fn unavailable(error: reqwest::Error) -> Error {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn tools_wait_for_a_search_only_where_the_provider_and_model_load_them_later() {
+        let capabilities = |deferred_tools| super::Capabilities {
+            tool_calls: true,
+            model_limits: true,
+            deferred_tools,
+        };
+        for current in ["claude-opus-5-5", "claude-sonnet-4-5", "claude-haiku-4-5"] {
+            assert!(capabilities(true).defers(current), "{current}");
+        }
+        for earlier in [
+            "claude-opus-4-1-20250805",
+            "claude-opus-4-20250514",
+            "claude-sonnet-4-0",
+            "claude-3-7-sonnet-latest",
+        ] {
+            assert!(!capabilities(true).defers(earlier), "{earlier}");
+        }
+        assert!(!capabilities(false).defers("claude-opus-5-5"));
+    }
+
     #[test]
     fn a_strict_tool_closes_its_object_and_requires_every_property() {
         let tool = super::Tool::strict("t", "d", serde_json::json!({"a":{},"b":{}}));

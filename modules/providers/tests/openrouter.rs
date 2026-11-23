@@ -46,6 +46,7 @@ fn request<'a>(messages: &'a [Message], tools: &'a [Tool]) -> Request<'a> {
         tools_disabled: false,
         effort: None,
         max_output_tokens: None,
+        anchor: None,
     }
 }
 
@@ -89,6 +90,7 @@ async fn pieced_tool_calls_become_a_reply_that_replays_its_reasoning() {
             parameters: json!({}),
             strict: false,
             computer: true,
+            deferred: false,
         },
     ];
     let messages = [Message::User("Hello".into())];
@@ -154,11 +156,13 @@ async fn native_messages_and_screenshots_go_back_in_chat_completions_form() {
             call_id: "c1".into(),
             output: "shot".into(),
             image: Some("AAAA".into()),
+            loaded: Vec::new(),
         },
         Message::ToolResult {
             call_id: "c2".into(),
             output: "text".into(),
             image: None,
+            loaded: Vec::new(),
         },
     ];
     let mut request = request(&messages, &[]);

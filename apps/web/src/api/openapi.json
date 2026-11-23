@@ -11625,10 +11625,14 @@
       },
       "Personality": {
         "type": "object",
-        "required": ["personality"],
+        "required": ["personality", "limit"],
         "properties": {
           "edited_by": {
             "type": ["string", "null"]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
           },
           "personality": {
             "type": "string"

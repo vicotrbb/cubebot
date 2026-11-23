@@ -349,6 +349,7 @@ fn definition(server: &str, listed: &Value) -> Option<cubebot_providers::Tool> {
         parameters: schema.clone(),
         strict: false,
         computer: false,
+        deferred: false,
     })
 }
 

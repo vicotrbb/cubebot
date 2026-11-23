@@ -374,7 +374,7 @@ async fn enough_finished_work_earns_a_dream_even_without_a_new_memory() {
             .body(Body::empty())
             .unwrap()
     };
-    for count in 2..=4 {
+    for count in 2..=11 {
         work.send(&admin, agent, &send(&format!("Turn {count}")))
             .await
             .unwrap();
@@ -389,9 +389,9 @@ async fn enough_finished_work_earns_a_dream_even_without_a_new_memory() {
     assert_eq!(
         early.status(),
         StatusCode::CONFLICT,
-        "four turns are too few to learn from"
+        "eleven turns are too few to learn from"
     );
-    work.send(&admin, agent, &send("Turn 5")).await.unwrap();
+    work.send(&admin, agent, &send("Turn 12")).await.unwrap();
     sqlx::query(finish)
         .bind(agent)
         .execute(&f.pool)
@@ -400,7 +400,7 @@ async fn enough_finished_work_earns_a_dream_even_without_a_new_memory() {
     let admitted = router.oneshot(dream(Uuid::new_v4())).await.unwrap();
     let body = admitted.into_body().collect().await.unwrap().to_bytes();
     let plan: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(plan["turns"].as_array().unwrap().len(), 5);
+    assert_eq!(plan["turns"].as_array().unwrap().len(), 12);
     assert!(plan["library"].is_array(), "{plan}");
 }
 

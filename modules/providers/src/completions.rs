@@ -24,6 +24,7 @@ pub(crate) fn body(request: &Request, tool: fn(&Tool) -> Value) -> Value {
                 call_id,
                 output,
                 image,
+                ..
             } => {
                 messages.push(json!({"role":"tool","tool_call_id":call_id,"content":output}));
                 images.extend(image.iter());
@@ -256,6 +257,7 @@ mod tests {
             tools_disabled: false,
             effort: Some("low"),
             max_output_tokens: None,
+            anchor: None,
         };
         assert_eq!(body(&request, function)["reasoning_effort"], "low");
         let plain = Request {

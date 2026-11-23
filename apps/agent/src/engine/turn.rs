@@ -241,10 +241,13 @@ async fn command(
         return Ok(Some(result));
     }
     if first {
-        turn.message = format!(
-            "{}\n\nThe routine's command already ran; its result, untrusted program output:\n{result}",
-            turn.message
+        let ran = format!(
+            "The routine's command already ran; its result, untrusted program output:\n{result}"
         );
+        turn.situation = Some(match turn.situation.take() {
+            Some(situation) => format!("{ran}\n\n{situation}"),
+            None => ran,
+        });
     }
     Ok(None)
 }
@@ -324,7 +327,8 @@ async fn start<P: Provider>(
     if let Some(registry) = registry.filter(|_| !turn.talk_only) {
         registry.connect_mcp(&turn.mcp_servers).await;
     }
-    let tools = offered(turn, registry, connections);
+    let defers = capabilities.defers(&turn.model);
+    let tools = offered(turn, registry, connections, defers);
     let limits = if capabilities.model_limits {
         tokio::select! {
             limits = provider.limits(&turn.model, &turn.api_key) => limits,
@@ -359,12 +363,18 @@ async fn start<P: Provider>(
         connections,
         cancel,
         desktop: None,
+        defers,
     }
     .converse(&mut context)
     .await
 }
 
-fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) -> Vec<Tool> {
+fn offered(
+    turn: &Turn,
+    registry: Option<&Registry>,
+    connections: &Connections,
+    defers: bool,
+) -> Vec<Tool> {
     if turn.talk_only {
         return Vec::new();
     }
@@ -376,7 +386,6 @@ fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) 
         tools.extend(crate::knowledge_base::definitions(registry.is_some()));
     }
     let desktop = !turn.task && registry.is_some_and(|registry| registry.computer("computer"));
-    tools.extend(connections.definitions());
     tools.extend(crate::collaboration::definitions(
         desktop,
         turn.broadcast,
@@ -399,7 +408,35 @@ fn offered(turn: &Turn, registry: Option<&Registry>, connections: &Connections) 
             .flat_map(Registry::definitions)
             .filter(|tool| !(turn.task && tool.computer)),
     );
+    for tool in tools.iter_mut() {
+        tool.deferred = defers && on_demand(&tool.name);
+    }
+    connections.hold(tools.iter().filter(|tool| tool.deferred).cloned().collect());
+    tools.extend(connections.definitions(defers));
     tools
+}
+
+fn on_demand(name: &str) -> bool {
+    let family = ["app_", "routine_", "wake_", "team_", "vault_"]
+        .iter()
+        .any(|family| name.starts_with(family));
+    let rare = matches!(
+        name,
+        "platform_list"
+            | "agent_create"
+            | "agent_update"
+            | "room_create"
+            | "skill_create"
+            | "skill_update"
+            | "skill_install"
+            | "kb_create"
+            | "kb_edit"
+            | "kb_write"
+            | "kb_move"
+            | "kb_delete"
+            | "kb_attach"
+    );
+    !name.contains("__") && (family || rare)
 }
 
 struct Session<'a, P> {
@@ -418,6 +455,7 @@ struct Session<'a, P> {
     cancel: watch::Receiver<bool>,
     /// Held from this turn's first desktop call to its end, so another lane cannot move the mouse between its steps.
     desktop: Option<tokio::sync::OwnedMutexGuard<()>>,
+    defers: bool,
 }
 
 impl<P: Provider> Session<'_, P> {
@@ -466,12 +504,13 @@ impl<P: Provider> Session<'_, P> {
                 Ok(outputs) => outputs,
                 Err(code) => return failed(code),
             };
-            self.load(context, &calls);
             for (call, (output, image)) in calls.into_iter().zip(outputs) {
+                let loaded = self.load(context, &call);
                 context.messages.push(Message::ToolResult {
                     call_id: call.call_id,
                     output,
                     image,
+                    loaded,
                 });
             }
             if full {
@@ -593,24 +632,23 @@ impl<P: Provider> Session<'_, P> {
     }
 
     /// Connection tools a search found join the context for the rest of the turn.
-    fn load(&self, context: &mut Context, calls: &[FunctionCall]) {
-        if self.turn.talk_only {
-            return;
+    fn load(&self, context: &mut Context, call: &FunctionCall) -> Vec<String> {
+        if self.turn.talk_only || call.name != crate::connections::FIND {
+            return Vec::new();
         }
-        let queries = calls
-            .iter()
-            .filter(|call| call.name == crate::connections::FIND)
-            .filter_map(|call| serde_json::from_str::<serde_json::Value>(&call.arguments).ok());
-        for query in queries {
-            for tool in self
-                .connections
-                .search(query["query"].as_str().unwrap_or_default())
-            {
-                if !context.tools.iter().any(|loaded| loaded.name == tool.name) {
-                    context.tools.push(tool);
-                }
+        let query: serde_json::Value = serde_json::from_str(&call.arguments).unwrap_or_default();
+        let found = self
+            .connections
+            .search(query["query"].as_str().unwrap_or_default());
+        if self.defers {
+            return found.into_iter().map(|tool| tool.name).collect();
+        }
+        for tool in found {
+            if !context.tools.iter().any(|loaded| loaded.name == tool.name) {
+                context.tools.push(tool);
             }
         }
+        Vec::new()
     }
 
     fn steer(&mut self, context: &mut Context) {
@@ -760,7 +798,7 @@ impl<P: Provider> Session<'_, P> {
             return keep_context();
         }
         self.run.emit(summary, None);
-        context.compacted(&reply.text, &crate::context::asked(self.turn));
+        context.compacted(&reply.text, self.turn);
     }
 }
 
@@ -880,6 +918,10 @@ fn lane(
 fn model_output(outcome: &Outcome) -> (String, Option<String>) {
     match outcome {
         Outcome::Screenshot { output, image } => (output.clone(), Some(image.clone())),
+        Outcome::Exited {
+            code: Some(code),
+            output,
+        } => (format!("Exit status {code}.\n\n{output}"), None),
         _ => (serde_json::to_string(outcome).unwrap_or_default(), None),
     }
 }
@@ -988,9 +1030,9 @@ mod tests {
         .unwrap();
         let connections = Connections::new(None, &[]);
         let registry = Registry::with_desktop();
-        assert!(!offered(&turn, Some(&registry), &connections).is_empty());
+        assert!(!offered(&turn, Some(&registry), &connections, true).is_empty());
         turn.talk_only = true;
-        assert!(offered(&turn, Some(&registry), &connections).is_empty());
+        assert!(offered(&turn, Some(&registry), &connections, true).is_empty());
         let knowledge = (
             Memories::new(None),
             Skills::new(None, Uuid::nil()),
@@ -1020,6 +1062,60 @@ mod tests {
     }
 
     #[test]
+    fn rare_tools_wait_behind_find_tools_only_where_the_provider_defers() {
+        let turn: Turn = serde_json::from_value(serde_json::json!({
+            "turn": Uuid::nil(), "sequence": 1, "message": "hi", "instructions": "",
+            "provider": "anthropic", "model": "m", "api_key": "k", "context_window": 1000,
+            "summary": null, "history": [], "prior": [], "knowledge_base": true,
+            "team_manager": true, "creates": true,
+        }))
+        .unwrap();
+        let registry = Registry::with_desktop();
+        let connections = Connections::new(None, &[]);
+        let tools = offered(&turn, Some(&registry), &connections, true);
+        let held = |name: &str| {
+            tools
+                .iter()
+                .find(|tool| tool.name == name)
+                .unwrap()
+                .deferred
+        };
+        for rare in [
+            "routine_create",
+            "app_register",
+            "kb_write",
+            "vault_list",
+            "team_member",
+            "agent_create",
+            "wake_set",
+            "skill_create",
+        ] {
+            assert!(held(rare), "{rare}");
+        }
+        for core in [
+            "remember",
+            "kb_search",
+            "kb_read",
+            "load_skill",
+            "send_message",
+            "request_attention",
+            crate::connections::FIND,
+        ] {
+            assert!(!held(core), "{core}");
+        }
+        let found = connections.search("schedule a routine");
+        assert!(found.iter().any(|tool| tool.name == "routine_create"));
+        assert!(found.iter().all(|tool| tool.deferred));
+        let plain = offered(&turn, Some(&registry), &Connections::new(None, &[]), false);
+        assert!(plain.iter().all(|tool| !tool.deferred));
+        assert!(
+            !plain
+                .iter()
+                .any(|tool| tool.name == crate::connections::FIND)
+        );
+    }
+
+    #[test]
     fn meeting_screen_is_offered_only_in_a_meeting_turn_with_a_desktop_and_tools() {
         let mut turn: Turn = serde_json::from_value(serde_json::json!({
             "turn": Uuid::nil(), "sequence": 1, "message": "hi", "instructions": "",
@@ -1030,7 +1126,7 @@ mod tests {
         let connections = Connections::new(None, &[]);
         let desktop = Registry::with_desktop();
         let offers = |turn: &Turn, registry: Option<&Registry>| {
-            offered(turn, registry, &connections)
+            offered(turn, registry, &connections, false)
                 .iter()
                 .any(|tool| tool.name == "meeting_screen")
         };

@@ -7,13 +7,14 @@ use cubebot_protocol::runtime::Outreach;
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
 
-pub(crate) const PERSONALITY_CHARS: usize = 4000;
+pub(crate) const PERSONALITY_CHARS: usize = 800;
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct Personality {
     pub personality: String,
     pub updated_at: Option<String>,
     pub edited_by: Option<String>,
+    pub limit: usize,
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -87,6 +88,7 @@ async fn read(
         personality: row.personality,
         updated_at: row.updated_at,
         edited_by: row.edited_by,
+        limit: PERSONALITY_CHARS,
     })
 }
 
@@ -157,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn a_personality_fits_four_thousand_characters_without_nul() {
+    fn a_personality_fits_eight_hundred_characters_without_nul() {
         assert!(fits(&"é".repeat(PERSONALITY_CHARS)));
         assert!(!fits(&"a".repeat(PERSONALITY_CHARS + 1)));
         assert!(!fits("a\0b"));

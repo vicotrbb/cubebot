@@ -17,6 +17,7 @@ struct Search {
 #[serde(deny_unknown_fields)]
 struct Read {
     page: String,
+    offset: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -86,8 +87,8 @@ pub fn definitions(workspace: bool) -> Vec<cubebot_providers::Tool> {
         ),
         tool(
             "kb_read",
-            "Read a page: its Markdown body, revision and attachments.",
-            json!({"page":id()}),
+            "Read a page: its Markdown body, revision and attachments. A long body comes in parts of about 12,000 characters.",
+            json!({"page":id(),"offset":{"type":["integer","null"],"description":"Where to continue a long body, from the offset a previous kb_read gave; null to start at the beginning."}}),
         ),
         tool(
             "kb_create",
@@ -178,11 +179,33 @@ fn outline(client: &MemoryClient) -> Result<Running<'_>, &'static str> {
 }
 
 fn read<'a>(client: &'a MemoryClient, input: &Value) -> Result<Running<'a>, &'static str> {
-    let Read { page } = parse(input)?;
+    let Read { page, offset } = parse(input)?;
     let page = uuid(&page)?;
     Ok(Box::pin(async move {
-        reported(client.kb_get(&format!("kb/pages/{page}"), &[]).await)
+        let answer = client.kb_get(&format!("kb/pages/{page}"), &[]).await;
+        reported(answer.map(|read| read.map(|page| excerpted(page, offset.unwrap_or(0)))))
     }))
+}
+
+fn excerpted(page: String, offset: usize) -> String {
+    let Ok(mut parsed) = serde_json::from_str::<Value>(&page) else {
+        return page;
+    };
+    let Some(body) = parsed["body"].as_str() else {
+        return page;
+    };
+    let total = body.chars().count();
+    let (part, next) = crate::tools::excerpt(body, offset);
+    if offset == 0 && next.is_none() {
+        return page;
+    }
+    parsed["body"] = json!(part);
+    if let Some(next) = next {
+        parsed["more"] = json!(format!(
+            "The body has {total} characters and this is part of it. Call kb_read with offset {next} for the rest, and read all of it before kb_write."
+        ));
+    }
+    parsed.to_string()
 }
 
 fn create<'a>(
@@ -248,7 +271,7 @@ fn relocate<'a>(client: &'a MemoryClient, input: &Value) -> Result<Running<'a>, 
 }
 
 fn delete<'a>(client: &'a MemoryClient, input: &Value) -> Result<Running<'a>, &'static str> {
-    let Read { page } = parse(input)?;
+    let Read { page, .. } = parse(input)?;
     let page = uuid(&page)?;
     Ok(Box::pin(async move {
         changed(
@@ -354,6 +377,22 @@ fn reported(result: Result<Result<String, String>, Error>) -> Outcome {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_page_is_read_in_parts_that_say_where_to_continue() {
+        let short = json!({"title":"t","body":"hello","revision":3}).to_string();
+        assert_eq!(excerpted(short.clone(), 0), short);
+        let body = "é".repeat(30_000);
+        let page = json!({"title":"t","body":body,"revision":3}).to_string();
+        let first: Value = serde_json::from_str(&excerpted(page.clone(), 0)).unwrap();
+        assert_eq!(first["body"].as_str().unwrap().chars().count(), 12_000);
+        assert_eq!(first["revision"], 3);
+        assert!(first["more"].as_str().unwrap().contains("offset 12000"));
+        let last: Value = serde_json::from_str(&excerpted(page, 24_000)).unwrap();
+        assert_eq!(last["body"].as_str().unwrap().chars().count(), 6_000);
+        assert!(last.get("more").is_none());
+        assert_eq!(excerpted("not json".into(), 0), "not json");
+    }
 
     #[test]
     fn tools_that_move_bytes_need_the_workspace() {

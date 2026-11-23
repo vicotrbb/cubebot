@@ -545,9 +545,10 @@ async fn a_guest_request_is_claimed_talk_only_with_the_meeting_and_nothing_priva
         instructions.contains("live meeting named \"Weekly sync\""),
         "{instructions}"
     );
-    assert!(
-        instructions.contains("Present with you: admin, Bo (a guest)."),
-        "{instructions}"
+    assert!(!instructions.contains("Bo (a guest)"), "{instructions}");
+    assert_eq!(
+        claimed["situation"],
+        "Present with you in the meeting now: admin, Bo (a guest)."
     );
     assert!(
         instructions.contains("guest who is not signed in")

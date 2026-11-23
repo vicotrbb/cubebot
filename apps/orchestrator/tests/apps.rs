@@ -640,10 +640,11 @@ async fn the_agents_turn_names_the_app_a_message_came_through() {
     report(&mut channel, json!({"type":"pull"})).await;
     let claimed = next_turn(&mut channel).await;
     let sent = claimed["message"].as_str().unwrap();
-    assert!(sent.starts_with("Plan my week\n\n"), "{sent}");
-    assert!(
-        sent.ends_with("(Sent through your app Budget (budget) by the person using it.)"),
-        "{sent}"
+    assert!(sent.starts_with("Plan my week"), "{sent}");
+    assert!(!sent.contains("Sent through"), "{sent}");
+    assert_eq!(
+        claimed["situation"],
+        "(Sent through your app Budget (budget) by the person using it.)"
     );
     let history = work.history(&admin, agent, 0).await.unwrap();
     assert_eq!(history.last().unwrap().message, "Plan my week");
