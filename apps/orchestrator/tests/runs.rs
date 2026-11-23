@@ -322,8 +322,14 @@ async fn several_mentions_go_to_one_lead_whose_parts_show_in_the_room() {
     let bee_request = request_with(crew.model(1), "Count the rows in launch.csv");
     assert!(bee_request.contains("In room Launch, agent Ada delegated part of a request to you"));
     assert!(bee_request.contains("Lead: Ada, who writes the final answer."));
+    let cy_request = request_with(crew.model(2), "Check the launch dates");
+    // The delegate calls run concurrently, so only the later part is sure to see the other.
     assert!(
         bee_request.contains("- Cy, delegated by Ada: \\\"Check the launch dates\\\" (working)")
+            || cy_request.contains(
+                "- Bee, delegated by Ada: \\\"Count the rows in launch.csv\\\" (working)"
+            ),
+        "{bee_request}\n{cy_request}"
     );
     for member in [bee, cy] {
         let own = crew.work.history(&crew.admin, member, 0).await.unwrap();
