@@ -114,6 +114,7 @@ impl Provider for OpenAi {
         Capabilities {
             tool_calls: true,
             model_limits: false,
+            deferred_tools: false,
         }
     }
 
@@ -209,6 +210,7 @@ fn body(request: &Request, dialect: Dialect) -> Value {
                 call_id,
                 output,
                 image,
+                ..
             } => match image {
                 // A computer call's output is only its screenshot, so a refusal, such as while a person holds the desktop, follows as a note.
                 Some(image) if computer.contains(&&**call_id) => {
@@ -265,6 +267,16 @@ fn prompted(body: &mut Value, request: &Request, dialect: Dialect) {
     if let Some(effort) = request.effort {
         body["reasoning"] = json!({"effort":effort});
     }
+    if dialect.header.is_none() {
+        body["prompt_cache_key"] = json!(cache_key(request.system));
+    }
+}
+
+fn cache_key(system: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::hash::DefaultHasher::new();
+    system.hash(&mut hasher);
+    format!("cubebot-{:016x}", hasher.finish())
 }
 
 fn declared(tool: &crate::Tool, dialect: Dialect) -> Value {
@@ -427,6 +439,7 @@ mod tests {
             tools_disabled: false,
             effort: Some("minimal"),
             max_output_tokens: None,
+            anchor: None,
         };
         for dialect in [API, CHATGPT] {
             assert_eq!(
@@ -439,5 +452,29 @@ mod tests {
             ..request
         };
         assert!(body(&plain, API).get("reasoning").is_none());
+    }
+
+    #[test]
+    fn one_agent_s_requests_share_a_cache_key_that_another_agent_does_not() {
+        let request = |system| Request {
+            model: "gpt",
+            key: "",
+            system,
+            messages: &[],
+            tools: &[],
+            tools_disabled: false,
+            effort: None,
+            max_output_tokens: None,
+            anchor: None,
+        };
+        let key = |system, dialect| body(&request(system), dialect)["prompt_cache_key"].clone();
+        assert_eq!(key("You are Ada.", API), key("You are Ada.", CHATGPT));
+        assert!(key("You are Ada.", API).is_string());
+        assert_ne!(key("You are Ada.", API), key("You are Bo.", API));
+        let proxied = Dialect {
+            header: Some(("x-client", "1")),
+            ..API
+        };
+        assert!(key("You are Ada.", proxied).is_null());
     }
 }

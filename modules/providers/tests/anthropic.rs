@@ -50,7 +50,10 @@ async fn messages(headers: HeaderMap, Json(body): Json<Value>) -> Response {
     assert_eq!(body["stream"], true);
     assert_eq!(body["max_tokens"], 128000);
     assert_eq!(body["cache_control"], json!({"type":"ephemeral"}));
-    assert_eq!(body["system"], "Be brief.");
+    assert_eq!(
+        body["system"],
+        json!([{"type":"text","text":"Be brief.","cache_control":{"type":"ephemeral"}}])
+    );
     assert_eq!(body["tools"][0]["input_schema"], json!({"type":"object"}));
     assert_eq!(body["tool_choice"], json!({"type":"auto"}));
     assert_eq!(
@@ -60,7 +63,7 @@ async fn messages(headers: HeaderMap, Json(body): Json<Value>) -> Response {
     );
     assert_eq!(
         body["messages"][0],
-        json!({"role":"user","content":"Hello"})
+        json!({"role":"user","content":[{"type":"text","text":"Hello","cache_control":{"type":"ephemeral"}}]})
     );
     assert_eq!(
         body["messages"][1],
@@ -130,11 +133,13 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
             call_id: "toolu_a".into(),
             output: "one".into(),
             image: None,
+            loaded: Vec::new(),
         },
         Message::ToolResult {
             call_id: "toolu_b".into(),
             output: "two".into(),
             image: None,
+            loaded: Vec::new(),
         },
     ];
     let tools = [Tool {
@@ -143,6 +148,7 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         parameters: json!({"type":"object"}),
         strict: true,
         computer: false,
+        deferred: false,
     }];
     let request = Request {
         model: "test-model",
@@ -153,6 +159,7 @@ async fn streams_text_and_assembles_a_replayable_tool_call_with_signed_thinking(
         tools_disabled: false,
         effort: None,
         max_output_tokens: Some(128_000),
+        anchor: Some(0),
     };
     let events: Vec<Event> = provider
         .stream(&request)
@@ -225,6 +232,7 @@ async fn truncated_and_overloaded_streams_are_errors_not_replies() {
         tools_disabled: false,
         effort: None,
         max_output_tokens: Some(1),
+        anchor: None,
     };
     let events: Vec<_> = provider.stream(&request).collect().await;
     assert_eq!(
@@ -277,6 +285,7 @@ async fn computer_toolset_calls_become_computer_calls_and_echo_their_toolset() {
             call_id: "toolu_1".into(),
             output: String::new(),
             image: Some("iVBORw0KGgo=".into()),
+            loaded: Vec::new(),
         },
     ];
     let tools = [Tool {
@@ -285,6 +294,7 @@ async fn computer_toolset_calls_become_computer_calls_and_echo_their_toolset() {
         parameters: json!({}),
         strict: false,
         computer: true,
+        deferred: false,
     }];
     let request = Request {
         model: "test-model",
@@ -295,6 +305,7 @@ async fn computer_toolset_calls_become_computer_calls_and_echo_their_toolset() {
         tools_disabled: false,
         effort: None,
         max_output_tokens: Some(1000),
+        anchor: None,
     };
     let events: Vec<Event> = provider
         .stream(&request)

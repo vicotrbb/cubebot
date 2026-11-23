@@ -4660,6 +4660,7 @@ export interface components {
       | 'charcoal'
     Personality: {
       edited_by?: string | null
+      limit: number
       personality: string
       updated_at?: string | null
     }

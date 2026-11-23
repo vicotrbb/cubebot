@@ -58,6 +58,7 @@ impl Provider for OpenRouter {
             tool_calls: true,
             // The window is configured from the listing; fetching all of it per turn is wasteful.
             model_limits: false,
+            deferred_tools: false,
         }
     }
 

@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// through older memories once agents hold more than a run can consolidate.
 const DREAM_MEMORIES: i64 = 120;
 const DREAM_TURNS: i64 = 20;
-const DREAM_NEW_TURNS: i64 = 5;
+const DREAM_NEW_TURNS: i64 = 12;
 const LISTED_RUNS: i64 = 50;
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -186,7 +186,7 @@ pub(crate) async fn start_dream(
         Exchange,
         r#"
         SELECT message AS "message!", response AS "response!"
-        FROM (SELECT left(c.message,2000) AS message,left(c.response,2000) || COALESCE(E'\n[tools used: ' || (SELECT string_agg(DISTINCT e.payload->>'name', ', ') FROM turn_events e WHERE e.turn_id=c.id AND e.payload->>'kind'='tool_call') || ']', '') AS response,c.sequence FROM chat_turns c WHERE c.conversation_id=$1 AND c.status='complete' ORDER BY c.sequence DESC LIMIT $2) t
+        FROM (SELECT left(c.message,2000) AS message,left(c.response,2000) || COALESCE(E'\n[tools used: ' || (SELECT string_agg(DISTINCT CASE WHEN e.payload->>'name'='load_skill' THEN 'load_skill ' || COALESCE(e.payload->'input'->>'name','') ELSE e.payload->>'name' END, ', ') FROM turn_events e WHERE e.turn_id=c.id AND e.payload->>'kind'='tool_call') || ']', '') AS response,c.sequence FROM chat_turns c WHERE c.conversation_id=$1 AND c.status='complete' ORDER BY c.sequence DESC LIMIT $2) t
         ORDER BY sequence
         "#,
         actor.agent.0,

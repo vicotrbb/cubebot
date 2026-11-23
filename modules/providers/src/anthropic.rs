@@ -94,6 +94,7 @@ impl Provider for Anthropic {
         Capabilities {
             tool_calls: true,
             model_limits: true,
+            deferred_tools: self.dialect.native,
         }
     }
 
@@ -174,46 +175,18 @@ fn body(request: &Request, native: bool) -> Result<Value, Error> {
     let limit = request
         .max_output_tokens
         .ok_or(Error::Configuration(None))?;
-    let computer = crate::computer_calls(request.messages, |block| {
-        (block["toolset_name"] == "computer").then(|| block["id"].as_str())?
-    });
-    let mut messages: Vec<Value> = Vec::new();
-    for message in request.messages {
-        let value = match message {
-            Message::ToolResult {
-                call_id,
-                output,
-                image,
-            } => {
-                let result = tool_result(
-                    call_id,
-                    output,
-                    image.as_deref(),
-                    computer.contains(&&**call_id),
-                );
-                // Parallel results answer one assistant message, so they share one user message.
-                if let Some(Value::Array(content)) = messages
-                    .last_mut()
-                    .filter(|last| last["content"][0]["type"] == "tool_result")
-                    .map(|last| &mut last["content"])
-                {
-                    content.push(result);
-                    continue;
-                }
-                json!({"role":"user","content":[result]})
-            }
-            other => turn(other),
-        };
-        messages.push(value);
-    }
-    let mut body =
-        json!({"model":request.model,"max_tokens":limit,"messages":messages,"stream":true});
+    let mut body = json!({"model":request.model,"max_tokens":limit,"messages":messages(request, native),"stream":true});
     if native {
         // One breakpoint moves to the end of the history each turn, so the resent prefix is read from cache.
         body["cache_control"] = json!({"type":"ephemeral"});
     }
     if !request.system.is_empty() {
-        body["system"] = json!(request.system);
+        body["system"] = match native {
+            true => {
+                json!([{"type":"text","text":request.system,"cache_control":{"type":"ephemeral"}}])
+            }
+            false => json!(request.system),
+        };
     }
     if let Some(effort) = request.effort.filter(|_| native) {
         body["output_config"] = json!({"effort":effort});
@@ -234,6 +207,45 @@ fn body(request: &Request, native: bool) -> Result<Value, Error> {
     Ok(body)
 }
 
+fn messages(request: &Request, native: bool) -> Vec<Value> {
+    let computer = crate::computer_calls(request.messages, |block| {
+        (block["toolset_name"] == "computer").then(|| block["id"].as_str())?
+    });
+    let mut messages: Vec<Value> = Vec::new();
+    for (index, message) in request.messages.iter().enumerate() {
+        let value = match message {
+            Message::ToolResult {
+                call_id,
+                output,
+                image,
+                loaded,
+            } => {
+                let result = tool_result(
+                    call_id,
+                    output,
+                    image.as_deref(),
+                    computer.contains(&&**call_id),
+                    if native { loaded } else { &[] },
+                );
+                // Parallel results answer one assistant message, so they share one user message.
+                if let Some(Value::Array(content)) = messages
+                    .last_mut()
+                    .filter(|last| last["content"][0]["type"] == "tool_result")
+                    .map(|last| &mut last["content"])
+                {
+                    content.push(result);
+                    continue;
+                }
+                json!({"role":"user","content":[result]})
+            }
+            other if native && request.anchor == Some(index) => cached(turn(other)),
+            other => turn(other),
+        };
+        messages.push(value);
+    }
+    messages
+}
+
 fn native_tools(tools: &[crate::Tool]) -> Value {
     tools
         .iter()
@@ -241,11 +253,24 @@ fn native_tools(tools: &[crate::Tool]) -> Value {
         .map(|(tool, strict)| {
             if tool.computer {
                 json!({"type":"computer_toolset_20260801","configs":unserved()})
+            } else if tool.deferred {
+                json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":strict,"defer_loading":true})
             } else {
                 json!({"name":tool.name,"description":tool.description,"input_schema":tool.parameters,"strict":strict})
             }
         })
         .collect()
+}
+
+fn cached(mut message: Value) -> Value {
+    let content = &mut message["content"];
+    if let Some(text) = content.as_str().map(str::to_owned) {
+        *content = json!([{"type":"text","text":text}]);
+    }
+    if let Some(last) = content.as_array_mut().and_then(|blocks| blocks.last_mut()) {
+        last["cache_control"] = json!({"type":"ephemeral"});
+    }
+    message
 }
 
 /// Without the computer toolset the computer is the ordinary function Chat Completions providers
@@ -352,9 +377,20 @@ fn unserved() -> Value {
     .into()
 }
 
-fn tool_result(call_id: &str, output: &str, image: Option<&str>, computer: bool) -> Value {
+fn tool_result(
+    call_id: &str,
+    output: &str,
+    image: Option<&str>,
+    computer: bool,
+    loaded: &[String],
+) -> Value {
     let mut result = json!({"type":"tool_result","tool_use_id":call_id,"content":output});
-    if let Some(image) = image {
+    if !loaded.is_empty() {
+        result["content"] = loaded
+            .iter()
+            .map(|name| json!({"type":"tool_reference","tool_name":name}))
+            .collect();
+    } else if let Some(image) = image {
         result["content"] = json!([
             {"type":"text","text":output},
             {"type":"image","source":{"type":"base64","media_type":"image/png","data":image}}
@@ -511,7 +547,7 @@ impl Messages {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Tool;
+    use crate::{Reply, Tool};
 
     fn tool(name: String, parameters: Value) -> Tool {
         Tool {
@@ -520,6 +556,7 @@ mod tests {
             parameters,
             strict: true,
             computer: false,
+            deferred: false,
         }
     }
 
@@ -533,6 +570,7 @@ mod tests {
             tools_disabled: false,
             effort: None,
             max_output_tokens: Some(1),
+            anchor: None,
         };
         body(&request, true).unwrap()["tools"]
             .as_array()
@@ -551,6 +589,7 @@ mod tests {
             tools_disabled: false,
             effort: Some("xhigh"),
             max_output_tokens: Some(1),
+            anchor: None,
         };
         assert_eq!(
             body(&request, true).unwrap()["output_config"],
@@ -593,6 +632,106 @@ mod tests {
         assert!(named("union") <= 16);
         assert!(named("optional") * 2 <= 24);
         assert_eq!(sent[0]["strict"], true);
+    }
+
+    fn turn_request<'a>(messages: &'a [Message], tools: &'a [Tool]) -> Request<'a> {
+        Request {
+            model: "claude-opus-5-5",
+            key: "",
+            system: "Be useful.",
+            messages,
+            tools,
+            tools_disabled: false,
+            effort: None,
+            max_output_tokens: Some(1),
+            anchor: Some(2),
+        }
+    }
+
+    fn marked(body: &Value) -> Vec<String> {
+        let mut found = Vec::new();
+        if body["cache_control"].is_object() {
+            found.push("automatic".to_owned());
+        }
+        if body["system"][0]["cache_control"].is_object() {
+            found.push("system".to_owned());
+        }
+        for (index, message) in body["messages"].as_array().unwrap().iter().enumerate() {
+            let blocks = message["content"].as_array().into_iter().flatten();
+            if blocks
+                .into_iter()
+                .any(|block| block["cache_control"].is_object())
+            {
+                found.push(format!("message {index}"));
+            }
+        }
+        found
+    }
+
+    fn history() -> Vec<Message> {
+        let said = |text: &str| Reply {
+            text: text.into(),
+            calls: Vec::new(),
+            native: Value::Null,
+        };
+        vec![
+            Message::User("earlier".into()),
+            Message::Assistant(said("answered")),
+            Message::User("now".into()),
+            Message::User("present: Ana".into()),
+            Message::Assistant(Reply {
+                text: String::new(),
+                calls: Vec::new(),
+                native: json!([{"type":"tool_use","id":"toolu_1","name":"find_tools","input":{"query":"routine"}}]),
+            }),
+            Message::ToolResult {
+                call_id: "toolu_1".into(),
+                output: "Loaded".into(),
+                image: None,
+                loaded: vec!["routine_create".into()],
+            },
+        ]
+    }
+
+    #[test]
+    fn breakpoints_cover_the_instructions_the_turns_message_and_the_end() {
+        let tools = [tool("bash".into(), json!({"type":"object"}))];
+        let messages = history();
+        let sent = body(&turn_request(&messages, &tools), true).unwrap();
+        assert_eq!(marked(&sent), ["automatic", "system", "message 2"]);
+        assert_eq!(
+            sent["messages"][2]["content"],
+            json!([{"type":"text","text":"now","cache_control":{"type":"ephemeral"}}])
+        );
+        assert_eq!(sent["messages"][0]["content"], "earlier");
+        let compatible = body(&turn_request(&messages, &tools), false).unwrap();
+        assert!(marked(&compatible).is_empty());
+        assert_eq!(compatible["system"], "Be useful.");
+    }
+
+    #[test]
+    fn a_loaded_tool_arrives_by_reference_and_leaves_the_earlier_request_unchanged() {
+        let mut deferred = tool("routine_create".into(), json!({"type":"object"}));
+        deferred.deferred = true;
+        let tools = [tool("bash".into(), json!({"type":"object"})), deferred];
+        let messages = history();
+        let before = body(&turn_request(&messages[..4], &tools), true).unwrap();
+        let after = body(&turn_request(&messages, &tools), true).unwrap();
+        assert_eq!(before["tools"], after["tools"]);
+        assert_eq!(before["system"], after["system"]);
+        assert_eq!(after["tools"][1]["defer_loading"], true);
+        assert!(after["tools"][0].get("defer_loading").is_none());
+        let earlier = before["messages"].as_array().unwrap();
+        assert_eq!(
+            after["messages"].as_array().unwrap()[..earlier.len()],
+            earlier[..]
+        );
+        assert_eq!(
+            after["messages"][5]["content"],
+            json!([{"type":"tool_result","tool_use_id":"toolu_1","content":[{"type":"tool_reference","tool_name":"routine_create"}]}])
+        );
+        let compatible = body(&turn_request(&messages, &tools), false).unwrap();
+        assert_eq!(compatible["messages"][5]["content"][0]["content"], "Loaded");
     }
 
     #[test]

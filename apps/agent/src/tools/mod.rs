@@ -42,6 +42,14 @@ pub(crate) fn tool_user(user: &str) -> Option<(u32, u32)> {
         .filter(|&(uid, gid)| uid != 0 && gid != 0)
 }
 
+const EXCERPT_CHARS: usize = 12_000;
+
+pub(crate) fn excerpt(text: &str, offset: usize) -> (String, Option<usize>) {
+    let part: String = text.chars().skip(offset).take(EXCERPT_CHARS).collect();
+    let end = offset + part.chars().count();
+    (part, text.chars().nth(end).is_some().then_some(end))
+}
+
 const HEAD: u64 = 8 * 1024;
 const TAIL: u64 = 8 * 1024;
 const OUTPUT: &str = ".cubebot-tool-output";
@@ -463,6 +471,19 @@ xwallpaper --zoom "${1:-$f}"; s=$?; rm -f "$f"; exit $s"#;
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn an_excerpt_counts_characters_and_says_where_the_rest_starts() {
+        assert_eq!(excerpt("short", 0), ("short".to_owned(), None));
+        let long = "ü".repeat(EXCERPT_CHARS + 5);
+        let (part, next) = excerpt(&long, 0);
+        assert_eq!(
+            (part.chars().count(), next),
+            (EXCERPT_CHARS, Some(EXCERPT_CHARS))
+        );
+        assert_eq!(excerpt(&long, EXCERPT_CHARS), ("ü".repeat(5), None));
+        assert_eq!(excerpt(&long, EXCERPT_CHARS * 2), (String::new(), None));
+    }
 
     pub(crate) fn sandbox() -> Sandbox {
         let workspace = std::env::temp_dir().join(format!("cubebot-tools-{}", Uuid::new_v4()));

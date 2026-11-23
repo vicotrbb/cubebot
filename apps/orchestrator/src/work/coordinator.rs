@@ -196,6 +196,7 @@ pub(super) async fn ask(
         tools_disabled: false,
         effort: None,
         max_output_tokens: Some(max_output_tokens),
+        anchor: None,
     };
     let (text, usage) = through(inference.provider, vendor, &request)
         .await

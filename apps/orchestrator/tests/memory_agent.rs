@@ -181,9 +181,9 @@ fn search_results(requests: &[Value]) -> Vec<Value> {
         .flat_map(|request| request["input"].as_array().unwrap().clone())
         .rfind(|item| item["type"] == "function_call_output")
         .unwrap();
-    let outcome: Value = serde_json::from_str(output["output"].as_str().unwrap()).unwrap();
-    assert_eq!(outcome["code"], 0, "{outcome}");
-    serde_json::from_str(outcome["output"].as_str().unwrap()).unwrap()
+    let output = output["output"].as_str().unwrap();
+    let found = output.strip_prefix("Exit status 0.\n\n");
+    serde_json::from_str(found.unwrap_or_else(|| panic!("{output}"))).unwrap()
 }
 
 #[tokio::test]

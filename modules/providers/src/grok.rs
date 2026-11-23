@@ -43,6 +43,7 @@ impl Provider for Grok {
         Capabilities {
             tool_calls: true,
             model_limits: false,
+            deferred_tools: false,
         }
     }
 

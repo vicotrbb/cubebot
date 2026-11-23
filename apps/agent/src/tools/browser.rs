@@ -52,7 +52,7 @@ const MAIN: &str = "main";
 /// Bounds each DevTools reply, so a hung page fails the call rather than the turn.
 const REPLY: Duration = Duration::from_secs(30);
 const LOAD: Duration = Duration::from_secs(15);
-const OUTLINE_BYTES: usize = 32 * 1024;
+const OUTLINE_BYTES: usize = 512 * 1024;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
@@ -108,7 +108,7 @@ pub(super) fn tools() -> Vec<Box<dyn Tool>> {
     let node = json!({"type":"integer","description":"An element number from browser_read"});
     [
         (Kind::Navigate, "browser_navigate", "Open a URL in the session's page, opening the session on first use, and wait up to 15 s for it to load.", json!({"session":session,"url":text})),
-        (Kind::Read, "browser_read", "The session page's accessibility tree: each element's [number], role, name and value.", json!({"session":session})),
+        (Kind::Read, "browser_read", "The session page's accessibility tree: each element's [number], role, name and value. A long page comes in parts of about 12,000 characters.", json!({"session":session,"offset":{"type":["integer","null"],"description":"Where to continue a long page, from the offset a previous browser_read gave; null to start at the top."}})),
         (Kind::Click, "browser_click", "Click an element by its number from browser_read. Read again to see the result.", json!({"session":session,"node":node})),
         (Kind::Type, "browser_type", "Focus an element by its number from browser_read and insert text at its cursor.", json!({"session":session,"node":node,"text":text})),
         (Kind::Screenshot, "browser_screenshot", "A PNG of the session page's visible area.", json!({"session":session})),
@@ -284,9 +284,8 @@ async fn act(cdp: &Cdp, page: &Page, kind: Kind, input: &Value) -> Result<Outcom
         Kind::Navigate => navigate(cdp, page, &input["url"]).await,
         Kind::Read => {
             let tree = on("Accessibility.getFullAXTree", json!({})).await?;
-            Ok(done(outline(
-                tree["nodes"].as_array().map_or(&[], Vec::as_slice),
-            )))
+            let shown = outline(tree["nodes"].as_array().map_or(&[], Vec::as_slice));
+            Ok(done(part(&shown, &input["offset"])))
         }
         Kind::Click => click(cdp, page, node).await,
         Kind::Type => {
@@ -405,6 +404,16 @@ fn outline(nodes: &[Value]) -> String {
         stack.extend(children.into_iter().rev().map(|child| (*child, depth)));
     }
     shown
+}
+
+fn part(shown: &str, offset: &Value) -> String {
+    let offset = offset.as_u64().map_or(0, |offset| offset as usize);
+    match super::excerpt(shown, offset) {
+        (part, Some(next)) => format!(
+            "{part}\n[... the page goes on; call browser_read with offset {next} to continue ...]"
+        ),
+        (part, None) => part,
+    }
 }
 
 fn line(node: &Value) -> Option<String> {
@@ -657,6 +666,15 @@ mod tests {
             shown,
             "[1] RootWebArea \"Sign in\"\n  [12] textbox \"Email\" = \"a@b.c\"\n  [14] button \"Next\"\n    StaticText \"Next\"\n"
         );
+    }
+
+    #[test]
+    fn a_long_page_is_read_in_parts() {
+        assert_eq!(part("short", &Value::Null), "short");
+        let page = "x".repeat(20_000);
+        let first = part(&page, &Value::Null);
+        assert!(first.ends_with("call browser_read with offset 12000 to continue ...]"));
+        assert_eq!(part(&page, &json!(12_000)), "x".repeat(8_000));
     }
 
     #[tokio::test]

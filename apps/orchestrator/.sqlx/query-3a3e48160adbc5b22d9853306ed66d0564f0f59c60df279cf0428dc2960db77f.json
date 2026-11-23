@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO turn_events (turn_id, sequence, payload) SELECT id, 1, $1 FROM chat_turns",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a3e48160adbc5b22d9853306ed66d0564f0f59c60df279cf0428dc2960db77f"
+}
