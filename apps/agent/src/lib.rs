@@ -15,6 +15,7 @@ mod init;
 pub mod knowledge_base;
 pub mod memory;
 pub mod people;
+mod sensor;
 pub mod skills;
 pub mod tools;
 mod vitals;

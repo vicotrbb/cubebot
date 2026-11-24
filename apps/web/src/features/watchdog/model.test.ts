@@ -5,6 +5,7 @@ import { headline, notifying, ruleTitle, scopeOf, severityOf } from './model'
 describe('watchdog wording', () => {
   test('rules read as titles, unknown ones included', () => {
     assert.equal(ruleTitle('reverse_shell'), 'Reverse shell')
+    assert.equal(ruleTitle('lan_scan'), 'Network scan')
     assert.equal(ruleTitle('new_rule_kind'), 'New rule kind')
   })
 

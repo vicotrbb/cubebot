@@ -534,6 +534,10 @@ pub enum Report {
         request_id: Uuid,
     },
     Vitals(Vitals),
+    /// The sandbox sensor's report, sent with each vitals sample; an empty list is its heartbeat.
+    Sightings {
+        sightings: Vec<crate::watch::Sighting>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

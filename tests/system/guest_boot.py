@@ -134,7 +134,7 @@ def run_guest(directory: Path, workspace: Path, requests: queue.Queue, computer:
     try:
         console = Console(sandbox.stdout)
         failure = computer and drawn(directory, console)
-        return failure or check(sandbox, console, requests)
+        return failure or check(directory, sandbox, console, requests)
     finally:
         end(sandbox)
 
@@ -302,6 +302,7 @@ def environment(directory: Path, workspace: Path):
         "CUBEBOT_BOOTSTRAP_TOKEN_FILE": directory / "token",
         "CUBEBOT_CONTROL_CA_FILE": directory / "ca.pem",
         "CUBEBOT_GUEST_DESKTOP_SOCKET": directory / "desktop.sock",
+        "CUBEBOT_GUEST_NETWORK_SOCKET": directory / "network.sock",
     } | SIZES
 
 
@@ -321,7 +322,34 @@ class Console:
         self.closed.set()
 
 
-def check(sandbox: subprocess.Popen, console: Console, requests: queue.Queue):
+def traffic(directory: Path):
+    """The VMM's traffic summary, which must show the bootstrap's connection."""
+    read = subprocess.run(
+        ["sudo", "env", f"CUBEBOT_GUEST_NETWORK_SOCKET={directory / 'network.sock'}"]
+        + [ROOT / "target/debug/cubebot-sandbox", "network"],
+        capture_output=True,
+        timeout=10,
+    )
+    if read.returncode:
+        return f"the network summary could not be read: {read.stderr.decode()[-300:]}"
+    summary = json.loads(read.stdout)
+    flows = [f for f in summary["flows"] if (f["address"], f["port"]) == (HOST, PORT)]
+    if not flows or flows[0]["opened"] < 1 or flows[0]["received"] < 1:
+        return f"the network summary shows no connection to the orchestrator: {summary}"
+    again = subprocess.run(
+        ["sudo", "env", f"CUBEBOT_GUEST_NETWORK_SOCKET={directory / 'network.sock'}"]
+        + [ROOT / "target/debug/cubebot-sandbox", "network"],
+        capture_output=True,
+        timeout=10,
+    )
+    if any(f["opened"] for f in json.loads(again.stdout)["flows"]):
+        return "reading the network summary did not clear it"
+    return None
+
+
+def check(
+    directory: Path, sandbox: subprocess.Popen, console: Console, requests: queue.Queue
+):
     deadline = time.monotonic() + DEADLINE
     if not until(lambda: b"Guest agent alive" in console.output, deadline):
         return "no liveness report over vsock"
@@ -334,6 +362,9 @@ def check(sandbox: subprocess.Popen, console: Console, requests: queue.Queue):
     # Bootstrap retries queue more requests; each boot checks only its own first one.
     while not requests.empty():
         requests.get()
+    failure = traffic(directory)
+    if failure:
+        return failure
     sandbox.send_signal(signal.SIGTERM)
     if not console.closed.wait(SHUTDOWN) or sandbox.wait(timeout=5) != 0:
         return f"the VM did not exit 0 within {SHUTDOWN}s of SIGTERM"

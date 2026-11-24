@@ -78,9 +78,11 @@ export function Watchdog() {
         <div className="watch">
           <div className="watch__main">
             <p className="watch__lead">
-              Reads every tool call, sign-in and change as it is recorded. It
-              never blocks or stops an agent: high and medium findings also land
-              in Activity and on your devices, and you decide what happens next.
+              Reads every tool call, sign-in and change as it is recorded, what
+              runs and connects inside each agent’s sandbox, and the pods beside
+              it. It never blocks or stops an agent: high and medium findings
+              also land in Activity and on your devices, and you decide what
+              happens next.
             </p>
             <Open findings={data.findings} named={named} />
             <Dismissed findings={data.dismissed} />

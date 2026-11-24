@@ -171,6 +171,15 @@ impl Kubernetes {
     }
 
     #[tracing::instrument(skip_all)]
+    /// Every pod in the installation's namespace, for the watchdog to judge.
+    pub async fn pods(&self) -> Result<Vec<Pod>, Error> {
+        Ok(self
+            .pods
+            .list(&kube::api::ListParams::default())
+            .await?
+            .items)
+    }
+
     pub async fn create_pod(&self, pod: &Pod) -> Result<Pod, Error> {
         self.validate_target(&pod.metadata)?;
         Ok(self.pods.create(&PostParams::default(), pod).await?)

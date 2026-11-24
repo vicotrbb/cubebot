@@ -25,6 +25,8 @@ struct Channel {
     /// The backup this connection last asked for the workspace.
     backup: Option<String>,
     vitals: Option<(crate::agents::AgentId, crate::agents::sandbox::Desktop)>,
+    agent: Option<crate::agents::AgentId>,
+    sensed: crate::watchdog::sandbox::Sensed,
 }
 
 impl Channel {
@@ -46,10 +48,12 @@ impl RuntimeIdentity {
         self,
         token: String,
         mut socket: WebSocket,
-        vitals: Option<(crate::agents::AgentId, crate::agents::sandbox::Desktop)>,
+        agent: crate::agents::AgentId,
+        desktop: Option<crate::agents::sandbox::Desktop>,
     ) {
         let mut channel = Channel {
-            vitals,
+            vitals: desktop.map(|desktop| (agent, desktop)),
+            agent: Some(agent),
             ..Channel::default()
         };
         // shortcut: each connection polls the ledger every second; use LISTEN/NOTIFY if
@@ -113,6 +117,11 @@ impl RuntimeIdentity {
                 }
                 Ok(Vec::new())
             }
+            Report::Sightings { sightings } => {
+                let hits = channel.sensed.report(&sightings);
+                self.flag(channel.agent, &hits).await;
+                Ok(Vec::new())
+            }
             Report::Drained { request_id } => {
                 self.acknowledge_drain(token, request_id).await?;
                 // The agent may exit; stopping the sandbox remains the hard stop.
@@ -121,7 +130,25 @@ impl RuntimeIdentity {
         }
     }
 
+    /// Opens the watchdog's findings for this channel's agent; a failure is logged, never fatal.
+    async fn flag(
+        &self,
+        agent: Option<crate::agents::AgentId>,
+        hits: &[crate::watchdog::rules::Hit],
+    ) {
+        for hit in hits {
+            let opened =
+                crate::watchdog::open(&self.pool, hit, agent.map(|agent| agent.0), None, 0).await;
+            if let Err(error) = opened {
+                tracing::warn!(?error, rule = hit.rule, "watchdog finding not recorded");
+            }
+        }
+    }
+
     async fn poll(&self, token: &str, channel: &mut Channel) -> Result<Vec<Delivery>, Error> {
+        if let Some(silence) = channel.sensed.silence() {
+            self.flag(channel.agent, &[silence]).await;
+        }
         let control = self.control(token).await?;
         let mut deliveries = Vec::new();
         if let Some(drain) = control.drain

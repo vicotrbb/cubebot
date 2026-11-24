@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT g.id,\n               NOT EXISTS(\n                   SELECT 1 FROM chat_turns t\n                   WHERE t.conversation_id = g.id\n                     AND (t.status = 'running' OR t.status_at > clock_timestamp() - interval '5 minutes')\n               ) AND NOT EXISTS(\n                   SELECT 1 FROM dream_runs d\n                   WHERE d.agent_id = g.id\n                     AND (d.status = 'running' OR d.ended_at > clock_timestamp() - interval '5 minutes')\n               ) AS \"idle!\"\n        FROM agents g\n        WHERE g.desired_state = 'running'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "idle!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "800e9580565537b324e43c5a468f0fc6d906bd976c7ae50eb485e3f0ebdcde50"
+}

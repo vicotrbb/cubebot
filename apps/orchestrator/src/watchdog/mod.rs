@@ -1,7 +1,9 @@
 //! The watchdog (docs/adr/agents.md#a-watchdog-that-notifies): rules over records the platform
 //! already keeps open findings for administrators, and a few posture checks describe how the
 //! installation is set up. It reads; it never blocks, pauses or stops an agent.
+pub mod platform;
 pub mod rules;
+pub mod sandbox;
 mod worker;
 
 use crate::{
@@ -12,7 +14,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
 use uuid::Uuid;
+pub(crate) use worker::open;
 pub use worker::{sweep, watch};
+
+/// What the watchdog can read beyond PostgreSQL: each agent's traffic from its VMM, and the pods
+/// of the installation's namespace. Either is absent where the installation has no such thing.
+#[derive(Clone, Default)]
+pub struct Reach {
+    pub traffic: Option<sandbox::Probe>,
+    pub pods: Option<platform::Pods>,
+}
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct Finding {

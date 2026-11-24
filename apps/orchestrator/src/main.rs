@@ -267,7 +267,7 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
             let desktop = controller.desktop();
             let console = origin.clone();
             let Ok(router) = cubebot_orchestrator::api::configured_router(
-                pool,
+                pool.clone(),
                 origin,
                 config,
                 desktop.clone(),
@@ -282,8 +282,13 @@ async fn application() -> Result<Application, Box<dyn Error + Send + Sync>> {
                     .map_err(failure("startup cleanup could not release ownership"))?;
                 return Err("identity configuration failed".into());
             };
-            let router = cubebot_orchestrator::api::public_host(
+            let router = cubebot_orchestrator::api::watched(
                 controller.routes(router, desktop),
+                pool.clone(),
+                console.clone(),
+            );
+            let router = cubebot_orchestrator::api::public_host(
+                router,
                 console.as_deref(),
                 std::env::var("CUBEBOT_MEETINGS_ORIGIN").ok().as_deref(),
             );

@@ -138,6 +138,32 @@ impl Controller {
             Mode::DatabaseOnly => Installation::default(),
         }
     }
+    /// What the watchdog reads beyond the database: KVM guests' traffic through their VMM, and,
+    /// on Kubernetes, the namespace's pods.
+    fn reach(&self) -> crate::watchdog::Reach {
+        use crate::{agents::sandbox::Runtime, watchdog::sandbox::probe};
+        match &self.mode {
+            Mode::Kubernetes(lifecycle) => {
+                let sandbox = lifecycle.sandbox.clone();
+                let listing = sandbox.clone();
+                crate::watchdog::Reach {
+                    traffic: matches!(sandbox.layout.runtime(), Runtime::Kvm {})
+                        .then(|| probe(sandbox)),
+                    pods: Some(Arc::new(move || {
+                        let listing = listing.clone();
+                        Box::pin(async move { listing.namespace_pods().await })
+                    })),
+                }
+            }
+            Mode::Docker(lifecycle) => crate::watchdog::Reach {
+                traffic: matches!(lifecycle.sandbox.runtime(), Runtime::Kvm {})
+                    .then(|| probe(lifecycle.sandbox.clone())),
+                pods: None,
+            },
+            Mode::DatabaseOnly => crate::watchdog::Reach::default(),
+        }
+    }
+
     pub async fn run(&mut self, stop: watch::Receiver<bool>) -> Result<(), Error> {
         let connections = match &self.mode {
             Mode::Kubernetes(lifecycle) => lifecycle.runtime.connections.clone(),
@@ -167,7 +193,11 @@ impl Controller {
         ));
         let prices = tokio::spawn(crate::work::keep_prices(self.pool.clone(), stop.clone()));
         let push = tokio::spawn(crate::push::notify(self.pool.clone(), stop.clone()));
-        let watchdog = tokio::spawn(crate::watchdog::watch(self.pool.clone(), stop.clone()));
+        let watchdog = tokio::spawn(crate::watchdog::watch(
+            self.pool.clone(),
+            self.reach(),
+            stop.clone(),
+        ));
         let result = self.reconcile_all(stop).await;
         if let Some(coordinator) = coordinator {
             coordinator.abort();

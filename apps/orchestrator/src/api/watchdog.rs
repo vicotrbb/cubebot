@@ -70,3 +70,75 @@ async fn unmute(
     api.watchdog.unmute(&actor, mute).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Clone)]
+struct Watched {
+    pool: sqlx::PgPool,
+    identity: Identity,
+    refusals: crate::watchdog::platform::Refusals,
+}
+
+/// Counts refused requests per session by the digest of its token, and opens a finding for a
+/// burst; requests that are not refused only have their credential header read.
+pub fn watched(router: Router, pool: sqlx::PgPool, origin: Option<String>) -> Router {
+    let mut identity = Identity::new(pool.clone());
+    identity.browser_origin = origin;
+    let watched = Watched {
+        pool,
+        identity,
+        refusals: crate::watchdog::platform::Refusals::default(),
+    };
+    router.layer(axum::middleware::from_fn_with_state(watched, refused))
+}
+
+async fn refused(
+    State(watched): State<Watched>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let credential = super::browser::credential(&watched.identity, request.headers())
+        .ok()
+        .map(crate::identity::digest);
+    let response = next.run(request).await;
+    if response.status() == StatusCode::FORBIDDEN
+        && let Some(digest) = credential
+        && watched.refusals.refused(digest.clone())
+    {
+        tokio::spawn(report(watched.pool, digest));
+    }
+    response
+}
+
+/// Opens the burst's finding; a failure is logged.
+async fn report(pool: sqlx::PgPool, digest: Vec<u8>) {
+    let Some((hit, agent)) = named(&pool, digest).await else {
+        return;
+    };
+    if let Err(error) = crate::watchdog::open(&pool, &hit, agent, None, 0).await {
+        tracing::warn!(?error, "watchdog finding not recorded");
+    }
+}
+
+/// The person or agent whose session the burst came from; an ended session is let go.
+async fn named(
+    pool: &sqlx::PgPool,
+    digest: Vec<u8>,
+) -> Option<(crate::watchdog::rules::Hit, Option<Uuid>)> {
+    let row = sqlx::query!(
+        r#"
+        SELECT (SELECT a.login FROM human_sessions s JOIN human_accounts a ON a.id = s.account_id
+                WHERE s.token_hash = $1) AS "login?",
+               (SELECT r.agent_id FROM runtime_session_access r WHERE r.token_hash = $1 LIMIT 1) AS "agent?"
+        "#,
+        digest,
+    )
+    .fetch_one(pool)
+    .await
+    .inspect_err(|error| tracing::warn!(?error, "the refused session could not be named"))
+    .ok()?;
+    match (row.login, row.agent) {
+        (Some(login), _) => Some((crate::watchdog::platform::refusal(Some(&login)), None)),
+        (None, Some(agent)) => Some((crate::watchdog::platform::refusal(None), Some(agent))),
+        (None, None) => None,
+    }
+}

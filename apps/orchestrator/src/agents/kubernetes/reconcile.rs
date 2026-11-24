@@ -28,6 +28,16 @@ pub struct Reconciler {
     pub(super) layout: Layout,
 }
 impl Reconciler {
+    /// The namespace's pods with its name; `None`, logged, when the list fails.
+    pub async fn namespace_pods(&self) -> Option<(String, Vec<k8s_openapi::api::core::v1::Pod>)> {
+        match self.api.pods().await {
+            Ok(pods) => Some((self.namespace.clone(), pods)),
+            Err(error) => {
+                tracing::warn!(?error, "the namespace's pods could not be listed");
+                None
+            }
+        }
+    }
     pub fn new(
         pool: PgPool,
         config: kube::Config,
