@@ -68,9 +68,26 @@ import { docs } from '../../data/site'
   <h2 id="console">People and the console</h2>
   <ul>
     <li>Sessions live in secure cookies; the API checks origins and cross-site requests.</li>
-    <li>Access is granted per agent or room to people and teams, and every grant, sign-in and sensitive action is in the audit log.</li>
+    <li>Access is granted per agent or room to people and groups, and every grant, sign-in and sensitive action is in the audit log.</li>
     <li>Rich previews in chat run in a sandbox with no network access.</li>
+    <li>Apps agents build run with an opaque origin and a view token, so they can never read your session or call the API as you.</li>
+    <li>Payment cards in the vault are typed only after a person approves, once per card and site.</li>
   </ul>
+
+  <h2 id="meetings">Meeting guests</h2>
+  <ul>
+    <li>A guest waits in a lobby until a signed-in participant lets them in.</li>
+    <li>What a guest says reaches agents with no tools, no history, no skills and no connections.</li>
+    <li>The public meeting host answers only meeting routes, whatever the proxy in front routes to it, and redirects plain HTTP to HTTPS.</li>
+  </ul>
+
+  <h2 id="watchdog">The watchdog</h2>
+  <p>
+    A watchdog reads every tool call and change, senses inside each sandbox,
+    watches each KVM guest's traffic from the VMM and checks the namespace's
+    pods. It notifies administrators and never stops an agent by itself.
+    <a href="/docs/watchdog/">Every rule and its limits</a>.
+  </p>
 
   <h2 id="not-qualified">Not qualified yet</h2>
   <p>We would rather say this than have you find out:</p>

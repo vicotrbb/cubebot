@@ -2,11 +2,12 @@
 import Doc from '../../layouts/Doc.astro'
 import Cube from '../../components/Cube.astro'
 import Icon from '../../components/Icon.astro'
+import Stages from '../../components/Stages.astro'
 import { docs } from '../../data/site'
 
 const layers = [
   { tone: 'paper', label: 'web', name: 'Console', body: 'TanStack Start and React. Pages are served here; every domain request and live stream goes to Rust.' },
-  { tone: 'orange', label: 'orch', name: 'Orchestrator', body: 'One Rust process. Owns the database, starts and watches sandboxes, routes work, encrypts secrets, and is the only thing that touches the cluster.' },
+  { tone: 'orange', label: 'orch', name: 'Orchestrator', body: 'One Rust process. Owns the database, starts and watches sandboxes, routes work, encrypts secrets, relays calls, meetings and apps, runs the watchdog, and is the only thing that touches the cluster.' },
   { tone: 'paper', label: 'pg', name: 'PostgreSQL', body: 'The source of truth: agents, conversations, memory, skills, files metadata, the audit log. Agents never connect to it.' },
   { tone: 'orange', label: 'agent', name: 'Agent sandboxes', body: 'One per agent, always on. The agent runtime, its tools, its desktop and its journal live together inside it.' },
 ] as const
@@ -16,7 +17,7 @@ const layers = [
   title="Architecture · Cubebot"
   description="How Cubebot works: one Rust orchestrator, PostgreSQL, a web console, and one sandbox per agent, either a KVM guest from an in-house VMM or a declared container."
   heading="How Cubebot is built"
-  lede="Three services and one sandbox per agent. Everything is Rust except the console, and every important decision is written down in the open."
+  lede="One orchestrator, PostgreSQL, a console and one sandbox per agent. Everything is Rust except the console, and every important decision is written down in the open."
   tones={['paper', 'orange', 'paper']}
   source="ARCHITECTURE.md"
 >
@@ -85,6 +86,43 @@ const layers = [
     input while a person holds it, and streams only the parts of the screen that
     change. The orchestrator relays the picture but never stores a person's
     session.
+  </p>
+
+  <h2 id="speech">Calls and meetings</h2>
+  <p>
+    Audio never reaches the agent. The orchestrator turns each finished
+    sentence into an ordinary chat message and speaks the agent's reply back
+    sentence by sentence, with embedded engines that run offline or with OpenAI
+    and ElevenLabs. Meetings use the same pipeline: every participant holds one
+    WebSocket and the orchestrator relays everyone's media, with no WebRTC or
+    UDP. <a href="/docs/meetings/">How meetings work</a>.
+  </p>
+
+  <h2 id="apps">Apps</h2>
+  <Stages
+    caption="An app request travels the agent's own tunnel. No port opens on the network, and the page never holds a credential."
+    stages={[
+      { label: 'Your browser', tone: 'paper', items: ['Opens the app in a sandboxed frame', 'Opaque origin, no cookies'] },
+      { label: 'Orchestrator', tone: 'orange', items: ['Checks a view token', 'Rechecks your access each request', 'Strips cookies and headers'] },
+      { label: 'Agent sandbox', tone: 'orange', items: ['Second tunnel to the orchestrator', 'Serves files or runs the backend', 'Restarts it when it exits'] },
+      { label: 'Connections', tone: 'sage', items: ['Only tools the app declared', 'Within each connection’s level'] },
+    ]}
+  />
+  <ul>
+    <li>An agent writes an app in a workspace folder and registers it. Without a start command the runtime serves the files; with one it runs the backend as the tool user and restarts it with backoff.</li>
+    <li>The agent opens a second WebSocket beside its control channel, and each app request rides it as one stream with its own flow control, so a slow viewer slows only itself. Streaming responses and WebSockets pass through.</li>
+    <li>Every app answer carries a sandbox Content-Security-Policy and the console frames it without <code>allow-same-origin</code>. The page cannot read your session or call the API as you.</li>
+    <li>A view token is 32 random bytes for one viewer and one app, kept 12 hours in the orchestrator's memory.</li>
+    <li>The kit's <code>call(tool, input)</code> runs in the agent process with the agent's authority, never as the tool user, so app code never sees a credential.</li>
+  </ul>
+
+  <h2 id="watchdog">Watchdog</h2>
+  <p>
+    A worker in the orchestrator reads the turn ledger and audit log every ten
+    seconds, a sensor in each sandbox reports what it sees in <code>/proc</code>,
+    and on <code>kvm</code> the VMM summarizes each guest's traffic from outside
+    it. Findings go to administrators; nothing is stopped automatically.
+    <a href="/docs/watchdog/">Every rule and how it works</a>.
   </p>
 
   <h2 id="recovery">Recovery</h2>

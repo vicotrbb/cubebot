@@ -1,5 +1,3 @@
-import { connectors } from './connectors'
-
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
@@ -36,6 +34,16 @@ export const resources = [
     body: 'Everything an agent and the console can do today.',
   },
   {
+    href: '/docs/meetings/',
+    title: 'Meetings',
+    body: 'Video calls with people and agents, and how they work.',
+  },
+  {
+    href: '/docs/watchdog/',
+    title: 'Watchdog',
+    body: 'What it watches, every rule, and who decides.',
+  },
+  {
     href: '/docs/architecture/',
     title: 'Architecture',
     body: 'Orchestrator, sandboxes, journal and the database.',
@@ -53,41 +61,19 @@ export const resources = [
 ] as const
 
 export const status = {
-  today: [
-    'Each agent in its own KVM guest or declared container',
-    'One-command install, Docker Compose or Helm',
-    'OpenAI, Anthropic, Gemini, Grok, OpenRouter and MiniMax',
-    'Use a ChatGPT, SuperGrok or MiniMax M Plan',
-    'One permanent conversation per agent',
-    'Terminal, files, browser and a desktop you can take over',
-    `${connectors.length} native connectors and MCP servers`,
-    'Rooms, delegation, tasks and parallel lanes',
-    'Memory, dreaming and a shared skill library',
-    'Knowledge base, shared files and a vault',
-    'Routines on schedules, webhooks and account events',
-    'Voice calls, with speech that runs offline',
-    'Agent teams with managers, shared instructions and an org chart',
-    'Groups, scoped grants, OpenID Connect, audit log',
-    'Usage tracking, daily and monthly budgets per agent',
-    'Profiles agents read: who you are and how you work',
-    'Backups to S3-compatible storage, restore into a new install',
-    'A calendar with your events and every routine run',
-    'Agents that set up agents, rooms and teams, with your approval',
-    'A model of its own for each agent',
-    'An org chart that fits, pans and zooms',
-    'A title for each agent on its cards',
-  ],
   progress: [
     'Real-cluster fencing and isolation',
     'Network policy on production CNIs',
     'Scale at 100 registered, 25 working agents',
     'Live checks for every connector',
+    'Watchdog false-alarm rates on real agent work',
   ],
   planned: [
     'Hybrid memory retrieval',
     'Skill imports from files and Git',
-    'Push notifications',
     'Vendor webhooks for connectors',
+    'Chat inside meetings',
+    'Agents joining meetings in other apps',
   ],
 }
 
@@ -167,8 +153,8 @@ export const timeline = [
 ] as const
 
 export const next = [
-  { title: 'Video calls', body: 'Agents join your meetings.' },
   { title: 'Kanban', body: 'Tasks on a board you share with agents.' },
+  { title: 'Hybrid memory', body: 'Recall by meaning as well as words.' },
 ] as const
 
 export const releases = [
@@ -706,6 +692,8 @@ export const wallLogos: Record<string, string> = {
   Discord: 'discord',
   Nextcloud: 'nextcloud',
   Zoom: 'zoom',
+  Devin: 'devin',
+  WHOOP: 'whoop',
   'PostgreSQL and MySQL': 'sql',
   'S3 buckets': 's3',
   'ntfy and Pushover': 'ntfy',
@@ -728,6 +716,14 @@ export const wall = [
       'Run on a schedule',
       'Answer a webhook',
       'Take a phone call',
+      'Speak up in a meeting',
+      'Build you an app',
+      'Set itself a wake',
+      'Grow a personality',
+      'Pay with a vault card',
+      'Review its own work',
+      'Send a GIF',
+      'Play Doom',
     ],
   },
   {
@@ -747,6 +743,8 @@ export const wall = [
       'Discord',
       'Nextcloud',
       'Zoom',
+      'Devin',
+      'WHOOP',
       'PostgreSQL and MySQL',
       'S3 buckets',
       'ntfy and Pushover',
@@ -769,6 +767,13 @@ export const wall = [
       'An audit log',
       'A knowledge base',
       'Mermaid and math in chat',
+      'A trace for every reply',
+      'Meetings and recordings',
+      'Your calendar',
+      'Apps agents built',
+      'What needs you',
+      'Watchdog findings',
+      'Each computer’s vitals',
     ],
   },
 ] as const

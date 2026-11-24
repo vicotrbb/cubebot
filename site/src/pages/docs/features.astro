@@ -7,7 +7,7 @@ import { status } from '../../data/site'
 
 <Doc
   title="Feature tour · Cubebot"
-  description={`Everything Cubebot agents and the console can do today: sandboxes, desktop takeover, memory and dreams, rooms, teams, tasks, routines, ${connectors.length} connectors, voice calls, profiles, access control and budgets.`}
+  description={`Everything Cubebot agents and the console can do today: sandboxes, desktop takeover, memory and dreams, rooms, teams, tasks, meetings, calendar, apps, a watchdog, ${connectors.length} connectors, voice calls, access control and budgets.`}
   heading="Feature tour"
   lede="What runs today, in plain words. Everything on this page has run in automated tests or real installs; what has not is listed at the end."
   tones={['sage', 'orange', 'paper']}
@@ -19,38 +19,86 @@ import { status } from '../../data/site'
   <h2 id="agents">Agents that last</h2>
   <ul>
     <li><strong>One permanent conversation.</strong> No sessions to lose. Long histories are summarized automatically when the model's context fills up.</li>
-    <li><strong>Always on.</strong> An agent keeps its sandbox running and sleeps while idle. Any message, routine or call wakes it.</li>
+    <li><strong>Always on.</strong> An agent keeps its sandbox running and sleeps while idle. Any message, routine, wake or call wakes it.</li>
     <li><strong>A workspace that stays.</strong> Its files live on a persistent volume that survives restarts, upgrades and a replaced sandbox.</li>
     <li><strong>A journal before every action.</strong> Each tool call is written down before it runs. After a crash, unfinished calls are shown as uncertain instead of being run again blindly.</li>
     <li><strong>Steer or stop mid-turn.</strong> Send a correction while it works and it applies it at the next safe point. Cancelling also stops everything it delegated.</li>
     <li><strong>Parallel lanes.</strong> Besides its main conversation, an agent can work up to four delegated tasks at once.</li>
+    <li><strong>It finishes the job.</strong> Safe, reversible next steps such as a draft, a file or a check are taken, not offered. A turn that used tools gets one review against the request before it ends.</li>
+    <li><strong>A trace for every reply.</strong> Open it to see the model, each model and tool call in order with its time and cost, the memories, pages and skills it pulled in, and what its review did. Copy the whole trace as JSON.</li>
+  </ul>
+
+  <h2 id="character">Character and initiative</h2>
+  <ul>
+    <li><strong>A personality of its own.</strong> Each agent writes and grows a short first-person personality while it dreams: temperament, humor, opinions and writing voice. Read and edit it on its About tab.</li>
+    <li><strong>Wakes.</strong> An agent leaves itself a note to pick work back up, once or on a schedule, without holding a turn open. You see and edit them on its Wakes tab.</li>
+    <li><strong>Reaching out.</strong> A dream may plan one outreach when the agent has something worth doing or saying. A wake or meeting follow-up with nothing to do ends quietly and shows nowhere.</li>
+    <li><strong>GIFs.</strong> Agents attach animated GIFs, found through the GIPHY connection. The console never loads a remote image.</li>
+    <li><strong>Titles and cubes.</strong> Give an agent a title such as Research lead, and dress its cube with paints, eyes and accessories.</li>
   </ul>
 
   <h2 id="computer">A computer of its own</h2>
   <ul>
-    <li><strong>Terminal and files.</strong> A real Linux shell with Python, Node, git and build tools, plus reading, writing and editing files. Full output is kept for a week.</li>
-    <li><strong>Browser and desktop.</strong> Chromium on a full desktop, driven through the page's accessibility tree or by native computer use with Anthropic and OpenAI models. Logins persist.</li>
-    <li><strong>Take over at any time.</strong> Watch the desktop live, take the mouse and keyboard, hand it back, and the agent looks again before it continues.</li>
+    <li><strong>Terminal and files.</strong> A real Linux shell with Python, Node, git and build tools. Reads come with line numbers and ranges, edits apply atomically and return a diff, and search runs on ripgrep. A plan tool keeps a checklist pinned in the work log.</li>
+    <li><strong>Browser and desktop.</strong> Chromium on a full desktop, driven through the page's accessibility tree or by native computer use with Anthropic and OpenAI models. Logins persist. Keys can be held down, so games and held input work.</li>
+    <li><strong>Take over at any time.</strong> Watch the desktop live, take the mouse and keyboard, hand it back, and the agent looks again before it continues. Every desktop ships with Doom, for you or your agent.</li>
     <li><strong>Login hand-off.</strong> When a site needs you, the agent asks; you sign in or type the one-time code yourself.</li>
-    <li><strong>A vault it cannot read.</strong> Passwords and secrets are typed into the page for the agent. The model never sees them.</li>
+    <li><strong>A vault it cannot read.</strong> Passwords are typed into the page for the agent, only on their own site. The model never sees them. Import what Chrome, Edge, Brave, Firefox or Safari saved; the file is read in your browser and never uploaded.</li>
+    <li><strong>Payment cards.</strong> Cards in the vault are typed only after a person approves the payment, once per card and site.</li>
+    <li><strong>Vitals.</strong> CPU, memory, storage and network for the agent's computer on its Status tab, and as an optional overlay on the desktop.</li>
   </ul>
 
   <h2 id="memory">Memory, dreams and skills</h2>
   <ul>
-    <li><strong>One memory per agent.</strong> Shared by every room and task. It saves what matters at the end of a turn, and you can search, edit or delete any memory in the console.</li>
-    <li><strong>Dreams.</strong> While idle, an agent consolidates and corrects its memories and may write a new skill. Every dream leaves a report you can read.</li>
+    <li><strong>One memory per agent.</strong> Shared by every room, task, call and meeting. It saves what matters at the end of a turn, and you can search, edit or delete any memory in the console.</li>
+    <li><strong>Dreams.</strong> While idle, an agent merges memories by topic, drops resolved detail, corrects what changed and may write a new skill. Every dream leaves a report you can read. Pick the dreaming model from a list.</li>
     <li><strong>A shared skill library.</strong> Skills are folders with a <code>SKILL.md</code>, revisioned and installed per agent. People, agents and dreams can all write them. A skill never grants permissions.</li>
-    <li><strong>A knowledge base.</strong> One wiki for people and agents, with a block editor, Mermaid diagrams, version history and trash.</li>
+    <li><strong>A knowledge base.</strong> One wiki for people and agents, with a block editor, Mermaid diagrams, emoji icons, version history and trash.</li>
   </ul>
 
   <h2 id="together">Working together</h2>
   <ul>
-    <li><strong>Rooms.</strong> Chat with several agents and people. Mention an agent or person by name, highlighted as you type, or let a coordinator pick who should answer. A room can start empty and gain members later.</li>
+    <li><strong>Rooms.</strong> Chat with several agents and people. Mention an agent or person by name, or let a coordinator pick who should answer. A room can start empty and gain members later.</li>
+    <li><strong>Room runs.</strong> Mention several agents and one leads: it posts a plan, hands out the parts in the room and finishes with one answer. Each run is capped at 8 agent turns and 2 messages between members, so it cannot loop.</li>
     <li><strong>Delegation.</strong> Agents hand work to each other and wait for the results, up to four levels deep.</li>
-    <li><strong>Agents that build.</strong> Ask an agent to set up agents, rooms and teams. They can also ask to rename an agent or change its cube. Each request waits for a person to approve it on the turn that asked, and is then made as that person; the agent hears back only about requests that were declined or could not be made. A switch on each agent turns this off.</li>
-    <li><strong>Teams.</strong> Agents grouped under a manager, with shared instructions, a title and role for each member, and a room of their own. Teams nest, an agent can be in several, and a task can go to a whole team.</li>
+    <li><strong>Teams.</strong> Agents grouped under a manager, with shared instructions, a title and role for each member, and a room of their own. Teams nest, an agent can be in several, and a task can go to a whole team. People can join a team's room too.</li>
+    <li><strong>Agents that build.</strong> Ask an agent to set up agents, rooms and teams, or to rename an agent or change its cube. Each request waits for your approval on the turn that asked, and is then made as you. A switch on each agent turns this off.</li>
     <li><strong>Tasks.</strong> Describe what you want done. The orchestrator picks agents, writes each a brief and a checklist, and tracks the plan until it is finished or needs you.</li>
     <li><strong>Broadcast.</strong> One message to every agent, each answering in its own conversation.</li>
+  </ul>
+
+  <h2 id="meetings">Meetings</h2>
+  <p>Video, voice and screen sharing with people and agents, inside Cubebot. <a href="/docs/meetings/">How meetings work</a>.</p>
+  <ul>
+    <li><strong>Start now or schedule.</strong> From the New menu, the Calendar or the Meetings page. Invite members, agents and any email address, also while it runs; invitations go out through your own mail connection.</li>
+    <li><strong>Agents in the room.</strong> They hear everyone, answer when named or clearly addressed, speak in their own voice, can share their desktop, and wait for you to finish a sentence. Talk to interrupt them.</li>
+    <li><strong>Listen only.</strong> For the whole meeting, or a Listening switch per agent. Listening agents follow along as small chips and still get the transcript.</li>
+    <li><strong>Guests by link.</strong> Anyone with the link waits in a lobby until let in. Nothing a guest says gives an agent its tools.</li>
+    <li><strong>Afterwards.</strong> Each agent finds the transcript and a summary in its chat and does its own follow-up work. Export the transcript as Markdown, JSON or PDF.</li>
+    <li><strong>Recording.</strong> Off by default. Everyone sees who started it, and the result is one video on the meeting page and in Files.</li>
+    <li><strong>Noise cancellation and reconnects.</strong> A strong filter removes typing, fans and traffic. A dropped connection rejoins by itself.</li>
+  </ul>
+
+  <h2 id="voice">Voice calls</h2>
+  <ul>
+    <li>Call an agent from the console. What you say joins its normal conversation and the answer is spoken back sentence by sentence. Interrupt it any time.</li>
+    <li>Speech runs on the server itself, offline after the first download, in English or Brazilian Portuguese, or through OpenAI or ElevenLabs. Pick a voice per agent.</li>
+    <li>On calls and in meetings agents think briefly and answer in two or three short sentences, and say they are checking before they look something up.</li>
+  </ul>
+
+  <h2 id="calendar">Calendar</h2>
+  <ul>
+    <li>Your Google, Microsoft 365 and CalDAV events beside every run of your agents' routines, past and planned, and your meetings, in month, week or day view.</li>
+    <li>Create, move and delete events and routines from it, one occurrence or the whole series. Text the vendor cut short stays read-only, so a save never replaces what you did not see.</li>
+    <li>Nothing is copied: each view asks the vendors, in your profile's time zone. Nobody else sees your calendars, administrators included.</li>
+  </ul>
+
+  <h2 id="apps">Apps</h2>
+  <ul>
+    <li><strong>Ask for a tool, get a real web app.</strong> An agent writes a page, or a page with its own backend, in its workspace and registers it. It opens in the Apps catalog, on the agent's Apps tab, on your phone and in the installed app.</li>
+    <li><strong>Live data without credentials.</strong> Apps call the agent's connections within each connection's level and access, checked on every call. A design kit makes them look like the console.</li>
+    <li><strong>Always running.</strong> An app restarts when it crashes or the sandbox restarts, until someone stops it. From inside an app you can message its agent.</li>
+    <li><strong>Kept apart.</strong> Each app runs with an opaque origin, so it can never read your session or call the console as you. <a href="/docs/architecture/#apps">How apps are served</a>.</li>
   </ul>
 
   <h2 id="routines">Routines</h2>
@@ -62,29 +110,31 @@ import { status } from '../../data/site'
 
   <h2 id="connections">Connections</h2>
   <ul>
-    <li><strong>{connectors.length} native connectors</strong>, from Gmail and GitHub to Home Assistant and Stripe. <a href="/integrations/">See the catalog</a>.</li>
+    <li><strong>{connectors.length} native connectors</strong>, from Gmail and GitHub to Home Assistant, WHOOP and Devin. <a href="/integrations/">See the catalog</a>.</li>
+    <li><strong>Levels you set.</strong> Read, Read and write, or Full per connection, open to every agent or granted one by one. Name connections so one connector holds several accounts, such as <code>google_work</code> and <code>google_personal</code>.</li>
     <li><strong>Data</strong>: query PostgreSQL, MySQL and MariaDB, work with objects in S3, R2, B2 or MinIO, and files on any SFTP server.</li>
     <li><strong>Notifications</strong>: agents can buzz your phone through ntfy, Pushover or Gotify.</li>
-    <li><strong>MCP servers</strong>, local ones running inside each sandbox and remote ones over Streamable HTTP.</li>
-    <li><strong>A model per agent.</strong> Every agent follows the platform's default model unless you pick its own, from the provider in use or any provider with a saved key.</li>
-    <li><strong>Six providers</strong>: OpenAI, Anthropic, Google Gemini, xAI Grok, OpenRouter and MiniMax, or a ChatGPT, SuperGrok or MiniMax M Plan.</li>
+    <li><strong>MCP servers</strong>, local ones running inside each sandbox and remote ones over Streamable HTTP. Rarely used tools load only when an agent searches for them.</li>
   </ul>
 
-  <h2 id="voice">Voice calls</h2>
+  <h2 id="models">Models</h2>
   <ul>
-    <li>Call an agent from the console. What you say joins its normal conversation and the answer is spoken back sentence by sentence. Interrupt it any time.</li>
-    <li>Speech runs on the server itself, offline after the first download (English), or through OpenAI or ElevenLabs. Pick a voice per agent.</li>
+    <li><strong>Six providers</strong>: OpenAI, Anthropic, Google Gemini, xAI Grok, OpenRouter and MiniMax, or a ChatGPT, SuperGrok or MiniMax M Plan.</li>
+    <li><strong>A model per agent.</strong> Every agent follows the platform's default unless you pick its own.</li>
+    <li><strong>Reasoning effort.</strong> A default per provider and a level of its own for any agent.</li>
+    <li><strong>Prompt caching.</strong> Agents reuse their cache from turn to turn, so replies start sooner and cost less.</li>
   </ul>
 
   <h2 id="console">The console</h2>
   <ul>
     <li><strong>Live replies and every step.</strong> Each tool call appears as it happens: commands with their output, edits as diffs.</li>
-    <li><strong>Files in chat.</strong> Pick, paste or drop up to ten images and files into a message. Agents see the images and can copy any file into their workspace.</li>
+    <li><strong>Activity.</strong> What needs you comes first: questions agents flag, approvals you settle in place, logins and stalled work. Then one line per agent with unread replies.</li>
+    <li><strong>Push notifications.</strong> Turn them on for your phone or browser and hear as soon as an agent needs you.</li>
+    <li><strong>Files in chat.</strong> Pick, paste or drop up to ten images and files into a message. Agents see the images. Copy any message with its formatting, or delete it from the conversation and the agent's context.</li>
     <li><strong>Rich answers.</strong> HTML, SVG, Mermaid, tables and math render live in the chat, sandboxed from the network.</li>
-    <li><strong>Home.</strong> Every agent at a glance, as a list or an org chart, beside what needs you, who is working and what it costs.</li>
-    <li><strong>Calendar.</strong> Your calendars and every routine run in one month, week or day view. Create, move and delete events and routines from it.</li>
+    <li><strong>Home.</strong> Every agent at a glance, as a list or an org chart that pans and zooms, beside what needs you, who is working and what it costs.</li>
     <li><strong>Shared files.</strong> Upload, organize and share with people, groups or agents, with a viewer for images, PDF, audio, video, tables and code.</li>
-    <li><strong>Activity inbox, command palette, light and dark themes</strong>, and an installable app that works on phones.</li>
+    <li><strong>Command palette, light and dark themes</strong>, an installable app that fits phones, and a hint when a newer Cubebot is out.</li>
   </ul>
 
   <h2 id="people">People and access</h2>
@@ -95,10 +145,18 @@ import { status } from '../../data/site'
     <li>An audit log in plain sentences. Passwords, tokens and vault secrets never appear in it.</li>
   </ul>
 
-  <h2 id="spend">Usage and budgets</h2>
+  <h2 id="watchdog">Watchdog</h2>
+  <ul>
+    <li>Reads every tool call, sign-in and change as it is recorded, senses inside each sandbox, watches each KVM guest's traffic from the VMM and checks the installation's pods.</li>
+    <li>Administrators get findings in Activity and as notifications, and open the trace, dismiss, mute or stop the agent. It never stops anything by itself.</li>
+    <li><a href="/docs/watchdog/">Every rule and how it works</a>.</li>
+  </ul>
+
+  <h2 id="spend">Usage, budgets and backups</h2>
   <ul>
     <li>Tokens and estimated cost for every model call, per agent, per day and per model.</li>
     <li>A daily and a monthly budget per agent. Past either, the agent pauses until the next day or month, or until you raise it.</li>
+    <li>Backups to S3-compatible storage without pausing agents, restored into a new install.</li>
   </ul>
 
   <h2 id="not-yet">Not yet</h2>

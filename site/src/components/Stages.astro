@@ -1,0 +1,108 @@
+---
+import Cube from './Cube.astro'
+
+type Tone = 'orange' | 'sage' | 'paper' | 'wood'
+interface Props {
+  caption: string
+  stages: { label: string; tone: Tone; items: string[] }[]
+}
+const { caption, stages } = Astro.props
+---
+
+<figure class="stages" style={`--n:${stages.length}`}>
+  <div class="stages__row">
+    {
+      stages.map((stage, i) => (
+        <div class:list={['stage', `stage--${stage.tone}`]}>
+          <div class="stage__head">
+            <Cube size={26} tone={stage.tone} eyes={stage.tone === 'orange' ? 'open' : 'none'} style={`--blink-delay:${i * 0.8}s`} />
+            <span>{stage.label}</span>
+          </div>
+          {stage.items.map((item) => <div class="stage__item">{item}</div>)}
+        </div>
+      ))
+    }
+  </div>
+  <figcaption>{caption}</figcaption>
+</figure>
+
+<style>
+  .stages {
+    margin: 1.6em 0 0;
+  }
+  .stages__row {
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+    gap: 26px;
+  }
+  .stage {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--desk);
+    border-bottom: 3px solid var(--desk-deep);
+  }
+  /* The arrow to the next stage. */
+  .stage:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 22px;
+    right: -21px;
+    width: 0;
+    height: 0;
+    border: 8px solid transparent;
+    border-left: 11px solid var(--orange);
+  }
+  .stage__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 30px;
+    font-weight: 800;
+    font-size: 0.95rem;
+    line-height: 1.15;
+  }
+  .stage__head :global(.cube) {
+    --ry: 34deg;
+    flex: none;
+  }
+  .stage__item {
+    padding: 8px 10px 9px;
+    border-radius: 8px;
+    background: var(--paper);
+    border-bottom: 2px solid var(--paper-deep);
+    font-size: 0.86rem;
+    line-height: 1.35;
+  }
+  .stage--orange .stage__item {
+    border-bottom-color: var(--orange);
+  }
+  .stage--sage .stage__item {
+    border-bottom-color: var(--sage);
+  }
+  .stage--wood .stage__item {
+    border-bottom-color: var(--wood-deep);
+  }
+  figcaption {
+    margin-top: 12px;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 760px) {
+    .stages__row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .stage:not(:last-child)::after {
+      top: auto;
+      right: auto;
+      bottom: -23px;
+      left: 24px;
+      border: 8px solid transparent;
+      border-top: 11px solid var(--orange);
+    }
+  }
+</style>

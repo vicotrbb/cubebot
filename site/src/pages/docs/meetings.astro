@@ -1,0 +1,107 @@
+---
+import Doc from '../../layouts/Doc.astro'
+import Icon from '../../components/Icon.astro'
+import Stages from '../../components/Stages.astro'
+
+const media = [
+  { label: 'Each participant', tone: 'paper', items: ['Microphone as 16 kHz audio', 'Camera encoded in the browser', 'Screen or agent desktop'] },
+  { label: 'Orchestrator relay', tone: 'orange', items: ['One WebSocket each', 'Every frame checked', 'A bounded queue per receiver', 'A speech listener per person'] },
+  { label: 'Who answers', tone: 'sage', items: ['Named agent answers', 'Otherwise a model decides', 'Or only when named', 'Listen only: nobody'] },
+  { label: 'The agent', tone: 'orange', items: ['An ordinary chat turn', 'Spoken sentence by sentence', 'Stops when you talk'] },
+] as const
+
+const after = [
+  { label: 'Meeting ends', tone: 'paper', items: ['Host ends it', 'Or 5 minutes after the last person leaves'] },
+  { label: 'Summary', tone: 'sage', items: ['One model call, no tools', 'Up to 4000 tokens long'] },
+  { label: 'Each agent', tone: 'orange', items: ['Reads the summary and transcript', 'Does what falls to it', 'Or stays quiet'] },
+  { label: 'You', tone: 'wood', items: ['Export as Markdown, JSON or PDF', 'Play the recording'] },
+] as const
+---
+
+<Doc
+  title="Meetings · Cubebot"
+  description="Video, voice and screen sharing with people and agents inside Cubebot: how agents take the floor, how guests are kept apart, recordings, transcripts and follow-up work."
+  heading="Meetings with your agents"
+  lede="Video, voice and screens with people and agents, inside your own install. Agents speak when it is their turn and do the follow-up work when it ends."
+  tones={['paper', 'orange', 'sage']}
+  source="docs/adr/console.md"
+>
+  <Fragment slot="actions">
+    <a class="btn" href="/download/"><span>Install Cubebot</span></a>
+    <a class="link" href="/docs/features/#meetings">Back to the feature tour <Icon name="arrow" /></a>
+  </Fragment>
+
+  <h2 id="start">Start one</h2>
+  <ul>
+    <li>Start a meeting now or schedule it from the New menu, the Calendar or the Meetings page. Scheduled meetings show on the calendar of everyone invited.</li>
+    <li>Invite members, agents and any email address, also while it runs. Invitations go out through your own Gmail, Outlook or email connection.</li>
+    <li>Everyone has voice, video and screen sharing. Agents can share their own desktop, so you watch them work while they talk.</li>
+    <li>The People panel shows who was invited and who joined, guests and agents included, and copies the link in one tap.</li>
+  </ul>
+
+  <h2 id="how">How the media moves</h2>
+  <p>
+    There is no WebRTC, TURN server or UDP. Each participant holds one
+    WebSocket to the orchestrator, which relays everyone's media to everyone
+    else. A meeting therefore works through any HTTP ingress, behind one entry
+    point and one set of checks.
+  </p>
+  <Stages caption="A person speaks: the relay forwards their audio and video, their own listener turns speech into text, and the floor rules pick which agent, if any, answers." stages={media} />
+  <ul>
+    <li><strong>Audio</strong> is plain 16 kHz PCM, as in voice calls. <strong>Video</strong> is encoded by the browser with WebCodecs, in VP8, H.264 or VP9.</li>
+    <li><strong>A slow receiver</strong> loses video until the next key frame. It never slows anyone else.</li>
+    <li><strong>Every person has their own listener</strong>, so each line in the transcript has a known speaker.</li>
+    <li>Practical up to about a dozen people with video. The largest meeting is set in Platform › Meetings, 12 by default, agents included.</li>
+  </ul>
+
+  <h2 id="floor">How agents take the floor</h2>
+  <ol>
+    <li>A sentence that names an agent goes to that agent.</li>
+    <li>Otherwise, in the default <strong>When relevant</strong> mode, a short model call with no tools decides whether an agent should answer. <strong>Only when named</strong> skips it.</li>
+    <li>One agent speaks at a time. It waits until nobody is mid-sentence, and its tile says "talk to interrupt" while it speaks.</li>
+    <li>Agents can hand the floor to each other at most twice before a person speaks again.</li>
+  </ol>
+  <p>
+    <strong>Listen only</strong> silences every agent, even when named. Each
+    agent also has a Listening switch: a listening agent shows as a small chip
+    above the stage, is never handed the floor, and still gets the transcript.
+  </p>
+
+  <h2 id="guests">Guests</h2>
+  <ul>
+    <li>Share a link anyone can open. A guest waits in a lobby until a signed-in participant lets them in, unless you allow guests in directly.</li>
+    <li>Nothing a guest says gives an agent its tools. Their words run with no tools, no conversation history, no skills, no connections and none of the owner's profile.</li>
+    <li>On Kubernetes the meeting links can live alone on a second, public host while the console stays private. On that host Cubebot answers only meeting routes, whatever the proxy in front sends it.</li>
+    <li>A link is 32 random bytes the owner can turn off or replace. Lookups and joins are rate limited.</li>
+  </ul>
+
+  <h2 id="after">When it ends</h2>
+  <Stages caption="Every agent that attended gets the meeting as a follow-up turn and acts on it as if the owner had asked." stages={after} />
+  <p>
+    Each agent finds one Meeting message in its chat with the transcript and the
+    summary. A follow-up
+    with nothing to do ends quietly, so you only see agents that had work.
+  </p>
+
+  <h2 id="recording">Recording</h2>
+  <ul>
+    <li>Off by default. Any signed-in member starts or stops it, and every participant, guests included, sees a Recording flag and who started it.</li>
+    <li>The server records what it already relays, then makes one 1280x720 video: the newest screen share fills the frame, otherwise whoever is speaking, with every voice mixed.</li>
+    <li>The video lands in the owner's Files under Meeting recordings, shared read-only with the invited members, and plays on the meeting page. You are notified when it is ready.</li>
+  </ul>
+
+  <h2 id="comfort">Small things that matter</h2>
+  <ul>
+    <li><strong>Noise cancellation.</strong> Off, Standard or Strong, changeable during the call. Strong removes typing, fans and traffic.</li>
+    <li><strong>Reconnects.</strong> A dropped connection keeps the meeting on screen and rejoins by itself for about a minute. A guest comes back without the lobby.</li>
+    <li><strong>Languages.</strong> The built-in speech engines hear and speak English or Brazilian Portuguese, offline. OpenAI and ElevenLabs detect the language themselves.</li>
+    <li><strong>Short answers.</strong> Agents think briefly in meetings, answer in two or three sentences, and say they are checking before they look something up.</li>
+  </ul>
+
+  <h2 id="limits">Limits today</h2>
+  <ul>
+    <li>No chat inside the meeting yet, and agents do not join meetings in other apps.</li>
+    <li>Video stalls rather than degrades on a lossy network, since everything rides TCP.</li>
+    <li>A browser without WebCodecs joins with audio only. Echo control is the browser's.</li>
+  </ul>
+</Doc>

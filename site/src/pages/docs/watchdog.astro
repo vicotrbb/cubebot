@@ -1,0 +1,190 @@
+---
+import Doc from '../../layouts/Doc.astro'
+import Icon from '../../components/Icon.astro'
+import Stages from '../../components/Stages.astro'
+
+const flow = [
+  { label: 'What it reads', tone: 'paper', items: ['Inside: a sensor in each sandbox', 'Around: each KVM guest’s traffic', 'Platform: tool calls, audit log, pods'] },
+  { label: 'Watchdog worker', tone: 'orange', items: ['New records every 10 s', 'Rates and traffic every 5 min', 'Rules match, evidence masked'] },
+  { label: 'Findings', tone: 'sage', items: ['One open per rule and agent', 'Repeats are counted', 'High and medium notify'] },
+  { label: 'An administrator', tone: 'wood', items: ['Opens the trace', 'Dismisses or mutes', 'Stops the agent'] },
+] as const
+
+type Rule = [string, 'high' | 'medium' | 'low', string]
+const groups: { id: string; title: string; intro: string; rules: Rule[] }[] = [
+  {
+    id: 'actions',
+    title: 'What agents do',
+    intro: 'Read from every tool call in the turn ledger. Tools run as an unprivileged user that cannot touch the runtime writing the ledger, so the commands it records are the commands the model issued.',
+    rules: [
+      ['reverse_shell', 'high', 'A shell wired to a network socket'],
+      ['miner', 'high', 'A command that starts a cryptocurrency miner'],
+      ['credential_reach', 'high', 'Reading the runtime’s credentials, other processes’ environments, the cluster API or cloud metadata'],
+      ['privilege_probe', 'medium', 'Probing for ways to become root'],
+      ['secret_sent', 'high', 'A credential shape in something a connection sends'],
+      ['injection_then_send', 'medium', 'A send after an earlier tool result told the model to ignore its instructions'],
+      ['send_burst', 'medium', 'Ten or more sends in ten minutes, and three times the agent’s busiest ten minutes this week'],
+      ['shared_content', 'medium', 'A dangerous command written into a skill or knowledge base page other agents load'],
+      ['tool_loop', 'low', 'The same call eight times in one reply'],
+      ['vault_burst', 'medium', 'Ten vault fills, three card requests or five login requests by one agent'],
+      ['spend_spike', 'medium', 'An hour’s model spend of at least $2 and five times the agent’s hourly average'],
+    ],
+  },
+  {
+    id: 'inside',
+    title: 'Inside each sandbox',
+    intro: 'The agent process samples /proc every three seconds with its vitals, and checks a few root-only files and the places tools write every minute. Each new sighting is sent once over its runtime channel, and an empty report doubles as a heartbeat. Both runtimes have the sensor.',
+    rules: [
+      ['privilege_escalation', 'high', 'A root process whose real user, or any ancestor, is not root'],
+      ['miner_process', 'high', 'A running miner'],
+      ['tampered', 'high', '/etc/passwd, shadow, group, sudoers, ld.so.preload or the agent binary changed'],
+      ['setuid_file', 'high', 'A root-owned setuid file in a temporary directory or the workspace'],
+      ['lan_scan', 'high', 'Three private addresses left unanswered within five minutes'],
+      ['process_flood', 'medium', 'A thousand processes that are not root'],
+      ['odd_port', 'medium', 'A connection to a port used by mail spam, miners, Tor or shells'],
+      ['sensor_silent', 'medium', 'A sensor stops reporting while its agent stays connected'],
+      ['hidden_executable', 'low', 'A program run from a temporary directory or a deleted file'],
+      ['blocked_private', 'low', 'One private address left unanswered'],
+    ],
+  },
+  {
+    id: 'around',
+    title: 'Around each sandbox',
+    intro: 'On kvm, the VMM sees every packet a guest sends, from outside the guest. Every five minutes the watchdog reads each running agent’s traffic summary. A guest taken over as root can blind its own sensor, but not this table. Private destinations are left to the network policy.',
+    rules: [
+      ['large_upload', 'medium', '100 MB to one public address'],
+      ['idle_traffic', 'medium', '50 MB to the internet with no turn or dream running'],
+      ['dns_tunnel', 'medium', 'A DNS label of 50 characters or more, or 150 names under one domain'],
+      ['direct_ip', 'low', 'Public addresses reached without a DNS answer naming them'],
+    ],
+  },
+  {
+    id: 'platform',
+    title: 'The platform',
+    intro: 'Every five minutes on Kubernetes the watchdog lists the namespace’s pods and compares them with what Cubebot created. The audit log and a count of refused requests cover the people side.',
+    rules: [
+      ['image_swapped', 'high', 'An agent pod running an image other than the one Cubebot created it from'],
+      ['foreign_pod', 'medium', 'A pod that is neither the chart’s nor Cubebot’s'],
+      ['oom_killed, crash_loop', 'low', 'A platform pod killed for memory, or restarting three times'],
+      ['refusal_burst', 'medium', 'Twenty refused requests from one session in five minutes'],
+      ['sign_in_failures', 'medium', 'Ten failed sign-ins across the installation'],
+      ['administrator_added', 'medium', 'A new administrator'],
+      ['access_granted, provider_changed', 'low', 'Grants, provider and single sign-on changes'],
+      ['sensitive_change', 'low', 'Single sign-on turned off, or the backup key downloaded'],
+    ],
+  },
+]
+const tone = { high: 'orange', medium: 'wood', low: 'paper' } as const
+---
+
+<Doc
+  title="Watchdog · Cubebot"
+  description="How Cubebot's watchdog flags risky agent work: a sensor in each sandbox, VMM traffic records, the turn ledger, the audit log and the namespace's pods, with every rule listed."
+  heading="A watchdog that tells you"
+  lede="Agents work inside their grants without asking. The watchdog reads what they and the platform do, flags what looks wrong, and leaves the decision to a person."
+  tones={['sage', 'orange', 'wood']}
+  source="docs/adr/agents.md"
+>
+  <Fragment slot="actions">
+    <a class="btn btn--paper" href="#rules"><span>See every rule</span></a>
+    <a class="link" href="/docs/security/">Read the security page <Icon name="arrow" /></a>
+  </Fragment>
+
+  <h2 id="how">How it works</h2>
+  <p>
+    The watchdog is one worker inside the orchestrator. It needs no extra
+    service, no antivirus in every sandbox and no model reviewing other
+    agents' turns, which would cost tokens and could be prompt injected by what
+    it reads. Every agent action is already a ledger row and every person's
+    change an audit entry, so it reads those, plus what each sandbox and the
+    VMM report.
+  </p>
+  <Stages caption="Agents never wait on the watchdog. It only writes findings, its cursor and audit entries." stages={flow} />
+
+  <h2 id="layers">Three layers of sight</h2>
+  <div class="table">
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>Source</th><th>How often</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>What agents do</td><td>Tool calls in the turn ledger, the audit log, usage</td><td>Every 10 s, rates every 5 min</td></tr>
+        <tr><td>Inside the sandbox</td><td>A sensor in the agent process reading <code>/proc</code> and key files</td><td>Every 3 s, files every minute</td></tr>
+        <tr><td>Around the sandbox</td><td>The VMM's record of each KVM guest's traffic</td><td>Every 5 min</td></tr>
+        <tr><td>The platform</td><td>The namespace's pods and refused requests</td><td>Every 5 min</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Nodes stay outside it: a host sensor you run watches those. The cursor
+    starts at the moment the watchdog is installed, so old history never floods
+    it.
+  </p>
+
+  <h2 id="rules">Every rule</h2>
+  <p>
+    Each rule is <span class="chip chip--orange">high</span>,
+    <span class="chip chip--wood">medium</span> or
+    <span class="chip chip--paper">low</span>. High and medium reach administrators in Activity and as a push
+    notification; low ones are listed on the Watchdog page.
+  </p>
+  {
+    groups.map((group) => (
+      <>
+        <h3 id={group.id}>{group.title}</h3>
+        <p>{group.intro}</p>
+        <div class="table">
+          <table>
+            <tbody>
+              {group.rules.map(([name, level, body]) => (
+                <tr>
+                  <td><code>{name}</code></td>
+                  <td><span class:list={['chip', `chip--${tone[level]}`]}>{level}</span></td>
+                  <td>{body}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
+    ))
+  }
+
+  <h2 id="findings">Findings</h2>
+  <ul>
+    <li>One open finding per rule and agent, or per rule for the installation. A repeat counts on it instead of opening another.</li>
+    <li>Evidence is at most 300 characters of what matched, with credential shapes masked.</li>
+    <li>A finding from a turn opens that reply's trace, so you see every step that led to it.</li>
+  </ul>
+
+  <h2 id="decide">People decide</h2>
+  <p>
+    The watchdog never blocks, pauses or stops an agent. Stopping one wrongly in
+    the middle of a task costs more than a short delay on a real finding. An
+    administrator, from the Watchdog page below Apps:
+  </p>
+  <ul>
+    <li>dismisses a finding, optionally muting its rule for that agent or the installation, and unmutes it later;</li>
+    <li>stops the agent through the ordinary lifecycle action;</li>
+    <li>reads the last 30 days of dismissed findings and the active mutes.</li>
+  </ul>
+  <p>Opening, dismissing and unmuting are all in the audit log. Members never see the page.</p>
+
+  <h2 id="posture">Posture checks</h2>
+  <p>Beside the findings, the page checks how the installation itself is set up:</p>
+  <ul>
+    <li>which sandbox isolation it runs;</li>
+    <li>whether Full-level connections open to every agent meet terminal access;</li>
+    <li>how many administrators there are;</li>
+    <li>the newest verified backup;</li>
+    <li>connection health, and whether the worker is keeping up.</li>
+  </ul>
+
+  <h2 id="limits">What it does not see</h2>
+  <ul>
+    <li>The sensor samples, so a process that lives less than three seconds can pass unseen.</li>
+    <li>Traffic thresholds are fixed, not learned per agent, and new destinations are not flagged, since browsing agents reach new sites all the time.</li>
+    <li>Skills written by dreaming are not read, and MCP tools are not judged for risk.</li>
+    <li>False-alarm rates on real agents' work are still being measured.</li>
+  </ul>
+</Doc>

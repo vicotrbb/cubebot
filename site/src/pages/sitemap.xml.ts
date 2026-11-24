@@ -7,6 +7,8 @@ const pages = [
   '/download/',
   '/docs/install/',
   '/docs/features/',
+  '/docs/meetings/',
+  '/docs/watchdog/',
   '/docs/architecture/',
   '/docs/security/',
   '/changelog/',
