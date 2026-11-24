@@ -3,7 +3,7 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.5.4'
+export const version = 'v0.6.0'
 export const released = '2026-11-23'
 
 export const docs = {
@@ -158,6 +158,12 @@ export const timeline = [
     title: 'Apps',
     body: 'Agents build the tools you open.',
   },
+  {
+    date: 'Nov 23',
+    datetime: '2026-11-23',
+    title: 'Watchdog',
+    body: 'Risky agent work, flagged for you.',
+  },
 ] as const
 
 export const next = [
@@ -166,6 +172,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.6.0',
+    date: '2026-11-23',
+    title: 'Watchdog',
+    items: [
+      'A watchdog reads every tool call, sign-in and change as it is recorded and flags reverse shells, miners, reaching for credentials, credentials leaving the installation, prompt injections that led to a send, bursts and spending spikes',
+      'Administrators get findings in Activity and as notifications, and open the trace, dismiss, mute or stop the agent from a new Watchdog page below Apps, beside checks of how the installation is set up',
+      'It only notifies: agents keep working within their grants, and only a person stops one',
+    ],
+  },
   {
     tag: 'v0.5.4',
     date: '2026-11-23',
