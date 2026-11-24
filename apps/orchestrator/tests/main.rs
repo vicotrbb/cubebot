@@ -60,6 +60,7 @@ mod tasks;
 mod teams;
 mod vault;
 mod wallpaper;
+mod watchdog;
 
 fn database_router(pool: sqlx::PgPool) -> axum::Router {
     let identity = cubebot_orchestrator::identity::Identity::new(pool.clone());

@@ -30,6 +30,7 @@ mod teams;
 mod usage;
 mod vault;
 mod wakes;
+mod watchdog;
 mod work;
 
 use axum::{Json, Router, routing::get};
@@ -104,6 +105,7 @@ pub fn openapi() -> String {
     doc.merge(wakes::Doc::openapi());
     doc.merge(tasks::Doc::openapi());
     doc.merge(usage::Doc::openapi());
+    doc.merge(watchdog::Doc::openapi());
     doc.to_pretty_json().unwrap_or_default()
 }
 
@@ -157,6 +159,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(wakes::router(pool.clone(), identity.clone()))
         .merge(tasks::router(pool.clone(), identity.clone()))
         .merge(usage::router(pool.clone(), identity.clone()))
+        .merge(watchdog::router(pool.clone(), identity.clone()))
         .merge(memories::router(pool.clone(), identity.clone()))
         .merge(skills::router(pool.clone(), identity.clone()))
         .merge(files::router(identity.clone()))

@@ -3,6 +3,7 @@ import type { components } from '../../api/schema'
 export type Item = components['schemas']['ActivityItem']
 
 const NEEDS = [
+  'watchdog',
   'attention',
   'approval_pending',
   'login_pending',

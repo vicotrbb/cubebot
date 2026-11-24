@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE watchdog_cursor SET turn_event = $1, audit = $2, read_at = clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "21b00bedf93c4d873064fb4486345057c0f3af823272734e722ee356f0b9c4a8"
+}

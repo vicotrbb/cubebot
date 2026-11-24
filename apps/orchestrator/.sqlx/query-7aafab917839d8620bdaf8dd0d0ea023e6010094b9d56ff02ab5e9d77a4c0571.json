@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT turn_event, audit FROM watchdog_cursor",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "turn_event",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "audit",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7aafab917839d8620bdaf8dd0d0ea023e6010094b9d56ff02ab5e9d77a4c0571"
+}

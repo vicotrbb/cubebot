@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT agent_id AS \"agent!\",\n               count(*) FILTER (WHERE kind = 'vault.fill') AS \"fills!\",\n               count(*) FILTER (WHERE kind = 'vault.card_request') AS \"cards!\",\n               count(*) FILTER (WHERE kind = 'login.request') AS \"logins!\"\n        FROM audit_log\n        WHERE kind IN ('vault.fill', 'vault.card_request', 'login.request')\n          AND agent_id IS NOT NULL AND at > clock_timestamp() - interval '15 minutes'\n        GROUP BY agent_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "fills!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "cards!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "logins!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c66deaa64717dd15dc2876d72f168d746a651b534a362ecaae750ed02d89c8b6"
+}

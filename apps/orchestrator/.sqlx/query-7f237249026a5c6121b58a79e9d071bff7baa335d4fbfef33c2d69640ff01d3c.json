@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO watchdog_findings (rule, severity, agent_id, turn_id, summary, evidence)\n        SELECT $1, $2, $3, $4, $5, $6\n        WHERE NOT EXISTS(\n            SELECT 1 FROM watchdog_mutes m WHERE m.rule = $1 AND (m.agent_id IS NULL OR m.agent_id = $3)\n        )\n        ON CONFLICT (rule, COALESCE(agent_id, '00000000-0000-0000-0000-000000000000')) WHERE dismissed_at IS NULL\n        DO UPDATE SET count = watchdog_findings.count + 1, seen_at = clock_timestamp(),\n            turn_id = COALESCE(EXCLUDED.turn_id, watchdog_findings.turn_id),\n            summary = EXCLUDED.summary,\n            evidence = COALESCE(EXCLUDED.evidence, watchdog_findings.evidence)\n        WHERE watchdog_findings.seen_at < clock_timestamp() - make_interval(secs => $7)\n        RETURNING count = 1 AS \"opened!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "opened!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7f237249026a5c6121b58a79e9d071bff7baa335d4fbfef33c2d69640ff01d3c"
+}

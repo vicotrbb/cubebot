@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT f.id, f.rule, f.severity, f.agent_id AS agent, g.name AS \"agent_name?\",\n                   f.turn_id AS turn, f.summary, f.evidence, f.count,\n                   (to_jsonb(f.opened_at) #>> '{}') AS \"opened_at!\", (to_jsonb(f.seen_at) #>> '{}') AS \"seen_at!\",\n                   (to_jsonb(f.dismissed_at) #>> '{}') AS dismissed_at, h.login AS \"dismissed_by?\"\n            FROM watchdog_findings f\n            LEFT JOIN agents g ON g.id = f.agent_id\n            LEFT JOIN human_accounts h ON h.id = f.dismissed_by\n            WHERE CASE WHEN $1 THEN f.dismissed_at IS NULL\n                       ELSE f.dismissed_at > clock_timestamp() - interval '30 days' END\n            ORDER BY CASE WHEN $1 THEN array_position(ARRAY['high', 'medium', 'low'], f.severity) END,\n                     COALESCE(f.dismissed_at, f.seen_at) DESC\n            LIMIT CASE WHEN $1 THEN 200 ELSE 50 END\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "rule",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "severity",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "agent_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "turn",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "summary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "evidence",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "opened_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "seen_at!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "dismissed_at",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "dismissed_by?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "e9c2b8ed8cc71422a5b6d831c7fc917fc3070e894de488a19951ac18efb59450"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"failures!\", mode() WITHIN GROUP (ORDER BY detail->>'login') AS login\n        FROM audit_log\n        WHERE kind = 'session.sign_in_failed' AND at > clock_timestamp() - interval '15 minutes'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "failures!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "login",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e6983d04245c27b7a116e4ebd56562e018e7bf200462447c564c9824ba2b566c"
+}

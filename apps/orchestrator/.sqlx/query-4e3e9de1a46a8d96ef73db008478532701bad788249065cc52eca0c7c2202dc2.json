@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT agent_id AS \"agent!\",\n               COALESCE(sum(cost_usd) FILTER (WHERE created_at > clock_timestamp() - interval '1 hour'), 0) AS \"hour!\",\n               COALESCE(sum(cost_usd) FILTER (WHERE created_at <= clock_timestamp() - interval '1 hour'), 0) / 167 AS \"usual!\"\n        FROM usage_events\n        WHERE agent_id IS NOT NULL AND created_at > clock_timestamp() - interval '7 days'\n        GROUP BY agent_id\n        -- A new agent has no week to compare with.\n        HAVING min(created_at) < clock_timestamp() - interval '1 day'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "agent!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "hour!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 2,
+        "name": "usual!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "4e3e9de1a46a8d96ef73db008478532701bad788249065cc52eca0c7c2202dc2"
+}

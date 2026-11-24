@@ -20,6 +20,7 @@ import { Route as AppKbRouteImport } from './routes/_app.kb'
 import { Route as AppMenuRouteImport } from './routes/_app.menu'
 import { Route as AppPlatformRouteImport } from './routes/_app.platform'
 import { Route as AppSituationRouteImport } from './routes/_app.situation'
+import { Route as AppWatchdogRouteImport } from './routes/_app.watchdog'
 import { Route as AppYouRouteImport } from './routes/_app.you'
 import { Route as MTokenRouteImport } from './routes/m.$token'
 import { Route as AppAgentsAgentIdRouteImport } from './routes/_app.agents.$agentId'
@@ -123,6 +124,11 @@ const AppPlatformRoute = AppPlatformRouteImport.update({
 const AppSituationRoute = AppSituationRouteImport.update({
   id: '/situation',
   path: '/situation',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWatchdogRoute = AppWatchdogRouteImport.update({
+  id: '/watchdog',
+  path: '/watchdog',
   getParentRoute: () => AppRoute,
 } as any)
 const AppYouRoute = AppYouRouteImport.update({
@@ -392,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/menu': typeof AppMenuRoute
   '/platform': typeof AppPlatformRouteWithChildren
   '/situation': typeof AppSituationRoute
+  '/watchdog': typeof AppWatchdogRoute
   '/you': typeof AppYouRoute
   '/m/$token': typeof MTokenRoute
   '/agents/$agentId': typeof AppAgentsAgentIdRouteWithChildren
@@ -452,6 +459,7 @@ export interface FileRoutesByTo {
   '/menu': typeof AppMenuRoute
   '/platform': typeof AppPlatformRouteWithChildren
   '/situation': typeof AppSituationRoute
+  '/watchdog': typeof AppWatchdogRoute
   '/you': typeof AppYouRoute
   '/m/$token': typeof MTokenRoute
   '/': typeof AppIndexRoute
@@ -516,6 +524,7 @@ export interface FileRoutesById {
   '/_app/menu': typeof AppMenuRoute
   '/_app/platform': typeof AppPlatformRouteWithChildren
   '/_app/situation': typeof AppSituationRoute
+  '/_app/watchdog': typeof AppWatchdogRoute
   '/_app/you': typeof AppYouRoute
   '/m/$token': typeof MTokenRoute
   '/_app/': typeof AppIndexRoute
@@ -581,6 +590,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/platform'
     | '/situation'
+    | '/watchdog'
     | '/you'
     | '/m/$token'
     | '/agents/$agentId'
@@ -641,6 +651,7 @@ export interface FileRouteTypes {
     | '/menu'
     | '/platform'
     | '/situation'
+    | '/watchdog'
     | '/you'
     | '/m/$token'
     | '/'
@@ -704,6 +715,7 @@ export interface FileRouteTypes {
     | '/_app/menu'
     | '/_app/platform'
     | '/_app/situation'
+    | '/_app/watchdog'
     | '/_app/you'
     | '/m/$token'
     | '/_app/'
@@ -840,6 +852,13 @@ declare module '@tanstack/react-router' {
       path: '/situation'
       fullPath: '/situation'
       preLoaderRoute: typeof AppSituationRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/watchdog': {
+      id: '/_app/watchdog'
+      path: '/watchdog'
+      fullPath: '/watchdog'
+      preLoaderRoute: typeof AppWatchdogRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/you': {
@@ -1307,6 +1326,7 @@ interface AppRouteChildren {
   AppMenuRoute: typeof AppMenuRoute
   AppPlatformRoute: typeof AppPlatformRouteWithChildren
   AppSituationRoute: typeof AppSituationRoute
+  AppWatchdogRoute: typeof AppWatchdogRoute
   AppYouRoute: typeof AppYouRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAgentsAgentIdRoute: typeof AppAgentsAgentIdRouteWithChildren
@@ -1335,6 +1355,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppMenuRoute: AppMenuRoute,
   AppPlatformRoute: AppPlatformRouteWithChildren,
   AppSituationRoute: AppSituationRoute,
+  AppWatchdogRoute: AppWatchdogRoute,
   AppYouRoute: AppYouRoute,
   AppIndexRoute: AppIndexRoute,
   AppAgentsAgentIdRoute: AppAgentsAgentIdRouteWithChildren,

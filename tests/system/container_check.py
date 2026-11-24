@@ -160,7 +160,18 @@ def built(outputs):
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
 
+# Two commands the watchdog must flag: the runtime's private state, then a miner.
+def watched(outputs):
+    steps = [
+        lambda: ("bash", {"command": "cat /run/cubebot/display 2>&1; true"}),
+        lambda: ("bash", {"command": "./xmrig --version 2>&1; true"}),
+    ]
+    return steps[len(outputs)]() if len(outputs) < len(steps) else None
+
+
 def step(request, outputs):
+    if "watchdog-" + MARKER in request:
+        return watched(outputs)
     if "apps-" + MARKER in request:
         return built(outputs)
     if "connections-" + MARKER in request:
@@ -280,6 +291,38 @@ def shared_and_written(api, postgres, identity, marker):
     )
     api(f"/api/agents/{identity}/definition", update)
     assert not api(f"/api/agents/{identity}")["knowledge_base"]
+
+
+def watchdog_turn(api, identity, marker):
+    path = f"/api/conversations/{identity}/messages"
+    message = command(message=f"Tidy the workspace, watchdog-{marker}")
+    turn = api(path, message, expected=202)["id"]
+    wait_for("the watchdog turn", lambda: finished(api, identity, turn), timeout=120)
+
+    def flagged():
+        found = api("/api/watchdog")["findings"]
+        return found if len(found) >= 2 else None
+
+    findings = wait_for("the watchdog's findings", flagged, timeout=60)
+    # Every earlier turn in this check was ordinary work, so nothing else may be open.
+    rules = sorted(finding["rule"] for finding in findings)
+    assert rules == ["credential_reach", "miner"], findings
+    for finding in findings:
+        expected = (identity, turn, "high")
+        assert (finding["agent"], finding["turn"], finding["severity"]) == expected
+    checks = {check["key"]: check["ok"] for check in api("/api/watchdog")["checks"]}
+    assert checks["watchdog"] and "sandbox" in checks, checks
+    told = [item for item in api("/api/activity") if item["kind"] == "watchdog"]
+    assert len(told) == 2, told
+    miner = next(finding for finding in findings if finding["rule"] == "miner")
+    dismiss = f"/api/watchdog/findings/{miner['id']}/dismiss"
+    api(dismiss, {"mute": True}, expected=204, method="PUT")
+    after = api("/api/watchdog")
+    assert [finding["rule"] for finding in after["findings"]] == ["credential_reach"], (
+        after
+    )
+    muted = [(mute["rule"], mute["agent"]) for mute in after["mutes"]]
+    assert muted == [("miner", identity)], after
 
 
 def openrouter_turn(api, postgres, identity, marker):
@@ -825,6 +868,9 @@ def qualify(directory: Path, network, console):
                 echo.shutdown()
                 openrouter_turn(api, postgres, identity, marker)
                 print("PASS one turn through the OpenRouter adapter")
+                watchdog_turn(api, identity, marker)
+                print("PASS the watchdog flagged exactly the two dangerous commands,")
+                print("     after every earlier turn's ordinary work raised nothing")
             except BaseException:
                 if name := container(identity):
                     subprocess.run(["docker", "logs", "--tail", "80", name])

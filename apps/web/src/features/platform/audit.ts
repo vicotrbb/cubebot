@@ -1,3 +1,5 @@
+import { ruleTitle } from '../watchdog/model'
+
 export type Detail = Record<string, unknown>
 
 export const FILTERS = [
@@ -8,6 +10,7 @@ export const FILTERS = [
   { label: 'Desktop and vault', areas: 'desktop,login,vault' },
   { label: 'Connections', areas: 'provider,mcp' },
   { label: 'Installation', areas: 'installation,task' },
+  { label: 'Watchdog', areas: 'watchdog' },
 ] as const
 
 const text = (value: unknown) => (typeof value === 'string' ? value : '')
@@ -36,7 +39,15 @@ const LIFECYCLE: Record<string, string> = {
   retire: 'retired',
 }
 
+/** A watchdog entry's rule in quotes, ending "on" when an agent's name follows. */
+const finding = (verb: string, detail: Detail) =>
+  `${verb} “${ruleTitle(text(detail.rule))}”${detail.scope === 'agent' ? ' on' : ''}`
+
 const PHRASES: Record<string, (detail: Detail) => string> = {
+  'watchdog.flag': (detail) => finding('flagged', detail),
+  'watchdog.dismiss': (detail) =>
+    finding(detail.muted ? 'dismissed and muted' : 'dismissed', detail),
+  'watchdog.unmute': (detail) => finding('unmuted', detail),
   'account.bootstrap': () => 'set up the installation as',
   'account.create': () => 'created the account',
   'account.suspend': () => 'suspended',

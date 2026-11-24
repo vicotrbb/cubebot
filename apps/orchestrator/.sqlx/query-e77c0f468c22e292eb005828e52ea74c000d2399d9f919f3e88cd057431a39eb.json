@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO connections (id, connector, slug, auth, credential, level, created_by)\n        VALUES (gen_random_uuid(), 'email', 'mail', 'password', '\\x00', 'full', $1)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e77c0f468c22e292eb005828e52ea74c000d2399d9f919f3e88cd057431a39eb"
+}

@@ -7172,6 +7172,85 @@
           }
         }
       }
+    },
+    "/api/watchdog": {
+      "get": {
+        "tags": [],
+        "summary": "Open and recently dismissed findings, mutes and posture checks; administrators only.",
+        "operationId": "watchdog",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/watchdog/findings/{finding}/dismiss": {
+      "put": {
+        "tags": [],
+        "operationId": "dismiss_finding",
+        "parameters": [
+          {
+            "name": "finding",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Dismiss"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/watchdog/mutes/{mute}": {
+      "delete": {
+        "tags": [],
+        "operationId": "unmute_rule",
+        "parameters": [
+          {
+            "name": "mute",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
     }
   },
   "components": {
@@ -7376,7 +7455,7 @@
           },
           "kind": {
             "type": "string",
-            "description": "`approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,\n`invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or\n`recording_failed`."
+            "description": "`watchdog`, `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,\n`invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or\n`recording_failed`."
           },
           "meeting": {
             "type": ["string", "null"],
@@ -8747,6 +8826,29 @@
           }
         }
       },
+      "Check": {
+        "type": "object",
+        "description": "One fact about how the installation is set up, true or worth a look.",
+        "required": ["key", "ok", "title", "detail"],
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "to": {
+            "type": ["string", "null"],
+            "description": "The console page that changes it."
+          }
+        }
+      },
       "Child": {
         "type": "object",
         "required": ["id", "agent_id", "agent", "status", "awaited"],
@@ -9422,6 +9524,16 @@
         "type": "string",
         "enum": ["running", "stopped"]
       },
+      "Dismiss": {
+        "type": "object",
+        "properties": {
+          "mute": {
+            "type": "boolean",
+            "description": "Also stop this rule opening findings for this agent, or for the installation when the\nfinding has no agent."
+          }
+        },
+        "additionalProperties": false
+      },
       "DreamRevision": {
         "type": "object",
         "description": "A revision the run committed, with the content it replaced.",
@@ -9925,6 +10037,69 @@
           }
         },
         "additionalProperties": false
+      },
+      "Finding": {
+        "type": "object",
+        "required": [
+          "id",
+          "rule",
+          "severity",
+          "summary",
+          "count",
+          "opened_at",
+          "seen_at"
+        ],
+        "properties": {
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "agent_name": {
+            "type": ["string", "null"]
+          },
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many times it matched while open."
+          },
+          "dismissed_at": {
+            "type": ["string", "null"]
+          },
+          "dismissed_by": {
+            "type": ["string", "null"]
+          },
+          "evidence": {
+            "type": ["string", "null"],
+            "description": "What matched, with credential shapes masked."
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "opened_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "rule": {
+            "type": "string",
+            "description": "Such as `reverse_shell`, `secret_sent` or `sign_in_failures`."
+          },
+          "seen_at": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "description": "`high`, `medium` (both notify administrators) or `low` (listed only)."
+          },
+          "summary": {
+            "type": "string"
+          },
+          "turn": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The latest turn that matched; its trace is the evidence."
+          }
+        }
       },
       "FinishSignIn": {
         "type": "object",
@@ -11248,6 +11423,33 @@
         },
         "additionalProperties": false
       },
+      "Mute": {
+        "type": "object",
+        "required": ["id", "rule", "muted_by", "muted_at"],
+        "properties": {
+          "agent": {
+            "type": ["string", "null"],
+            "format": "uuid",
+            "description": "The agent it applies to; every agent when absent."
+          },
+          "agent_name": {
+            "type": ["string", "null"]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "muted_at": {
+            "type": "string"
+          },
+          "muted_by": {
+            "type": "string"
+          },
+          "rule": {
+            "type": "string"
+          }
+        }
+      },
       "NewEvent": {
         "type": "object",
         "description": "A new event: RFC 3339 times, or `YYYY-MM-DD` dates (end exclusive) with `all_day`.",
@@ -11550,6 +11752,38 @@
             }
           }
         ]
+      },
+      "Overview": {
+        "type": "object",
+        "required": ["findings", "dismissed", "mutes", "checks"],
+        "properties": {
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Check"
+            }
+          },
+          "dismissed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "description": "Dismissed in the last 30 days, newest first, at most 50."
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "description": "Open findings, most severe first."
+          },
+          "mutes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Mute"
+            }
+          }
+        }
       },
       "Page": {
         "allOf": [
