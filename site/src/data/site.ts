@@ -3,8 +3,8 @@ import { connectors } from './connectors'
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.6.0'
-export const released = '2026-11-23'
+export const version = 'v0.6.1'
+export const released = '2026-11-24'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -172,6 +172,16 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.6.1',
+    date: '2026-11-24',
+    title: 'A deeper watchdog',
+    items: [
+      'A sensor inside each sandbox reports escalated, mining or hidden processes, process floods, blocked or odd-port connections, changed system files and new setuid files',
+      'The VMM summarizes each KVM guest’s traffic where the guest cannot reach, so the watchdog flags large uploads, traffic while idle, DNS tunnels and direct-to-IP connections',
+      'Pods in the installation’s namespace are checked against what Cubebot created, and bursts of refused requests from one session are flagged',
+    ],
+  },
   {
     tag: 'v0.6.0',
     date: '2026-11-23',
