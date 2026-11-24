@@ -1,12 +1,13 @@
 //! virtio-net (virtio 1.2 §5.1). No offloads are offered, so every buffer is a 12-byte header followed by one Ethernet frame.
 use super::{Device, Slot, queue::Queue};
+use crate::flows::Flows;
 use crate::kvm::memory::GuestMemory;
 use std::{
     convert::Infallible,
     fs::File,
     io::{self, Read, Write},
     net::Ipv4Addr,
-    sync::{Arc, Condvar},
+    sync::{Arc, Condvar, Mutex},
 };
 
 const MTU: u64 = 1 << 3;
@@ -35,6 +36,7 @@ pub struct Net {
     config: [u8; 12],
     address: [u8; 4],
     receivable: Arc<Condvar>,
+    flows: Arc<Mutex<Flows>>,
 }
 
 impl Net {
@@ -47,11 +49,23 @@ impl Net {
             config,
             address: address.octets(),
             receivable: Arc::default(),
+            flows: Arc::default(),
         }
     }
 
     pub fn receivable(&self) -> Arc<Condvar> {
         self.receivable.clone()
+    }
+
+    /// The traffic table the watchdog reads (crate::flows).
+    pub fn flows(&self) -> Arc<Mutex<Flows>> {
+        self.flows.clone()
+    }
+
+    fn flows_lock(&self) -> std::sync::MutexGuard<'_, Flows> {
+        self.flows
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn receive(
@@ -64,6 +78,7 @@ impl Net {
         let Some(chain) = queue.pop(memory)? else {
             return Ok(false);
         };
+        self.flows_lock().inbound(frame);
         let mut written = 0;
         // A buffer too small for the frame is returned empty, which the driver counts as an error.
         if chain.writable_len() >= (HEADER + frame.len()) as u64 {
@@ -86,6 +101,7 @@ impl Net {
                 chain.read_at(memory, HEADER as u64, frame)?;
                 // A full or down tap drops the frame, as a NIC would.
                 if genuine(frame, &self.config[..6], &self.address) {
+                    self.flows_lock().outbound(frame);
                     let _ = self.tap.write(frame);
                 }
             }

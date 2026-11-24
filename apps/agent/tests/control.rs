@@ -97,7 +97,8 @@ async fn relay(channel: Channel, mut socket: WebSocket) {
             incoming = socket.recv() => match incoming {
                 Some(Ok(Message::Text(text))) => {
                     let report: Value = serde_json::from_str(&text).unwrap();
-                    if report["type"] != "vitals" {
+                    // Periodic reports arrive on their own clock; the tests follow the work.
+                    if !matches!(report["type"].as_str(), Some("vitals" | "sightings")) {
                         channel.reports.send(report).unwrap();
                     }
                 }

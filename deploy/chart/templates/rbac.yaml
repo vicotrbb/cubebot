@@ -21,6 +21,10 @@ rules:
   - apiGroups: [""]
     resources: [pods, persistentvolumeclaims, configmaps]
     verbs: [get, create, patch, delete]
+  # The watchdog compares every pod in the namespace with what Cubebot created.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [list]
   # The desktop host channel runs a command in the sandbox container.
   - apiGroups: [""]
     resources: [pods/exec]

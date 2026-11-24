@@ -36,6 +36,7 @@ mod work;
 use axum::{Json, Router, routing::get};
 use cubebot_protocol::{Liveness, LivenessStatus};
 pub use installation::Installation;
+pub use watchdog::watched;
 
 #[derive(utoipa::OpenApi)]
 #[openapi(paths(liveness, readiness))]

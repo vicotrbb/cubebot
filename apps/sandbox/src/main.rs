@@ -1,3 +1,9 @@
+// Only the kvm module records traffic; elsewhere the table is built for its tests alone.
+#[cfg_attr(
+    not(all(target_os = "linux", target_arch = "x86_64")),
+    allow(dead_code)
+)]
+mod flows;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod kvm;
 use std::{
@@ -7,6 +13,7 @@ use std::{
 };
 
 const DESKTOP_SOCKET: &str = "/tmp/cubebot-desktop.sock";
+const NETWORK_SOCKET: &str = "/tmp/cubebot-network.sock";
 
 fn main() -> ExitCode {
     let _ = tracing_subscriber::fmt()
@@ -17,8 +24,11 @@ fn main() -> ExitCode {
     let result = match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["run"] => run(),
         ["desktop"] => desktop().map(|()| 0),
+        ["network"] => network().map(|()| 0),
         _ => {
-            eprintln!("usage: cubebot-sandbox run | cubebot-sandbox desktop");
+            eprintln!(
+                "usage: cubebot-sandbox run | cubebot-sandbox desktop | cubebot-sandbox network"
+            );
             return ExitCode::FAILURE;
         }
     };
@@ -60,6 +70,14 @@ fn desktop() -> io::Result<()> {
         let _ = requests.shutdown(std::net::Shutdown::Write);
     });
     forward(&socket, io::stdout().lock())
+}
+
+/// The guest's traffic since the previous read, as JSON on stdout; the orchestrator runs this
+/// inside the sandbox container, as it does `desktop`.
+fn network() -> io::Result<()> {
+    let path =
+        std::env::var_os("CUBEBOT_GUEST_NETWORK_SOCKET").unwrap_or_else(|| NETWORK_SOCKET.into());
+    forward(UnixStream::connect(&path)?, io::stdout().lock())
 }
 
 /// `io::copy` would splice between the socket and a pipe, which holds responses back until the socket closes.

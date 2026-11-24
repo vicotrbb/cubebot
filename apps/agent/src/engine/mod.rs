@@ -89,6 +89,7 @@ struct Agent {
     restored: bool,
     backup: Option<tokio::task::JoinHandle<()>>,
     vitals: crate::vitals::Sampler,
+    sensor: crate::sensor::Sensor,
     workspace: std::path::PathBuf,
 }
 
@@ -109,6 +110,8 @@ impl Agent {
             .map(|(entry, journal)| (entry, Some(journal)))
             .collect();
         let (sender, events) = mpsc::unbounded_channel();
+        let workspace: std::path::PathBuf =
+            std::env::var_os("CUBEBOT_WORKSPACE_DIRECTORY").map_or_else(|| "/".into(), Into::into);
         Ok(Self {
             store: Arc::new(Mutex::new(store)),
             outbox,
@@ -125,8 +128,8 @@ impl Agent {
             restored: false,
             backup: None,
             vitals: crate::vitals::Sampler::default(),
-            workspace: std::env::var_os("CUBEBOT_WORKSPACE_DIRECTORY")
-                .map_or_else(|| "/".into(), Into::into),
+            sensor: crate::sensor::Sensor::new(&workspace),
+            workspace,
         })
     }
 
@@ -178,14 +181,19 @@ impl Agent {
                 }
                 Some(event) = self.events.recv() => self.forward(&mut channel, event).await?,
                 _ = until(dream_at) => self.dream(),
-                _ = vitals.tick() => {
-                    let sample = self.vitals.sample(&self.workspace);
-                    send(&mut channel, &Report::Vitals(sample)).await?;
-                }
+                _ = vitals.tick() => self.sample(&mut channel).await?,
                 // The switchboard pings every few seconds, so silence means a dead connection.
                 _ = tokio::time::sleep_until(heard + SILENCE) => return Ok(Next::Reconnect),
             }
         }
+    }
+
+    /// The sandbox's vitals and its sensor's report, which doubles as the sensor's heartbeat.
+    async fn sample(&mut self, channel: &mut Channel) -> Result<(), Error> {
+        let sample = self.vitals.sample(&self.workspace);
+        send(channel, &Report::Vitals(sample)).await?;
+        let sightings = self.sensor.sample();
+        send(channel, &Report::Sightings { sightings }).await
     }
 
     /// A wallpaper change or a backup is not work, so it neither disarms the idle timer nor makes a dream yield.

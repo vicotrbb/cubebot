@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT l.kind, l.detail, h.login AS \"login?\"\n        FROM audit_log l\n        LEFT JOIN human_accounts h ON h.id = l.actor_id\n        WHERE l.sequence > $1 AND l.sequence <= $2\n          AND l.kind IN ('oidc.disable', 'oidc.configure', 'backup.key_downloaded', 'account.create',\n                         'access.grant', 'provider.configure', 'provider.forget', 'provider.sign_in',\n                         'provider.sign_out')\n        ORDER BY l.sequence\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "detail",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "login?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1005170ffc1c85cbe27e7d1472157442c45d7eb30ce8a131fc7a055dae16e7bd"
+}

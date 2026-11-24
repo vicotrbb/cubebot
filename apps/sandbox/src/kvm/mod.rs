@@ -78,6 +78,11 @@ pub fn run() -> io::Result<u8> {
     let size = unsafe { sys::get_vcpu_mmap_size(kvm.as_raw_fd(), 0) }
         .map_err(failed("KVM_GET_VCPU_MMAP_SIZE"))? as usize;
     let receivable = net.lock().device.receivable();
+    let network = std::env::var_os("CUBEBOT_GUEST_NETWORK_SOCKET")
+        .map_or_else(|| PathBuf::from(crate::NETWORK_SOCKET), PathBuf::from);
+    crate::flows::serve(&network, net.lock().device.flows()).map_err(|error| {
+        io::Error::other(format!("network socket {}: {error}", network.display()))
+    })?;
     std::thread::spawn(move || {
         let Err(error) = virtio::net::receive(tap, &net, &receivable, memory);
         fail(&format!("guest network: {error}"));

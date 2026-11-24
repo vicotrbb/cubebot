@@ -142,10 +142,10 @@ async fn channel(
         .authenticate(&token, RuntimeAccess::Recovery)
         .await
         .map_err(Failure::from)?;
-    let vitals = desktop.map(|axum::Extension(desktop)| (actor.agent, desktop));
+    let desktop = desktop.map(|axum::Extension(desktop)| desktop);
     Ok(upgrade
         .max_message_size(2 * cubebot_protocol::runtime::EVENT_BYTES)
-        .on_upgrade(move |socket| identity.serve(token, socket, vitals)))
+        .on_upgrade(move |socket| identity.serve(token, socket, actor.agent, desktop)))
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -1,8 +1,14 @@
 //! The watchdog's one worker. Every ten seconds it reads the tool calls and audit entries recorded
 //! since its cursor; every five minutes it runs the rate rules over the last fifteen. It writes
 //! only findings, its cursor and audit entries, so agents never wait on it.
-use super::rules::{self, Hit};
+use super::{
+    Reach, platform,
+    rules::{self, Hit},
+    sandbox,
+};
+use crate::agents::AgentId;
 use crate::identity::audit;
+use k8s_openapi::api::core::v1::Pod;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use std::{
@@ -32,12 +38,12 @@ const SHARED: &[&str] = &[
     "kb_edit",
 ];
 
-pub async fn watch(pool: PgPool, mut stop: watch::Receiver<bool>) {
+pub async fn watch(pool: PgPool, reach: Reach, mut stop: watch::Receiver<bool>) {
     let mut memory = Memory::default();
     let mut rated: Option<Instant> = None;
     loop {
         memory.read(&pool).await;
-        rate(&pool, &mut rated).await;
+        rate(&pool, &reach, &mut rated).await;
         tokio::select! {
             _ = stop.changed() => return,
             () = tokio::time::sleep(EVERY) => (),
@@ -45,22 +51,102 @@ pub async fn watch(pool: PgPool, mut stop: watch::Receiver<bool>) {
     }
 }
 
-/// The rate rules when they are due; a failure is logged and retried next round.
-async fn rate(pool: &PgPool, rated: &mut Option<Instant>) {
+/// The rate rules, the agents' traffic and the namespace's pods when they are due; a failure is
+/// logged and retried next round.
+async fn rate(pool: &PgPool, reach: &Reach, rated: &mut Option<Instant>) {
     if rated.is_some_and(|at| at.elapsed() < RATES) {
         return;
     }
     *rated = Some(Instant::now());
-    if let Err(error) = rates(pool).await {
-        tracing::warn!(?error, "watchdog rate rules failed");
+    logged("the rate rules", rates(pool).await);
+    logged("the sandboxes and the namespace", around(pool, reach).await);
+}
+
+fn logged(what: &str, outcome: Result<(), sqlx::Error>) {
+    if let Err(error) = outcome {
+        tracing::warn!(?error, "watchdog could not read {what}");
     }
+}
+
+/// What the VMMs and the cluster report, when this installation can read them.
+async fn around(pool: &PgPool, reach: &Reach) -> Result<(), sqlx::Error> {
+    if let Some(probe) = &reach.traffic {
+        traffic(pool, probe).await?;
+    }
+    if let Some(list) = &reach.pods
+        && let Some((namespace, pods)) = list().await
+    {
+        namespace_pods(pool, &namespace, &pods).await?;
+    }
+    Ok(())
+}
+
+async fn traffic(pool: &PgPool, probe: &sandbox::Probe) -> Result<(), sqlx::Error> {
+    let agents = sqlx::query!(
+        r#"
+        SELECT g.id,
+               NOT EXISTS(
+                   SELECT 1 FROM chat_turns t
+                   WHERE t.conversation_id = g.id
+                     AND (t.status = 'running' OR t.status_at > clock_timestamp() - interval '5 minutes')
+               ) AND NOT EXISTS(
+                   SELECT 1 FROM dream_runs d
+                   WHERE d.agent_id = g.id
+                     AND (d.status = 'running' OR d.ended_at > clock_timestamp() - interval '5 minutes')
+               ) AS "idle!"
+        FROM agents g
+        WHERE g.desired_state = 'running'
+        "#
+    )
+    .fetch_all(pool)
+    .await?;
+    let reads = agents.iter().map(|agent| probe(AgentId(agent.id)));
+    let summaries = futures_util::future::join_all(reads).await;
+    for (agent, summary) in agents.iter().zip(summaries) {
+        let Some(summary) = summary else {
+            continue;
+        };
+        for hit in sandbox::traffic(&summary, agent.idle) {
+            open(pool, &hit, Some(agent.id), None, WINDOW_SECONDS).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Findings about pods repeat each pass while they hold, so they count at most hourly.
+async fn namespace_pods(pool: &PgPool, namespace: &str, pods: &[Pod]) -> Result<(), sqlx::Error> {
+    let recorded: HashMap<String, platform::Recorded> = sqlx::query!(
+        "
+        SELECT name, agent_id, manifest FROM agent_resources
+        WHERE namespace = $1 AND kind = 'pod' AND phase <> 'stopped'
+        ",
+        namespace,
+    )
+    .fetch_all(pool)
+    .await?
+    .into_iter()
+    .map(|row| {
+        let record = platform::Recorded {
+            agent: row.agent_id,
+            manifest: row.manifest,
+        };
+        (row.name, record)
+    })
+    .collect();
+    for pod in pods {
+        for (hit, agent) in platform::pod(pod, &recorded) {
+            open(pool, &hit, agent, None, 3600).await?;
+        }
+    }
+    Ok(())
 }
 
 /// One read of everything recorded since the cursor and one run of the rate rules, with
 /// nothing remembered from earlier reads.
-pub async fn sweep(pool: &PgPool) -> Result<(), sqlx::Error> {
+pub async fn sweep(pool: &PgPool, reach: &Reach) -> Result<(), sqlx::Error> {
     Memory::default().tick(pool).await?;
-    rates(pool).await
+    rates(pool).await?;
+    around(pool, reach).await
 }
 
 /// What the event rules remember between calls. It starts empty with the process.
@@ -257,10 +343,13 @@ async fn changes(pool: &PgPool, after: i64) -> Result<i64, sqlx::Error> {
             .await?;
     let rows = sqlx::query!(
         r#"
-        SELECT l.kind, h.login AS "login?"
+        SELECT l.kind, l.detail, h.login AS "login?"
         FROM audit_log l
         LEFT JOIN human_accounts h ON h.id = l.actor_id
-        WHERE l.sequence > $1 AND l.sequence <= $2 AND l.kind IN ('oidc.disable', 'backup.key_downloaded')
+        WHERE l.sequence > $1 AND l.sequence <= $2
+          AND l.kind IN ('oidc.disable', 'oidc.configure', 'backup.key_downloaded', 'account.create',
+                         'access.grant', 'provider.configure', 'provider.forget', 'provider.sign_in',
+                         'provider.sign_out')
         ORDER BY l.sequence
         "#,
         after,
@@ -269,7 +358,7 @@ async fn changes(pool: &PgPool, after: i64) -> Result<i64, sqlx::Error> {
     .fetch_all(pool)
     .await?;
     for row in rows {
-        if let Some(hit) = rules::sensitive_change(&row.kind, row.login.as_deref()) {
+        if let Some(hit) = rules::platform_change(&row.kind, &row.detail, row.login.as_deref()) {
             open(pool, &hit, None, None, 0).await?;
         }
     }
@@ -337,7 +426,7 @@ async fn spend(pool: &PgPool) -> Result<(), sqlx::Error> {
 
 /// Opens a finding, or counts a repeat on the open one at most once per `quiet` seconds. A
 /// muted rule opens nothing. Opening one is recorded in the audit log.
-pub(super) async fn open(
+pub(crate) async fn open(
     pool: &PgPool,
     hit: &Hit,
     agent: Option<Uuid>,

@@ -7,7 +7,7 @@ use cubebot_orchestrator::{
     agents::{Agents, CreateAgent},
     api::Installation,
     identity::{Actor, Identity, IdentityError, audit::AuditQuery},
-    watchdog::{Dismiss, Watchdog, sweep},
+    watchdog::{Dismiss, Reach, Watchdog, sweep},
     work::Work,
 };
 use serde_json::{Value, json};
@@ -153,7 +153,7 @@ async fn the_watchdog_flags_what_agents_do_and_tells_administrators_only() {
             bash(&format!("{SHELL} # again")),
         ])
         .await;
-    sweep(&f.pool).await.unwrap();
+    sweep(&f.pool, &Reach::default()).await.unwrap();
     assert_eq!(
         f.rules().await,
         [
@@ -194,7 +194,7 @@ async fn the_watchdog_flags_what_agents_do_and_tells_administrators_only() {
     .execute(&f.pool)
     .await
     .unwrap();
-    sweep(&f.pool).await.unwrap();
+    sweep(&f.pool, &Reach::default()).await.unwrap();
     let rules = f.rules().await;
     assert_eq!(
         rules[2],
@@ -261,7 +261,7 @@ async fn a_dismissed_and_muted_rule_stays_quiet_until_unmuted() {
     let f = fixture().await;
     let watchdog = Watchdog::new(f.pool.clone());
     f.turn(&[bash(SHELL)]).await;
-    sweep(&f.pool).await.unwrap();
+    sweep(&f.pool, &Reach::default()).await.unwrap();
     let finding = watchdog
         .overview(&f.admin, &Installation::default())
         .await
@@ -286,7 +286,7 @@ async fn a_dismissed_and_muted_rule_stays_quiet_until_unmuted() {
     ));
 
     f.turn(&[bash(SHELL)]).await;
-    sweep(&f.pool).await.unwrap();
+    sweep(&f.pool, &Reach::default()).await.unwrap();
     let overview = watchdog
         .overview(&f.admin, &Installation::default())
         .await
@@ -302,7 +302,7 @@ async fn a_dismissed_and_muted_rule_stays_quiet_until_unmuted() {
 
     watchdog.unmute(&f.admin, mute.id).await.unwrap();
     f.turn(&[bash(SHELL)]).await;
-    sweep(&f.pool).await.unwrap();
+    sweep(&f.pool, &Reach::default()).await.unwrap();
     assert_eq!(f.rules().await, [("reverse_shell".to_owned(), 1)]);
     assert_eq!(
         f.audited("watchdog").await,
@@ -312,5 +312,184 @@ async fn a_dismissed_and_muted_rule_stays_quiet_until_unmuted() {
             "watchdog.dismiss",
             "watchdog.flag"
         ]
+    );
+}
+
+async fn findings(pool: &sqlx::PgPool, admin: &Actor) -> Vec<(String, String, Option<Uuid>)> {
+    Watchdog::new(pool.clone())
+        .overview(admin, &Installation::default())
+        .await
+        .unwrap()
+        .findings
+        .into_iter()
+        .map(|finding| (finding.rule, finding.summary, finding.agent))
+        .collect()
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn the_sandbox_sensor_reports_over_the_runtime_channel() {
+    use crate::runtime_identity::{native_chat_setup, open_channel, report, runtime_server};
+    let f = crate::runtime_support::fixture().await;
+    let (auth, _work, admin, agent) = native_chat_setup(&f, "Tidy up").await;
+    let session = auth
+        .bootstrap("projected-token", Uuid::new_v4())
+        .await
+        .unwrap();
+    let (runtime, _task) = runtime_server(auth).await;
+    let mut channel = open_channel(&runtime, &session.token).await;
+    report(&mut channel, json!({"type": "sightings", "sightings": []})).await;
+    let su =
+        json!({"kind": "escalated", "pid": 61, "executable": "/usr/bin/su", "command": "su -"});
+    let blocked = |address: &str| json!({"kind": "blocked", "address": address, "port": 22});
+    report(
+        &mut channel,
+        json!({"type": "sightings", "sightings": [
+            su,
+            {"kind": "tampered", "path": "/etc/passwd"},
+            blocked("10.0.0.1"), blocked("10.0.0.2"), blocked("10.0.0.3"),
+        ]}),
+    )
+    .await;
+    let mut seen = Vec::new();
+    for _ in 0..50 {
+        seen = findings(&f.pool, &admin).await;
+        if seen.len() >= 4 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    let mut rules: Vec<&str> = seen.iter().map(|(rule, ..)| rule.as_str()).collect();
+    rules.sort_unstable();
+    assert_eq!(
+        rules,
+        [
+            "blocked_private",
+            "lan_scan",
+            "privilege_escalation",
+            "tampered"
+        ],
+        "{seen:?}"
+    );
+    assert!(seen.iter().all(|(.., about)| *about == Some(agent)));
+    let escalation = seen
+        .iter()
+        .find(|(rule, ..)| rule == "privilege_escalation")
+        .unwrap();
+    assert_eq!(
+        escalation.1,
+        "Ran `/usr/bin/su` as root from an unprivileged process"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn traffic_pods_and_platform_changes_open_findings() {
+    use cubebot_protocol::watch::{Flow, Name, Traffic};
+    use k8s_openapi::api::core::v1::{Container, Pod, PodSpec};
+    let f = fixture().await;
+    let probe: cubebot_orchestrator::watchdog::sandbox::Probe = std::sync::Arc::new(|_| {
+        Box::pin(async {
+            Some(Traffic {
+                seconds: 300,
+                flows: vec![Flow {
+                    address: "140.82.112.3".into(),
+                    port: 443,
+                    protocol: "tcp".into(),
+                    sent: 120 << 20,
+                    received: 0,
+                    opened: 1,
+                }],
+                names: vec![Name {
+                    name: format!("{}.evil.example", "a".repeat(60)),
+                    count: 1,
+                }],
+                ..Traffic::default()
+            })
+        })
+    });
+    let pods: cubebot_orchestrator::watchdog::platform::Pods = std::sync::Arc::new(|| {
+        Box::pin(async {
+            let mut debug = Pod::default();
+            debug.metadata.name = Some("debug-shell".into());
+            debug.spec = Some(PodSpec {
+                containers: vec![Container {
+                    name: "shell".into(),
+                    image: Some("busybox".into()),
+                    ..Container::default()
+                }],
+                ..PodSpec::default()
+            });
+            Some(("cubebot".to_owned(), vec![debug]))
+        })
+    });
+    f.identity
+        .create_account(
+            &f.admin,
+            "root2",
+            "second administrator",
+            true,
+            Uuid::new_v4(),
+        )
+        .await
+        .unwrap();
+    let reach = Reach {
+        traffic: Some(probe),
+        pods: Some(pods),
+    };
+    sweep(&f.pool, &reach).await.unwrap();
+    let seen = findings(&f.pool, &f.admin).await;
+    let rule = |name: &str| seen.iter().find(|(rule, ..)| rule == name).cloned();
+    let upload = rule("large_upload").expect("large upload");
+    assert_eq!(upload.1, "Sent 120 MB to 140.82.112.3:443 in 5 minutes");
+    assert_eq!(upload.2, Some(f.agent));
+    assert!(
+        rule("idle_traffic").is_some(),
+        "the agent had no work: {seen:?}"
+    );
+    assert!(rule("dns_tunnel").is_some());
+    let foreign = rule("foreign_pod").expect("foreign pod");
+    assert!(foreign.1.ends_with("debug-shell"), "{}", foreign.1);
+    let admin = rule("administrator_added").expect("administrator added");
+    assert_eq!(admin.1, "admin made root2 an administrator");
+}
+
+#[tokio::test]
+#[ignore = "requires isolated PostgreSQL; run just integration"]
+async fn a_burst_of_refused_requests_names_the_session() {
+    let f = fixture().await;
+    let router = cubebot_orchestrator::api::watched(
+        crate::database_router(f.pool.clone()),
+        f.pool.clone(),
+        None,
+    );
+    for _ in 0..20 {
+        let refused = router
+            .clone()
+            .oneshot(
+                Request::get("/api/watchdog")
+                    .header("authorization", format!("Bearer {}", f.member_token))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(refused.status(), StatusCode::FORBIDDEN);
+    }
+    let mut seen = Vec::new();
+    for _ in 0..50 {
+        seen = findings(&f.pool, &f.admin).await;
+        if !seen.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    assert_eq!(
+        seen,
+        [(
+            "refusal_burst".to_owned(),
+            "member was refused 20 requests within five minutes".to_owned(),
+            None
+        )]
     );
 }

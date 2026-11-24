@@ -169,7 +169,19 @@ def watched(outputs):
     return steps[len(outputs)]() if len(outputs) < len(steps) else None
 
 
+# What the sandbox sensor must see: a program run from /tmp, then a private
+# address that never answers, held open across a few of its samples.
+def sensed(outputs):
+    command = (
+        "cp /bin/sleep /tmp/watch-check && /tmp/watch-check 8; "
+        "timeout 9 bash -c '</dev/tcp/10.255.255.1/80'; true"
+    )
+    return ("bash", {"command": command}) if not outputs else None
+
+
 def step(request, outputs):
+    if "sensor-" + MARKER in request:
+        return sensed(outputs)
     if "watchdog-" + MARKER in request:
         return watched(outputs)
     if "apps-" + MARKER in request:
@@ -299,8 +311,9 @@ def watchdog_turn(api, identity, marker):
     turn = api(path, message, expected=202)["id"]
     wait_for("the watchdog turn", lambda: finished(api, identity, turn), timeout=120)
 
+    # The installation's own findings, such as the providers this check set, aside.
     def flagged():
-        found = api("/api/watchdog")["findings"]
+        found = [f for f in api("/api/watchdog")["findings"] if f["agent"] == identity]
         return found if len(found) >= 2 else None
 
     findings = wait_for("the watchdog's findings", flagged, timeout=60)
@@ -318,11 +331,37 @@ def watchdog_turn(api, identity, marker):
     dismiss = f"/api/watchdog/findings/{miner['id']}/dismiss"
     api(dismiss, {"mute": True}, expected=204, method="PUT")
     after = api("/api/watchdog")
-    assert [finding["rule"] for finding in after["findings"]] == ["credential_reach"], (
-        after
-    )
+    mine = [f["rule"] for f in after["findings"] if f["agent"] == identity]
+    assert mine == ["credential_reach"], after
     muted = [(mute["rule"], mute["agent"]) for mute in after["mutes"]]
     assert muted == [("miner", identity)], after
+
+
+def sensor_turn(api, identity, marker):
+    path = f"/api/conversations/{identity}/messages"
+    message = command(message=f"Check the sandbox, sensor-{marker}")
+    turn = api(path, message, expected=202)["id"]
+    wait_for("the sensor turn", lambda: finished(api, identity, turn), timeout=120)
+
+    def sensed():
+        findings = api("/api/watchdog")["findings"]
+        found = {f["rule"]: f for f in findings if f["agent"] == identity}
+        wanted = {"hidden_executable", "blocked_private"}
+        return found if wanted <= set(found) else None
+
+    found = wait_for("the sensor's findings", sensed, timeout=60)
+    hidden = found["hidden_executable"]
+    assert hidden["agent"] == identity and "/tmp/watch-check" in hidden["summary"], (
+        hidden
+    )
+    blocked = found["blocked_private"]
+    assert "10.255.255.1:80" in blocked["summary"], blocked
+    unexpected = set(found) - {
+        "credential_reach",
+        "hidden_executable",
+        "blocked_private",
+    }
+    assert not unexpected, found
 
 
 def openrouter_turn(api, postgres, identity, marker):
@@ -871,6 +910,9 @@ def qualify(directory: Path, network, console):
                 watchdog_turn(api, identity, marker)
                 print("PASS the watchdog flagged exactly the two dangerous commands,")
                 print("     after every earlier turn's ordinary work raised nothing")
+                sensor_turn(api, identity, marker)
+                print("PASS the sandbox sensor saw a program run from /tmp and a")
+                print("     private address left unanswered, and nothing else")
             except BaseException:
                 if name := container(identity):
                     subprocess.run(["docker", "logs", "--tail", "80", name])
