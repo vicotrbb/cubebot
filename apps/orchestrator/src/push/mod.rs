@@ -18,7 +18,8 @@ const PUSH_SERVICES: [&str; 4] = [
     "push.apple.com",
     "notify.windows.com",
 ];
-const PUSHED: [&str; 7] = [
+const PUSHED: [&str; 8] = [
+    "watchdog",
     "attention",
     "approval_pending",
     "login_pending",
@@ -328,10 +329,11 @@ impl Push {
         }
         for item in fresh.iter().take(PER_TICK) {
             let title = self.title(item.agent).await?;
-            let url = item.meeting.map_or_else(
-                || "/activity".to_owned(),
-                |meeting| format!("/meetings/{meeting}"),
-            );
+            let url = match (item.kind.as_str(), item.meeting) {
+                ("watchdog", _) => "/watchdog".to_owned(),
+                (_, Some(meeting)) => format!("/meetings/{meeting}"),
+                _ => "/activity".to_owned(),
+            };
             let note = Notification {
                 title: &title,
                 body: &item.text,

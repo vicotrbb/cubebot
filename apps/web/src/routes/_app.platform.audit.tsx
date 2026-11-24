@@ -181,7 +181,8 @@ function Entry({ entry }: { entry: AuditEntry }) {
 }
 
 function actorName(entry: AuditEntry) {
-  return entry.agent_name ?? entry.actor_name ?? 'Someone'
+  const nobody = entry.kind.startsWith('watchdog.') ? 'The watchdog' : 'Someone'
+  return entry.agent_name ?? entry.actor_name ?? nobody
 }
 
 function Actor({ entry }: { entry: AuditEntry }) {

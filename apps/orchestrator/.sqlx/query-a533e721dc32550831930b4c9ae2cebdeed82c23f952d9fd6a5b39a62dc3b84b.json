@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT payload->'outcome' AS \"outcome!\"\n        FROM turn_events\n        WHERE turn_id = $1 AND sequence < $2 AND payload->>'kind' = 'tool_result'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "outcome!",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a533e721dc32550831930b4c9ae2cebdeed82c23f952d9fd6a5b39a62dc3b84b"
+}

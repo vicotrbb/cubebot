@@ -8,6 +8,7 @@ import {
   Mail,
   MessageCircleQuestion,
   PauseCircle,
+  ShieldAlert,
   ShieldCheck,
   Video,
   Wallet,
@@ -39,6 +40,7 @@ type Named = Map<string, AgentSummary>
 const budget = (item: Item) => item.text.startsWith('Spent its budget')
 
 const KINDS: Record<string, [string, LucideIcon]> = {
+  watchdog: ['Watchdog', ShieldAlert],
   attention: ['Asks you', MessageCircleQuestion],
   approval_pending: ['Approval', ShieldCheck],
   login_pending: ['Log in', KeyRound],
@@ -47,6 +49,7 @@ const KINDS: Record<string, [string, LucideIcon]> = {
 }
 
 function destination(item: Item) {
+  if (item.kind === 'watchdog') return '/watchdog'
   if (item.meeting) return `/meetings/${item.meeting}`
   if (item.task) return `/tasks/${item.task}`
   if (item.room) return `/rooms/${item.room}`
@@ -233,7 +236,22 @@ function NeedsYou({
   )
 }
 
-function Face({ agent }: { agent: AgentSummary | undefined }) {
+function Face({
+  agent,
+  item,
+}: {
+  agent: AgentSummary | undefined
+  item?: Item
+}) {
+  if (item?.kind === 'watchdog' && !item.agent)
+    return (
+      <span
+        className="needs__face needs__face--installation"
+        aria-hidden="true"
+      >
+        <ShieldAlert />
+      </span>
+    )
   return (
     <span className="needs__face" aria-hidden="true">
       <Cube agentId={agent?.id} avatar={agent?.avatar ?? null} size={30} />
@@ -279,11 +297,11 @@ function Need({
       data-kind={item.kind}
       data-new={fresh.has(keyOf(item))}
     >
-      <Face agent={agent} />
+      <Face agent={agent} item={item} />
       <div className="need__body">
         <p className="need__head">
           <Link to={to} className="need__name">
-            {agent?.name ?? 'An agent'}
+            {agent?.name ?? (item.agent ? 'An agent' : 'Installation')}
           </Link>
           <span className="need__tag">
             <Icon aria-hidden="true" />
@@ -321,6 +339,7 @@ function Need({
 }
 
 function verb(item: Item) {
+  if (item.kind === 'watchdog') return 'Review'
   if (item.kind === 'attention') return 'Reply'
   if (item.kind === 'login_pending') return 'Open desktop'
   if (budget(item)) return 'See usage'

@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                (SELECT count(*) FROM human_accounts WHERE role = 'administrator' AND active) AS \"administrators!\",\n                (SELECT count(*) FROM connections WHERE status <> 'connected') AS \"unhealthy_connections!\",\n                (SELECT count(*) FROM connections WHERE level = 'full' AND access->>'mode' = 'all_agents') AS \"open_full_connections!\",\n                (SELECT extract(epoch FROM clock_timestamp() - max(finished_at))::bigint FROM backups\n                 WHERE status IN ('complete', 'incomplete')) AS backup_age_seconds,\n                (SELECT extract(epoch FROM clock_timestamp() - read_at)::bigint FROM watchdog_cursor) AS \"read_seconds_ago!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "administrators!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "unhealthy_connections!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "open_full_connections!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "backup_age_seconds",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "read_seconds_ago!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "efc389adea0ac30feb3b5fb53310825bec36439bc0991450e4e8b420fc44006b"
+}

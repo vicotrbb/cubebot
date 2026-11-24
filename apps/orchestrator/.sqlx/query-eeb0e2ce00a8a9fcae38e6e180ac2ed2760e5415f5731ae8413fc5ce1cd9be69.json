@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO watchdog_mutes (rule, agent_id, muted_by) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eeb0e2ce00a8a9fcae38e6e180ac2ed2760e5415f5731ae8413fc5ce1cd9be69"
+}

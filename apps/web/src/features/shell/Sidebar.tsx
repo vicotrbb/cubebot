@@ -17,6 +17,7 @@ import {
   UsersRound,
   Search,
   Settings,
+  ShieldCheck,
   Star,
   Sun,
   SunMoon,
@@ -29,6 +30,7 @@ import {
   notRetired,
   signOut,
   unread,
+  useActivity,
   useAgents,
   useBroadcasts,
   useInstallation,
@@ -50,6 +52,7 @@ import { NewMeeting } from '../meetings/NewMeeting'
 import { isRunning, pileOf, titleOf } from '../tasks/status'
 import { TaskMark } from '../tasks/TaskMark'
 import '../tasks/tasks.css'
+import { notifying } from '../watchdog/model'
 import { UpdateHint } from './UpdateHint'
 
 const TASK_TREE = 'task-tree'
@@ -164,6 +167,7 @@ export function Sidebar({
           <LayoutGrid className="row__icon" />
           <span className="row__label">Apps</span>
         </Link>
+        {administrator && <WatchdogRow />}
         <Favorites />
         <AgentsSection administrator={administrator} />
         <TeamsSection administrator={administrator} />
@@ -201,6 +205,25 @@ export function Sidebar({
         {administrator && <PlatformGear />}
       </footer>
     </aside>
+  )
+}
+
+function WatchdogRow() {
+  const findings = notifying(useActivity().data)
+  return (
+    <Link
+      to="/watchdog"
+      className="row row--page"
+      activeProps={{ 'aria-current': 'page' }}
+    >
+      <ShieldCheck className="row__icon" />
+      <span className="row__label">Watchdog</span>
+      {findings > 0 && (
+        <span className="row__badge" title="Findings that need you">
+          {findings}
+        </span>
+      )}
+    </Link>
   )
 }
 

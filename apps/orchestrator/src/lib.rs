@@ -11,4 +11,5 @@ pub mod operations;
 pub mod push;
 pub mod speech;
 pub mod storage;
+pub mod watchdog;
 pub mod work;

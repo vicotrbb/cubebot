@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT e.id, e.turn_id, e.sequence, t.conversation_id AS agent, e.payload,\n               extract(epoch FROM e.created_at)::bigint AS \"at!\"\n        FROM turn_events e\n        JOIN chat_turns t ON t.id = e.turn_id\n        WHERE e.id > $1 AND e.id <= $2 AND e.payload->>'kind' = 'tool_call'\n        ORDER BY e.id\n        LIMIT $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "turn_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "sequence",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "agent",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "payload",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "at!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "d271d1a152cb3ba504df64ac652b73f67147a417f69b5225c42424c6957dd053"
+}

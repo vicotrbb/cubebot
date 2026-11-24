@@ -115,6 +115,16 @@ export function CommandPalette({
       { key: 'p:kb', label: 'Knowledge base', hint: 'Page', go: go('/kb') },
       { key: 'p:you', label: 'You', hint: 'Page', go: go('/you') },
       ...(session.data?.administrator
+        ? [
+            {
+              key: 'p:watchdog',
+              label: 'Watchdog',
+              hint: 'Page',
+              go: go('/watchdog'),
+            },
+          ]
+        : []),
+      ...(session.data?.administrator
         ? PLATFORM.map(([to, label]) => ({
             key: `p:${to}`,
             label,

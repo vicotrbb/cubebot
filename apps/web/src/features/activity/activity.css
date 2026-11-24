@@ -94,6 +94,19 @@
   align-self: start;
   padding-top: 1px;
 }
+.needs__face--installation {
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+.needs__face--installation svg {
+  width: 16px;
+  height: 16px;
+}
 .need__body {
   display: grid;
   gap: 3px;
@@ -154,7 +167,8 @@
   box-shadow: none;
   color: var(--orange-text);
 }
-.need[data-kind='turn_failed'] .need__tag {
+.need[data-kind='turn_failed'] .need__tag,
+.need[data-kind='watchdog'] .need__tag {
   background: var(--danger-wash);
   box-shadow: none;
   color: var(--danger);

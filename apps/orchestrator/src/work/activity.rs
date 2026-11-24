@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ActivityItem {
-    /// `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
+    /// `watchdog`, `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
     /// `invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or
     /// `recording_failed`.
     pub kind: String,
@@ -83,6 +83,10 @@ impl Work {
                 JOIN vault_items v ON v.id=f.item_id
                 WHERE f.status='pending'
                   AND (a.role='administrator' OR (v.agent_id IS NOT NULL AND EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='agent' AND p.scope_id=g.id AND p.capability='browser.control')))
+                UNION ALL
+                SELECT 'watchdog', f.agent_id, NULL, f.turn_id, f.opened_at, f.summary, NULL
+                FROM watchdog_findings f
+                WHERE a.role='administrator' AND f.dismissed_at IS NULL AND f.severity IN ('high','medium')
                 UNION ALL
                 SELECT 'invitation_pending', NULL, NULL, NULL, v.created_at, format('Invitation for %s is pending', v.login), NULL
                 FROM invitations v

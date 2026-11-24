@@ -2922,6 +2922,55 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/watchdog': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Open and recently dismissed findings, mutes and posture checks; administrators only. */
+    get: operations['watchdog']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/watchdog/findings/{finding}/dismiss': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put: operations['dismiss_finding']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/watchdog/mutes/{mute}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['unmute_rule']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
 export type webhooks = Record<string, never>
 export interface components {
@@ -2999,7 +3048,7 @@ export interface components {
       /** @description RFC 3339. */
       at: string
       /**
-       * @description `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
+       * @description `watchdog`, `approval_pending`, `attention`, `login_pending`, `turn_waiting`, `turn_failed`,
        *     `invitation_pending`, `dream_published_skill`, `agent_published_skill`, `recording_ready` or
        *     `recording_failed`.
        */
@@ -3510,6 +3559,15 @@ export interface components {
       /** @description Opened in the person's browser; it ends on a `127.0.0.1` address they paste back. */
       url: string
     }
+    /** @description One fact about how the installation is set up, true or worth a look. */
+    Check: {
+      detail: string
+      key: string
+      ok: boolean
+      title: string
+      /** @description The console page that changes it. */
+      to?: string | null
+    }
     Child: {
       agent: string
       /** Format: uuid */
@@ -3750,6 +3808,13 @@ export interface components {
     }
     /** @enum {string} */
     Desired: 'running' | 'stopped'
+    Dismiss: {
+      /**
+       * @description Also stop this rule opening findings for this agent, or for the installation when the
+       *     finding has no agent.
+       */
+      mute?: boolean
+    }
     /** @description A revision the run committed, with the content it replaced. */
     DreamRevision: {
       content: string
@@ -3982,6 +4047,35 @@ export interface components {
     }
     FillVaultItem: {
       field: components['schemas']['VaultField']
+    }
+    Finding: {
+      /** Format: uuid */
+      agent?: string | null
+      agent_name?: string | null
+      /**
+       * Format: int32
+       * @description How many times it matched while open.
+       */
+      count: number
+      dismissed_at?: string | null
+      dismissed_by?: string | null
+      /** @description What matched, with credential shapes masked. */
+      evidence?: string | null
+      /** Format: uuid */
+      id: string
+      /** @description RFC 3339. */
+      opened_at: string
+      /** @description Such as `reverse_shell`, `secret_sent` or `sign_in_failures`. */
+      rule: string
+      seen_at: string
+      /** @description `high`, `medium` (both notify administrators) or `low` (listed only). */
+      severity: string
+      summary: string
+      /**
+       * Format: uuid
+       * @description The latest turn that matched; its trace is the evidence.
+       */
+      turn?: string | null
     }
     FinishSignIn: {
       /** @description The address the browser landed on; absent while a device sign-in waits. */
@@ -4482,6 +4576,19 @@ export interface components {
        */
       parent?: string | null
     }
+    Mute: {
+      /**
+       * Format: uuid
+       * @description The agent it applies to; every agent when absent.
+       */
+      agent?: string | null
+      agent_name?: string | null
+      /** Format: uuid */
+      id: string
+      muted_at: string
+      muted_by: string
+      rule: string
+    }
     /** @description A new event: RFC 3339 times, or `YYYY-MM-DD` dates (end exclusive) with `all_day`. */
     NewEvent: {
       all_day: boolean
@@ -4592,6 +4699,14 @@ export interface components {
           /** @enum {string} */
           status: 'uncertain'
         }
+    Overview: {
+      checks: components['schemas']['Check'][]
+      /** @description Dismissed in the last 30 days, newest first, at most 50. */
+      dismissed: components['schemas']['Finding'][]
+      /** @description Open findings, most severe first. */
+      findings: components['schemas']['Finding'][]
+      mutes: components['schemas']['Mute'][]
+    }
     Page: components['schemas']['PageSummary'] & {
       attachments: components['schemas']['Attachment'][]
       /** @description Markdown. */
@@ -11575,6 +11690,79 @@ export interface operations {
     requestBody?: never
     responses: {
       204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  watchdog: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Overview']
+        }
+      }
+    }
+  }
+  dismiss_finding: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        finding: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Dismiss']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  unmute_rule: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        mute: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

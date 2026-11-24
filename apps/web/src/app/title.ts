@@ -16,6 +16,7 @@ const PAGES: [string, string][] = [
   ['/platform/health', 'Health'],
   ['/broadcast', 'Broadcast'],
   ['/apps', 'Apps'],
+  ['/watchdog', 'Watchdog'],
   ['/calendar', 'Calendar'],
   ['/files', 'Files'],
   ['/meetings', 'Meetings'],

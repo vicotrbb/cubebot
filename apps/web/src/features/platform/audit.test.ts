@@ -3,6 +3,21 @@ import { describe, test } from 'node:test'
 import { day, isSelf, phrase, target } from './audit'
 
 describe('audit sentences', () => {
+  test('watchdog entries name the rule and end on the agent when there is one', () => {
+    assert.equal(
+      phrase('watchdog.flag', { rule: 'reverse_shell', scope: 'agent' }),
+      'flagged “Reverse shell” on',
+    )
+    assert.equal(
+      phrase('watchdog.dismiss', {
+        rule: 'sign_in_failures',
+        muted: true,
+        scope: 'installation',
+      }),
+      'dismissed and muted “Failed sign-ins”',
+    )
+  })
+
   test('a kind reads as a verb phrase with its detail', () => {
     assert.equal(
       phrase('vault.fill', { field: 'secret' }),
