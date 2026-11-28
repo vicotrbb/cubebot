@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::identity::{
     Identity, IdentityError, Receipt,
     access::{AccessExplanation, Capability, GrantRequest, GrantSummary, RevokeGrant, Scope},
-    groups::{CreateGroup, DeleteGroup, GroupId, MembershipChange},
+    groups::{CreateGroup, DeleteGroup, GroupId, GroupRole, MembershipChange},
 };
 
 #[derive(utoipa::OpenApi)]
@@ -20,6 +20,7 @@ use crate::identity::{
     create_group,
     membership,
     delete_group,
+    group_role,
     grants,
     grant,
     revoke,
@@ -35,6 +36,7 @@ pub fn router(identity: Identity) -> Router {
         .route("/api/identity/groups", get(groups).post(create_group))
         .route("/api/identity/groups/membership", post(membership))
         .route("/api/identity/groups/delete", post(delete_group))
+        .route("/api/identity/groups/role", post(group_role))
         .route("/api/identity/access/grants", get(grants).post(grant))
         .route("/api/identity/access/revoke", post(revoke))
         .route("/api/identity/access/explain", post(explain))
@@ -93,7 +95,18 @@ async fn delete_group(
     Ok(no_store(identity.delete_group(&actor, &input).await?))
 }
 
-/// Every grant in force; administrators only.
+/// Gives a group's members a role; only the installation owner maps a group to administrators.
+#[utoipa::path(post, path = "/api/identity/groups/role", request_body = GroupRole, responses((status = 200, body = Receipt)))]
+async fn group_role(
+    State(identity): State<Identity>,
+    headers: HeaderMap,
+    Json(input): Json<GroupRole>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&identity, &headers).await?;
+    Ok(no_store(identity.set_group_role(&actor, &input).await?))
+}
+
+/// Every grant in force; administrators and auditors.
 #[utoipa::path(get, path = "/api/identity/access/grants", operation_id = "list_grants", responses((status = 200, body = Vec<GrantSummary>)))]
 async fn grants(
     State(identity): State<Identity>,

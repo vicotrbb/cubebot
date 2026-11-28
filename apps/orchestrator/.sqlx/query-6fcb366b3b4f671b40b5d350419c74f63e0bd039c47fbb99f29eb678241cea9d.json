@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT CASE WHEN EXISTS(SELECT 1 FROM agents WHERE id = $1) THEN 'agent' ELSE 'room' END AS \"kind!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6fcb366b3b4f671b40b5d350419c74f63e0bd039c47fbb99f29eb678241cea9d"
+}

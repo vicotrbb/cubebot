@@ -150,7 +150,8 @@ impl Work {
         }
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
-        crate::identity::administrator(&mut *tx, actor.id).await?;
+        crate::identity::members::may_create(&mut *tx, actor.id, crate::identity::Creation::Room)
+            .await?;
         let previous = sqlx::query_scalar!(
             "
             SELECT id
@@ -219,15 +220,17 @@ impl Work {
     pub async fn delete_room(&self, actor: &Actor, room: Uuid) -> Result<Room, IdentityError> {
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
-        crate::identity::administrator(&mut *tx, actor.id).await?;
         lock(&mut tx, room).await?;
+        // Administrators archive any room; members their own.
         let found = sqlx::query!(
             r#"
             SELECT r.task, EXISTS(SELECT 1 FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS "teamed!"
             FROM rooms r
+            JOIN human_accounts a ON a.id=$2 AND a.active AND (a.role='administrator' OR (r.created_by=a.id AND a.role<>'guest'))
             WHERE r.id=$1
             "#,
             room,
+            actor.id,
         )
         .fetch_optional(&mut *tx)
         .await?
@@ -270,6 +273,7 @@ impl Work {
         if fixed {
             return Err(IdentityError::Forbidden);
         }
+        add_members(&mut tx, actor, room, &input.agents).await?;
         sqlx::query!(
             "
             DELETE FROM room_members
@@ -280,7 +284,6 @@ impl Work {
         )
         .execute(&mut *tx)
         .await?;
-        add_members(&mut tx, room, &input.agents).await?;
         sqlx::query!(
             "UPDATE rooms SET lead_agent_id=$2 WHERE id=$1",
             room,
@@ -449,7 +452,7 @@ async fn insert_room(
     )
     .fetch_one(&mut **tx)
     .await?;
-    add_members(tx, id, &input.agents).await?;
+    add_members(tx, actor, id, &input.agents).await?;
     Ok(id)
 }
 
@@ -461,18 +464,27 @@ fn sized(agents: &[Uuid]) -> bool {
     agents.len() <= 32
 }
 
+/// A newly added agent must be one the actor may talk to, so a room cannot reach someone
+/// else's private agent; agents already in the room stay.
 async fn add_members(
     tx: &mut Transaction<'_, Postgres>,
+    actor: &Actor,
     room: Uuid,
     agents: &[Uuid],
 ) -> Result<(), IdentityError> {
     let eligible = sqlx::query_scalar!(
         r#"
         SELECT count(*) AS "eligible!"
-        FROM agents
-        WHERE id=ANY($1) AND desired_state<>'retired'
+        FROM agents g
+        JOIN human_accounts a ON a.id=$3 AND a.active
+        WHERE g.id=ANY($1) AND g.desired_state<>'retired'
+          AND (a.role='administrator'
+            OR EXISTS(SELECT 1 FROM room_members m WHERE m.room_id=$2 AND m.agent_id=g.id)
+            OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.send'))
         "#,
         agents,
+        room,
+        actor.id,
     )
     .fetch_one(&mut **tx)
     .await?;

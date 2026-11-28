@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credential FROM personal_providers",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "209a97359a9b0721a50bf7d92b0edd7688186cf8747a25124cf0abbad0f43029"
+}

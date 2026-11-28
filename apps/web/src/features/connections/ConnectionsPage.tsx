@@ -3,7 +3,7 @@ import { Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api, failure } from '../../api/client'
 import { Alert, Skeleton, Status, when } from '../../components/primitives'
-import { answer, CATALOG_KEY, CONNECTIONS_KEY } from './api'
+import { answer, CATALOG_KEY, CONNECTIONS_KEY, Personal } from './api'
 import { Mark } from './Mark'
 import {
   CATEGORIES,
@@ -25,7 +25,7 @@ const RETURNED: Record<string, string> = {
   unexpected: 'The sign-in came back without what it needed. Start it again.',
 }
 
-export function ConnectionsPage() {
+export function ConnectionsPage({ personal = false }: { personal?: boolean }) {
   const catalog = useQuery({
     queryKey: CATALOG_KEY,
     queryFn: () => answer(api.GET('/api/connectors')),
@@ -56,49 +56,53 @@ export function ConnectionsPage() {
   const opened = connectors.find((m) => m.id === open?.id)
 
   return (
-    <div className="connectors">
-      <p className="platform__lead">
-        Accounts and services your agents act through: a mailbox, a repository,
-        a database, a bucket or the app that buzzes your phone. Each signs in
-        with credentials you own; agents find its tools when they need them and
-        never see its password or token.
-      </p>
-      <Notices returned={returned} error={catalog.error ?? connections.error} />
-      <Toolbar
-        connectors={connectors}
-        query={query}
-        category={category}
-        onQuery={setQuery}
-        onCategory={setCategory}
-      />
-      {catalog.isPending && <Skeleton lines={4} />}
-      {catalog.data && shown.length === 0 && (
-        <p className="connectors__none">
-          Nothing matches “{query}”. Try a product such as Gmail, or the generic
-          HTTP API for any other service.
+    <Personal.Provider value={personal}>
+      <div className="connectors">
+        <p className="platform__lead">
+          {personal
+            ? 'Your own accounts, such as your mailbox or your repositories. Only agents you manage can use them, and only the ones you choose on each account. Agents never see a password or token, and the accounts stop working while your account is suspended.'
+            : 'Accounts and services your agents act through: a mailbox, a repository, a database, a bucket or the app that buzzes your phone. Each signs in with credentials you own; agents find its tools when they need them and never see its password or token.'}
         </p>
-      )}
-      <ul className="connectors__grid" aria-label="Connectors">
-        {shown.map((manifest) => (
-          <Card
-            key={manifest.id}
-            manifest={manifest}
-            connections={byConnector.get(manifest.id) ?? []}
-            onOpen={() => setOpen({ id: manifest.id })}
-          />
-        ))}
-      </ul>
-      {opened && catalog.data && (
-        <Sheet
-          catalog={catalog.data}
-          manifest={opened}
-          connections={byConnector.get(opened.id) ?? []}
-          all={connections.data ?? []}
-          focus={open?.account}
-          onClose={() => setOpen(null)}
+        <Notices
+          returned={returned}
+          error={catalog.error ?? connections.error}
         />
-      )}
-    </div>
+        <Toolbar
+          connectors={connectors}
+          query={query}
+          category={category}
+          onQuery={setQuery}
+          onCategory={setCategory}
+        />
+        {catalog.isPending && <Skeleton lines={4} />}
+        {catalog.data && shown.length === 0 && (
+          <p className="connectors__none">
+            Nothing matches “{query}”. Try a product such as Gmail, or the
+            generic HTTP API for any other service.
+          </p>
+        )}
+        <ul className="connectors__grid" aria-label="Connectors">
+          {shown.map((manifest) => (
+            <Card
+              key={manifest.id}
+              manifest={manifest}
+              connections={byConnector.get(manifest.id) ?? []}
+              onOpen={() => setOpen({ id: manifest.id })}
+            />
+          ))}
+        </ul>
+        {opened && catalog.data && (
+          <Sheet
+            catalog={catalog.data}
+            manifest={opened}
+            connections={byConnector.get(opened.id) ?? []}
+            all={connections.data ?? []}
+            focus={open?.account}
+            onClose={() => setOpen(null)}
+          />
+        )}
+      </div>
+    </Personal.Provider>
   )
 }
 

@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT enabled, admin_email, customer, client_email,\n                   service_account IS NOT NULL AS \"has_key!\",\n                   EXTRACT(EPOCH FROM synced_at)::bigint AS synced_at_unix, problem\n            FROM google_directory WHERE singleton\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "admin_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "customer",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "client_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "has_key!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "synced_at_unix",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "problem",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true,
+      null,
+      null,
+      true
+    ]
+  },
+  "hash": "b9380089641f943be7183e2814319277c89673fb88ac1378712cd8d9349dc558"
+}

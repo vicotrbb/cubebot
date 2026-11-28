@@ -27,6 +27,8 @@ pub fn router(identity: Identity) -> Router {
 struct Invite {
     request_id: Uuid,
     login: String,
+    /// `member` when left out.
+    role: Option<crate::identity::Role>,
 }
 
 /// The token is in the first response only.
@@ -38,7 +40,12 @@ async fn invite(
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = super::identity::actor(&identity, &headers).await?;
     let invitation = identity
-        .invite(&actor, &input.login, input.request_id)
+        .invite_as(
+            &actor,
+            &input.login,
+            input.role.unwrap_or(crate::identity::Role::Member),
+            input.request_id,
+        )
         .await?;
     Ok((
         StatusCode::CREATED,

@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.role,\n               i.owner_id IS NOT DISTINCT FROM a.id AS \"owner!\",\n               a.totp_enabled_at IS NOT NULL AS \"two_factor!\",\n               (SELECT count(*) FROM agents g WHERE g.created_by = a.id AND g.desired_state <> 'retired') AS \"owned!\",\n               (SELECT count(*) FROM human_accounts o WHERE o.active) = 1\n                   AND NOT EXISTS(SELECT 1 FROM identity_oidc_policy p WHERE p.singleton AND p.enabled) AS \"solo!\",\n               s.members_create_agents, s.members_create_rooms, s.members_create_teams,\n               s.members_create_connections, s.members_bring_providers, s.member_agent_limit\n        FROM human_accounts a\n        CROSS JOIN installation i\n        CROSS JOIN installation_settings s\n        WHERE a.id = $1 AND a.active\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "role",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "owner!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "two_factor!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "owned!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "solo!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "members_create_agents",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "members_create_rooms",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "members_create_teams",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "members_create_connections",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "members_bring_providers",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "member_agent_limit",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "09552993c8c7877cb8bb0630736a7000790a778c20ff2cea0ce0a4780b5a2424"
+}

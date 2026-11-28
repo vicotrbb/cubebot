@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { Hash, Plus, Search, Shield, Users, X } from 'lucide-react'
+import { Hash, Plus, Search, Shield } from 'lucide-react'
 import { useState } from 'react'
 import { admin } from '../api/admin'
 import type { AgentSummary, RoomSummary } from '../api/types'
@@ -24,14 +24,23 @@ import {
   type Target,
 } from '../features/platform/access'
 import { applyLevel } from '../features/platform/applyLevel'
+import {
+  GroupMark,
+  GroupMembers,
+  GroupOrigin,
+  GroupRole,
+  LinkGroups,
+  type Group,
+} from '../features/platform/Groups'
+import { roleLabel } from '../features/platform/roles'
 import { useAdminAction } from '../features/platform/useAdminAction'
+import { useViewer } from '../features/platform/useViewer'
 import '../features/platform/platform.css'
 
 export const Route = createFileRoute('/_app/platform/groups')({
   component: GroupsAndAccess,
 })
 
-type Group = Awaited<ReturnType<typeof admin.groups>>[number]
 type Account = Awaited<ReturnType<typeof admin.accounts>>[number]
 type Chosen = { kind: 'group' | 'user'; id: string }
 
@@ -42,7 +51,13 @@ function GroupsAndAccess() {
   const groups = useQuery({ queryKey: ['groups'], queryFn: admin.groups })
   const accounts = useQuery({ queryKey: ['accounts'], queryFn: admin.accounts })
   const grants = useQuery({ queryKey: ['grants'], queryFn: admin.grants })
-  const action = useAdminAction(['groups', 'grants', 'access-events'])
+  const action = useAdminAction([
+    'groups',
+    'grants',
+    'access-events',
+    'accounts',
+  ])
+  const viewer = useViewer()
   const [chosen, setChosen] = useState<Chosen | null>(null)
   const activeGroups = active(groups.data)
   const people = active(accounts.data)
@@ -62,6 +77,7 @@ function GroupsAndAccess() {
         people={people}
         selected={selected}
         action={action}
+        writer={viewer.writer}
         onChoose={setChosen}
       />
       <div className="access__detail">
@@ -74,6 +90,7 @@ function GroupsAndAccess() {
             people={people}
             grants={grants.data ?? []}
             action={action}
+            viewer={viewer}
           />
         )}
         {person && (
@@ -82,6 +99,7 @@ function GroupsAndAccess() {
             groups={activeGroups}
             grants={grants.data ?? []}
             action={action}
+            writer={viewer.writer}
           />
         )}
       </div>
@@ -94,12 +112,14 @@ function Recipients({
   people,
   selected,
   action,
+  writer,
   onChoose,
 }: {
   groups: Group[]
   people: Account[]
   selected: Chosen | null
   action: Action
+  writer: boolean
   onChoose: (chosen: Chosen) => void
 }) {
   return (
@@ -118,19 +138,22 @@ function Recipients({
             }
             onClick={() => onChoose({ kind: 'group', id: item.id })}
           >
-            <span className="access__mark">
-              <Users aria-hidden="true" />
-            </span>
+            <GroupMark source={item.source} />
             <span className="access__name">{item.name}</span>
             <span className="faint small tabular">{item.members.length}</span>
           </button>
         ))}
-        <NewGroup
-          busy={action.busy}
-          onCreate={(name) =>
-            action.run(() => admin.createGroup(name), `${name} is ready.`)
-          }
-        />
+        {writer && (
+          <>
+            <NewGroup
+              busy={action.busy}
+              onCreate={(name) =>
+                action.run(() => admin.createGroup(name), `${name} is ready.`)
+              }
+            />
+            <LinkGroups groups={groups} action={action} />
+          </>
+        )}
       </div>
       <div className="access__group">
         <h2>People</h2>
@@ -204,111 +227,65 @@ function GroupDetail({
   people,
   grants,
   action,
+  viewer,
 }: {
   group: Group
   people: Account[]
   grants: Grant[]
   action: Action
+  viewer: ReturnType<typeof useViewer>
 }) {
-  const inGroup = people.filter((person) => group.members.includes(person.id))
-  const others = people.filter((person) => !group.members.includes(person.id))
-  const change = (account: string, present: boolean, done: string) =>
-    void action.run(
-      () => admin.membership(group.id, account, group.revision, present),
-      done,
-    )
   return (
     <>
       <header className="access__head">
         <h2>{group.name}</h2>
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm"
-          disabled={action.busy}
-          onClick={async () => {
-            const yes = await confirmAction({
-              title: `Delete ${group.name}?`,
-              body: 'Its members lose what the group gave them.',
-              action: 'Delete',
-            })
-            if (yes)
-              void action.run(
-                () => admin.deleteGroup(group.id, group.revision),
-                `${group.name} is gone.`,
-              )
-          }}
-        >
-          Delete group
-        </button>
+        <GroupOrigin group={group} />
+        {viewer.writer && <DeleteGroup group={group} action={action} />}
       </header>
-      <section className="access__section">
-        <h3>Members</h3>
-        <ul className="access__members">
-          {inGroup.map((person) => (
-            <li key={person.id}>
-              <PersonAvatar account={person.id} name={person.login} />
-              {person.login}
-              <button
-                type="button"
-                className="access__remove"
-                aria-label={`Remove ${person.login} from ${group.name}`}
-                disabled={action.busy}
-                onClick={() =>
-                  change(
-                    person.id,
-                    false,
-                    `${person.login} left ${group.name}.`,
-                  )
-                }
-              >
-                <X />
-              </button>
-            </li>
-          ))}
-          {others.length > 0 && (
-            <li className="access__add">
-              <select
-                className="input"
-                aria-label={`Add someone to ${group.name}`}
-                value=""
-                disabled={action.busy}
-                onChange={(event) => {
-                  const person = others.find(
-                    (item) => item.id === event.target.value,
-                  )
-                  if (person)
-                    change(
-                      person.id,
-                      true,
-                      `${person.login} joined ${group.name}.`,
-                    )
-                }}
-              >
-                <option value="" disabled>
-                  Add someone…
-                </option>
-                {others.map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.login}
-                  </option>
-                ))}
-              </select>
-            </li>
-          )}
-        </ul>
-        {inGroup.length === 0 && (
-          <p className="small faint">
-            Nobody yet. What you allow below reaches everyone you add.
-          </p>
-        )}
-      </section>
+      <GroupRole
+        group={group}
+        owner={viewer.owner}
+        writer={viewer.writer}
+        action={action}
+      />
+      <GroupMembers
+        group={group}
+        people={people}
+        writer={viewer.writer}
+        action={action}
+      />
       <AccessTable
         recipient={{ kind: 'group', id: group.id }}
         own={grants.filter((grant) => grant.group_id === group.id)}
         inherited={() => null}
         action={action}
+        writer={viewer.writer}
       />
     </>
+  )
+}
+
+function DeleteGroup({ group, action }: { group: Group; action: Action }) {
+  return (
+    <button
+      type="button"
+      className="btn btn--ghost btn--sm"
+      disabled={action.busy}
+      onClick={async () => {
+        const yes = await confirmAction({
+          title: `Delete ${group.name}?`,
+          body: `Its members lose what the group gave them${group.role ? ', including the role it sets' : ''}.${group.source === 'local' ? '' : ' The group itself stays where it came from.'}`,
+          action: 'Delete',
+        })
+        if (yes)
+          void action.run(
+            () => admin.deleteGroup(group.id, group.revision),
+            `${group.name} is gone.`,
+          )
+      }}
+    >
+      Delete group
+    </button>
   )
 }
 
@@ -317,11 +294,13 @@ function PersonDetail({
   groups,
   grants,
   action,
+  writer,
 }: {
   person: Account
   groups: Group[]
   grants: Grant[]
   action: Action
+  writer: boolean
 }) {
   const theirGroups = groups.filter((group) =>
     group.members.includes(person.id),
@@ -330,11 +309,11 @@ function PersonDetail({
     <>
       <header className="access__head">
         <h2>{person.login}</h2>
-        {theirGroups.length > 0 && (
-          <span className="small faint">
-            In {theirGroups.map((group) => group.name).join(', ')}
-          </span>
-        )}
+        <span className="small faint">
+          {roleLabel(person.role)}
+          {theirGroups.length > 0 &&
+            ` · in ${theirGroups.map((group) => group.name).join(', ')}`}
+        </span>
       </header>
       {person.administrator ? (
         <p className="access__note">
@@ -348,6 +327,7 @@ function PersonDetail({
           own={grants.filter((grant) => grant.account_id === person.id)}
           inherited={(target) => throughGroups(theirGroups, grants, target)}
           action={action}
+          writer={writer}
         />
       )}
     </>
@@ -372,11 +352,13 @@ function AccessTable({
   own,
   inherited,
   action,
+  writer,
 }: {
   recipient: { kind: 'user' | 'group'; id: string }
   own: Grant[]
   inherited: (target: Target) => string | null
   action: Action
+  writer: boolean
 }) {
   const agents = useAgents()
   const rooms = useRooms()
@@ -405,7 +387,7 @@ function AccessTable({
           aria-label={`Access to ${name}`}
           data-level={level}
           value={level}
-          disabled={action.busy}
+          disabled={action.busy || !writer}
           onChange={(event) => set(target, name, event.target.value as Level)}
         >
           {level === 'custom' && <option value="custom">Custom</option>}

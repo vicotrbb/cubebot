@@ -962,17 +962,20 @@ pub(super) async fn may_view(pool: &PgPool, account: Uuid, agent: Uuid) -> bool 
 }
 
 async fn actor(pool: &PgPool, account: Uuid) -> Result<Option<Actor>, sqlx::Error> {
-    sqlx::query_as!(
-        Actor,
-        r#"
-        SELECT id, role='administrator' AS "administrator!"
-        FROM human_accounts
-        WHERE id=$1 AND active
-        "#,
+    let role = sqlx::query_scalar!(
+        "SELECT role FROM human_accounts WHERE id=$1 AND active",
         account,
     )
     .fetch_optional(pool)
-    .await
+    .await?;
+    Ok(role.map(|role| {
+        let role = crate::identity::Role::parse(&role);
+        Actor {
+            id: account,
+            administrator: role == crate::identity::Role::Administrator,
+            role,
+        }
+    }))
 }
 
 fn clip(text: &str, bytes: usize) -> &str {

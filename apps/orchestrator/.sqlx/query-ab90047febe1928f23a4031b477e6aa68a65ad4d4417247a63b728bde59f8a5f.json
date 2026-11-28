@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id AS \"id!: GroupId\", name AS \"name!\", revision AS \"revision!\", active AS \"active!\",\n                COALESCE((SELECT array_agg(m.account_id) FROM human_team_members m WHERE m.team_id=t.id),'{}') AS \"members!\",\n                COALESCE((SELECT array_agg(m.account_id) FROM human_team_members m WHERE m.team_id=t.id AND m.manager),'{}') AS \"managers!\",\n                source AS \"source!\", external_id, role,\n                EXTRACT(EPOCH FROM synced_at)::bigint AS synced_at_unix\n            FROM human_teams t\n            WHERE ($1::uuid IS NULL OR id > $1)\n              AND ($2 OR EXISTS(SELECT 1 FROM human_team_members m WHERE m.team_id=t.id AND m.account_id=$3 AND m.manager))\n            ORDER BY id\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: GroupId",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "active!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "members!",
+        "type_info": "UuidArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "managers!",
+        "type_info": "UuidArray"
+      },
+      {
+        "ordinal": 6,
+        "name": "source!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "external_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "role",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "synced_at_unix",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "ab90047febe1928f23a4031b477e6aa68a65ad4d4417247a63b728bde59f8a5f"
+}

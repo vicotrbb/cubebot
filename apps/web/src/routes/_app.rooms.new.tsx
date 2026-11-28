@@ -2,23 +2,23 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
 import { api, failure, ok } from '../api/client'
-import { keys, useAgents, useSession } from '../app/queries'
+import { keys, useAgents, useSession, useStanding } from '../app/queries'
 import { AddMember, MemberList } from '../components/MemberPicker'
-import {
-  agentOptions,
-  memberKey,
-  without,
-  type MemberOption,
-} from '../components/members'
+import { memberKey, without, type MemberOption } from '../components/members'
 import { Alert, Field } from '../components/primitives'
-import { settlePeople, usePeopleCandidates } from '../features/rooms/Members'
+import {
+  addableAgents,
+  settlePeople,
+  usePeopleCandidates,
+} from '../features/rooms/Members'
 
 export const Route = createFileRoute('/_app/rooms/new')({ component: NewRoom })
 
 function NewRoom() {
   const agents = useAgents()
   const administrator = Boolean(useSession().data?.administrator)
-  const { people, grants } = usePeopleCandidates(administrator)
+  const shares = useStanding().data?.solo === false
+  const { people, grants } = usePeopleCandidates(shares)
   const navigate = useNavigate()
   const client = useQueryClient()
   const [name, setName] = useState('')
@@ -90,12 +90,12 @@ function NewRoom() {
             />
             <AddMember
               options={without(
-                [...agentOptions(agents.data ?? []), ...people],
+                [...addableAgents(agents.data ?? [], administrator), ...people],
                 members,
               )}
               busy={busy}
               placeholder={
-                administrator ? 'Search agents and people' : 'Search agents'
+                shares ? 'Search agents and people' : 'Search agents'
               }
               onAdd={(member) => setMembers((current) => [...current, member])}
             />

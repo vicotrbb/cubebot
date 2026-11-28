@@ -47,6 +47,37 @@ pub(super) struct Verified {
     pub subject: String,
     pub email: Option<String>,
     pub email_verified: bool,
+    /// The groups claim's values, when the provider is set to read one.
+    pub groups: Vec<String>,
+}
+
+/// Reads one claim of an ID token whose signature and claims were already verified.
+fn groups_from(id: &openidconnect::core::CoreIdToken, claim: &str) -> Vec<String> {
+    use base64::Engine;
+    let token = id.to_string();
+    let payload = token
+        .split('.')
+        .nth(1)
+        .and_then(|part| {
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(part)
+                .ok()
+        })
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+    let values = payload.as_ref().and_then(|payload| payload.get(claim));
+    let listed = match values {
+        Some(serde_json::Value::Array(values)) => {
+            values.iter().filter_map(|value| value.as_str()).collect()
+        }
+        Some(serde_json::Value::String(value)) => vec![value.as_str()],
+        _ => Vec::new(),
+    };
+    listed
+        .into_iter()
+        .filter(|value| !value.is_empty() && value.len() <= 320)
+        .take(1000)
+        .map(str::to_owned)
+        .collect()
 }
 
 #[tracing::instrument(skip_all)]
@@ -57,6 +88,7 @@ pub(super) async fn verify(
     browser: String,
     nonce: String,
     need_email: bool,
+    groups_claim: Option<&str>,
 ) -> Result<Verified, IdentityError> {
     let token = client
         .exchange_code(AuthorizationCode::new(code))
@@ -80,6 +112,7 @@ pub(super) async fn verify(
         subject: claims.subject().as_str().to_owned(),
         email: claims.email().map(|email| email.as_str().to_owned()),
         email_verified: claims.email_verified() == Some(true),
+        groups: groups_claim.map_or_else(Vec::new, |claim| groups_from(id, claim)),
     };
     if need_email && identity.email.is_none() {
         let user: CoreUserInfoClaims = client

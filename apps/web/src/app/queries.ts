@@ -35,6 +35,7 @@ export const keys = {
   teams: ['teams'] as const,
   meetings: ['meetings'] as const,
   apps: ['apps'] as const,
+  standing: ['standing'] as const,
 }
 
 export function useSession() {
@@ -49,6 +50,15 @@ export function useSession() {
       }
     },
     staleTime: 60_000,
+  })
+}
+
+/** The signed-in person's role, ownership and what they may create right now. */
+export function useStanding() {
+  return useQuery({
+    queryKey: keys.standing,
+    queryFn: () => ok(api.GET('/api/identity/me/standing')),
+    staleTime: 30_000,
   })
 }
 

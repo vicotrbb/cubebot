@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO human_sessions (token_hash, account_id, expires_at, name)\n            SELECT $1, id, clock_timestamp() + make_interval(days => $3), $4\n            FROM human_accounts WHERE id = $2 AND active\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2e66102bafa3dcd5d329a74dd135ec10acbb714873d8af0ba81b984dce6332ed"
+}

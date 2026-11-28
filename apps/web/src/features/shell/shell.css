@@ -103,6 +103,11 @@
   flex: none;
   color: var(--ink-faint);
 }
+.section__add[aria-disabled='true'],
+.menu__item[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.5;
+}
 .section__head:hover {
   color: var(--ink);
   background: rgb(var(--shadow) / 0.05);

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE installation_settings SET members_create_agents = false",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "a2d021d5b143659206c460861f5db2c90a70c6cf5c095755d292c617ad234b5e"
+}

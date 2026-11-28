@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE rooms SET created_by = $2 WHERE created_by = $1 AND NOT task",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8050fd22f9ca98817f843513f4f59bfe524e5ee331b9327eafd70c7cda6374a2"
+}

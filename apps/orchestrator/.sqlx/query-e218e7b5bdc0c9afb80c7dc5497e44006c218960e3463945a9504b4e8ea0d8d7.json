@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH target AS (\n            SELECT CASE $2\n                WHEN 'room' THEN $3\n                ELSE COALESCE((SELECT id FROM agents WHERE id = $3), (SELECT agent_id FROM conversation_origins WHERE id = $3))\n            END AS id,\n            CASE $2 WHEN 'room' THEN 'room' ELSE 'agent' END AS kind,\n            CASE $2 WHEN 'room' THEN 'room.manage' ELSE 'agent.manage' END AS capability\n        )\n        SELECT EXISTS(\n            SELECT 1 FROM human_accounts a, target t\n            WHERE a.id = $1 AND a.active AND (\n                a.role = 'administrator'\n                OR (a.role = 'member'\n                    AND EXISTS(SELECT 1 FROM effective_human_grants p\n                        WHERE p.actor_id = a.id AND p.scope_kind = t.kind AND p.scope_id = t.id AND p.capability = t.capability)\n                    AND ($4::text IS NULL OR EXISTS(SELECT 1 FROM effective_human_grants p\n                        WHERE p.actor_id = a.id AND p.scope_kind = $2 AND p.scope_id = $3 AND p.capability = $4))))\n        ) AS \"allowed!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "allowed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e218e7b5bdc0c9afb80c7dc5497e44006c218960e3463945a9504b4e8ea0d8d7"
+}

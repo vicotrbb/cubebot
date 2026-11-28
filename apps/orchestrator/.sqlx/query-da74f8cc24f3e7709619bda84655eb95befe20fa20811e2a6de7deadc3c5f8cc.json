@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT count(*) AS \"eligible!\"\n        FROM agents g\n        JOIN human_accounts a ON a.id=$3 AND a.active\n        WHERE g.id=ANY($1) AND g.desired_state<>'retired'\n          AND (a.role='administrator'\n            OR EXISTS(SELECT 1 FROM room_members m WHERE m.room_id=$2 AND m.agent_id=g.id)\n            OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id=a.id AND p.scope_kind='conversation' AND p.scope_id=g.id AND p.capability='conversation.send'))\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "eligible!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "da74f8cc24f3e7709619bda84655eb95befe20fa20811e2a6de7deadc3c5f8cc"
+}

@@ -6,6 +6,17 @@ use super::{Actor, Identity, IdentityError, Session, passwords};
 impl Identity {
     #[tracing::instrument(skip_all)]
     pub async fn login(&self, login: &str, password: &str) -> Result<Session, IdentityError> {
+        self.login_with(login, password, None).await
+    }
+
+    /// Signs in with a password and, when the account has two-factor on, its code.
+    #[tracing::instrument(skip_all)]
+    pub async fn login_with(
+        &self,
+        login: &str,
+        password: &str,
+        code: Option<&str>,
+    ) -> Result<Session, IdentityError> {
         if login.len() > 64 || password.len() > 1024 {
             return Err(IdentityError::Unauthorized);
         }
@@ -42,6 +53,11 @@ impl Identity {
         .fetch_optional(&mut *transaction)
         .await?;
         active.ok_or(IdentityError::Unauthorized)?;
+        if let Err(error) = self.second_factor(&mut transaction, id, code).await {
+            // Commit the used-code bookkeeping only on success; a wrong code changes nothing.
+            transaction.rollback().await?;
+            return Err(error);
+        }
         sqlx::query!(
             "
             INSERT INTO human_sessions (token_hash, account_id, expires_at)
@@ -67,7 +83,8 @@ impl Identity {
         }
         let account = sqlx::query!(
             r#"
-            SELECT a.id AS "id!", a.role = 'administrator' AS "administrator!"
+            SELECT a.id AS "id!", a.role AS "role!",
+                s.last_seen_at IS NULL OR s.last_seen_at < clock_timestamp() - interval '5 minutes' AS "stale!"
             FROM human_sessions s
             JOIN human_accounts a ON a.id = s.account_id
             WHERE s.token_hash = $1
@@ -87,9 +104,26 @@ impl Identity {
         .fetch_optional(&self.pool)
         .await?;
         let account = account.ok_or(IdentityError::Unauthorized)?;
+        if account.stale {
+            // At most one write per session every five minutes, for "last seen".
+            sqlx::query!(
+                "
+                WITH seen AS (
+                    UPDATE human_sessions SET last_seen_at = clock_timestamp() WHERE token_hash = $1
+                )
+                UPDATE human_accounts SET last_seen_at = clock_timestamp() WHERE id = $2
+                ",
+                digest(token),
+                account.id,
+            )
+            .execute(&self.pool)
+            .await?;
+        }
+        let role = super::Role::parse(&account.role);
         Ok(Actor {
             id: account.id,
-            administrator: account.administrator,
+            administrator: role == super::Role::Administrator,
+            role,
         })
     }
 

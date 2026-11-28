@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT connector, auth, config FROM connections WHERE id = $1 AND (NOT personal OR created_by = $2)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "connector",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "auth",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "config",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9d1ecc324831297877010441026486c16bfcbc33617dba17d2e9f7b50a6764dd"
+}

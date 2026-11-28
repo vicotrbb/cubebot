@@ -15,19 +15,23 @@ def check_agents(base, admin, member):
     assert status == 201
     assert request(base, "/api/agents", admin, command)[1] == receipt
     assert request(base, "/api/agents", admin, command | {"name": "Changed"})[0] == 409
-    assert request(base, "/api/agents", member, command)[0] == 403
+    # Members create within the installation's policy and own what they create.
+    mine = command | {"request_id": str(uuid.uuid4()), "name": "Member's own agent"}
+    status, own = request(base, "/api/agents", member, mine)
+    assert status == 201
     other = command | {"request_id": str(uuid.uuid4()), "name": "Other private agent"}
     assert request(base, "/api/agents", admin, other)[0] == 201
-    assert request(base, "/api/agents", member)[1] == []
+    assert [item["id"] for item in request(base, "/api/agents", member)[1]] == [
+        own["id"]
+    ]
     path = "/api/agents/" + receipt["id"]
     assert request(base, path, member)[0] == 404
     team, membership = grant_manager(base, admin, member, receipt["id"])
     status, definition = request(base, path, member)
     assert status == 200 and definition["instructions"] == command["instructions"]
     assert definition["desired_state"] == "running"
-    assert [item["id"] for item in request(base, "/api/agents", member)[1]] == [
-        receipt["id"]
-    ]
+    listed = [item["id"] for item in request(base, "/api/agents", member)[1]]
+    assert sorted(listed) == sorted([receipt["id"], own["id"]])
     revoke_membership(base, admin, member, path, membership)
     return command, receipt, team, member
 
@@ -67,7 +71,8 @@ def revoke_membership(base, admin, member, path, membership):
     }
     assert request(base, "/api/identity/groups/membership", admin, change)[0] == 200
     assert request(base, path, member)[0] == 404
-    assert request(base, "/api/agents", member)[1] == []
+    listed = [item["id"] for item in request(base, "/api/agents", member)[1]]
+    assert path.rsplit("/", 1)[1] not in listed
 
 
 def check_agents_restart(base, admin, checkpoint):
@@ -77,4 +82,6 @@ def check_agents_restart(base, admin, checkpoint):
         request(base, "/api/agents/" + receipt["id"], admin)[1]["name"]
         == command["name"]
     )
-    assert request(base, "/api/agents", member)[1] == []
+    # After a restart the member still reaches only the agent they own.
+    listed = [item["id"] for item in request(base, "/api/agents", member)[1]]
+    assert receipt["id"] not in listed and len(listed) == 1

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT EXISTS(\n                SELECT 1 FROM human_team_members m JOIN human_teams t ON t.id = m.team_id AND t.active AND t.role IS NOT NULL\n                WHERE m.account_id = $1\n            ) AS \"grouped!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grouped!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cc22ac25d720cc894c23cafea2342f0e2c4800dcef7264fe1dd7364773172302"
+}

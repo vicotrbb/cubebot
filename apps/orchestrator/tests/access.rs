@@ -51,6 +51,7 @@ fn membership(
         account_id,
         expected_revision,
         present,
+        manager: None,
     }
 }
 
@@ -66,6 +67,8 @@ async fn team_access_is_scoped_explainable_and_revoked_without_relogin() {
             &CreateGroup {
                 request_id: Uuid::new_v4(),
                 name: "Engineering".into(),
+                source: None,
+                external_id: None,
             },
         )
         .await
@@ -153,6 +156,8 @@ async fn team_commands_replay_after_reconnect_and_reject_changed_input_or_stale_
     let command = CreateGroup {
         request_id: Uuid::new_v4(),
         name: "Research".into(),
+        source: None,
+        external_id: None,
     };
     let (first, second) = tokio::join!(
         identity.create_group(&admin, &command),
@@ -168,6 +173,8 @@ async fn team_commands_replay_after_reconnect_and_reject_changed_input_or_stale_
     assert_eq!(team, identity.create_group(&admin, &command).await.unwrap());
     let changed = CreateGroup {
         name: "Changed".into(),
+        source: None,
+        external_id: None,
         ..command
     };
     assert!(matches!(
@@ -258,6 +265,8 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
             &CreateGroup {
                 request_id: Uuid::new_v4(),
                 name: "Shared".into(),
+                source: None,
+                external_id: None,
             },
         )
         .await
@@ -359,15 +368,10 @@ async fn revoking_a_direct_grant_preserves_team_access_until_team_deletion() {
 #[ignore = "requires isolated PostgreSQL; run just integration"]
 async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
     let identity = Identity::new(support::database().await);
-    let (admin, _) = people(&identity).await;
-    let command = CreateGroup {
-        request_id: Uuid::new_v4(),
-        name: "Private".into(),
-    };
-    identity.create_group(&admin, &command).await.unwrap();
+    let (owner, _) = people(&identity).await;
     identity
         .create_account(
-            &admin,
+            &owner,
             "second-admin",
             "second administrator password",
             true,
@@ -379,9 +383,17 @@ async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
         .login("second-admin", "second administrator password")
         .await
         .unwrap();
-    let second = identity.authenticate(&session.token).await.unwrap();
+    let admin = identity.authenticate(&session.token).await.unwrap();
+    let command = CreateGroup {
+        request_id: Uuid::new_v4(),
+        name: "Private".into(),
+        source: None,
+        external_id: None,
+    };
+    identity.create_group(&admin, &command).await.unwrap();
+    // Only the installation owner suspends an administrator.
     identity
-        .suspend(&second, admin.id, 1, uuid::Uuid::new_v4())
+        .suspend(&owner, admin.id, 1, uuid::Uuid::new_v4())
         .await
         .unwrap();
     assert!(matches!(
@@ -396,7 +408,7 @@ async fn replay_and_receipt_reads_recheck_current_administrator_authority() {
     ));
     assert!(matches!(
         identity
-            .command_receipt(&second, "team.create", command.request_id)
+            .command_receipt(&owner, "team.create", command.request_id)
             .await,
         Err(IdentityError::NotFound)
     ));
@@ -422,10 +434,8 @@ async fn team_listing_pages_and_denies_non_administrators() {
     assert_eq!(page.len(), 100);
     let tail = identity.groups(&admin, Some(page[99].id)).await.unwrap();
     assert_eq!(tail.len(), 5);
-    assert!(matches!(
-        identity.groups(&member, None).await,
-        Err(IdentityError::Forbidden)
-    ));
+    // Members see only the groups they manage.
+    assert!(identity.groups(&member, None).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -476,10 +486,13 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
                 &cubebot_orchestrator::identity::Actor {
                     id: actor_id,
                     administrator: true,
+                    role: cubebot_orchestrator::identity::Role::Administrator,
                 },
                 &CreateGroup {
                     request_id: Uuid::new_v4(),
                     name: "First".into(),
+                    source: None,
+                    external_id: None,
                 },
             )
             .await
@@ -492,6 +505,8 @@ async fn publication_barrier_prevents_cursor_gaps_between_administrators() {
                 &CreateGroup {
                     request_id: Uuid::new_v4(),
                     name: "Second".into(),
+                    source: None,
+                    external_id: None,
                 },
             )
             .await
@@ -532,6 +547,8 @@ async fn membership_cleanup_accepts_suspended_accounts() {
             &CreateGroup {
                 request_id: Uuid::new_v4(),
                 name: "Cleanup".into(),
+                source: None,
+                external_id: None,
             },
         )
         .await

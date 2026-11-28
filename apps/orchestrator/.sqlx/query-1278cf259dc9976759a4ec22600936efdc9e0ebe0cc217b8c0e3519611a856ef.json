@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT enabled, admin_email, customer, service_account FROM google_directory WHERE singleton",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "admin_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "customer",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "service_account",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "1278cf259dc9976759a4ec22600936efdc9e0ebe0cc217b8c0e3519611a856ef"
+}

@@ -3586,7 +3586,7 @@
     "/api/identity/access/grants": {
       "get": {
         "tags": [],
-        "summary": "Every grant in force; administrators only.",
+        "summary": "Every grant in force; administrators and auditors.",
         "operationId": "list_grants",
         "responses": {
           "200": {
@@ -3624,6 +3624,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/access/resources/{id}": {
+      "get": {
+        "tags": [],
+        "summary": "The owner and the grants of one agent or room, for those who manage it.",
+        "operationId": "resource_access",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceAccess"
                 }
               }
             }
@@ -3717,6 +3747,91 @@
         }
       }
     },
+    "/api/identity/accounts/password-reset": {
+      "post": {
+        "tags": [],
+        "summary": "A one-day link token for setting a new password; in this response only.",
+        "operationId": "create_password_reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Secret"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/accounts/role": {
+      "post": {
+        "tags": [],
+        "operationId": "change_role",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/accounts/two-factor-reset": {
+      "post": {
+        "tags": [],
+        "operationId": "reset_two_factor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/identity/accounts/{id}/avatar": {
       "get": {
         "tags": [],
@@ -3801,6 +3916,138 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/identity/directory": {
+      "get": {
+        "tags": [],
+        "operationId": "directory",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Directory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/google": {
+      "get": {
+        "tags": [],
+        "summary": "Administrators and auditors; the service account key is never returned.",
+        "operationId": "google_directory",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GoogleSettings"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "summary": "400 for an invalid key or address, or enabling without both; 503 when no credential key is\nconfigured to seal a new key.",
+        "operationId": "save_google_directory",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGoogle"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          },
+          "503": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/google/groups": {
+      "get": {
+        "tags": [],
+        "summary": "The Workspace's groups, for linking; 503 when Google refuses.",
+        "operationId": "google_workspace_groups",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WorkspaceGroup"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
+          },
+          "503": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/google/sync": {
+      "post": {
+        "tags": [],
+        "summary": "Mirrors every linked Google group now; groups Google could not list are named in `problem`.\n409 until a key and administrator are saved.",
+        "operationId": "sync_google_directory",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncOutcome"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": ""
+          },
+          "409": {
+            "description": ""
           }
         }
       }
@@ -3912,6 +4159,85 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/groups/role": {
+      "post": {
+        "tags": [],
+        "summary": "Gives a group's members a role; only the installation owner maps a group to administrators.",
+        "operationId": "group_role",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupRole"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/installation/hand-over": {
+      "post": {
+        "tags": [],
+        "operationId": "hand_over",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandOver"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/inventory": {
+      "get": {
+        "tags": [],
+        "summary": "Every agent, room, team and connection with its owner; administrators and auditors.",
+        "operationId": "inventory",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnedResource"
+                  }
                 }
               }
             }
@@ -4155,6 +4481,31 @@
         }
       }
     },
+    "/api/identity/me/password": {
+      "post": {
+        "tags": [],
+        "summary": "Ends every other session and personal token.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
     "/api/identity/me/preferences": {
       "get": {
         "tags": [],
@@ -4242,6 +4593,172 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/me/sessions": {
+      "get": {
+        "tags": [],
+        "operationId": "sessions",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/me/sessions/{id}": {
+      "delete": {
+        "tags": [],
+        "operationId": "end_session",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/me/standing": {
+      "get": {
+        "tags": [],
+        "operationId": "standing",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Standing"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/me/tokens": {
+      "post": {
+        "tags": [],
+        "summary": "The token is in this response only.",
+        "operationId": "create_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Secret"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/me/two-factor": {
+      "post": {
+        "tags": [],
+        "operationId": "enroll_two_factor",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Enrollment"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/me/two-factor/confirm": {
+      "post": {
+        "tags": [],
+        "operationId": "confirm_two_factor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Code"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecoveryCodes"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/me/two-factor/disable": {
+      "post": {
+        "tags": [],
+        "operationId": "disable_two_factor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Code"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
           },
           "400": {
             "description": ""
@@ -4431,6 +4948,158 @@
         }
       }
     },
+    "/api/identity/ownership/transfer": {
+      "post": {
+        "tags": [],
+        "operationId": "transfer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Transfer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/ownership/transfer-all": {
+      "post": {
+        "tags": [],
+        "operationId": "transfer_all",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferAll"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/password-reset": {
+      "post": {
+        "tags": [],
+        "operationId": "redeem_password_reset",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Redeem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/policy": {
+      "get": {
+        "tags": [],
+        "operationId": "policy",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [],
+        "operationId": "save_policy",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePolicy"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/identity/reactivate": {
+      "post": {
+        "tags": [],
+        "operationId": "reactivate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reactivate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/identity/setup": {
       "get": {
         "tags": [],
@@ -4475,6 +5144,39 @@
           },
           "409": {
             "description": ""
+          }
+        }
+      }
+    },
+    "/api/identity/spend": {
+      "get": {
+        "tags": [],
+        "summary": "Model spend per person over the last `days` (30 when left out).",
+        "operationId": "spend",
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OwnerSpend"
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -5282,6 +5984,88 @@
         ],
         "responses": {
           "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/api/me/providers": {
+      "get": {
+        "tags": [],
+        "summary": "The signed-in person's own provider keys, without the keys.",
+        "operationId": "my_providers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonalProvider"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/providers/{provider}": {
+      "put": {
+        "tags": [],
+        "summary": "Saves the person's own key for a pay-as-you-go provider; their agents that choose it use it.",
+        "operationId": "save_my_provider",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderKind"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePersonalProvider"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": ""
+          },
+          "403": {
+            "description": ""
+          }
+        }
+      },
+      "delete": {
+        "tags": [],
+        "operationId": "forget_my_provider",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProviderKind"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
             "description": ""
           }
         }
@@ -7348,7 +8132,7 @@
       },
       "AccessExplanation": {
         "type": "object",
-        "required": ["allowed", "administrator", "grants"],
+        "required": ["allowed", "administrator", "owner", "auditor", "grants"],
         "properties": {
           "administrator": {
             "type": "boolean"
@@ -7356,11 +8140,19 @@
           "allowed": {
             "type": "boolean"
           },
+          "auditor": {
+            "type": "boolean",
+            "description": "They are an auditor, who reads everything."
+          },
           "grants": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AccessSource"
             }
+          },
+          "owner": {
+            "type": "boolean",
+            "description": "They own the resource."
           }
         }
       },
@@ -7400,7 +8192,7 @@
       },
       "Account": {
         "type": "object",
-        "required": ["id", "login", "administrator"],
+        "required": ["id", "login", "administrator", "role"],
         "properties": {
           "administrator": {
             "type": "boolean"
@@ -7415,12 +8207,41 @@
           "name": {
             "type": ["string", "null"],
             "description": "A display name; accounts have none yet."
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
           }
         }
       },
+      "AccountRequest": {
+        "type": "object",
+        "required": ["request_id", "id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "AccountSummary": {
         "type": "object",
-        "required": ["id", "login", "administrator", "active", "revision"],
+        "required": [
+          "id",
+          "login",
+          "administrator",
+          "role",
+          "owner",
+          "active",
+          "revision",
+          "two_factor",
+          "owned",
+          "sessions"
+        ],
         "properties": {
           "active": {
             "type": "boolean"
@@ -7432,12 +8253,38 @@
             "type": "string",
             "format": "uuid"
           },
+          "last_seen_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
           "login": {
             "type": "string"
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "owned": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Live agents, rooms and teams this person owns."
+          },
+          "owner": {
+            "type": "boolean",
+            "description": "The installation owner."
           },
           "revision": {
             "type": "integer",
             "format": "int64"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "sessions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "two_factor": {
+            "type": "boolean"
           }
         }
       },
@@ -7656,7 +8503,9 @@
           "status",
           "all_agents",
           "enabled",
-          "events"
+          "events",
+          "personal",
+          "owner"
         ],
         "properties": {
           "account": {
@@ -7686,6 +8535,13 @@
           },
           "level": {
             "$ref": "#/components/schemas/Level"
+          },
+          "owner": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "personal": {
+            "type": "boolean"
           },
           "slug": {
             "type": "string"
@@ -8631,6 +9487,28 @@
           }
         }
       },
+      "CanCreate": {
+        "type": "object",
+        "description": "What the signed-in person may create right now.",
+        "required": ["agents", "rooms", "teams", "connections", "providers"],
+        "properties": {
+          "agents": {
+            "type": "boolean"
+          },
+          "connections": {
+            "type": "boolean"
+          },
+          "providers": {
+            "type": "boolean"
+          },
+          "rooms": {
+            "type": "boolean"
+          },
+          "teams": {
+            "type": "boolean"
+          }
+        }
+      },
       "Capability": {
         "type": "string",
         "enum": [
@@ -8812,6 +9690,42 @@
         },
         "additionalProperties": false
       },
+      "ChangePassword": {
+        "type": "object",
+        "required": ["current", "password"],
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "description": "The new password."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ChangeRole": {
+        "type": "object",
+        "required": ["request_id", "id", "role", "expected_revision"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        },
+        "additionalProperties": false
+      },
       "ChatgptSignIn": {
         "type": "object",
         "required": ["sign_in", "url"],
@@ -8921,6 +9835,16 @@
             "description": "The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1)."
           }
         }
+      },
+      "Code": {
+        "type": "object",
+        "required": ["code"],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "Color": {
         "type": "string",
@@ -9040,7 +9964,9 @@
           "access",
           "level",
           "disabled_tools",
-          "status"
+          "status",
+          "personal",
+          "owner"
         ],
         "properties": {
           "access": {
@@ -9081,6 +10007,15 @@
           "level": {
             "$ref": "#/components/schemas/Level"
           },
+          "owner": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Who connected it."
+          },
+          "personal": {
+            "type": "boolean",
+            "description": "One person's own account, usable only by agents they manage."
+          },
           "polled_at": {
             "type": ["string", "null"]
           },
@@ -9113,6 +10048,17 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Role",
+                "description": "Overrides `administrator` when given."
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -9160,12 +10106,27 @@
         "type": "object",
         "required": ["request_id", "name"],
         "properties": {
+          "external_id": {
+            "type": ["string", "null"],
+            "description": "A Google group's address, or the value of the single sign-on groups claim."
+          },
           "name": {
             "type": "string"
           },
           "request_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "source": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GroupSource",
+                "description": "Where its members come from; `local` when left out."
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -9524,6 +10485,57 @@
         "type": "string",
         "enum": ["running", "stopped"]
       },
+      "Directory": {
+        "type": "object",
+        "required": ["people", "groups"],
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DirectoryGroup"
+            }
+          },
+          "people": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DirectoryPerson"
+            }
+          }
+        }
+      },
+      "DirectoryGroup": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "DirectoryPerson": {
+        "type": "object",
+        "description": "Someone a member can share with.",
+        "required": ["id", "login", "role"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "login": {
+            "type": "string"
+          },
+          "name": {
+            "type": ["string", "null"]
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
       "Dismiss": {
         "type": "object",
         "properties": {
@@ -9655,6 +10667,20 @@
           },
           "slug": {
             "type": "string"
+          }
+        }
+      },
+      "Enrollment": {
+        "type": "object",
+        "required": ["secret", "uri"],
+        "properties": {
+          "secret": {
+            "type": "string",
+            "description": "Base32, for typing into an authenticator app."
+          },
+          "uri": {
+            "type": "string",
+            "description": "An `otpauth://` URI for a QR code."
           }
         }
       },
@@ -10111,6 +11137,39 @@
         },
         "additionalProperties": false
       },
+      "GoogleSettings": {
+        "type": "object",
+        "required": ["enabled", "customer", "has_key", "can_store_key"],
+        "properties": {
+          "admin_email": {
+            "type": ["string", "null"]
+          },
+          "can_store_key": {
+            "type": "boolean",
+            "description": "A credential key is configured, so a service account key can be stored."
+          },
+          "client_email": {
+            "type": ["string", "null"],
+            "description": "The stored service account; its key is never returned."
+          },
+          "customer": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "has_key": {
+            "type": "boolean"
+          },
+          "problem": {
+            "type": ["string", "null"]
+          },
+          "synced_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          }
+        }
+      },
       "GrantId": {
         "type": "string",
         "format": "uuid"
@@ -10172,13 +11231,32 @@
       },
       "Group": {
         "type": "object",
-        "required": ["id", "name", "revision", "active", "members"],
+        "required": [
+          "id",
+          "name",
+          "revision",
+          "active",
+          "members",
+          "managers",
+          "source"
+        ],
         "properties": {
           "active": {
             "type": "boolean"
           },
+          "external_id": {
+            "type": ["string", "null"]
+          },
           "id": {
             "$ref": "#/components/schemas/GroupId"
+          },
+          "managers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Members who may change who is in it."
           },
           "members": {
             "type": "array",
@@ -10194,12 +11272,71 @@
           "revision": {
             "type": "integer",
             "format": "int64"
+          },
+          "role": {
+            "type": ["string", "null"]
+          },
+          "source": {
+            "type": "string"
+          },
+          "synced_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
           }
         }
       },
       "GroupId": {
         "type": "string",
         "format": "uuid"
+      },
+      "GroupRole": {
+        "type": "object",
+        "required": ["request_id", "group", "expected_revision"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "group": {
+            "$ref": "#/components/schemas/GroupId"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Role",
+                "description": "The role its members get; `None` leaves their roles alone."
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "GroupSource": {
+        "type": "string",
+        "enum": ["local", "google", "oidc"]
+      },
+      "HandOver": {
+        "type": "object",
+        "required": ["request_id", "to"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "type": "string",
+            "format": "uuid",
+            "description": "An active administrator who becomes the installation owner."
+          }
+        },
+        "additionalProperties": false
       },
       "HookDelivery": {
         "type": "object",
@@ -10414,7 +11551,14 @@
       },
       "InvitationSummary": {
         "type": "object",
-        "required": ["id", "login", "revision", "status", "expires_at_unix"],
+        "required": [
+          "id",
+          "login",
+          "role",
+          "revision",
+          "status",
+          "expires_at_unix"
+        ],
         "properties": {
           "expires_at_unix": {
             "type": "integer",
@@ -10431,6 +11575,9 @@
             "type": "integer",
             "format": "int64"
           },
+          "role": {
+            "type": "string"
+          },
           "status": {
             "type": "string"
           }
@@ -10446,6 +11593,17 @@
           "request_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Role",
+                "description": "`member` when left out."
+              }
+            ]
           }
         },
         "additionalProperties": false
@@ -10635,6 +11793,10 @@
         "type": "object",
         "required": ["login", "password"],
         "properties": {
+          "code": {
+            "type": ["string", "null"],
+            "description": "The six-digit or recovery code, for accounts with two-factor on."
+          },
           "login": {
             "type": "string"
           },
@@ -11238,6 +12400,10 @@
           "group": {
             "$ref": "#/components/schemas/GroupId"
           },
+          "manager": {
+            "type": ["boolean", "null"],
+            "description": "Makes them a manager of the group's members, or not; administrators only."
+          },
           "present": {
             "type": "boolean"
           },
@@ -11575,6 +12741,21 @@
         },
         "additionalProperties": false
       },
+      "NewToken": {
+        "type": "object",
+        "required": ["name", "days"],
+        "properties": {
+          "days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 365."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "OAuth2": {
         "type": "object",
         "required": ["authorize", "token", "scopes", "params", "fields"],
@@ -11785,6 +12966,95 @@
           }
         }
       },
+      "Owned": {
+        "type": "string",
+        "description": "The kinds of resource that have an owner who can hand it on.",
+        "enum": ["agent", "room", "team"]
+      },
+      "OwnedResource": {
+        "type": "object",
+        "description": "One agent, room, team or connection and its owner.",
+        "required": [
+          "kind",
+          "id",
+          "name",
+          "owner",
+          "owner_login",
+          "owner_active",
+          "shares",
+          "personal"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`agent`, `room`, `team` or `connection`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_active": {
+            "type": "boolean",
+            "description": "False when the owner is suspended: the resource needs a new owner."
+          },
+          "owner_login": {
+            "type": "string"
+          },
+          "personal": {
+            "type": "boolean",
+            "description": "A personal connection; installation connections are shared by administrators."
+          },
+          "shares": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Grants that share it with people or groups."
+          }
+        }
+      },
+      "OwnerSpend": {
+        "type": "object",
+        "description": "One person's agents' model spend over the period asked for.",
+        "required": [
+          "account",
+          "login",
+          "agents",
+          "input_tokens",
+          "output_tokens"
+        ],
+        "properties": {
+          "account": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "agents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cost_usd": {
+            "type": ["number", "null"],
+            "format": "double",
+            "description": "`None` when no price is known for any of the models used."
+          },
+          "input_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "login": {
+            "type": "string"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "Page": {
         "allOf": [
           {
@@ -11950,6 +13220,22 @@
           "charcoal"
         ]
       },
+      "PersonalProvider": {
+        "type": "object",
+        "required": ["provider", "updated_at"],
+        "properties": {
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderKind"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
       "Personality": {
         "type": "object",
         "required": ["personality", "limit"],
@@ -11999,6 +13285,41 @@
           "provider": {
             "$ref": "#/components/schemas/ProviderKind",
             "description": "`minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform."
+          }
+        },
+        "additionalProperties": false
+      },
+      "Policy": {
+        "type": "object",
+        "description": "What members may do without an administrator. Administrators always may; auditors and\nguests never create anything.",
+        "required": [
+          "members_create_agents",
+          "members_create_rooms",
+          "members_create_teams",
+          "members_create_connections",
+          "members_bring_providers"
+        ],
+        "properties": {
+          "member_agent_limit": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "Live agents one member may own; `None` is no limit."
+          },
+          "members_bring_providers": {
+            "type": "boolean",
+            "description": "Members may add their own AI provider keys and plans for their own agents."
+          },
+          "members_create_agents": {
+            "type": "boolean"
+          },
+          "members_create_connections": {
+            "type": "boolean"
+          },
+          "members_create_rooms": {
+            "type": "boolean"
+          },
+          "members_create_teams": {
+            "type": "boolean"
           }
         },
         "additionalProperties": false
@@ -12325,6 +13646,25 @@
           }
         }
       },
+      "Reactivate": {
+        "type": "object",
+        "required": ["request_id", "id", "expected_revision"],
+        "properties": {
+          "expected_revision": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
+      },
       "ReadCursor": {
         "type": "object",
         "required": ["sequence"],
@@ -12431,6 +13771,32 @@
           }
         ]
       },
+      "RecoveryCodes": {
+        "type": "object",
+        "required": ["codes"],
+        "properties": {
+          "codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Single-use codes for when the authenticator is lost; shown this once."
+          }
+        }
+      },
+      "Redeem": {
+        "type": "object",
+        "required": ["token", "password"],
+        "properties": {
+          "password": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
       "Release": {
         "type": "object",
         "required": ["version", "url", "published_at"],
@@ -12511,6 +13877,23 @@
           "size": {
             "type": "integer",
             "format": "int64"
+          }
+        }
+      },
+      "ResourceAccess": {
+        "type": "object",
+        "description": "Who owns a resource and the grants that share it.",
+        "required": ["grants"],
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantSummary"
+            }
+          },
+          "owner": {
+            "type": ["string", "null"],
+            "format": "uuid"
           }
         }
       },
@@ -12656,6 +14039,10 @@
         "type": "string",
         "description": "What a tool can do. `Send` is irreversible or reaches other people: email, a chat post, a comment.",
         "enum": ["read", "write", "send"]
+      },
+      "Role": {
+        "type": "string",
+        "enum": ["administrator", "auditor", "member", "guest"]
       },
       "Room": {
         "type": "object",
@@ -12999,6 +14386,32 @@
         },
         "additionalProperties": false
       },
+      "SaveGoogle": {
+        "type": "object",
+        "required": ["request_id", "enabled"],
+        "properties": {
+          "admin_email": {
+            "type": ["string", "null"],
+            "description": "The Workspace administrator the service account acts as."
+          },
+          "customer": {
+            "type": ["string", "null"],
+            "description": "`my_customer` when left out."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "service_account": {
+            "type": ["string", "null"],
+            "description": "The service account's JSON key; left out keeps the stored one."
+          }
+        },
+        "additionalProperties": false
+      },
       "SaveMcpServer": {
         "type": "object",
         "required": ["name", "transport"],
@@ -13099,12 +14512,40 @@
         },
         "additionalProperties": false
       },
+      "SavePersonalProvider": {
+        "type": "object",
+        "required": ["api_key"],
+        "properties": {
+          "api_key": {
+            "type": "string"
+          },
+          "context_window": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          }
+        },
+        "additionalProperties": false
+      },
       "SavePersonality": {
         "type": "object",
         "required": ["personality"],
         "properties": {
           "personality": {
             "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "SavePolicy": {
+        "type": "object",
+        "required": ["request_id", "policy"],
+        "properties": {
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "additionalProperties": false
@@ -13163,6 +14604,12 @@
               "type": "string"
             }
           },
+          "admit_groups": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "admit_subjects": {
             "type": "array",
             "items": {
@@ -13175,6 +14622,10 @@
           "client_secret": {
             "type": ["string", "null"],
             "description": "Absent keeps the stored secret; empty removes it, for a public client."
+          },
+          "groups_claim": {
+            "type": ["string", "null"],
+            "description": "The ID token claim listing groups, such as `groups`; fills groups of source `oidc`."
           },
           "issuer": {
             "type": "string"
@@ -13407,6 +14858,15 @@
           }
         }
       },
+      "Secret": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        }
+      },
       "SendMessage": {
         "type": "object",
         "required": ["request_id", "message"],
@@ -13430,6 +14890,35 @@
           }
         },
         "additionalProperties": false
+      },
+      "SessionSummary": {
+        "type": "object",
+        "required": ["id", "current", "created_at_unix", "expires_at_unix"],
+        "properties": {
+          "created_at_unix": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "expires_at_unix": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "last_seen_at_unix": {
+            "type": ["integer", "null"],
+            "format": "int64"
+          },
+          "name": {
+            "type": ["string", "null"],
+            "description": "Set for a personal API token; browser sign-ins have none."
+          }
+        }
       },
       "SetAgentModel": {
         "type": "object",
@@ -13667,10 +15156,17 @@
           "has_client_secret",
           "admit_subjects",
           "admit_email_domains",
+          "admit_groups",
           "can_store_secret"
         ],
         "properties": {
           "admit_email_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "admit_groups": {
             "type": "array",
             "items": {
               "type": "string"
@@ -13691,6 +15187,9 @@
           },
           "enabled": {
             "type": "boolean"
+          },
+          "groups_claim": {
+            "type": ["string", "null"]
           },
           "has_client_secret": {
             "type": "boolean"
@@ -14003,6 +15502,48 @@
           }
         }
       },
+      "Standing": {
+        "type": "object",
+        "description": "The signed-in person's place in the installation.",
+        "required": [
+          "role",
+          "owner",
+          "can_create",
+          "owned_agents",
+          "solo",
+          "two_factor"
+        ],
+        "properties": {
+          "agent_limit": {
+            "type": ["integer", "null"],
+            "format": "int32",
+            "description": "Live agents a member may own; `None` is no limit, and administrators have none."
+          },
+          "can_create": {
+            "$ref": "#/components/schemas/CanCreate"
+          },
+          "owned_agents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Agents this person owns that are not retired, against `member_agent_limit`."
+          },
+          "owner": {
+            "type": "boolean",
+            "description": "The installation owner."
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "solo": {
+            "type": "boolean",
+            "description": "One active account and no single sign-on: sharing has no one to share with."
+          },
+          "two_factor": {
+            "type": "boolean",
+            "description": "Their sign-in asks for a code from an authenticator app."
+          }
+        }
+      },
       "StartSignIn": {
         "type": "object",
         "required": ["connector", "slug", "auth"],
@@ -14244,6 +15785,25 @@
           }
         }
       },
+      "SyncOutcome": {
+        "type": "object",
+        "required": ["groups", "members"],
+        "properties": {
+          "groups": {
+            "type": "integer",
+            "description": "Groups whose members were mirrored.",
+            "minimum": 0
+          },
+          "members": {
+            "type": "integer",
+            "description": "Memberships set across those groups.",
+            "minimum": 0
+          },
+          "problem": {
+            "type": ["string", "null"]
+          }
+        }
+      },
       "Task": {
         "type": "object",
         "required": [
@@ -14398,6 +15958,7 @@
           "description",
           "instructions",
           "room",
+          "owner",
           "revision",
           "members"
         ],
@@ -14421,6 +15982,11 @@
           },
           "name": {
             "type": "string"
+          },
+          "owner": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The person who owns the team and may change it."
           },
           "parent": {
             "type": ["string", "null"],
@@ -14594,6 +16160,48 @@
             "format": "int64"
           }
         }
+      },
+      "Transfer": {
+        "type": "object",
+        "required": ["request_id", "kind", "id", "to"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Owned"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The new owner: an active administrator or member."
+          }
+        },
+        "additionalProperties": false
+      },
+      "TransferAll": {
+        "type": "object",
+        "required": ["request_id", "from", "to"],
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "to": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "additionalProperties": false
       },
       "Trigger": {
         "type": "object",
@@ -15266,6 +16874,22 @@
         "required": ["secret"],
         "properties": {
           "secret": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkspaceGroup": {
+        "type": "object",
+        "required": ["email", "name", "direct_members_count"],
+        "properties": {
+          "direct_members_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
             "type": "string"
           }
         }

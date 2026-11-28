@@ -10,6 +10,7 @@ mod connections;
 mod connectors;
 mod creations;
 mod desktop;
+mod directory;
 mod files;
 mod identity;
 mod installation;
@@ -17,6 +18,7 @@ mod invitations;
 mod knowledge_base;
 mod mcp;
 mod meetings;
+mod members;
 mod memories;
 mod oidc;
 mod public;
@@ -77,6 +79,8 @@ pub fn openapi() -> String {
     let mut doc = identity::Doc::openapi();
     doc.merge(HealthDoc::openapi());
     doc.merge(invitations::Doc::openapi());
+    doc.merge(members::Doc::openapi());
+    doc.merge(directory::Doc::openapi());
     doc.merge(access::Doc::openapi());
     doc.merge(oidc::Doc::openapi());
     doc.merge(installation::Doc::openapi());
@@ -167,6 +171,7 @@ pub fn identity_router(pool: sqlx::PgPool, identity: crate::identity::Identity) 
         .merge(knowledge_base::router(identity.clone(), pool.clone()))
         .merge(identity::router(identity.clone()))
         .merge(invitations::router(identity.clone()))
+        .merge(members::router(identity.clone()))
         .merge(access::router(identity))
         .route("/api/health/ready", get(readiness).with_state(pool))
 }
@@ -216,6 +221,7 @@ async fn assembled(
     {
         return Err(crate::identity::IdentityError::InvalidInput);
     }
+    identity.credentials = credentials.clone().map(std::sync::Arc::new);
     let sso =
         crate::identity::oidc::SingleSignOn::start(identity, config, credentials.clone()).await?;
     let identity = sso.identity();
@@ -223,6 +229,10 @@ async fn assembled(
     let mut routes = identity_router(pool.clone(), identity.clone())
         .merge(apps::router(apps.clone(), identity.clone()))
         .merge(self::oidc::router(sso));
+    routes = routes.merge(directory::router(
+        identity.clone(),
+        crate::identity::google::GoogleDirectory::new(pool.clone(), credentials.clone()),
+    ));
     let connections = credentials
         .map(|credentials| crate::connections::Connections::new(pool.clone(), credentials));
     let speech = crate::speech::Speech::environment(connections.clone());

@@ -6,11 +6,12 @@ import {
   useAgents,
   useRooms,
   useSession,
+  useStanding,
   useTeams,
 } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { useApps } from '../apps/api'
-import { PLATFORM } from './Sidebar'
+import { AUDITED, PLATFORM } from './Sidebar'
 
 type Hit = {
   key: string
@@ -18,6 +19,22 @@ type Hit = {
   hint: string
   go: () => void
   icon?: React.ReactNode
+}
+
+const CREATE = [
+  { what: 'agents', label: 'New agent', to: '/agents/new' },
+  { what: 'rooms', label: 'New room', to: '/rooms/new' },
+  { what: 'teams', label: 'New team', to: '/teams/new' },
+] as const
+
+/** Administrators reach every Platform page; auditors the ones they can read. */
+function platformPages(role: string | undefined) {
+  if (role === 'administrator') return PLATFORM
+  if (role === 'auditor')
+    return PLATFORM.filter(([to]) =>
+      (AUDITED as readonly string[]).includes(to),
+    )
+  return []
 }
 
 export function CommandPalette({
@@ -32,6 +49,7 @@ export function CommandPalette({
   const rooms = useRooms()
   const teams = useTeams()
   const session = useSession()
+  const standing = useStanding()
   const apps = useApps(open)
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
@@ -124,14 +142,20 @@ export function CommandPalette({
             },
           ]
         : []),
-      ...(session.data?.administrator
-        ? PLATFORM.map(([to, label]) => ({
-            key: `p:${to}`,
-            label,
-            hint: 'Platform',
-            go: go(to),
-          }))
-        : []),
+      ...platformPages(session.data?.role).map(([to, label]) => ({
+        key: `p:${to}`,
+        label,
+        hint: 'Platform',
+        go: go(to),
+      })),
+      ...CREATE.filter(
+        ({ what }) => standing.data?.can_create[what] ?? false,
+      ).map(({ what, label, to }) => ({
+        key: `new:${what}`,
+        label,
+        hint: 'Create',
+        go: go(to),
+      })),
     ]
     const needle = query.trim().toLowerCase()
     return (
@@ -145,6 +169,7 @@ export function CommandPalette({
     rooms.data,
     teams.data,
     session.data,
+    standing.data,
     query,
     navigate,
     onClose,

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE installation_settings\n            SET members_create_agents = $1, members_create_rooms = $2, members_create_teams = $3,\n                members_create_connections = $4, members_bring_providers = $5,\n                member_agent_limit = $6, revision = revision + 1\n            WHERE singleton\n            RETURNING revision AS \"revision!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b31800b2c11dbabf5a443f2857d5e34d5755ccf616da81688cc02f82ac29ba98"
+}

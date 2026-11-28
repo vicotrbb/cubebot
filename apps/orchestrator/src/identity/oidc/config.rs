@@ -13,6 +13,12 @@ pub struct Config {
     pub admit_subjects: Vec<String>,
     #[serde(default)]
     pub admit_email_domains: Vec<String>,
+    /// The ID token claim that lists the person's groups, such as `groups`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub groups_claim: Option<String>,
+    /// Admits anyone the groups claim puts in one of these groups.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub admit_groups: Vec<String>,
 }
 
 impl Config {
@@ -36,7 +42,23 @@ impl Config {
         for domain in &config.admit_email_domains {
             validate_domain(domain)?;
         }
+        config.validate_groups()?;
         Ok(config)
+    }
+
+    fn validate_groups(&self) -> Result<(), IdentityError> {
+        let claim_ok = self.groups_claim.as_deref().is_none_or(|claim| {
+            !claim.is_empty()
+                && claim.len() <= 64
+                && claim.bytes().all(|byte| byte.is_ascii_graphic())
+        });
+        if !claim_ok
+            || self.admit_groups.len() > 1000
+            || (!self.admit_groups.is_empty() && self.groups_claim.is_none())
+        {
+            return Err(IdentityError::InvalidInput);
+        }
+        Ok(())
     }
 
     pub fn public_origin(value: &str) -> Result<String, IdentityError> {
@@ -53,8 +75,16 @@ impl Config {
             .ascii_serialization())
     }
 
-    pub(super) fn permits(&self, subject: &str, email: Option<&str>, verified: bool) -> bool {
-        if self.admit_subjects.iter().any(|allowed| allowed == subject) {
+    pub(super) fn permits(
+        &self,
+        subject: &str,
+        email: Option<&str>,
+        verified: bool,
+        groups: &[String],
+    ) -> bool {
+        if self.admit_subjects.iter().any(|allowed| allowed == subject)
+            || groups.iter().any(|group| self.admit_groups.contains(group))
+        {
             return true;
         }
         if !verified {

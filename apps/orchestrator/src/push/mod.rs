@@ -293,7 +293,7 @@ impl Push {
     async fn tick(&self) -> Result<(), IdentityError> {
         let accounts = sqlx::query!(
             r#"
-            SELECT a.id, a.role='administrator' AS "administrator!", (to_jsonb(a.pushed_through) #>> '{}') AS through
+            SELECT a.id, a.role, (to_jsonb(a.pushed_through) #>> '{}') AS through
             FROM human_accounts a
             WHERE a.active AND EXISTS(SELECT 1 FROM push_subscriptions s WHERE s.account_id=a.id)
             "#
@@ -303,7 +303,8 @@ impl Push {
         for account in accounts {
             let actor = Actor {
                 id: account.id,
-                administrator: account.administrator,
+                administrator: account.role == "administrator",
+                role: crate::identity::Role::parse(&account.role),
             };
             if let Err(error) = self.account(&actor, account.through.as_deref()).await {
                 tracing::warn!(?error, account = %actor.id, "push notifications failed");

@@ -26,6 +26,8 @@ pub struct Team {
     /// The parent team's member this team's manager reports to.
     pub reports_to: Option<Uuid>,
     pub room: Uuid,
+    /// The person who owns the team and may change it.
+    pub owner: Uuid,
     pub revision: i64,
     /// The manager first, then by name.
     pub members: Vec<TeamMember>,
@@ -140,6 +142,8 @@ impl Work {
     ) -> Result<Team, IdentityError> {
         checked(&input.team).map_err(|_| IdentityError::InvalidInput)?;
         let mut tx = self.begin_change(actor).await?;
+        crate::identity::members::may_create(&mut *tx, actor.id, crate::identity::Creation::Team)
+            .await?;
         let previous = sqlx::query_scalar!(
             "SELECT id FROM teams WHERE created_by=$1 AND request_id=$2",
             actor.id,
@@ -149,7 +153,10 @@ impl Work {
         .await?;
         let id = match previous {
             Some(id) => id,
-            None => insert(&mut tx, actor, input).await?,
+            None => {
+                may_change(&mut tx, actor, None, &input.team).await?;
+                insert(&mut tx, actor, input).await?
+            }
         };
         let team = find(&load(&mut tx).await?, id)?;
         commit(tx).await?;
@@ -166,7 +173,9 @@ impl Work {
         checked(&input.team).map_err(|_| IdentityError::InvalidInput)?;
         let mut tx = self.begin_change(actor).await?;
         let org = load(&mut tx).await?;
-        if find(&org, id)?.revision != input.expected_revision {
+        let current = find(&org, id)?;
+        may_change(&mut tx, actor, Some(&current), &input.team).await?;
+        if current.revision != input.expected_revision {
             return Err(IdentityError::Conflict);
         }
         placed(&org, Some(id), &input.team).map_err(|_| IdentityError::InvalidInput)?;
@@ -190,6 +199,7 @@ impl Work {
         let mut tx = self.begin_change(actor).await?;
         let org = load(&mut tx).await?;
         let team = find(&org, id)?;
+        may_change(&mut tx, actor, Some(&team), &SaveTeam::from(&team)).await?;
         if team.revision != expected_revision || org.iter().any(|t| t.parent == Some(id)) {
             return Err(IdentityError::Conflict);
         }
@@ -220,10 +230,58 @@ impl Work {
     ) -> Result<Transaction<'static, Postgres>, IdentityError> {
         let mut tx = self.pool.begin().await?;
         access::lock_actor(&mut tx, actor).await?;
-        crate::identity::administrator(&mut *tx, actor.id).await?;
         lock(&mut tx).await?;
         Ok(tx)
     }
+}
+
+/// Administrators change any team. A member changes only their own, places it only under a
+/// team they own, and adds only agents they manage, since a team's text reaches every member's
+/// turns.
+async fn may_change(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: &Actor,
+    current: Option<&Team>,
+    team: &SaveTeam,
+) -> Result<(), IdentityError> {
+    if actor.role == crate::identity::Role::Administrator {
+        return Ok(());
+    }
+    if actor.role == crate::identity::Role::Auditor || actor.role == crate::identity::Role::Guest {
+        return Err(IdentityError::Forbidden);
+    }
+    if current.is_some_and(|current| current.owner != actor.id) {
+        return Err(IdentityError::Forbidden);
+    }
+    let new_parent = team
+        .parent
+        .filter(|parent| current.is_none_or(|current| current.parent != Some(*parent)));
+    let seated: Vec<Uuid> = current
+        .map(|current| current.members.iter().map(|member| member.agent).collect())
+        .unwrap_or_default();
+    let added: Vec<Uuid> = team
+        .members
+        .iter()
+        .map(|member| member.agent)
+        .filter(|agent| !seated.contains(agent))
+        .collect();
+    let allowed = sqlx::query_scalar!(
+        r#"
+        SELECT ($2::uuid IS NULL OR EXISTS(SELECT 1 FROM teams t WHERE t.id=$2 AND t.created_by=$1 AND t.deleted_at IS NULL))
+           AND (SELECT count(DISTINCT p.scope_id) FROM effective_human_grants p
+                WHERE p.actor_id=$1 AND p.scope_kind='agent' AND p.scope_id=ANY($3) AND p.capability='agent.manage')
+               >= cardinality($3::uuid[]) AS "allowed!"
+        "#,
+        actor.id,
+        new_parent,
+        &added,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    if !allowed {
+        return Err(IdentityError::Forbidden);
+    }
+    Ok(())
 }
 
 /// A deferred line that no longer holds fails at commit; a lost race, not bad input.
@@ -410,7 +468,7 @@ async fn sync_rooms(tx: &mut Transaction<'_, Postgres>) -> Result<(), sqlx::Erro
 pub(super) async fn load(tx: &mut Transaction<'_, Postgres>) -> Result<Vec<Team>, sqlx::Error> {
     let mut teams: Vec<Team> = sqlx::query!(
         "
-        SELECT id, name, description, instructions, parent_id, reports_to, room_id, revision
+        SELECT id, name, description, instructions, parent_id, reports_to, room_id, revision, created_by
         FROM teams
         WHERE deleted_at IS NULL
         ORDER BY lower(name), id
@@ -427,6 +485,7 @@ pub(super) async fn load(tx: &mut Transaction<'_, Postgres>) -> Result<Vec<Team>
         parent: row.parent_id,
         reports_to: row.reports_to,
         room: row.room_id,
+        owner: row.created_by,
         revision: row.revision,
         members: Vec::new(),
     })
@@ -593,6 +652,7 @@ pub(super) mod tests {
         members: &[SaveMember],
     ) -> Team {
         Team {
+            owner: Uuid::nil(),
             id,
             name: name.into(),
             description: String::new(),

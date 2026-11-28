@@ -1342,3 +1342,128 @@ p.backup__key {
   width: 13px;
   height: 13px;
 }
+
+/* Platform › People: a page an auditor reads has no editor beside it. */
+.platform--wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+.people__who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 9px;
+}
+.people__name {
+  display: grid;
+  min-width: 0;
+}
+.people__sub {
+  display: block;
+}
+.people__role {
+  width: auto;
+  min-height: 30px;
+  font-size: var(--t-sm);
+}
+.people td {
+  vertical-align: middle;
+}
+.people__token {
+  margin-top: 8px;
+}
+.policy {
+  max-width: 62ch;
+}
+.policy__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.policy__name {
+  font-weight: var(--w-label);
+}
+.policy__row .switch {
+  flex: none;
+  margin-top: 2px;
+}
+@media (max-width: 640px) {
+  .people :is(th, td):is(:nth-child(3), :nth-child(4), :nth-child(5)) {
+    display: none;
+  }
+}
+
+/* Platform › Groups and access: linked groups, roles and managers. */
+.groups__link {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  padding: 4px 13px;
+}
+.groups__role {
+  width: 180px;
+}
+.groups__manager[aria-pressed='true'] {
+  color: var(--orange-text);
+}
+.groups__pick {
+  max-height: 50vh;
+  overflow: auto;
+}
+.google__steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+.google__steps .sso__callback {
+  margin-top: 6px;
+}
+
+/* Platform › Ownership */
+.ownership {
+  display: grid;
+  gap: 8px;
+  max-width: 1040px;
+}
+.ownership__section {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.ownership__filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.ownership__filters .platform__h2 {
+  flex: 1;
+}
+.ownership__owner,
+.ownership__give {
+  width: auto;
+  min-height: 30px;
+  font-size: var(--t-sm);
+}
+.ownership__table td {
+  vertical-align: middle;
+}
+.ownership__chip {
+  margin-left: 6px;
+}
+@media (max-width: 640px) {
+  .ownership__table :is(th, td):is(:nth-child(2), :nth-child(4)) {
+    display: none;
+  }
+}
+
+.audit__export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.audit__export .notice {
+  margin: 0;
+}

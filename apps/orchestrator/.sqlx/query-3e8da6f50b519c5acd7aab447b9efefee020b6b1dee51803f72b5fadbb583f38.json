@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_accounts SET totp_secret = $2 WHERE id = $1 AND active AND totp_enabled_at IS NULL RETURNING login",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "login",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3e8da6f50b519c5acd7aab447b9efefee020b6b1dee51803f72b5fadbb583f38"
+}

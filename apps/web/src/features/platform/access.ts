@@ -62,6 +62,16 @@ export const MEANING: Record<Exclude<Level, 'none' | 'custom'>, string> = {
 
 const needs = (target: Target) => (target.kind === 'agent' ? AGENT : ROOM)
 
+/** Levels someone may hand out: never more than they hold themselves; `null` holds everything. */
+export function levelsWithin(target: Target, held: Set<string> | null) {
+  return LEVELS.filter(
+    (level) =>
+      level.id === 'none' ||
+      held === null ||
+      needs(target)[level.id].every((need) => held.has(need.capability)),
+  )
+}
+
 export function grantsOn(grants: Grant[], target: Target) {
   return grants.filter(
     (grant) =>

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE installation\n            SET bootstrapped = true, owner_id = $1\n            WHERE singleton\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "02d0418905941481159c035f6f31806833f429cc9263472ce5d691f5e7083b65"
+}

@@ -55,9 +55,35 @@ impl Command {
         &self,
         pool: &'a PgPool,
     ) -> Result<(Transaction<'a, Postgres>, Option<Receipt>), IdentityError> {
+        self.begin_as(pool, true).await
+    }
+
+    /// For commands any active account may send; the caller checks its own authority.
+    pub async fn begin_account<'a>(
+        &self,
+        pool: &'a PgPool,
+    ) -> Result<(Transaction<'a, Postgres>, Option<Receipt>), IdentityError> {
+        self.begin_as(pool, false).await
+    }
+
+    async fn begin_as<'a>(
+        &self,
+        pool: &'a PgPool,
+        administrator: bool,
+    ) -> Result<(Transaction<'a, Postgres>, Option<Receipt>), IdentityError> {
         let mut transaction = pool.begin().await?;
-        // This lock also serializes command retries from the same administrator.
-        accounts::lock_administrator(&mut transaction, self.actor).await?;
+        // This lock also serializes command retries from the same account.
+        if administrator {
+            accounts::lock_administrator(&mut transaction, self.actor).await?;
+        } else {
+            sqlx::query_scalar!(
+                "SELECT id FROM human_accounts WHERE id = $1 AND active FOR UPDATE",
+                self.actor,
+            )
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or(IdentityError::Unauthorized)?;
+        }
         let previous = sqlx::query!(
             r#"
             SELECT
@@ -176,7 +202,16 @@ impl super::Identity {
         kind: &str,
         request_id: Uuid,
     ) -> Result<Receipt, IdentityError> {
-        self.require_administrator(actor).await?;
+        // Anyone active may look up their own receipts, and only theirs.
+        let active = sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id = $1 AND active) AS "active!""#,
+            actor.id,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        if !active {
+            return Err(IdentityError::Forbidden);
+        }
         let receipt = sqlx::query_as!(
             Receipt,
             r#"
@@ -199,7 +234,7 @@ impl super::Identity {
         actor: &Actor,
         after: i64,
     ) -> Result<Vec<IdentityEvent>, IdentityError> {
-        self.require_administrator(actor).await?;
+        self.require_overseer(actor).await?;
         Ok(sqlx::query_as!(
             IdentityEvent,
             r#"

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_recovery_codes SET used_at = clock_timestamp() WHERE account_id = $1 AND code_hash = $2 AND used_at IS NULL RETURNING account_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f524bc6b070874ac8b152d097e5f8adf20c471306f1f9a319c0ce3971537a366"
+}

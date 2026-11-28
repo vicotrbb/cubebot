@@ -11,31 +11,44 @@ import { Cube } from '../../components/Cube'
 import { AddMember, MemberList } from '../../components/MemberPicker'
 import {
   agentOptions,
-  personOptions,
   without,
   type MemberOption,
 } from '../../components/members'
 import { Alert } from '../../components/primitives'
 import type { Grant } from '../platform/access'
 import { applyLevel } from '../platform/applyLevel'
+import { useResourceAccess } from '../agent/Access'
 
-export function usePeopleCandidates(enabled: boolean) {
-  const accounts = useQuery({
-    queryKey: ['accounts'],
-    queryFn: admin.accounts,
+/** People a room can be shared with, and their grants on it (none yet for a room not made). */
+export function usePeopleCandidates(enabled: boolean, room?: string) {
+  const directory = useQuery({
+    queryKey: ['directory'],
+    queryFn: admin.directory,
     enabled,
   })
-  const grants = useQuery({
-    queryKey: ['grants'],
-    queryFn: admin.grants,
-    enabled,
-  })
+  const access = useResourceAccess(room ?? '', enabled && Boolean(room))
   return {
-    people: personOptions(
-      (accounts.data ?? []).filter((person) => !person.administrator),
-    ),
-    grants: grants.data ?? [],
+    people: (directory.data?.people ?? [])
+      // Administrators and auditors reach every room through their role.
+      .filter((person) => person.role === 'member' || person.role === 'guest')
+      .map((person): MemberOption => ({
+        kind: 'person',
+        id: person.id,
+        name: person.login,
+      })),
+    grants: access.data?.grants ?? [],
   }
+}
+
+/** Members add to a room only agents they can chat with; administrators any. */
+export function addableAgents(agents: AgentSummary[], administrator: boolean) {
+  return agentOptions(
+    administrator
+      ? agents
+      : agents.filter((agent) =>
+          agent.capabilities.includes('conversation_send'),
+        ),
+  )
 }
 
 export async function settlePeople(
@@ -85,12 +98,12 @@ export function Members({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const agentsEditable = room.manage && !room.team && !room.archived
-  const peopleEditable = administrator && !room.archived
-  const { people, grants } = usePeopleCandidates(peopleEditable)
+  const peopleEditable = (administrator || room.manage) && !room.archived
+  const { people, grants } = usePeopleCandidates(peopleEditable, room.id)
   const members = roomMembers(room, agents)
   const options = without(
     [
-      ...(agentsEditable ? agentOptions(agents) : []),
+      ...(agentsEditable ? addableAgents(agents, administrator) : []),
       ...(peopleEditable ? people : []),
     ],
     members,
@@ -131,6 +144,7 @@ export function Members({
       await Promise.all([
         client.invalidateQueries({ queryKey: keys.rooms }),
         client.invalidateQueries({ queryKey: ['grants'] }),
+        client.invalidateQueries({ queryKey: ['resource-access', room.id] }),
       ])
     })
   const agentIds = room.members.map((member) => member.id)

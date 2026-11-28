@@ -735,6 +735,7 @@ mod tests {
     fn a_team_names_its_parent_and_lines_by_name() {
         let parent = Uuid::from_u128(1);
         let org = vec![Team {
+            owner: Uuid::nil(),
             id: parent,
             name: "Engineering".into(),
             description: String::new(),

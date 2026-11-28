@@ -310,6 +310,7 @@ impl Apps {
         let viewer = Actor {
             id: view.viewer,
             administrator: false,
+            role: crate::identity::Role::Member,
         };
         access::conversation(&mut tx, &viewer, view.agent.0, "conversation.send").await?;
         tx.commit().await?;

@@ -32,6 +32,8 @@ pub struct SingleSignOnSettings {
     pub has_client_secret: bool,
     pub admit_subjects: Vec<String>,
     pub admit_email_domains: Vec<String>,
+    pub groups_claim: Option<String>,
+    pub admit_groups: Vec<String>,
     /// The callback to register with the identity provider; absent without a public origin.
     pub redirect_uri: Option<String>,
     /// Whether a client secret can be stored, which needs the installation's credential key.
@@ -49,6 +51,11 @@ pub struct SaveSingleSignOn {
     pub admit_subjects: Vec<String>,
     #[serde(default)]
     pub admit_email_domains: Vec<String>,
+    /// The ID token claim listing groups, such as `groups`; fills groups of source `oidc`.
+    #[serde(default)]
+    pub groups_claim: Option<String>,
+    #[serde(default)]
+    pub admit_groups: Vec<String>,
 }
 
 impl SingleSignOn {
@@ -169,6 +176,8 @@ impl SingleSignOn {
                 "redirect_uri": redirect_uri,
                 "admit_subjects": input.admit_subjects,
                 "admit_email_domains": input.admit_email_domains,
+                "groups_claim": input.groups_claim.as_deref().map(str::trim).filter(|claim| !claim.is_empty()),
+                "admit_groups": input.admit_groups,
             })
             .to_string(),
         )?;
@@ -251,6 +260,8 @@ fn view(
         admit_subjects: config.map_or_else(Vec::new, |config| config.admit_subjects.clone()),
         admit_email_domains: config
             .map_or_else(Vec::new, |config| config.admit_email_domains.clone()),
+        groups_claim: config.and_then(|config| config.groups_claim.clone()),
+        admit_groups: config.map_or_else(Vec::new, |config| config.admit_groups.clone()),
         redirect_uri: config.map_or(redirect_uri, |config| Some(config.redirect_uri.clone())),
         can_store_secret,
     }

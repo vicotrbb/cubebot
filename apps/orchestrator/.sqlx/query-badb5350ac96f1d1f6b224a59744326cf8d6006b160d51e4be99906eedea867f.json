@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM human_team_members m USING human_teams t\n        WHERE m.team_id = t.id AND t.source = 'oidc' AND m.account_id = $1 AND t.external_id <> ALL($2)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "badb5350ac96f1d1f6b224a59744326cf8d6006b160d51e4be99906eedea867f"
+}

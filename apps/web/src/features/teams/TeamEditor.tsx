@@ -3,7 +3,7 @@ import { Crown, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
 import type { AgentSummary } from '../../api/types'
-import { keys } from '../../app/queries'
+import { keys, useSession } from '../../app/queries'
 import { Cube, moodOf } from '../../components/Cube'
 import { AddMember, MemberList } from '../../components/MemberPicker'
 import {
@@ -54,9 +54,11 @@ export function TeamEditor({
   onCancel: () => void
 }) {
   const client = useQueryClient()
+  const session = useSession().data
+  const administrator = Boolean(session?.administrator)
   const [draft, setDraft] = useState<SaveTeam>(initial ?? EMPTY)
   const [people, setPeople] = useState<MemberOption[]>(present)
-  const candidates = usePeopleCandidates(true)
+  const candidates = usePeopleCandidates(true, team?.room)
   const [requestId] = useState(() => crypto.randomUUID())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -93,6 +95,7 @@ export function TeamEditor({
         client.invalidateQueries({ queryKey: keys.teams }),
         client.invalidateQueries({ queryKey: keys.rooms }),
         client.invalidateQueries({ queryKey: ['grants'] }),
+        client.invalidateQueries({ queryKey: ['resource-access'] }),
       ])
       onDone(saved)
     } catch (caught) {
@@ -144,10 +147,27 @@ export function TeamEditor({
           />
         </Field>
       </fieldset>
-      <Placement draft={draft} team={team} teams={teams} set={set} />
+      <Placement
+        draft={draft}
+        team={team}
+        teams={teams}
+        placeable={(other) =>
+          administrator ||
+          other.owner === session?.id ||
+          other.id === draft.parent
+        }
+        set={set}
+      />
       <Seats
         draft={draft}
         agents={agents}
+        seatable={
+          administrator
+            ? agents
+            : agents.filter((agent) =>
+                agent.capabilities.includes('agent_manage'),
+              )
+        }
         setDraft={setDraft}
         people={people}
         setPeople={setPeople}
@@ -178,15 +198,20 @@ function Placement({
   draft,
   team,
   teams,
+  placeable,
   set,
 }: {
   draft: SaveTeam
   team?: Team | undefined
   teams: Team[]
+  /** Members place a team only under one they own. */
+  placeable: (team: Team) => boolean
   set: (change: Partial<SaveTeam>) => void
 }) {
   const excluded = team ? teamsBelow(teams, team.id) : new Set<string>()
-  const parents = teams.filter((other) => !excluded.has(other.id))
+  const parents = teams.filter(
+    (other) => !excluded.has(other.id) && placeable(other),
+  )
   const parent = teams.find((other) => other.id === draft.parent)
   return (
     <fieldset>
@@ -236,6 +261,7 @@ function Placement({
 function Seats({
   draft,
   agents,
+  seatable,
   setDraft,
   people,
   setPeople,
@@ -243,6 +269,8 @@ function Seats({
 }: {
   draft: SaveTeam
   agents: AgentSummary[]
+  /** Members seat only agents they manage; administrators any. */
+  seatable: AgentSummary[]
   setDraft: (change: (current: SaveTeam) => SaveTeam) => void
   people: MemberOption[]
   setPeople: (change: (current: MemberOption[]) => MemberOption[]) => void
@@ -254,7 +282,7 @@ function Seats({
     name: '',
   }))
   const options = without(
-    [...agentOptions(agents), ...candidates],
+    [...agentOptions(seatable), ...candidates],
     [...seated, ...people],
   )
   const seat = (agent: string) =>

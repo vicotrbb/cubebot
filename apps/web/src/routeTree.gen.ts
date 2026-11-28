@@ -10,11 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as AppIndexRouteImport } from './routes/_app.index'
 import { Route as AppActivityRouteImport } from './routes/_app.activity'
 import { Route as AppBroadcastRouteImport } from './routes/_app.broadcast'
 import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
+import { Route as AppConnectionsRouteImport } from './routes/_app.connections'
 import { Route as AppFilesRouteImport } from './routes/_app.files'
 import { Route as AppKbRouteImport } from './routes/_app.kb'
 import { Route as AppMenuRouteImport } from './routes/_app.menu'
@@ -39,6 +41,7 @@ import { Route as AppPlatformGroupsRouteImport } from './routes/_app.platform.gr
 import { Route as AppPlatformHealthRouteImport } from './routes/_app.platform.health'
 import { Route as AppPlatformMcpRouteImport } from './routes/_app.platform.mcp'
 import { Route as AppPlatformMeetingsRouteImport } from './routes/_app.platform.meetings'
+import { Route as AppPlatformOwnershipRouteImport } from './routes/_app.platform.ownership'
 import { Route as AppPlatformPeopleRouteImport } from './routes/_app.platform.people'
 import { Route as AppPlatformProvidersRouteImport } from './routes/_app.platform.providers'
 import { Route as AppPlatformSignInRouteImport } from './routes/_app.platform.sign-in'
@@ -76,6 +79,11 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignInRoute = SignInRouteImport.update({
   id: '/sign-in',
   path: '/sign-in',
@@ -99,6 +107,11 @@ const AppBroadcastRoute = AppBroadcastRouteImport.update({
 const AppCalendarRoute = AppCalendarRouteImport.update({
   id: '/calendar',
   path: '/calendar',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConnectionsRoute = AppConnectionsRouteImport.update({
+  id: '/connections',
+  path: '/connections',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFilesRoute = AppFilesRouteImport.update({
@@ -219,6 +232,11 @@ const AppPlatformMcpRoute = AppPlatformMcpRouteImport.update({
 const AppPlatformMeetingsRoute = AppPlatformMeetingsRouteImport.update({
   id: '/meetings',
   path: '/meetings',
+  getParentRoute: () => AppPlatformRoute,
+} as any)
+const AppPlatformOwnershipRoute = AppPlatformOwnershipRouteImport.update({
+  id: '/ownership',
+  path: '/ownership',
   getParentRoute: () => AppPlatformRoute,
 } as any)
 const AppPlatformPeopleRoute = AppPlatformPeopleRouteImport.update({
@@ -389,10 +407,12 @@ const AppAgentsAgentIdTraceTurnIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
   '/calendar': typeof AppCalendarRoute
+  '/connections': typeof AppConnectionsRoute
   '/files': typeof AppFilesRoute
   '/kb': typeof AppKbRouteWithChildren
   '/menu': typeof AppMenuRoute
@@ -414,6 +434,7 @@ export interface FileRoutesByFullPath {
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
   '/platform/meetings': typeof AppPlatformMeetingsRoute
+  '/platform/ownership': typeof AppPlatformOwnershipRoute
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
@@ -451,10 +472,12 @@ export interface FileRoutesByFullPath {
   '/agents/$agentId/trace/$turnId': typeof AppAgentsAgentIdTraceTurnIdRoute
 }
 export interface FileRoutesByTo {
+  '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/activity': typeof AppActivityRoute
   '/broadcast': typeof AppBroadcastRoute
   '/calendar': typeof AppCalendarRoute
+  '/connections': typeof AppConnectionsRoute
   '/files': typeof AppFilesRoute
   '/menu': typeof AppMenuRoute
   '/platform': typeof AppPlatformRouteWithChildren
@@ -476,6 +499,7 @@ export interface FileRoutesByTo {
   '/platform/health': typeof AppPlatformHealthRoute
   '/platform/mcp': typeof AppPlatformMcpRoute
   '/platform/meetings': typeof AppPlatformMeetingsRoute
+  '/platform/ownership': typeof AppPlatformOwnershipRoute
   '/platform/people': typeof AppPlatformPeopleRoute
   '/platform/providers': typeof AppPlatformProvidersRoute
   '/platform/sign-in': typeof AppPlatformSignInRoute
@@ -515,10 +539,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/sign-in': typeof SignInRoute
   '/_app/activity': typeof AppActivityRoute
   '/_app/broadcast': typeof AppBroadcastRoute
   '/_app/calendar': typeof AppCalendarRoute
+  '/_app/connections': typeof AppConnectionsRoute
   '/_app/files': typeof AppFilesRoute
   '/_app/kb': typeof AppKbRouteWithChildren
   '/_app/menu': typeof AppMenuRoute
@@ -541,6 +567,7 @@ export interface FileRoutesById {
   '/_app/platform/health': typeof AppPlatformHealthRoute
   '/_app/platform/mcp': typeof AppPlatformMcpRoute
   '/_app/platform/meetings': typeof AppPlatformMeetingsRoute
+  '/_app/platform/ownership': typeof AppPlatformOwnershipRoute
   '/_app/platform/people': typeof AppPlatformPeopleRoute
   '/_app/platform/providers': typeof AppPlatformProvidersRoute
   '/_app/platform/sign-in': typeof AppPlatformSignInRoute
@@ -581,10 +608,12 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/reset-password'
     | '/sign-in'
     | '/activity'
     | '/broadcast'
     | '/calendar'
+    | '/connections'
     | '/files'
     | '/kb'
     | '/menu'
@@ -606,6 +635,7 @@ export interface FileRouteTypes {
     | '/platform/health'
     | '/platform/mcp'
     | '/platform/meetings'
+    | '/platform/ownership'
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
@@ -643,10 +673,12 @@ export interface FileRouteTypes {
     | '/agents/$agentId/trace/$turnId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/reset-password'
     | '/sign-in'
     | '/activity'
     | '/broadcast'
     | '/calendar'
+    | '/connections'
     | '/files'
     | '/menu'
     | '/platform'
@@ -668,6 +700,7 @@ export interface FileRouteTypes {
     | '/platform/health'
     | '/platform/mcp'
     | '/platform/meetings'
+    | '/platform/ownership'
     | '/platform/people'
     | '/platform/providers'
     | '/platform/sign-in'
@@ -706,10 +739,12 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_app'
+    | '/reset-password'
     | '/sign-in'
     | '/_app/activity'
     | '/_app/broadcast'
     | '/_app/calendar'
+    | '/_app/connections'
     | '/_app/files'
     | '/_app/kb'
     | '/_app/menu'
@@ -732,6 +767,7 @@ export interface FileRouteTypes {
     | '/_app/platform/health'
     | '/_app/platform/mcp'
     | '/_app/platform/meetings'
+    | '/_app/platform/ownership'
     | '/_app/platform/people'
     | '/_app/platform/providers'
     | '/_app/platform/sign-in'
@@ -771,6 +807,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SignInRoute: typeof SignInRoute
   MTokenRoute: typeof MTokenRoute
 }
@@ -782,6 +819,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sign-in': {
@@ -817,6 +861,13 @@ declare module '@tanstack/react-router' {
       path: '/calendar'
       fullPath: '/calendar'
       preLoaderRoute: typeof AppCalendarRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/connections': {
+      id: '/_app/connections'
+      path: '/connections'
+      fullPath: '/connections'
+      preLoaderRoute: typeof AppConnectionsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/files': {
@@ -985,6 +1036,13 @@ declare module '@tanstack/react-router' {
       path: '/meetings'
       fullPath: '/platform/meetings'
       preLoaderRoute: typeof AppPlatformMeetingsRouteImport
+      parentRoute: typeof AppPlatformRoute
+    }
+    '/_app/platform/ownership': {
+      id: '/_app/platform/ownership'
+      path: '/ownership'
+      fullPath: '/platform/ownership'
+      preLoaderRoute: typeof AppPlatformOwnershipRouteImport
       parentRoute: typeof AppPlatformRoute
     }
     '/_app/platform/people': {
@@ -1235,6 +1293,7 @@ interface AppPlatformRouteChildren {
   AppPlatformHealthRoute: typeof AppPlatformHealthRoute
   AppPlatformMcpRoute: typeof AppPlatformMcpRoute
   AppPlatformMeetingsRoute: typeof AppPlatformMeetingsRoute
+  AppPlatformOwnershipRoute: typeof AppPlatformOwnershipRoute
   AppPlatformPeopleRoute: typeof AppPlatformPeopleRoute
   AppPlatformProvidersRoute: typeof AppPlatformProvidersRoute
   AppPlatformSignInRoute: typeof AppPlatformSignInRoute
@@ -1252,6 +1311,7 @@ const AppPlatformRouteChildren: AppPlatformRouteChildren = {
   AppPlatformHealthRoute: AppPlatformHealthRoute,
   AppPlatformMcpRoute: AppPlatformMcpRoute,
   AppPlatformMeetingsRoute: AppPlatformMeetingsRoute,
+  AppPlatformOwnershipRoute: AppPlatformOwnershipRoute,
   AppPlatformPeopleRoute: AppPlatformPeopleRoute,
   AppPlatformProvidersRoute: AppPlatformProvidersRoute,
   AppPlatformSignInRoute: AppPlatformSignInRoute,
@@ -1321,6 +1381,7 @@ interface AppRouteChildren {
   AppActivityRoute: typeof AppActivityRoute
   AppBroadcastRoute: typeof AppBroadcastRoute
   AppCalendarRoute: typeof AppCalendarRoute
+  AppConnectionsRoute: typeof AppConnectionsRoute
   AppFilesRoute: typeof AppFilesRoute
   AppKbRoute: typeof AppKbRouteWithChildren
   AppMenuRoute: typeof AppMenuRoute
@@ -1350,6 +1411,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppActivityRoute: AppActivityRoute,
   AppBroadcastRoute: AppBroadcastRoute,
   AppCalendarRoute: AppCalendarRoute,
+  AppConnectionsRoute: AppConnectionsRoute,
   AppFilesRoute: AppFilesRoute,
   AppKbRoute: AppKbRouteWithChildren,
   AppMenuRoute: AppMenuRoute,
@@ -1379,6 +1441,7 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
+  ResetPasswordRoute: ResetPasswordRoute,
   SignInRoute: SignInRoute,
   MTokenRoute: MTokenRoute,
 }

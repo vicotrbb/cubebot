@@ -64,11 +64,7 @@ impl Command {
         .fetch_optional(&mut *transaction)
         .await?;
         let admin = admin.ok_or(IdentityError::Unauthorized)?;
-        match self.resource {
-            Some(id) => lock_agent(&mut transaction, self.actor, id).await?,
-            None if !admin => return Err(IdentityError::Forbidden),
-            None => (),
-        }
+        self.authorize(&mut transaction, admin).await?;
         let previous = sqlx::query!(
             "
             SELECT input_digest, agent_id, revision
@@ -92,6 +88,26 @@ impl Command {
             None => None,
         };
         Ok((transaction, previous))
+    }
+
+    /// Changing an agent takes agent.manage; creating one, the member policy unless administrator.
+    async fn authorize(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        admin: bool,
+    ) -> Result<(), IdentityError> {
+        match self.resource {
+            Some(id) => lock_agent(transaction, self.actor, id).await,
+            None if admin => Ok(()),
+            None => {
+                crate::identity::members::may_create(
+                    &mut **transaction,
+                    self.actor,
+                    crate::identity::Creation::Agent,
+                )
+                .await
+            }
+        }
     }
 
     #[tracing::instrument(skip_all, fields(kind = self.kind))]
@@ -246,6 +262,7 @@ mod tests {
         let actor = Actor {
             id: Uuid::new_v4(),
             administrator: true,
+            role: crate::identity::Role::Administrator,
         };
         let input = crate::agents::CreateAgent {
             request_id: Uuid::new_v4(),

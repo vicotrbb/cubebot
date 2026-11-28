@@ -13,7 +13,7 @@ import {
   type Capability,
   type Session,
 } from '../api/types'
-import { useAgent, useSession } from '../app/queries'
+import { useAgent, useSession, useStanding } from '../app/queries'
 import { Cube, moodOf } from '../components/Cube'
 import { Empty, Skeleton } from '../components/primitives'
 import { AgentProvider } from '../features/agent/context'
@@ -56,6 +56,18 @@ const TABS: { to: string; label: string; needs: Capability }[] = [
   { to: '/agents/$agentId/status', label: 'Status', needs: 'agent_manage' },
 ]
 
+/** Sharing has nobody to share with in a solo install; auditors read who has access, guests never share. */
+function shows(
+  tab: (typeof TABS)[number],
+  agent: AgentSummary,
+  me: Session,
+  solo: boolean,
+) {
+  if (tab.label !== 'Access') return can(agent, tab.needs, me)
+  if (solo || me.role === 'guest') return false
+  return me.role === 'auditor' || can(agent, tab.needs, me)
+}
+
 function AgentScreen() {
   const { agentId } = Route.useParams()
   // Remount per agent so the conversation state starts fresh instead of resetting in effects.
@@ -64,6 +76,7 @@ function AgentScreen() {
 
 function AgentScreenFor({ agentId }: { agentId: string }) {
   const session = useSession()
+  const solo = useStanding().data?.solo ?? false
   const { agent, isPending } = useAgent(agentId)
   const phone = useIsPhone()
   const navigate = useNavigate()
@@ -83,7 +96,7 @@ function AgentScreenFor({ agentId }: { agentId: string }) {
       </Empty>
     )
   const me = session.data
-  const tabs = TABS.filter((tab) => can(agent, tab.needs, me))
+  const tabs = TABS.filter((tab) => shows(tab, agent, me, solo))
   const firstTab = tabs[0]
   const readable = can(agent, 'conversation_read', me) || me.administrator
   return (

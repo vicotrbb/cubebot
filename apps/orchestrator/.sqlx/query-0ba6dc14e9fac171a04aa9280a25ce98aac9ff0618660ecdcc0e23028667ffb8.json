@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH mapped AS (\n            SELECT a.id,\n                (SELECT t.role FROM human_team_members m JOIN human_teams t ON t.id = m.team_id AND t.active AND t.role IS NOT NULL\n                 WHERE m.account_id = a.id\n                 ORDER BY array_position(ARRAY['administrator','auditor','member','guest'], t.role) LIMIT 1) AS role\n            FROM human_accounts a\n            WHERE a.id = ANY($1) AND a.id IS DISTINCT FROM (SELECT owner_id FROM installation WHERE singleton)\n        )\n        UPDATE human_accounts a\n        SET role = COALESCE(mapped.role, 'member'), role_from_group = mapped.role IS NOT NULL,\n            revision = a.revision + 1\n        FROM mapped\n        WHERE a.id = mapped.id\n          AND (mapped.role IS NOT NULL OR a.role_from_group)\n          AND (a.role IS DISTINCT FROM COALESCE(mapped.role, 'member') OR a.role_from_group IS DISTINCT FROM (mapped.role IS NOT NULL))\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ba6dc14e9fac171a04aa9280a25ce98aac9ff0618660ecdcc0e23028667ffb8"
+}

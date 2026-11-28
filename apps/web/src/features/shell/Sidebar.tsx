@@ -25,7 +25,7 @@ import {
   Video,
 } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import type { AgentSummary, RoomSummary } from '../../api/types'
+import type { AgentSummary, RoomSummary, Schemas } from '../../api/types'
 import {
   notRetired,
   signOut,
@@ -38,6 +38,7 @@ import {
   useRooms,
   useSavePreferences,
   useSession,
+  useStanding,
   useTasks,
   useTeams,
   useUnreadActivity,
@@ -71,6 +72,7 @@ export const PLATFORM = [
   ['/platform/general', 'General'],
   ['/platform/people', 'People'],
   ['/platform/groups', 'Groups and access'],
+  ['/platform/ownership', 'Ownership'],
   ['/platform/sign-in', 'Sign-in'],
   ['/platform/providers', 'AI providers'],
   ['/platform/speech', 'Speech'],
@@ -84,6 +86,25 @@ export const PLATFORM = [
   ['/platform/health', 'Health'],
 ] as const
 
+type Standing = Schemas['Standing']
+
+/** The Platform pages an auditor can read. */
+export const AUDITED = [
+  '/platform/people',
+  '/platform/groups',
+  '/platform/ownership',
+  '/platform/audit',
+] as const
+
+/** Why a member at their agent limit cannot create another; null when they can, or never could. */
+export function agentLimit(standing: Standing | undefined) {
+  if (!standing || standing.can_create.agents) return null
+  const limit = standing.agent_limit
+  if (standing.role !== 'member' || limit == null) return null
+  if (standing.owned_agents < limit) return null
+  return `You own ${limit} of the ${limit} agents a member may have here. Retire one, or ask an administrator to raise the limit.`
+}
+
 export function Sidebar({
   page = false,
   onSearch,
@@ -94,6 +115,7 @@ export function Sidebar({
   const session = useSession()
   const installation = useInstallation()
   const administrator = Boolean(session.data?.administrator)
+  const standing = useStanding().data
   const attention = useUnreadActivity()
   return (
     <aside
@@ -119,7 +141,7 @@ export function Sidebar({
             <Search />
           </button>
         )}
-        <NewMenu administrator={administrator} />
+        <NewMenu standing={standing} />
       </header>
       <nav className="sidebar__scroll" aria-label="Workspace">
         <Link
@@ -169,9 +191,9 @@ export function Sidebar({
         </Link>
         {administrator && <WatchdogRow />}
         <Favorites />
-        <AgentsSection administrator={administrator} />
-        <TeamsSection administrator={administrator} />
-        <RoomsSection administrator={administrator} />
+        <AgentsSection standing={standing} />
+        <TeamsSection creatable={Boolean(standing?.can_create.teams)} />
+        <RoomsSection creatable={Boolean(standing?.can_create.rooms)} />
         <Section id="library" title="Library">
           <Link
             to="/files"
@@ -202,7 +224,7 @@ export function Sidebar({
       <UpdateHint />
       <footer className="sidebar__foot">
         <AccountMenu />
-        {administrator && <PlatformGear />}
+        <PlatformGear role={session.data?.role} />
       </footer>
     </aside>
   )
@@ -340,21 +362,25 @@ function Favorites() {
   )
 }
 
-function AgentsSection({ administrator }: { administrator: boolean }) {
+function AgentsSection({ standing }: { standing: Standing | undefined }) {
   const agents = useAgents()
+  const creatable = Boolean(standing?.can_create.agents)
+  const limit = agentLimit(standing)
   return (
     <Section
       id="agents"
       title="Agents"
       label="Agents"
       add={
-        administrator ? { to: '/agents/new', label: 'Add agent' } : undefined
+        creatable || limit
+          ? { to: '/agents/new', label: 'Add agent', unavailable: limit }
+          : undefined
       }
     >
       {agents.isPending && <RowSkeleton />}
       {agents.isSuccess && notRetired(agents.data).length === 0 && (
         <p className="row row--note faint">
-          {administrator ? 'No agents yet.' : 'No agents shared with you.'}
+          {creatable ? 'No agents yet.' : 'No agents shared with you.'}
         </p>
       )}
       {notRetired(agents.data).map((agent) => (
@@ -364,15 +390,15 @@ function AgentsSection({ administrator }: { administrator: boolean }) {
   )
 }
 
-function TeamsSection({ administrator }: { administrator: boolean }) {
+function TeamsSection({ creatable }: { creatable: boolean }) {
   const teams = useTeams()
-  if (teams.data?.length === 0 && !administrator) return null
+  if (teams.data?.length === 0 && !creatable) return null
   return (
     <Section
       id="teams"
       title="Teams"
       label="Teams"
-      add={administrator ? { to: '/teams/new', label: 'Add team' } : undefined}
+      add={creatable ? { to: '/teams/new', label: 'Add team' } : undefined}
     >
       {teams.data?.length === 0 && (
         <p className="row row--note faint">No teams yet.</p>
@@ -394,14 +420,14 @@ function TeamsSection({ administrator }: { administrator: boolean }) {
   )
 }
 
-function RoomsSection({ administrator }: { administrator: boolean }) {
+function RoomsSection({ creatable }: { creatable: boolean }) {
   const rooms = useRooms()
   return (
     <Section
       id="rooms"
       title="Rooms"
       label="Rooms"
-      add={administrator ? { to: '/rooms/new', label: 'Add room' } : undefined}
+      add={creatable ? { to: '/rooms/new', label: 'Add room' } : undefined}
     >
       {live(rooms.data).length === 0 && rooms.isSuccess && (
         <p className="row row--note faint">No rooms yet.</p>
@@ -423,9 +449,7 @@ function Section({
   id: string
   title: string
   label?: string
-  add?:
-    | { to: '/agents/new' | '/rooms/new' | '/teams/new'; label: string }
-    | undefined
+  add?: Add | undefined
   children: ReactNode
 }) {
   const preferences = usePreferences()
@@ -454,16 +478,7 @@ function Section({
           />
           {title}
         </button>
-        {add && (
-          <Link
-            to={add.to}
-            className="btn btn--ghost btn--icon btn--sm section__add"
-            aria-label={add.label}
-            title={add.label}
-          >
-            <Plus />
-          </Link>
-        )}
+        {add && <AddButton add={add} />}
       </div>
       {!collapsed && (
         <div
@@ -475,6 +490,39 @@ function Section({
         </div>
       )}
     </section>
+  )
+}
+
+type Add = {
+  to: '/agents/new' | '/rooms/new' | '/teams/new'
+  label: string
+  /** Shown instead of creating, such as at the member agent limit. */
+  unavailable?: string | null
+}
+
+/** Stays focusable when unavailable so the reason reaches keyboard and screen-reader users too. */
+function AddButton({ add }: { add: Add }) {
+  if (add.unavailable)
+    return (
+      <button
+        type="button"
+        className="btn btn--ghost btn--icon btn--sm section__add"
+        aria-disabled="true"
+        aria-label={`${add.label}: ${add.unavailable}`}
+        title={add.unavailable}
+      >
+        <Plus />
+      </button>
+    )
+  return (
+    <Link
+      to={add.to}
+      className="btn btn--ghost btn--icon btn--sm section__add"
+      aria-label={add.label}
+      title={add.label}
+    >
+      <Plus />
+    </Link>
   )
 }
 
@@ -539,8 +587,10 @@ function RowSkeleton() {
   )
 }
 
-function NewMenu({ administrator }: { administrator: boolean }) {
+function NewMenu({ standing }: { standing: Standing | undefined }) {
   const [meeting, setMeeting] = useState(false)
+  const can = standing?.can_create
+  const limit = agentLimit(standing)
   return (
     <>
       <Menu
@@ -556,18 +606,31 @@ function NewMenu({ administrator }: { administrator: boolean }) {
         >
           New meeting
         </button>
-        {administrator && (
-          <>
-            <Link to="/agents/new" className="menu__item">
-              New agent
-            </Link>
-            <Link to="/teams/new" className="menu__item">
-              New team
-            </Link>
-            <Link to="/rooms/new" className="menu__item">
-              New room
-            </Link>
-          </>
+        {can?.agents && (
+          <Link to="/agents/new" className="menu__item">
+            New agent
+          </Link>
+        )}
+        {limit && (
+          <button
+            type="button"
+            className="menu__item"
+            aria-disabled="true"
+            title={limit}
+          >
+            New agent
+            <span className="sr-only">: {limit}</span>
+          </button>
+        )}
+        {can?.teams && (
+          <Link to="/teams/new" className="menu__item">
+            New team
+          </Link>
+        )}
+        {can?.rooms && (
+          <Link to="/rooms/new" className="menu__item">
+            New room
+          </Link>
         )}
       </Menu>
       <NewMeeting open={meeting} onClose={() => setMeeting(false)} />
@@ -575,13 +638,16 @@ function NewMenu({ administrator }: { administrator: boolean }) {
   )
 }
 
-function PlatformGear() {
+/** Administrators change the platform; auditors read part of it. */
+function PlatformGear({ role }: { role: Schemas['Role'] | undefined }) {
   const inPlatform = useLocation({
     select: (location) => location.pathname.startsWith('/platform'),
   })
+  if (role !== 'administrator' && role !== 'auditor') return null
+  const to = role === 'administrator' ? PLATFORM[0][0] : AUDITED[0]
   return (
     <Link
-      to={PLATFORM[0][0]}
+      to={to}
       className="btn btn--ghost btn--icon sidebar__gear"
       aria-label="Platform settings"
       title="Platform settings"
@@ -615,7 +681,7 @@ function AccountMenu() {
           <span className="account__who">
             <span className="row__label">{name}</span>
             <span className="faint">
-              {session.data?.administrator ? 'Administrator' : 'Member'}
+              {ROLES[session.data?.role ?? 'member']}
             </span>
           </span>
         </>
@@ -649,6 +715,13 @@ function AccountMenu() {
       </button>
     </Menu>
   )
+}
+
+const ROLES: Record<Schemas['Role'], string> = {
+  administrator: 'Administrator',
+  auditor: 'Auditor',
+  member: 'Member',
+  guest: 'Guest',
 }
 
 const THEMES: Record<Theme, string> = {

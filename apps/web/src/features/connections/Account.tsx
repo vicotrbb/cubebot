@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, LogIn, RotateCw, Trash2, Zap } from 'lucide-react'
-import { useState } from 'react'
+import { useContext, useState } from 'react'
 import { api, failure } from '../../api/client'
 import { notRetired, useAgents } from '../../app/queries'
 import {
@@ -10,7 +10,7 @@ import {
   Switch,
   when,
 } from '../../components/primitives'
-import { answer, CONNECTIONS_KEY } from './api'
+import { answer, CONNECTIONS_KEY, Personal } from './api'
 import {
   type Connection,
   type Level,
@@ -292,6 +292,7 @@ function Access({
   busy: boolean
   onChange: (change: Change) => void
 }) {
+  const personal = useContext(Personal)
   const agents = useAgents()
   const everyone = connection.access.mode === 'all_agents'
   const granted =
@@ -303,7 +304,22 @@ function Access({
         agents: on ? [...granted, id] : granted.filter((agent) => agent !== id),
       },
     })
-  const live = notRetired(agents.data)
+  const live = notRetired(agents.data).filter(
+    (agent) => !personal || agent.capabilities.includes('agent_manage'),
+  )
+  // A personal connection is never shared with every agent, whoever looks at it.
+  if (personal || connection.personal)
+    return (
+      <section className="account__part">
+        <h4>Agents that may use it</h4>
+        <p className="small faint">
+          {personal
+            ? 'Only agents you manage are listed. None may use it until you choose.'
+            : 'Someone’s own account: it works only for agents they manage.'}
+        </p>
+        <Agents agents={live} granted={granted} busy={busy} onGrant={grant} />
+      </section>
+    )
   return (
     <section className="account__part">
       <div className="account__row">
@@ -322,24 +338,40 @@ function Access({
         />
       </div>
       {!everyone && (
-        <ul className="account__agents" aria-label="Agents that may use it">
-          {live.length === 0 && <li className="small faint">No agents yet.</li>}
-          {live.map((agent) => (
-            <li key={agent.id}>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={granted.includes(agent.id)}
-                  disabled={busy}
-                  onChange={(event) => grant(agent.id, event.target.checked)}
-                />
-                <span>{agent.name}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
+        <Agents agents={live} granted={granted} busy={busy} onGrant={grant} />
       )}
     </section>
+  )
+}
+
+function Agents({
+  agents,
+  granted,
+  busy,
+  onGrant,
+}: {
+  agents: { id: string; name: string }[]
+  granted: string[]
+  busy: boolean
+  onGrant: (id: string, on: boolean) => void
+}) {
+  return (
+    <ul className="account__agents" aria-label="Agents that may use it">
+      {agents.length === 0 && <li className="small faint">No agents yet.</li>}
+      {agents.map((agent) => (
+        <li key={agent.id}>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={granted.includes(agent.id)}
+              disabled={busy}
+              onChange={(event) => onGrant(agent.id, event.target.checked)}
+            />
+            <span>{agent.name}</span>
+          </label>
+        </li>
+      ))}
+    </ul>
   )
 }
 
