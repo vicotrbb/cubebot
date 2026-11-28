@@ -55,7 +55,7 @@ bzip2 = "0.5"
 ring = "0.17.14"
 reqwest = { version = "0.12.28", default-features = false, features = ["rustls-tls", "stream", "json"] }
 # 2.0 ships without the espeak-ng frontend and cannot run Piper.
-sherpa-onnx = "=1.13.8"
+sherpa-onnx = "=2.0.2"
 tar = "0.4"
 utoipa = { version = "5.5", features = ["uuid"] }
 png = "0.18.1"
