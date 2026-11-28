@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                INSERT INTO human_team_members (team_id, account_id, manager)\n                VALUES ($1, $2, COALESCE($3, false))\n                ON CONFLICT (team_id, account_id) DO UPDATE SET manager = COALESCE($3, human_team_members.manager)\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fc586c5b8d39b95d71a83ec89b014ae5356152ff5ff5a832f67f50e8f72bc5d9"
+}

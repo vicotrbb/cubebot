@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT a.id, a.role = 'administrator' AS \"administrator!\",\n               i.owner_id IS NOT DISTINCT FROM a.id AS \"owner!\"\n        FROM human_accounts a CROSS JOIN installation i\n        WHERE a.id = $1\n        FOR UPDATE OF a\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "administrator!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "557ce188048aa9cc225861ad27528b27c5c8e41b4a3025e45e2e421e80c5fef5"
+}

@@ -84,6 +84,9 @@ async fn accounts(
 struct Login {
     login: String,
     password: String,
+    /// The six-digit or recovery code, for accounts with two-factor on.
+    #[serde(default)]
+    code: Option<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -96,7 +99,10 @@ async fn login(
     State(identity): State<Identity>,
     Json(input): Json<Login>,
 ) -> Result<impl IntoResponse, IdentityError> {
-    let session = match identity.login(&input.login, &input.password).await {
+    let session = match identity
+        .login_with(&input.login, &input.password, input.code.as_deref())
+        .await
+    {
         Err(IdentityError::Unauthorized) => {
             // Anyone can post this, so what it stores stays bounded; no real login is longer.
             let login: String = input.login.chars().take(64).collect();
@@ -166,6 +172,7 @@ struct Account {
     /// A display name; accounts have none yet.
     name: Option<String>,
     administrator: bool,
+    role: crate::identity::Role,
 }
 
 #[utoipa::path(get, path = "/api/identity/me", responses((status = 200, body = Account)))]
@@ -183,6 +190,7 @@ async fn me(
             // shortcut: no display name column; add one with OIDC profile claims when needed.
             name: None,
             administrator: actor.administrator,
+            role: actor.role,
         }),
     ))
 }
@@ -315,6 +323,9 @@ struct CreateAccount {
     password: String,
     #[serde(default)]
     administrator: bool,
+    /// Overrides `administrator` when given.
+    #[serde(default)]
+    role: Option<crate::identity::Role>,
 }
 
 #[utoipa::path(post, path = "/api/identity/accounts", request_body = CreateAccount, responses((status = 201, body = Account)))]
@@ -324,12 +335,17 @@ async fn create_account(
     Json(input): Json<CreateAccount>,
 ) -> Result<impl IntoResponse, IdentityError> {
     let actor = actor(&identity, &headers).await?;
+    let role = input.role.unwrap_or(if input.administrator {
+        crate::identity::Role::Administrator
+    } else {
+        crate::identity::Role::Member
+    });
     let id = identity
-        .create_account(
+        .create_account_as(
             &actor,
             &input.login,
             &input.password,
-            input.administrator,
+            role,
             input.request_id,
         )
         .await?;
@@ -339,7 +355,8 @@ async fn create_account(
             id,
             login: input.login,
             name: None,
-            administrator: input.administrator,
+            administrator: role == crate::identity::Role::Administrator,
+            role,
         }),
     ))
 }
@@ -379,6 +396,7 @@ impl IntoResponse for IdentityError {
         let (status, error) = match self {
             Self::InvalidInput | Self::Invalid(_) => (StatusCode::BAD_REQUEST, "invalid_input"),
             Self::Unauthorized | Self::Rejected(_) => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            Self::TwoFactorRequired => (StatusCode::UNAUTHORIZED, "two_factor_required"),
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             Self::Conflict => (StatusCode::CONFLICT, "conflict"),
             Self::Busy => (StatusCode::TOO_MANY_REQUESTS, "identity_busy"),

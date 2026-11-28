@@ -64,11 +64,6 @@ impl Command {
         .fetch_optional(&mut *transaction)
         .await?;
         let admin = admin.ok_or(IdentityError::Unauthorized)?;
-        match self.resource {
-            Some(id) => lock_agent(&mut transaction, self.actor, id).await?,
-            None if !admin => return Err(IdentityError::Forbidden),
-            None => (),
-        }
         let previous = sqlx::query!(
             "
             SELECT input_digest, agent_id, revision
@@ -83,15 +78,42 @@ impl Command {
         )
         .fetch_optional(&mut *transaction)
         .await?;
-        let previous = match previous {
-            Some(row) if row.input_digest == self.digest => Some(Receipt {
+        let replay = previous
+            .as_ref()
+            .filter(|row| row.input_digest == self.digest)
+            .map(|row| Receipt {
                 id: row.agent_id,
                 revision: row.revision,
-            }),
-            Some(_) => return Err(IdentityError::Conflict),
-            None => None,
-        };
-        Ok((transaction, previous))
+            });
+        // An identical retry of a creation gets its receipt even once the member is at their
+        // agent limit; anything else is authorized afresh.
+        if replay.is_none() || self.resource.is_some() {
+            self.authorize(&mut transaction, admin).await?;
+        }
+        if previous.is_some() && replay.is_none() {
+            return Err(IdentityError::Conflict);
+        }
+        Ok((transaction, replay))
+    }
+
+    /// Changing an agent takes agent.manage; creating one, the member policy unless administrator.
+    async fn authorize(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        admin: bool,
+    ) -> Result<(), IdentityError> {
+        match self.resource {
+            Some(id) => lock_agent(transaction, self.actor, id).await,
+            None if admin => Ok(()),
+            None => {
+                crate::identity::members::may_create(
+                    &mut **transaction,
+                    self.actor,
+                    crate::identity::Creation::Agent,
+                )
+                .await
+            }
+        }
     }
 
     #[tracing::instrument(skip_all, fields(kind = self.kind))]
@@ -246,6 +268,7 @@ mod tests {
         let actor = Actor {
             id: Uuid::new_v4(),
             administrator: true,
+            role: crate::identity::Role::Administrator,
         };
         let input = crate::agents::CreateAgent {
             request_id: Uuid::new_v4(),

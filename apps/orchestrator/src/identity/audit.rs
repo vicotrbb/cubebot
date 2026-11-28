@@ -115,7 +115,7 @@ impl Identity {
         actor: &Actor,
         query: &AuditQuery,
     ) -> Result<Vec<AuditEntry>, IdentityError> {
-        self.require_administrator(actor).await?;
+        self.require_overseer(actor).await?;
         let areas = areas(query.area.as_deref()).ok_or(IdentityError::InvalidInput)?;
         Ok(sqlx::query_as!(
             AuditEntry,

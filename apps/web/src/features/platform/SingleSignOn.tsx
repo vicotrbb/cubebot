@@ -97,6 +97,8 @@ function ProviderForm({ settings }: { settings: Settings }) {
       ...(secret ? { client_secret: secret } : {}),
       admit_subjects: lines(data.get('subjects')),
       admit_email_domains: lines(data.get('domains')),
+      admit_groups: lines(data.get('groups')),
+      groups_claim: String(data.get('claim') ?? '').trim() || null,
     }
     void run(
       () => ok(api.PUT('/api/identity/oidc/settings', { body })),
@@ -154,6 +156,7 @@ function ProviderForm({ settings }: { settings: Settings }) {
           defaultValue={settings.admit_email_domains.join('\n')}
         />
       </Field>
+      <GroupFields settings={settings} />
       <Alert>{error}</Alert>
       <Status>{notice}</Status>
       <div className="actions">
@@ -199,5 +202,34 @@ function SecretField({ settings }: { settings: Settings }) {
         disabled={!settings.can_store_secret}
       />
     </Field>
+  )
+}
+
+function GroupFields({ settings }: { settings: Settings }) {
+  return (
+    <>
+      <Field
+        label="Groups claim"
+        hint="The ID token claim that lists someone’s groups, such as groups. It fills groups linked as single sign-on groups"
+      >
+        <input
+          name="claim"
+          maxLength={128}
+          autoCapitalize="none"
+          placeholder="groups"
+          defaultValue={settings.groups_claim ?? ''}
+        />
+      </Field>
+      <Field
+        label="Admit members of these groups"
+        hint="Values of the groups claim, one per line; needs the claim above"
+      >
+        <textarea
+          name="groups"
+          rows={2}
+          defaultValue={settings.admit_groups.join('\n')}
+        />
+      </Field>
+    </>
   )
 }

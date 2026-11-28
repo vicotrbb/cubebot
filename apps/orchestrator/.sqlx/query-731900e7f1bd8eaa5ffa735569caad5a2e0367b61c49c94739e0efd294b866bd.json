@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT created_by FROM agents WHERE id = $1 UNION ALL SELECT created_by FROM rooms WHERE id = $1 AND NOT task",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "created_by",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "731900e7f1bd8eaa5ffa735569caad5a2e0367b61c49c94739e0efd294b866bd"
+}

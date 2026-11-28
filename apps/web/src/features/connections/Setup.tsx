@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { ClipboardPaste, ExternalLink, LogIn } from 'lucide-react'
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useContext, useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, failure } from '../../api/client'
 import type { Schemas } from '../../api/types'
 import { Alert, CopyButton, Field } from '../../components/primitives'
-import { answer, CONNECTIONS_KEY } from './api'
+import { answer, CONNECTIONS_KEY, Personal } from './api'
 import {
   AUTH_LABEL,
   type Auth,
@@ -218,6 +218,7 @@ function Settings({
   onDone: Done
 }) {
   const client = useQueryClient()
+  const personal = useContext(Personal)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const taken = all.map((c) => c.slug)
@@ -241,6 +242,7 @@ function Settings({
         form,
         fields,
         callback,
+        access: personal ? PERSONAL_START : {},
       })
       if (result.kind === 'saved') {
         await client.invalidateQueries({ queryKey: CONNECTIONS_KEY })
@@ -402,6 +404,11 @@ function Products({ manifest }: { manifest: Manifest }) {
   )
 }
 
+/** A personal connection starts granted to none of its owner's agents. */
+const PERSONAL_START = {
+  access: { mode: 'explicit_grants' as const, agents: [] as string[] },
+}
+
 type Saved =
   | { kind: 'saved'; connection: Connection }
   | { kind: 'started'; started: Started }
@@ -410,8 +417,15 @@ async function save(
   manifest: Manifest,
   auth: Auth,
   replacing: Connection | null,
-  input: { slug: string; form: FormData; fields: Setting[]; callback: boolean },
+  input: {
+    slug: string
+    form: FormData
+    fields: Setting[]
+    callback: boolean
+    access: typeof PERSONAL_START | Record<string, never>
+  },
 ): Promise<Saved> {
+  const { access } = input
   const { config, secrets } = collect(input.fields, input.form)
   const products = input.form.getAll('__products').map(String)
   if (manifest.products.length > 0 && !replacing) {
@@ -436,6 +450,7 @@ async function save(
       secrets,
       callback: input.callback,
       connection: replacing?.id ?? null,
+      ...(replacing ? {} : access),
     }
     const started = await answer(
       api.POST('/api/connections/sign-ins', { body }),
@@ -450,6 +465,7 @@ async function save(
     config: config as Record<string, never>,
     secrets,
     linked: linked ? String(linked) : null,
+    ...access,
   }
   const connection = await answer(api.POST('/api/connections', { body }))
   return { kind: 'saved', connection: connection as Connection }

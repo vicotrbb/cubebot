@@ -114,6 +114,7 @@ impl Oidc {
             browser,
             flow.nonce.clone(),
             !self.config.admit_email_domains.is_empty(),
+            self.config.groups_claim.as_deref(),
         )
         .await?;
         storage::admit(&self.identity.pool, &self.config, flow, verified).await

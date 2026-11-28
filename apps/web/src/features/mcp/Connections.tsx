@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { Globe, Terminal } from 'lucide-react'
 import { useState } from 'react'
 import { api, failure, ok } from '../../api/client'
+import { useSession } from '../../app/queries'
 import type { AgentSummary, Schemas } from '../../api/types'
 import { Alert, Empty, Skeleton, Switch } from '../../components/primitives'
 import { Mark } from '../connections/Mark'
@@ -38,6 +39,7 @@ function AccountsSection({
   administrator: boolean
 }) {
   const client = useQueryClient()
+  const me = useSession().data?.id
   const key = ['agent-connections', agent.id]
   const connections = useQuery({
     queryKey: key,
@@ -75,8 +77,10 @@ function AccountsSection({
       <p className="panel__lead">
         {agent.name} acts through the accounts switched on, within each one’s
         permission level, and finds their tools when it needs them.{' '}
-        {administrator && (
+        {administrator ? (
           <Link to="/platform/connections">Connect accounts in Platform</Link>
+        ) : (
+          <Link to="/connections">Connect your own accounts</Link>
         )}
       </p>
       {connections.isPending && <Skeleton lines={2} />}
@@ -99,7 +103,7 @@ function AccountsSection({
               </div>
               <Switch
                 checked={connection.enabled}
-                disabled={!administrator || connection.all_agents}
+                disabled={!mayToggle(connection, administrator, me)}
                 label={`${agent.name} may use ${connection.slug}`}
                 onChange={(enabled) => void grant(connection, enabled)}
               />
@@ -109,6 +113,17 @@ function AccountsSection({
       )}
     </section>
   )
+}
+
+/** A personal account is its owner's to hand out; anyone else may only withdraw it. */
+function mayToggle(
+  connection: AgentConnection,
+  administrator: boolean,
+  me: string | undefined,
+) {
+  if (connection.personal)
+    return connection.owner === me || (administrator && connection.enabled)
+  return administrator && !connection.all_agents
 }
 
 function accountNote(connection: AgentConnection) {

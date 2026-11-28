@@ -395,7 +395,8 @@ async fn shared_files(
     Ok(storage)
 }
 
-/// Starts the backup worker, once this orchestrator owns the installation.
+/// Starts the backup worker, and with a credential key Google group mirroring, once this
+/// orchestrator owns the installation.
 fn backups(
     pool: &sqlx::PgPool,
     url: &str,
@@ -409,6 +410,13 @@ fn backups(
         .map_err(failure(
             "CUBEBOT_CREDENTIAL_KEY_FILE is not a private 32-byte key",
         ))?;
+    if let Some(credentials) = credentials.clone() {
+        use cubebot_orchestrator::identity::google::{GoogleDirectory, keep_synced};
+        tokio::spawn(keep_synced(GoogleDirectory::new(
+            pool.clone(),
+            Some(credentials),
+        )));
+    }
     let backups = cubebot_orchestrator::backup::Backups::new(
         pool.clone(),
         url.to_owned(),

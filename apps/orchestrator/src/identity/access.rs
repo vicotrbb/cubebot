@@ -124,13 +124,24 @@ pub struct AccessSource {
 pub struct AccessExplanation {
     pub allowed: bool,
     pub administrator: bool,
+    /// They own the resource.
+    pub owner: bool,
+    /// They are an auditor, who reads everything.
+    pub auditor: bool,
     pub grants: Vec<AccessSource>,
+}
+
+/// Who owns a resource and the grants that share it.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct ResourceAccess {
+    pub owner: Option<Uuid>,
+    pub grants: Vec<GrantSummary>,
 }
 
 impl Identity {
     #[tracing::instrument(skip_all, fields(actor = %actor.id))]
     pub async fn grants(&self, actor: &Actor) -> Result<Vec<GrantSummary>, IdentityError> {
-        self.require_administrator(actor).await?;
+        self.require_overseer(actor).await?;
         Ok(sqlx::query_as!(
             GrantSummary,
             r#"
@@ -151,13 +162,21 @@ impl Identity {
         input: &GrantRequest,
     ) -> Result<Receipt, IdentityError> {
         let command = Command::new(actor, "access.grant", input.request_id, input)?;
-        let (mut transaction, receipt) = command.begin(&self.pool).await?;
+        let (mut transaction, receipt) = command.begin_account(&self.pool).await?;
         if let Some(receipt) = receipt {
             return Ok(receipt);
         }
         input.capability.validate(input.scope)?;
-        let (account_id, team_id) = validate_recipient(&mut transaction, input.recipient).await?;
         let (kind, scope_id) = input.scope.parts();
+        may_share(
+            &mut transaction,
+            actor.id,
+            kind,
+            scope_id,
+            Some(input.capability.name()),
+        )
+        .await?;
+        let (account_id, team_id) = validate_recipient(&mut transaction, input.recipient).await?;
         let id = sqlx::query_scalar!(
             r#"
             INSERT INTO access_grants (account_id, team_id, scope_kind, scope_id, capability)
@@ -184,10 +203,25 @@ impl Identity {
         input: &RevokeGrant,
     ) -> Result<Receipt, IdentityError> {
         let command = Command::new(actor, "access.revoke", input.request_id, input)?;
-        let (mut transaction, receipt) = command.begin(&self.pool).await?;
+        let (mut transaction, receipt) = command.begin_account(&self.pool).await?;
         if let Some(receipt) = receipt {
             return Ok(receipt);
         }
+        let scope = sqlx::query!(
+            "SELECT scope_kind, scope_id FROM access_grants WHERE id = $1 AND revoked_at IS NULL",
+            input.id.0,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(IdentityError::Conflict)?;
+        may_share(
+            &mut transaction,
+            actor.id,
+            &scope.scope_kind,
+            scope.scope_id,
+            None,
+        )
+        .await?;
         let revision = sqlx::query_scalar!(
             r#"
             UPDATE access_grants
@@ -226,7 +260,8 @@ impl Identity {
             SELECT
                 a.role = 'administrator' AS "administrator!",
                 g.id AS "id?: GrantId",
-                g.team_id AS "group_id?: GroupId"
+                g.team_id AS "group_id?: GroupId",
+                g.source AS "source?"
             FROM human_accounts a
             LEFT JOIN effective_human_grants g
                 ON g.actor_id = a.id
@@ -247,6 +282,8 @@ impl Identity {
             .first()
             .ok_or(IdentityError::Unauthorized)?
             .administrator;
+        let derived = |source: &str| rows.iter().any(|row| row.source.as_deref() == Some(source));
+        let (owner, auditor) = (derived("owner"), derived("auditor"));
         let grants = rows
             .into_iter()
             .filter_map(|row| {
@@ -257,8 +294,10 @@ impl Identity {
             })
             .collect::<Vec<_>>();
         Ok(AccessExplanation {
-            allowed: administrator || !grants.is_empty(),
+            allowed: administrator || owner || auditor || !grants.is_empty(),
             administrator,
+            owner,
+            auditor,
             grants,
         })
     }
@@ -274,6 +313,98 @@ impl Identity {
         }
         Ok(())
     }
+}
+
+impl Identity {
+    /// The owner and the grants on one agent (with its conversation) or room, for the people
+    /// who manage it and for overseers.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, resource = %resource))]
+    pub async fn resource_access(
+        &self,
+        actor: &Actor,
+        resource: Uuid,
+    ) -> Result<ResourceAccess, IdentityError> {
+        let mut transaction = self.pool.begin().await?;
+        let kind = sqlx::query_scalar!(
+            r#"SELECT CASE WHEN EXISTS(SELECT 1 FROM agents WHERE id = $1) THEN 'agent' ELSE 'room' END AS "kind!""#,
+            resource,
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        let oversees = sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id = $1 AND active AND role IN ('administrator', 'auditor')) AS "yes!""#,
+            actor.id,
+        )
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !oversees {
+            may_share(&mut transaction, actor.id, &kind, resource, None).await?;
+        }
+        let owner = sqlx::query_scalar!(
+            "SELECT created_by FROM agents WHERE id = $1 UNION ALL SELECT created_by FROM rooms WHERE id = $1 AND NOT task",
+            resource,
+        )
+        .fetch_optional(&mut *transaction)
+        .await?
+        .flatten();
+        let grants = sqlx::query_as!(
+            GrantSummary,
+            r#"
+            SELECT id, revision, account_id, team_id AS group_id, scope_kind, scope_id,
+                replace(capability,'.','_') AS "capability!"
+            FROM access_grants
+            WHERE revoked_at IS NULL AND scope_id = $1
+            "#,
+            resource,
+        )
+        .fetch_all(&mut *transaction)
+        .await?;
+        Ok(ResourceAccess { owner, grants })
+    }
+}
+
+/// Administrators share anything. Otherwise the actor must manage the resource (agent.manage
+/// on the agent behind it, or room.manage on the room) and, when granting, hold the capability
+/// they hand out, so nobody passes on more than they have.
+async fn may_share(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    actor: Uuid,
+    kind: &str,
+    scope: Uuid,
+    capability: Option<&str>,
+) -> Result<(), IdentityError> {
+    let allowed = sqlx::query_scalar!(
+        r#"
+        WITH target AS (
+            SELECT CASE $2
+                WHEN 'room' THEN $3
+                ELSE COALESCE((SELECT id FROM agents WHERE id = $3), (SELECT agent_id FROM conversation_origins WHERE id = $3))
+            END AS id,
+            CASE $2 WHEN 'room' THEN 'room' ELSE 'agent' END AS kind,
+            CASE $2 WHEN 'room' THEN 'room.manage' ELSE 'agent.manage' END AS capability
+        )
+        SELECT EXISTS(
+            SELECT 1 FROM human_accounts a, target t
+            WHERE a.id = $1 AND a.active AND (
+                a.role = 'administrator'
+                OR (a.role = 'member'
+                    AND EXISTS(SELECT 1 FROM effective_human_grants p
+                        WHERE p.actor_id = a.id AND p.scope_kind = t.kind AND p.scope_id = t.id AND p.capability = t.capability)
+                    AND ($4::text IS NULL OR EXISTS(SELECT 1 FROM effective_human_grants p
+                        WHERE p.actor_id = a.id AND p.scope_kind = $2 AND p.scope_id = $3 AND p.capability = $4))))
+        ) AS "allowed!"
+        "#,
+        actor,
+        kind,
+        scope,
+        capability,
+    )
+    .fetch_one(&mut **transaction)
+    .await?;
+    if !allowed {
+        return Err(IdentityError::Forbidden);
+    }
+    Ok(())
 }
 
 async fn validate_recipient(

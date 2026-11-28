@@ -20,7 +20,7 @@ Related decisions within this model: agents are installation-owned with assigned
 
 ## Agent ownership
 
-Accepted 2026-10-22.
+Accepted 2026-10-22. Amended 2026-11-27: the creator owns and manages what they create, and ownership is transferable ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** All agents belong to the installation, with assigned managers and scoped access. The user selected this model on 2026-10-22. Creating an agent does not make its lifecycle depend on the creator's account. A private assistant and a shared specialist use the same ownership model.
 
@@ -54,7 +54,7 @@ Scope: this decision concerns reading agent content. Credential disclosure, cred
 
 ## Platform-wide built-in accounts and optional OpenID Connect
 
-Accepted 2026-10-23.
+Accepted 2026-10-23. Amended 2026-11-27: people change their own password, manage their sessions and personal API tokens and may turn on a time-based second factor; administrators issue one-day password reset links ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** Support built-in user accounts plus optional OpenID Connect, managed centrally for the entire Cubebot installation. The user selected this model on 2026-10-23. Both sign-in paths use the same platform identity and authorization model across human-facing features: the management console, chat and installed PWA. Individual agents, rooms and frontend surfaces do not maintain separate human account systems.
 
@@ -77,7 +77,7 @@ Ownership: an identity module within the orchestrator owns human accounts, confi
 
 ## Invitations and optional OpenID Connect admission
 
-Accepted 2026-10-23. Amended 2026-11-02: a new installation is open for exactly its first account, which becomes the administrator. Amended 2026-11-06: a deployment may name that administrator.
+Accepted 2026-10-23. Amended 2026-11-02: a new installation is open for exactly its first account, which becomes the administrator. Amended 2026-11-06: a deployment may name that administrator. Amended 2026-11-27: an invitation carries the member, guest or auditor role, and single sign-on may admit by groups claim ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** Use invitations or authorized account creation for built-in membership, with optional automatic admission through administrator-configured OpenID Connect rules. The user selected this model on 2026-10-23. Open public registration for built-in accounts is outside this model.
 
@@ -99,7 +99,7 @@ Ownership: the orchestrator's identity module owns invitations, membership and a
 
 ## Built-in roles with scoped resource grants
 
-Accepted 2026-10-23.
+Accepted 2026-10-23. Amended 2026-11-27: the built-in roles, the installation owner, owner-derived grants, member creation policy and delegated sharing are settled ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** Use Cubebot-defined roles and permissions with scoped resource grants assigned to users or teams. The user selected this model on 2026-10-23. Installation-defined custom roles are outside the initial design. Exact built-in role names and their permission matrix remain to be specified.
 
@@ -123,6 +123,8 @@ Ownership: the authorization module owns role definitions, grants and effective-
 
 Accepted 2026-10-23.
 
+Amended 2026-11-27: groups may also be mirrored from Google Workspace or filled from a single sign-on groups claim, have managers and may carry a role ([Members own what they create](#members-own-what-they-create)); this replaces the no-synchronization rule below.
+
 Amended 2026-11-08: the console and API call these **groups** (Platform › Groups and access, `/api/identity/groups`, a grant or file share `kind` of `group`), because [Agent teams](agents.md#agent-teams) took the word team. The tables and stored audit kinds keep their names.
 
 **Decision.** Manage human teams and their membership entirely in Cubebot. The user selected this model on 2026-10-23. Authorized humans add and remove members locally. Identity-provider groups do not create, synchronize or change Cubebot team membership. OpenID Connect remains responsible for sign-in and optional admission under [Platform-wide built-in accounts and optional OpenID Connect](#platform-wide-built-in-accounts-and-optional-openid-connect) and [Invitations and optional OpenID Connect admission](#invitations-and-optional-openid-connect-admission).
@@ -141,9 +143,32 @@ Ownership: the orchestrator's identity and membership module owns team records a
 
 **Validation scenarios.** Add and remove members locally; apply team-scoped grants; preserve local membership across external group changes; prevent login from restoring a removed team membership; deny unauthorized membership changes; explain access through multiple grants; and deny suspended users despite retained membership records.
 
+## Members own what they create
+
+Accepted 2026-11-27.
+
+**Decision.** People run their own corner of the installation: members create and own agents, rooms, agent teams, personal connections and their own provider keys, and share them, while administrators set what members may do and see everything. The user asked for this on 2026-11-27, choosing installation ownership with creator management (the installation keeps the records; the creator owns and manages them).
+
+- **Roles.** Four built-in roles. An *administrator* runs the installation and reads everything ([Administrator content access](#administrator-content-access) is unchanged). An *auditor* reads everything, including the people, groups, ownership and audit pages, and changes nothing. A *member* creates and shares within the installation policy. A *guest* uses only what is shared with them: they create nothing, share nothing and see no directory. Custom roles stay out.
+- **Installation owner.** One administrator is the installation owner, first the account that set the installation up (on an upgraded installation, its earliest active administrator). Only the owner makes or unmakes administrators, suspends or reactivates an administrator, maps a group to the administrator role, changes who is in a group mapped to it or deletes one, or hands ownership to another administrator. Nobody changes their own standing or the owner's.
+- **Ownership.** The person who creates an agent, room or agent team owns it (`created_by` is the owner) and holds every capability on it through grants `effective_human_grants` derives, without grant rows, while they are an active member or administrator: an owner made auditor or guest holds nothing on what they once created. The owner or an administrator hands it to another active member or administrator; an administrator moves everything someone owns at once. A suspended owner's resources keep working for the people they are shared with, and the console lists them as needing a new owner. Ownership of a personal connection never moves: it holds the person's own credentials.
+- **Member policy.** Administrators decide whether members may create agents, rooms, agent teams and personal connections and bring provider keys, and how many live agents one member may own (three by default, since every agent is a sandbox). Administrators are not limited; a member handing an agent to another member is, so the limit holds. A new installation starts with members allowed; an upgraded one keeps what members could do before, nothing, until an administrator turns it on.
+- **Sharing.** An owner, or anyone holding `agent.manage` on the agent or `room.manage` on the room, shares it with people or groups and revokes those shares, never handing out a capability they do not hold. Rooms add only agents their creator may talk to, and agent teams only agents their owner manages, so nobody reaches someone else's private agent through them. Sharing an agent shares what it learned: [Unified memory per agent](memory.md#unified-memory-per-agent) still applies.
+- **Groups.** A group is local, mirrored from a Google Workspace group (a service account with domain-wide delegation reads the linked groups every 15 minutes and matches members by the verified address of their single sign-on identity), or filled at each single sign-on from a groups claim. Local groups may have managers who add and remove members; mirrored groups change only at their source. A group may carry a role its members get; that role follows membership. The owner's never changes, nor does that of an administrator the owner made directly. A token without the groups claim (as some providers send for people in too many groups) leaves memberships as they were. Mirroring trusts the single sign-on provider's verified addresses, so a provider that lets people choose their own verified address must not be used with mirrored groups.
+- **Personal connections and keys.** A member's connection is personal: granted one agent at a time to agents its owner manages, and usable only while its owner is active. It links only to its owner's own personal connections, and only its owner grants it to more agents; an administrator may only withdraw it. A member's own API key for a pay-as-you-go provider serves agents they own that choose that provider, before any installation key, while they are an active member allowed to bring keys or an administrator; signed-in plans stay under [Personal subscription connections](#personal-subscription-connections).
+- **Own sign-in.** People change their password (ending their other sessions), list and end sessions, create named personal API tokens and may turn on a time-based second factor with single-use recovery codes; the secret is sealed with the credential key. Administrators issue one-day password reset links and remove a lost second factor. A reset link works only while its maker is an active administrator, and only the owner's reset an account that has since become an administrator's. A token made from a single sign-on session ends with that sign-on policy, as the session does. Second-factor codes spend from the same attempt budget as passwords.
+
+**Rationale.** With every creation and share going through an administrator, an organization could not give people assistants of their own, and the access model existed only for administrators to operate. Deriving ownership inside the existing grant view keeps one authorization path, so every existing check honours owners without change. The alternative ownership model, user-owned resources that leave with their owner, was declined because work would vanish with the person.
+
+**What changed.** It amends [Agent ownership](#agent-ownership), [Built-in roles with scoped resource grants](#built-in-roles-with-scoped-resource-grants), [Human teams managed entirely in Cubebot](#human-teams-managed-entirely-in-cubebot) (which ruled out group synchronization), [Invitations and optional OpenID Connect admission](#invitations-and-optional-openid-connect-admission), [Platform-wide built-in accounts and optional OpenID Connect](#platform-wide-built-in-accounts-and-optional-openid-connect), and the connection decisions that ruled out user-owned connections.
+
+**Open details.** An administrator setting that keeps private content from administrators, or logs their reads of it; passkeys; SCIM provisioning; per-member spending limits; personal signed-in plans for more than one person per provider; deleting accounts outright.
+
+**Validation scenarios.** A member creates an agent and nobody else sees it until shared; the agent limit refuses a fourth; a co-manager cannot grant memory editing they lack; a room cannot reach another member's private agent; only the owner makes an administrator; a suspended member's personal connection stops serving their agents; a removed Google group member loses the group's access at the next sync; a second-factor code works once.
+
 ## Installation-managed provider connections
 
-Accepted 2026-10-23. Amended 2026-10-25: enabled connections are available to all eligible agents by default, with a per-connection specific-grants mode. Amended 2026-10-27: provider material is propagated to each agent's sandbox for its lifetime rather than per turn. Amended 2026-11-05: a connection signed in with a personal subscription is personal ([Personal subscription connections](#personal-subscription-connections)).
+Accepted 2026-10-23. Amended 2026-10-25: enabled connections are available to all eligible agents by default, with a per-connection specific-grants mode. Amended 2026-10-27: provider material is propagated to each agent's sandbox for its lifetime rather than per turn. Amended 2026-11-05: a connection signed in with a personal subscription is personal ([Personal subscription connections](#personal-subscription-connections)). Amended 2026-11-27: a person may save their own API key for a pay-as-you-go provider, used by agents they own ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** Support installation-managed provider connections, plus personal subscription connections under [Personal subscription connections](#personal-subscription-connections). The user selected this model on 2026-10-23. Installation administrators configure connections and choose each connection's access: all eligible agents (the default) or specific grants, under [Installation-wide connection access by default](#installation-wide-connection-access-by-default). Apart from personal subscription connections, Cubebot does not introduce a separate category of user-owned personal provider connections.
 
@@ -245,7 +270,7 @@ Adding or changing managed integrations requires administrator involvement. Once
 
 ## Installation-managed external account connections
 
-Accepted 2026-10-23. Amended 2026-10-25: enabled external account and reusable website connections are usable by all eligible agents by default, with a per-connection specific-grants mode. Amended 2026-11-01: an agent may hold website logins of its own in the vault. Amended 2026-11-05: [Native connectors](#native-connectors) settles most open details.
+Accepted 2026-10-23. Amended 2026-10-25: enabled external account and reusable website connections are usable by all eligible agents by default, with a per-connection specific-grants mode. Amended 2026-11-01: an agent may hold website logins of its own in the vault. Amended 2026-11-05: [Native connectors](#native-connectors) settles most open details. Amended 2026-11-27: members may connect their own accounts as personal connections ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** External account connections are installation-managed. Administrators manage connection records and choose each connection's access: all eligible agents (the default) or specific grants ([Installation-wide connection access by default](#installation-wide-connection-access-by-default)). The user selected this model on 2026-10-23. Cubebot does not introduce a user-owned connection category for email, calendars, repositories or other external integrations. Reusable website account access follows the same administrative model, with one exception: an agent may hold website logins and secrets of its own as agent-scoped vault items ([A vault the desktop arbiter fills](#a-vault-the-desktop-arbiter-fills)), besides installation-managed ones.
 
@@ -270,7 +295,7 @@ External account onboarding and installation connection administration require a
 
 ## Installation-wide connection access by default
 
-Accepted 2026-10-25.
+Accepted 2026-10-25. Amended 2026-11-27: personal connections are always granted per agent ([Members own what they create](#members-own-what-they-create)).
 
 **Decision.** Keep all integrations and connections installation-managed and make enabled, approved connections usable by all eligible installation agents by default. Each connection has an access setting: all agents, or specific grants. All agents is the default for newly configured connections. The user explicitly selected this change on 2026-10-25.
 

@@ -47,7 +47,10 @@ function NewAgent() {
                   },
                 }),
               )
-              await client.invalidateQueries({ queryKey: keys.agents })
+              await Promise.all([
+                client.invalidateQueries({ queryKey: keys.agents }),
+                client.invalidateQueries({ queryKey: keys.standing }),
+              ])
               await navigate({
                 to: '/agents/$agentId',
                 params: { agentId: made.id },

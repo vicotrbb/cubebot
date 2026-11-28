@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE google_directory\n            SET enabled = $1, admin_email = $2, customer = $3,\n                service_account = COALESCE($4, service_account),\n                client_email = COALESCE($5, client_email), revision = revision + 1\n            WHERE singleton\n              AND (NOT $1 OR ($2::text IS NOT NULL AND ($4::bytea IS NOT NULL OR service_account IS NOT NULL)))\n            RETURNING revision\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "revision",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "da292f1d29ca4a93b457e913d3376a54f003a622a717c375a2728dac695bbf9a"
+}

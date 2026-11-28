@@ -45,7 +45,10 @@ struct Api {
     sign_out_minimax,
     agent_model,
     set_agent_model,
-    agent_models
+    agent_models,
+    my_providers,
+    save_my_provider,
+    forget_my_provider
 ))]
 pub(super) struct Doc;
 
@@ -61,6 +64,11 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
             get(agent_model).put(set_agent_model),
         )
         .route("/api/agents/{agent}/models", post(agent_models))
+        .route("/api/me/providers", get(my_providers))
+        .route(
+            "/api/me/providers/{provider}",
+            axum::routing::put(save_my_provider).delete(forget_my_provider),
+        )
         // Each plan's path carries its own sign-out: a `{provider}` route would lose to these.
         .route(
             "/api/provider/subscriptions/chatgpt",
@@ -425,4 +433,59 @@ async fn sign_out(
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct SignedOut {
     pub revoked: bool,
+}
+
+/// The signed-in person's own provider keys, without the keys.
+#[utoipa::path(get, path = "/api/me/providers", responses((status = 200, body = Vec<crate::connections::PersonalProvider>)))]
+async fn my_providers(
+    State(api): State<Api>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let providers = api.connections.personal_providers(actor.id).await?;
+    Ok(([("cache-control", "no-store")], Json(providers)))
+}
+
+/// Saves the person's own key for a pay-as-you-go provider; their agents that choose it use it.
+#[utoipa::path(put, path = "/api/me/providers/{provider}", params(("provider" = ProviderKind, Path)), request_body = crate::connections::SavePersonalProvider, responses((status = 204), (status = 400), (status = 403)))]
+async fn save_my_provider(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(provider): Path<ProviderKind>,
+    Json(input): Json<crate::connections::SavePersonalProvider>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    if !actor.administrator {
+        crate::identity::members::may_create(
+            api.connections.pool(),
+            actor.id,
+            crate::identity::Creation::Provider,
+        )
+        .await?;
+    }
+    api.connections
+        .save_personal_provider(actor.id, provider, &input)
+        .await?;
+    let event = Event::by(actor.id, "provider.personal_save")
+        .on(actor.id)
+        .detail(json!({"provider": provider.as_str()}));
+    api.identity.audit(event).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(delete, path = "/api/me/providers/{provider}", params(("provider" = ProviderKind, Path)), responses((status = 204), (status = 404)))]
+async fn forget_my_provider(
+    State(api): State<Api>,
+    headers: HeaderMap,
+    Path(provider): Path<ProviderKind>,
+) -> Result<impl IntoResponse, IdentityError> {
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    api.connections
+        .forget_personal_provider(actor.id, provider)
+        .await?;
+    let event = Event::by(actor.id, "provider.personal_forget")
+        .on(actor.id)
+        .detail(json!({"provider": provider.as_str()}));
+    api.identity.audit(event).await;
+    Ok(StatusCode::NO_CONTENT)
 }

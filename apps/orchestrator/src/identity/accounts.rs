@@ -1,14 +1,23 @@
 use uuid::Uuid;
 
-use super::{Actor, Identity, IdentityError, Receipt, commands::Command, passwords};
+use super::{Actor, Identity, IdentityError, Receipt, Role, commands::Command, members, passwords};
 
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct AccountSummary {
     pub id: Uuid,
     pub login: String,
+    pub name: Option<String>,
     pub administrator: bool,
+    pub role: Role,
+    /// The installation owner.
+    pub owner: bool,
     pub active: bool,
     pub revision: i64,
+    pub two_factor: bool,
+    pub last_seen_at_unix: Option<i64>,
+    /// Live agents, rooms and teams this person owns.
+    pub owned: i64,
+    pub sessions: i64,
 }
 
 impl Identity {
@@ -33,25 +42,49 @@ impl Identity {
         actor: &Actor,
         after: Option<Uuid>,
     ) -> Result<Vec<AccountSummary>, IdentityError> {
-        self.require_administrator(actor).await?;
-        Ok(sqlx::query_as!(
-            AccountSummary,
+        self.require_overseer(actor).await?;
+        let rows = sqlx::query!(
             r#"
             SELECT
-                id AS "id!",
-                login AS "login!",
-                role = 'administrator' AS "administrator!",
-                active AS "active!",
-                revision AS "revision!"
-            FROM human_accounts
-            WHERE $1::uuid IS NULL OR id > $1
-            ORDER BY id
+                a.id AS "id!",
+                a.login AS "login!",
+                NULLIF(a.profile->>'name', '') AS name,
+                a.role AS "role!",
+                i.owner_id IS NOT DISTINCT FROM a.id AS "owner!",
+                a.active AS "active!",
+                a.revision AS "revision!",
+                a.totp_enabled_at IS NOT NULL AS "two_factor!",
+                EXTRACT(EPOCH FROM a.last_seen_at)::bigint AS last_seen_at_unix,
+                (SELECT count(*) FROM agents g WHERE g.created_by = a.id AND g.desired_state <> 'retired')
+                    + (SELECT count(*) FROM rooms r WHERE r.created_by = a.id AND NOT r.task AND NOT r.archived)
+                    + (SELECT count(*) FROM teams t WHERE t.created_by = a.id AND t.deleted_at IS NULL) AS "owned!",
+                (SELECT count(*) FROM human_sessions s WHERE s.account_id = a.id AND s.expires_at > clock_timestamp()) AS "sessions!"
+            FROM human_accounts a CROSS JOIN installation i
+            WHERE $1::uuid IS NULL OR a.id > $1
+            ORDER BY a.id
             LIMIT 100
             "#,
             after,
         )
         .fetch_all(&self.pool)
-        .await?)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|row| AccountSummary {
+                id: row.id,
+                login: row.login,
+                name: row.name,
+                administrator: row.role == "administrator",
+                role: Role::parse(&row.role),
+                owner: row.owner,
+                active: row.active,
+                revision: row.revision,
+                two_factor: row.two_factor,
+                last_seen_at_unix: row.last_seen_at_unix,
+                owned: row.owned,
+                sessions: row.sessions,
+            })
+            .collect())
     }
 
     pub async fn setup_open(&self) -> Result<bool, IdentityError> {
@@ -89,9 +122,10 @@ impl Identity {
         sqlx::query!(
             "
             UPDATE installation
-            SET bootstrapped = true
+            SET bootstrapped = true, owner_id = $1
             WHERE singleton
             ",
+            id,
         )
         .execute(&mut *transaction)
         .await?;
@@ -109,8 +143,32 @@ impl Identity {
         administrator: bool,
         request_id: Uuid,
     ) -> Result<Uuid, IdentityError> {
-        let input = serde_json::json!({"login": login, "administrator": administrator});
-        let command = Command::new(actor, "account.create", request_id, &input)?;
+        let role = if administrator {
+            Role::Administrator
+        } else {
+            Role::Member
+        };
+        self.create_account_as(actor, login, password, role, request_id)
+            .await
+    }
+
+    /// Only the installation owner creates administrators.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, request = %request_id))]
+    pub async fn create_account_as(
+        &self,
+        actor: &Actor,
+        login: &str,
+        password: &str,
+        role: Role,
+        request_id: Uuid,
+    ) -> Result<Uuid, IdentityError> {
+        let administrator = role == Role::Administrator;
+        let command = Command::new(
+            actor,
+            "account.create",
+            request_id,
+            &account_input(login, role),
+        )?;
         let (transaction, previous) = command.begin(&self.pool).await?;
         transaction.rollback().await?;
         if let Some(receipt) = previous {
@@ -128,12 +186,10 @@ impl Identity {
                 .replay_account(actor, request_id, password, receipt)
                 .await;
         }
-        let role = if administrator {
-            "administrator"
-        } else {
-            "member"
-        };
-        let id = insert_account(&mut transaction, login, &verifier, role).await?;
+        if administrator && !members::is_owner(&mut transaction, actor.id).await? {
+            return Err(IdentityError::Forbidden);
+        }
+        let id = insert_account(&mut transaction, login, &verifier, role.as_str()).await?;
         command
             .commit(transaction, Receipt { id, revision: 1 })
             .await?;
@@ -167,9 +223,8 @@ impl Identity {
         if let Some(receipt) = previous {
             return Ok(receipt);
         }
-        if actor.id == subject {
-            return Err(IdentityError::InvalidInput);
-        }
+        let found = members::subject(&mut transaction, subject).await?;
+        members::guard_subject(&mut transaction, actor, &found, false).await?;
         let revision = sqlx::query_scalar!(
             r#"
             UPDATE human_accounts
@@ -221,6 +276,16 @@ pub(super) async fn lock_administrator(
     .await?;
     allowed.ok_or(IdentityError::Forbidden)?;
     Ok(())
+}
+
+/// The audited input; members and administrators keep the shape older receipts were made with.
+fn account_input(login: &str, role: Role) -> serde_json::Value {
+    match role {
+        Role::Administrator | Role::Member => {
+            serde_json::json!({"login": login, "administrator": role == Role::Administrator})
+        }
+        _ => serde_json::json!({"login": login, "role": role}),
+    }
 }
 
 pub(super) async fn insert_account(

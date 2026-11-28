@@ -1,13 +1,13 @@
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { ChevronRight, ShieldAlert } from 'lucide-react'
+import { ChevronRight, Download, ShieldAlert } from 'lucide-react'
 import { Fragment, useState } from 'react'
-import { api, ok } from '../api/client'
+import { api, failure, ok } from '../api/client'
 import type { Schemas } from '../api/types'
 import { useAgents } from '../app/queries'
 import { Cube, moodOf } from '../components/Cube'
 import { PersonAvatar } from '../components/PersonAvatar'
-import { Alert, Empty, Skeleton } from '../components/primitives'
+import { Alert, Empty, Skeleton, Status } from '../components/primitives'
 import {
   day,
   FILTERS,
@@ -16,6 +16,7 @@ import {
   target,
   type Detail,
 } from '../features/platform/audit'
+import { auditCsv } from '../features/platform/csv'
 import '../features/platform/platform.css'
 
 export const Route = createFileRoute('/_app/platform/audit')({
@@ -24,24 +25,95 @@ export const Route = createFileRoute('/_app/platform/audit')({
 
 const PAGE = 100
 
+const MOST = 10_000
+
 type AuditEntry = Schemas['AuditEntry']
+
+/** One page of the log, newest first, older than `before` when given. */
+const auditPage = (filter: string, before?: number) =>
+  ok(
+    api.GET('/api/audit', {
+      params: {
+        query: {
+          ...(before === undefined ? {} : { before }),
+          ...(filter ? { area: filter } : {}),
+        },
+      },
+    }),
+  )
+
+async function exportAll(filter: string, onCount: (count: number) => void) {
+  const entries: AuditEntry[] = []
+  for (;;) {
+    const page = await auditPage(filter, entries.at(-1)?.sequence)
+    entries.push(...page)
+    onCount(entries.length)
+    if (page.length < PAGE || entries.length >= MOST)
+      return entries.slice(0, MOST)
+  }
+}
+
+function download(text: string, name: string) {
+  // The byte-order mark makes spreadsheet apps read the file as UTF-8.
+  const url = URL.createObjectURL(
+    new Blob(['\uFEFF', text], { type: 'text/csv;charset=utf-8' }),
+  )
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function ExportCsv({ filter, label }: { filter: string; label: string }) {
+  const [count, setCount] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const run = async () => {
+    setError('')
+    setNotice('')
+    setCount(0)
+    try {
+      const entries = await exportAll(filter, setCount)
+      const day = new Date().toISOString().slice(0, 10)
+      const area = filter
+        ? `-${label.toLowerCase().replaceAll(/\W+/g, '-')}`
+        : ''
+      download(auditCsv(entries), `cubebot-audit${area}-${day}.csv`)
+      setNotice(
+        entries.length >= MOST
+          ? `Exported the newest ${MOST.toLocaleString()} entries, the most one file holds.`
+          : `Exported ${entries.length.toLocaleString()} entries.`,
+      )
+    } catch (caught) {
+      setError(failure(caught))
+    } finally {
+      setCount(null)
+    }
+  }
+  return (
+    <div className="audit__export">
+      <button
+        type="button"
+        className="btn btn--sm"
+        disabled={count !== null}
+        onClick={() => void run()}
+      >
+        <Download aria-hidden="true" />
+        {count === null ? 'Export CSV' : `Exporting… ${count.toLocaleString()}`}
+      </button>
+      <Alert>{error}</Alert>
+      <Status>{notice}</Status>
+    </div>
+  )
+}
 
 function Audit() {
   const [filter, setFilter] = useState<string>(FILTERS[0].areas)
   const log = useInfiniteQuery({
     queryKey: ['audit', filter],
     initialPageParam: undefined as number | undefined,
-    queryFn: ({ pageParam }) =>
-      ok(
-        api.GET('/api/audit', {
-          params: {
-            query: {
-              ...(pageParam === undefined ? {} : { before: pageParam }),
-              ...(filter ? { area: filter } : {}),
-            },
-          },
-        }),
-      ),
+    queryFn: ({ pageParam }) => auditPage(filter, pageParam),
     getNextPageParam: (last) =>
       last.length === PAGE ? last.at(-1)?.sequence : undefined,
   })
@@ -65,6 +137,10 @@ function Audit() {
             </button>
           ))}
         </nav>
+        <ExportCsv
+          filter={filter}
+          label={FILTERS.find((item) => item.areas === filter)?.label ?? ''}
+        />
       </div>
       {log.isPending && <Skeleton lines={6} />}
       {log.isError && <Alert>The audit log could not be loaded.</Alert>}

@@ -4,6 +4,7 @@ mod credentials;
 mod mcp;
 mod models;
 mod native;
+mod personal;
 mod subscriptions;
 mod supergrok;
 mod vault;
@@ -19,6 +20,7 @@ pub use native::{
     EventRoutine, FinishSignIn, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,
     callback as callback_address,
 };
+pub use personal::{PersonalProvider, SavePersonalProvider};
 pub(crate) use subscriptions::For;
 pub use subscriptions::{PlanKey, SignInError, SubscriptionSummary, keep_fresh};
 pub use supergrok::SupergrokSignIn;
@@ -392,6 +394,9 @@ impl Connections {
         tx: &mut Transaction<'_, Postgres>,
         agent: crate::agents::AgentId,
     ) -> Result<Inference, IdentityError> {
+        if let Some(own) = self.owner_inference(tx, agent).await? {
+            return self.with_effort(tx, agent, own).await;
+        }
         let base = self.connection(tx, For::Agent(agent)).await?;
         self.chosen(tx, agent, base).await
     }

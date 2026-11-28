@@ -63,7 +63,7 @@ The backend is a modular monolith. Modules own rules and transactions; they are 
 
 | Module | Owns | Representative interface |
 | --- | --- | --- |
-| Identity and access | Built-in accounts, OIDC identities, teams, scoped grants, effective access | authorize(actor, action, resource); explain_access(...) |
+| Identity and access | Built-in accounts and roles, OIDC identities, groups (local, Google Workspace, SSO claim), ownership, member policy, scoped grants, effective access, two-factor and sessions | authorize(actor, action, resource); explain_access(...); may_create(actor, kind) |
 | Agents and lifecycle | Agent definitions, configuration revisions, runtime policy, pod and workspace ownership | create_agent(...); reconcile_agent(id); retire_agent(...) |
 | Work | Conversations, room routing, goals, tasks, mailboxes, dependencies, triggers, cancellation, budgets, acceptance | send_message(...); delegate(...); next_messages(agent); record_result(...) |
 | Knowledge | Durable memory revisions, human edits, dream reports, skill library and installations; no memory policy | read_memory(...); commit_changes(...); publish_skill(...) |

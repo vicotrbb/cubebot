@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                a.id AS \"id!\",\n                a.login AS \"login!\",\n                NULLIF(a.profile->>'name', '') AS name,\n                a.role AS \"role!\",\n                i.owner_id IS NOT DISTINCT FROM a.id AS \"owner!\",\n                a.active AS \"active!\",\n                a.revision AS \"revision!\",\n                a.totp_enabled_at IS NOT NULL AS \"two_factor!\",\n                EXTRACT(EPOCH FROM a.last_seen_at)::bigint AS last_seen_at_unix,\n                (SELECT count(*) FROM agents g WHERE g.created_by = a.id AND g.desired_state <> 'retired')\n                    + (SELECT count(*) FROM rooms r WHERE r.created_by = a.id AND NOT r.task AND NOT r.archived)\n                    + (SELECT count(*) FROM teams t WHERE t.created_by = a.id AND t.deleted_at IS NULL) AS \"owned!\",\n                (SELECT count(*) FROM human_sessions s WHERE s.account_id = a.id AND s.expires_at > clock_timestamp()) AS \"sessions!\"\n            FROM human_accounts a CROSS JOIN installation i\n            WHERE $1::uuid IS NULL OR a.id > $1\n            ORDER BY a.id\n            LIMIT 100\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "login!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "role!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "owner!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "active!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "revision!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "two_factor!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_seen_at_unix",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "owned!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "sessions!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      null,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "48b50892b0b12ff5b1fc768301970eb2f4b05f1edf3ef3b89a0271d0e46343eb"
+}

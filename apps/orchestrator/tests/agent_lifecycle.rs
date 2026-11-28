@@ -233,6 +233,7 @@ async fn competing_managers_commit_one_revision_without_changing_instruction_ide
     let manager = Actor {
         id: manager_id,
         administrator: false,
+        role: cubebot_orchestrator::identity::Role::Member,
     };
     let agents = Agents::new(pool.clone());
     let created = agents

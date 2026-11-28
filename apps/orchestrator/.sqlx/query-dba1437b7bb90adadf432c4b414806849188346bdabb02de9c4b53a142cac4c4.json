@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE installation SET owner_id = $2\n            WHERE singleton AND owner_id = $1\n              AND EXISTS(SELECT 1 FROM human_accounts WHERE id = $2 AND active AND role = 'administrator')\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dba1437b7bb90adadf432c4b414806849188346bdabb02de9c4b53a142cac4c4"
+}

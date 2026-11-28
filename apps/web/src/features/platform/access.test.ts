@@ -1,6 +1,13 @@
 // @ts-expect-error bun provides this at test time
 import { expect, test } from 'bun:test'
-import { changesTo, grantsOn, levelOf, type Grant } from './access'
+import {
+  changesTo,
+  grantsOn,
+  levelOf,
+  levelsWithin,
+  type Grant,
+  type Target,
+} from './access'
 
 const agent = { kind: 'agent', id: 'a' } as const
 const room = { kind: 'room', id: 'a' } as const
@@ -47,4 +54,25 @@ test('grantsOn tells a room from an agent with the same id', () => {
   const both = [...watching, grant('room', 'conversation_read')]
   expect(grantsOn(both, agent).length).toBe(4)
   expect(grantsOn(both, room).length).toBe(1)
+})
+
+test('levelsWithin offers only levels the sharer holds in full', () => {
+  const ids = (held: Set<string> | null, target: Target = agent) =>
+    levelsWithin(target, held).map((level) => level.id)
+  expect(ids(null)).toEqual(['none', 'view', 'chat', 'manage'])
+  const chatting = new Set([
+    'conversation_read',
+    'conversation_send',
+    'browser_view',
+    'memory_read',
+    'workspace_read',
+  ])
+  expect(ids(chatting)).toEqual(['none', 'view', 'chat'])
+  expect(ids(new Set(['agent_manage']))).toEqual(['none'])
+  expect(
+    ids(
+      new Set(['conversation_read', 'conversation_send', 'room_manage']),
+      room,
+    ),
+  ).toEqual(['none', 'view', 'chat', 'manage'])
 })

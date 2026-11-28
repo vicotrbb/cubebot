@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE agents SET created_by = $2 WHERE created_by = $1 AND desired_state <> 'retired'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e06b29f105ef1fc240f334c1f7d2057fd033df9bd1f99b823c4c5abd2f98ee8c"
+}

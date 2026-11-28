@@ -3,7 +3,7 @@ use crate::{
     agents::AgentId,
     connections::{
         AgentConnection, Catalog, ConnectError, ConnectionActivity, ConnectionSummary, Connections,
-        FinishSignIn, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,
+        FinishSignIn, ProviderAccess, SaveConnection, SignInStarted, StartSignIn, UpdateConnection,
     },
     identity::{
         Actor, Identity, IdentityError,
@@ -70,10 +70,30 @@ pub(super) fn router(identity: Identity, connections: Connections) -> Router {
         })
 }
 
-async fn administrator(api: &Api, headers: &HeaderMap) -> Result<Actor, IdentityError> {
+/// Administrators connect for the installation; members whom the policy lets connect their own
+/// accounts, which only their agents use.
+async fn connector(api: &Api, headers: &HeaderMap) -> Result<Actor, IdentityError> {
     let actor = super::identity::actor(&api.identity, headers).await?;
     if !actor.administrator {
-        return Err(IdentityError::Forbidden);
+        crate::identity::members::may_create(
+            api.connections.pool(),
+            actor.id,
+            crate::identity::Creation::Connection,
+        )
+        .await?;
+    }
+    Ok(actor)
+}
+
+/// Administrators change any connection; anyone else only their own personal ones.
+async fn editor(api: &Api, headers: &HeaderMap, id: Uuid) -> Result<Actor, IdentityError> {
+    let actor = super::identity::actor(&api.identity, headers).await?;
+    if actor.administrator {
+        return Ok(actor);
+    }
+    let connection = api.connections.connection_summary(id).await?;
+    if !connection.personal || connection.owner != actor.id {
+        return Err(IdentityError::NotFound);
     }
     Ok(actor)
 }
@@ -113,7 +133,7 @@ async fn catalog(
     State(api): State<Api>,
     headers: HeaderMap,
 ) -> Result<Json<Catalog>, IdentityError> {
-    administrator(&api, &headers).await?;
+    connector(&api, &headers).await?;
     let origin = api.identity.browser_origin.as_deref();
     Ok(Json(api.connections.catalog(origin)))
 }
@@ -123,8 +143,15 @@ async fn list(
     State(api): State<Api>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ConnectionSummary>>, IdentityError> {
-    administrator(&api, &headers).await?;
-    Ok(Json(api.connections.connections().await?))
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let all = api.connections.connections().await?;
+    Ok(Json(match actor.administrator {
+        true => all,
+        false => all
+            .into_iter()
+            .filter(|connection| connection.personal && connection.owner == actor.id)
+            .collect(),
+    }))
 }
 
 /// Saves a connection signed in with pasted secrets or another connection, once its check
@@ -135,7 +162,7 @@ async fn create(
     headers: HeaderMap,
     Json(input): Json<SaveConnection>,
 ) -> Result<Json<ConnectionSummary>, ConnectError> {
-    let actor = administrator(&api, &headers).await?;
+    let actor = connector(&api, &headers).await?;
     let connection = api.connections.create_connection(actor.id, input).await?;
     audit(&api, &actor, "connection.create", &connection).await;
     Ok(Json(connection))
@@ -149,10 +176,30 @@ async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateConnection>,
 ) -> Result<Json<ConnectionSummary>, ConnectError> {
-    let actor = administrator(&api, &headers).await?;
+    let actor = editor(&api, &headers, id).await?;
+    let current = api.connections.connection_summary(id).await?;
+    if let (true, Some(access)) = (current.personal, &input.access) {
+        // Only its owner hands a personal connection to agents; anyone else only withdraws it.
+        if actor.id != current.owner && !withdraws(&current.access.0, access) {
+            return Err(IdentityError::Forbidden.into());
+        }
+        api.connections
+            .personal_access(current.owner, access)
+            .await?;
+    }
     let connection = api.connections.update_connection(id, input).await?;
     audit(&api, &actor, "connection.update", &connection).await;
     Ok(Json(connection))
+}
+
+fn withdraws(current: &ProviderAccess, next: &ProviderAccess) -> bool {
+    match (current, next) {
+        (
+            ProviderAccess::ExplicitGrants { agents: now },
+            ProviderAccess::ExplicitGrants { agents },
+        ) => agents.iter().all(|agent| now.contains(agent)),
+        _ => false,
+    }
 }
 
 /// Forgets the connection and asks the vendor to revoke an OAuth sign-in.
@@ -162,7 +209,7 @@ async fn delete(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, IdentityError> {
-    let actor = administrator(&api, &headers).await?;
+    let actor = editor(&api, &headers, id).await?;
     let slug = api.connections.delete_connection(id).await?;
     let event = Event::by(actor.id, "connection.delete").on(id);
     api.identity
@@ -178,7 +225,7 @@ async fn check(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ConnectionSummary>, IdentityError> {
-    administrator(&api, &headers).await?;
+    editor(&api, &headers, id).await?;
     Ok(Json(api.connections.check_connection(id).await?))
 }
 
@@ -188,7 +235,7 @@ async fn activity(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ConnectionActivity>, IdentityError> {
-    administrator(&api, &headers).await?;
+    editor(&api, &headers, id).await?;
     Ok(Json(api.connections.connection_activity(id).await?))
 }
 
@@ -199,7 +246,11 @@ async fn start(
     headers: HeaderMap,
     Json(input): Json<StartSignIn>,
 ) -> Result<Response, ConnectError> {
-    let actor = administrator(&api, &headers).await?;
+    // Signing a connection in again replaces its account: only those who may edit it may.
+    let actor = match input.connection {
+        Some(id) => editor(&api, &headers, id).await?,
+        None => connector(&api, &headers).await?,
+    };
     let origin = api.identity.browser_origin.as_deref();
     let started = api
         .connections
@@ -217,7 +268,7 @@ async fn finish(
     Path(sign_in): Path<Uuid>,
     Json(input): Json<FinishSignIn>,
 ) -> Result<Response, ConnectError> {
-    let actor = administrator(&api, &headers).await?;
+    let actor = connector(&api, &headers).await?;
     let finished = api
         .connections
         .finish_connection_sign_in(actor.id, sign_in, input)
@@ -236,13 +287,20 @@ async fn callback(
     headers: HeaderMap,
     RawQuery(query): RawQuery,
 ) -> Redirect {
-    let back = |query: String| Redirect::to(&format!("/platform/connections?{query}"));
+    let to = |page: &str, query: String| Redirect::to(&format!("{page}?{query}"));
     let (Some(origin), Some(query)) = (api.identity.browser_origin.clone(), query) else {
-        return back("sign_in_error=unexpected".into());
+        return to("/platform/connections", "sign_in_error=unexpected".into());
     };
-    let Ok(actor) = administrator(&api, &headers).await else {
-        return back("sign_in_error=signed_out".into());
+    let Ok(actor) = connector(&api, &headers).await else {
+        return to("/platform/connections", "sign_in_error=signed_out".into());
     };
+    // Members manage their own connections outside Platform.
+    let page = if actor.administrator {
+        "/platform/connections"
+    } else {
+        "/connections"
+    };
+    let back = |query: String| to(page, query);
     let landed = format!("{}?{query}", crate::connections::callback_address(&origin));
     let state = url_state(&landed);
     let Some(sign_in) = state.and_then(|state| api.connections.connection_sign_in_for(&state))
@@ -282,7 +340,19 @@ async fn agent_connections(
     api.identity
         .authorize(&actor, scope, Capability::AgentManage)
         .await?;
-    Ok(Json(api.connections.agent_connections(agent).await?))
+    // Someone else's personal connection shows only while this agent uses it.
+    let listed = api.connections.agent_connections(agent).await?;
+    Ok(Json(
+        listed
+            .into_iter()
+            .filter(|connection| {
+                !connection.personal
+                    || connection.owner == actor.id
+                    || connection.enabled
+                    || actor.administrator
+            })
+            .collect(),
+    ))
 }
 
 /// Grants or withdraws the agent's use of a connection with explicit grants, for administrators;
@@ -294,7 +364,24 @@ async fn grant(
     Path((agent, connection)): Path<(AgentId, Uuid)>,
     Json(input): Json<ConnectionGrant>,
 ) -> Result<StatusCode, IdentityError> {
-    let actor = administrator(&api, &headers).await?;
+    let actor = super::identity::actor(&api.identity, &headers).await?;
+    let current = api.connections.connection_summary(connection).await?;
+    // A personal connection is its owner's to grant, to agents they manage; an administrator
+    // may only withdraw it.
+    let allowed = match (current.personal, actor.administrator) {
+        (false, administrator) => administrator,
+        (true, administrator) if current.owner != actor.id => administrator && !input.enabled,
+        (true, _) => {
+            let scope = Scope::Agent { id: agent.0 };
+            api.identity
+                .authorize(&actor, scope, Capability::AgentManage)
+                .await
+                .is_ok()
+        }
+    };
+    if !allowed {
+        return Err(IdentityError::Forbidden);
+    }
     api.connections
         .grant_connection(connection, agent, input.enabled)
         .await?;

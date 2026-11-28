@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT status FROM connections\n            WHERE id = $1 AND (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($2::uuid))\n              AND (NOT personal OR EXISTS(SELECT 1 FROM human_accounts o WHERE o.id = created_by AND o.active AND (o.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = o.id AND p.scope_kind = 'agent' AND p.scope_id = $2 AND p.capability = 'agent.manage'))))\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ff1aba1ff483ccf5b275d0efb038d74962d43324312faa9b3df22c7afa2d503a"
+}

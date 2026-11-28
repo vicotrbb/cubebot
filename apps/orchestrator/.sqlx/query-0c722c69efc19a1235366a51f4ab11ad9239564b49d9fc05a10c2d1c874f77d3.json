@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT t.source, t.role,\n               EXISTS(SELECT 1 FROM human_team_members m WHERE m.team_id = t.id AND m.account_id = $2 AND m.manager) AS \"manages!\"\n        FROM human_teams t\n        WHERE t.id = $1 AND t.active\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "source",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "manages!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "0c722c69efc19a1235366a51f4ab11ad9239564b49d9fc05a10c2d1c874f77d3"
+}

@@ -1,7 +1,11 @@
+import { createContext } from 'react'
 import { ApiError } from '../../api/client'
 
 export const CATALOG_KEY = ['connectors']
 export const CONNECTIONS_KEY = ['connections']
+
+/** A member's own accounts: granted per agent, and only to agents they manage. */
+export const Personal = createContext(false)
 
 /** The answer, or null for 202; a refusal throws with the server's own words when it gave them. */
 export async function answer<T>(

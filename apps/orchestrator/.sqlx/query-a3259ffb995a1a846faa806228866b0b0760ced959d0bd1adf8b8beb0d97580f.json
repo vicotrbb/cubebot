@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT totp_secret AS \"secret!\" FROM human_accounts WHERE id = $1 AND active AND totp_enabled_at IS NULL AND totp_secret IS NOT NULL FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "secret!",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "a3259ffb995a1a846faa806228866b0b0760ced959d0bd1adf8b8beb0d97580f"
+}

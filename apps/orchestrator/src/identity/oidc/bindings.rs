@@ -22,7 +22,7 @@ impl Identity {
         actor: &Actor,
         after: Option<Uuid>,
     ) -> Result<Vec<Binding>, IdentityError> {
-        self.require_administrator(actor).await?;
+        self.require_overseer(actor).await?;
         Ok(sqlx::query_as!(
             Binding,
             r#"

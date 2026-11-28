@@ -203,6 +203,22 @@ pub(super) async fn admit(
         None => None,
     };
     let account = resolve(&mut transaction, config, &verified, link).await?;
+    let email = verified
+        .email
+        .as_deref()
+        .filter(|email| verified.email_verified && email.len() <= 320)
+        .map(str::to_ascii_lowercase);
+    sqlx::query!(
+        "UPDATE oidc_bindings SET email = $3 WHERE issuer = $1 AND subject = $2",
+        &config.issuer,
+        &verified.subject,
+        email,
+    )
+    .execute(&mut *transaction)
+    .await?;
+    if let (Some(_), Some(groups)) = (&config.groups_claim, &verified.groups) {
+        crate::identity::groups::sync_claimed(&mut transaction, account, groups).await?;
+    }
     let token = passwords::token();
     sqlx::query!(
         "
@@ -292,6 +308,7 @@ async fn new_binding_account(
         &verified.subject,
         verified.email.as_deref(),
         verified.email_verified,
+        verified.groups.as_deref().unwrap_or_default(),
     ) {
         return Err(IdentityError::Forbidden);
     }

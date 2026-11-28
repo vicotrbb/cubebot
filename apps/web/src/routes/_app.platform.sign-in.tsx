@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { admin } from '../api/admin'
 import { Alert, Skeleton, Status } from '../components/primitives'
+import { GoogleDirectory } from '../features/platform/Google'
 import { SingleSignOnEditor } from '../features/platform/SingleSignOn'
 import { useAdminAction } from '../features/platform/useAdminAction'
 import '../features/platform/platform.css'
@@ -80,6 +81,8 @@ function SignInSettings() {
         </table>
         <Alert>{error}</Alert>
         <Status>{notice}</Status>
+        <h2 className="platform__h2">Google Workspace groups</h2>
+        <GoogleDirectory />
       </div>
       <aside className="platform__editor">
         <h2>Single sign-on</h2>

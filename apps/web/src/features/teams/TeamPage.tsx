@@ -54,33 +54,20 @@ export function TeamPage({ teamId }: { teamId: string }) {
     id: person.id,
     name: person.name,
   }))
-  const administrator = Boolean(session.data?.administrator)
+  // Members change only the teams they own; administrators any.
+  const changeable =
+    Boolean(session.data?.administrator) || team.owner === session.data?.id
   return (
     <div className="page team-page">
       <header className="page__head">
         <h1>{editing ? `Edit ${team.name}` : team.name}</h1>
         {!editing && (
-          <div className="actions">
-            <Link
-              to="/rooms/$roomId"
-              params={{ roomId: team.room }}
-              className="btn btn--sm"
-            >
-              <Hash /> Team room
-            </Link>
-            {administrator && (
-              <>
-                <button
-                  type="button"
-                  className="btn btn--sm"
-                  onClick={() => setEditing(true)}
-                >
-                  <Pencil /> Edit
-                </button>
-                <DeleteTeam team={team} teams={all} />
-              </>
-            )}
-          </div>
+          <TeamActions
+            team={team}
+            teams={all}
+            changeable={changeable}
+            onEdit={() => setEditing(true)}
+          />
         )}
       </header>
       <div className="page__body">
@@ -103,6 +90,38 @@ export function TeamPage({ teamId }: { teamId: string }) {
           />
         )}
       </div>
+    </div>
+  )
+}
+
+function TeamActions({
+  team,
+  teams,
+  changeable,
+  onEdit,
+}: {
+  team: Team
+  teams: Team[]
+  changeable: boolean
+  onEdit: () => void
+}) {
+  return (
+    <div className="actions">
+      <Link
+        to="/rooms/$roomId"
+        params={{ roomId: team.room }}
+        className="btn btn--sm"
+      >
+        <Hash /> Team room
+      </Link>
+      {changeable && (
+        <>
+          <button type="button" className="btn btn--sm" onClick={onEdit}>
+            <Pencil /> Edit
+          </button>
+          <DeleteTeam team={team} teams={teams} />
+        </>
+      )}
     </div>
   )
 }

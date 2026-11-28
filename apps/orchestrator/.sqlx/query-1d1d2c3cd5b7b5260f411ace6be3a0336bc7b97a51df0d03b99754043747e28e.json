@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE human_accounts SET role = 'guest' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1d1d2c3cd5b7b5260f411ace6be3a0336bc7b97a51df0d03b99754043747e28e"
+}

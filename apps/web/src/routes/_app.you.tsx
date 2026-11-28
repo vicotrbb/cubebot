@@ -11,13 +11,21 @@ import {
   usePreferences,
   useSavePreferences,
   useSession,
+  useStanding,
 } from '../app/queries'
 import { applyTheme, type Theme } from '../app/theme'
 import { PersonAvatar } from '../components/PersonAvatar'
 import { Alert } from '../components/primitives'
+import { ConnectionsLink } from '../features/account/ConnectionsLink'
+import { Keys } from '../features/account/Keys'
+import { ManagedGroups } from '../features/account/ManagedGroups'
+import { roleOf } from '../features/account/model'
+import { Security } from '../features/account/Security'
+import { Sessions } from '../features/account/Sessions'
 import { AboutYou, useDisplayName } from '../features/shell/AboutYou'
 import { Notifications } from '../features/shell/Notifications'
 import '../features/shell/profile.css'
+import '../features/account/account.css'
 
 export const Route = createFileRoute('/_app/you')({ component: You })
 
@@ -49,10 +57,7 @@ function You() {
           />
           <div className="profile__who">
             <h2>{name}</h2>
-            <p className="muted">
-              {session.data?.administrator ? 'Administrator' : 'Member'} of{' '}
-              {installation.data?.name ?? 'Cubebot'}
-            </p>
+            <Role installation={installation.data?.name ?? 'Cubebot'} />
             {session.data && <PictureControls account={session.data.id} />}
           </div>
         </section>
@@ -87,6 +92,15 @@ function You() {
 
         <Notifications />
 
+        <Security />
+
+        <Sessions />
+
+        <Keys />
+        <ManagedGroups />
+
+        <ConnectionsLink />
+
         <section className="profile__section" aria-labelledby="session">
           <div>
             <h3 id="session">Session</h3>
@@ -109,6 +123,18 @@ function You() {
         </section>
       </div>
     </div>
+  )
+}
+
+function Role({ installation }: { installation: string }) {
+  const standing = useStanding()
+  if (!standing.data) return <p className="muted">&nbsp;</p>
+  const { label, detail } = roleOf(standing.data)
+  return (
+    <p className="muted">
+      {label} of {installation}
+      {detail && <span className="faint"> · {detail}</span>}
+    </p>
   )
 }
 

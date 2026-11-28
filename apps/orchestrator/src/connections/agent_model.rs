@@ -71,7 +71,7 @@ impl Connections {
         input: &SetAgentModel,
     ) -> Result<AgentModel, IdentityError> {
         let mut tx = self.pool.begin().await?;
-        let providers = choosable(&mut tx).await?;
+        let providers = choosable(&mut tx, agent).await?;
         if let Some(chosen) = &input.chosen
             && (!chosen.valid() || !providers.contains(&chosen.provider))
         {
@@ -127,8 +127,11 @@ impl Connections {
         agent: AgentId,
         provider: ProviderKind,
     ) -> Result<String, IdentityError> {
-        if !choosable(tx).await?.contains(&provider) {
+        if !choosable(tx, agent).await?.contains(&provider) {
             return Err(IdentityError::NotFound);
+        }
+        if let Some((key, _)) = self.owner_key(tx, agent, provider).await? {
+            return Ok(key);
         }
         if let Some((key, ..)) = self.saved_material(tx, provider).await? {
             return Ok(key);
@@ -142,8 +145,18 @@ impl Connections {
         agent: AgentId,
         base: Inference,
     ) -> Result<Inference, IdentityError> {
-        let own = own_effort(tx, agent).await?;
         let inference = self.chosen_inference(tx, agent, base).await?;
+        self.with_effort(tx, agent, inference).await
+    }
+
+    /// The agent's own effort, else the provider's, when the provider offers it.
+    pub(super) async fn with_effort(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        agent: AgentId,
+        inference: Inference,
+    ) -> Result<Inference, IdentityError> {
+        let own = own_effort(tx, agent).await?;
         let effort = own.or(inference.effort);
         Ok(Inference {
             effort: effort.filter(|_| effort_offered(inference.provider, effort)),
@@ -221,7 +234,7 @@ fn window(tokens: Option<i64>) -> Option<u64> {
     tokens.and_then(|tokens| u64::try_from(tokens).ok())
 }
 
-async fn chosen_model(
+pub(super) async fn chosen_model(
     tx: &mut Transaction<'_, Postgres>,
     agent: AgentId,
 ) -> Result<Option<ModelRef>, sqlx::Error> {
@@ -266,22 +279,30 @@ async fn described(
     Ok(AgentModel {
         chosen: chosen_model(tx, agent).await?,
         default,
-        providers: choosable(tx).await?,
+        providers: choosable(tx, agent).await?,
         effort: own_effort(tx, agent).await?,
         provider_efforts: provider_efforts(tx).await?,
     })
 }
 
-async fn choosable(tx: &mut Transaction<'_, Postgres>) -> Result<Vec<ProviderKind>, sqlx::Error> {
+/// The installation's providers, then the agent's owner's own ones.
+async fn choosable(
+    tx: &mut Transaction<'_, Postgres>,
+    agent: AgentId,
+) -> Result<Vec<ProviderKind>, sqlx::Error> {
     let names = sqlx::query_scalar!(
         r#"
         SELECT provider AS "provider!" FROM (
             SELECT provider, 0 AS position FROM provider_connection
             UNION ALL
             SELECT provider, 1 FROM provider_saved WHERE provider NOT IN (SELECT provider FROM provider_connection)
+            UNION ALL
+            SELECT p.provider, 2 FROM usable_personal_providers p JOIN agents g ON g.created_by = p.owner AND g.id = $1
+            WHERE p.provider NOT IN (SELECT provider FROM provider_connection UNION SELECT provider FROM provider_saved)
         ) providers
         ORDER BY position, provider
-        "#
+        "#,
+        agent.0,
     )
     .fetch_all(&mut **tx)
     .await?;

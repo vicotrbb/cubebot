@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT h.id AS \"account!\", h.login AS \"login!\",\n                   count(DISTINCT g.id) AS \"agents!\",\n                   COALESCE(sum(u.input_tokens), 0)::bigint AS \"input_tokens!\",\n                   COALESCE(sum(u.output_tokens), 0)::bigint AS \"output_tokens!\",\n                   sum(u.cost_usd) AS cost_usd\n            FROM human_accounts h\n            JOIN agents g ON g.created_by = h.id\n            LEFT JOIN usage_events u ON u.agent_id = g.id AND u.created_at > clock_timestamp() - make_interval(days => $1)\n            GROUP BY h.id, h.login\n            ORDER BY sum(u.cost_usd) DESC NULLS LAST, h.login\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "account!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "login!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "agents!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "input_tokens!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "output_tokens!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "cost_usd",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0f468e2cb439a56627227f04b0062160d2b2ca2dc6c973d3026c40ba94bb0095"
+}

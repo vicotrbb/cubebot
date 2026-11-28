@@ -15,6 +15,7 @@ const team = (
   parent: parent?.[0] ?? null,
   reports_to: parent?.[1] ?? null,
   room: `room-${id}`,
+  owner: 'owner',
   revision: 1,
   members: lines.map(([agent, reports_to]) => ({
     agent,

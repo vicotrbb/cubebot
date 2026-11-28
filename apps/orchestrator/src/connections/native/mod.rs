@@ -100,6 +100,10 @@ pub struct ConnectionSummary {
     /// When the current access token expires; the orchestrator renews it before then.
     pub expires_at: Option<String>,
     pub polled_at: Option<String>,
+    /// One person's own account, usable only by agents they manage.
+    pub personal: bool,
+    /// Who connected it.
+    pub owner: Uuid,
 }
 
 /// A connection signed in with pasted secrets, an app's own client credentials, another
@@ -166,6 +170,8 @@ pub struct AgentConnection {
     pub enabled: bool,
     /// The events it reports, for routine triggers.
     pub events: Vec<String>,
+    pub personal: bool,
+    pub owner: Uuid,
 }
 
 /// What a connection reported recently and which routines it starts.
@@ -331,7 +337,7 @@ impl Connections {
             SELECT id, connector, slug, auth, account, config AS "config!: _", access AS "access!: Access",
                 level, disabled_tools AS "disabled_tools!: _", status, problem,
                 (to_jsonb(checked_at) #>> '{}') AS checked_at, (to_jsonb(expires_at) #>> '{}') AS expires_at,
-                (to_jsonb(polled_at) #>> '{}') AS polled_at
+                (to_jsonb(polled_at) #>> '{}') AS polled_at, personal, created_by AS owner
             FROM connections
             WHERE $1::uuid IS NULL OR id = $1
             ORDER BY connector, slug
@@ -366,7 +372,7 @@ impl Connections {
         slug(&input.slug)?;
         let mut config = settings(manifest, auth, input.config, &input.secrets, &Value::Null)?;
         if let Some(linked) = input.linked {
-            self.linkable(auth, linked).await?;
+            self.linkable(auth, linked, actor).await?;
             config["linked"] = Value::String(linked.to_string());
         } else if matches!(auth, Auth::Linked { .. }) {
             return Err(ConnectError::Invalid(
@@ -448,10 +454,22 @@ impl Connections {
     ) -> Result<ConnectionSummary, ConnectError> {
         let mut tx = self.pool.begin().await?;
         validate_access(&mut tx, &draft.access).await?;
+        // Administrators connect for the installation; anyone else connects their own account.
+        let personal = crate::identity::administrator(&mut *tx, actor)
+            .await
+            .is_err();
+        let mut draft = draft;
+        if personal {
+            // A personal connection starts granted to none of its owner's agents.
+            if matches!(draft.access, ProviderAccess::AllAgents) {
+                draft.access = ProviderAccess::ExplicitGrants { agents: Vec::new() };
+            }
+            personal_access(&mut tx, actor, &draft.access).await?;
+        }
         let id = Uuid::new_v4();
         let credential = self.seal_connection(&mut *tx, id, sealed).await?;
         let row = (account, expires_in, problem);
-        let inserted = insert_row(&mut tx, (id, actor), &draft, credential, row)
+        let inserted = insert_row(&mut tx, (id, actor, personal), &draft, credential, row)
             .await?
             .ok_or(IdentityError::Conflict)?;
         tx.commit().await?;
@@ -459,7 +477,7 @@ impl Connections {
     }
 
     /// A linked sign-in borrows a connection of a connector it names, with the product it needs.
-    async fn linkable(&self, auth: &Auth, linked: Uuid) -> Result<(), ConnectError> {
+    async fn linkable(&self, auth: &Auth, linked: Uuid, actor: Uuid) -> Result<(), ConnectError> {
         let Auth::Linked {
             connectors,
             product,
@@ -467,9 +485,13 @@ impl Connections {
         else {
             return Err(ConnectError::Invalid("this sign-in does not link".into()));
         };
+        // A personal connection links only to its owner's own personal ones; only administrators
+        // link to the installation's, so nobody borrows a token they could not use.
         let row = sqlx::query!(
-            "SELECT connector, auth, config FROM connections WHERE id = $1",
-            linked
+            "SELECT connector, auth, config FROM connections WHERE id = $1 AND CASE WHEN personal THEN created_by = $2
+                ELSE EXISTS(SELECT 1 FROM human_accounts WHERE id = $2 AND active AND role = 'administrator') END",
+            linked,
+            actor,
         )
         .fetch_optional(&self.pool)
         .await?
@@ -719,7 +741,8 @@ impl Connections {
             r#"
             SELECT id, connector, slug, account, level, status, config,
                 access->>'mode' = 'all_agents' AS "all_agents!",
-                (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)) AS "enabled!"
+                ((access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)) AND (NOT personal OR EXISTS(SELECT 1 FROM human_accounts o WHERE o.id = created_by AND o.active AND (o.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = o.id AND p.scope_kind = 'agent' AND p.scope_id = $1 AND p.capability = 'agent.manage'))))) AS "enabled!",
+                personal, created_by AS owner
             FROM connections
             ORDER BY connector, slug
             "#,
@@ -739,8 +762,26 @@ impl Connections {
                 status: row.status,
                 all_agents: row.all_agents,
                 enabled: row.enabled,
+                personal: row.personal,
+                owner: row.owner,
             })
             .collect())
+    }
+
+    /// Checks a personal connection's new access against what its owner manages.
+    pub async fn personal_access(
+        &self,
+        owner: Uuid,
+        access: &ProviderAccess,
+    ) -> Result<(), IdentityError> {
+        let mut tx = self.pool.begin().await?;
+        personal_access(&mut tx, owner, access).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub fn pool(&self) -> &sqlx::PgPool {
+        &self.pool
     }
 
     /// Grants or withdraws one agent's use of a connection with explicit grants.
@@ -799,6 +840,7 @@ impl Connections {
             r#"
             SELECT status FROM connections
             WHERE id = $1 AND (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($2::uuid))
+              AND (NOT personal OR EXISTS(SELECT 1 FROM human_accounts o WHERE o.id = created_by AND o.active AND (o.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = o.id AND p.scope_kind = 'agent' AND p.scope_id = $2 AND p.capability = 'agent.manage'))))
             "#,
             id,
             agent.0,
@@ -859,7 +901,8 @@ pub(crate) async fn granted(
             r#"
             SELECT id, connector, slug, account, config, level, disabled_tools AS "disabled_tools!: sqlx::types::Json<Vec<String>>"
             FROM connections
-            WHERE access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid)
+            WHERE (access->>'mode' = 'all_agents' OR access->'agents' @> jsonb_build_array($1::uuid))
+              AND (NOT personal OR EXISTS(SELECT 1 FROM human_accounts o WHERE o.id = created_by AND o.active AND (o.role = 'administrator' OR EXISTS(SELECT 1 FROM effective_human_grants p WHERE p.actor_id = o.id AND p.scope_kind = 'agent' AND p.scope_id = $1 AND p.capability = 'agent.manage'))))
             ORDER BY slug
             "#,
             agent.0,
@@ -966,7 +1009,7 @@ async fn updated(
 /// The new row, unless its slug is taken.
 async fn insert_row(
     tx: &mut Transaction<'_, Postgres>,
-    (id, actor): (Uuid, Uuid),
+    (id, actor, personal): (Uuid, Uuid, bool),
     draft: &Draft,
     credential: Vec<u8>,
     (account, expires_in, problem): (Option<String>, Option<i64>, Option<String>),
@@ -974,11 +1017,11 @@ async fn insert_row(
     sqlx::query_scalar!(
         r#"
         INSERT INTO connections (id, connector, slug, auth, account, config, credential, access, level,
-            checked_at, created_by, expires_at, refresh_after, status, problem)
+            checked_at, created_by, expires_at, refresh_after, status, problem, personal)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp(), $10,
             clock_timestamp() + make_interval(secs => $11),
             clock_timestamp() + make_interval(secs => $11 - LEAST(600, $11 / 2)),
-            CASE WHEN $12::text IS NULL THEN 'connected' ELSE 'error' END, $12)
+            CASE WHEN $12::text IS NULL THEN 'connected' ELSE 'error' END, $12, $13)
         ON CONFLICT (slug) DO NOTHING
         RETURNING id
         "#,
@@ -994,9 +1037,39 @@ async fn insert_row(
         actor,
         expires_in.map(|seconds| seconds as f64),
         problem,
+        personal,
     )
     .fetch_optional(&mut **tx)
     .await
+}
+
+/// A personal connection is granted one agent at a time, and only to agents its owner manages.
+pub(crate) async fn personal_access(
+    tx: &mut Transaction<'_, Postgres>,
+    owner: Uuid,
+    access: &ProviderAccess,
+) -> Result<(), IdentityError> {
+    let ProviderAccess::ExplicitGrants { agents } = access else {
+        return Err(IdentityError::InvalidInput);
+    };
+    let managed = sqlx::query_scalar!(
+        r#"
+        SELECT count(DISTINCT p.scope_id) AS "managed!"
+        FROM effective_human_grants p
+        WHERE p.actor_id = $1 AND p.scope_kind = 'agent' AND p.capability = 'agent.manage' AND p.scope_id = ANY($2)
+        "#,
+        owner,
+        agents,
+    )
+    .fetch_one(&mut **tx)
+    .await?;
+    let administrator = crate::identity::administrator(&mut **tx, owner)
+        .await
+        .is_ok();
+    if !administrator && managed != agents.len() as i64 {
+        return Err(IdentityError::Forbidden);
+    }
+    Ok(())
 }
 
 /// The event kinds a connection reports, given the products it has switched on.

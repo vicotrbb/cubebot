@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { notRetired, useAgents, useSession } from '../app/queries'
+import { notRetired, useAgents, useStanding } from '../app/queries'
 import { Cube } from '../components/Cube'
 import { Home } from '../features/home/Home'
 
@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_app/')({
 
 function Landing() {
   const agents = useAgents()
-  const session = useSession()
+  const standing = useStanding()
   const { view } = Route.useSearch()
   const navigate = Route.useNavigate()
   if (agents.isPending) return null
@@ -22,7 +22,7 @@ function Landing() {
       <div className="empty shell-empty">
         <Cube size={96} follow mood="idle" />
         <h2>No agents yet.</h2>
-        {session.data?.administrator ? (
+        {standing.data?.can_create.agents ? (
           <>
             <p>Create one to start a conversation.</p>
             <Link to="/agents/new" className="btn btn--primary">
@@ -30,7 +30,7 @@ function Landing() {
             </Link>
           </>
         ) : (
-          <p>You see agents here once an administrator gives you access.</p>
+          <p>You see agents here once someone shares one with you.</p>
         )}
       </div>
     )

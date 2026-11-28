@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE google_directory SET synced_at = clock_timestamp(), problem = $1 WHERE singleton",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eefbf129e0917219703e98a76a758a037d554dda5e5a5206d0391f3d20d6c372"
+}

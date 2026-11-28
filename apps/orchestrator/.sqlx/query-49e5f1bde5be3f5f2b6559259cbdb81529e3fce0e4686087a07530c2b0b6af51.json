@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, name, token_hash = $2 AS \"current!\",\n                   EXTRACT(EPOCH FROM created_at)::bigint AS \"created_at_unix!\",\n                   EXTRACT(EPOCH FROM expires_at)::bigint AS \"expires_at_unix!\",\n                   EXTRACT(EPOCH FROM last_seen_at)::bigint AS last_seen_at_unix\n            FROM human_sessions\n            WHERE account_id = $1 AND expires_at > clock_timestamp()\n            ORDER BY created_at DESC\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "current!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at_unix!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_at_unix!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "last_seen_at_unix",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "49e5f1bde5be3f5f2b6559259cbdb81529e3fce0e4686087a07530c2b0b6af51"
+}

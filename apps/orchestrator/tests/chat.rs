@@ -216,6 +216,7 @@ async fn legacy_histories_merge_without_broadening_private_grants() {
     let actor = cubebot_orchestrator::identity::Actor {
         id: admin,
         administrator: true,
+        role: cubebot_orchestrator::identity::Role::Administrator,
     };
     let history = Work::new(pool.clone())
         .history(&actor, agent, 0)
@@ -231,6 +232,7 @@ async fn legacy_histories_merge_without_broadening_private_grants() {
     let member_actor = cubebot_orchestrator::identity::Actor {
         id: member,
         administrator: false,
+        role: cubebot_orchestrator::identity::Role::Member,
     };
     assert!(matches!(
         Work::new(pool.clone())

@@ -55,3 +55,6 @@
   height: 1px;
   background: var(--line);
 }
+.sign-in .link-btn {
+  justify-self: start;
+}

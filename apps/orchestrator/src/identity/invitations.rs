@@ -18,6 +18,7 @@ pub struct Invitation {
 pub struct InvitationSummary {
     pub id: Uuid,
     pub login: String,
+    pub role: String,
     pub revision: i64,
     pub status: String,
     pub expires_at_unix: i64,
@@ -26,6 +27,7 @@ pub struct InvitationSummary {
 struct Redemption {
     id: Uuid,
     login: String,
+    role: String,
     accepted_by: Option<Uuid>,
     accept_request_id: Option<Uuid>,
 }
@@ -47,12 +49,27 @@ impl Identity {
         login: &str,
         request_id: Uuid,
     ) -> Result<Invitation, IdentityError> {
-        let command = Command::new(
-            actor,
-            "invitation.create",
-            request_id,
-            &serde_json::json!({"login": login}),
-        )?;
+        self.invite_as(actor, login, super::Role::Member, request_id)
+            .await
+    }
+
+    /// Invites someone as a member, guest or auditor; administrators are promoted afterwards.
+    #[tracing::instrument(skip_all, fields(actor = %actor.id, request = %request_id))]
+    pub async fn invite_as(
+        &self,
+        actor: &Actor,
+        login: &str,
+        role: super::Role,
+        request_id: Uuid,
+    ) -> Result<Invitation, IdentityError> {
+        if role == super::Role::Administrator {
+            return Err(IdentityError::InvalidInput);
+        }
+        let input = match role {
+            super::Role::Member => serde_json::json!({"login": login}),
+            _ => serde_json::json!({"login": login, "role": role}),
+        };
+        let command = Command::new(actor, "invitation.create", request_id, &input)?;
         let (mut transaction, previous) = command.begin(&self.pool).await?;
         if let Some(receipt) = previous {
             return Ok(Invitation {
@@ -80,13 +97,14 @@ impl Identity {
         let token = passwords::token();
         let id = sqlx::query_scalar!(
             r#"
-            INSERT INTO invitations (login, token_hash, created_by)
-            VALUES ($1, $2, $3)
+            INSERT INTO invitations (login, token_hash, created_by, role)
+            VALUES ($1, $2, $3, $4)
             RETURNING id AS "id!"
             "#,
             login,
             digest(&token),
             actor.id,
+            role.as_str(),
         )
         .fetch_one(&mut *transaction)
         .await?;
@@ -180,13 +198,14 @@ impl Identity {
         actor: &Actor,
         after: Option<Uuid>,
     ) -> Result<Vec<InvitationSummary>, IdentityError> {
-        self.require_administrator(actor).await?;
+        self.require_overseer(actor).await?;
         Ok(sqlx::query_as!(
             InvitationSummary,
             r#"
             SELECT
                 id AS "id!",
                 login AS "login!",
+                role AS "role!",
                 revision AS "revision!",
                 EXTRACT(EPOCH FROM expires_at)::bigint AS "expires_at_unix!",
                 CASE
@@ -220,6 +239,7 @@ async fn load<'e>(
         SELECT
             id AS "id!",
             login AS "login!",
+            role AS "role!",
             accepted_by AS "accepted_by?",
             accept_request_id AS "accept_request_id?"
         FROM invitations
@@ -240,8 +260,13 @@ async fn admit(
     verifier: String,
     request_id: Uuid,
 ) -> Result<Uuid, IdentityError> {
-    let account =
-        accounts::insert_account(&mut transaction, &invitation.login, &verifier, "member").await?;
+    let account = accounts::insert_account(
+        &mut transaction,
+        &invitation.login,
+        &verifier,
+        &invitation.role,
+    )
+    .await?;
     sqlx::query!(
         "
         UPDATE invitations
@@ -263,6 +288,7 @@ async fn admit(
         &Actor {
             id: account,
             administrator: false,
+            role: super::Role::Member,
         },
         "invitation.accept",
         request_id,

@@ -1384,10 +1384,27 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** Every grant in force; administrators only. */
+    /** Every grant in force; administrators and auditors. */
     get: operations['list_grants']
     put?: never
     post: operations['grant']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/access/resources/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The owner and the grants of one agent or room, for those who manage it. */
+    get: operations['resource_access']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -1420,6 +1437,55 @@ export interface paths {
     get: operations['accounts']
     put?: never
     post: operations['create_account']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/accounts/password-reset': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** A one-day link token for setting a new password; in this response only. */
+    post: operations['create_password_reset']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/accounts/role': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['change_role']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/accounts/two-factor-reset': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['reset_two_factor']
     delete?: never
     options?: never
     head?: never
@@ -1479,6 +1545,80 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/directory': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['directory']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/google': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Administrators and auditors; the service account key is never returned. */
+    get: operations['google_directory']
+    /**
+     * 400 for an invalid key or address, or enabling without both; 503 when no credential key is
+     *     configured to seal a new key.
+     */
+    put: operations['save_google_directory']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/google/groups': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The Workspace's groups, for linking; 503 when Google refuses. */
+    get: operations['google_workspace_groups']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/google/sync': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Mirrors every linked Google group now; groups Google could not list are named in `problem`.
+     *     409 until a key and administrator are saved.
+     */
+    post: operations['sync_google_directory']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/groups': {
     parameters: {
       query?: never
@@ -1521,6 +1661,56 @@ export interface paths {
     get?: never
     put?: never
     post: operations['membership']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/groups/role': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Gives a group's members a role; only the installation owner maps a group to administrators. */
+    post: operations['group_role']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/installation/hand-over': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['hand_over']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/inventory': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Every agent, room, team and connection with its owner; administrators and auditors. */
+    get: operations['inventory']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -1642,6 +1832,23 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/me/password': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** Ends every other session and personal token. */
+    post: operations['change_password']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/me/preferences': {
     parameters: {
       query?: never
@@ -1671,6 +1878,119 @@ export interface paths {
     /** Replaces the caller's whole profile; agents that person reaches read it. */
     put: operations['set_profile']
     post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/sessions': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['sessions']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/sessions/{id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete: operations['end_session']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/standing': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['standing']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/tokens': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** The token is in this response only. */
+    post: operations['create_token']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/two-factor': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['enroll_two_factor']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/two-factor/confirm': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['confirm_two_factor']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/me/two-factor/disable': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['disable_two_factor']
     delete?: never
     options?: never
     head?: never
@@ -1783,6 +2103,86 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/identity/ownership/transfer': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['transfer']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/ownership/transfer-all': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['transfer_all']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/password-reset': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['redeem_password_reset']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/policy': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get: operations['policy']
+    put: operations['save_policy']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/reactivate': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post: operations['reactivate']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/identity/setup': {
     parameters: {
       query?: never
@@ -1794,6 +2194,23 @@ export interface paths {
     put?: never
     /** Creates the installation's first account as its administrator and signs it in. */
     post: operations['setup']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/identity/spend': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Model spend per person over the last `days` (30 when left out). */
+    get: operations['spend']
+    put?: never
+    post?: never
     delete?: never
     options?: never
     head?: never
@@ -2136,6 +2553,40 @@ export interface paths {
     put: operations['update_mcp_server']
     post?: never
     delete: operations['delete_mcp_server']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/me/providers': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** The signed-in person's own provider keys, without the keys. */
+    get: operations['my_providers']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/me/providers/{provider}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /** Saves the person's own key for a pay-as-you-go provider; their agents that choose it use it. */
+    put: operations['save_my_provider']
+    post?: never
+    delete: operations['forget_my_provider']
     options?: never
     head?: never
     patch?: never
@@ -3007,7 +3458,11 @@ export interface components {
     AccessExplanation: {
       administrator: boolean
       allowed: boolean
+      /** @description They are an auditor, who reads everything. */
+      auditor: boolean
       grants: components['schemas']['AccessSource'][]
+      /** @description They own the resource. */
+      owner: boolean
     }
     AccessSource: {
       group_id?: null | components['schemas']['GroupId']
@@ -3032,15 +3487,36 @@ export interface components {
       login: string
       /** @description A display name; accounts have none yet. */
       name?: string | null
+      role: components['schemas']['Role']
+    }
+    AccountRequest: {
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      request_id: string
     }
     AccountSummary: {
       active: boolean
       administrator: boolean
       /** Format: uuid */
       id: string
+      /** Format: int64 */
+      last_seen_at_unix?: number | null
       login: string
+      name?: string | null
+      /**
+       * Format: int64
+       * @description Live agents, rooms and teams this person owns.
+       */
+      owned: number
+      /** @description The installation owner. */
+      owner: boolean
       /** Format: int64 */
       revision: number
+      role: components['schemas']['Role']
+      /** Format: int64 */
+      sessions: number
+      two_factor: boolean
     }
     ActivityItem: {
       /** Format: uuid */
@@ -3159,6 +3635,9 @@ export interface components {
       /** Format: uuid */
       id: string
       level: components['schemas']['Level']
+      /** Format: uuid */
+      owner: string
+      personal: boolean
       slug: string
       status: string
     }
@@ -3474,6 +3953,14 @@ export interface components {
       turns: components['schemas']['Turn'][]
       voice: components['schemas']['Voice']
     }
+    /** @description What the signed-in person may create right now. */
+    CanCreate: {
+      agents: boolean
+      connections: boolean
+      providers: boolean
+      rooms: boolean
+      teams: boolean
+    }
     /** @enum {string} */
     Capability:
       | 'agent_manage'
@@ -3553,6 +4040,20 @@ export interface components {
       starts_at?: string | null
       title?: string | null
     }
+    ChangePassword: {
+      current: string
+      /** @description The new password. */
+      password: string
+    }
+    ChangeRole: {
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      request_id: string
+      role: components['schemas']['Role']
+    }
     ChatgptSignIn: {
       /** Format: uuid */
       sign_in: string
@@ -3593,6 +4094,9 @@ export interface components {
       params: string[][]
       /** @description The token endpoint; the client id and secret go in Basic authentication (RFC 6749 §2.3.1). */
       token: string
+    }
+    Code: {
+      code: string
     }
     /**
      * @description An opaque `#rrggbb` color, stored lowercase.
@@ -3656,6 +4160,13 @@ export interface components {
       /** Format: uuid */
       id: string
       level: components['schemas']['Level']
+      /**
+       * Format: uuid
+       * @description Who connected it.
+       */
+      owner: string
+      /** @description One person's own account, usable only by agents they manage. */
+      personal: boolean
       polled_at?: string | null
       problem?: string | null
       /** @description Prefixes the connection's tools as `<slug>__<tool>`. */
@@ -3669,6 +4180,7 @@ export interface components {
       password: string
       /** Format: uuid */
       request_id: string
+      role?: null | components['schemas']['Role']
     }
     CreateAgent: {
       avatar?: null | components['schemas']['Avatar']
@@ -3679,9 +4191,12 @@ export interface components {
       voice?: null | components['schemas']['Voice']
     }
     CreateGroup: {
+      /** @description A Google group's address, or the value of the single sign-on groups claim. */
+      external_id?: string | null
       name: string
       /** Format: uuid */
       request_id: string
+      source?: null | components['schemas']['GroupSource']
     }
     CreateMemory: {
       content: string
@@ -3808,6 +4323,23 @@ export interface components {
     }
     /** @enum {string} */
     Desired: 'running' | 'stopped'
+    Directory: {
+      groups: components['schemas']['DirectoryGroup'][]
+      people: components['schemas']['DirectoryPerson'][]
+    }
+    DirectoryGroup: {
+      /** Format: uuid */
+      id: string
+      name: string
+    }
+    /** @description Someone a member can share with. */
+    DirectoryPerson: {
+      /** Format: uuid */
+      id: string
+      login: string
+      name?: string | null
+      role: components['schemas']['Role']
+    }
     Dismiss: {
       /**
        * @description Also stop this rule opening findings for this agent, or for the installation when the
@@ -3860,6 +4392,12 @@ export interface components {
       /** Format: uuid */
       id: string
       slug: string
+    }
+    Enrollment: {
+      /** @description Base32, for typing into an authenticator app. */
+      secret: string
+      /** @description An `otpauth://` URI for a QR code. */
+      uri: string
     }
     Event: {
       /**
@@ -4081,6 +4619,19 @@ export interface components {
       /** @description The address the browser landed on; absent while a device sign-in waits. */
       url?: string | null
     }
+    GoogleSettings: {
+      admin_email?: string | null
+      /** @description A credential key is configured, so a service account key can be stored. */
+      can_store_key: boolean
+      /** @description The stored service account; its key is never returned. */
+      client_email?: string | null
+      customer: string
+      enabled: boolean
+      has_key: boolean
+      problem?: string | null
+      /** Format: int64 */
+      synced_at_unix?: number | null
+    }
     /** Format: uuid */
     GrantId: string
     GrantRequest: {
@@ -4109,15 +4660,41 @@ export interface components {
     }
     Group: {
       active: boolean
+      external_id?: string | null
       id: components['schemas']['GroupId']
+      /** @description Members who may change who is in it. */
+      managers: string[]
       /** @description The accounts in the group. */
       members: string[]
       name: string
       /** Format: int64 */
       revision: number
+      role?: string | null
+      source: string
+      /** Format: int64 */
+      synced_at_unix?: number | null
     }
     /** Format: uuid */
     GroupId: string
+    GroupRole: {
+      /** Format: int64 */
+      expected_revision: number
+      group: components['schemas']['GroupId']
+      /** Format: uuid */
+      request_id: string
+      role?: null | components['schemas']['Role']
+    }
+    /** @enum {string} */
+    GroupSource: 'local' | 'google' | 'oidc'
+    HandOver: {
+      /** Format: uuid */
+      request_id: string
+      /**
+       * Format: uuid
+       * @description An active administrator who becomes the installation owner.
+       */
+      to: string
+    }
     /**
      * @description One authenticated webhook delivery of the last 30 days. A rejected one is the caller's to see:
      *     it never reached the routine.
@@ -4214,12 +4791,14 @@ export interface components {
       login: string
       /** Format: int64 */
       revision: number
+      role: string
       status: string
     }
     Invite: {
       login: string
       /** Format: uuid */
       request_id: string
+      role?: null | components['schemas']['Role']
     }
     Item: {
       all_day: boolean
@@ -4295,6 +4874,8 @@ export interface components {
     /** @enum {string} */
     LivenessStatus: 'alive'
     Login: {
+      /** @description The six-digit or recovery code, for accounts with two-factor on. */
+      code?: string | null
       login: string
       password: string
     }
@@ -4485,6 +5066,8 @@ export interface components {
       /** Format: int64 */
       expected_revision: number
       group: components['schemas']['GroupId']
+      /** @description Makes them a manager of the group's members, or not; administrators only. */
+      manager?: boolean | null
       present: boolean
       /** Format: uuid */
       request_id: string
@@ -4633,6 +5216,14 @@ export interface components {
       request_id: string
       title: string
     }
+    NewToken: {
+      /**
+       * Format: int32
+       * @description 1 to 365.
+       */
+      days: number
+      name: string
+    }
     OAuth2: {
       authorize: string
       /** @description A device-code endpoint: sign-in without any redirect, for public clients. */
@@ -4707,6 +5298,48 @@ export interface components {
       findings: components['schemas']['Finding'][]
       mutes: components['schemas']['Mute'][]
     }
+    /**
+     * @description The kinds of resource that have an owner who can hand it on.
+     * @enum {string}
+     */
+    Owned: 'agent' | 'room' | 'team'
+    /** @description One agent, room, team or connection and its owner. */
+    OwnedResource: {
+      /** Format: uuid */
+      id: string
+      /** @description `agent`, `room`, `team` or `connection`. */
+      kind: string
+      name: string
+      /** Format: uuid */
+      owner: string
+      /** @description False when the owner is suspended: the resource needs a new owner. */
+      owner_active: boolean
+      owner_login: string
+      /** @description A personal connection; installation connections are shared by administrators. */
+      personal: boolean
+      /**
+       * Format: int64
+       * @description Grants that share it with people or groups.
+       */
+      shares: number
+    }
+    /** @description One person's agents' model spend over the period asked for. */
+    OwnerSpend: {
+      /** Format: uuid */
+      account: string
+      /** Format: int64 */
+      agents: number
+      /**
+       * Format: double
+       * @description `None` when no price is known for any of the models used.
+       */
+      cost_usd?: number | null
+      /** Format: int64 */
+      input_tokens: number
+      login: string
+      /** Format: int64 */
+      output_tokens: number
+    }
     Page: components['schemas']['PageSummary'] & {
       attachments: components['schemas']['Attachment'][]
       /** @description Markdown. */
@@ -4773,6 +5406,12 @@ export interface components {
       | 'mint'
       | 'ocean'
       | 'charcoal'
+    PersonalProvider: {
+      /** Format: int64 */
+      context_window?: number | null
+      provider: components['schemas']['ProviderKind']
+      updated_at: string
+    }
     Personality: {
       edited_by?: string | null
       limit: number
@@ -4792,6 +5431,23 @@ export interface components {
       api_key: string
       /** @description `minimax_plan`, or `minimax_plan_cn` for a key from the mainland China platform. */
       provider: components['schemas']['ProviderKind']
+    }
+    /**
+     * @description What members may do without an administrator. Administrators always may; auditors and
+     *     guests never create anything.
+     */
+    Policy: {
+      /**
+       * Format: int32
+       * @description Live agents one member may own; `None` is no limit.
+       */
+      member_agent_limit?: number | null
+      /** @description Members may add their own AI provider keys and plans for their own agents. */
+      members_bring_providers: boolean
+      members_create_agents: boolean
+      members_create_connections: boolean
+      members_create_rooms: boolean
+      members_create_teams: boolean
     }
     Preferences: {
       /** @description Sidebar sections the person collapsed. */
@@ -4919,6 +5575,14 @@ export interface components {
       /** Format: uuid */
       turn?: string | null
     }
+    Reactivate: {
+      /** Format: int64 */
+      expected_revision: number
+      /** Format: uuid */
+      id: string
+      /** Format: uuid */
+      request_id: string
+    }
     ReadCursor: {
       /** Format: int64 */
       sequence: number
@@ -4958,6 +5622,14 @@ export interface components {
           /** @enum {string} */
           kind: 'group'
         }
+    RecoveryCodes: {
+      /** @description Single-use codes for when the authenticator is lost; shown this once. */
+      codes: string[]
+    }
+    Redeem: {
+      password: string
+      token: string
+    }
     Release: {
       published_at: string
       url: string
@@ -4991,6 +5663,12 @@ export interface components {
       name: string
       /** Format: int64 */
       size: number
+    }
+    /** @description Who owns a resource and the grants that share it. */
+    ResourceAccess: {
+      grants: components['schemas']['GrantSummary'][]
+      /** Format: uuid */
+      owner?: string | null
     }
     /** @description What the console shows while a restore runs. */
     RestoreProgress: {
@@ -5054,6 +5732,8 @@ export interface components {
      * @enum {string}
      */
     Risk: 'read' | 'write' | 'send'
+    /** @enum {string} */
+    Role: 'administrator' | 'auditor' | 'member' | 'guest'
     Room: {
       /** @description A deleted team's room: history only, no new messages. */
       archived: boolean
@@ -5189,6 +5869,17 @@ export interface components {
       /** @description Lowercase letters, digits and hyphens, at most 32. */
       slug: string
     }
+    SaveGoogle: {
+      /** @description The Workspace administrator the service account acts as. */
+      admin_email?: string | null
+      /** @description `my_customer` when left out. */
+      customer?: string | null
+      enabled: boolean
+      /** Format: uuid */
+      request_id: string
+      /** @description The service account's JSON key; left out keeps the stored one. */
+      service_account?: string | null
+    }
     SaveMcpServer: {
       access?: null | components['schemas']['ProviderAccess']
       /** @description Stdio only. */
@@ -5225,8 +5916,18 @@ export interface components {
       role: string
       title: string
     }
+    SavePersonalProvider: {
+      api_key: string
+      /** Format: int64 */
+      context_window?: number | null
+    }
     SavePersonality: {
       personality: string
+    }
+    SavePolicy: {
+      policy: components['schemas']['Policy']
+      /** Format: uuid */
+      request_id: string
     }
     /** @description What a routine does and when. At least one of `prompt` and `command`. */
     SaveRoutine: {
@@ -5245,10 +5946,13 @@ export interface components {
     }
     SaveSingleSignOn: {
       admit_email_domains?: string[]
+      admit_groups?: string[]
       admit_subjects?: string[]
       client_id: string
       /** @description Absent keeps the stored secret; empty removes it, for a public client. */
       client_secret?: string | null
+      /** @description The ID token claim listing groups, such as `groups`; fills groups of source `oidc`. */
+      groups_claim?: string | null
       issuer: string
     }
     SaveSpeech: {
@@ -5331,12 +6035,28 @@ export interface components {
       snippet: string
       title: string
     }
+    Secret: {
+      token: string
+    }
     SendMessage: {
       app?: string | null
       attachments?: string[]
       message: string
       /** Format: uuid */
       request_id: string
+    }
+    SessionSummary: {
+      /** Format: int64 */
+      created_at_unix: number
+      current: boolean
+      /** Format: int64 */
+      expires_at_unix: number
+      /** Format: uuid */
+      id: string
+      /** Format: int64 */
+      last_seen_at_unix?: number | null
+      /** @description Set for a personal API token; browser sign-ins have none. */
+      name?: string | null
     }
     SetAgentModel: {
       chosen?: null | components['schemas']['ModelRef']
@@ -5421,11 +6141,13 @@ export interface components {
     /** @description What an administrator sees; never the client secret itself. */
     SingleSignOnSettings: {
       admit_email_domains: string[]
+      admit_groups: string[]
       admit_subjects: string[]
       /** @description Whether a client secret can be stored, which needs the installation's credential key. */
       can_store_secret: boolean
       client_id?: string | null
       enabled: boolean
+      groups_claim?: string | null
       has_client_secret: boolean
       issuer?: string | null
       /** @description Set by the deployment's `CUBEBOT_OIDC_CONFIG`; the console cannot change it. */
@@ -5551,6 +6273,27 @@ export interface components {
       /** Format: int64 */
       unpriced: number
     }
+    /** @description The signed-in person's place in the installation. */
+    Standing: {
+      /**
+       * Format: int32
+       * @description Live agents a member may own; `None` is no limit, and administrators have none.
+       */
+      agent_limit?: number | null
+      can_create: components['schemas']['CanCreate']
+      /**
+       * Format: int64
+       * @description Agents this person owns that are not retired, against `member_agent_limit`.
+       */
+      owned_agents: number
+      /** @description The installation owner. */
+      owner: boolean
+      role: components['schemas']['Role']
+      /** @description One active account and no single sign-on: sharing has no one to share with. */
+      solo: boolean
+      /** @description Their sign-in asks for a code from an authenticator app. */
+      two_factor: boolean
+    }
     StartSignIn: {
       access?: null | components['schemas']['ProviderAccess']
       /** @description `oauth2` or `github_app`, as the connector offers. */
@@ -5653,6 +6396,13 @@ export interface components {
       /** @description Opens xAI's approval page with the code filled in. */
       verification_uri: string
     }
+    SyncOutcome: {
+      /** @description Groups whose members were mirrored. */
+      groups: number
+      /** @description Memberships set across those groups. */
+      members: number
+      problem?: string | null
+    }
     Task: {
       agents: components['schemas']['Member'][]
       /** @description A turn of this task waits for a person: to retry it, raise a budget or stop it. */
@@ -5719,6 +6469,11 @@ export interface components {
       /** @description The manager first, then by name. */
       members: components['schemas']['TeamMember'][]
       name: string
+      /**
+       * Format: uuid
+       * @description The person who owns the team and may change it.
+       */
+      owner: string
       /**
        * Format: uuid
        * @description The team this one sits under.
@@ -5791,6 +6546,26 @@ export interface components {
       id: string
       /** Format: int64 */
       revision: number
+    }
+    Transfer: {
+      /** Format: uuid */
+      id: string
+      kind: components['schemas']['Owned']
+      /** Format: uuid */
+      request_id: string
+      /**
+       * Format: uuid
+       * @description The new owner: an active administrator or member.
+       */
+      to: string
+    }
+    TransferAll: {
+      /** Format: uuid */
+      from: string
+      /** Format: uuid */
+      request_id: string
+      /** Format: uuid */
+      to: string
     }
     /** @description A connection event that runs a routine (docs/adr/agents.md#scheduled-and-event-triggered-work). */
     Trigger: {
@@ -6016,6 +6791,12 @@ export interface components {
     }
     WebhookSecret: {
       secret: string
+    }
+    WorkspaceGroup: {
+      /** Format: int64 */
+      direct_members_count: number
+      email: string
+      name: string
     }
     /** @description An agent workspace a restore put back, or could not. */
     WorkspaceRestore: {
@@ -8624,6 +9405,27 @@ export interface operations {
       }
     }
   }
+  resource_access: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ResourceAccess']
+        }
+      }
+    }
+  }
   revoke: {
     parameters: {
       query?: never
@@ -8687,6 +9489,75 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Account']
+        }
+      }
+    }
+  }
+  create_password_reset: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AccountRequest']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Secret']
+        }
+      }
+    }
+  }
+  change_role: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangeRole']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  reset_two_factor: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AccountRequest']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
         }
       }
     }
@@ -8756,6 +9627,159 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Receipt']
         }
+      }
+    }
+  }
+  directory: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Directory']
+        }
+      }
+    }
+  }
+  google_directory: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['GoogleSettings']
+        }
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  save_google_directory: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveGoogle']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  google_workspace_groups: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkspaceGroup'][]
+        }
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      503: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  sync_google_directory: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SyncOutcome']
+        }
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
     }
   }
@@ -8845,6 +9869,71 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  group_role: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GroupRole']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  hand_over: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['HandOver']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  inventory: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['OwnedResource'][]
         }
       }
     }
@@ -9048,6 +10137,33 @@ export interface operations {
       }
     }
   }
+  change_password: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangePassword']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
   preferences: {
     parameters: {
       query?: never
@@ -9129,6 +10245,167 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Profile']
         }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  sessions: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SessionSummary'][]
+        }
+      }
+    }
+  }
+  end_session: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  standing: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Standing']
+        }
+      }
+    }
+  }
+  create_token: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NewToken']
+      }
+    }
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Secret']
+        }
+      }
+    }
+  }
+  enroll_two_factor: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Enrollment']
+        }
+      }
+      409: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  confirm_two_factor: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Code']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RecoveryCodes']
+        }
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  disable_two_factor: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Code']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
       }
       400: {
         headers: {
@@ -9316,6 +10593,144 @@ export interface operations {
       }
     }
   }
+  transfer: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Transfer']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  transfer_all: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransferAll']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  redeem_password_reset: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Redeem']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      401: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  policy: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Policy']
+        }
+      }
+    }
+  }
+  save_policy: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavePolicy']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
+  reactivate: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['Reactivate']
+      }
+    }
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Receipt']
+        }
+      }
+    }
+  }
   setup_state: {
     parameters: {
       query?: never
@@ -9361,6 +10776,27 @@ export interface operations {
           [name: string]: unknown
         }
         content?: never
+      }
+    }
+  }
+  spend: {
+    parameters: {
+      query?: {
+        days?: number
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['OwnerSpend'][]
+        }
       }
     }
   }
@@ -10032,6 +11468,85 @@ export interface operations {
     requestBody?: never
     responses: {
       204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  my_providers: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['PersonalProvider'][]
+        }
+      }
+    }
+  }
+  save_my_provider: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        provider: components['schemas']['ProviderKind']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SavePersonalProvider']
+      }
+    }
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      400: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      403: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+    }
+  }
+  forget_my_provider: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        provider: components['schemas']['ProviderKind']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      404: {
         headers: {
           [name: string]: unknown
         }

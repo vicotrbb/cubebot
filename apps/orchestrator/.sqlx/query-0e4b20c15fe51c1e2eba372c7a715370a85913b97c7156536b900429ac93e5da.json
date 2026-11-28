@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO personal_providers (owner, provider, credential, context_window)\n            VALUES ($1, $2, $3, $4)\n            ON CONFLICT (owner, provider) DO UPDATE\n            SET credential = EXCLUDED.credential, context_window = EXCLUDED.context_window, updated_at = clock_timestamp()\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e4b20c15fe51c1e2eba372c7a715370a85913b97c7156536b900429ac93e5da"
+}

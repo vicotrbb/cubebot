@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT r.task, EXISTS(SELECT 1 FROM teams t WHERE t.room_id=r.id AND t.deleted_at IS NULL) AS \"teamed!\"\n            FROM rooms r\n            JOIN human_accounts a ON a.id=$2 AND a.active AND (a.role='administrator' OR (r.created_by=a.id AND a.role<>'guest'))\n            WHERE r.id=$1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "task",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "teamed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "07ef110928ca61c1eaef864e1f60f2810577d8f524273c9870655c2608a74458"
+}

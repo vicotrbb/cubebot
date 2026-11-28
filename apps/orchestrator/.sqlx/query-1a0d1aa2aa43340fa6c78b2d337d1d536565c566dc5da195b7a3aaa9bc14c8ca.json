@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT a.id, a.role, (to_jsonb(a.pushed_through) #>> '{}') AS through\n            FROM human_accounts a\n            WHERE a.active AND EXISTS(SELECT 1 FROM push_subscriptions s WHERE s.account_id=a.id)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "role",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "through",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "1a0d1aa2aa43340fa6c78b2d337d1d536565c566dc5da195b7a3aaa9bc14c8ca"
+}

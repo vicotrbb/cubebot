@@ -6,9 +6,14 @@ pub use avatars::{AVATAR_BYTES, AvatarRevision};
 pub mod oidc;
 pub use accounts::AccountSummary;
 mod commands;
+pub mod google;
 pub mod groups;
 pub use commands::{IdentityEvent, Receipt};
 mod invitations;
+pub mod members;
+pub mod oversight;
+pub use members::{Creation, Policy, Role};
+pub mod security;
 pub use invitations::{Invitation, InvitationSummary};
 mod passwords;
 mod preferences;
@@ -25,6 +30,8 @@ use uuid::Uuid;
 pub struct Identity {
     pool: PgPool,
     pub(crate) browser_origin: Option<String>,
+    /// Seals two-factor secrets; without it, two-factor enrollment is unavailable.
+    pub(crate) credentials: Option<std::sync::Arc<crate::connections::Credentials>>,
 }
 
 #[derive(Debug)]
@@ -40,6 +47,8 @@ pub enum IdentityError {
     Database(sqlx::Error),
     Password(Source),
     Busy,
+    /// The password was right; the account also needs its two-factor code.
+    TwoFactorRequired,
     OidcUnavailable(Source),
     CredentialUnavailable(Option<Source>),
 }
@@ -56,6 +65,7 @@ impl std::fmt::Display for IdentityError {
             Self::NotFound => "not found",
             Self::Database(_) | Self::Password(_) => "identity unavailable",
             Self::Busy => "identity busy",
+            Self::TwoFactorRequired => "two-factor code required",
             Self::OidcUnavailable(_) => "OIDC unavailable",
             Self::CredentialUnavailable(_) => "credential unavailable",
         })
@@ -90,6 +100,7 @@ impl From<sqlx::Error> for IdentityError {
 pub struct Actor {
     pub id: Uuid,
     pub administrator: bool,
+    pub role: Role,
 }
 
 pub struct Session {
@@ -101,12 +112,41 @@ impl Identity {
         Self {
             pool,
             browser_origin: None,
+            credentials: None,
         }
+    }
+
+    /// Lets two-factor secrets be sealed with the installation's credential key.
+    pub fn with_credentials(mut self, credentials: crate::connections::Credentials) -> Self {
+        self.credentials = Some(std::sync::Arc::new(credentials));
+        self
     }
 
     async fn require_administrator(&self, actor: &Actor) -> Result<(), IdentityError> {
         administrator(&self.pool, actor.id).await
     }
+
+    /// Administrators and auditors: the people who may look at the whole installation.
+    async fn require_overseer(&self, actor: &Actor) -> Result<(), IdentityError> {
+        overseer(&self.pool, actor.id).await
+    }
+}
+
+/// Administrators and auditors: the people who may look at the whole installation.
+pub(crate) async fn overseer(
+    executor: impl sqlx::PgExecutor<'_>,
+    actor: Uuid,
+) -> Result<(), IdentityError> {
+    let allowed = sqlx::query_scalar!(
+        r#"SELECT EXISTS(SELECT 1 FROM human_accounts WHERE id = $1 AND active AND role IN ('administrator', 'auditor')) AS "allowed!""#,
+        actor,
+    )
+    .fetch_one(executor)
+    .await?;
+    if !allowed {
+        return Err(IdentityError::Forbidden);
+    }
+    Ok(())
 }
 
 pub(crate) async fn administrator(

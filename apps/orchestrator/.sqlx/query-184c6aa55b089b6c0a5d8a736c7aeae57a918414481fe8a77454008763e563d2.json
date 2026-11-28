@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH owned AS (\n                SELECT 'agent' AS kind, id, name, created_by AS owner, false AS personal\n                FROM agents WHERE desired_state <> 'retired'\n                UNION ALL\n                SELECT 'room', r.id, r.name, r.created_by, false\n                FROM rooms r\n                WHERE NOT r.task AND NOT r.archived AND NOT EXISTS(SELECT 1 FROM teams t WHERE t.room_id = r.id)\n                UNION ALL\n                SELECT 'team', id, name, created_by, false FROM teams WHERE deleted_at IS NULL\n                UNION ALL\n                SELECT 'connection', id, slug, created_by, personal FROM connections\n            )\n            SELECT o.kind AS \"kind!\", o.id AS \"id!\", o.name AS \"name!\", o.owner AS \"owner!\",\n                   h.login AS \"owner_login!\", h.active AS \"owner_active!\", o.personal AS \"personal!\",\n                   (SELECT count(*) FROM access_grants g WHERE g.scope_id = o.id AND g.revoked_at IS NULL) AS \"shares!\"\n            FROM owned o JOIN human_accounts h ON h.id = o.owner\n            ORDER BY h.active, o.kind, lower(o.name)\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "owner!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "owner_login!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "owner_active!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "personal!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "shares!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "184c6aa55b089b6c0a5d8a736c7aeae57a918414481fe8a77454008763e563d2"
+}

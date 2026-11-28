@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT role IS NOT DISTINCT FROM 'administrator' AS \"administrators!\" FROM human_teams WHERE id = $1 AND active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "administrators!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "42f0013488c9fa84adfed71fcd09acd17e504b06b0fc9cab7aa84b59ecbc685e"
+}

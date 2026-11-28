@@ -36,6 +36,11 @@ async fn definitions_are_durable_scoped_and_creation_replays() {
         avatar: None,
         voice: None,
     };
+    // Members create agents only while the installation's policy lets them.
+    sqlx::query!("UPDATE installation_settings SET members_create_agents = false")
+        .execute(&pool)
+        .await
+        .unwrap();
     assert!(matches!(
         agents.create(&actor, &input).await,
         Err(IdentityError::Forbidden)
@@ -169,7 +174,7 @@ async fn creation_is_atomic_under_retries_and_rechecks_current_role() {
     sqlx::query!(
         "
         UPDATE human_accounts
-        SET role = 'member'
+        SET role = 'guest'
         WHERE id = $1
         ",
         actor.id,
