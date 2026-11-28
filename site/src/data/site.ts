@@ -1,8 +1,8 @@
 export const repo = 'https://github.com/vicotrbb/cubebot'
 export const sponsor = 'https://github.com/sponsors/vicotrbb'
 export const install = 'curl -fsSL https://cubebot.io/install.sh | bash'
-export const version = 'v0.6.1'
-export const released = '2026-11-24'
+export const version = 'v0.7.0'
+export const released = '2026-11-28'
 
 export const docs = {
   manifesto: `${repo}/blob/main/MANIFESTO.md`,
@@ -158,6 +158,19 @@ export const next = [
 ] as const
 
 export const releases = [
+  {
+    tag: 'v0.7.0',
+    date: '2026-11-28',
+    title: 'Everyone runs their own agents',
+    items: [
+      'Members create and own agents, rooms, teams and connections within a policy administrators set, share them, and hand them on; upgraded installations keep members creating nothing until an administrator allows it',
+      'Four roles (administrator, auditor, member and guest) and an installation owner who alone makes administrators',
+      'Groups mirrored from Google Workspace or filled from a single sign-on groups claim, local groups with managers, and groups that give their members a role',
+      'Personal connections and provider keys, used only by the agents their owner manages',
+      'Password changes, sessions, personal API tokens and authenticator-app codes with recovery codes; reset links and second-factor resets for administrators',
+      'People, Ownership and spend pages for administrators and auditors, and audit log export',
+    ],
+  },
   {
     tag: 'v0.6.1',
     date: '2026-11-24',
